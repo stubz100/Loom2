@@ -218,3 +218,14 @@ adapter in M1 (vendored worker kept as reference). Open: **Q15** (slow-mode caus
 Artefacts: `engine/spikes/out/` (e0_sanity.json, e0_t2i_results.jsonl — 60 rows, PNGs, engine logs, loom-ab/),
 `bench/t2i/01–10`, `bench/inpaint/tasks.json` + masks, `bench/i2v/tasks.json`, `scripts/engine-start|stop.ps1`,
 `engine/spikes/e0_*.py|ps1`, `engine/patches/`, `engine/nodes.lock`. Nothing committed yet (author's call).
+
+## 2026-10-04 21:05 — first commit and push; D28 accepted
+
+- Initial commit `409e2a1` (51 files, ≈ 380 KB; venvs, weights, spike outputs excluded) pushed to
+  **https://github.com/stubz100/Loom2** (`origin/main`). Added `scripts/engine-setup.ps1` (recreates venv,
+  submodule, pinned nodes and patches from `nodes.lock`), root `README.md`, `.gitattributes`.
+- **D28 accepted** by the author after reviewing the E0 evidence: loom's worker is not built into loom2 (reference
+  only). Scope of the proof recorded in 13: identical files/settings, 649 s vs 62 s per image, the gap attributed to
+  loom's whole-model HMM paging design (its own probes), capability gap (no inpaint/video nodes), stability of 57
+  engine executions. Not isolated: the worker on the new torch/ROCm stack (not worth porting). Q16 closed; Q15
+  (bimodal sampling speed) remains the only open question.

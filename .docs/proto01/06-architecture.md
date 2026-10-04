@@ -25,9 +25,9 @@ decision (§3) is validated by spike E0 in the roadmap before any suite is built
 └───────┬──────────────────────────────┬───────────────────────────┬────────────┘
         │ HTTP /prompt + WS            │ stdin/stdout JSON lines   │ argv + manifest
 ┌───────▼──────────────┐   ┌───────────▼───────────┐   ┌───────────▼─────────────┐
-│ Engine A: ComfyUI    │   │ Engine B: loom FLUX.2 │   │ Tools: thumbs, SAM 3,  │
-│ headless (pinned),   │   │ torch worker (ref.)   │   │ BiRefNet, ffmpeg,      │
-│ ROCm venv, models/   │   │ --serve warm mode     │   │ hf fetch/verify (CPU)  │
+│ Engine A: ComfyUI    │   │ [Engine B: loom torch │   │ Tools: thumbs, SAM 3,  │
+│ headless (pinned),   │   │  worker — reference   │   │ BiRefNet, ffmpeg,      │
+│ ROCm venv, models/   │   │  only, not built: D28]│   │ hf fetch/verify (CPU)  │
 │ via extra_model_paths│   │                       │   │                        │
 └──────────────────────┘   └───────────────────────┘   └────────────────────────┘
           ▲ one GPU job at a time, admitted by the queue (VRAM budget 16 GB)
@@ -61,8 +61,9 @@ paths are project-relative and traversal-guarded (loom rules).
 | C. `comfy` core imported as a library in the orchestrator process | no second process | import stability not researched; mixes a 16 GB GPU process with the API server; crashes take the API down |
 | D. stable-diffusion.cpp (Vulkan) | zero driver dependency, GGUF native, FLUX.2/Qwen/Wan/inpaint | no node ecosystem, rough edges (Klein-4B VAE on Vulkan), slower than ROCm; keep as fallback |
 
-**Decision:** A as the primary engine; B retained as the reference/fallback FLUX.2 engine behind the same
-adapter interface (it is the only measured FLUX.2 path on this rig today); D post-MVP.
+**Decision:** A is the engine (D2, verified by E0). B is **not built into loom2** (D28, accepted 2026-10-04 after
+the E0 A/B: 649 s vs 62 s per image on identical files); loom's vendored worker stays available only as a
+reference and for A/B reruns. D post-MVP.
 
 ### 3b. How loom2 uses ComfyUI
 
@@ -101,7 +102,7 @@ ComfyUI is GPL-3. loom2 drives it as a separate process over HTTP and ships it a
 own code (orchestrator, frontend) stays under its own licence. This mirrors how many MIT/Apache frontends use
 ComfyUI. For a personal tool this is moot; recorded for a future distribution decision.
 
-### 3d. Engine adapter interface (both engines implement it)
+### 3d. Engine adapter interface (the ComfyUI engine implements it; sd.cpp would later)
 
 ```
 Engine.capabilities() -> {families, modes, formats, max_resolution, supports: {inpaint, ref, flf2v, keyframes, lora}}

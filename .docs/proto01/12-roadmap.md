@@ -91,8 +91,8 @@ Build: repo layout (`app/` Tauri shell, `frontend/`, `orchestrator/`, `engine/`,
 sidecar supervision + READY handshake + token injection + graceful shutdown; orchestrator with project
 workspace, atomic I/O, schema validation, SQLite catalogue index, durable queue (ported from loom
 `runner.py`, domain fields stripped), roster + resolver + fetch/verify jobs (ported `weights.py`,
-`hf_cache` worker), engine adapter interface with Engine A (ComfyUI managed process, graph builders for T2I)
-and Engine B (loom FLUX.2 worker, vendored); OpenAPI → generated TS client; WS events; disk guard; logging;
+`hf_cache` worker), engine adapter interface with the ComfyUI managed process (graph builders for T2I; no second engine — D28);
+OpenAPI → generated TS client; WS events; disk guard; logging;
 frame skeleton (07) with Top bar, Rail, Panel, Stage, Inspector, Dock, Banner; Models suite (roster health,
 fetch meter); Settings; **build-variant plumbing** (D26: `LOOM2_VARIANT`, roster `variants`, variant-aware
 pickers and fetch, SAM 3 licence verified for `open`); recipes carry `loras[]` (D25).

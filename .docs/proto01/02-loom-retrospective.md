@@ -153,7 +153,7 @@ tier, LTX-extend, RIFE/FILM seam welding. **loom2 starts video evaluation from z
 | `workspace.py`, `lineage.py`, `projects.py`, `diskguard.py`, `logsetup.py`, `config.py` | atomic writes, schema validator, project registry, disk guard, env/.env loader | `story.json`, `bible/`, `assets/` paths |
 | `weights.py`, `adapters/hf_cache.py`, `pipelines/hf_cache/run_pipeline.py`, `flux2/hf_pins.py` | roster + revision resolver + fetch/verify/move as torch-free queue jobs | `roster()` source becomes the loom2 model registry |
 | `adapters/base.py`, `_batch.py`, `model_catalog.py` machinery | `JobSpec` / `CompletionRecord`, batch manifest parsing, `validate_params` / `emit_argv`, UI-driving param specs | catalog *content* |
-| `pipelines/multistack/src/pipeline/flux2/*` + `flux2/src/flux2/*` | the only proven FLUX.2 runner on this rig (two-phase offload, `img2img_schedule`, ref mode, serve mode, NaN guard) | keep as the **reference backend** while the engine decision in 04 is validated |
+| `pipelines/multistack/src/pipeline/flux2/*` + `flux2/src/flux2/*` | reference implementation of two-phase offload, `img2img_schedule`, ref mode, serve mode, NaN guard | **reference only, not built into loom2** (D28, after E0 measured it ≈ 10× slower than the ComfyUI engine on identical files); the `img2img_schedule` semantics are re-implemented in the recipe compiler |
 | `ltxv/`, `zimage/`, `sd35/` workers, `postproc/_common.py`, birefnet/resize workers | reference implementations of i2v, inpaint pipelines, matting | |
 | `flux2_prompt.py` directive tables + `REF_*` clauses | pose/angle/shot vocabulary for prompt helpers | coverage-cell coupling |
 | Tauri `lib.rs` / `main.rs` | sidecar spawn, READY handshake, token injection, graceful shutdown on exit | |

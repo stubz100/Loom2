@@ -42,7 +42,7 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | D25 | **LoRA slots designed in, implemented post-MVP**: roster `kind: lora`, every generative recipe carries `loras: [{model_id, strength}]` (empty in MVP), manifests record it, Generate reserves a hidden LoRA section; training stays post-MVP | **accepted 2026-10-04** (Q12) | 04 §1b, 06 §3d, 09 §3b | the author's Flux/Qwen LoRAs on disk and loom's P2 work become usable without a data-model change |
 | D26 | **MVP ships two build variants**: `full` (every licence the author holds: dev, Klein 9B, FLUX.1 Fill, LTX, H3 after application) and `open` (Apache-2.0 / MIT weights only: Klein 4B, Wan 2.2, Qwen-Image-Edit-2511, SeedVR2, BiRefNet…). Variant = roster filter + build flag + variant-aware pickers/fetch + two installers from CI; `open` defaults to Klein 4B for Generate | **accepted 2026-10-04** (Q13) | 03 §3a, 04 §1b/§7, 06 §11, 12 M1/M7 | distribution-ready from day one |
 | D27 | **fps conform needs a spike (E9, in M6)**: measure the quality cost of interpolating Wan 16 fps → 24 fps (RIFE / FILM / Practical-RIFE) on bench clips vs native 24 fps LTX, scoring identity drift, flicker, ghosting on motion | **accepted 2026-10-04** (Q14) | 11, 12 E9 | decides export policy and whether Wan drafts can be conformed |
-| D28 | **Engine B (loom's torch worker) is not built into loom2** — no adapter in M1; the vendored code stays available as a reference and for A/B reruns only. ComfyUI is the sole engine until a measured need appears (sd.cpp Vulkan remains the planned zero-driver fallback) | proposed 2026-10-04 (E0 result) | 06 §3, 12 M1 | 10× slower on the same files; maintaining two engines costs more than it insures |
+| D28 | **Engine B (loom's torch worker) is not built into loom2** — no adapter in M1; the vendored code stays available as a reference and for A/B reruns only. ComfyUI is the sole engine until a measured need appears (sd.cpp Vulkan remains the planned zero-driver fallback) | **accepted 2026-10-04** (author, after E0: 649 s vs 62 s per image on identical files; the gap is loom's whole-model HMM paging design, not the stack) | 06 §3, 12 M1 | 10× slower on the same files; maintaining two engines costs more than it insures |
 | D29 | **dev default format = Comfy-Org fp8mixed + fp8 Mistral encoder, encoder on the GPU**; GGUF kept as a VRAM-saving option; Turbo LoRA offered as the "fast draft" preset (8 steps) | **accepted by measurement 2026-10-04** (E0) | 04 §3b, 09 §3b | fp8 2.7–3.5 s/it vs GGUF 31 s/it; CPU encode ≈ 170 s per new prompt |
 
 ## Open questions (need the author)
@@ -57,9 +57,9 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | Q14 | ~~fps conform?~~ **Resolved → D27**: spike E9 measures interpolation quality; masters keep native fps meanwhile | 11, 12 E9 | — |
 
 | Q15 | **Why does dev Turbo sampling alternate between ≈ 4.5 and ≈ 7.2 s/it under sustained load** (vs 3.5 s/it when fresh)? Not the text encoder (cached). Candidates: thermal throttling (hot-spot), DynamicVRAM residency variance, per-weight LoRA patching | 12 E0 follow-up, M3 | instrument in M3: hot-spot/clock log next to the driver, no-LoRA control, `--disable-dynamic-vram` control |
-| Q16 | Should D28 (no Engine B adapter) be accepted? | 06 §3, 12 M1 | yes, unless the author wants the old worker kept runnable inside loom2 |
+| Q16 | ~~Accept D28?~~ **Resolved 2026-10-04 → D28 accepted** | 06 §3, 12 M1 | — |
 
-Q1–Q14 are resolved; Q15–Q16 are open as of 2026-10-04 evening.
+Q1–Q14 and Q16 are resolved; Q15 is open as of 2026-10-04 evening.
 | Q6 | ~~Accent / icons?~~ **Resolved → D20** keep | 07 §7 | — |
 | Q7 | ~~Default Generate tier?~~ **Resolved → D21**: FLUX.2 dev + JSON first; Klein later | 09 | — |
 | Q8 | ~~Inpaint candidates?~~ **Resolved → D22**: 4 Klein / 2 dev-Fill Pro | 10 | — |

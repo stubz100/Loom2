@@ -1,0 +1,35 @@
+# loom2 model mounts for the headless ComfyUI engine (decision D1: ComfyUI layout convention).
+# Passed with: python main.py --extra-model-paths-config engine/extra_model_paths.yaml
+#
+# loom2_models  = loom2's own roster-managed root (fetch jobs land here; default save location).
+# comfyui_backup = the author's old ComfyUI install, mounted for its MODEL FILES ONLY (D15) — its code is never run.
+
+loom2_models:
+  base_path: F:/loom2-models
+  is_default: true
+  checkpoints: checkpoints
+  diffusion_models: diffusion_models
+  unet: diffusion_models
+  text_encoders: text_encoders
+  clip: text_encoders
+  vae: vae
+  loras: loras
+  controlnet: controlnet
+  upscale_models: upscale_models
+  clip_vision: clip_vision
+  embeddings: embeddings
+
+comfyui_backup:
+  base_path: D:/comfyui/ComfyUI/models
+  checkpoints: checkpoints
+  diffusion_models: diffusion_models
+  unet: unet
+  text_encoders: text_encoders
+  clip: text_encoders
+  vae: vae
+  loras: loras
+  controlnet: controlnet
+  upscale_models: upscale_models
+  clip_vision: clip_vision
+  sam3: sam3
+  ultralytics: ultralytics

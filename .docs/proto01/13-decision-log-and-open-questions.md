@@ -1,0 +1,74 @@
+# 13 · Decision log and open questions
+
+Status values: **proposed** (this plan), **accepted** (confirmed by the author or by a spike), **revised**.
+Append new entries; never rewrite history.
+
+## Decisions
+
+**2026-10-04 — the author approved the direction D1–D14 ("go").** Their status is now *accepted*; the ones
+marked "gated by E0/E1/E2/E4/E5/E7/E8" stay subject to revision by that spike's measured result only.
+
+**2026-10-04 evening — E0 interim (journal 18:47–19:03):** D16 (new stack) and D2 (ComfyUI engine) passed their
+first gate — sanity matrix green, FLUX.2 dev JSON image in 62 s warm at 960×544. Amendment to D6/D21: the dev
+default *format* is Comfy-Org fp8mixed, not GGUF (GGUF Q4 ≈ 12× slower per step here). Engine-drift risk
+materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was handled with a recorded patch.
+
+| Id | Decision | Status | Where | Rationale (short) |
+| --- | --- | --- | --- | --- |
+| D1 | Anchor model sourcing on the **ComfyUI convention** (folder keys, key-based detection, Comfy-Org split files canonical; GGUF a format inside it, Unsloth → city96 → QuantStack); mount the user's ComfyUI tree via `extra_model_paths.yaml`; one roster with sha256 + licence | proposed 2026-10-04 | 04 §1 | full coverage (Wan, Fill, ControlNets, upscalers), fp8 fastest on gfx1201, ≈150 GB already on disk in this layout; Unsloth-only leaves gaps |
+| D2 | **ComfyUI headless as the primary engine** (pinned, managed process, API-format graphs built by loom2); loom's FLUX.2 torch worker as reference/fallback engine; sd.cpp Vulkan later | **accepted — E0 passed 2026-10-04** (62 s vs 649 s per image against loom's worker) | 06 §3 | realises "anything ComfyUI runs, loom2 runs"; nodes exist for every chosen model/technique; already runs on this rig; krita-ai-diffusion precedent |
+| D3 | **Tauri 2 + React/TS + PixiJS v8** (WebGPU, WebGL2 fallback) tiled compositor; frontend shell-agnostic so Electron is a one-week switch | proposed; gated by E1 | 05 §8 | WebGPU in WebView2 is real; only IPC is slow on Windows and we avoid it; no embeddable MIT layered editor exists |
+| D4 | **Pixels never cross IPC**: loopback HTTP (Range) for bytes, WebSocket for events, Tauri IPC for commands | proposed; gated by E2 | 05 §5, 06 §2 | ~200 ms/10 MB Tauri IPC on Windows vs ~1.5 GB/s loopback |
+| D5 | **ORA** project format, **PSD** export via ag-psd (8-bit), PNG with metadata, PNG-sequence clip masters + MP4 proxies | proposed | 05 §6, 06 §4 | standard formats, Krita/GIMP interop, loom R161 |
+| D6 | FLUX.2 **tiers**: Iterate (Klein 4B), Quality (Klein 9B/base/KV), Hero (dev GGUF Q4 / fp8mixed streamed); same prompt tree, JSON for dev, prose for Klein | proposed | 04 §3 | fit on 16 GB; dev is the user's accuracy choice and the best JSON parser |
+| D7 | **Inpaint stack**: Klein + InpaintModelConditioning/ReferenceLatent + crop-and-stitch; LanPaint for hard fills/outpaint; FLUX.1 Fill Q8 quality fallback; Qwen-Image-Edit-2511 for instruction edits; SAM 3 + BiRefNet for masks | proposed; gated by E8 | 04 §4 | shares t2i weights, seconds per fill; no open FLUX.2 mask model exists |
+| D8 | **Primary i2v: Wan 2.2 I2V-A14B** GGUF Q5_K_M + Lightning 4+4, FLF on the same weights | proposed; gated by E4 | 04 §5 | only quantitative identity evidence (FaceSim 0.578), zero extra weights for FLF, Apache, largest ecosystem |
+| D9 | **Secondary i2v: LTX-2.3 distilled** (keyframes at arbitrary indices); **MiniMax H3 opt-in** behind a licence confirmation | proposed; gated by E5 | 04 §5 | speed and beat control; H3 quality proven on this GPU but territorially licensed |
+| D10 | Keep loom's durable rules (queue, atomic writes, roster/resolver, token gate, manifest-as-truth, lineage at write time, disk guard, staged GPU work, advisory meters) | proposed | 02 §2 | each paid for itself in loom |
+| D11 | **Drop for MVP**: StoryBible/AssetProfile/coverage/readiness/LoRA training, multi-model casting, SD3.5 tooling, research-licensed identity/face weights | proposed | 02 §3, 03 §4 | restart is about generation + editing; storyboard layers return on top later |
+| D12 | **Suites** (Catalogue · Generate · Edit · Animate · Models) with one frame (07); each suite's UI doc approved before its milestone | proposed | 03 §2, 07 | user requirement; loom lesson 10 |
+| D13 | Runtime flags: SDPA default, no Sage by default, fp8 scaled + GGUF, no INT8 convrot for UNets, tiled VAE, `--disable-pinned-memory`, engine restart-per-N (torch pin moved to D16) | proposed; E7 refines MIOpen; **revised 2026-10-04** | 04 §2 | ROCm-on-Windows field reports 2026 |
+| D14 | Benchmark set (10 t2i / 5 inpaint / 5 i2v) is binding for "done"; timings bracketed by `torch.cuda.synchronize()` | proposed | 04 §6 | loom lessons 2 and 3 |
+| D15 | loom2 carries its **own fresh checkout of github.com/Comfy-Org/ComfyUI**, pinned to a release tag (v0.38.2 on 2026-10-04) with its own venv; `D:\comfyui` (0.19.3) is a model-file backup only and its code is never used | **accepted 2026-10-04** (author) | 06 §3b, 12 E0 | the backup install is 19 minor releases behind; a current pinned release carries the Wan / LTX / H3 / SeedVR2 nodes and the RDNA4 fixes |
+| D16 | **Fresh loom2 environment, not loom's**: ROCm **10.0.0 stable** index, **torch 2.13.0+rocm10.0.0** (`[device-all]`), **Python 3.13** installed and pinned by **uv**, two venvs (torch-free orchestrator, GPU engine) with lockfiles and a torch constraints file; stable channel only, nightlies in throwaway venvs; **no FlashAttention build carried over** (SDPA/AOTriton default, rebuild only if profiling demands); `triton-windows` 3.8 optional; Adrenalin for the **driver only**, the AI Bundle's global Python/PyTorch unused; loom's 7.2.1 venv untouched as A/B reference | **accepted 2026-10-04** (author); **verified by E0** (sanity matrix green, 57 engine jobs, 0 errors) | 01 §2b, 04 §2, 06 §3b, 12 §1a | ROCm 10 is the current official Windows path with cp311–cp314 wheels and is the exact combination ComfyUI v0.38.2 documents; installed driver 26.9.2 already meets the ≥ 26.8.1 requirement; reproducibility beats an auto-managed global env |
+| D17 | **MiniMax H3 is enabled as the "hero clip" tier**: the author is EU-located, eligible and willing to complete the H3 community-licence application; the option unlocks in Settings once the author confirms the application is filed. Licensing focus is **EU-first** (all roster licence checks are read against EU terms) | **accepted 2026-10-04** (author, Q1) | 04 §5b/§7, 11 §3b | H3 is the quality ceiling and proven on this GPU/OS; the only blocker was the territorial application |
+| D18 | **Project format = target + draft tiers.** Target (export/finalize): 16:9, 1920×1080 @ 24 fps. Generation defaults to the **Draft** tier: images 1280×720 (Klein) / 960×544 (dev); video Wan 832×480 @ 16 fps 81 f, LTX 1024×576 @ 24 fps 121 f. **Thumb** 896×512 for composition passes. **Full** (FHD) available per model: Klein at 1920×1088 → crop 1080; LTX two-stage (base + 2× spatial upscaler) → 1920×1088 → crop; Wan and dev reach FHD via upscale, not native. Dimensions snap to each model's multiple (FLUX.2 ×16, Wan ×16 / 4n+1 frames, LTX ×32 / 8n+1 frames). Clip masters keep native fps; conforming to 24 fps is an export step (post-MVP interpolation) | **accepted 2026-10-04** (author, Q5: "small by default, FHD as an option") | 04 §9, 06 §5, 07 §6, 09 §3c, 11 §3c | quick drafts are the daily loop on a 16 GB card; FHD costs 2–5× per image and is not a native video resolution for Wan/dev |
+| D19 | **Input: mouse-first.** No pen/touch hardware now; the editor is designed pen-ready (PointerEvents pressure/tilt, Windows Ink as the future strategy) but pressure UI is hidden until a pen is detected, and the brush spike E3 is measured with a mouse. A pen tablet is a future purchase, not an MVP dependency | **accepted 2026-10-04** (author, Q2) | 05 §9, 10 §9, 12 E3 | avoids speculative tuning; PointerEvents give pressure for free later |
+| D20 | Visual language: keep loom's warm graphite + amber accent and the Lucide icon set | **accepted 2026-10-04** (Q6) | 07 §7 | continuity, no bikeshedding |
+| D21 | **Generate is dev-first.** Default and first-built t2i model = **FLUX.2 dev** with BFL JSON prompting through the Mistral template; "concentrate on the complex first". Klein tiers join the Generate picker later (cheaply, once the Klein graphs exist for Edit in M5) and may slip past MVP. **Klein remains the Edit suite's inpaint workhorse** (interactive fills need seconds, dev needs minutes); dev is offered there as "Fill Hero" | **accepted 2026-10-04** (Q7) | 04 §3b, 09 §3b, 12 M3/M5 | reliable JSON adherence is effectively dev-only; the author's accuracy choice; slow drafts are accepted (Draft tier 960×544, Stage/overnight batches) |
+| D22 | Inpaint candidate defaults: **4 on Klein, 2 on dev / Fill Pro** | **accepted 2026-10-04** (Q8) | 10 §4 | engine time |
+| D23 | **Story layers adopted as-is from loom's design** (kb-storyboard01 L1–L4, P3–P5 specs) as the first post-MVP phase, followed by a **refining session**; the MVP data model must not preclude it (stable ids, lineage, collections → AssetProfiles, PNG-seq masters, format target). Pointer doc: 14 | **accepted 2026-10-04** (Q10) | 03 §5, 06 §5, 14 | detailed analysis already exists and was never built, so nothing is lost by adopting it unchanged |
+| D24 | Krita + krita-ai-diffusion is a **fallback only**, never planned work; trigger remains an author decision if M4 overruns by > 50 % | **accepted 2026-10-04** (Q11) | 05 §8 | the editor is the product |
+| D25 | **LoRA slots designed in, implemented post-MVP**: roster `kind: lora`, every generative recipe carries `loras: [{model_id, strength}]` (empty in MVP), manifests record it, Generate reserves a hidden LoRA section; training stays post-MVP | **accepted 2026-10-04** (Q12) | 04 §1b, 06 §3d, 09 §3b | the author's Flux/Qwen LoRAs on disk and loom's P2 work become usable without a data-model change |
+| D26 | **MVP ships two build variants**: `full` (every licence the author holds: dev, Klein 9B, FLUX.1 Fill, LTX, H3 after application) and `open` (Apache-2.0 / MIT weights only: Klein 4B, Wan 2.2, Qwen-Image-Edit-2511, SeedVR2, BiRefNet…). Variant = roster filter + build flag + variant-aware pickers/fetch + two installers from CI; `open` defaults to Klein 4B for Generate | **accepted 2026-10-04** (Q13) | 03 §3a, 04 §1b/§7, 06 §11, 12 M1/M7 | distribution-ready from day one |
+| D27 | **fps conform needs a spike (E9, in M6)**: measure the quality cost of interpolating Wan 16 fps → 24 fps (RIFE / FILM / Practical-RIFE) on bench clips vs native 24 fps LTX, scoring identity drift, flicker, ghosting on motion | **accepted 2026-10-04** (Q14) | 11, 12 E9 | decides export policy and whether Wan drafts can be conformed |
+| D28 | **Engine B (loom's torch worker) is not built into loom2** — no adapter in M1; the vendored code stays available as a reference and for A/B reruns only. ComfyUI is the sole engine until a measured need appears (sd.cpp Vulkan remains the planned zero-driver fallback) | proposed 2026-10-04 (E0 result) | 06 §3, 12 M1 | 10× slower on the same files; maintaining two engines costs more than it insures |
+| D29 | **dev default format = Comfy-Org fp8mixed + fp8 Mistral encoder, encoder on the GPU**; GGUF kept as a VRAM-saving option; Turbo LoRA offered as the "fast draft" preset (8 steps) | **accepted by measurement 2026-10-04** (E0) | 04 §3b, 09 §3b | fp8 2.7–3.5 s/it vs GGUF 31 s/it; CPU encode ≈ 170 s per new prompt |
+
+## Open questions (need the author)
+
+| Id | Question | Affects | Proposed default |
+| --- | --- | --- | --- |
+| Q1 | ~~H3 licence eligibility?~~ **Resolved 2026-10-04 → D17**: author is in the EU, eligible and willing; EU-first licensing focus | 04 §5, 11 | — |
+| Q2 | ~~Pen tablet model / driver?~~ **Resolved 2026-10-04 → D19**: no pen now, mouse-first; Windows Ink is the agreed future strategy | 05, 10 | — |
+| Q3 | ~~Reuse `D:\comfyui` for development spikes or as the engine checkout?~~ **Resolved 2026-10-04 → D15**; author confirms ComfyUI is for **model and inference management only** — its UI and queue are never used | 06 §3 | — |
+| Q4 | ~~Torch pin: stay on 2.9.1+rocm7.2.1 or adopt a community 2.12 build?~~ **Resolved 2026-10-04 → D16**: torch 2.13.0+rocm10.0.0 stable, Python 3.13 via uv | 04 §2 | — |
+| Q5 | ~~Project format defaults?~~ **Resolved 2026-10-04 → D18**: small drafts by default (720p images, 480p/576p video), FHD as a per-model option; constraints in 04 §9 | 06 §5, 09, 11 | — |
+| Q14 | ~~fps conform?~~ **Resolved → D27**: spike E9 measures interpolation quality; masters keep native fps meanwhile | 11, 12 E9 | — |
+
+| Q15 | **Why does dev Turbo sampling alternate between ≈ 4.5 and ≈ 7.2 s/it under sustained load** (vs 3.5 s/it when fresh)? Not the text encoder (cached). Candidates: thermal throttling (hot-spot), DynamicVRAM residency variance, per-weight LoRA patching | 12 E0 follow-up, M3 | instrument in M3: hot-spot/clock log next to the driver, no-LoRA control, `--disable-dynamic-vram` control |
+| Q16 | Should D28 (no Engine B adapter) be accepted? | 06 §3, 12 M1 | yes, unless the author wants the old worker kept runnable inside loom2 |
+
+Q1–Q14 are resolved; Q15–Q16 are open as of 2026-10-04 evening.
+| Q6 | ~~Accent / icons?~~ **Resolved → D20** keep | 07 §7 | — |
+| Q7 | ~~Default Generate tier?~~ **Resolved → D21**: FLUX.2 dev + JSON first; Klein later | 09 | — |
+| Q8 | ~~Inpaint candidates?~~ **Resolved → D22**: 4 Klein / 2 dev-Fill Pro | 10 | — |
+| Q9 | ~~SAM 3 licence?~~ **Resolved**: include in `full`; the `open` variant includes it only if the SAM 3 licence is verified permissive during M1 roster work (task, not question) | 04 §7, 10 | — |
+| Q10 | ~~Story layers?~~ **Resolved → D23**: adopt loom's design as-is post-MVP, then refine | 03 §5, 14 | — |
+| Q11 | ~~Krita trigger?~~ **Resolved → D24**: fallback only | 05 §8 | — |
+| Q12 | ~~LoRA slots?~~ **Resolved → D25**: designed in now, implemented post-MVP | 09 | — |
+| Q13 | ~~Build variants?~~ **Resolved → D26**: `full` + `open` in MVP | 04 §1b | — |
+
+## Volatile facts to re-check at each milestone start
+See 04 §8 (ROCm nightlies, INT8 convrot fix, FLUX.2 fill releases, Qwen-Image-2.1 licence, sd.cpp fixes,
+LTX-2.5 GGUF maturity, Wan-Animate-2 ComfyUI support, ComfyUI version pin).

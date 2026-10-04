@@ -1,0 +1,29 @@
+{
+  "scene": "The circular lamp room at the top of a lighthouse at night, brass lens assembly turning slowly",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin and a dark green hooded wool cloak, hood down",
+      "position": "lower left, kneeling on the iron floor",
+      "action": "unrolling a hand-drawn map and pinning it with the brass compass",
+      "pose": "kneeling, bent over the map, face lit from below, profile view",
+      "color_match": "exact"
+    },
+    {
+      "description": "The map shows a coastline with an island marked by a red X and the handwritten label \"SKERRY VAULT\"",
+      "position": "foreground, bottom of frame, readable"
+    }
+  ],
+  "style": "painterly cinematic concept art, visible brush texture, storyboard key frame",
+  "color_palette": ["#F2B544", "#1C2B3A", "#8A6F3E", "#DCD3C0"],
+  "lighting": "rotating warm lamp light sweeping across the room, cool blue night outside the glass, the map lit by a hurricane lantern",
+  "mood": "discovery, hushed excitement",
+  "background": "curved glass panes with rain, the great fresnel lens, iron spiral stairs descending",
+  "composition": "medium shot from slightly above, circular room suggested by the curved glass, map in the foreground",
+  "camera": {
+    "angle": "high angle, looking down over her shoulder",
+    "lens": "35mm",
+    "depth_of_field": "moderate, map sharp, lens assembly slightly soft",
+    "f-number": "f/4",
+    "distance": "medium shot"
+  }
+}

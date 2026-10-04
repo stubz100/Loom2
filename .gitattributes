@@ -1,0 +1,8 @@
+# Normalise line endings in the repo; scripts stay CRLF-tolerant on Windows.
+* text=auto
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.gguf binary
+*.safetensors binary

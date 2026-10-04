@@ -1,0 +1,25 @@
+{
+  "scene": "A narrow rain-soaked alley at night in a weathered harbour town, wet cobblestones reflecting neon signs",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin and a dark green hooded wool cloak, holding a small brass compass in her right hand",
+      "position": "right third of the frame, waist-up",
+      "action": "turning her head toward the viewer as if interrupted",
+      "pose": "body angled three-quarters away, head turned back over the left shoulder",
+      "color_match": "exact"
+    }
+  ],
+  "style": "painterly cinematic concept art, visible brush texture, storyboard key frame",
+  "color_palette": ["#0E1B2A", "#1FB6C8", "#F2A93B", "#7A2E1F"],
+  "lighting": "cool cyan neon rim light from the left, warm sodium street lamp glow from behind, soft fill from wet ground reflections",
+  "mood": "tense, secretive, quiet before a chase",
+  "background": "stacked crates, a steaming vent, a faded shop sign reading \"MARLOW & SONS\", distant harbour cranes in mist",
+  "composition": "rule of thirds, strong diagonal of the alley walls leading to the woman, foreground rain streaks",
+  "camera": {
+    "angle": "low angle, slightly below eye level",
+    "lens": "35mm",
+    "depth_of_field": "shallow, background softly blurred",
+    "f-number": "f/2.0",
+    "distance": "medium shot"
+  }
+}

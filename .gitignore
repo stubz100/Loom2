@@ -1,0 +1,28 @@
+# environments (recreated by uv from pyproject/uv.lock)
+.venv/
+engine/.venv/
+orchestrator/.venv/
+__pycache__/
+*.pyc
+# engine outputs and scratch
+engine/spikes/out/
+engine/comfyui_out/
+engine/comfyui/output/
+engine/comfyui/temp/
+engine/comfyui/input/
+engine/comfyui/user/
+engine/comfyui/custom_nodes/*/__pycache__/
+# weights never in git
+*.safetensors
+*.gguf
+*.ckpt
+*.pth
+*.onnx
+# node / frontend
+node_modules/
+dist/
+# OS
+Thumbs.db
+.DS_Store
+engine/comfyui_tmp/
+engine/comfyui_user/

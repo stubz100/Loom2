@@ -1,0 +1,31 @@
+{
+  "scene": "The open deck of an old steam trawler in a night storm, huge waves, spray and rain across the frame",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair plastered to her face and a soaked dark green wool cloak",
+      "position": "left third, gripping a rope railing",
+      "action": "shouting toward the wheelhouse, one arm pointing at a wave",
+      "pose": "braced wide stance, body leaning into the wind, three-quarter view",
+      "color_match": "exact"
+    },
+    {
+      "description": "A heavy-set grey-bearded captain in a navy peacoat",
+      "position": "right, in the lit wheelhouse doorway",
+      "action": "hauling on the wheel",
+      "pose": "leaning back, both hands on the wheel"
+    }
+  ],
+  "style": "painterly cinematic concept art, energetic brush strokes, storyboard action frame",
+  "color_palette": ["#0D1A24", "#3F6E7A", "#F2C14E", "#E9EEF2"],
+  "lighting": "lightning flash as a hard cold key from behind the wave, warm wheelhouse light on the captain, deck lamp swinging",
+  "mood": "chaotic, desperate",
+  "background": "a wall of black water, foam, the bow dipping, a lifebuoy swinging on its hook",
+  "composition": "dutch angle tilted 15 degrees, diagonal of the deck against the wave crest",
+  "camera": {
+    "angle": "low angle from the deck, tilted",
+    "lens": "24mm",
+    "depth_of_field": "deep, spray drops in the foreground",
+    "f-number": "f/5.6",
+    "distance": "wide shot"
+  }
+}

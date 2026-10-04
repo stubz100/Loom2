@@ -1,0 +1,30 @@
+{
+  "scene": "A crowded covered fish market in the harbour town at mid-morning, wet stone floor, hanging lanterns",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin and a dark green hooded wool cloak, hood up",
+      "position": "centre, moving through the crowd toward the camera",
+      "action": "glancing sideways at a stall while keeping her head low",
+      "pose": "walking, shoulders hunched, three-quarter front view",
+      "color_match": "exact"
+    },
+    {
+      "description": "Fishmongers in rubber aprons and a dozen townsfolk with baskets",
+      "position": "filling the frame around her, slightly out of focus",
+      "action": "haggling, carrying crates, calling out"
+    }
+  ],
+  "style": "painterly cinematic concept art, visible brush texture, storyboard key frame",
+  "color_palette": ["#9DB4C0", "#E0C9A6", "#3B4A3F", "#B0452B"],
+  "lighting": "diffuse skylight from a glass roof, warm lantern accents, wet reflections on the floor",
+  "mood": "bustling, anonymous, slightly paranoid",
+  "background": "stalls of silver fish on ice, hanging nets, a painted sign reading \"HARBOUR MARKET\"",
+  "composition": "medium shot through the crowd, foreground figures framing her, strong depth",
+  "camera": {
+    "angle": "eye level",
+    "lens": "50mm",
+    "depth_of_field": "shallow, crowd soft, her face sharp",
+    "f-number": "f/2.2",
+    "distance": "medium shot"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "_doc": "E4/E5 image-to-video bench (04 §6). Start/end frames are renders of the t2i bench prompts (same character) so identity can be judged across image and video. Frames under frames/ are produced in M0 close-out with the fp8 dev 20-step preset at the project Draft size and then frozen. Scores: identity (ArcFace FaceSim across frames, advisory), motion plausibility, end-frame reach (FLF tasks), artefacts, time.",
+  "defaults": {"wan": {"width": 832, "height": 480, "frames": 81, "fps": 16}, "ltx": {"width": 1024, "height": 576, "frames": 121, "fps": 24}, "h3": {"width": 864, "height": 480, "seconds": 5}},
+  "tasks": [
+    {
+      "id": "01-character-turn",
+      "kind": "i2v_prompt",
+      "start": "frames/alley-rain_s20261004.png",
+      "prompt": "she slowly turns to face the camera and lowers the compass, rain keeps falling, neon flickers, subtle handheld camera",
+      "expect": "face and braids stay identical through the turn, cloak and compass preserved, no morphing of the sign"
+    },
+    {
+      "id": "02-walk-toward-camera",
+      "kind": "i2v_prompt",
+      "start": "frames/fish-market_s20261004.png",
+      "prompt": "she walks toward the camera through the crowd, crowd moves naturally, camera holds still",
+      "expect": "plausible gait and cloth motion, crowd parallax, identity kept while scale changes"
+    },
+    {
+      "id": "03-flf-rooftop-crouch-to-stand",
+      "kind": "flf2v",
+      "start": "frames/rooftop-night_s20261004.png",
+      "end": "frames/rooftop-night-standing_s20261004.png",
+      "prompt": "she rises from the crouch and stands at the roof edge looking out, cloak moves in the wind",
+      "expect": "reaches the end pose without a cut or morph, roofline and moon stay fixed"
+    },
+    {
+      "id": "04-camera-push-cabin",
+      "kind": "i2v_prompt",
+      "start": "frames/captain-cabin_s20261004.png",
+      "prompt": "slow dolly push-in toward the chart table, lamp flame flickers, the captain nods once",
+      "expect": "clean camera motion without geometry warping, two characters stable, lamp flicker plausible"
+    },
+    {
+      "id": "05-dialogue-gesture",
+      "kind": "i2v_prompt",
+      "start": "frames/portrait-grief_s20261004.png",
+      "prompt": "she takes a breath, blinks, looks down and then back up at the camera, a single tear runs down her cheek",
+      "expect": "natural blink and eye motion, no identity drift in a tight close-up, no teeth/mouth artefacts"
+    }
+  ]
+}

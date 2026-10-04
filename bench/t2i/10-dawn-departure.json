@@ -1,0 +1,30 @@
+{
+  "scene": "The harbour mouth at dawn, mist on flat water, the old steam trawler pulling away from the quay",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair and a dark green hooded wool cloak, hood up",
+      "position": "centre-right, standing at the stern rail of the trawler",
+      "action": "looking back at the town, one hand raised in a small wave",
+      "pose": "full body, turned toward the camera, cloak stirring in the breeze",
+      "color_match": "exact"
+    },
+    {
+      "description": "A heavy-set grey-bearded captain in a navy peacoat",
+      "position": "far right, small, at the wheelhouse window",
+      "action": "steering"
+    }
+  ],
+  "style": "painterly cinematic concept art, soft brush texture, wide storyboard frame",
+  "color_palette": ["#F4D6B5", "#9FB7C9", "#2E3E48", "#3F5B3A"],
+  "lighting": "low golden sunrise from the left, long soft shadows, mist glowing, cool shadows on the water",
+  "mood": "bittersweet, hopeful",
+  "background": "the town's slate roofs and church spire in silhouette, the lighthouse, gulls, a buoy",
+  "composition": "wide shot, boat in the lower right quadrant, town on the left, horizon on the lower third",
+  "camera": {
+    "angle": "eye level from the quay",
+    "lens": "35mm",
+    "depth_of_field": "deep",
+    "f-number": "f/8",
+    "distance": "wide shot"
+  }
+}

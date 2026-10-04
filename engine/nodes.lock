@@ -1,0 +1,6 @@
+# pinned custom nodes (repo  commit  date) — generated 2026-10-04
+ComfyUI-GGUF  https://github.com/city96/ComfyUI-GGUF  6ea2651  2026-01-12
+LanPaint  https://github.com/scraed/LanPaint  2d7912f  2026-09-28
+
+# local patches (engine/patches/) applied on top of the pinned commits
+ComfyUI-GGUF  patch  comfyui-gguf-pr479-tekken-special-tokens.patch  (upstream PR #479, 2026-09-05)

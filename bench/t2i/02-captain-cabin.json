@@ -1,0 +1,31 @@
+{
+  "scene": "The cramped wood-panelled cabin of an old steam trawler at dusk, charts and brass instruments on a table",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin and a dark green hooded wool cloak, hood down",
+      "position": "left of frame, seated at the chart table",
+      "action": "pointing at a spot on a sea chart",
+      "pose": "leaning forward, elbows on the table, face in three-quarter view",
+      "color_match": "exact"
+    },
+    {
+      "description": "A heavy-set grey-bearded captain in a navy peacoat and knitted cap",
+      "position": "right of frame, standing",
+      "action": "listening with crossed arms",
+      "pose": "weight on one leg, head tilted down toward the chart"
+    }
+  ],
+  "style": "painterly cinematic concept art, visible brush texture, storyboard key frame",
+  "color_palette": ["#2B1B10", "#D98E32", "#4A6B5A", "#F2E6C9"],
+  "lighting": "single warm oil lamp on the table as key light, cool dusk light through a small porthole",
+  "mood": "conspiratorial, hushed",
+  "background": "porthole with rain, coiled rope, a ticking brass chronometer, hanging oilskins",
+  "composition": "two-shot, eye-level, table in the lower third forming a base line between them",
+  "camera": {
+    "angle": "eye level",
+    "lens": "28mm",
+    "depth_of_field": "moderate, both faces sharp",
+    "f-number": "f/4",
+    "distance": "medium wide shot"
+  }
+}

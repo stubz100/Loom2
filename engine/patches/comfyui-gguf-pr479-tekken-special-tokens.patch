@@ -1,0 +1,19 @@
+From: loom2 vendored patch (upstream city96/ComfyUI-GGUF PR #479, 2026-09-05, open at pin time)
+Subject: Fix KeyError 'default_num_special_tokens' when recreating the Mistral tekken tokenizer from GGUF metadata
+
+Core ComfyUI (>= 0.38) from_tekken_json requires config["default_num_special_tokens"]; Mistral's tekken.json
+uses 1000. Applied locally until the PR is merged and the node pin moves (recorded in engine/nodes.lock).
+
+diff --git a/loader.py b/loader.py
+index 7cefb11..ca617c8 100644
+--- a/loader.py
++++ b/loader.py
+@@ -395,7 +395,7 @@ def gguf_tekken_tokenizer_loader(path, temb_shape):
+     if model_str == "gpt2":
+         if temb_shape == (131072, 5120): # probably Mistral
+             data = {
+-                "config": {"num_vocab_tokens": 150000, "default_vocab_size": 131072},
++                "config": {"num_vocab_tokens": 150000, "default_vocab_size": 131072, "default_num_special_tokens": 1000},
+                 "vocab": [],
+                 "special_tokens": [],
+             }

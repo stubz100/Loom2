@@ -1,0 +1,29 @@
+{
+  "scene": "A weathered paper wanted poster nailed to a harbour noticeboard, photographed straight on",
+  "subjects": [
+    {
+      "description": "A printed woodcut-style portrait of a young woman with long red braided hair, freckles and a green hood",
+      "position": "upper two-thirds of the poster",
+      "action": "staring out of the portrait",
+      "pose": "head and shoulders, front view",
+      "color_match": "exact"
+    },
+    {
+      "description": "Bold headline text reading \"WANTED\" at the top and the words \"REWARD 200 CROWNS\" at the bottom in a serif typeface",
+      "position": "top and bottom bands of the poster"
+    }
+  ],
+  "style": "19th-century letterpress poster, aged paper, ink bleed, slight tears, storyboard insert shot",
+  "color_palette": ["#D9C7A1", "#2A2320", "#8C2F1B"],
+  "lighting": "soft overcast daylight from above, faint shadow of the nail head",
+  "mood": "ominous",
+  "background": "grey wooden noticeboard planks, other torn notices at the edges",
+  "composition": "poster fills the frame, centred, slight perspective from being pinned unevenly",
+  "camera": {
+    "angle": "straight on, eye level",
+    "lens": "50mm",
+    "depth_of_field": "shallow, edges of the board soft",
+    "f-number": "f/2.8",
+    "distance": "close-up insert"
+  }
+}

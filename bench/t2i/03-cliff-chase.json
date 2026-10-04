@@ -1,0 +1,30 @@
+{
+  "scene": "A windswept coastal cliff path at midday with grey sea and breaking waves far below",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair and a dark green hooded wool cloak streaming behind her",
+      "position": "centre-left, small in frame",
+      "action": "sprinting along the path toward the right edge of frame",
+      "pose": "full body, mid-stride, arms pumping, braid flying",
+      "color_match": "exact"
+    },
+    {
+      "description": "Three distant figures in black coats",
+      "position": "far left, on the path behind her",
+      "action": "running after her"
+    }
+  ],
+  "style": "painterly cinematic concept art, wide establishing storyboard frame",
+  "color_palette": ["#6E7F8C", "#3C5A3E", "#E8E4DA", "#1F2A33"],
+  "lighting": "flat overcast daylight, soft shadows, spray catching the light",
+  "mood": "urgent, exposed",
+  "background": "lighthouse on a headland, gorse bushes, a wooden signpost",
+  "composition": "extreme wide shot, horizon on the upper third, strong left-to-right motion line",
+  "camera": {
+    "angle": "high angle, looking slightly down the path",
+    "lens": "24mm",
+    "depth_of_field": "deep, everything sharp",
+    "f-number": "f/8",
+    "distance": "extreme wide shot"
+  }
+}

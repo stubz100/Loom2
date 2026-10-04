@@ -1,0 +1,25 @@
+{
+  "scene": "A plain whitewashed room with a single small window, late afternoon",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin, hood of her dark green wool cloak pushed back",
+      "position": "centred, filling the frame",
+      "action": "holding back tears, lips pressed together, eyes glossy, looking just past the camera",
+      "pose": "head and shoulders, slight downward tilt of the head, front view",
+      "color_match": "exact"
+    }
+  ],
+  "style": "painterly cinematic concept art, soft brush texture, storyboard close-up",
+  "color_palette": ["#EDE6DA", "#2F4A3A", "#B5542F", "#6B5A4E"],
+  "lighting": "soft window light from the right as key, gentle bounce fill from the white wall, no rim",
+  "mood": "grief held in, quiet",
+  "background": "blurred whitewashed wall, edge of the window frame",
+  "composition": "tight close-up, eyes on the upper third line, lots of headroom removed",
+  "camera": {
+    "angle": "eye level",
+    "lens": "85mm",
+    "depth_of_field": "very shallow, ears already soft",
+    "f-number": "f/1.8",
+    "distance": "close-up"
+  }
+}

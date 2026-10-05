@@ -614,3 +614,23 @@ read the clock)*
   description (what the floor and wall are, nothing about objects).
 - **Q17 resolved → D7 amended again (04 §4, 10, 12, 13):** Remove = Klein ICM with the neutralised-hole
   reference (default), LanPaint Prompt First as the alternative, Fill Hero for quality.
+
+## 2026-10-05 13:07 — E4b: the motion lever is the undistilled high expert, not more Lightning steps
+
+- Three extra Wan clips on the shared engine, 12:43–13:06 (832×480 × 81 f, seed 20261005, 0 errors):
+
+  | task | recipe | exec s | sampling s | high / low sampler s | VAE decode s |
+  | --- | --- | --- | --- | --- | --- |
+  | 01 character turn | lightning44 (4 + 4, LoRAs, CFG 1) | 550 | 330 | 173 / 203 | 116 |
+  | 04 camera push | lightning44 | 424 | 240 | 142 / 137 | 115 |
+  | 04 camera push | motion (high no LoRA CFG 3.5 0–4, low LoRA CFG 1 4–8) | 495 | 313 | 249 / 129 | 116 |
+
+- lightning44 reproduces the 2 + 2 clips almost frame for frame (01 still looks down at the compass, 04 still
+  barely moves) for 35–60 % more time → dropped. The **motion** recipe makes the captain unfold his arms and
+  lean in to point at the chart, the girl follows with her eyes, identity and the cabin geometry hold; the
+  dolly push itself is still minimal — camera moves are a control problem (VACE / camera LoRAs), not a sampler
+  setting. CFG 3.5 on the high expert costs 2 forward passes per step (249 s vs 142 s).
+- VAE decode fell to 115–116 s from 131–134 s on a warm engine (the first E4 run decoded cold) — still the
+  largest fixed cost (Q18).
+- **Presets for M6 (04 §5b, 12 E4):** Draft = Lightning 2 + 2 (≈ 315 s per 5 s clip), Motion = undistilled
+  high + distilled low (≈ 495 s). D8 unchanged.

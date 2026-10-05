@@ -208,8 +208,12 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   832×480 × 81 f with Lightning 2 + 2 steps (high 0.7 / low 1.0, CFG 1, shift 5), **312–366 s per clip**, of
   which the Wan VAE decode is 131–134 s and the start-image encode 36–40 s (Q18) against 104–130 s of
   sampling; identity held in every clip including the tight close-up, FLF reached the end pose. Weak spots:
-  camera moves (the push-in barely moves) and the turn-to-camera (she looks down at the compass instead) —
-  E4b tries 4 + 4 steps with CFG 2.5 on the high expert for motion before M6 fixes the presets.
+  camera moves (the push-in barely moves) and the turn-to-camera (she looks down at the compass instead).
+  **E4b (same day):** 4 + 4 Lightning steps change nothing (same motion, 424–550 s); the **high expert without
+  the LoRA at CFG 3.5 for steps 0–4, low expert with the LoRA at CFG 1 for 4–8** ("motion" recipe, 495 s)
+  gives real character action (the captain unfolds his arms and leans in to point) with identity intact.
+  Presets for M6: **Draft = Lightning 2 + 2 (≈ 315 s)**, **Motion = undistilled high + distilled low (≈ 495 s)**;
+  camera moves need a dedicated control (Wan camera LoRAs / VACE) post-MVP, no recipe fixed them.
 - **Secondary engine: LTX-2.3 distilled** GGUF Q4_K_M + Gemma-3-12B Q4, `LTXVAddGuide` at frame 0 / −1 (+
   optional middle beats), 8 steps, 24 fps. Reasons: fastest open model (interactive previews on AMD),
   arbitrary keyframe conditioning maps directly onto "boards → beats", IC-LoRA pose/depth for driven motion,

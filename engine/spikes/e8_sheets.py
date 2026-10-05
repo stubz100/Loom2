@@ -14,7 +14,8 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 BENCH = ROOT / "bench" / "inpaint"
 OUT_E8 = ROOT / "engine" / "spikes" / "out" / "e8"
-METHODS = ["klein_icm", "klein_base_icm", "klein_lanpaint", "dev_lanpaint", "fill", "qwen_edit"]
+METHODS = ["klein_icm", "klein_base_icm", "klein_lanpaint", "dev_lanpaint", "fill", "qwen_edit",
+           "klein_icm_noref", "klein_icm_hole", "klein_lanpaint_pf", "klein_lanpaint_noref"]  # last four: E8b (Q17)
 LABEL_H = 30
 MARGIN = 40
 

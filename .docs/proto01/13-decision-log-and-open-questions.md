@@ -58,10 +58,10 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 
 | Q15 | **Why does dev Turbo sampling alternate between ≈ 4.5 and ≈ 7.2 s/it under sustained load** (vs 3.5 s/it when fresh)? Not the text encoder (cached); reproduced in every E7 run (warm 8-step KSampler 58–74 s vs 27 s sampling cold). Candidates: thermal throttling (hot-spot), DynamicVRAM residency variance, per-weight LoRA patching. 2026-10-05: `torch.cuda.temperature()/clock_rate()` need `amdsmi`, which has no Windows build → telemetry must come from HWiNFO shared memory or ADLX | 12 E0 follow-up, M3 | instrument in M3: HWiNFO/ADLX hot-spot + clock log next to the driver, no-LoRA control, `--disable-dynamic-vram` control |
 | Q16 | ~~Accept D28?~~ **Resolved 2026-10-04 → D28 accepted** | 06 §3, 12 M1 | — |
-| Q17 | **Klein object-removal recipe** — in E8 every Klein graph kept or swapped the crates (ICM's `ReferenceLatent` feeds the masked content back in; LanPaint "Image First" swaps the object), only dev + LanPaint removed them. Try ICM without the reference (or with the hole neutralised in the reference) and LanPaint "Prompt First" / higher λ | 04 §4, 12 E8b | run E8b on task 01 once E4/E5 free the engine; removal stays a Fill Hero job meanwhile |
+| Q17 | ~~Klein object-removal recipe?~~ **Resolved 2026-10-05 by E8b**: neutralise the hole in the reference image (`klein_icm_hole`, 10 s warm) or LanPaint "Prompt First" λ 8 (21 s); both cleared the crates that every reference-fed Klein graph kept. The Remove verb uses the hole recipe with a background-only prompt | 04 §4, 10 | — |
 | Q18 | **Wan VAE time**: decoding 81 × 832×480 frames takes 131–134 s and the start-image encode 36–40 s — 54 % of a 315 s clip (sampling 104–130 s). Try MIOpen on for the 3D convs (E7 measured image VAEs only), `VAEDecodeTiled` temporal tiling, and a lightweight preview VAE | 04 §5, 12 E4 | measure in M6 before the Animate suite sets its progress expectations |
 
-Q1–Q14 and Q16 are resolved; Q15, Q17 and Q18 are open as of 2026-10-05 midday.
+Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-05 afternoon.
 | Q6 | ~~Accent / icons?~~ **Resolved → D20** keep | 07 §7 | — |
 | Q7 | ~~Default Generate tier?~~ **Resolved → D21**: FLUX.2 dev + JSON first; Klein later | 09 | — |
 | Q8 | ~~Inpaint candidates?~~ **Resolved → D22**: 4 Klein / 2 dev (Fill Pro dropped by E8) | 10 | — |

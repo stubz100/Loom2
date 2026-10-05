@@ -595,3 +595,22 @@ read the clock)*
   not on speed; Wan remains primary on identity (D8).
 - Driver gap: the e5 driver does not collect per-node times (the e4 driver does, via the websocket) — the
   engine log's progress bars were used instead; port the e4 collector before M6.
+
+## 2026-10-05 12:44 — E8b: Klein removes objects once the reference stops showing them (Q17 resolved)
+
+- Task 01 (remove crates) × 4 Klein variants on the frozen source, 12:41–12:42, 0 errors:
+  `klein_icm_noref` 31 s (cold load), `klein_icm_hole` 10 s, `klein_lanpaint_pf` 21 s, `klein_lanpaint_noref` 13 s.
+- Results (detail sheet `engine/spikes/out/e8_sheets/01-remove-crates_detail.png`): **every variant cleared the
+  crates.** `klein_icm_hole` (reference image with the hole painted mid grey) gives a clean brick wall with a
+  grille vent and the golden cobbles continuing at the bottom — the most scene-faithful; `klein_lanpaint_pf`
+  ("Prompt First", λ 8) leaves an almost empty floor with steam and a low metal step — closest to "empty";
+  `klein_icm_noref` builds a wall with a steaming pipe; `klein_lanpaint_noref` swaps in a steaming trough.
+  dev + LanPaint (255 s) remains the best-looking removal but is no longer the only one.
+- Why run 3 failed on this task: `ReferenceLatent` of the untouched source tells Klein "this scene contains
+  crates here", and LanPaint "Image First" leans on the same latent. Neutralising the hole (not dropping the
+  reference) keeps the rest of the scene anchored while freeing the masked region.
+- Bench note: the task prompt literally asks for "a grimy brick wall with a steaming vent", so every variant
+  painted a vent — the prompt stays frozen, but the **Remove** verb in 10 must send a background-only
+  description (what the floor and wall are, nothing about objects).
+- **Q17 resolved → D7 amended again (04 §4, 10, 12, 13):** Remove = Klein ICM with the neutralised-hole
+  reference (default), LanPaint Prompt First as the alternative, Fill Hero for quality.

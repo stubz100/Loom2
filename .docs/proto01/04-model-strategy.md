@@ -163,8 +163,12 @@ cloak colour, 46–155 s) and stays on the refine path only. The editor's "AI in
 (Klein + LanPaint) · Fill-Match (Klein ICM) · Fill Hero (dev + LanPaint)** with the same selection → mask →
 new-layer contract; "Edit by instruction" waits for a model that beats Klein on this bench. Candidate defaults
 (D22): **4 on Klein, 2 on dev**. In the `open` variant Fill Hero is absent and Fill runs on Klein 4B
-(unmeasured). Open: **Q17** — a Klein recipe for object removal (E8b: ICM without `ReferenceLatent` on the
-masked region, LanPaint "Prompt First"); until then removal is a Fill Hero job.
+(unmeasured). **Q17 resolved by E8b (2026-10-05):** Klein removes objects once the reference stops showing
+them — ICM with the hole neutralised to mid grey in the reference image (`klein_icm_hole`, 10 s warm) and
+LanPaint in "Prompt First" mode (λ 8, 21 s) both cleared the crates that every reference-fed graph had kept;
+dropping the reference entirely also clears them but drifts further from the scene. The editor's **Remove**
+verb therefore runs the hole recipe with a background-only prompt (the bench prompt's "steaming vent" duly
+produced a vent in every variant), and Fill Hero stays the quality option for removal.
 
 **Masks:** SAM 3 (`sam3.pt` on disk) for click/box/text-prompt segmentation, BiRefNet / BiRefNet_HR (MIT) for
 subject matting, YOLOv8 face/hand/person/skin/hair detectors for one-click region masks.

@@ -85,7 +85,7 @@ document when none) and returns **new layers**.
 
 | Operation | Modes | Controls | Result |
 | --- | --- | --- | --- |
-| **Inpaint** | Fill (Klein + LanPaint, default) · Fill-Match (Klein ICM/ReferenceLatent, conservative texture continuation) · Fill Hero (FLUX.2 dev + LanPaint, slow, the removal tier) — E8 2026-10-05 dropped Fill Pro (FLUX.1 Fill) and deferred Edit by instruction (Qwen) post-MVP | prompt (text or compact tree), candidates 1–4 (**default 4 on Klein, 2 on dev**, D22), seed, **region**: context margin % (default 25), min working size (auto-upscale small regions to ≥ 1024 px), paste-back feather px, "match colour to surroundings", mask expand px | N candidate layers in a **variant strip** over the canvas; pick one (`1–4`, Enter) → kept as a layer with mask; others discarded (or "keep all hidden") |
+| **Inpaint** | Fill (Klein + LanPaint, default) · Fill-Match (Klein ICM/ReferenceLatent, conservative texture continuation) · Fill Hero (FLUX.2 dev + LanPaint, slow) · Remove (Klein ICM with the hole neutralised in the reference and a background-only prompt, E8b) — E8 2026-10-05 dropped Fill Pro (FLUX.1 Fill) and deferred Edit by instruction (Qwen) post-MVP | prompt (text or compact tree), candidates 1–4 (**default 4 on Klein, 2 on dev**, D22), seed, **region**: context margin % (default 25), min working size (auto-upscale small regions to ≥ 1024 px), paste-back feather px, "match colour to surroundings", mask expand px | N candidate layers in a **variant strip** over the canvas; pick one (`1–4`, Enter) → kept as a layer with mask; others discarded (or "keep all hidden") |
 | **Refine** (i2i) | Klein base · dev · Klein distilled "enhance" instruction | strength 0.15–0.6 (schedule semantics exact), prompt (defaults to the source asset's prompt), on: active layer / visible / selection | new layer above |
 | **Upscale** | ESRGAN 2× · Tiled refine (Klein base, tile 1024, overlap 128, strength 0.25) · SeedVR2 (post-MVP) | factor, tile settings | new document size (prompt to resize canvas) or new layer at 1× (downscaled preview) |
 | **Remove background** | BiRefNet / HR | refine, output as mask or transparency | mask on active layer |
@@ -173,7 +173,7 @@ save/export is uploaded as tiles (PNG per tile or raw RGBA with Range) to keep m
       reference flatten (ΔE small on a test document).
 - [ ] Brush with pressure on the tablet meets the latency budget; undo/redo across 100 strokes is instant.
 - [ ] SAM click/box/text and BiRefNet produce masks on the canvas within 3 s.
-- [ ] Inpaint Fill / Fill-Match / Fill Hero each return candidate layers with masks; paste-back has no
+- [ ] Inpaint Fill / Fill-Match / Fill Hero / Remove each return candidate layers with masks; paste-back has no
       visible seam on the 5 bench tasks (04 §6).
 - [ ] Refine at 0.25 on Klein base changes detail without reconstructing the input (schedule fix honoured).
 - [ ] ORA round-trip (save, reopen) is lossless; PSD export opens in Photoshop and Krita with structure intact.

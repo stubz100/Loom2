@@ -15,6 +15,9 @@ import { selectedOrPrimary, type Folder, type GroupHeader, type GroupMode, type 
 import { useCat } from './catalogueContext'
 import './catalogue.css'
 
+/** Group headers show the scene of a JSON prompt rather than the raw JSON. */
+const excerptOf = (p: string) => { const m = /^\{\s*"scene"\s*:\s*"([^"]{1,80})/.exec(p); return m ? m[1] : p }
+
 const FOLDERS: [Folder, string][] = [['all', 'All'], ['today', 'Today'], ['last_session', 'Last session'], ['images', 'Images'], ['clips', 'Clips'], ['documents', 'Documents'], ['imported', 'Imported'], ['rejected', 'Rejected'], ['trash', 'Trash']]
 const GROUPS: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
 const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'oldest'], ['rating_desc', 'rating'], ['model', 'model'], ['size_desc', 'size']]
@@ -34,6 +37,7 @@ function Panel({ tab }: { tab: string }) {
       const l = p.get('loupe'); const cmp = p.get('compare')
       if (l) c.openLoupe(l)
       else if (cmp) { cmp.split(',').filter(Boolean).forEach((id) => c.togglePin(id)); c.setCompareOpen(true) }
+      if (p.get('expand') === 'all') c.expandAll(true)
     })
     void c.refreshMeta()
   }, [s.project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -166,7 +170,7 @@ export function Strip() {
       <span>sort</span>
       <select value={c.q.sort} onChange={(e) => c.setQuery({ sort: e.target.value as Sort })}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       {activeChips.length > 0 && <span className="chips">{activeChips.map((x) => <span key={x} className="chip-f">{x}</span>)}</span>}
-      <span style={{ color: 'var(--fg3)' }}>{c.total ?? '…'} assets{c.loading ? ' · loading' : ''}</span>
+      <span style={{ color: c.error ? 'var(--error)' : 'var(--fg3)' }}>{c.error ?? `${c.total ?? '…'} assets${c.loading ? ' · loading' : ''}`}</span>
       <span className="spacer" />
       {ids.length > 0 && (
         <>
@@ -188,7 +192,7 @@ export function Strip() {
 }
 
 // ---------------------------------------------------------------- Stage
-type Row = { kind: 'header'; g: GroupHeader } | { kind: 'tiles'; items: Asset[] } | { kind: 'note'; text: string }
+type Row = { kind: 'header'; g: GroupHeader } | { kind: 'tiles'; items: Asset[] } | { kind: 'note'; text: string; key: string }
 
 export function Stage() {
   const c = useCat()
@@ -215,10 +219,10 @@ export function Stage() {
     if (c.q.group === 'none') chunk(c.items)
     else for (const g of c.groups) {
       out.push({ kind: 'header', g })
-      if (c.expanded[g.key]) { const items = c.groupItems[g.key]; if (items) chunk(items); else out.push({ kind: 'note', text: 'loading…' }) }
+      if (c.expanded[g.key]) { const items = c.groupItems[g.key]; if (items) chunk(items); else out.push({ kind: 'note', text: c.groupErrors[g.key] ? `failed: ${c.groupErrors[g.key]}` : 'loading…', key: g.key }) }
     }
     return out
-  }, [c.items, c.groups, c.groupItems, c.expanded, c.q.group, cols])
+  }, [c.items, c.groups, c.groupItems, c.groupErrors, c.expanded, c.q.group, cols])
   const rowKey = useCallback((i: number) => { const r = rows[i]; return r.kind === 'header' ? `h:${r.g.key}` : r.kind === 'tiles' ? `t:${r.items[0]?.id}:${r.items.length}` : `n:${i}` }, [rows])
   const headerIdx = useMemo(() => rows.map((r, i) => (r.kind === 'header' ? i : -1)).filter((i) => i >= 0), [rows])
   const activeSticky = useRef(-1)
@@ -235,7 +239,9 @@ export function Stage() {
   const vitems = virt.getVirtualItems()
   useEffect(() => {
     if (c.q.group === 'none' && c.nextCursor && vitems.length && vitems[vitems.length - 1].index >= rows.length - 3) void c.loadMore()
-  }, [vitems, rows.length, c.nextCursor, c.q.group]) // eslint-disable-line react-hooks/exhaustive-deps
+    // expanded groups load as their placeholder rows come into view (bounded by the store's in-flight limit)
+    for (const v of vitems) { const r = rows[v.index]; if (r?.kind === 'note' && !c.groupErrors[r.key]) void c.loadGroup(r.key) }
+  }, [vitems, rows, c.nextCursor, c.q.group]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rowOf = useCallback((id: string) => rows.findIndex((r) => r.kind === 'tiles' && r.items.some((a) => a.id === id)), [rows])
   const focusId = useCallback((id: string, mode: 'single' | 'range') => {
@@ -305,11 +311,11 @@ export function Stage() {
             <div key={v.key} className={`cat-header${sticky ? ' sticky' : ''}`} style={st} data-index={v.index} ref={sticky ? undefined : virt.measureElement} onClick={() => c.toggleGroup(r.g.key)}>
               <span>{c.expanded[r.g.key] ? '▾' : '▸'}</span>
               {r.g.cover_id && <img className="cover" src={api.thumbUrl(r.g.cover_id, 256)} alt="" loading="lazy" />}
-              <b>{r.g.label}</b>{r.g.model_id && <span>· {r.g.model_id}</span>}<span className="excerpt">{r.g.prompt_excerpt ? `· "${r.g.prompt_excerpt}"` : ''}</span>
+              <b>{r.g.label}</b>{r.g.model_id && <span>· {r.g.model_id}</span>}<span className="excerpt">{r.g.prompt_excerpt ? `· "${excerptOf(r.g.prompt_excerpt)}"` : ''}</span>
               <span>{r.g.count} · {new Date(r.g.last_created).toLocaleString()}</span>
             </div>
           )
-          if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st}><span className="excerpt">{r.text}</span></div>
+          if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
               {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} dragIds={() => selectedOrPrimary(c)} />)}

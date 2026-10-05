@@ -806,3 +806,15 @@ read the clock)*
   Klein 9B-KV are M5.
 - 09 §10 "adherence recorded" is therefore done qualitatively; a per-field score table can follow when the
   Catalogue's compare view is used for a second seed.
+
+## 2026-10-05 16:24 — Catalogue "expand all" on 10k: thousands of fetches → lazy group loading (user report)
+
+- The user expanded all groups on the 10k project and got a wall of `TypeError: Failed to fetch`: `expandAll`
+  fired one `/assets` fetch per group (2 612 at once); the browser dropped connections and every rejected
+  promise hit the crash overlay. Fix: groups load only when their placeholder row scrolls into view (the
+  virtualiser's visible range), at most 6 fetches in flight (`limited()` in the store), failures are recorded
+  per group with a "retry" on the row and one line in the strip instead of an overlay.
+- Found while verifying: single-image batches have no `batch_id`, so the header key fell back to `job_id` and
+  the item request (`batch_id=<job_id>`) returned nothing — expanded groups looked empty. The item query now
+  takes `group_by` + `group_key` and filters on the same `COALESCE(...)` expression the headers use (test added).
+- Cosmetic: dev headers showed the raw JSON as excerpt; the scene field is shown instead.

@@ -66,6 +66,9 @@ class AssetRecord(BaseModel):
     sha256: str | None = None
 
 
+GROUP_KEY = {"batch": "COALESCE(batch_id, job_id, id)", "lineage": "COALESCE(root_id, id)", "session": "COALESCE(session_id, '')", "model": "COALESCE(model_id, '')"}
+
+
 class AssetQuery(BaseModel):
     folder: Folder = "all"
     kind: AssetKind | None = None
@@ -90,6 +93,8 @@ class AssetQuery(BaseModel):
     job_id: str | None = None
     sort: Sort = "created_desc"
     group: GroupMode = "none"
+    group_by: GroupMode | None = None            # with group_key: the items of one group, using the same key expression as groups()
+    group_key: str | None = None
     limit: int = 200
     cursor: str | None = None
 
@@ -374,6 +379,8 @@ class Catalogue:
                 where.append(f"{col} = ?"); args.append(val)
         if q.collection_id:
             where.append("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)"); args.append(q.collection_id)
+        if q.group_by and q.group_by != "none" and q.group_key is not None:
+            where.append(f"{GROUP_KEY[q.group_by]} = ?"); args.append(q.group_key)
         if q.search:
             if self.fts and fts_query(q.search):
                 where.append("id IN (SELECT id FROM assets_fts WHERE assets_fts MATCH ?)"); args.append(fts_query(q.search))
@@ -415,7 +422,7 @@ class Catalogue:
 
     def groups(self, q: AssetQuery) -> list[GroupHeader]:
         """Server-side group headers for the Stage (08 §3b): one row per batch / lineage root / session / model."""
-        col = {"batch": "COALESCE(batch_id, job_id, id)", "lineage": "COALESCE(root_id, id)", "session": "COALESCE(session_id, '')", "model": "COALESCE(model_id, '')"}.get(q.group)
+        col = GROUP_KEY.get(q.group)
         if col is None:
             return []
         where, args = self._where(q)

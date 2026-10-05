@@ -37,7 +37,7 @@ function qs(q: Query, extra: Record<string, string | number | boolean | undefine
 export interface CatalogueState {
   q: Query
   items: Asset[]; nextCursor: string | null; total: number | null; loading: boolean; error: string | null
-  groups: GroupHeader[]; groupItems: Record<string, Asset[]>; expanded: Record<string, boolean>; groupLoading: Record<string, boolean>
+  groups: GroupHeader[]; groupItems: Record<string, Asset[]>; expanded: Record<string, boolean>; groupLoading: Record<string, boolean>; groupErrors: Record<string, string>
   counts: Record<string, number>; collections: Collection[]; tagCloud: { tag: string; count: number }[]
   selected: string[]; primary: string | null; anchor: string | null
   tile: number; fill: boolean
@@ -49,6 +49,7 @@ export interface CatalogueState {
   loadGroup: (key: string) => Promise<void>
   toggleGroup: (key: string, open?: boolean) => void
   expandAll: (open: boolean) => void
+  retryGroup: (key: string) => void
   refreshMeta: () => Promise<void>
   visibleOrder: () => string[]
   byId: (id: string) => Asset | undefined
@@ -77,6 +78,14 @@ export interface CatalogueState {
 }
 
 let loadSeq = 0
+const MAX_INFLIGHT = 6
+let inflight = 0
+const waiting: (() => void)[] = []
+async function limited<T>(fn: () => Promise<T>): Promise<T> {
+  if (inflight >= MAX_INFLIGHT) await new Promise<void>((resolve) => waiting.push(resolve))
+  inflight++
+  try { return await fn() } finally { inflight--; waiting.shift()?.() }
+}
 
 export function createCatalogueStore(name: string, defaults: Partial<Query> = {}) {
   const DEFAULT_Q: Query = { ...DEFAULT_QUERY, ...defaults }
@@ -84,7 +93,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
   persist(
     (set, get) => ({
       q: DEFAULT_Q, items: [], nextCursor: null, total: null, loading: false, error: null,
-      groups: [], groupItems: {}, expanded: {}, groupLoading: {}, counts: {}, collections: [], tagCloud: [],
+      groups: [], groupItems: {}, expanded: {}, groupLoading: {}, groupErrors: {}, counts: {}, collections: [], tagCloud: [],
       selected: [], primary: null, anchor: null, tile: 192, fill: false, loupe: null, compare: [], compareOpen: false, pendingDelete: null,
 
       setQuery: (patch) => { set({ q: { ...get().q, ...patch } }); return get().load() },
@@ -103,8 +112,9 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
             if (seq !== loadSeq) return
             const expanded = { ...get().expanded }
             groups.slice(0, 6).forEach((g) => { if (expanded[g.key] === undefined) expanded[g.key] = true })
-            set({ groups, groupItems: {}, items: [], nextCursor: null, total: groups.reduce((n, g) => n + g.count, 0), expanded })
-            for (const g of groups) if (expanded[g.key]) void get().loadGroup(g.key)
+            set({ groups, groupItems: {}, groupErrors: {}, items: [], nextCursor: null, total: groups.reduce((n, g) => n + g.count, 0), expanded })
+            // expanded groups load when they scroll into view (Stage); the first few are warmed here
+            groups.filter((g) => expanded[g.key]).slice(0, 6).forEach((g) => void get().loadGroup(g.key))
           }
         } catch (e) {
           set({ error: (e as Error).message })
@@ -125,12 +135,19 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
 
       loadGroup: async (key) => {
         const { q } = get()
-        if (get().groupItems[key] || get().groupLoading[key]) return
+        if (get().groupItems[key] || get().groupLoading[key] || get().groupErrors[key]) return
         set({ groupLoading: { ...get().groupLoading, [key]: true } })
-        const field = { batch: 'batch_id', lineage: 'root_id', session: 'session_id', model: 'model_id' }[q.group as Exclude<GroupMode, 'none'>]
+        const seq = loadSeq
         try {
-          const page = await api.get<Page>(`/assets?${qs({ ...q, group: 'none' }, { [field]: key, limit: 1000 })}`)
+          // at most MAX_INFLIGHT group fetches at a time: "expand all" on 10k assets must not open thousands of connections
+          const page = await limited(() => api.get<Page>(`/assets?${qs({ ...q, group: 'none' }, { group_by: q.group, group_key: key, limit: 1000 })}`))
+          if (seq !== loadSeq) return                               // the query changed meanwhile
           set({ groupItems: { ...get().groupItems, [key]: page.items } })
+        } catch (e) {
+          if (seq === loadSeq) {
+            set({ groupErrors: { ...get().groupErrors, [key]: (e as Error).message } })
+            if (!get().error) set({ error: `Could not load a group: ${(e as Error).message}` })
+          }
         } finally {
           const gl = { ...get().groupLoading }; delete gl[key]; set({ groupLoading: gl })
         }
@@ -144,9 +161,9 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       expandAll: (open) => {
         const expanded: Record<string, boolean> = {}
         get().groups.forEach((g) => { expanded[g.key] = open })
-        set({ expanded })
-        if (open) get().groups.forEach((g) => void get().loadGroup(g.key))
+        set({ expanded, groupErrors: {}, error: null })             // items load as the groups scroll into view (Stage)
       },
+      retryGroup: (key) => { const ge = { ...get().groupErrors }; delete ge[key]; set({ groupErrors: ge, error: null }); void get().loadGroup(key) },
 
       refreshMeta: async () => {
         const [counts, collections, tags] = await Promise.all([

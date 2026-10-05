@@ -72,6 +72,10 @@ def test_groups_and_lineage_roots(tmp_path: Path):
     tree = cat.lineage_tree(x["a"].id)
     assert {i["id"] for i in tree["items"]} == {x["a"].id, x["c"].id} and tree["edges"][0]["from_id"] == x["a"].id
     assert cat.groups(AssetQuery(group="none")) == []
+    # the items of a group are fetched with the same key expression the headers use (single-job batches key on job_id)
+    assert [i.id for i in cat.list(AssetQuery(group_by="batch", group_key="job_c")).items] == [x["c"].id]
+    assert len(cat.list(AssetQuery(group_by="batch", group_key="bat_1")).items) == 2
+    assert [i.id for i in cat.list(AssetQuery(group_by="model", group_key="")).items] == [x["d"].id]
     cat.close()
 
 

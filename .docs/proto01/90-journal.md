@@ -711,3 +711,28 @@ read the clock)*
   `retired=`). F: now holds no GGUF at all; the remaining open i2v cost is the Wan VAE (Q18).
 - Driver: `e4_wan_i2v.py --wan-format fp8` (default stays `gguf` for reproducing the old rows; flip the default
   in M6 when the Animate recipe compiler takes over).
+
+## 2026-10-05 14:11 — M1 shell + frame: the app window renders through the sidecar handshake
+
+- **Shell** (`frontend/src-tauri/src/lib.rs`): spawns `orchestrator/.venv/Scripts/python.exe -m loom2.main
+  --port 8765` (override `LOOM2_ORCH_CMD`, `LOOM2_PORT`, `LOOM2_REPO`), parses the `LOOM2_READY {json}` stdout
+  line, serves `backend_info` / `request_exit` / `reveal_path` commands, POSTs `/shutdown` on window close and
+  waits up to 20 s before killing, assigns the sidecar to a kill-on-close Job Object (raw kernel32, no extra
+  crate), single-instance plugin. Verified: `npx tauri dev` → orchestrator answered `/health` after 41 s (first
+  Rust build) → the window rendered the frame → `Stop-Process app.exe` killed the orchestrator with it
+  (nothing listening on 8765 afterwards).
+- **Frame** (`frontend/src/frame`, 07 §2): CSS-grid regions, graphite theme with the amber accent, suite tabs
+  with `Ctrl+1…5`, project switcher (recents, New, Open, Close), status chips (engine with VRAM, jobs, disk,
+  weights), one sticky banner (queue paused / resumed unclean / engine down / weights missing / disk), rail with
+  per-suite tabs, panel with the pinned primary action, strip, stage, inspector, dock (collapsed line + Active /
+  Queued / Recent columns with previews from the binary WS frames), toasts, Settings modal, keyboard overlay.
+  Store: one zustand store (`store/session.ts`), layout persisted per machine, events applied from `/events`.
+  Models suite: roster table with health badges, fetch meter, verify sha256, reveal; engine panel with
+  start / stop / restart / free VRAM. Other suites are placeholders holding their frame slots.
+- Two bugs found by screenshotting the webview (no console in WebView2): a module cycle (`Rail.tsx` ↔
+  `suiteRegistry.tsx`, fixed with a leaf `railTabs.tsx`) and an infinite re-render from a zustand selector that
+  returned a fresh object (`selectJobsByStatus`; now a `useMemo`). A crash overlay in `main.tsx` renders
+  uncaught errors on screen from now on; headless Edge (`msedge --headless=new --screenshot`) against a
+  second orchestrator (`LOOM2_TOKEN=devtoken --port 8766`) is the quick visual check; `?suite=models` deep link.
+- Tooling: `npm run api:types` regenerates `src/api/schema.d.ts` from `src/api/openapi.json` (exported from the
+  FastAPI app); `npm run typecheck`; spike harness kept at `spikes.html`.

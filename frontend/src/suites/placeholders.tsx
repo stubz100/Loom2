@@ -1,6 +1,6 @@
 // Suites that arrive in later milestones keep their frame slots so the frame can be judged whole (07 §1.1).
 import type { SuiteDef } from '../frame/suiteRegistry'
-import { DEFAULT_RAIL } from '../frame/Rail'
+import { DEFAULT_RAIL } from '../frame/railTabs'
 import { useSession } from '../store/session'
 
 export function placeholderSuite(id: string, title: string, milestone: string, doc: string): SuiteDef {

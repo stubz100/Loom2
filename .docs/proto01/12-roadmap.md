@@ -119,6 +119,15 @@ through Engine A → asset + manifest + lineage + thumbnail exist → kill the a
 paused with the job queued → cancel kills the engine job tree. Contract tests pass against the pinned
 ComfyUI `/object_info`.
 
+**M1 status 2026-10-05** (journal 13:49, 14:11): orchestrator core + rig acceptance **20/20**
+(`scripts/m1_acceptance.py`); Tauri shell supervises the orchestrator sidecar (READY handshake, token via
+`backend_info`, graceful `/shutdown` on close, kill-on-close Job Object, single instance); frame skeleton (07)
+with Top bar · Banner · Rail · Panel · Strip · Stage · Inspector · Dock · Toasts, global keys, Settings modal,
+project dialogs, Models suite (roster health, fetch meter, verify, engine panel); OpenAPI → `src/api/schema.d.ts`
++ typed client; variant surfaced read-only. **Open in M1:** OS folder picker for project dialogs (Tauri dialog
+plugin), response models in the OpenAPI schema (responses are plain dicts today), `--project` restore of the
+last project at launch, a `loom2 dev` task that starts Vite + shell + orchestrator with one command.
+
 ## 3. M2 · Catalogue (2–3 weeks) — gate: 08 approved
 
 Virtual grid, group modes (Batch, Lineage, Session, Model, None), filters + FTS, loupe, compare, inspector

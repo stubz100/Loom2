@@ -2,7 +2,9 @@
 import type { Backend, EventFrame } from './types'
 
 export class ApiError extends Error {
-  constructor(public status: number, public detail: string) { super(`${status}: ${detail}`) }
+  status: number
+  detail: string
+  constructor(status: number, detail: string) { super(`${status}: ${detail}`); this.status = status; this.detail = detail }
 }
 
 let backend: Backend | null = null
@@ -49,7 +51,12 @@ export class EventsSocket {
   private ws: WebSocket | null = null
   private closed = false
   private backoff = 500
-  constructor(private onEvent: (f: EventFrame) => void, private onBinary: (f: BinaryFrame) => void, private onStatus: (s: 'open' | 'closed') => void) {}
+  private onEvent: (f: EventFrame) => void
+  private onBinary: (f: BinaryFrame) => void
+  private onStatus: (s: 'open' | 'closed') => void
+  constructor(onEvent: (f: EventFrame) => void, onBinary: (f: BinaryFrame) => void, onStatus: (s: 'open' | 'closed') => void) {
+    this.onEvent = onEvent; this.onBinary = onBinary; this.onStatus = onStatus
+  }
 
   connect(): void {
     if (!backend || this.closed) return

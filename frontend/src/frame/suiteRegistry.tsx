@@ -8,7 +8,7 @@ import { CatalogueSuite } from '../suites/catalogue/CatalogueSuite'
 import { EditSuite } from '../suites/edit/EditSuite'
 import { GenerateSuite } from '../suites/generate/GenerateSuite'
 import { ModelsSuite } from '../suites/models/ModelsSuite'
-import { DEFAULT_RAIL, type RailTab } from './Rail'
+import { DEFAULT_RAIL, type RailTab } from './railTabs'
 
 export interface SuiteDef {
   id: string

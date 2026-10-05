@@ -69,6 +69,8 @@ export const useSession = create<SessionState>()(
           set({ backendError: (e as Error).message })
           return
         }
+        const deep = new URLSearchParams(location.search).get('suite')
+        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
         await get().refreshAll()
         socket?.close()
         socket = new EventsSocket(

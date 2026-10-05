@@ -1,9 +1,11 @@
 import { ChevronUp, Pause, Play, X } from 'lucide-react'
+import { useMemo } from 'react'
 import type { Job } from '../api/types'
-import { selectJobsByStatus, useSession } from '../store/session'
+import { useSession } from '../store/session'
 
 function JobRow({ j }: { j: Job }) {
-  const s = useSession()
+  const cancelJob = useSession((s) => s.cancelJob)
+  const deleteJob = useSession((s) => s.deleteJob)
   const label = `${j.kind} · ${String((j.recipe as { model_id?: string }).model_id ?? '')} · seed ${j.seed}`
   return (
     <div className={`job ${j.status}`}>
@@ -13,22 +15,31 @@ function JobRow({ j }: { j: Job }) {
       {j.error && <div className="err">{j.error}</div>}
       <span className="meta">{j.id}</span>
       <span>
-        {(j.status === 'running' || j.status === 'queued') && <button className="quiet" title="cancel" onClick={() => void s.cancelJob(j.id)}><X size={14} /></button>}
-        {['done', 'failed', 'cancelled'].includes(j.status) && <button className="quiet" title="remove" onClick={() => void s.deleteJob(j.id)}><X size={14} /></button>}
+        {(j.status === 'running' || j.status === 'queued') && <button className="quiet" title="cancel" onClick={() => void cancelJob(j.id)}><X size={14} /></button>}
+        {['done', 'failed', 'cancelled'].includes(j.status) && <button className="quiet" title="remove" onClick={() => void deleteJob(j.id)}><X size={14} /></button>}
       </span>
     </div>
   )
 }
 
 export function Dock() {
-  const s = useSession()
-  const { running, queued, recent } = useSession(selectJobsByStatus)
+  const jobs = useSession((s) => s.jobs)
+  const queue = useSession((s) => s.queue)
+  const project = useSession((s) => s.project)
+  const previews = useSession((s) => s.previews)
+  const open = useSession((s) => s.ui.dockOpen)
+  const setUi = useSession((s) => s.setUi)
+  const pauseQueue = useSession((s) => s.pauseQueue)
+  // derived in a memo, never in a selector: a selector returning a fresh object re-renders forever
+  const { running, queued, recent } = useMemo(() => {
+    const all = Object.values(jobs).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    return { running: all.filter((j) => j.status === 'running'), queued: all.filter((j) => j.status === 'queued'), recent: all.filter((j) => ['done', 'failed', 'cancelled'].includes(j.status)) }
+  }, [jobs])
   const active = running[0]
-  const preview = active ? s.previews[active.id] : undefined
-  const open = s.ui.dockOpen
+  const preview = active ? previews[active.id] : undefined
   return (
     <footer className={`dock${open ? ' open' : ''}`}>
-      <div className="line" onClick={() => s.setUi({ dockOpen: !open })}>
+      <div className="line" onClick={() => setUi({ dockOpen: !open })}>
         <ChevronUp size={14} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
         {active ? (
           <>
@@ -36,12 +47,12 @@ export function Dock() {
             <span className="bar"><i style={{ width: `${Math.round(active.progress * 100)}%` }} /></span>
             <span>{Math.round(active.progress * 100)}%</span>
           </>
-        ) : <span>{s.project?.open ? (s.queue?.paused ? 'Queue paused' : 'Idle') : 'No project'}</span>}
+        ) : <span>{project?.open ? (queue?.paused ? 'Queue paused' : 'Idle') : 'No project'}</span>}
         <span>· Queued {queued.length} · Recent {recent.length}</span>
         <span className="spacer" />
-        {s.project?.open && (
-          <button className="quiet" onClick={(e) => { e.stopPropagation(); void s.pauseQueue(!s.queue?.paused) }} title={s.queue?.paused ? 'resume queue' : 'pause queue'}>
-            {s.queue?.paused ? <Play size={14} /> : <Pause size={14} />}
+        {project?.open && (
+          <button className="quiet" onClick={(e) => { e.stopPropagation(); void pauseQueue(!queue?.paused) }} title={queue?.paused ? 'resume queue' : 'pause queue'}>
+            {queue?.paused ? <Play size={14} /> : <Pause size={14} />}
           </button>
         )}
       </div>

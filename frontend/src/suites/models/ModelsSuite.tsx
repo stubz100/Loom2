@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { create } from 'zustand'
 import type { ModelEntry } from '../../api/types'
 import type { SuiteDef } from '../../frame/suiteRegistry'
-import { DEFAULT_RAIL } from '../../frame/Rail'
+import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { revealPath } from '../../shell/tauri'
 import { useSession } from '../../store/session'
 

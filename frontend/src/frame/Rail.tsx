@@ -1,17 +1,6 @@
-import { Boxes, Cpu, Filter, FolderTree, Library, PanelLeft, PanelRight, Settings, SlidersHorizontal, Wand2 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { PanelLeft, PanelRight, Settings } from 'lucide-react'
 import { useSession } from '../store/session'
 import { useSuiteRail } from './suiteRegistry'
-
-export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
-
-export const DEFAULT_RAIL: Record<string, RailTab[]> = {
-  catalogue: [{ id: 'library', label: 'Library', icon: <Library size={18} /> }, { id: 'filters', label: 'Filters', icon: <Filter size={18} /> }, { id: 'collections', label: 'Collections', icon: <FolderTree size={18} /> }],
-  generate: [{ id: 'prompt', label: 'Prompt', icon: <Wand2 size={18} /> }, { id: 'params', label: 'Parameters', icon: <SlidersHorizontal size={18} /> }],
-  edit: [{ id: 'tools', label: 'Tools', icon: <Wand2 size={18} /> }],
-  animate: [{ id: 'inputs', label: 'Inputs', icon: <Boxes size={18} /> }],
-  models: [{ id: 'roster', label: 'Roster', icon: <Boxes size={18} /> }, { id: 'engine', label: 'Engine', icon: <Cpu size={18} /> }],
-}
 
 export function Rail() {
   const s = useSession()

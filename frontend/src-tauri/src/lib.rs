@@ -83,6 +83,7 @@ fn spawn_backend(backend: Shared) {
             return;
         }
     };
+    assign_kill_on_close(&child);
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     *backend.child.lock().unwrap() = Some(child);
@@ -125,6 +126,43 @@ fn spawn_backend(backend: Shared) {
         });
     }
 }
+
+/// Windows Job Object with KILL_ON_JOB_CLOSE: if the shell dies hard, the orchestrator dies with it (and the
+/// engine with the orchestrator, which holds its own job object). The handle is leaked on purpose: it must
+/// live as long as the process.
+#[cfg(windows)]
+fn assign_kill_on_close(child: &Child) {
+    use std::os::windows::io::AsRawHandle;
+    #[repr(C)]
+    struct IoCounters { _c: [u64; 6] }
+    #[repr(C)]
+    struct BasicLimit { per_process_user_time: i64, per_job_user_time: i64, limit_flags: u32, min_ws: usize, max_ws: usize, active_process_limit: u32, affinity: usize, priority_class: u32, scheduling_class: u32 }
+    #[repr(C)]
+    struct ExtendedLimit { basic: BasicLimit, io: IoCounters, process_memory_limit: usize, job_memory_limit: usize, peak_process_memory: usize, peak_job_memory: usize }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn CreateJobObjectW(attrs: *const std::ffi::c_void, name: *const u16) -> *mut std::ffi::c_void;
+        fn SetInformationJobObject(job: *mut std::ffi::c_void, class: i32, info: *const std::ffi::c_void, len: u32) -> i32;
+        fn AssignProcessToJobObject(job: *mut std::ffi::c_void, process: *mut std::ffi::c_void) -> i32;
+    }
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return;
+        }
+        let mut info: ExtendedLimit = std::mem::zeroed();
+        info.basic.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(job, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, &info as *const _ as *const _, std::mem::size_of::<ExtendedLimit>() as u32);
+        if ok != 0 {
+            AssignProcessToJobObject(job, child.as_raw_handle() as _);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn assign_kill_on_close(_child: &Child) {}
 
 /// POST /shutdown, wait for the child to exit, kill it if it will not. Returns how it ended.
 fn shutdown_backend(backend: &Backend, grace: Duration) -> String {

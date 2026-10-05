@@ -1,3 +1,499 @@
-import { placeholderSuite } from '../placeholders'
+// Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
+// Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
+import { Brush, Eye, EyeOff, Files, Lasso, Lock, LockOpen, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { api } from '../../api/client'
+import type { SuiteDef } from '../../frame/suiteRegistry'
+import { useSession } from '../../store/session'
+import { EditorCanvas } from './EditorCanvas'
+import { ADJUSTMENT_DEFAULTS, BLEND_MODES, FILTER_DEFAULTS, TOOL_KEYS, countRasters, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import './edit.css'
 
-export const EditSuite = placeholderSuite('edit', 'Edit', 'M4/M5', 'doc 10')
+const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
+  { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' },
+  { key: 'A', tool: 'ai', label: 'AI select', later: 'M5' }, { key: 'B', tool: 'brush', label: 'Brush' }, { key: 'E', tool: 'eraser', label: 'Eraser' }, { key: 'G', tool: 'fill', label: 'Fill' },
+  { key: 'I', tool: 'eyedropper', label: 'Eyedropper' }, { key: 'C', tool: 'crop', label: 'Crop / canvas' }, { key: 'H', tool: 'hand', label: 'Hand' }, { key: 'Z', tool: 'zoom', label: 'Zoom' },
+]
+/** min, max, step for the numeric adjustment / filter parameters (names from compose.py). */
+const PARAM_RANGES: Record<string, [number, number, number]> = {
+  in_black: [0, 255, 1], in_white: [0, 255, 1], out_black: [0, 255, 1], out_white: [0, 255, 1], gamma: [0.1, 5, 0.01],
+  hue: [-180, 180, 1], saturation: [-100, 100, 1], lightness: [-100, 100, 1], brightness: [-100, 100, 1], contrast: [-100, 100, 1],
+  exposure: [-5, 5, 0.01], offset: [-0.5, 0.5, 0.001], r: [0, 100, 1], g: [0, 100, 1], b: [0, 100, 1],
+  radius: [0, 100, 0.1], amount: [0, 500, 1], threshold: [0, 255, 1], seed: [0, 99999, 1],
+}
+const BRUSH_PRESETS = [
+  { name: 'hard round', hardness: 1, flow: 1, opacity: 1, spacing: 0.1, smoothing: 0.3 }, { name: 'soft round', hardness: 0.5, flow: 0.6, opacity: 1, spacing: 0.15, smoothing: 0.4 },
+  { name: 'airbrush', hardness: 0.05, flow: 0.12, opacity: 1, spacing: 0.06, smoothing: 0.5 }, { name: 'inker', hardness: 0.95, flow: 1, opacity: 1, spacing: 0.04, smoothing: 0.75 },
+]
+const pct = (v: number) => `${Math.round(v * 100)} %`
+const ed = () => useEditor.getState()
+const snapshot = (d: DocumentStack): DocumentStack => JSON.parse(JSON.stringify(d))
+
+function Slider({ label, value, min, max, step = 1, fmt, onChange, onStart, onCommit }: { label: string; value: number; min: number; max: number; step?: number; fmt?: (v: number) => string; onChange: (v: number) => void; onStart?: () => void; onCommit?: () => void }) {
+  return (
+    <>
+      <label>{label}</label>
+      <div className="slider">
+        <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} onPointerDown={onStart} onPointerUp={onCommit} onKeyDown={(e) => { if (!e.repeat) onStart?.() }} onKeyUp={onCommit} />
+        <span className="val">{fmt ? fmt(value) : String(Math.round(value * 1000) / 1000)}</span>
+      </div>
+    </>
+  )
+}
+
+function Swatches() {
+  const b = useEditor((s) => s.brush)
+  return (
+    <div className="swatch-pair">
+      <span className="sw" style={{ background: b.color }} title="foreground"><input type="color" value={b.color} onChange={(e) => ed().setBrush({ color: e.target.value })} /></span>
+      <span className="sw" style={{ background: b.background }} title="background"><input type="color" value={b.background} onChange={(e) => ed().setBrush({ background: e.target.value })} /></span>
+      <button className="quiet" onClick={() => ed().setBrush({ color: b.background, background: b.color })} title="swap (X)">⇄</button>
+      <button className="quiet" onClick={() => ed().setBrush({ color: '#000000', background: '#ffffff' })} title="defaults (D)">D</button>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ Panel · Tool options
+function Toolbox() {
+  const tool = useEditor((s) => s.tool)
+  return (
+    <div className="toolbox">
+      {TOOLS.map((x) => <button key={x.tool} className={`tool${tool === x.tool ? ' active' : ''}${x.later ? ' later' : ''}`} title={`${x.label} (${x.key})${x.later ? ` · arrives in ${x.later}` : ''}`} onClick={() => ed().setTool(x.tool)}><b>{x.key}</b><span>{x.label}</span></button>)}
+    </div>
+  )
+}
+
+function ToolOptions() {
+  const tool = useEditor((s) => s.tool)
+  const b = useEditor((s) => s.brush)
+  const marqueeShape = useEditor((s) => s.marqueeShape)
+  const mode = useEditor((s) => s.selectionMode)
+  const tolerance = useEditor((s) => s.tolerance)
+  const doc = useEditor((s) => s.doc)
+  const hasSel = useEditor((s) => !!s.selection)
+  const activeId = useEditor((s) => s.activeId)
+  const [cv, setCv] = useState({ w: 0, h: 0, ax: 0.5, ay: 0.5 })
+  useEffect(() => { if (doc) setCv((c) => ({ ...c, w: doc.w, h: doc.h })) }, [doc?.w, doc?.h]) // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (p: Partial<typeof b>) => ed().setBrush(p)
+  const nudge = (dx: number, dy: number) => { const n = findNode(doc, activeId); if (n?.kind === 'raster') ed().updateNode(n.id, { x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }, 'nudge') }
+  const modeSeg = <div className="segmented">{(['replace', 'add', 'subtract'] as const).map((m) => <button key={m} className={mode === m ? 'active' : ''} onClick={() => ed().setView({ selectionMode: m })}>{m}</button>)}</div>
+  return (
+    <div>
+      <Toolbox />
+      <h4 className="sect">{TOOLS.find((x) => x.tool === tool)?.label}</h4>
+      {(tool === 'brush' || tool === 'eraser') && (
+        <div className="tool-opts">
+          <Slider label="size" value={b.size} min={1} max={512} fmt={(v) => `${v} px`} onChange={(v) => set({ size: v })} />
+          <Slider label="hardness" value={b.hardness} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ hardness: v })} />
+          <Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} />
+          <Slider label="flow" value={b.flow} min={0.01} max={1} step={0.01} fmt={pct} onChange={(v) => set({ flow: v })} />
+          <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} fmt={pct} onChange={(v) => set({ spacing: v })} />
+          <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ smoothing: v })} />
+          {tool === 'brush' && <><label>colour</label><Swatches /></>}
+          <span className="hint full">[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected (D19)</span>
+        </div>
+      )}
+      {tool === 'marquee' && <div className="tool-opts"><label>shape</label><div className="segmented">{(['rect', 'ellipse'] as const).map((m) => <button key={m} className={marqueeShape === m ? 'active' : ''} onClick={() => ed().setView({ marqueeShape: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}<span className="hint full">Shift adds, Alt subtracts while dragging</span></div>}
+      {tool === 'lasso' && <div className="tool-opts"><label>mode</label>{modeSeg}<span className="hint full">freehand; Shift adds, Alt subtracts</span></div>}
+      {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} /><span className="hint full">contiguous on the active raster layer</span></div>}
+      {tool === 'fill' && <div className="tool-opts"><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} /><span className="hint full">fills the selection, or the whole layer (mask: white) when nothing is selected · gradient arrives in M5</span></div>}
+      {tool === 'move' && <div className="tool-opts"><label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div><span className="hint full">drag the active raster layer on the canvas; free transform (Ctrl+T) arrives with M5</span></div>}
+      {tool === 'crop' && (
+        <div className="tool-opts">
+          <label>canvas</label><div><input type="number" value={cv.w} min={1} max={16384} onChange={(e) => setCv({ ...cv, w: Number(e.target.value) })} style={{ width: 76 }} /> × <input type="number" value={cv.h} min={1} max={16384} onChange={(e) => setCv({ ...cv, h: Number(e.target.value) })} style={{ width: 76 }} /></div>
+          <label>anchor</label><div className="anchor">{[0, 0.5, 1].map((ay) => [0, 0.5, 1].map((ax) => <button key={`${ax}-${ay}`} className={cv.ax === ax && cv.ay === ay ? 'active' : ''} onClick={() => setCv({ ...cv, ax, ay })}>•</button>))}</div>
+          <label /><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button disabled={!doc || (cv.w === doc.w && cv.h === doc.h)} onClick={() => ed().resizeCanvas(cv.w, cv.h, cv.ax, cv.ay)}>Resize canvas</button><button disabled={!hasSel} onClick={() => ed().cropToSelection()}>Crop to selection</button></div>
+          <span className="hint full">layers keep their pixels; a smaller canvas only hides what lies outside</span>
+        </div>
+      )}
+      {tool === 'eyedropper' && <p className="hint">Click the canvas to pick the composited colour into the foreground swatch.</p>}
+      {tool === 'hand' && <p className="hint">Drag to pan. Space + drag pans with any tool; middle mouse too.</p>}
+      {tool === 'zoom' && <p className="hint">Click zooms in, Alt-click out; Ctrl+wheel zooms anywhere; Ctrl+0 fit, Ctrl+1 1:1.</p>}
+      {tool === 'ai' && <p className="hint">AI Select (SAM 3 click / box / text) and Subject (BiRefNet matte) arrive in M5 (10 §4).</p>}
+    </div>
+  )
+}
+
+function BrushesTab() {
+  const b = useEditor((s) => s.brush)
+  return (
+    <div>
+      <div className="brush-presets">
+        {BRUSH_PRESETS.map((p) => <button key={p.name} className={Math.abs(b.hardness - p.hardness) < 0.01 && Math.abs(b.flow - p.flow) < 0.01 ? 'active' : ''} onClick={() => ed().setBrush({ hardness: p.hardness, flow: p.flow, opacity: p.opacity, spacing: p.spacing, smoothing: p.smoothing })}>
+          <span className="dab" style={{ background: `radial-gradient(circle, ${b.color} ${Math.round(p.hardness * 100)}%, transparent 100%)`, opacity: Math.max(0.35, p.flow) }} />{p.name}
+        </button>)}
+      </div>
+      <p className="hint">Presets set hardness, flow, spacing and smoothing; size and colour stay. Saving custom presets and the pen pressure curve arrive with the tablet (D19).</p>
+    </div>
+  )
+}
+
+function SelectionTab() {
+  const hasSel = useEditor((s) => !!s.selection)
+  const quickMask = useEditor((s) => s.quickMask)
+  const activeId = useEditor((s) => s.activeId)
+  const doc = useEditor((s) => s.doc)
+  const [feather, setFeather] = useState(4)
+  const n = findNode(doc, activeId)
+  return (
+    <div className="tool-opts">
+      <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><button onClick={() => ed().selectAll()} title="Ctrl+A">all</button><button onClick={() => ed().clearSelection()} title="Ctrl+D" disabled={!hasSel}>none</button><button onClick={() => ed().invertSelection()} title="Ctrl+Shift+I">invert</button></div>
+      <label>feather</label><div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={0} max={200} value={feather} onChange={(e) => setFeather(Number(e.target.value))} style={{ width: 70 }} /> px <button disabled={!hasSel} onClick={() => ed().featherSelection(feather)}>apply</button></div>
+      <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => ed().setView({ quickMask: !quickMask })} title="Q">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
+      <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <button disabled={!n || !!n.mask} onClick={() => n && ed().addMask(n.id, true)}>save as mask on layer</button>
+        <button disabled={!n?.mask} onClick={() => ed().loadSelectionFromMask()}>load from layer mask</button>
+      </div>
+      <span className="hint full">Expand / contract and the AI selectors (SAM, BiRefNet) arrive in M5.</span>
+    </div>
+  )
+}
+
+function AiTab() {
+  return (
+    <div>
+      <p className="hint">The AI panel operates on the current selection and returns new layers (10 §4). Arrives in M5 on the E8 recipes:</p>
+      <dl className="kv">
+        <dt>Inpaint</dt><dd>Fill (Klein + LanPaint) · Fill-Match (Klein ICM) · Fill Hero (dev + LanPaint) · Remove</dd>
+        <dt>Refine</dt><dd>Klein base · dev · strength 0.15–0.6</dd>
+        <dt>Upscale</dt><dd>ESRGAN 2× · tiled refine</dd>
+        <dt>Remove bg</dt><dd>BiRefNet → mask or transparency</dd>
+        <dt>Outpaint</dt><dd>Fill / Fill Hero per side</dd>
+      </dl>
+      <button className="primary" disabled title="M5">AI ▶ Inpaint</button>
+    </div>
+  )
+}
+
+function DocumentsTab() {
+  const [items, setItems] = useState<DocSummary[]>([])
+  const docId = useEditor((s) => s.doc?.id)
+  const savedAt = useEditor((s) => s.doc?.saved_at)
+  const [form, setForm] = useState({ w: 1920, h: 1080, name: 'Untitled' })
+  const refresh = () => { void ed().listDocuments().then(setItems).catch(() => undefined) }
+  useEffect(refresh, [docId, savedAt])
+  return (
+    <div>
+      <div className="tool-opts">
+        <label>new</label><div><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={{ width: 120 }} /> <input type="number" value={form.w} step={16} min={64} max={8192} onChange={(e) => setForm({ ...form, w: Number(e.target.value) })} style={{ width: 70 }} /> × <input type="number" value={form.h} step={16} min={64} max={8192} onChange={(e) => setForm({ ...form, h: Number(e.target.value) })} style={{ width: 70 }} /></div>
+        <label /><button onClick={() => void ed().newDocument(form.w, form.h, form.name)}>New document</button>
+      </div>
+      <h4 className="sect">DOCUMENTS IN THIS PROJECT</h4>
+      <div className="doc-list">
+        {items.map((d) => (
+          <div key={d.id} className={`doc-row${d.id === docId ? ' active' : ''}`} onClick={() => { if (d.id !== docId) void ed().openDocument(d.id) }}>
+            <img src={api.fileUrl(`/documents/${d.id}/thumbnail`)} alt="" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
+            <div className="t"><b>{d.name}</b><span className="kind">{d.w}×{d.h} · {d.layers} layer{d.layers === 1 ? '' : 's'} · {d.saved_at ? new Date(d.saved_at).toLocaleString() : 'unsaved'}{d.open ? ' · open' : ''}</span></div>
+            <button className="quiet" title="delete the .ora" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete document "${d.name}"? The .ora file is removed.`)) void ed().deleteDocument(d.id).then(refresh) }}>✕</button>
+          </div>
+        ))}
+        {!items.length && <span className="muted">No documents yet. Select an asset in the Catalogue and press E.</span>}
+      </div>
+    </div>
+  )
+}
+
+function Panel({ tab }: { tab: string }) {
+  const project = useSession((s) => s.project)
+  if (!project?.open) return <span className="muted">Open or create a project.</span>
+  if (tab === 'brushes') return <BrushesTab />
+  if (tab === 'selection') return <SelectionTab />
+  if (tab === 'ai') return <AiTab />
+  if (tab === 'documents') return <DocumentsTab />
+  return <ToolOptions />
+}
+
+function PrimaryAction() {
+  const doc = useEditor((s) => s.doc)
+  const dirty = useEditor((s) => s.docDirty)
+  const saving = useEditor((s) => s.saving)
+  if (!doc) return <div className="estimate"><span className="muted">no document open</span></div>
+  return (
+    <div>
+      <button className="primary" disabled={saving} onClick={() => void ed().save()} title="Ctrl+S">{saving ? 'Saving…' : dirty ? 'Save •' : 'Save'}</button>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        <button onClick={() => void ed().saveToCatalogue()} title="Ctrl+Shift+S · exact flatten in the orchestrator → new asset with lineage">Save to Catalogue</button>
+        <button onClick={() => void ed().exportPng()} title="Ctrl+Shift+E · flattened PNG">PNG</button>
+        <button onClick={() => void ed().exportPsd()} title="ag-psd · layers, groups, masks, blend modes">PSD</button>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ Strip / Stage
+function Strip() {
+  useEditKeys()
+  const doc = useEditor((s) => s.doc)
+  const dirty = useEditor((s) => s.docDirty)
+  const zoom = useEditor((s) => s.zoom)
+  const pixelGrid = useEditor((s) => s.pixelGrid)
+  const overlay = useEditor((s) => s.overlay)
+  const before = useEditor((s) => s.before)
+  const quickMask = useEditor((s) => s.quickMask)
+  const cursor = useEditor((s) => s.cursor)
+  const renderer = useEditor((s) => s.renderer)
+  const [zt, setZt] = useState<string | null>(null)
+  const apply = () => { if (zt !== null) { const v = parseFloat(zt); if (v > 0) ed().zoomTo(v / 100) } setZt(null) }
+  return (
+    <>
+      <span>{doc ? `${doc.name}${dirty ? ' •' : ''} · ${doc.w}×${doc.h}` : 'Edit'}</span>
+      <input className="edit-strip-zoom" value={zt ?? String(Math.round(zoom * 100))} onChange={(e) => setZt(e.target.value)} onBlur={apply} onKeyDown={(e) => { if (e.key === 'Enter') apply() }} disabled={!doc} /><span style={{ marginLeft: -4 }}>%</span>
+      <button className="quiet" onClick={() => ed().requestFit()} title="Ctrl+0" disabled={!doc}>fit</button>
+      <button className="quiet" onClick={() => ed().zoomTo(1)} title="Ctrl+1" disabled={!doc}>1:1</button>
+      <label className="chk"><input type="checkbox" checked={pixelGrid} onChange={(e) => ed().setView({ pixelGrid: e.target.checked })} /> pixel grid</label>
+      <label className="chk"><input type="checkbox" checked={overlay} onChange={(e) => ed().setView({ overlay: e.target.checked })} /> mask overlay</label>
+      <button className={`quiet${before ? ' active' : ''}`} onPointerDown={() => ed().setView({ before: true })} onPointerUp={() => ed().setView({ before: false })} onPointerLeave={() => { if (before) ed().setView({ before: false }) }} disabled={!doc} title="hold: hide the active layer (\)">before</button>
+      <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => ed().setView({ quickMask: !quickMask })} disabled={!doc} title="Q">quick mask</button>
+      <span className="spacer" />
+      {cursor && <span className="mono">{cursor.x}, {cursor.y}</span>}
+      <span className="badge-renderer">{renderer}</span>
+    </>
+  )
+}
+
+function RecentDocuments() {
+  const [items, setItems] = useState<DocSummary[]>([])
+  useEffect(() => { void ed().listDocuments().then((x) => setItems(x.slice(0, 8))).catch(() => undefined) }, [])
+  if (!items.length) return null
+  return <p style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>{items.map((d) => <button key={d.id} onClick={() => void ed().openDocument(d.id)}>{d.name} <span className="kind">{d.w}×{d.h}</span></button>)}</p>
+}
+
+function Stage() {
+  const project = useSession((s) => s.project)
+  const doc = useEditor((s) => s.doc)
+  const loading = useEditor((s) => s.loading)
+  const error = useEditor((s) => s.error)
+  if (!project?.open) return <div className="placeholder"><div><h2>Edit</h2>open or create a project to begin</div></div>
+  if (!doc) return (
+    <div className="edit-empty"><div>
+      <h2>Edit</h2>
+      {loading ? <p>loading document…</p> : <>
+        <p>Select an asset in the Catalogue and press <kbd>E</kbd>, or start empty.</p>
+        <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => useSession.getState().setSuite('catalogue')}>Open the Catalogue</button></p>
+        <RecentDocuments />
+      </>}
+      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
+    </div></div>
+  )
+  return <EditorCanvas />
+}
+
+// ------------------------------------------------------------------ Inspector
+function LayersTab() {
+  const doc = useEditor((s) => s.doc)!
+  const activeId = useEditor((s) => s.activeId)
+  const editingMask = useEditor((s) => s.editingMask)
+  const revision = useEditor((s) => s.revision)
+  const hasSel = useEditor((s) => !!s.selection)
+  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); st.pixels.forEach((lp, id) => m.set(id, lp.thumbnail(64))); st.masks.forEach((lp, id) => m.set('m:' + id, lp.thumbnail(48))); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [pendingDel, setPendingDel] = useState(0)
+  const [adj, setAdj] = useState('levels')
+  const [flt, setFlt] = useState('gaussian_blur')
+  const before = useRef<DocumentStack | null>(null)
+  const active = findNode(doc, activeId)
+  const start = () => { before.current = snapshot(doc) }
+  const commit = (label: string) => { if (before.current && active) { ed().pushHistory({ label, layerId: active.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
+  const rows = (nodes: Node[], depth: number): ReactNode => nodes.map((n) => (
+    <div key={n.id}>
+      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} onClick={() => ed().setActive(n.id, false)}
+        onDoubleClick={() => { const name = window.prompt('Layer name', n.name); if (name && name !== n.name) ed().updateNode(n.id, { name }, 'rename') }}>
+        <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+        <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
+        {n.kind === 'raster' ? <img className="thumb" src={thumbs.get(n.id)} alt="" /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
+        <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : n.type}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${n.blend}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
+        {n.mask
+          ? <img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}${n.mask.enabled ? '' : ' off'}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click to edit · Shift-click to disable" onClick={(e) => { e.stopPropagation(); if (e.shiftKey) ed().updateNode(n.id, { mask: { ...n.mask!, enabled: !n.mask!.enabled } }, 'toggle mask'); else ed().setActive(n.id, true) }} />
+          : <span className="mask-box" title={hasSel ? 'add a mask from the selection' : 'add a mask'} onClick={(e) => { e.stopPropagation(); ed().addMask(n.id, hasSel) }}>+◐</span>}
+      </div>
+      {n.kind === 'group' && n.children && rows(n.children, depth + 1)}
+    </div>
+  ))
+  return (
+    <div>
+      <div className="layers">{rows(doc.layers, 0)}</div>
+      {active && (
+        <div className="tool-opts" style={{ marginTop: 10 }}>
+          <label>blend</label><select value={active.blend} onChange={(e) => ed().updateNode(active.id, { blend: e.target.value }, 'blend mode')}>{BLEND_MODES.map((m) => <option key={m}>{m}</option>)}</select>
+          <Slider label="opacity" value={active.opacity} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(active.id, { opacity: v })} onCommit={() => commit('opacity')} />
+          {active.kind === 'raster' && <Slider label="fill" value={active.fill ?? 1} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(active.id, { fill: v })} onCommit={() => commit('fill')} />}
+          {active.kind === 'group' && <><label>group</label><div className="segmented"><button className={active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: true }, 'group mode')}>pass-through</button><button className={!active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: false }, 'group mode')}>isolated</button></div></>}
+          <label>clip</label><label className="chk"><input type="checkbox" checked={active.clip} onChange={(e) => ed().updateNode(active.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
+        </div>
+      )}
+      <div className="layer-actions">
+        <button onClick={() => ed().addLayer('raster')} title="Ctrl+Shift+N">+ layer</button>
+        <button onClick={() => ed().addLayer('group')} title="empty group · Ctrl+G groups the active layer">+ group</button>
+        <span className="pair"><select value={adj} onChange={(e) => setAdj(e.target.value)}>{Object.keys(ADJUSTMENT_DEFAULTS).map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select><button onClick={() => ed().addLayer('adjustment', { type: adj })}>+ adjustment</button></span>
+        <span className="pair"><select value={flt} onChange={(e) => setFlt(e.target.value)}>{Object.keys(FILTER_DEFAULTS).map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select><button onClick={() => ed().addLayer('filter', { type: flt })}>+ filter</button></span>
+        <button disabled={!active} onClick={() => active && ed().duplicateNode(active.id)} title="Ctrl+J">duplicate</button>
+        <button disabled={!active} onClick={() => active && ed().mergeDown(active.id)} title="Ctrl+E">merge ↓</button>
+        <button disabled={!active} onClick={() => active && ed().moveNode(active.id, 'up')}>↑</button>
+        <button disabled={!active} onClick={() => active && ed().moveNode(active.id, 'down')}>↓</button>
+        {active?.mask && <button onClick={() => ed().removeMask(active.id)}>remove mask</button>}
+        <button disabled={!active} className={pendingDel ? 'danger' : ''} onClick={() => { if (!active) return; if (pendingDel && Date.now() - pendingDel < 1500) { ed().deleteNode(active.id); setPendingDel(0) } else { setPendingDel(Date.now()); useSession.getState().toast('Click delete again to remove the layer', 'info') } }}>delete</button>
+      </div>
+    </div>
+  )
+}
+
+function PropertiesTab() {
+  const doc = useEditor((s) => s.doc)!
+  const activeId = useEditor((s) => s.activeId)
+  const before = useRef<DocumentStack | null>(null)
+  const n = findNode(doc, activeId)
+  if (!n) return <span className="muted">Select a layer.</span>
+  const start = () => { before.current = snapshot(doc) }
+  const commit = (label: string) => { if (before.current) { ed().pushHistory({ label, layerId: n.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
+  if (n.kind === 'raster') return (
+    <dl className="kv">
+      <dt>name</dt><dd>{n.name}</dd>
+      <dt>position</dt><dd><input type="number" value={n.x ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { x: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /> , <input type="number" value={n.y ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { y: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /></dd>
+      <dt>size</dt><dd>{n.w}×{n.h}</dd>
+      <dt>lineage</dt><dd className="mono">{n.lineage_asset_id ?? '—'}</dd>
+      <dt>recipe</dt><dd>{n.recipe ? <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre> : <span className="muted">— AI layers carry their recipe from M5 (Re-run with a new seed)</span>}</dd>
+      {n.mask && <><dt>mask</dt><dd>{n.mask.enabled ? 'enabled' : 'disabled'} · {n.mask.linked ? 'linked' : 'unlinked'} · offset {n.mask.x}, {n.mask.y}</dd></>}
+    </dl>
+  )
+  if (n.kind === 'group') return <dl className="kv"><dt>group</dt><dd>{n.children?.length ?? 0} children · {n.passthrough ? 'pass-through' : 'isolated'}</dd></dl>
+  const params = n.params ?? {}
+  const setParam = (k: string, v: unknown) => ed().updateNode(n.id, { params: { ...params, [k]: v } })
+  return (
+    <div>
+      <div className="tool-opts">
+        <label>type</label><span>{n.type}</span>
+        {Object.entries(params).map(([k, v]) => {
+          if (typeof v === 'number') { const [min, max, step] = PARAM_RANGES[k] ?? [-100, 100, 1]; return <Slider key={k} label={k.replace('_', ' ')} value={v} min={min} max={max} step={step} onStart={start} onChange={(x) => setParam(k, x)} onCommit={() => commit(`${n.type} ${k}`)} /> }
+          if (typeof v === 'boolean') return <Fragment key={k}><label>{k}</label><input type="checkbox" checked={v} onChange={(e) => { start(); setParam(k, e.target.checked); setTimeout(() => commit(`${n.type} ${k}`)) }} /></Fragment>
+          return <Fragment key={k}><label>{k}</label><input type="text" defaultValue={JSON.stringify(v)} onFocus={start} onBlur={(e) => { try { setParam(k, JSON.parse(e.target.value)); commit(`${n.type} ${k}`) } catch { useSession.getState().toast(`${k}: not valid JSON`, 'error') } }} /></Fragment>
+        })}
+        {!Object.keys(params).length && <span className="hint full">no parameters</span>}
+      </div>
+      <p className="hint">Exact in the orchestrator's compositor on Save to Catalogue / Export (10 §3); the GPU preview of adjustment and filter layers arrives in the next slice. Until then the canvas shows the stack without them.</p>
+    </div>
+  )
+}
+
+function HistoryTab() {
+  const history = useEditor((s) => s.history)
+  const future = useEditor((s) => s.future)
+  const stepBack = (i: number) => { const n = history.length - 1 - i; for (let k = 0; k < n; k++) ed().undo() }
+  const stepFwd = (j: number) => { const n = future.length - j; for (let k = 0; k < n; k++) ed().redo() }
+  const what = (e: { tiles: unknown[]; stack?: unknown }) => e.tiles.length ? `${e.tiles.length} tile${e.tiles.length > 1 ? 's' : ''}` : e.stack ? 'stack' : ''
+  return (
+    <div className="history-list">
+      {future.map((e, j) => <button key={`f${j}`} className="future" onClick={() => stepFwd(j)}>{e.label} <span className="kind">{what(e)} · redo</span></button>)}
+      {[...history].reverse().map((e, r) => { const i = history.length - 1 - r; return <button key={`h${i}`} className={r === 0 ? 'current' : ''} onClick={() => stepBack(i)}>{e.label} <span className="kind">{what(e)} · {new Date(e.at).toLocaleTimeString()}</span></button> })}
+      <button className="quiet" disabled={!history.length} onClick={() => stepBack(-1)}>◂ back to the opened state</button>
+      {!history.length && !future.length && <div className="muted">No steps yet. Undo Ctrl+Z · redo Ctrl+Shift+Z; strokes keep 256² tile snapshots, stack edits keep the layer tree.</div>}
+    </div>
+  )
+}
+
+function InfoTab() {
+  const doc = useEditor((s) => s.doc)!
+  const renderer = useEditor((s) => s.renderer)
+  const cursor = useEditor((s) => s.cursor)
+  const dirty = useEditor((s) => s.docDirty)
+  const revision = useEditor((s) => s.revision)
+  const cmp = useEditor((s) => s.lastCompare)
+  const mem = useMemo(() => { const st = ed(); let b = 0; st.pixels.forEach((lp) => { b += lp.width * lp.height * 4 }); st.masks.forEach((lp) => { b += lp.width * lp.height * 4 }); if (st.selection) b += st.selection.width * st.selection.height * 4; return b }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  let total = 0; walk(doc.layers, () => { total++ })
+  return (
+    <dl className="kv">
+      <dt>document</dt><dd className="mono">{doc.id}</dd>
+      <dt>name</dt><dd>{doc.name}</dd>
+      <dt>size</dt><dd>{doc.w}×{doc.h} · background {doc.background}</dd>
+      <dt>layers</dt><dd>{countRasters(doc)} raster · {total} nodes</dd>
+      <dt>source</dt><dd>{doc.source_asset_id ? <><img className="insp-thumb" src={api.thumbUrl(doc.source_asset_id, 256)} alt="" /><span className="mono">{doc.source_asset_id}</span></> : '—'}</dd>
+      <dt>saved</dt><dd>{doc.saved_at ? new Date(doc.saved_at).toLocaleString() : 'never'}{dirty ? ' · unsaved changes' : ''}</dd>
+      <dt>colour</dt><dd>sRGB · 8-bit layers (16-bit post-MVP, 10 §15)</dd>
+      <dt>memory</dt><dd>{(mem / 1048576).toFixed(0)} MB CPU canvases + the GPU copies</dd>
+      <dt>renderer</dt><dd>{renderer || '—'}</dd>
+      <dt>cursor</dt><dd className="mono">{cursor ? `${cursor.x}, ${cursor.y}` : '—'}</dd>
+      <dt>preview vs exact</dt><dd><button onClick={() => void ed().compareWithExact()} title="renders the exact flatten in the orchestrator and reports the per-channel difference (10 §14 item 1)">compare</button>{cmp && <div className="kind">RGB mean {cmp.rgb_mean.toFixed(2)} · p99 {cmp.rgb_p99} · max {cmp.rgb_max} · with alpha p99 {cmp.p99} · {new Date(cmp.at).toLocaleTimeString()}</div>}</dd>
+    </dl>
+  )
+}
+
+function Inspector() {
+  const [tab, setTab] = useState<'layers' | 'properties' | 'history' | 'info'>('layers')
+  const hasDoc = useEditor((s) => !!s.doc)
+  if (!hasDoc) return <span className="muted">No document.</span>
+  return (
+    <div>
+      <div className="tabs2">{(['layers', 'properties', 'history', 'info'] as const).map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
+      {tab === 'layers' && <LayersTab />}
+      {tab === 'properties' && <PropertiesTab />}
+      {tab === 'history' && <HistoryTab />}
+      {tab === 'info' && <InfoTab />}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ keys (10 §10), autosave (10 §7), unsaved-changes toast (10 §12)
+function useEditKeys() {
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const s = useSession.getState()
+      if (s.ui.suite !== 'edit') return
+      if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
+      const st = ed()
+      const k = e.key, low = k.toLowerCase(), ctrl = e.ctrlKey || e.metaKey
+      const b = st.brush
+      // view keys from 10 §5 take precedence over the suite switch (07 §4) while a document is open
+      if (ctrl && st.doc && (k === '0' || k === '1' || k === '2')) { e.preventDefault(); e.stopImmediatePropagation(); if (k === '0') st.requestFit(); else st.zoomTo(Number(k)); return }
+      if (ctrl && (k === '+' || k === '=')) { e.preventDefault(); st.zoomTo(st.zoom * 1.25); return }
+      if (ctrl && k === '-') { e.preventDefault(); st.zoomTo(st.zoom / 1.25); return }
+      if (ctrl && low === 'z') { e.preventDefault(); if (e.shiftKey) st.redo(); else st.undo(); return }
+      if (ctrl && low === 'y') { e.preventDefault(); st.redo(); return }
+      if (ctrl && low === 's') { e.preventDefault(); if (e.shiftKey) void st.saveToCatalogue(); else void st.save(); return }
+      if (ctrl && e.shiftKey && low === 'e') { e.preventDefault(); void st.exportPng(); return }
+      if (ctrl && low === 'e') { e.preventDefault(); if (st.activeId) st.mergeDown(st.activeId); return }
+      if (ctrl && e.shiftKey && low === 'n') { e.preventDefault(); st.addLayer('raster'); return }
+      if (ctrl && low === 'j') { e.preventDefault(); if (st.activeId) st.duplicateNode(st.activeId); return }
+      if (ctrl && low === 'g') { e.preventDefault(); st.groupActive(); return }
+      if (ctrl && low === 'd') { e.preventDefault(); st.clearSelection(); return }
+      if (ctrl && e.shiftKey && low === 'i') { e.preventDefault(); e.stopImmediatePropagation(); st.invertSelection(); return }
+      if (ctrl && low === 'a') { e.preventDefault(); st.selectAll(); return }
+      if (k === '\\') { e.preventDefault(); if (e.altKey) st.setView({ overlay: !st.overlay }); else st.setView({ before: true }); return }
+      if (ctrl || e.altKey) return
+      if (low === 'q') { st.setView({ quickMask: !st.quickMask }); return }
+      if (k === '[' || k === '{') { if (e.shiftKey || k === '{') st.setBrush({ hardness: Math.max(0, Math.round((b.hardness - 0.1) * 100) / 100) }); else st.setBrush({ size: Math.max(1, Math.round(b.size / 1.2)) }); return }
+      if (k === ']' || k === '}') { if (e.shiftKey || k === '}') st.setBrush({ hardness: Math.min(1, Math.round((b.hardness + 0.1) * 100) / 100) }); else st.setBrush({ size: Math.min(512, Math.round(b.size * 1.2)) }); return }
+      if (/^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
+      if (low === 'x') { st.setBrush({ color: b.background, background: b.color }); return }
+      if (low === 'd') { st.setBrush({ color: '#000000', background: '#ffffff' }); return }
+      if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); st.clearSelected(); return }
+      if (k === 'Escape') { if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
+      const tool = TOOL_KEYS[low]
+      if (tool && !e.shiftKey) st.setTool(tool)
+    }
+    const up = (e: KeyboardEvent) => { if (e.key === '\\') ed().setView({ before: false }) }
+    window.addEventListener('keydown', down, { capture: true })
+    window.addEventListener('keyup', up)
+    // deep links for the verification loop (07 §1.7): ?doc=<id> opens that document once the project is open;
+    // &verify=1 then compares the GPU composite with the exact flatten (10 §14 item 1)
+    const q = new URLSearchParams(location.search)
+    const deep = q.get('doc')
+    let unsubDeep = () => {}
+    if (deep) {
+      const tryOpen = () => {
+        const st = ed()
+        if (!useSession.getState().project?.open || st.doc || st.loading) return false
+        void st.openDocument(deep).then(() => { if (q.get('verify')) setTimeout(() => void ed().compareWithExact(), 2000) })
+        return true
+      }
+      if (!tryOpen()) unsubDeep = useSession.subscribe(() => { if (tryOpen()) unsubDeep() })
+    }
+    const auto = setInterval(() => { const st = ed(); if (st.doc && st.docDirty && !st.saving) void st.save() }, 120_000)
+    const unsub = useSession.subscribe((s, prev) => { if (prev.ui.suite === 'edit' && s.ui.suite !== 'edit' && ed().docDirty) s.toast('Unsaved changes in Edit — autosave runs every 2 min, Ctrl+S saves now', 'info') })
+    return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); clearInterval(auto); unsub(); unsubDeep() }
+  }, [])
+}
+
+export const EditSuite: SuiteDef = {
+  id: 'edit',
+  rail: [{ id: 'tools', label: 'Tool options', icon: <SlidersHorizontal size={18} /> }, { id: 'brushes', label: 'Brushes', icon: <Brush size={18} /> }, { id: 'selection', label: 'Selection', icon: <Lasso size={18} /> },
+    { id: 'ai', label: 'AI', icon: <Sparkles size={18} /> }, { id: 'documents', label: 'Documents', icon: <Files size={18} /> }],
+  Panel, Strip, Stage, Inspector, PrimaryAction,
+}

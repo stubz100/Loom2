@@ -47,9 +47,14 @@ Blend modes (Photoshop set): Normal, Dissolve, Darken, Multiply, Colour Burn, Li
 Colour Dodge, Linear Dodge (Add), Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light,
 Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Colour, Luminosity.
 
-Working precision is 8-bit in the compositor; adjustment/filter layers are previewed in shaders and
-**re-rendered exactly in Python at 16-bit on save/export** (05 §3b). Documented difference; the UI shows a
-"preview ≈" badge on adjustment layers.
+Working precision is 8-bit in the compositor and, in M4, in the ORA layers too (Pillow writes no RGBA16; 16-bit
+layers are post-MVP, §15). The canvas composite is **exact** for layers, groups, masks, clip and all 24
+deterministic blend modes: the editor registers its own W3C/Photoshop blend shaders (D31, PixiJS's built-in set
+measured and replaced) and renders masked layers and isolated groups through render-texture passes; measured
+p99 ≤ 1/255 per feature and 3/255 over a 25-layer stack against the Python flatten (`scripts/m4_acceptance.py`,
+Info tab "compare"). Dissolve is seeded noise and only ≈. Adjustment/filter layers are
+**re-rendered exactly in Python on save/export** (05 §3b); their shader previews are the remaining M4 slice, and
+until then the canvas shows the stack without them — the Properties tab says so ("preview ≈").
 
 ## 4. Toolbox (Rail) and Panel · Tool options
 
@@ -162,11 +167,17 @@ No document (drop zone + "Open from Catalogue"); renderer fallback to WebGL2 (ba
 reduced); unsaved changes on suite switch (toast with Save, never a blocking modal, autosave covers it).
 
 ## 13. Data and API
-`POST /documents` (from asset) · `GET/PUT /documents/{id}` (ORA stream) · `PUT /blobs/{sha}` (region PNG, mask) ·
-`POST /documents/{id}/inpaint|refine|instruct-edit|upscale|outpaint` (recipes with region + paste-back
-policy, returns layer PNG + mask blob ids) · `POST /documents/{id}/segment` (SAM points/box/text, BiRefNet) ·
-`POST /documents/{id}/flatten` (exact) · `POST /documents/{id}/export` (psd | png). Layer pixel data for
-save/export is uploaded as tiles (PNG per tile or raw RGBA with Range) to keep memory flat.
+As built in M4 (06 §2): `GET /documents` (list) · `POST /documents` (from asset, or w×h) · `GET/PUT /documents/{id}`
+(the stack as JSON; `PUT` keeps the pixels of surviving layers) · `GET/PUT /documents/{id}/layers/{lid}/pixels?kind=image|mask&raw=1`
+(raw RGBA or grey bytes with `X-Loom-Width/Height/Channels`; the editor uploads only dirty layers on save) ·
+`POST /documents/{id}/save` (ORA) · `POST /documents/{id}/flatten {to_catalogue}` (exact, lineage + `has_document`) ·
+`POST /documents/{id}/export` (png; PSD is written in the editor by ag-psd) · `POST /documents/{id}/compare`
+(the editor's composite → per-channel delta vs the exact flatten, used by the acceptance and the Info tab) ·
+`GET /documents/{id}/thumbnail` · `POST /documents/{id}/close` · `DELETE /documents/{id}`.
+M5 adds `POST /documents/{id}/inpaint|refine|instruct-edit|upscale|outpaint` (recipes with region + paste-back
+policy, returning new layers + masks) and `POST /documents/{id}/segment` (SAM points/box/text, BiRefNet).
+Tiled uploads (PNG per tile or raw RGBA with Range) are deferred until a measured need: whole-layer raw RGBA
+transfers run at loopback speed (52 MB of layers in < 1 s in the M4 acceptance).
 
 ## 14. Acceptance checklist
 - [ ] Layers, groups, masks, 24 blend modes, adjustment and filter layers render correctly vs a Python

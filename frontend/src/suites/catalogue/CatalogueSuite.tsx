@@ -282,7 +282,7 @@ export function Stage() {
     else if (k === ']') c.setTile(c.tile + 32)
     else if (k === 'f' || k === 'F') { e.preventDefault(); setRailTab('catalogue', 'filters'); setTimeout(() => document.getElementById('cat-search')?.focus(), 50) }
     else if (k === 't' || k === 'T') { e.preventDefault(); document.getElementById('insp-tag')?.focus() }
-    else if (k === 'e' || k === 'E') s.toast('Send to Edit arrives in M4', 'info')
+    else if ((k === 'e' || k === 'E') && c.primary) { const id = c.primary; void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }
     else if (k === 'r' && e.ctrlKey && c.primary) { e.preventDefault(); const a = c.byId(c.primary); if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a)) }
     else if ((k === 'r' || k === 'R') && !e.ctrlKey) { ids.forEach((id) => void import('../generate/generateStore').then((m) => m.useGenerate.getState().addRef(id))) }
     else if (k === 'v' || k === 'V') { const a = c.primary ? c.byId(c.primary) : undefined; if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().variations(a)) }

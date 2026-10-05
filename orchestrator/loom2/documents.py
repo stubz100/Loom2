@@ -285,9 +285,10 @@ class DocumentStore:
                     meta = json.loads(z.read("loom2.json").decode("utf-8")) if "loom2.json" in z.namelist() else {"id": p.stem, "name": p.stem}
             except (zipfile.BadZipFile, OSError, ValueError):
                 continue
-            layers = meta.get("layers", [])
+            def _count(nodes: list) -> int:   # every node, groups included (what the Documents list shows)
+                return sum(1 + _count(n.get("children") or []) for n in nodes)
             out.append({"id": meta.get("id", p.stem), "name": meta.get("name", p.stem), "w": meta.get("w"), "h": meta.get("h"), "saved_at": meta.get("saved_at"),
-                        "source_asset_id": meta.get("source_asset_id"), "layers": len(layers), "path": str(p), "open": meta.get("id", p.stem) in self.open,
+                        "source_asset_id": meta.get("source_asset_id"), "layers": _count(meta.get("layers", [])), "path": str(p), "open": meta.get("id", p.stem) in self.open,
                         "dirty": self.open[meta.get("id", p.stem)].dirty if meta.get("id", p.stem) in self.open else False})
         return out
 

@@ -176,8 +176,11 @@ GET  /assets/{id}/file  GET /thumbs/{id}/{size}  DELETE /assets/{id}   POST /ass
 GET  /lineage/{id}  GET /collections  POST /collections  PATCH /collections/{id}
 POST /jobs (recipe)  GET /jobs?status  GET /jobs/{id}  POST /jobs/{id}/cancel  DELETE /jobs/{id}
 POST /queue/pause|unpause   GET /queue
-GET  /documents/{id}  PUT /documents/{id} (ORA stream)  POST /documents (from asset)  POST /documents/{id}/flatten
-POST /documents/{id}/export (psd|png)   POST /documents/{id}/segment (SAM/BiRefNet → mask)
+GET  /documents (list)  POST /documents (from asset | w,h)  GET/PUT /documents/{id} (stack JSON)  POST /documents/{id}/save (ORA)
+GET/PUT /documents/{id}/layers/{lid}/pixels?kind=image|mask&raw=1 (raw RGBA / grey bytes, X-Loom-Width/Height/Channels)
+POST /documents/{id}/flatten {to_catalogue}  POST /documents/{id}/export (png; psd is written by the editor via ag-psd)
+POST /documents/{id}/compare?w&h (editor composite → delta vs the exact flatten, 10 §14)  GET /documents/{id}/thumbnail
+POST /documents/{id}/close  DELETE /documents/{id}   POST /documents/{id}/segment (SAM/BiRefNet → mask, M5)
 POST /documents/{id}/inpaint  /refine  /instruct-edit  (recipes with crop region + paste-back policy)
 GET  /clips/{id}  GET /clips/{id}/proxy.mp4 (Range)  GET /clips/{id}/frames/{n}.png  POST /clips/{id}/extract
 GET  /models (roster + health)  POST /models/fetch  /models/{id}/verify  PUT /models/root  POST /models/scan

@@ -184,7 +184,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
 
     app = FastAPI(title="loom2 orchestrator", version=__version__, lifespan=lifespan)
     app.state.services = svc
-    app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Loom-Width", "X-Loom-Height", "X-Loom-Channels", "Content-Disposition"])
 
     @app.middleware("http")
     async def token_gate(request: Request, call_next):
@@ -608,6 +608,34 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         buf = io.BytesIO()
         Image.fromarray(merged, "RGBA").save(buf, "PNG")
         return Response(content=buf.getvalue(), media_type="image/png", headers={"Content-Disposition": f'attachment; filename="{od.doc.name}.png"'})
+
+    @app.post("/documents/{doc_id}/compare")
+    async def documents_compare(doc_id: str, request: Request, w: int, h: int):
+        """Raw straight-alpha RGBA of the editor's GPU composite (w·h·4 bytes) → per-channel delta against the exact
+        flatten (10 §14 item 1). Both images are kept under temp/compare for inspection; the result lands in doc.meta."""
+        import io
+        from datetime import datetime, timezone
+        import numpy as np
+        from PIL import Image
+        from .compose import srgb_delta
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        body = await request.body()
+        if len(body) != w * h * 4:
+            raise HTTPException(400, f"expected {w * h * 4} bytes for {w}×{h}×4, got {len(body)}")
+        if (w, h) != (od.doc.w, od.doc.h):
+            raise HTTPException(400, f"composite is {w}×{h}, the document is {od.doc.w}×{od.doc.h}")
+        gpu = np.frombuffer(body, dtype=np.uint8).reshape((h, w, 4)).copy()
+        exact = await asyncio.to_thread(od.flatten)
+        d = srgb_delta(exact, gpu)
+        rgb = srgb_delta(exact[..., :3], gpu[..., :3])
+        d = {"mean": d["mean"], "p99": d["p99"], "max": d["max"], "rgb_mean": rgb["mean"], "rgb_p99": rgb["p99"], "rgb_max": rgb["max"],
+             "w": w, "h": h, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        out = svc.ws.temp_dir / "compare"   # type: ignore[union-attr]
+        out.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(lambda: (Image.fromarray(exact, "RGBA").save(out / f"{doc_id}-exact.png"), Image.fromarray(gpu, "RGBA").save(out / f"{doc_id}-gpu.png")))
+        del io
+        od.doc.meta["last_compare"] = d
+        return d
 
     @app.get("/documents/{doc_id}/thumbnail")
     async def documents_thumbnail(doc_id: str):

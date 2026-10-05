@@ -2493,6 +2493,62 @@
     }
    }
   },
+  "/documents/{doc_id}/compare": {
+   "post": {
+    "summary": "Documents Compare",
+    "description": "Raw straight-alpha RGBA of the editor's GPU composite (w\u00b7h\u00b74 bytes) \u2192 per-channel delta against the exact\nflatten (10 \u00a714 item 1). Both images are kept under temp/compare for inspection; the result lands in doc.meta.",
+    "operationId": "documents_compare_documents__doc_id__compare_post",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     },
+     {
+      "name": "w",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "W"
+      }
+     },
+     {
+      "name": "h",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "H"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/documents/{doc_id}/thumbnail": {
    "get": {
     "summary": "Documents Thumbnail",

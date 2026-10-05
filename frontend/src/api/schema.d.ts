@@ -634,6 +634,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Documents Compare
+         * @description Raw straight-alpha RGBA of the editor's GPU composite (w·h·4 bytes) → per-channel delta against the exact
+         *     flatten (10 §14 item 1). Both images are kept under temp/compare for inspection; the result lands in doc.meta.
+         */
+        post: operations["documents_compare_documents__doc_id__compare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/thumbnail": {
         parameters: {
             query?: never;
@@ -2784,6 +2805,40 @@ export interface operations {
                 "application/json": components["schemas"]["ExportRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    documents_compare_documents__doc_id__compare_post: {
+        parameters: {
+            query: {
+                w: number;
+                h: number;
+            };
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

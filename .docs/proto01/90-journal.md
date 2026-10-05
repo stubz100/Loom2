@@ -818,3 +818,50 @@ read the clock)*
   the item request (`batch_id=<job_id>`) returned nothing — expanded groups looked empty. The item query now
   takes `group_by` + `group_key` and filters on the same `COALESCE(...)` expression the headers use (test added).
 - Cosmetic: dev headers showed the raw JSON as excerpt; the scene field is shown instead.
+
+## 2026-10-05 18:44 — M4 slice 2: the PixiJS editor; exact blend modes measured against the Python flatten
+
+- **Edit suite is live** (`frontend/src/suites/edit/`): toolbox + tool options in the Panel (V M L W B E G I C H Z;
+  A is an M5 placeholder), Brushes / Selection / AI (placeholder) / Documents panels, strip (zoom, fit, 1:1,
+  pixel grid, mask overlay, before, quick mask, cursor, renderer badge), PixiJS stage, inspector with Layers
+  (tree, eye/lock/solo, mask thumbnails, blend/opacity/fill/clip, add layer/group/adjustment/filter, duplicate,
+  merge down, reorder, delete-twice), Properties (position, lineage, adjustment/filter parameters with sliders),
+  History (tile snapshots for strokes, stack snapshots for structure; click to step), Info (size, source, memory,
+  renderer, cursor, **compare preview vs exact**). Save (dirty layers only, raw RGBA) · Save to Catalogue
+  (lineage) · Export PNG (orchestrator) / PSD (ag-psd, adjustment layers skipped with a warning). `E` in the
+  Catalogue opens the asset's document (or creates it). Keys per 10 §10; `Ctrl+0/1/2` zoom wins over the suite
+  switch while a document is open (capture-phase listener). Autosave every 2 min; unsaved-changes toast on
+  suite switch. Deep links `?doc=<id>&verify=1` for the headless loop.
+- **Toolbox lives at the top of the Tool options panel**, not in the frame Rail: 07 §2 makes the Rail the
+  suite's section navigation, and that stays consistent across suites.
+- **Blend modes: PixiJS's advanced set is not the Photoshop/W3C set.** Measured per mode on a 960×544 gradient
+  layer over an opaque base (RGB p99 in 1/255): only normal/multiply/screen matched; darken 55, soft-light 30,
+  hard-light 85, linear-light 145, hard-mix 165, hue 72, luminosity 53 … Pixi's filters use looser formulas (the
+  Pegtop soft-light, premultiplied colours treated as straight, backdrop alpha ignored) and batch adjacent layers
+  with the same mode into one pass. Replaced by `blendModes.ts`: 24 `BlendModeFilter` subclasses (GLSL + WGSL)
+  porting compose.py's formulas, registered as `w3c-<mode>[-clip][-b]`; `-clip` multiplies the layer alpha by
+  the backdrop alpha (clipping = alpha × everything below), `-b` alternates names so equal modes never batch.
+  The filter emits only the source-side term (cs·(1−αb) + B·αb)·αs with alpha αs because Pixi draws the filter
+  output over the backdrop with source-over — emitting the full W3C `co` double-counted the backdrop wherever it
+  was semi-transparent (found through "two blended layers inside an isolated group" failing while one passed).
+- **Masks and isolated groups go through render-texture passes**, not Pixi's sprite masks / `cacheAsTexture`:
+  a sprite mask plus an advanced blend gave the blend a transparent backdrop (mask + multiply p99 57), and
+  cacheAsTexture applied alpha/blend per child. Each masked layer renders (layer-sized RT) and each isolated
+  group renders (document-sized RT, transparent clear) in a HIGH-priority ticker step when dirty; the result
+  sprite carries the blend/opacity/mask. Pass-through is exactly compose.py's rule (flag ∧ normal ∧ no mask ∧
+  opacity 1 ∧ no clip).
+- **Result (`scripts/m4_acceptance.py`, 12/12 in ≈ 25 s):** document from asset; 25 layers in 5 groups with every
+  mode, 6 masks, clips, opacities/fills, offsets; 52 MB raw upload 0.8 s; ORA save 2.2 s; reopen lossless
+  (stack, pixels, masks); 37-entry ORA with mimetype first; flatten → asset with parents + `has_document`;
+  **GPU preview vs exact flatten: RGB mean 0.63, p99 3, max 24 (1/255)** over the 25-layer stack with 8-bit
+  intermediates — threshold p99 ≤ 4. Per feature (`m4_compositor_diag.py`): opacity, fill, offsets, masks
+  (linked/unlinked), clip (over holes, in groups), pass-through and isolated groups (alpha, blend, mask, nested,
+  offsets), stacked equal modes, and all 24 deterministic modes are **p99 ≤ 1** (divide ≤ 4 — 8-bit division
+  noise; hard-mix max 193 at its threshold flip; dissolve is noise by design and excluded).
+- Found on the way: FastAPI's CORS needed `expose_headers` for the raw-pixel size headers (the browser read 0×0);
+  `extract.canvas()` returns a WebGPU canvas without a 2D context (redrawn into a plain canvas, which also
+  un-premultiplies); `renderer.render({target})` clears to the renderer background unless `clearColor` is given;
+  headless Edge renders with **WebGPU**, so both shader dialects are exercised by the acceptance.
+- Still in M4: adjustment/filter GPU previews (slice 4; the canvas shows the stack without them, exact on save),
+  free transform, gradient fill, marching ants (the selection shows as an additive tint), pen pressure (D19).
+  Roadmap 12 §5 and 13 D31 updated.

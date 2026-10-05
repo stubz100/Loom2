@@ -179,6 +179,17 @@ Catalogue with lineage. No AI yet.
 
 Acceptance: 10 §14 items 1, 2, 6, 7.
 
+**M4 status 2026-10-05** (journal 18:44): backend — pydantic document model, ORA writer/reader (8-bit layers,
+masks, stack.xml + `loom2.json`), exact numpy compositor (24 modes, masks, groups, clip, adjustments, filters),
+documents API with raw RGBA layer transfer and a compare endpoint; frontend — PixiJS editor with layers, groups,
+masks, **exact W3C blend shaders** (Pixi's own set measured and replaced), clip, render-texture passes for
+masked layers and isolated groups, tools V M L W B E G I C H Z, selections + quick mask, tile-snapshot history,
+Layers/Properties/History/Info inspector, Save / Save to Catalogue / PNG / PSD, `E` from the Catalogue.
+**Acceptance `scripts/m4_acceptance.py` 12/12**: item 1 (preview vs exact: p99 3/255 over a 25-layer stack of
+every mode, ≤ 1 per feature), item 6 (ORA round trip lossless; PSD written — opening it in Photoshop/Krita is a
+manual check), item 7 (lineage + `has_document`). Item 2's undo/redo is in; the tablet latency half waits for a
+pen (D19). Remaining in M4: adjustment/filter shader previews, free transform, gradient fill, marching ants.
+
 ## 6. M5 · Edit AI (3–4 weeks) — gate: 10 approved (AI section), E8 decided
 
 AI Select (SAM 3, BiRefNet); Inpaint Fill (Klein + LanPaint) / Fill-Match (Klein ICM) / Fill Hero (dev + LanPaint; Fill Pro and Instruct dropped by E8) with region

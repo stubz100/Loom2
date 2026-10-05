@@ -185,10 +185,12 @@ documents API with raw RGBA layer transfer and a compare endpoint; frontend — 
 masks, **exact W3C blend shaders** (Pixi's own set measured and replaced), clip, render-texture passes for
 masked layers and isolated groups, tools V M L W B E G I C H Z, selections + quick mask, tile-snapshot history,
 Layers/Properties/History/Info inspector, Save / Save to Catalogue / PNG / PSD, `E` from the Catalogue.
-**Acceptance `scripts/m4_acceptance.py` 12/12**: item 1 (preview vs exact: p99 3/255 over a 25-layer stack of
-every mode, ≤ 1 per feature), item 6 (ORA round trip lossless; PSD written — opening it in Photoshop/Krita is a
-manual check), item 7 (lineage + `has_document`). Item 2's undo/redo is in; the tablet latency half waits for a
-pen (D19). Remaining in M4: adjustment/filter shader previews, free transform, gradient fill, marching ants.
+**Acceptance `scripts/m4_acceptance.py` 12/12**: item 1 (preview vs exact: p99 3/255 over a 33-layer stack of
+every blend mode plus 8 adjustment/filter layers, ≤ 1 per feature and per adjustment/filter type), item 6 (ORA
+round trip lossless; PSD written — opening it in Photoshop/Krita is a manual check), item 7 (lineage +
+`has_document`). Item 2's undo/redo is in; the tablet latency half waits for a pen (D19). Adjustment and filter
+previews landed (journal 18:56). Remaining in M4: free transform (Ctrl+T), gradient fill, marching ants, and an
+on-demand render loop (the ticker currently re-renders every frame, which a blur layer makes costly).
 
 ## 6. M5 · Edit AI (3–4 weeks) — gate: 10 approved (AI section), E8 decided
 

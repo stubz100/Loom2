@@ -93,10 +93,25 @@ def main() -> int:
             k += 1
         layers.append({"kind": "group", "id": f"grp_t{gi}", "name": f"group {gi}", "opacity": 1.0 if gi % 2 == 0 else 0.8, "blend": "normal", "visible": True, "locked": False, "clip": False,
                        "mask": None, "passthrough": gi % 2 == 0, "children": children})
+    # adjustment / filter layers on top and inside a group (exact in Python; previewed on the GPU)
+    def adj(i: int, kind: str, type_: str, params: dict, **kw) -> dict:
+        n = {"kind": kind, "id": f"adj_t{i}", "name": type_, "type": type_, "params": params, "opacity": 1.0, "blend": "normal", "visible": True, "locked": False, "clip": False, "mask": None}
+        n.update(kw)
+        return n
+    layers = [adj(0, "adjustment", "levels", {"in_black": 16, "in_white": 235, "gamma": 1.3}, mask={"enabled": True, "linked": False, "x": 0, "y": 0}),
+              adj(1, "filter", "gaussian_blur", {"radius": 1.5}, opacity=0.6),
+              adj(2, "adjustment", "hue_saturation", {"hue": 25, "saturation": 20}, opacity=0.6),
+              adj(3, "filter", "sharpen", {"amount": 120, "radius": 1, "threshold": 2}),
+              adj(4, "adjustment", "curves", {"rgb": [[0, 0], [96, 70], [255, 255]]}, clip=True),
+              adj(5, "filter", "high_pass", {"radius": 2}, opacity=0.4),
+              *layers]
+    layers[-1]["children"].insert(0, adj(6, "adjustment", "brightness_contrast", {"brightness": 8, "contrast": 20}))
+    layers[-2]["children"].insert(2, adj(7, "adjustment", "color_balance", {"shadows": [15, 0, -10], "midtones": [0, 10, 0], "highlights": [-5, 0, 15]}))
     stack = dict(doc)
     stack["layers"] = layers + [base_layer]
     doc2 = call(base, "PUT", f"/documents/{did}", stack)
-    check("stack accepted (25 blend modes, 5 groups)", len(doc2["layers"]) == 6)
+    check("stack accepted (25 blend modes, 5 groups, 8 adjustment/filter layers)", len(doc2["layers"]) == 12)
+    call(base, "PUT", f"/documents/{did}/layers/adj_t0/pixels?w={w}&h={h}&kind=mask", mask_layer(w, h, 9).tobytes())
 
     # 3. pixels + masks
     t0 = time.perf_counter()
@@ -123,7 +138,7 @@ def main() -> int:
     check("reopened mask lossless", np.array_equal(np.frombuffer(m, dtype=np.uint8).reshape(h, w), mask_layer(w, h, 5)))
     docs = call(base, "GET", "/documents")["items"]
     entry = next((d for d in docs if d["id"] == did), None)
-    check("listed with layer count", bool(entry) and entry["layers"] == 31, str(entry and entry["layers"]))
+    check("listed with layer count", bool(entry) and entry["layers"] == 39, str(entry and entry["layers"]))
     ora = Path(entry["path"])
     with zipfile.ZipFile(ora) as z:
         names = z.namelist()

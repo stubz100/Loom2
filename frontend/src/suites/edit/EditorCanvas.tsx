@@ -6,6 +6,7 @@ import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle,
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useRef } from 'react'
 import { useSession } from '../../store/session'
+import { ensureAdjustment } from './adjustFilters'
 import { blendName } from './blendModes'
 import { findNode, useEditor, type Node } from './editorStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
@@ -167,8 +168,19 @@ export function EditorCanvas() {
           }
           parent.addChild(obj)
           spritesRef.current.set(n.id, obj)
+        } else if (n.kind === 'adjustment' || n.kind === 'filter') {
+          // a document-sized white sprite (or the layer's mask) carries the layer alpha; the per-layer filter
+          // registered as a blend mode rewrites the backdrop (adjustFilters.ts)
+          const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
+          const sp = m ? new Sprite(m.texture) : new Sprite(Texture.WHITE)
+          if (m && n.mask) sp.position.set(n.mask.x, n.mask.y)
+          else { sp.width = doc.w; sp.height = doc.h }
+          sp.alpha = n.opacity * (n.fill ?? 1)
+          ;(sp as unknown as { blendMode: string }).blendMode = ensureAdjustment(n)
+          lastBlend = ''
+          parent.addChild(sp)
+          spritesRef.current.set(n.id, sp)
         }
-        // adjustment / filter layers: GPU preview arrives in the next slice (10 §3 "preview ≈"); exact on save
       }
     }
     build(doc.layers, layers)

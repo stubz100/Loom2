@@ -52,9 +52,11 @@ layers are post-MVP, §15). The canvas composite is **exact** for layers, groups
 deterministic blend modes: the editor registers its own W3C/Photoshop blend shaders (D31, PixiJS's built-in set
 measured and replaced) and renders masked layers and isolated groups through render-texture passes; measured
 p99 ≤ 1/255 per feature and 3/255 over a 25-layer stack against the Python flatten (`scripts/m4_acceptance.py`,
-Info tab "compare"). Dissolve is seeded noise and only ≈. Adjustment/filter layers are
-**re-rendered exactly in Python on save/export** (05 §3b); their shader previews are the remaining M4 slice, and
-until then the canvas shows the stack without them — the Properties tab says so ("preview ≈").
+Info tab "compare"). Dissolve is seeded noise and only ≈. Adjustment/filter layers are previewed on the canvas
+with the same formulas (per-channel types through a 256-entry LUT, the rest in the shader; Gaussian blur exact
+up to a 12-tap radius and strided above; noise is a hash approximation of the seeded normal noise — measured
+p99 ≤ 1/255 for every type) and **re-rendered exactly in Python on save/export** (05 §3b); "preview ≈" therefore
+only applies to noise, large blur radii and dissolve.
 
 ## 4. Toolbox (Rail) and Panel · Tool options
 

@@ -99,6 +99,30 @@ def main() -> None:
         run("isolated grp + offsets", [group([node(1, blend="screen", x=-40, y=-30), node(0, blend="multiply", x=37, y=53)], opacity=0.8)], {"lyr_d0": g0, "lyr_d1": g1})
         run("isolated grp blend+mask child", [group([node(1, blend="screen"), node(0, blend="multiply", mask={"enabled": True, "linked": False, "x": 0, "y": 0})], opacity=0.8)], {"lyr_d0": g0, "lyr_d1": g1}, m1)
         run("two isolated grps", [group([node(1, blend="screen")], opacity=0.8), {**group([node(0, blend="multiply")], opacity=0.8), "id": "grp_e"}], {"lyr_d0": g0, "lyr_d1": g1})
+    if which in ("adjust", "all"):
+        def adj(i: int, kind: str, type_: str, params: dict, **kw) -> dict:
+            n = {"kind": kind, "id": f"adj_d{i}", "name": type_, "type": type_, "params": params, "opacity": 1.0, "blend": "normal", "visible": True, "locked": False, "clip": False, "mask": None}
+            n.update(kw)
+            return n
+        run("levels", [adj(0, "adjustment", "levels", {"in_black": 20, "in_white": 230, "gamma": 1.4, "out_black": 10, "out_white": 250})], {})
+        run("curves", [adj(0, "adjustment", "curves", {"rgb": [[0, 0], [64, 40], [192, 220], [255, 255]], "r": [[0, 0], [255, 200]]})], {})
+        run("hue_saturation", [adj(0, "adjustment", "hue_saturation", {"hue": 40, "saturation": 30, "lightness": -10})], {})
+        run("color_balance", [adj(0, "adjustment", "color_balance", {"shadows": [20, -10, 0], "midtones": [0, 15, -20], "highlights": [-10, 0, 25]})], {})
+        run("brightness_contrast", [adj(0, "adjustment", "brightness_contrast", {"brightness": 12, "contrast": 25})], {})
+        run("exposure", [adj(0, "adjustment", "exposure", {"exposure": 0.7, "offset": -0.05, "gamma": 1.2})], {})
+        run("black_white", [adj(0, "adjustment", "black_white", {"r": 30, "g": 50, "b": 20})], {})
+        run("invert", [adj(0, "adjustment", "invert", {})], {})
+        run("levels 50% masked", [adj(0, "adjustment", "levels", {"gamma": 0.6}, opacity=0.5, mask={"enabled": True, "linked": False, "x": 0, "y": 0})], {}, {"adj_d0": mask_layer(w, h, 3)})
+        run("invert clip over hole", [adj(1, "adjustment", "invert", {}, clip=True), node(0, x=200, y=100)], {"lyr_d0": g0})
+        run("adjust over layer w/ holes", [adj(1, "adjustment", "invert", {}), node(0, x=200, y=100)], {"lyr_d0": g0})
+        run("hue_sat inside isolated grp", [group([adj(1, "adjustment", "hue_saturation", {"hue": 90}), node(0, blend="multiply")], opacity=0.8)], {"lyr_d0": g0})
+        run("blur 1.5", [adj(0, "filter", "gaussian_blur", {"radius": 1.5})], {})
+        run("blur 3", [adj(0, "filter", "gaussian_blur", {"radius": 3})], {})
+        run("blur 8 (strided ≈)", [adj(0, "filter", "gaussian_blur", {"radius": 8})], {})
+        run("blur over layer w/ holes", [adj(1, "filter", "gaussian_blur", {"radius": 2}), node(0, x=200, y=100)], {"lyr_d0": g0})
+        run("sharpen", [adj(0, "filter", "sharpen", {"amount": 150, "radius": 1, "threshold": 4})], {})
+        run("high_pass", [adj(0, "filter", "high_pass", {"radius": 3})], {})
+        run("noise (≈)", [adj(0, "filter", "noise", {"amount": 10, "seed": 3})], {})
     if which in ("modes", "all"):
         for m in BLENDS:
             run(f"blend {m}", [node(0, blend=m)], {"lyr_d0": g0})

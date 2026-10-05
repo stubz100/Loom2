@@ -865,3 +865,26 @@ read the clock)*
 - Still in M4: adjustment/filter GPU previews (slice 4; the canvas shows the stack without them, exact on save),
   free transform, gradient fill, marching ants (the selection shows as an additive tint), pen pressure (D19).
   Roadmap 12 §5 and 13 D31 updated.
+
+## 2026-10-05 18:56 — M4 slice 4: adjustment and filter layer previews on the GPU, measured exact
+
+- `adjustFilters.ts`: one PixiJS `Filter` per adjustment/filter layer, registered as a blend mode
+  (`adj-<layerId>`) and driven by a document-sized white sprite (or the layer's mask) carrying the layer alpha;
+  the filter reads the backdrop (`uBackTexture`), draws with blend **none** and writes compose.py's mix:
+  adjustments `cb·(1−a) + f(cb)·a` where αb > 0, filters a straight-alpha mix of rgb and alpha. Per-channel
+  types (levels, curves, exposure, brightness/contrast, invert) are evaluated on the CPU into a 256-entry LUT
+  texture with the exact formulas; hue/saturation (the same HSL round trip), colour balance and black & white
+  run in the shader; blur/sharpen/high-pass sample compose.py's Gaussian (σ = radius, taps to 3σ) over the
+  premultiplied backdrop with `uInputClamp` edge clamping, strided beyond a 12-tap radius; noise is a
+  hash-driven Box–Muller approximation of the seeded normal noise. Parameters are uniforms updated in place on
+  every slider move (no shader recompiles); clip multiplies by the backdrop alpha; masks on any node kind load
+  now (they were fetched for raster layers only — found by the masked-levels variant).
+- Measured (`m4_compositor_diag.py adjust`, RGB p99 in 1/255): levels 0, curves 1, hue/saturation 1, colour
+  balance 1, brightness/contrast 0, exposure 0, black & white 1, invert 0, masked levels at 50 % 1, clip over a
+  hole 1, over a layer with holes 1, inside an isolated group 1; blur 1.5 → 1, blur 3 → 1, blur 8 (strided) → 1
+  (max 6), sharpen 0, high-pass 1; noise ≈ by design (p99 90).
+- **Acceptance 12/12** with the stack grown to 33 layers + 8 adjustment/filter nodes (39 nodes, 38-entry ORA):
+  preview vs exact **mean 0.70, p99 3, max 32** (1/255). 10 §3, 12 §5 and D31 updated; the "preview ≈" badge now
+  means noise, large blur radii and dissolve only.
+- Cost note: Pixi's ticker renders every frame, so a blur layer's 169–625 taps per pixel run continuously; an
+  on-demand render loop (render on change / paint only) is the next editor housekeeping item (12 §5).

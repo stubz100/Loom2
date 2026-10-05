@@ -200,13 +200,12 @@ export const useEditor = create<EditorState>()(
           try {
             const doc = await api.get<DocumentStack>(`/documents/${id}`)
             const pixels = new Map<string, LayerPixels>(); const masks = new Map<string, LayerPixels>()
-            const rasters: Node[] = []
-            walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.push(n) })
-            await Promise.all(rasters.map(async (n) => {
-              const lp = await fetchRaw(id, n.id, 'image')
-              if (lp) pixels.set(n.id, lp)
-              if (n.mask) { const m = await fetchRaw(id, n.id, 'mask'); if (m) masks.set(n.id, m) }
-            }))
+            const rasters: Node[] = []; const masked: Node[] = []
+            walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.push(n); if (n.mask) masked.push(n) })   // masks sit on any node kind
+            await Promise.all([
+              ...rasters.map(async (n) => { const lp = await fetchRaw(id, n.id, 'image'); if (lp) pixels.set(n.id, lp) }),
+              ...masked.map(async (n) => { const m = await fetchRaw(id, n.id, 'mask'); if (m) masks.set(n.id, m) }),
+            ])
             const first = rasters[0]?.id ?? null
             set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, revision: get().revision + 1 })
             get().requestFit()

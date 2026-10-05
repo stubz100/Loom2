@@ -368,7 +368,7 @@ function PropertiesTab() {
         })}
         {!Object.keys(params).length && <span className="hint full">no parameters</span>}
       </div>
-      <p className="hint">Exact in the orchestrator's compositor on Save to Catalogue / Export (10 §3); the GPU preview of adjustment and filter layers arrives in the next slice. Until then the canvas shows the stack without them.</p>
+      <p className="hint">Previewed on the canvas with the compositor's own formulas (blur exact up to radius 4, strided above; noise approximate); rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).</p>
     </div>
   )
 }

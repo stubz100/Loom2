@@ -68,6 +68,10 @@ def test_api_flow(tmp_path: Path):
             assert hello["type"] == "hello" and any(e["type"] == "project.opened" for e in hello["data"]["recent"])
         assert client.get("/engine").json()["running"] is False
         assert client.post("/project/close", headers=H).json() == {"open": False}
+    # a relaunch on the same state reopens the last project (reopen_last_project default)
+    client2 = TestClient(create_app(tmp_path / "state"))
+    with client2:
+        assert client2.get("/project").json()["name"] == "Smoke"
     # the queue file records a clean shutdown
     q = json.loads((tmp_path / "proj" / "jobs" / "queue.json").read_text(encoding="utf-8"))
     assert q["clean_shutdown"] is True

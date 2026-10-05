@@ -50,6 +50,7 @@ class Settings(BaseModel):
     api_port: int = 8765
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])
     log_level: str = "INFO"
+    reopen_last_project: bool = True
 
 
 class AppRecord(BaseModel):

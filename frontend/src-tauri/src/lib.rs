@@ -230,6 +230,7 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_dialog::init())
         .manage(backend.clone())
         .invoke_handler(tauri::generate_handler![backend_info, request_exit, reveal_path])
         .setup(move |app| {

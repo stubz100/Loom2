@@ -1,4 +1,4 @@
-// The only module that imports @tauri-apps/api (06 §8): shell adapters with browser fallbacks.
+// The only module that imports @tauri-apps/api and plugins (06 §8): shell adapters with browser fallbacks.
 import type { Backend } from '../api/types'
 
 export const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -42,4 +42,12 @@ export async function revealPath(path: string): Promise<void> {
   if (!isTauri()) { await navigator.clipboard?.writeText(path); return }
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('reveal_path', { path })
+}
+
+/** OS folder picker (07 §1.2: the only native dialogs are OS file pickers). Returns null when cancelled or in a browser. */
+export async function pickFolder(title: string, defaultPath?: string): Promise<string | null> {
+  if (!isTauri()) return null
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const picked = await open({ directory: true, multiple: false, title, defaultPath: defaultPath || undefined })
+  return typeof picked === 'string' ? picked : null
 }

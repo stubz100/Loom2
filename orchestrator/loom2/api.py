@@ -110,11 +110,12 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         svc.roster.scan()
-        if project:
+        target = project or (Path(svc.app.record.last_project) if svc.app.settings.reopen_last_project and svc.app.record.last_project else None)
+        if target:
             try:
-                await svc.open_project(Path(project))
+                await svc.open_project(Path(target))
             except StateError as e:
-                log.error("could not open project %s: %s", project, e)
+                log.error("could not open project %s: %s", target, e)
         if ready_cb:
             ready_cb(svc)
         try:

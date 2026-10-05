@@ -71,14 +71,24 @@ def flux2_loaders(g: dict, unet: str, clip: str, weight_dtype: str = "default"):
     g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": "flux2-vae.safetensors"}}
 
 
-def build_icm(method: str, prompt: str, image, mask, seed: int, g: dict):
+def build_icm(method: str, prompt: str, image, mask, seed: int, g: dict, w: int = 0, h: int = 0):
     base = method == "klein_base_icm"
+    noref = method == "klein_icm_noref"      # E8b / Q17: no ReferenceLatent at all
+    hole = method == "klein_icm_hole"        # E8b / Q17: reference image with the masked region neutralised (mid grey)
     flux2_loaders(g, "flux-2-klein-base-9b.safetensors" if base else "flux-2-klein-9b.safetensors", "qwen_3_8b_fp8mixed.safetensors", "fp8_e4m3fn")
     g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
     g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, text, watermark" if base else "", "clip": ["2", 0]}}
-    g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": image, "vae": ["3", 0]}}
-    g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
-    g["9"] = {"class_type": "InpaintModelConditioning", "inputs": {"positive": ["8", 0], "negative": ["6", 0], "vae": ["3", 0], "pixels": image, "mask": mask, "noise_mask": True}}
+    positive = ["5", 0]
+    if not noref:
+        ref_pixels = image
+        if hole:
+            g["14"] = {"class_type": "EmptyImage", "inputs": {"width": w, "height": h, "batch_size": 1, "color": 0x808080}}
+            g["15"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["14", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
+            ref_pixels = ["15", 0]
+        g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ref_pixels, "vae": ["3", 0]}}
+        g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
+        positive = ["8", 0]
+    g["9"] = {"class_type": "InpaintModelConditioning", "inputs": {"positive": positive, "negative": ["6", 0], "vae": ["3", 0], "pixels": image, "mask": mask, "noise_mask": True}}
     g["10"] = {"class_type": "DifferentialDiffusion", "inputs": {"model": ["1", 0]}}
     g["11"] = {"class_type": "KSampler", "inputs": {"model": ["10", 0], "seed": seed, "steps": 20 if base else 4, "cfg": 3.5 if base else 1.0,
                                                     "sampler_name": "euler", "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1],
@@ -90,6 +100,8 @@ def build_icm(method: str, prompt: str, image, mask, seed: int, g: dict):
 
 def build_lanpaint_flux2(method: str, prompt: str, image, mask, seed: int, g: dict, w: int, h: int):
     dev = method == "dev_lanpaint"
+    pf = method == "klein_lanpaint_pf"        # E8b / Q17: "Prompt First" with a higher lambda
+    noref = method == "klein_lanpaint_noref"  # E8b / Q17: no ReferenceLatent
     if dev:
         flux2_loaders(g, "flux2_dev_fp8mixed.safetensors", "mistral_3_small_flux2_fp8.safetensors")
         g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": "Flux2TurboComfyv2.safetensors", "strength_model": 1.0}}
@@ -101,13 +113,13 @@ def build_lanpaint_flux2(method: str, prompt: str, image, mask, seed: int, g: di
     g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": guidance}}
     g["7"] = {"class_type": "LanPaint_ImageEncode", "inputs": {"image": image, "vae": ["3", 0], "mask": mask}}
     g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["6", 0], "latent": ["7", 0]}}
-    g["9"] = {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": ["8", 0]}}
+    g["9"] = {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": ["6", 0] if noref else ["8", 0]}}
     g["10"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
     g["11"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
     g["12"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": steps, "width": w, "height": h}}
     g["13"] = {"class_type": "LanPaint_SamplerCustomAdvanced", "inputs": {"noise": ["10", 0], "guider": ["9", 0], "sampler": ["11", 0], "sigmas": ["12", 0],
-                                                                          "latent_image": ["7", 0], "LanPaint_NumSteps": 5, "LanPaint_Lambda": 5.0,
-                                                                          "LanPaint_StepSize": 0.15, "LanPaint_PromptMode": "Image First", "LanPaint_Info": "loom2 e8"}}
+                                                                          "latent_image": ["7", 0], "LanPaint_NumSteps": 5, "LanPaint_Lambda": 8.0 if pf else 5.0,
+                                                                          "LanPaint_StepSize": 0.15, "LanPaint_PromptMode": "Prompt First" if pf else "Image First", "LanPaint_Info": "loom2 e8"}}
     g["14"] = {"class_type": "LanPaint_ImageDecode", "inputs": {"samples": ["13", 0], "vae": ["3", 0], "image": image, "mask": mask, "blend_overlap": 9}}
     return "14"
 
@@ -147,6 +159,8 @@ def build_qwen_edit(prompt: str, image, mask, seed: int, g: dict):
 
 
 METHODS = ["klein_icm", "klein_base_icm", "klein_lanpaint", "dev_lanpaint", "fill", "qwen_edit"]
+# E8b (Q17, object removal on Klein): run with --methods klein_icm_noref,klein_icm_hole,klein_lanpaint_pf,klein_lanpaint_noref
+E8B_METHODS = ["klein_icm_noref", "klein_icm_hole", "klein_lanpaint_pf", "klein_lanpaint_noref"]
 
 
 NAME_INPUTS = {"unet_name", "clip_name", "clip_name1", "clip_name2", "vae_name", "lora_name", "image"}
@@ -230,9 +244,9 @@ def main() -> int:
             g: dict = {}
             image, mask = common_io(g, image_name, mask_name, outpaint)
             tw, th = (w + (outpaint or {}).get("left", 0) + (outpaint or {}).get("right", 0), h + (outpaint or {}).get("top", 0) + (outpaint or {}).get("bottom", 0))
-            if method in ("klein_icm", "klein_base_icm"):
-                out_id = build_icm(method, t["prompt"], image, mask, a.seed, g)
-            elif method in ("klein_lanpaint", "dev_lanpaint"):
+            if method in ("klein_icm", "klein_base_icm", "klein_icm_noref", "klein_icm_hole"):
+                out_id = build_icm(method, t["prompt"], image, mask, a.seed, g, tw, th)
+            elif method in ("klein_lanpaint", "dev_lanpaint", "klein_lanpaint_pf", "klein_lanpaint_noref"):
                 out_id = build_lanpaint_flux2(method, t["prompt"], image, mask, a.seed, g, tw, th)
             elif method == "fill":
                 out_id = build_fill(t["prompt"], image, mask, a.seed, g)

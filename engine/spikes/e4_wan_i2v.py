@@ -7,6 +7,8 @@ Usage (engine running):
 Recipes
   lightning  4 steps total (high expert steps 0-2, low expert 2-4), cfg 1.0, Lightning 4-step LoRAs (high 0.7, low 1.0), shift 5
   quality    20 steps (10 + 10), cfg 3.5, no LoRA, shift 8 — slow; use for one task only
+  lightning44  E4b: 8 steps (4 + 4), Lightning LoRAs on both experts, cfg 1, shift 5
+  motion       E4b: 8 steps; high expert WITHOUT the LoRA at cfg 3.5 (0-4) for motion, low expert with the LoRA at cfg 1 (4-8)
 Graph follows ComfyUI's Wan 2.2 14B i2v / flf2v templates: WanImageToVideo / WanFirstLastFrameToVideo →
 KSamplerAdvanced (high) → KSamplerAdvanced (low) → VAEDecode → CreateVideo → SaveVideo (mp4, h264).
 """
@@ -59,12 +61,17 @@ def build(recipe: str, prompt: str, start: str, end: str | None, w: int, h: int,
         "100": {"class_type": "LoadImage", "inputs": {"image": start}},
         "110": {"class_type": "ImageScale", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}},
     }
-    if recipe == "lightning":
+    if recipe in ("lightning", "lightning44", "motion"):
         g["4h"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1h", 0], "lora_name": "Wan2.2-I2V-A14B-Lightning-4steps-high.safetensors", "strength_model": 0.7}}
         g["4l"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1l", 0], "lora_name": "Wan2.2-I2V-A14B-Lightning-4steps-low.safetensors", "strength_model": 1.0}}
-        mh, ml, steps, split, cfg, shift = ["4h", 0], ["4l", 0], 4, 2, 1.0, 5.0
+    if recipe == "lightning":
+        mh, ml, steps, split, cfg_h, cfg_l, shift = ["4h", 0], ["4l", 0], 4, 2, 1.0, 1.0, 5.0
+    elif recipe == "lightning44":   # E4b: twice the steps, LoRAs on both experts
+        mh, ml, steps, split, cfg_h, cfg_l, shift = ["4h", 0], ["4l", 0], 8, 4, 1.0, 1.0, 5.0
+    elif recipe == "motion":        # E4b: high expert without the LoRA at real CFG (motion), low expert distilled
+        mh, ml, steps, split, cfg_h, cfg_l, shift = ["1h", 0], ["4l", 0], 8, 4, 3.5, 1.0, 5.0
     else:
-        mh, ml, steps, split, cfg, shift = ["1h", 0], ["1l", 0], 20, 10, 3.5, 8.0
+        mh, ml, steps, split, cfg_h, cfg_l, shift = ["1h", 0], ["1l", 0], 20, 10, 3.5, 3.5, 8.0
     g["8h"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": mh, "shift": shift}}
     g["8l"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ml, "shift": shift}}
     cond = {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames, "batch_size": 1, "start_image": ["110", 0]}
@@ -75,10 +82,10 @@ def build(recipe: str, prompt: str, start: str, end: str | None, w: int, h: int,
         g["7"] = {"class_type": "WanFirstLastFrameToVideo", "inputs": cond}
     else:
         g["7"] = {"class_type": "WanImageToVideo", "inputs": cond}
-    g["9"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8h", 0], "add_noise": "enable", "noise_seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "euler",
+    g["9"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8h", 0], "add_noise": "enable", "noise_seed": seed, "steps": steps, "cfg": cfg_h, "sampler_name": "euler",
                                                           "scheduler": "simple", "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["7", 2],
                                                           "start_at_step": 0, "end_at_step": split, "return_with_leftover_noise": "enable"}}
-    g["10"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8l", 0], "add_noise": "disable", "noise_seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "euler",
+    g["10"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8l", 0], "add_noise": "disable", "noise_seed": seed, "steps": steps, "cfg": cfg_l, "sampler_name": "euler",
                                                            "scheduler": "simple", "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["9", 0],
                                                            "start_at_step": split, "end_at_step": 10000, "return_with_leftover_noise": "disable"}}
     g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
@@ -154,7 +161,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default="127.0.0.1:8188")
     ap.add_argument("--tasks", default="01,02,03,04,05")
-    ap.add_argument("--recipe", choices=["lightning", "quality"], default="lightning")
+    ap.add_argument("--recipe", choices=["lightning", "quality", "lightning44", "motion"], default="lightning")
     ap.add_argument("--width", type=int, default=832); ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--frames", type=int, default=81); ap.add_argument("--fps", type=int, default=16)
     ap.add_argument("--seed", type=int, default=20261005); ap.add_argument("--timeout", type=float, default=3600)

@@ -188,7 +188,7 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
 | --- | --- | --- | --- | --- | --- | --- |
 | **Wan 2.2 I2V-A14B** (Jul 2025) | MoE 2×14B (14B active), umT5-XXL | 480p/720p, 16 fps, 81 f | **yes, same weights** via `WanFirstLastFrameToVideo`; `Wan2.2-Fun-A14B-InP` if morphing | **FaceSim 0.578 vs 0.379 (5B)** (arXiv 2510.14255); best photoreal faces in community tests | GGUF Q5_K_M 10.8 GB / Q6_K 12 GB per expert + umT5 fp8 offloaded; Lightning 4-step LoRAs | Apache-2.0 |
 | Wan 2.2 TI2V-5B | 5B dense | 720p 24 fps | community node only | FaceSim 0.379 | fp8 8–10 GB | Apache-2.0; RDNA4 colour corruption reported on ROCm 7.2.1 |
-| **LTX-2.3** (Mar 2026) | 22B, Gemma-3-12B | up to 4K, 24/48 fps, 121 f | **keyframes at arbitrary indices** (`LTXVAddGuide`, per-guide strength), FLF template | softer faces than Wan; fastest open model; IC-LoRA pose/depth/canny control | GGUF Q4_K_M 13–16.5 GB + Gemma Q4 ≈ 8 GB offloaded; distilled 8 steps | LTX Community (< $10M ARR) |
+| **LTX-2.3** (Mar 2026) | 22B, Gemma-3-12B | up to 4K, 24/48 fps, 121 f | **keyframes at arbitrary indices** (`LTXVAddGuide`, per-guide strength), FLF template | softer faces than Wan; fastest open model; IC-LoRA pose/depth/canny control | **fp8 transformer 23.5 GB streamed from RAM: 4.7 s/it, 141 s per 121 f @ 1024×576 (E5b)**; GGUF Q4_K_M 14 GB runs at 68–81 s/it on this card — struck; Gemma-3 fp8 12.3 GB offloaded; distilled 8 steps | LTX Community (< $10M ARR) |
 | LTX-2.5 (Aug 2026) | 22B, Gemma-4-12B | 1920×1088, 121 f, multishot, HDR | yes | AA Elo 1038 (Fast) | official ≥ 34 GB; community GGUF Q4 15.7 GB + Gemma-4 Q4 8.4 GB; no 16 GB numbers yet | LTX Community |
 | **MiniMax H3** (Aug 2026) | 33B (~20B loaded), Qwen3-VL-32B | 768p, 24 fps, 4–15 s | **native first + last frame** (FL2VA), ≤ 9 refs (Ref2VA) | top open-weights Elo 1181; **measured on a 9070 XT Windows: 864×480, 5 s, 20 steps = 13 m 39 s**, faces close to source | GGUF Q4_0 11.4 GB, spills to RAM (64 GB recommended) | Community licence with **application required for USA/EU/UK/KR users** |
 | HunyuanVideo 1.5 (Nov 2025) | 8.3B | 480p/720p, 24 fps, 121 f | **no** | best motion naturalness; step-distilled 8–12 steps | fp8 / GGUF Q4 7–11 GB | Tencent community (territorial terms) |
@@ -214,10 +214,16 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   gives real character action (the captain unfolds his arms and leans in to point) with identity intact.
   Presets for M6: **Draft = Lightning 2 + 2 (≈ 315 s)**, **Motion = undistilled high + distilled low (≈ 495 s)**;
   camera moves need a dedicated control (Wan camera LoRAs / VACE) post-MVP, no recipe fixed them.
-- **Secondary engine: LTX-2.3 distilled** GGUF Q4_K_M + Gemma-3-12B Q4, `LTXVAddGuide` at frame 0 / −1 (+
-  optional middle beats), 8 steps, 24 fps. Reasons: fastest open model (interactive previews on AMD),
-  arbitrary keyframe conditioning maps directly onto "boards → beats", IC-LoRA pose/depth for driven motion,
-  LTX-2.5 upgrade path.
+- **Secondary engine: LTX-2.3 distilled** — **fp8 transformer** (Kijai `transformer_only_fp8_scaled`, 23.5 GB,
+  streamed from RAM by the engine's dynamic VRAM loader) + Gemma-3-12B fp8 + text projection + video **and
+  audio** VAE (core 0.38 requires the audio VAE even for silent clips), `LTXVAddGuide` at frame 0 / −1 (+
+  optional middle beats), 8 steps, 24 fps. **E5 / E5b 2026-10-05 — D9 accepted (journal 13:11):** 141 s per
+  121 f @ 1024×576 clip at 4.7 s/it; the GGUF Q4 took 649–715 s at 68–81 s/it and is struck from the roster.
+  Both bench tasks pass with better motion and prompt adherence than Wan (she turns to the camera, the rise is
+  fluid) but softer identity after 3–5 s (costume drifts, a chimney artefact in the FLF clip), so Wan stays
+  primary for identity (D8) and LTX is the **preview / beat-driven** engine. Reasons unchanged: fastest open
+  model on this rig once streamed, arbitrary keyframe conditioning maps directly onto "boards → beats",
+  IC-LoRA pose/depth for driven motion, LTX-2.5 upgrade path.
 - **"Hero clip" tier: MiniMax H3 FL2VA** (proven on this exact GPU/OS; native first+last; highest quality;
   ≈ 3× slower). **Enabled (D17)**: the author is EU-located, eligible and willing to complete the community-licence
   application; the tier unlocks in Settings once the application is confirmed filed.

@@ -634,3 +634,18 @@ read the clock)*
   largest fixed cost (Q18).
 - **Presets for M6 (04 §5b, 12 E4):** Draft = Lightning 2 + 2 (≈ 315 s per 5 s clip), Motion = undistilled
   high + distilled low (≈ 495 s). D8 unchanged.
+
+## 2026-10-05 13:11 — E5b: LTX-2.3 fp8 streamed = 141 s per clip; D9 accepted; M0 closed
+
+- E5b 13:07–13:09 on the fp8 transformer (`ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors`,
+  23.5 GB, sha256 indexed): task 01 at 1024×576 × 121 f, 8 steps — **4.7 s/it, 37 s sampling, 141 s total**
+  (GGUF Q4: 68–81 s/it, 649 s). VRAM free after the run 15.35 GB: the engine streamed the whole transformer from
+  RAM (`loaded partially` never appeared) and still ran 14× faster than the dequant path. Same seed → the clip
+  matches the GGUF clip frame for frame, including the costume drift at 3–4 s and the turn-away at 5 s.
+- Consequence for the roster (04 §1, §5): on this card **GGUF is only for weights that cannot stream**;
+  fp8 (scaled) is the default for every large transformer. The LTX GGUF entry is struck; the Wan GGUF
+  experts stay only until an fp8 pair is benchmarked (E4 per-expert 70–92 s incl. load is acceptable).
+- **D9 accepted:** LTX-2.3 fp8 = preview / beat-driven engine (fast, fluid, arbitrary keyframes), Wan 2.2 =
+  identity-safe primary (D8). 13 and 12 E5 updated.
+- **M0 closed** (12 §1): E0–E8 all passed or decided; carried forward Q15 (M3), Q18 (M6), E9 (M6), inpaint
+  bench task 03 (M5). Next: M1 foundation (06) — engine service, roster/resolver, job queue, project store.

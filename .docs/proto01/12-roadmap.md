@@ -24,7 +24,7 @@ models are the heaviest and benefit from a hardened queue.
 | **E2** | Loopback throughput: FastAPI streams a 200 MB latent + an 8K PNG; UI uploads a 64 MB mask via `PUT /blobs` | ≥ 500 MB/s into a GPU texture — **PASS 2026-10-05**: 782 MiB/s end-to-end (8K raw → WebGPU texture), 1 276 MiB/s single fetch, 1 957 MiB/s with 4 ranges, after raising `FileResponse.chunk_size` to 4 MiB (64 KiB gave 329–422 MiB/s) | D4 transport |
 | **E3** | Worker brush (FastMask pattern) with `pointerrawupdate` + predicted events, **mouse-driven** (D19: no pen yet; pressure/Delegated Ink implemented, untested) | event→commit median ≤ 1.5 frames, p95 ≤ 2 (the rAF floor) at 2K preview; no dropped dabs at fast mouse strokes — **PASS 2026-10-05** (1.5 / 1.95 frames, 0 of 4 800 dropped at 250 events/s) | Edit feasibility |
 | **E4** | Wan 2.2 I2V-A14B GGUF Q5_K_M + umT5 fp8 + Lightning via ComfyUI on the rig; FLF with `WanFirstLastFrameToVideo` | 81 f @ 480p completes; time and peak VRAM recorded; identity visually acceptable — **PASS 2026-10-05**: 5/5 clips, 312–366 s each at 832×480 × 81 f (Lightning 2+2, CFG 1), ≈ 9 GB resident after the run (peak not captured); identity held in all five, FLF reached the end pose; VAE decode + encode = 54 % of the time (Q18); camera-move adherence weak. **E4b done**: 4+4 Lightning steps = no gain (424–550 s); undistilled high expert at CFG 3.5 + distilled low ("motion", 495 s) = real character action → presets Draft / Motion; camera moves need VACE or camera LoRAs post-MVP | D8 primary i2v — **accepted** |
-| **E5** | LTX-2.3 distilled GGUF Q4_K_M + Gemma-3 Q4 via ComfyUI; one mid keyframe | 121 f completes; time recorded | D9 secondary i2v |
+| **E5** | LTX-2.3 distilled via ComfyUI (GGUF Q4_K_M, then the Kijai fp8 transformer streamed) + Gemma-3 fp8; FLF via `LTXVAddGuide` at −1 | 121 f completes; time recorded — **PASS 2026-10-05**: both tasks at 1024×576 × 121 f; GGUF 649–715 s (68–81 s/it), **fp8 141 s (4.7 s/it)**; motion and prompt adherence better than Wan, identity softer; the audio VAE is required by core 0.38 (fetched) | D9 secondary i2v — **accepted** (fp8 only) |
 | **E6** | Mediabunny `CanvasSink` scrub on a 121-frame MP4; exact seek on the backend (PyAV; TorchCodec optional) | every frame reachable, step < 50 ms — **PASS 2026-10-05**: 0 wrong frames in 3 × 222 seeks; GOP 24 random 17.8 ms, **GOP 6 ≈ 10 ms** for every pattern (proxy policy), intra ≈ 7.5 ms; backend PyAV 6–15 ms | video stack |
 | **E7** | MIOpen on/off for VAE decode and ESRGAN on gfx1201 under ComfyUI | pick the faster, document — **DONE 2026-10-05: MIOpen off** (VAE decode 0.9 s Draft / 5.6 s Full; MIOpen costs 12–16 s search per new shape, wins 0.7 s warm); ESRGAN deferred until an upscaler is in the roster | runtime policy (04 §2, D13) |
 | **E8** | Inpaint quality bake-off on the bench tasks: Klein+ICM, Klein base+ICM, Klein+LanPaint, dev+LanPaint, FLUX.1 Fill (official file), Qwen-Image-Edit 2509 | ranked results with timings — **DONE 2026-10-05** (run 3: 4 tasks × 6 methods, 0 errors): Klein+LanPaint 22–28 s is the best fast method; Klein ICM 18–33 s conservative; dev+LanPaint 255–281 s is the hero tier and the only removal; FLUX.1 Fill 76–82 s dropped; Qwen-Edit 475 s (≈ 95 s warm) deferred. **E8b done 2026-10-05**: Klein removes with a neutralised-hole reference (10 s) or LanPaint Prompt First (21 s) — Q17 resolved; task 03 in M5 | D7 inpaint stack — **accepted with amendments** |
@@ -42,6 +42,16 @@ the Tauri 2 shell (WebView2, first Rust build 54 s): compositor 3.0 ms per 6×4K
 frame-accurate scrubbing at ≈ 10 ms with GOP-6 proxies. Harness: `frontend/src/spikes/`, server
 `orchestrator/spikes/e2_loopback.py`, results `orchestrator/spikes/out/*.jsonl` (gitignored). Monitor runs at
 29 Hz — author to switch to 60/75 Hz before any UI feel judgement.
+
+**E4 / E5 / E7 / E8 status — closed on 2026-10-05** (journal 11:50–13:11): the model spikes are done and D7,
+D8, D9 are accepted — inpaint on Klein 9B + LanPaint (Remove via a neutralised-hole reference, Fill Hero on
+dev), Wan 2.2 Lightning as the identity-safe i2v (Draft ≈ 315 s / Motion ≈ 495 s per 5 s clip at 832×480),
+LTX-2.3 fp8 as the fast beat-driven i2v (141 s per 5 s at 1024×576). Struck: FLUX.1 Fill, Qwen-Image-Edit
+(post-MVP), Klein base for inpaint, 4 + 4 Lightning, and every GGUF video model on this card (fp8 streamed
+from RAM is 5–15× faster). Drivers: `engine/spikes/e4_wan_i2v.py`, `e5_ltx_i2v.py`, `e8_inpaint.py`; sheets
+`e8_sheets.py`, `i2v_sheets.py`; results under `engine/spikes/out/` (gitignored, reproducible from the frozen
+bench inputs and seeds). **M0 is closed.** Carried forward: Q15 (sampling-speed telemetry, M3), Q18 (Wan VAE
+time, M6), E9 (fps conform, M6), inpaint bench task 03 (M5). Nothing gates M1.
 
 ### 1a. Environment setup (E0 prerequisite; decision D16)
 

@@ -82,7 +82,7 @@ def main():
             if i in frames:
                 tiles.append((f"f{i} ({i / (r.get('fps') or 16):.1f}s)", frames[i]))
         cols = 4 if len(tiles) > 6 else len(tiles)
-        name = f"{r['task']}_{r.get('recipe', '')}.png"
+        name = f"{r['task']}_{r.get('recipe') or r.get('format') or 'clip'}.png"   # e4 rows carry a recipe, e5 rows a format
         sheet(tiles, cols, a.scale).save(out_dir / name)
         print(f"[ok] {name}: refs {[l for l, _ in tiles if l.startswith('bench')]}, frames {idx}")
     print("sheets in", out_dir)

@@ -26,12 +26,8 @@ MANIFEST = [
          dest="text_encoders", license="flux-nc (TE: Qwen3 Apache-2.0 repack)"),
     dict(spike="e8", repo="black-forest-labs/FLUX.1-Fill-dev", file="flux1-fill-dev.safetensors",
          dest="diffusion_models", license="flux-nc (gated, official)"),
-    dict(spike="e8", repo="black-forest-labs/FLUX.1-Fill-dev", file="ae.safetensors",
-         dest="vae", rename="flux1-ae.safetensors", license="flux-nc (gated, official)"),
-    dict(spike="e8", repo="comfyanonymous/flux_text_encoders", file="clip_l.safetensors",
-         dest="text_encoders", license="openrail (CLIP-L)"),
-    dict(spike="e8", repo="comfyanonymous/flux_text_encoders", file="t5xxl_fp8_e4m3fn_scaled.safetensors",
-         dest="text_encoders", license="apache-2.0 (T5-XXL)"),
+    # FLUX.1 ae, clip_l and t5xxl fp8 already exist in the mounted D:\comfyui tree (vae/flux1/ae.safetensors,
+    # text_encoders/clip_l.safetensors, text_encoders/t5/t5xxl_fp8_e4m3fn_scaled.safetensors) — not re-fetched.
     # ---- E4 Wan 2.2 I2V-A14B ----
     dict(spike="e4", repo="QuantStack/Wan2.2-I2V-A14B-GGUF", file="HighNoise/Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf",
          dest="diffusion_models", license="apache-2.0 (QuantStack GGUF)"),
@@ -52,6 +48,13 @@ MANIFEST = [
          dest="text_encoders", license="gemma"),
     dict(spike="e5", repo="Lightricks/LTX-2.3", file="ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
          dest="upscale_models", license="ltx-2.x community"),
+    # ComfyUI-native LTX-2.3 pieces (added 2026-10-05 after reading the Kijai / Comfy-Org repacks):
+    dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="vae/LTX23_video_vae_bf16.safetensors",
+         dest="vae", rename="ltx-2.3_video_vae_bf16.safetensors", license="ltx-2.x community (Kijai repack)"),
+    dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="text_encoders/ltx-2.3_text_projection_bf16.safetensors",
+         dest="text_encoders", license="ltx-2.x community (Kijai repack)"),
+    dict(spike="e5", repo="Comfy-Org/ltx-2", file="split_files/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors",
+         dest="text_encoders", license="gemma (Comfy-Org repack)"),
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),

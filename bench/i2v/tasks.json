@@ -20,7 +20,7 @@
       "id": "03-flf-rooftop-crouch-to-stand",
       "kind": "flf2v",
       "start": "frames/rooftop-night_s20261004.png",
-      "end": "frames/rooftop-night-standing_s20261004.png",
+      "end": "frames/rooftop-standing_s20261004.png",
       "prompt": "she rises from the crouch and stands at the roof edge looking out, cloak moves in the wind",
       "expect": "reaches the end pose without a cut or morph, roofline and moon stay fixed"
     },

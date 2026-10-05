@@ -1,0 +1,25 @@
+{
+  "scene": "A slate rooftop above a harbour town at night, chimneys and a church spire, the sea glittering beyond",
+  "subjects": [
+    {
+      "description": "A young woman with long red braided hair, pale freckled skin and a dark green hooded wool cloak, hood up",
+      "position": "right third, silhouetted against the sky",
+      "action": "standing upright at the roof edge, looking out over the harbour",
+      "pose": "standing, feet apart on the slates, arms at her sides, profile view facing left, cloak moving in the wind",
+      "color_match": "exact"
+    }
+  ],
+  "style": "painterly cinematic concept art, visible brush texture, storyboard key frame",
+  "color_palette": ["#0B1626", "#F2A93B", "#5C6B7A", "#C9D6E3"],
+  "lighting": "cold moonlight from above left as key, warm window light from the street below as rim on her face",
+  "mood": "watchful, calm before action",
+  "background": "moonlit clouds, a weathervane, smoke from a chimney, harbour lights in the distance",
+  "composition": "medium shot, strong diagonal of the roof ridge, negative space of sky on the left",
+  "camera": {
+    "angle": "low angle, from the roof surface",
+    "lens": "35mm",
+    "depth_of_field": "shallow, town lights as soft bokeh",
+    "f-number": "f/2.0",
+    "distance": "medium shot"
+  }
+}

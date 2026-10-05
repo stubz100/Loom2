@@ -421,3 +421,51 @@ it again: KSampler ≈ 58–74 s for 8 steps at 960×544 in warm runs vs 27 s sa
 - `scripts/fetch_weights.py` written: manifest-driven fetch into the ComfyUI layout with sha256 + licence into
   `F:\loom2-models\roster.index.json` (the roster's seed). Order: E8 (Klein 9B TE, FLUX.1 Fill official + ae,
   CLIP-L, T5 fp8) → E4 (Wan 2.2 set) → E5 (LTX-2.3 set) → Klein 4B TE.
+- `datasets/parquet` identified as Wikipedia parquet→arrow caches of an unrelated project (`E:\…\LLM-Embedding-main`,
+  sources on E:) → deleted (41.6 GB). `F:\HF_HOME` now holds only `hub/` (BiRefNet ×2), `modules/`, the token files.
+  **F: free = 874 GB.** Downloads (≈ 85 GiB) started 09:08 via `fetch_weights.py` (log:
+  `orchestrator/spikes/out/fetch_weights.log`). Rate is bursty over the hub's xet backend (15 s samples from
+  3 to 114 MiB/s) but the **average is ≈ 16–18 MiB/s** (Klein encoder: 8.07 GiB in 515 s; NIC inbound 17.7 MiB/s
+  during the Fill download) → whole manifest ≈ 1–1.5 h. A plain-HTTPS CDN probe was far slower (0.3 MB/s single
+  stream, ~7 MB/s with 6 ranges) and `hf_transfer` is deprecated in hub 1.x — xet stays. The bake-offs are
+  chained to start as their files land (E8 first). Trimmed the manifest: CLIP-L, T5 fp8 and the
+  FLUX.1 ae already exist in the mounted `D:\comfyui` tree, so only the Klein 9B encoder and the official Fill
+  file are fetched for E8.
+
+## 2026-10-05 09:20 — E8 preparation while the weights land
+
+- LanPaint ships example workflows for exactly loom2's cases (`Flux2_Klein_EncodeDecode_Inpaint`,
+  `Flux2Dev_ImageEncode_Inpaint`, `Flux_EncodeDecode_Inpaint`, `Qwen_Image_Edit_EncodeDecode_Inpaint`) — wiring
+  extracted: `LanPaint_ImageEncode(image, vae, mask)` → `ReferenceLatent` → `BasicGuider` →
+  `LanPaint_SamplerCustomAdvanced(Flux2Scheduler sigmas, NumSteps 5, Lambda 5, StepSize 0.15, "Image First")` →
+  `LanPaint_ImageDecode(blend_overlap 9)`; Qwen-Edit uses `TextEncodeQwenImageEditPlus` + `ModelSamplingAuraFlow(3)`
+  + `CFGNorm` + Lightning LoRA + `LanPaint_KSampler`.
+- Node signatures read from `/object_info` (engine started briefly): `InpaintModelConditioning(positive, negative,
+  vae, pixels, mask, noise_mask)` → (pos, neg, latent); `ReferenceLatent(conditioning, latent?)`;
+  `DifferentialDiffusion(model, strength?)`; `LanPaint_KSampler(... LanPaint_NumSteps, LanPaint_PromptMode,
+  Inpainting_mode)`; `ImageCompositeMasked(destination, source, x, y, resize_source, mask?)`.
+- `engine/spikes/e8_inpaint.py` written: six methods (`klein_icm`, `klein_base_icm`, `klein_lanpaint`,
+  `dev_lanpaint`, `fill`, `qwen_edit`) × bench tasks 01/02/04/05 (03 needs a matte node — deferred to M5),
+  images uploaded through `POST /upload/image`, masks via `LoadImageMask(channel=red)`, outpaint via
+  `ImagePadForOutpaint`, results → `engine/spikes/out/e8/` + `e8_results.jsonl`.
+
+## 2026-10-05 10:05 — E4 / E5 drivers and the i2v bench frames (GPU idle while weights land)
+
+- Wan/LTX node signatures dumped from `/object_info` (`engine/spikes/out/node_signatures_e4e5.json`):
+  `WanImageToVideo` / `WanFirstLastFrameToVideo(positive, negative, vae, width 832, height 480, length 81, …,
+  start_image, end_image)` → (pos, neg, latent) — no CLIP-vision needed on 2.2; `KSamplerAdvanced` split
+  high/low experts; `LTXVImgToVideo`, `LTXVAddGuide(frame_idx, strength)`, `LTXVConditioning(frame_rate)`,
+  `LTXVScheduler`, AV-latent helpers; `CreateVideo(fps)` + `SaveVideo(mp4/h264)`.
+- `engine/spikes/e4_wan_i2v.py`: Wan 2.2 I2V-A14B Q5_K_M high+low via `UnetLoaderGGUF`, umT5 fp8, Wan 2.1 VAE,
+  **Lightning** recipe (4 steps, high 0–2 / low 2–4, cfg 1, shift 5, LoRA high 0.7 / low 1.0) and a **quality**
+  recipe (20 steps 10+10, cfg 3.5, shift 8); start+prompt and FLF on the same weights; 832×480×81 @ 16 fps;
+  per-node timings, VRAM, MP4 pulled via `/view`.
+- `engine/spikes/e5_ltx_i2v.py`: LTX-2.3 distilled (GGUF Q4_K_M, or Kijai fp8_scaled fallback) with
+  `DualCLIPLoader(gemma_3_12B_it_fp8_scaled + ltx-2.3_text_projection, type ltxv)`, Kijai video VAE,
+  `LTXVImgToVideo` + optional `LTXVAddGuide(frame_idx -1)` end frame, joint AV latent plumbing; `--preflight`
+  prints node signatures and runs only the contract check (the AV-latent wiring is the uncertain part).
+  Manifest extended with the Kijai VAE + text projection and the Comfy-Org Gemma fp8 encoder.
+- i2v bench frames rendered with the engine (fp8 dev, 20 steps, 960×544, seed 20261004) from prompts 01, 06, 05,
+  **05b (rooftop standing — new end frame for the FLF task)**, 02, 07 → `bench/i2v/frames/`.
+- Chains scheduled: E8 starts when the Fill file is indexed; E4 starts when the Wan files are indexed *and*
+  E8 has finished (24 result rows, port 8188 free).

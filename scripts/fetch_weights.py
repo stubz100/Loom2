@@ -51,6 +51,9 @@ MANIFEST = [
     # ComfyUI-native LTX-2.3 pieces (added 2026-10-05 after reading the Kijai / Comfy-Org repacks):
     dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="vae/LTX23_video_vae_bf16.safetensors",
          dest="vae", rename="ltx-2.3_video_vae_bf16.safetensors", license="ltx-2.x community (Kijai repack)"),
+    # ComfyUI 0.38 requires an audio VAE on LTXVEmptyLatentAudio even for silent clips (E5 preflight 2026-10-05):
+    dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="vae/LTX23_audio_vae_bf16.safetensors",
+         dest="vae", rename="ltx-2.3_audio_vae_bf16.safetensors", license="ltx-2.x community (Kijai repack)"),
     dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="text_encoders/ltx-2.3_text_projection_bf16.safetensors",
          dest="text_encoders", license="ltx-2.x community (Kijai repack)"),
     dict(spike="e5", repo="Comfy-Org/ltx-2", file="split_files/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors",

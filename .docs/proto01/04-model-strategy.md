@@ -200,7 +200,12 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
   strength, low 1.0, 4 + 4 steps, CFG ≈ 2.5 on high to keep motion), 480p–576p, 81 frames @ 16 fps. End frame
   via `WanFirstLastFrameToVideo` on the same weights. Reasons: the only quantitative identity evidence
   favours it; zero extra weights for FLF; Apache; the largest LoRA/control ecosystem (VACE, Fun-InP, Animate,
-  Stand-In) covers every later loom2 feature.
+  Stand-In) covers every later loom2 feature. **E4 2026-10-05 — D8 accepted:** 5 of 5 bench clips at
+  832×480 × 81 f with Lightning 2 + 2 steps (high 0.7 / low 1.0, CFG 1, shift 5), **312–366 s per clip**, of
+  which the Wan VAE decode is 131–134 s and the start-image encode 36–40 s (Q18) against 104–130 s of
+  sampling; identity held in every clip including the tight close-up, FLF reached the end pose. Weak spots:
+  camera moves (the push-in barely moves) and the turn-to-camera (she looks down at the compass instead) —
+  E4b tries 4 + 4 steps with CFG 2.5 on the high expert for motion before M6 fixes the presets.
 - **Secondary engine: LTX-2.3 distilled** GGUF Q4_K_M + Gemma-3-12B Q4, `LTXVAddGuide` at frame 0 / −1 (+
   optional middle beats), 8 steps, 24 fps. Reasons: fastest open model (interactive previews on AMD),
   arbitrary keyframe conditioning maps directly onto "boards → beats", IC-LoRA pose/depth for driven motion,

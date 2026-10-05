@@ -84,7 +84,8 @@ def build(fmt: str, prompt: str, start: str, end: str | None, w: int, h: int, fr
         g["9"] = {"class_type": "LTXVAddGuide", "inputs": {"positive": pos, "negative": neg, "vae": ["3", 0], "latent": lat, "image": ["113", 0], "frame_idx": -1, "strength": 1.0}}
         pos, neg, lat = ["9", 0], ["9", 1], ["9", 2]
     # joint audio-video latent (the LTX-2 transformer samples both); audio is discarded after sampling
-    g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1}}
+    g["99"] = {"class_type": "VAELoader", "inputs": {"vae_name": "ltx-2.3_audio_vae_bf16.safetensors"}}  # core 0.38 requires an audio VAE even for silent clips (E5 preflight 2026-10-05)
+    g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1, "audio_vae": ["99", 0]}}
     g["13"] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": lat, "audio_latent": ["12", 0]}}
     g["14"] = {"class_type": "BasicGuider", "inputs": {"model": ["1", 0], "conditioning": pos}}
     g["15"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}

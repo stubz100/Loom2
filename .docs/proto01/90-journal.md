@@ -537,3 +537,35 @@ read the clock)*
 - Follow-up **E8b** (once E4/E5 free the engine): a Klein removal recipe on task 01 — ICM without the reference
   on the hole, LanPaint "Prompt First" / higher λ. Until then removal is a Fill Hero job.
 - E4 started 11:46 on the freed engine (Wan 2.2 I2V-A14B Q5_K_M + Lightning 4+4, 5 tasks incl. FLF).
+
+## 2026-10-05 12:17 — E4 Wan 2.2 passed (D8 accepted); E5 blocked by the audio VAE, fixed and re-run
+
+- **E4** ran 11:46–12:13 on the engine freed by E8: 5 tasks, Lightning recipe (high 0–2 / low 2–4 steps, LoRA
+  0.7 / 1.0, CFG 1, shift 5), 832×480 × 81 f @ 16 fps, seed 20261005, 0 errors. VRAM free 15.76 → 6.66 GB
+  after the run (models staged; peak not captured). Frame sheets: `engine/spikes/i2v_sheets.py` →
+  `engine/spikes/out/e4_sheets/`.
+
+  | task | exec s | sampling s | VAE decode s | image encode s |
+  | --- | --- | --- | --- | --- |
+  | 01 character turn | 366 | 130 | 134 | 39 |
+  | 02 walk toward camera | 322 | 106 | 131 | 40 |
+  | 03 FLF crouch → stand | 312 | 104 | 131 | 36 |
+  | 04 camera push cabin | 314 | 106 | 132 | 38 |
+  | 05 dialogue gesture | 315 | 106 | 131 | 38 |
+
+- Scores (identity / motion / prompt or end-frame reach, 0–2): 01 = 2/2/1 (she lowers the compass and looks
+  down, never turns to camera; braids, cloak, sign intact); 02 = 2/2/2 (walks in, scale grows, crowd parallax,
+  freckles resolve as she nears); 03 = 2/1/2 (reaches the standing end pose; the rise happens between 1 s and
+  2 s with a position jump worth checking frame by frame); 04 = 2/1/1 (geometry stable, captain nods, but the
+  dolly barely moves); 05 = 2/2/2 (blink, look down and back up, tear, no mouth artefacts in a tight close-up).
+- **Verdict D8: accepted.** Identity is the property we bought Wan for and it held in all five. Motion
+  adherence at CFG 1 is the Lightning trade-off → **E4b** (4 + 4 steps, CFG 2.5 on the high expert) on tasks 01
+  and 04 when the engine is free. The clock is dominated by the VAE (decode 131–134 s + encode 36–40 s = 54 %)
+  → **Q18**.
+- **E5** started 12:13 and stopped at my contract check: core 0.38.2's `LTXVEmptyLatentAudio` has a required
+  `audio_vae` input (the LTX-2 transformer samples a joint audio-video latent even for silent clips) and the
+  graph had none. Fix: `ltx-2.3_audio_vae_bf16.safetensors` (Kijai repack, 0.34 GiB, sha256 5bc10fa4…) added to
+  the manifest and fetched; the driver loads it in a second `VAELoader` (node 99) wired into node 12. Run-1
+  rows kept as `e5_results_contract_errors_run1.jsonl`; **run 2 started 12:17** (preflight, then tasks
+  01 and 03). Lesson for the recipe compiler (06 §3b): contract checks must run against the pinned core before
+  a weight is declared "enough" — the audio VAE was missing from the roster, not from the node graph.

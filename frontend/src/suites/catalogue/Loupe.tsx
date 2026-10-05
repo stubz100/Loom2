@@ -1,8 +1,12 @@
 // Loupe and Compare (08 §3c): zoom/pan at any scale, prev/next, facts strip; 2-up / 4-up with locked zoom/pan,
 // wipe slider and difference toggle. One transform shared by every cell in Compare.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
+import { CommandButton, CommandRow } from '../../frame/CommandButton'
+import { handleKeyFor } from '../../frame/commands'
+import { showMenu } from '../../frame/ContextMenu'
+import { tileMenu } from './catalogueCommands'
 import { useCat } from './catalogueContext'
 
 interface Xf { s: number; x: number; y: number }
@@ -44,29 +48,30 @@ export function Loupe({ asset }: { asset: Asset }) {
   const c = useCat()
   const order = c.visibleOrder()
   const idx = order.indexOf(asset.id)
-  const dims = asset.w && asset.h ? { w: asset.w, h: asset.h } : null
+  // memoised: a fresh object per render would recreate `fit`, whose mount effect sets state → an endless re-render loop
+  const dims = useMemo(() => (asset.w && asset.h ? { w: asset.w, h: asset.h } : null), [asset.w, asset.h])
   const { xf, ref, fit, one, handlers } = useZoomPan(dims)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea')) return
-      if (e.key === 'ArrowLeft' && idx > 0) c.openLoupe(order[idx - 1])
-      else if (e.key === 'ArrowRight' && idx < order.length - 1) c.openLoupe(order[idx + 1])
-      else if (e.key === 'Escape') c.openLoupe(null)
+      if (e.key === 'Escape') c.openLoupe(null)
       else if (e.ctrlKey && e.key === '0') { e.preventDefault(); fit() }
       else if (e.ctrlKey && e.key === '1') { e.preventDefault(); one() }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') handleKeyFor('catalogue', e)
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey) { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); handleKeyFor('catalogue', e) }
       else return
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [c, idx, order, fit, one])
+  }, [c, idx, order, fit, one, asset.id])
   const pinned = c.compare.indexOf(asset.id) + 1
   return (
-    <div className="loupe">
+    <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, tileMenu()) }}>
       <div className="view" ref={ref} {...handlers}>
         <img src={api.assetUrl(asset.id)} alt="" style={style(xf)} draggable={false} />
       </div>
       <div className="facts">
-        <span>{idx + 1} / {order.length}</span>
+        <CommandButton id="cat.prev" /><span>{idx + 1} / {order.length}</span><CommandButton id="cat.next" />
         <span>{asset.model_id ?? asset.suite}</span>
         <span>{asset.w}×{asset.h}</span>
         <span>seed {asset.seed ?? '—'}</span>
@@ -77,6 +82,7 @@ export function Loupe({ asset }: { asset: Asset }) {
         <button className="quiet" onClick={fit}>Fit</button>
         <button className="quiet" onClick={one}>1:1</button>
         <button className="quiet" onClick={() => c.togglePin(asset.id)}>{pinned ? `Unpin C${pinned}` : 'Pin for compare (C)'}</button>
+        <CommandRow ids={['cat.keep', 'cat.reject', 'cat.edit', 'cat.reference']} />
         <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
       </div>
     </div>
@@ -88,7 +94,8 @@ export function Compare({ assets }: { assets: Asset[] }) {
   const [wipe, setWipe] = useState(0.5)
   const [diff, setDiff] = useState(false)
   const [two, setTwo] = useState(true)
-  const dims = assets[0]?.w && assets[0]?.h ? { w: assets[0].w!, h: assets[0].h! } : null
+  const w0 = assets[0]?.w, h0 = assets[0]?.h
+  const dims = useMemo(() => (w0 && h0 ? { w: w0, h: h0 } : null), [w0, h0])
   const { xf, ref, fit, one, handlers } = useZoomPan(dims)
   const shown = two ? assets.slice(0, 2) : assets.slice(0, 4)
   const swap = () => { if (assets.length >= 2) { c.clearCompare(); [assets[1], assets[0], ...assets.slice(2)].forEach((a) => c.togglePin(a.id)) } }

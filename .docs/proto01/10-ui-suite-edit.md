@@ -153,6 +153,15 @@ strategy when a tablet is bought. Modifier conventions: `Alt` eyedrop while brus
 `0–9` opacity, `Alt+right-drag` size/hardness HUD.
 
 ## 10. Keyboard (beyond 07 §4 and tool keys)
+Every key here is a registry command (07 §3c) with a mouse home: the strip (undo, redo, zoom in/out, fit, 100 %,
+pixel grid, mask overlay, before, quick mask), the Layers toolbar (new layer, new group, group active, add
+adjustment ▸, add filter ▸, duplicate, merge down, up/down, add/remove mask, hide/show, lock, delete, More ▸),
+the **layer row's right-click menu** (rename, hide/show, solo, lock, duplicate, merge, group, reorder, mask ▸,
+delete — the Alt-click/Shift-click/double-click gestures are listed as hints), the **canvas right-click menu**
+(undo/redo; selection, layer, view, tool and document submenus, with the selection items inline while a
+selection or quick mask exists), the Selection panel (all/none/invert/feather/quick mask/mask from
+selection/load mask/crop) and the Tool options (brush size/hardness steps, colour swap/defaults).
+
 `Ctrl+Z`/`Ctrl+Shift+Z` undo/redo · `Ctrl+D` deselect · `Ctrl+Shift+I` invert selection · `Q` quick mask ·
 `Ctrl+J` duplicate layer · `Ctrl+G` group · `Ctrl+E` merge down · `Ctrl+Shift+E` export · `Ctrl+T` transform ·
 `Ctrl+Shift+N` new layer · `Alt+click` eye = solo · `\` mask overlay / before · `Ctrl+Enter` run AI ·

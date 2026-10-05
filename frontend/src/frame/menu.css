@@ -1,0 +1,37 @@
+/* Context menus and command toolbars (07 §3c) */
+.ctx-menu { position: fixed; z-index: 60; min-width: 220px; max-width: 320px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); box-shadow: 0 10px 28px #000a; padding: 4px; font-size: 13px; }
+.ctx-menu .item { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 5px 8px; min-height: 28px; color: var(--fg); position: relative; cursor: default; }
+.ctx-menu .item.focus, .ctx-menu .item:hover:not(.disabled) { background: var(--bg3); }
+.ctx-menu .item.disabled { color: var(--fg3); opacity: .6; }
+.ctx-menu .item.danger { color: var(--error); }
+.ctx-menu .item .ic { display: inline-flex; justify-content: center; color: var(--fg2); }
+.ctx-menu .item .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu .item kbd { font-size: 11px; color: var(--fg3); background: transparent; border-color: transparent; padding: 0; }
+.ctx-menu .item .arrow { color: var(--fg3); }
+.ctx-menu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+.ctx-menu .heading { color: var(--fg3); font-size: 11px; padding: 4px 8px 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+.cmd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 28px; height: 28px; padding: 0 6px; background: transparent; border: 1px solid transparent; border-radius: var(--radius); color: var(--fg2); }
+.cmd-btn:hover:not(:disabled) { background: var(--bg3); color: var(--fg); border-color: var(--line2); }
+.cmd-btn.active { background: var(--bg4); color: var(--fg); border-color: var(--line2); }
+.cmd-btn:disabled { opacity: .4; }
+.cmd-btn.danger:hover:not(:disabled) { color: var(--error); }
+.cmd-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.cmd-row .gap { width: 8px; }
+.strip .cmd-row, .facts .cmd-row { flex-wrap: nowrap; }
+.strip .cmd-btn, .facts .cmd-btn { height: 24px; min-width: 24px; padding: 0 4px; }
+
+.cmd-help { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+.cmd-help section { min-width: 0; }
+.cmd-help .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.cmd-help .row kbd { white-space: nowrap; }
+
+.modal.palette { width: min(640px, 92vw); padding: 10px; }
+.palette input { width: 100%; font-size: 15px; padding: 8px 10px; margin-bottom: 8px; }
+.palette .list { max-height: 50vh; overflow: auto; }
+.palette .item { display: grid; grid-template-columns: 20px 1fr auto auto; gap: 10px; align-items: center; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 6px 8px; }
+.palette .item.focus { background: var(--bg3); }
+.palette .item.disabled { color: var(--fg3); }
+.palette .item .ic { display: inline-flex; color: var(--fg2); }
+.palette .item .scope { color: var(--fg3); font-size: 11px; }
+.palette .item kbd { font-size: 11px; }

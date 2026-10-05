@@ -3,10 +3,14 @@
 import { Brush, Eye, EyeOff, Files, Lasso, Lock, LockOpen, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../../api/client'
+import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
+import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { showMenu } from '../../frame/ContextMenu'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
+import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { EditorCanvas } from './EditorCanvas'
-import { ADJUSTMENT_DEFAULTS, BLEND_MODES, FILTER_DEFAULTS, TOOL_KEYS, countRasters, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import { BLEND_MODES, countRasters, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import './edit.css'
 
 const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
@@ -47,8 +51,7 @@ function Swatches() {
     <div className="swatch-pair">
       <span className="sw" style={{ background: b.color }} title="foreground"><input type="color" value={b.color} onChange={(e) => ed().setBrush({ color: e.target.value })} /></span>
       <span className="sw" style={{ background: b.background }} title="background"><input type="color" value={b.background} onChange={(e) => ed().setBrush({ background: e.target.value })} /></span>
-      <button className="quiet" onClick={() => ed().setBrush({ color: b.background, background: b.color })} title="swap (X)">⇄</button>
-      <button className="quiet" onClick={() => ed().setBrush({ color: '#000000', background: '#ffffff' })} title="defaults (D)">D</button>
+      <CommandButton id="edit.colour.swap" /><CommandButton id="edit.colour.default" />
     </div>
   )
 }
@@ -58,7 +61,7 @@ function Toolbox() {
   const tool = useEditor((s) => s.tool)
   return (
     <div className="toolbox">
-      {TOOLS.map((x) => <button key={x.tool} className={`tool${tool === x.tool ? ' active' : ''}${x.later ? ' later' : ''}`} title={`${x.label} (${x.key})${x.later ? ` · arrives in ${x.later}` : ''}`} onClick={() => ed().setTool(x.tool)}><b>{x.key}</b><span>{x.label}</span></button>)}
+      {TOOLS.map((x) => { markUsed(`edit.tool.${x.tool}`); return <button key={x.tool} className={`tool${tool === x.tool ? ' active' : ''}${x.later ? ' later' : ''}`} title={`${x.label} (${x.key})${x.later ? ` · arrives in ${x.later}` : ''}`} onClick={() => runCommand(`edit.tool.${x.tool}`)}><b>{x.key}</b><span>{x.label}</span></button> })}
     </div>
   )
 }
@@ -90,6 +93,7 @@ function ToolOptions() {
           <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} fmt={pct} onChange={(v) => set({ spacing: v })} />
           <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ smoothing: v })} />
           {tool === 'brush' && <><label>colour</label><Swatches /></>}
+          <label /><CommandRow ids={['edit.brush.smaller', 'edit.brush.larger', 'edit.brush.softer', 'edit.brush.harder']} />
           <span className="hint full">[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected (D19)</span>
         </div>
       )}
@@ -135,15 +139,13 @@ function SelectionTab() {
   const doc = useEditor((s) => s.doc)
   const [feather, setFeather] = useState(4)
   const n = findNode(doc, activeId)
+  void n
   return (
     <div className="tool-opts">
-      <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><button onClick={() => ed().selectAll()} title="Ctrl+A">all</button><button onClick={() => ed().clearSelection()} title="Ctrl+D" disabled={!hasSel}>none</button><button onClick={() => ed().invertSelection()} title="Ctrl+Shift+I">invert</button></div>
+      <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.sel.all', 'edit.sel.none', 'edit.sel.invert'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <label>feather</label><div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={0} max={200} value={feather} onChange={(e) => setFeather(Number(e.target.value))} style={{ width: 70 }} /> px <button disabled={!hasSel} onClick={() => ed().featherSelection(feather)}>apply</button></div>
-      <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => ed().setView({ quickMask: !quickMask })} title="Q">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
-      <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        <button disabled={!n || !!n.mask} onClick={() => n && ed().addMask(n.id, true)}>save as mask on layer</button>
-        <button disabled={!n?.mask} onClick={() => ed().loadSelectionFromMask()}>load from layer mask</button>
-      </div>
+      <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
+      <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.mask.fromSelection', 'edit.mask.load', 'edit.sel.crop'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <span className="hint full">Expand / contract and the AI selectors (SAM, BiRefNet) arrive in M5.</span>
     </div>
   )
@@ -208,13 +210,12 @@ function PrimaryAction() {
   const dirty = useEditor((s) => s.docDirty)
   const saving = useEditor((s) => s.saving)
   if (!doc) return <div className="estimate"><span className="muted">no document open</span></div>
+  markUsed('edit.save')
   return (
     <div>
-      <button className="primary" disabled={saving} onClick={() => void ed().save()} title="Ctrl+S">{saving ? 'Saving…' : dirty ? 'Save •' : 'Save'}</button>
+      <button className="primary" disabled={saving} onClick={() => runCommand('edit.save')} title="Save (⌃S)">{saving ? 'Saving…' : dirty ? 'Save •' : 'Save'}</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        <button onClick={() => void ed().saveToCatalogue()} title="Ctrl+Shift+S · exact flatten in the orchestrator → new asset with lineage">Save to Catalogue</button>
-        <button onClick={() => void ed().exportPng()} title="Ctrl+Shift+E · flattened PNG">PNG</button>
-        <button onClick={() => void ed().exportPsd()} title="ag-psd · layers, groups, masks, blend modes">PSD</button>
+        <CommandButton id="edit.saveToCatalogue" text /><CommandButton id="edit.exportPng" text /><CommandButton id="edit.exportPsd" text /><CommandButton id="edit.close" text />
       </div>
     </div>
   )
@@ -237,13 +238,14 @@ function Strip() {
   return (
     <>
       <span>{doc ? `${doc.name}${dirty ? ' •' : ''} · ${doc.w}×${doc.h}` : 'Edit'}</span>
+      <CommandRow ids={['edit.undo', 'edit.redo', 'gap', 'edit.view.zoomOut']} />
       <input className="edit-strip-zoom" value={zt ?? String(Math.round(zoom * 100))} onChange={(e) => setZt(e.target.value)} onBlur={apply} onKeyDown={(e) => { if (e.key === 'Enter') apply() }} disabled={!doc} /><span style={{ marginLeft: -4 }}>%</span>
-      <button className="quiet" onClick={() => ed().requestFit()} title="Ctrl+0" disabled={!doc}>fit</button>
-      <button className="quiet" onClick={() => ed().zoomTo(1)} title="Ctrl+1" disabled={!doc}>1:1</button>
-      <label className="chk"><input type="checkbox" checked={pixelGrid} onChange={(e) => ed().setView({ pixelGrid: e.target.checked })} /> pixel grid</label>
-      <label className="chk"><input type="checkbox" checked={overlay} onChange={(e) => ed().setView({ overlay: e.target.checked })} /> mask overlay</label>
-      <button className={`quiet${before ? ' active' : ''}`} onPointerDown={() => ed().setView({ before: true })} onPointerUp={() => ed().setView({ before: false })} onPointerLeave={() => { if (before) ed().setView({ before: false }) }} disabled={!doc} title="hold: hide the active layer (\)">before</button>
-      <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => ed().setView({ quickMask: !quickMask })} disabled={!doc} title="Q">quick mask</button>
+      <CommandRow ids={['edit.view.zoomIn', 'edit.view.fit']} />
+      <CommandButton id="edit.view.100" text />
+      <label className="chk" title="Pixel grid (shown from 800 %)"><input type="checkbox" checked={pixelGrid} onChange={() => { markUsed('edit.view.grid'); runCommand('edit.view.grid') }} /> pixel grid</label>
+      <label className="chk" title="Mask overlay (⌥\)"><input type="checkbox" checked={overlay} onChange={() => { markUsed('edit.view.overlay'); runCommand('edit.view.overlay') }} /> mask overlay</label>
+      <button className={`quiet${before ? ' active' : ''}`} onPointerDown={() => ed().setView({ before: true })} onPointerUp={() => ed().setView({ before: false })} onPointerLeave={() => { if (before) ed().setView({ before: false }) }} disabled={!doc} title="Before: hold to hide the active layer (hold \)">before</button>
+      <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => { markUsed('edit.view.before'); runCommand('edit.sel.quickMask') }} disabled={!doc} title="Quick mask (Q)">quick mask</button>
       <span className="spacer" />
       {cursor && <span className="mono">{cursor.x}, {cursor.y}</span>}
       <span className="badge-renderer">{renderer}</span>
@@ -286,17 +288,14 @@ function LayersTab() {
   const revision = useEditor((s) => s.revision)
   const hasSel = useEditor((s) => !!s.selection)
   const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); st.pixels.forEach((lp, id) => m.set(id, lp.thumbnail(64))); st.masks.forEach((lp, id) => m.set('m:' + id, lp.thumbnail(48))); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
-  const [pendingDel, setPendingDel] = useState(0)
-  const [adj, setAdj] = useState('levels')
-  const [flt, setFlt] = useState('gaussian_blur')
   const before = useRef<DocumentStack | null>(null)
   const active = findNode(doc, activeId)
   const start = () => { before.current = snapshot(doc) }
   const commit = (label: string) => { if (before.current && active) { ed().pushHistory({ label, layerId: active.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
   const rows = (nodes: Node[], depth: number): ReactNode => nodes.map((n) => (
     <div key={n.id}>
-      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} onClick={() => ed().setActive(n.id, false)}
-        onDoubleClick={() => { const name = window.prompt('Layer name', n.name); if (name && name !== n.name) ed().updateNode(n.id, { name }, 'rename') }}>
+      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} tabIndex={0} onClick={() => ed().setActive(n.id, false)}
+        onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id, false); showMenu(e, layerMenu()) }}>
         <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
         <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
         {n.kind === 'raster' ? <img className="thumb" src={thumbs.get(n.id)} alt="" /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
@@ -321,16 +320,11 @@ function LayersTab() {
         </div>
       )}
       <div className="layer-actions">
-        <button onClick={() => ed().addLayer('raster')} title="Ctrl+Shift+N">+ layer</button>
-        <button onClick={() => ed().addLayer('group')} title="empty group · Ctrl+G groups the active layer">+ group</button>
-        <span className="pair"><select value={adj} onChange={(e) => setAdj(e.target.value)}>{Object.keys(ADJUSTMENT_DEFAULTS).map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select><button onClick={() => ed().addLayer('adjustment', { type: adj })}>+ adjustment</button></span>
-        <span className="pair"><select value={flt} onChange={(e) => setFlt(e.target.value)}>{Object.keys(FILTER_DEFAULTS).map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select><button onClick={() => ed().addLayer('filter', { type: flt })}>+ filter</button></span>
-        <button disabled={!active} onClick={() => active && ed().duplicateNode(active.id)} title="Ctrl+J">duplicate</button>
-        <button disabled={!active} onClick={() => active && ed().mergeDown(active.id)} title="Ctrl+E">merge ↓</button>
-        <button disabled={!active} onClick={() => active && ed().moveNode(active.id, 'up')}>↑</button>
-        <button disabled={!active} onClick={() => active && ed().moveNode(active.id, 'down')}>↓</button>
-        {active?.mask && <button onClick={() => ed().removeMask(active.id)}>remove mask</button>}
-        <button disabled={!active} className={pendingDel ? 'danger' : ''} onClick={() => { if (!active) return; if (pendingDel && Date.now() - pendingDel < 1500) { ed().deleteNode(active.id); setPendingDel(0) } else { setPendingDel(Date.now()); useSession.getState().toast('Click delete again to remove the layer', 'info') } }}>delete</button>
+        <CommandRow ids={['edit.layer.new', 'edit.layer.newGroup', 'edit.layer.group']} />
+        <MenuButton label="Add adjustment" icon={SlidersHorizontal} items={adjustmentMenu} />
+        <MenuButton label="Add filter" icon={Sparkles} items={filterMenu} />
+        <CommandRow ids={['gap', 'edit.layer.duplicate', 'edit.layer.mergeDown', 'edit.layer.up', 'edit.layer.down', 'gap', active?.mask ? 'edit.mask.remove' : 'edit.mask.add', 'edit.layer.visibility', 'edit.layer.lock', 'gap', 'edit.layer.delete']} />
+        <MenuButton label="More" items={layerMenu} />
       </div>
     </div>
   )
@@ -410,7 +404,7 @@ function InfoTab() {
       <dt>memory</dt><dd>{(mem / 1048576).toFixed(0)} MB CPU canvases + the GPU copies</dd>
       <dt>renderer</dt><dd>{renderer || '—'}</dd>
       <dt>cursor</dt><dd className="mono">{cursor ? `${cursor.x}, ${cursor.y}` : '—'}</dd>
-      <dt>preview vs exact</dt><dd><button onClick={() => void ed().compareWithExact()} title="renders the exact flatten in the orchestrator and reports the per-channel difference (10 §14 item 1)">compare</button>{cmp && <div className="kind">RGB mean {cmp.rgb_mean.toFixed(2)} · p99 {cmp.rgb_p99} · max {cmp.rgb_max} · with alpha p99 {cmp.p99} · {new Date(cmp.at).toLocaleTimeString()}</div>}</dd>
+      <dt>preview vs exact</dt><dd><CommandButton id="edit.compare" text />{cmp && <div className="kind">RGB mean {cmp.rgb_mean.toFixed(2)} · p99 {cmp.rgb_p99} · max {cmp.rgb_max} · with alpha p99 {cmp.p99} · {new Date(cmp.at).toLocaleTimeString()}</div>}</dd>
     </dl>
   )
 }
@@ -438,35 +432,13 @@ function useEditKeys() {
       if (s.ui.suite !== 'edit') return
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
       const st = ed()
-      const k = e.key, low = k.toLowerCase(), ctrl = e.ctrlKey || e.metaKey
-      const b = st.brush
-      // view keys from 10 §5 take precedence over the suite switch (07 §4) while a document is open
-      if (ctrl && st.doc && (k === '0' || k === '1' || k === '2')) { e.preventDefault(); e.stopImmediatePropagation(); if (k === '0') st.requestFit(); else st.zoomTo(Number(k)); return }
-      if (ctrl && (k === '+' || k === '=')) { e.preventDefault(); st.zoomTo(st.zoom * 1.25); return }
-      if (ctrl && k === '-') { e.preventDefault(); st.zoomTo(st.zoom / 1.25); return }
-      if (ctrl && low === 'z') { e.preventDefault(); if (e.shiftKey) st.redo(); else st.undo(); return }
-      if (ctrl && low === 'y') { e.preventDefault(); st.redo(); return }
-      if (ctrl && low === 's') { e.preventDefault(); if (e.shiftKey) void st.saveToCatalogue(); else void st.save(); return }
-      if (ctrl && e.shiftKey && low === 'e') { e.preventDefault(); void st.exportPng(); return }
-      if (ctrl && low === 'e') { e.preventDefault(); if (st.activeId) st.mergeDown(st.activeId); return }
-      if (ctrl && e.shiftKey && low === 'n') { e.preventDefault(); st.addLayer('raster'); return }
-      if (ctrl && low === 'j') { e.preventDefault(); if (st.activeId) st.duplicateNode(st.activeId); return }
-      if (ctrl && low === 'g') { e.preventDefault(); st.groupActive(); return }
-      if (ctrl && low === 'd') { e.preventDefault(); st.clearSelection(); return }
-      if (ctrl && e.shiftKey && low === 'i') { e.preventDefault(); e.stopImmediatePropagation(); st.invertSelection(); return }
-      if (ctrl && low === 'a') { e.preventDefault(); st.selectAll(); return }
-      if (k === '\\') { e.preventDefault(); if (e.altKey) st.setView({ overlay: !st.overlay }); else st.setView({ before: true }); return }
-      if (ctrl || e.altKey) return
-      if (low === 'q') { st.setView({ quickMask: !st.quickMask }); return }
-      if (k === '[' || k === '{') { if (e.shiftKey || k === '{') st.setBrush({ hardness: Math.max(0, Math.round((b.hardness - 0.1) * 100) / 100) }); else st.setBrush({ size: Math.max(1, Math.round(b.size / 1.2)) }); return }
-      if (k === ']' || k === '}') { if (e.shiftKey || k === '}') st.setBrush({ hardness: Math.min(1, Math.round((b.hardness + 0.1) * 100) / 100) }); else st.setBrush({ size: Math.min(512, Math.round(b.size * 1.2)) }); return }
-      if (/^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
-      if (low === 'x') { st.setBrush({ color: b.background, background: b.color }); return }
-      if (low === 'd') { st.setBrush({ color: '#000000', background: '#ffffff' }); return }
-      if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); st.clearSelected(); return }
+      const k = e.key
+      if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
       if (k === 'Escape') { if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
-      const tool = TOOL_KEYS[low]
-      if (tool && !e.shiftKey) st.setTool(tool)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
+      // every other key is an accelerator for a registry command; a handled key stops here so the global
+      // suite switch (Ctrl+1/2, 07 §4) yields to the view keys of 10 §5 while a document is open
+      if (handleKeyFor('edit', e)) e.stopImmediatePropagation()
     }
     const up = (e: KeyboardEvent) => { if (e.key === '\\') ed().setView({ before: false }) }
     window.addEventListener('keydown', down, { capture: true })

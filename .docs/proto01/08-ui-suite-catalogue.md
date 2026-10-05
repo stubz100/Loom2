@@ -90,6 +90,13 @@ progress); filter yields nothing (clear-filters action); asset file missing on d
 Remove"); clip proxy still encoding (poster only).
 
 ## 6. Keyboard (suite-specific; global in 07 §4)
+Every key below is a registry command (07 §3c) that is also in the **tile's right-click menu** (loupe, edit,
+keep/reject/clear, rate ▸, tag, reference, re-run, variations, animate, pin/compare, reveal, trash/restore), the
+**strip's selection bar** (icons appear when tiles are selected: keep/reject/clear, loupe, edit, reference, pin,
+select all/none, tag, collection, trash), the **grid's right-click menu** (select all/none, group by ▸,
+expand/collapse all, search), the **group header menu** and the **Inspector verbs**. The loupe has ◀ ▶ buttons
+and the same tile menu.
+
 `←↑→↓` move · `Home/End` · `Shift+arrows` extend · `Ctrl+A` all in group · `Enter` loupe · `Esc` back ·
 `C` compare · `K`/`X`/`U` state · `1–5`/`0` rating · `T` tag · `E` edit · `Shift+A`/`Shift+Z` animate start/end ·
 `R` reference · `Ctrl+R` re-run · `V` variations · `Del` ×2 delete · `G` cycle group mode · `F` focus filter

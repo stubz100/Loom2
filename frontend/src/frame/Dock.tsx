@@ -1,14 +1,26 @@
-import { ChevronUp, Pause, Play, X } from 'lucide-react'
+import { ChevronUp, ClipboardCopy, Pause, Play, X } from 'lucide-react'
 import { useMemo } from 'react'
 import type { Job } from '../api/types'
 import { useSession } from '../store/session'
+import { sep, type MenuItem } from './commands'
+import { showMenu } from './ContextMenu'
 
 function JobRow({ j }: { j: Job }) {
   const cancelJob = useSession((s) => s.cancelJob)
   const deleteJob = useSession((s) => s.deleteJob)
+  const releaseJob = useSession((s) => s.releaseJob)
   const label = `${j.kind} · ${String((j.recipe as { model_id?: string }).model_id ?? '')} · seed ${j.seed}`
+  const live = j.status === 'running' || j.status === 'queued'
+  const menu = (): MenuItem[] => [
+    { label: 'Cancel job', icon: X, disabled: !live, run: () => void cancelJob(j.id) },
+    { label: 'Run now (release staged)', icon: Play, disabled: j.status !== 'staged', run: () => void releaseJob(j.id) },
+    { label: 'Remove from the list', icon: X, disabled: live, run: () => void deleteJob(j.id) },
+    sep,
+    { label: 'Copy job id', icon: ClipboardCopy, run: () => void navigator.clipboard?.writeText(j.id) },
+    { label: 'Copy recipe JSON', icon: ClipboardCopy, run: () => void navigator.clipboard?.writeText(JSON.stringify(j.recipe, null, 2)) },
+  ]
   return (
-    <div className={`job ${j.status}`}>
+    <div className={`job ${j.status}`} tabIndex={0} onContextMenu={(e) => showMenu(e, menu())}>
       <span>{label}</span>
       <span className="meta">{j.status === 'running' ? j.progress_text : j.status}{j.wall_s ? ` · ${j.wall_s}s` : ''}</span>
       {(j.status === 'running' || j.status === 'queued') && <div className="bar"><i style={{ width: `${Math.round((j.progress ?? 0) * 100)}%` }} /></div>}

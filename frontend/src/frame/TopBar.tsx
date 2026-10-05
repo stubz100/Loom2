@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
+import { runCommand } from './commands'
 
 export const SUITES: { id: Suite; label: string; key: string }[] = [
   { id: 'catalogue', label: 'Catalogue', key: '1' }, { id: 'generate', label: 'Generate', key: '2' }, { id: 'edit', label: 'Edit', key: '3' },
@@ -64,7 +65,10 @@ export function TopBar() {
       {menu === 'app' && (
         <div className="menu" style={{ right: 8 }}>
           <button onClick={() => { setMenu(null); s.openSettings(true) }}>Settings… <kbd>⌃,</kbd></button>
-          <button onClick={() => { setMenu(null); s.setHelp(true) }}>Keyboard map <kbd>?</kbd></button>
+          <button onClick={() => { setMenu(null); s.setHelp(true) }}>Commands and keys <kbd>?</kbd></button>
+          <button onClick={() => { setMenu(null); runCommand('global.palette') }}>Command palette <kbd>⌃K</kbd></button>
+          <button onClick={() => { setMenu(null); runCommand('global.focus') }}>{s.ui.focusMode ? 'Leave focus mode' : 'Focus mode'} <kbd>Tab</kbd></button>
+          <button onClick={() => { setMenu(null); runCommand('global.dock') }}>{s.ui.dockOpen ? 'Hide dock' : 'Show dock'} <kbd>`</kbd></button>
           <button onClick={() => { setMenu(null); s.setUi({ density: s.ui.density === 'compact' ? 'comfortable' : 'compact' }) }}>Density: {s.ui.density}</button>
           <div className="sep" />
           <button onClick={() => { setMenu(null); void s.refreshAll() }}>Refresh state</button>

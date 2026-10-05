@@ -1,9 +1,11 @@
 // Generate suite (09): Prompt (tree / JSON / text with the exact serialisation preview), Model, Size & Batch,
 // References, Presets; results on the Catalogue grid filtered to this suite; interim tiles with live previews.
-import { Boxes, Bookmark, Images, SlidersHorizontal, Wand2 } from 'lucide-react'
+import { Boxes, Bookmark, Images, SlidersHorizontal, Wand2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
+import { handleKeyFor, markUsed, registerCommands, runCommand, sep } from '../../frame/commands'
+import { showMenu } from '../../frame/ContextMenu'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
@@ -208,7 +210,13 @@ function RefsTab() {
     <div>
       <div className={`ref-slots`} onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}>
         {slots.slice(0, Math.min(max, 10)).map((r, i) => (
-          <div key={i} className={`ref-slot${over ? ' over' : ''}`}>
+          <div key={i} className={`ref-slot${over ? ' over' : ''}`} onContextMenu={(e) => { if (!r) return; showMenu(e, [
+            { label: 'Remove reference', icon: X, run: () => g.removeRef(r.asset_id) },
+            { label: 'Move first', disabled: i === 0, run: () => g.moveRef(i, 0) },
+            { label: 'Move left', disabled: i === 0, run: () => g.moveRef(i, i - 1) },
+            { label: 'Move right', disabled: i >= p.refs.length - 1, run: () => g.moveRef(i, i + 1) },
+            sep, { cmd: 'gen.clearRefs' },
+          ]) }}>
             {r ? <>
               <img src={api.thumbUrl(r.asset_id, 256)} alt="" />
               <span className="n">{i + 1}</span>
@@ -236,7 +244,7 @@ function PresetsTab() {
   useEffect(() => { void g.loadPresets(); void g.loadSnippets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6 }}><button className="primary" onClick={() => { const n = window.prompt('Preset name', g.lastPreset ?? ''); if (n) void g.savePreset(n) }}>Save preset… <kbd>⌃S</kbd></button></div>
+      <div style={{ display: 'flex', gap: 6 }}><button className="primary" onClick={() => runCommand('gen.savePreset')}>Save preset… <kbd>⌃S</kbd></button></div>
       <div className="lib-tree" style={{ marginTop: 8 }}>
         {g.presets.map((pr) => <div key={pr.name} style={{ display: 'flex', gap: 4 }}><button style={{ flex: 1 }} className={g.lastPreset === pr.name ? 'active' : ''} onClick={() => g.applyPreset(pr.name)}><span>{pr.name}</span><span className="n">{pr.panel.model_id}</span></button><button className="quiet" onClick={() => void g.deletePreset(pr.name)}>✕</button></div>)}
         {!g.presets.length && <span style={{ color: 'var(--fg3)' }}>No presets in this project yet.</span>}
@@ -269,15 +277,16 @@ function Panel({ tab }: { tab: string }) {
 function PrimaryAction() {
   const g = useGenerate()
   const s = useSession()
+  markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset')
   const pv = g.preview
   const missing = pv?.missing ?? []
   const reason = !s.project?.open ? 'no project' : g.previewError ? g.previewError : !pv ? 'preparing…' : !pv.serialized_prompt ? 'empty prompt'
     : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
   return (
     <div>
-      <button className="primary" disabled={!!reason} onClick={() => void g.generate(false)} title="Ctrl+Enter">Generate {g.panel.count} ▶</button>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (⌃↵)">Generate {g.panel.count} ▶</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button disabled={!!reason} onClick={() => void g.generate(true)} title="Ctrl+Shift+Enter: add to the queue as staged (run later)">Stage</button>
+        <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Stage: add to the queue, run later (⌃⇧↵)">Stage</button>
         {missing.length > 0 && <button onClick={() => s.setSuite('models')}>Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button>}
       </div>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * g.panel.count)} s · {pv?.width}×{pv?.height} · {pv?.steps} st{pv?.turbo ? ' turbo' : ''}</>}</div>
@@ -339,13 +348,18 @@ function Stage() {
 
 const withResults = (C: React.ComponentType) => function Wrapped() { return <CatalogueStoreCtx.Provider value={useGenerateResults}><C /></CatalogueStoreCtx.Provider> }
 
+registerCommands([
+  { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(false) },
+  { id: 'gen.stage', scope: 'generate', label: 'Stage (add to the queue, run later)', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(true) },
+  { id: 'gen.savePreset', scope: 'generate', label: 'Save preset…', icon: Bookmark, keys: 'Ctrl+S', placement: ['panel'], run: () => { const g = useGenerate.getState(); const n = window.prompt('Preset name', g.lastPreset ?? ''); if (n) void g.savePreset(n) } },
+  { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
+])
+
 export function useGenerateKeys() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'generate') return
-      const g = useGenerate.getState()
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); void g.generate(e.shiftKey) }
-      else if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); const n = window.prompt('Preset name', g.lastPreset ?? ''); if (n) void g.savePreset(n) }
+      handleKeyFor('generate', e)
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)

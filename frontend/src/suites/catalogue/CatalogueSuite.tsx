@@ -7,12 +7,16 @@ import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { isTauri, pickFiles, pickFolder, revealPath } from '../../shell/tauri'
+import { isTauri, pickFiles, pickFolder } from '../../shell/tauri'
 import { useSession } from '../../store/session'
 import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
 import { selectedOrPrimary, type Folder, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
-import { useCat } from './catalogueContext'
+import { useActiveCatalogue, useCat } from './catalogueContext'
+import { CommandButton, CommandRow } from '../../frame/CommandButton'
+import { handleKeyFor, runCommand } from '../../frame/commands'
+import { showMenu } from '../../frame/ContextMenu'
+import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
 import './catalogue.css'
 
 /** Group headers show the scene of a JSON prompt rather than the raw JSON. */
@@ -165,7 +169,7 @@ export function Strip() {
     <>
       <span>group</span>
       <select value={c.q.group} onChange={(e) => c.setQuery({ group: e.target.value as GroupMode })}>{GROUPS.map(([g, l]) => <option key={g} value={g}>{l}</option>)}</select>
-      {c.q.group !== 'none' && <><button className="quiet" onClick={() => c.expandAll(true)} title="expand all">▾</button><button className="quiet" onClick={() => c.expandAll(false)} title="collapse all">▸</button></>}
+      {c.q.group !== 'none' && <CommandRow ids={['cat.expandAll', 'cat.collapseAll']} />}
       <div className="segmented">{(['all', 'keep', 'reject'] as const).map((st) => <button key={st} className={c.q.state === st ? 'active' : ''} onClick={() => c.setQuery({ state: st })}>{st}</button>)}</div>
       <span>sort</span>
       <select value={c.q.sort} onChange={(e) => c.setQuery({ sort: e.target.value as Sort })}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
@@ -175,17 +179,18 @@ export function Strip() {
       {ids.length > 0 && (
         <>
           <span>▣ {ids.length}</span>
-          <button className="quiet" onClick={() => void c.setState(ids, 'keep')} title="Keep (K)">✓</button>
-          <button className="quiet" onClick={() => void c.setState(ids, 'reject')} title="Reject (X)">✗</button>
-          <button className="quiet" onClick={() => void c.setState(ids, 'none')} title="Clear state (U)">○</button>
-          <input type="text" value={tagText} placeholder="tag…" style={{ width: 90, minHeight: 24 }} onChange={(e) => setTagText(e.target.value)}
+          <CommandRow ids={['cat.keep', 'cat.reject', 'cat.unstate', 'gap', 'cat.loupe', 'cat.edit', 'cat.reference', 'cat.pin', 'gap', 'cat.selectAll', 'cat.clearSelection']} />
+          <input id="strip-tag" type="text" value={tagText} placeholder="tag…" style={{ width: 90, minHeight: 24 }} onChange={(e) => setTagText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && tagText.trim()) { const t = tagText.trim(); void Promise.all(ids.map((id) => { const a = c.byId(id); return a && !a.tags.includes(t) ? c.setTags([id], [...a.tags, t]) : Promise.resolve() })); setTagText('') } }} />
           <select value="" onChange={(e) => { if (e.target.value) void c.addToCollection(e.target.value, ids) }} title="Add to collection"><option value="">+ collection</option>{c.collections.filter((x) => x.kind === 'manual').map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-          {c.q.folder === 'trash' ? <><button className="quiet" onClick={() => void c.restore(ids)}>Restore</button><button className="quiet" onClick={() => { if (window.confirm(`Permanently delete ${ids.length}?`)) void c.purge(ids) }}>Purge</button></> : <button className="quiet" onClick={() => void c.trash(ids)} title="Trash (Del ×2)">🗑</button>}
+          {c.q.folder === 'trash' ? <CommandRow ids={['cat.restore', 'cat.purge']} /> : <CommandButton id="cat.trash" />}
         </>
       )}
-      {c.compare.length >= 2 && <button className="quiet" onClick={() => c.setCompareOpen(!c.compareOpen)} style={{ color: 'var(--accent)' }} title="open compare (Shift+C)">Compare {c.compare.length}</button>}
+      {c.compare.length >= 2 && <button className="quiet" onClick={() => runCommand('cat.compare')} style={{ color: 'var(--accent)' }} title="Open compare (⇧C)">Compare {c.compare.length}</button>}
+      {c.compare.length > 0 && <CommandButton id="cat.unpinAll" />}
+      <CommandButton id="cat.tileSmaller" />
       <input type="range" min={96} max={512} step={16} value={c.tile} onChange={(e) => c.setTile(Number(e.target.value))} title="tile size ([ / ])" style={{ width: 110 }} />
+      <CommandButton id="cat.tileLarger" />
       <button className="quiet" onClick={() => c.setFill(!c.fill)} title="fit / fill">{c.fill ? 'fill' : 'fit'}</button>
     </>
   )
@@ -199,9 +204,8 @@ export function Stage() {
   const s = useSession()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
-  const [pendingDel, setPendingDel] = useState(0)
+  useActiveCatalogue()
   const compareOpen = c.compareOpen
-  const setCompareOpen = c.setCompareOpen
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -264,30 +268,12 @@ export function Stage() {
     else if (k === 'ArrowUp') { e.preventDefault(); move(i < 0 ? 0 : Math.max(0, i - cols)) }
     else if (k === 'Home') { e.preventDefault(); move(0) }
     else if (k === 'End') { e.preventDefault(); move(order.length - 1) }
-    else if (k === 'a' && e.ctrlKey) { e.preventDefault(); c.selectAll() }
-    else if (k === 'Enter' && c.primary) { e.preventDefault(); c.openLoupe(c.primary) }
-    else if (k === 'Escape') { c.clearSelection() }
-    else if (k === 'k' || k === 'K') void c.setState(ids, 'keep')
-    else if (k === 'x' || k === 'X') void c.setState(ids, 'reject')
-    else if (k === 'u' || k === 'U') void c.setState(ids, 'none')
-    else if (/^[0-5]$/.test(k) && !e.ctrlKey) void c.setRating(ids, Number(k))
-    else if (k === 'c' && c.primary) c.togglePin(c.primary)
-    else if (k === 'C' && c.compare.length >= 2) setCompareOpen(true)
-    else if (k === 'Delete' || k === 'Backspace') {
-      if (!ids.length) return
-      if (pendingDel && Date.now() - pendingDel < 1500) { setPendingDel(0); void c.trash(ids) } else { setPendingDel(Date.now()); s.toast('Press Delete again to move to Trash', 'info') }
-    }
-    else if (k === 'g' || k === 'G') { const gi = GROUPS.findIndex(([g]) => g === c.q.group); c.setQuery({ group: GROUPS[(gi + 1) % GROUPS.length][0] }) }
-    else if (k === '[') c.setTile(c.tile - 32)
-    else if (k === ']') c.setTile(c.tile + 32)
-    else if (k === 'f' || k === 'F') { e.preventDefault(); setRailTab('catalogue', 'filters'); setTimeout(() => document.getElementById('cat-search')?.focus(), 50) }
-    else if (k === 't' || k === 'T') { e.preventDefault(); document.getElementById('insp-tag')?.focus() }
-    else if ((k === 'e' || k === 'E') && c.primary) { const id = c.primary; void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }
-    else if (k === 'r' && e.ctrlKey && c.primary) { e.preventDefault(); const a = c.byId(c.primary); if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a)) }
-    else if ((k === 'r' || k === 'R') && !e.ctrlKey) { ids.forEach((id) => void import('../generate/generateStore').then((m) => m.useGenerate.getState().addRef(id))) }
-    else if (k === 'v' || k === 'V') { const a = c.primary ? c.byId(c.primary) : undefined; if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().variations(a)) }
-    else if (k === 'A' && e.shiftKey) s.toast('Send to Animate arrives in M6', 'info')
-    else return
+    else handleKeyFor('catalogue', e.nativeEvent)        // every other key is an accelerator for a registry command (07 §3c)
+    void ids
+  }
+  const onTileContext = (e: React.MouseEvent, id: string) => {
+    if (!c.selected.includes(id)) c.select(id, 'single')
+    showMenu(e, tileMenu())
   }
 
   const onTileClick = (e: React.MouseEvent, id: string) => c.select(id, e.ctrlKey || e.metaKey ? 'toggle' : e.shiftKey ? 'range' : 'single')
@@ -300,7 +286,7 @@ export function Stage() {
   }
   const empty = !c.loading && rows.length === 0
   return (
-    <div className="cat-grid" ref={scrollRef} tabIndex={0} onKeyDown={onKey}>
+    <div className="cat-grid" ref={scrollRef} tabIndex={0} onKeyDown={onKey} onContextMenu={(e) => { if ((e.target as HTMLElement).closest('.tile, .cat-header')) return; showMenu(e, gridMenu()) }}>
       {empty && <div className="cat-empty"><div><h2>{c.counts.all ? 'Nothing matches these filters' : 'No assets yet'}</h2>{c.counts.all ? <button onClick={() => c.setQuery({ state: 'all', search: '', tags_any: [], model_id: undefined, rating_min: 0, aspect: undefined, has_children: undefined, folder: 'all', collection_id: undefined })}>Clear filters</button> : 'Import files from the panel, or generate your first image.'}</div></div>}
       <div className="cat-rows" style={{ height: virt.getTotalSize() }}>
         {vitems.map((v) => {
@@ -308,7 +294,7 @@ export function Stage() {
           const sticky = r.kind === 'header' && v.index === activeSticky.current
           const st = sticky ? { position: 'sticky' as const, top: 0, zIndex: 2 } : { transform: `translateY(${v.start}px)` }
           if (r.kind === 'header') return (
-            <div key={v.key} className={`cat-header${sticky ? ' sticky' : ''}`} style={st} data-index={v.index} ref={sticky ? undefined : virt.measureElement} onClick={() => c.toggleGroup(r.g.key)}>
+            <div key={v.key} className={`cat-header${sticky ? ' sticky' : ''}`} style={st} data-index={v.index} ref={sticky ? undefined : virt.measureElement} onClick={() => c.toggleGroup(r.g.key)} onContextMenu={(e) => showMenu(e, headerMenu(r.g.key))}>
               <span>{c.expanded[r.g.key] ? '▾' : '▸'}</span>
               {r.g.cover_id && <img className="cover" src={api.thumbUrl(r.g.cover_id, 256)} alt="" loading="lazy" />}
               <b>{r.g.label}</b>{r.g.model_id && <span>· {r.g.model_id}</span>}<span className="excerpt">{r.g.prompt_excerpt ? `· "${excerptOf(r.g.prompt_excerpt)}"` : ''}</span>
@@ -318,7 +304,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} dragIds={() => selectedOrPrimary(c)} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onContext={onTileContext} dragIds={() => selectedOrPrimary(c)} />)}
             </div>
           )
         })}
@@ -370,15 +356,7 @@ export function Inspector() {
           </div>
           <div className="chips" style={{ marginTop: 8 }}>{a.tags.map((t) => <span key={t} className="chip-f">{t}<button onClick={() => void c.setTags([a.id], a.tags.filter((x) => x !== t))}>✕</button></span>)}</div>
           <div className="verbs">
-            <button onClick={() => s.toast('Send to Edit arrives in M4', 'info')}>Send to Edit <kbd>E</kbd></button>
-            <button onClick={() => s.toast('Send to Animate arrives in M6', 'info')}>Animate start <kbd>⇧A</kbd></button>
-            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().addRef(a.id))}>Reference <kbd>R</kbd></button>
-            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a))} disabled={!a.params?.recipe}>Re-run <kbd>⌃R</kbd></button>
-            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().variations(a))} disabled={!a.params?.recipe}>Variations <kbd>V</kbd></button>
-            <button onClick={() => c.togglePin(a.id)}>{c.compare.includes(a.id) ? 'Unpin' : 'Compare'} <kbd>C</kbd></button>
-            <button onClick={() => c.openLoupe(a.id)}>Loupe <kbd>↵</kbd></button>
-            <button onClick={() => void revealPath(a.path)}>Reveal</button>
-            {a.trashed_at ? <button onClick={() => void c.restore(ids)}>Restore</button> : <button onClick={() => void c.trash(ids)}>Trash <kbd>Del</kbd></button>}
+            {['cat.edit', 'cat.animate', 'cat.reference', 'cat.rerun', 'cat.variations', 'cat.pin', 'cat.loupe', 'cat.reveal', a.trashed_at ? 'cat.restore' : 'cat.trash'].map((id) => <CommandButton key={id} id={id} text className="verb" />)}
           </div>
         </div>
       )}

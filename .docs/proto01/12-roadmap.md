@@ -232,6 +232,8 @@ calendar is **5–6 months** to the MVP with the rig available throughout.
 
 ## 10. Standing rules during execution
 - Append-only journal (`90-journal.md`) with real timestamps; same-day spec amendments to the affected doc.
+- **Mouse-first UI (D32)**: a new action is a registry command with an icon/button or a right-click menu entry
+  before it gets a key; no key-only or gesture-only actions ship (07 §3c).
 - Each milestone's first task is re-checking the volatile facts list (04 §8) for its models.
 - No milestone closes with "rig owed".
 - Memory and UI budgets are tested, not assumed; measurements replace the extrapolations in 04 §2 as they land.

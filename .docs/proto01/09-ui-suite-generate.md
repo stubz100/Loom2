@@ -121,6 +121,8 @@ shows a longer ETA; queue paused (banner); failed job (tile with error, "Open lo
 ## 8. Keyboard
 `Ctrl+Enter` generate · `Ctrl+Shift+Enter` stage · `Ctrl+J` focus JSON · `Ctrl+T` focus Tree · `Ctrl+S` save
 preset · `P` pin selected · `V` variations · `Ctrl+R` re-run · plus the catalogue keys on the Stage.
+All of these are registry commands (07 §3c) with buttons in the Panel (Generate, Stage, Save preset) or the
+results grid's tile menu; reference slots have a right-click menu (remove, move first/left/right, clear all).
 
 ## 9. Data and API
 `POST /jobs` with `T2I{model_id, prompt: {mode: tree|json|text, tree?, json?, text?}, serialized, width,

@@ -6,8 +6,10 @@ import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle,
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useRef } from 'react'
 import { useSession } from '../../store/session'
+import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName } from './blendModes'
+import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
 
@@ -483,10 +485,11 @@ export function EditorCanvas() {
     host.addEventListener('pointerup', onUp)
     host.addEventListener('pointercancel', onUp)
     host.addEventListener('wheel', onWheel, { passive: false })
-    host.addEventListener('contextmenu', (e) => e.preventDefault())
+    const onContext = (e: MouseEvent) => { e.preventDefault(); if (drag) return; showMenu(e, canvasMenu()) }
+    host.addEventListener('contextmenu', onContext)
     return () => {
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
-      host.removeEventListener('wheel', onWheel)
+      host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey)
     }
   }, [])

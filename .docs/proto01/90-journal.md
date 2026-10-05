@@ -888,3 +888,37 @@ read the clock)*
   means noise, large blur radii and dissolve only.
 - Cost note: Pixi's ticker renders every frame, so a blur layer's 169–625 taps per pixel run continuously; an
   on-demand render loop (render on change / paint only) is the next editor housekeeping item (12 §5).
+
+## 2026-10-05 19:47 — UI operating rule (D32): command registry, right-click menus, icon toolbars, palette
+
+- The user, after trying M4: keyboard shortcuts are welcome, but *everything* must be reachable by icons or a
+  right-click menu. Audit of the UI as it stood: no right-click menus anywhere; Catalogue verbs only as text
+  buttons in the Inspector; select all / clear / grouping cycle, loupe prev/next, Compare swap key-only; Edit
+  undo/redo, clear selected pixels, group active layer, zoom in/out/200 % key-only; rename, solo, mask toggle,
+  add/subtract selection gesture-only; focus mode and the dock toggle without an icon.
+- **Built one mechanism rather than patching buttons in:** `frame/commands.ts` is a registry where every action
+  is a `Command` (label, icon, shortcut, enabled predicate, and a **non-empty** list of mouse placements — a
+  keyboard-only command does not type-check). `handleKeyFor(scope, e)` turns keys into accelerators for those
+  commands; `CommandButton`/`CommandRow`/`MenuButton` render them as icon buttons with label + shortcut
+  tooltips; `ContextMenu.tsx` renders any list of commands (or ad-hoc entries, separators, submenus, checks)
+  at the pointer with ↑↓→←/Enter/Esc; the `?` overlay and the new `Ctrl+K` palette are generated from the
+  registry; `Shift+F10` / the Menu key re-dispatch a context-menu event at the focused element; the dev build
+  logs commands no menu or toolbar has rendered.
+- Right-click menus: Catalogue tiles (loupe, edit, keep/reject/clear, rate ▸, tag, reference, re-run, variations,
+  animate, pin/compare, reveal, trash/restore/purge), group headers, empty grid space (select all/none, group
+  by ▸, expand/collapse, search), the loupe (same as tiles, plus ◀ ▶ buttons and a keep/reject/edit/reference
+  row), Generate reference slots (remove, move, clear all), Edit layer rows (rename, hide/show, solo, lock,
+  duplicate, merge, group, reorder, mask ▸, delete), the Edit canvas (undo/redo + Selection / Layer / View /
+  Tool / Document submenus, selection items inline while a selection exists) and Dock job rows (cancel, run
+  now, remove, copy id / recipe). Icon rows: the Catalogue strip's selection bar (keep/reject/clear, loupe,
+  edit, reference, pin, select all/none, trash) with expand/collapse and tile-size icons; Edit strip (undo,
+  redo, zoom −/+, fit, 100 %); Layers toolbar (new, group, group active, adjustment ▸, filter ▸, duplicate,
+  merge, up/down, mask, hide/show, lock, delete, More ▸); brush size/hardness and colour swap/default buttons;
+  Rail gets focus-mode and dock icons; the app menu lists palette, focus mode and dock.
+- Verified in headless Edge with new dev deep links (`&ctx=<selector>` opens that element's menu, `&help=1`,
+  `&palette=1`, `&menu=1`): tile menu, layer menu, canvas menu, help overlay, palette, loupe. Two findings on
+  the way: headless Edge fires `blur`/`resize` on capture, so menus no longer close on those (pointer-down
+  outside, wheel, Esc remain); and the loupe had a **re-render loop** (an unmemoised `{w,h}` recreated `fit`,
+  whose mount effect set state) that hung the page — fixed with `useMemo` in both the loupe and Compare.
+- Docs: 07 §3c (rule + registry + menu inventory), 07 §4 (`Shift+F10`, `Ctrl+K` built), 08 §6, 09 §8, 10 §10,
+  12 §10 (standing rule), 13 D32. Lint: warnings only (pre-existing fast-refresh and purity notes).

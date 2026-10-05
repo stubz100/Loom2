@@ -63,6 +63,16 @@ columns; Home/End; `Ctrl+A`; Esc clears. The Inspector always reflects the prima
 selected" bulk actions when more than one.
 
 ### 3c. Cross-suite verbs (context menu, Inspector, and keys)
+**Operating rule (D32, 2026-10-05):** every action is reachable with the mouse — an icon/button where the user
+looks (strip, toolbar, panel, Inspector) and/or the **right-click menu of the object** it acts on; keyboard
+shortcuts and modifier-clicks are accelerators only and are shown in tooltips and menu entries. Every action is a
+*command* in one registry (`frontend/src/frame/commands.ts`: label, icon, shortcut, enabled predicate, and a
+non-empty list of mouse placements — a keyboard-only command cannot be registered); keys, toolbars, menus, the
+`?` overlay and the `Ctrl+K` palette all read from it, and the dev build logs commands no menu or toolbar has
+rendered. Right-click menus exist on: Catalogue tiles, group headers and empty grid space, the loupe, Generate
+reference slots, Edit layer rows and the canvas (tool-aware), and Dock job rows. `Shift+F10` / the Menu key
+open the menu of the focused item.
+
 | Verb | Key | Effect |
 | --- | --- | --- |
 | Send to Edit | `E` | opens the asset in Edit (creates a document if none) |
@@ -89,8 +99,9 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 | Key | Action |
 | --- | --- |
 | `Ctrl+1…5` | switch suite (Catalogue, Generate, Edit, Animate, Models) |
-| `Ctrl+K` | command palette |
-| `` ` `` | toggle Dock |
+| `Ctrl+K` | command palette (built 2026-10-05, generated from the registry) |
+| `Shift+F10` / Menu key | right-click menu of the focused item |
+| `` ` `` | toggle Dock (also: Rail icon, Dock line) |
 | `Tab` | hide/show Panel + Inspector (focus mode) |
 | `Ctrl+B` / `Ctrl+I` | toggle Panel / Inspector |
 | `Ctrl+,` | Settings |

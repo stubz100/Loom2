@@ -11,7 +11,8 @@ import { isTauri, pickFiles, pickFolder, revealPath } from '../../shell/tauri'
 import { useSession } from '../../store/session'
 import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
-import { selectedOrPrimary, useCatalogue, type Folder, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
+import { selectedOrPrimary, type Folder, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
+import { useCat } from './catalogueContext'
 import './catalogue.css'
 
 const FOLDERS: [Folder, string][] = [['all', 'All'], ['today', 'Today'], ['last_session', 'Last session'], ['images', 'Images'], ['clips', 'Clips'], ['documents', 'Documents'], ['imported', 'Imported'], ['rejected', 'Rejected'], ['trash', 'Trash']]
@@ -20,7 +21,7 @@ const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'ol
 
 // ---------------------------------------------------------------- Panel
 function Panel({ tab }: { tab: string }) {
-  const c = useCatalogue()
+  const c = useCat()
   const s = useSession()
   useEffect(() => {
     if (!s.project?.open) return
@@ -61,8 +62,8 @@ function Panel({ tab }: { tab: string }) {
   )
 }
 
-function Filters() {
-  const c = useCatalogue()
+export function Filters() {
+  const c = useCat()
   const caps = useSession((s) => s.capabilities)
   const q = c.q
   const models = Object.keys(caps?.models ?? {})
@@ -99,7 +100,7 @@ function Filters() {
 }
 
 function Collections() {
-  const c = useCatalogue()
+  const c = useCat()
   const [confirm, setConfirm] = useState<string | null>(null)
   return (
     <div className="lib-tree">
@@ -118,7 +119,7 @@ function Collections() {
 }
 
 function ImportPanel() {
-  const c = useCatalogue()
+  const c = useCat()
   const toast = useSession((s) => s.toast)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -149,8 +150,8 @@ function ImportPanel() {
 }
 
 // ---------------------------------------------------------------- Strip
-function Strip() {
-  const c = useCatalogue()
+export function Strip() {
+  const c = useCat()
   const s = useSession()
   const ids = selectedOrPrimary(c)
   const [tagText, setTagText] = useState('')
@@ -189,8 +190,8 @@ function Strip() {
 // ---------------------------------------------------------------- Stage
 type Row = { kind: 'header'; g: GroupHeader } | { kind: 'tiles'; items: Asset[] } | { kind: 'note'; text: string }
 
-function Stage() {
-  const c = useCatalogue()
+export function Stage() {
+  const c = useCat()
   const s = useSession()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
@@ -276,7 +277,9 @@ function Stage() {
     else if (k === 'f' || k === 'F') { e.preventDefault(); setRailTab('catalogue', 'filters'); setTimeout(() => document.getElementById('cat-search')?.focus(), 50) }
     else if (k === 't' || k === 'T') { e.preventDefault(); document.getElementById('insp-tag')?.focus() }
     else if (k === 'e' || k === 'E') s.toast('Send to Edit arrives in M4', 'info')
-    else if (k === 'r' || k === 'R') s.toast('Use as reference arrives in M3', 'info')
+    else if (k === 'r' && e.ctrlKey && c.primary) { e.preventDefault(); const a = c.byId(c.primary); if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a)) }
+    else if ((k === 'r' || k === 'R') && !e.ctrlKey) { ids.forEach((id) => void import('../generate/generateStore').then((m) => m.useGenerate.getState().addRef(id))) }
+    else if (k === 'v' || k === 'V') { const a = c.primary ? c.byId(c.primary) : undefined; if (a) void import('../generate/generateStore').then((m) => m.useGenerate.getState().variations(a)) }
     else if (k === 'A' && e.shiftKey) s.toast('Send to Animate arrives in M6', 'info')
     else return
   }
@@ -319,8 +322,8 @@ function Stage() {
 }
 
 // ---------------------------------------------------------------- Inspector
-function Inspector() {
-  const c = useCatalogue()
+export function Inspector() {
+  const c = useCat()
   const s = useSession()
   const [tab, setTab] = useState<'info' | 'params' | 'lineage' | 'tags'>('info')
   const [remote, setRemote] = useState<Asset | null>(null)
@@ -363,8 +366,9 @@ function Inspector() {
           <div className="verbs">
             <button onClick={() => s.toast('Send to Edit arrives in M4', 'info')}>Send to Edit <kbd>E</kbd></button>
             <button onClick={() => s.toast('Send to Animate arrives in M6', 'info')}>Animate start <kbd>⇧A</kbd></button>
-            <button onClick={() => s.toast('Use as reference arrives in M3', 'info')}>Reference <kbd>R</kbd></button>
-            <button onClick={() => s.toast('Re-run arrives in M3', 'info')}>Re-run <kbd>⌃R</kbd></button>
+            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().addRef(a.id))}>Reference <kbd>R</kbd></button>
+            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a))} disabled={!a.params?.recipe}>Re-run <kbd>⌃R</kbd></button>
+            <button onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().variations(a))} disabled={!a.params?.recipe}>Variations <kbd>V</kbd></button>
             <button onClick={() => c.togglePin(a.id)}>{c.compare.includes(a.id) ? 'Unpin' : 'Compare'} <kbd>C</kbd></button>
             <button onClick={() => c.openLoupe(a.id)}>Loupe <kbd>↵</kbd></button>
             <button onClick={() => void revealPath(a.path)}>Reveal</button>
@@ -385,8 +389,8 @@ function Inspector() {
           </dl>
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <button onClick={() => { void navigator.clipboard?.writeText(a.prompt_json ? JSON.stringify(a.prompt_json, null, 2) : a.prompt_text ?? ''); s.toast('Prompt copied', 'success') }}>Copy prompt</button>
-            <button onClick={() => s.toast('Reuse in Generate arrives in M3', 'info')}>Prompt → Generate</button>
-            <button onClick={() => s.toast('Reuse in Generate arrives in M3', 'info')}>All → Re-run</button>
+            <button disabled={!a.params?.recipe} onClick={() => void import('../generate/generateStore').then((m) => { m.useGenerate.getState().loadFromAsset(a, false); s.setSuite('generate') })}>Load into Panel</button>
+            <button disabled={!a.params?.recipe} onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a))}>All → Re-run</button>
           </div>
         </div>
       )}
@@ -397,7 +401,7 @@ function Inspector() {
 }
 
 function LineageTab({ a }: { a: Asset }) {
-  const c = useCatalogue()
+  const c = useCat()
   const [lin, setLin] = useState<{ parents: { from_id: string; kind: string }[]; children: { to_id: string; kind: string }[] } | null>(null)
   useEffect(() => { void api.get<typeof lin>(`/lineage/${a.id}`).then(setLin).catch(() => setLin(null)) }, [a.id])
   const go = (id: string) => { c.select(id, 'single') }
@@ -415,7 +419,7 @@ function LineageTab({ a }: { a: Asset }) {
 }
 
 function TagsTab({ a, ids }: { a: Asset; ids: string[] }) {
-  const c = useCatalogue()
+  const c = useCat()
   const [text, setText] = useState('')
   const add = (t: string) => {
     t = t.trim()

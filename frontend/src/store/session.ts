@@ -32,6 +32,7 @@ export interface SessionState {
   closeProject: () => Promise<void>
   submitJob: (recipe: Record<string, unknown>) => Promise<Job[]>
   cancelJob: (id: string) => Promise<void>
+  releaseJob: (id: string) => Promise<void>
   deleteJob: (id: string) => Promise<void>
   pauseQueue: (paused: boolean) => Promise<void>
   engineAction: (action: 'start' | 'stop' | 'restart' | 'free') => Promise<void>
@@ -129,6 +130,7 @@ export const useSession = create<SessionState>()(
         return r.jobs
       },
       cancelJob: async (id) => { await api.post(`/jobs/${id}/cancel`) },
+      releaseJob: async (id) => { await api.post(`/jobs/${id}/release`) },
       deleteJob: async (id) => {
         await api.del(`/jobs/${id}`)
         const jobs = { ...get().jobs }; delete jobs[id]; set({ jobs })
@@ -223,7 +225,7 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     case 'project.opened': set({ project: d as unknown as ProjectInfo }); break
     case 'project.closed': set({ project: { open: false } }); break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
-      void import('../suites/catalogue/catalogueStore').then((m) => m.useCatalogue.getState().applyEvent(f))
+      void import('../suites/catalogue/catalogueStore').then((m) => { m.useCatalogue.getState().applyEvent(f); m.useGenerateResults.getState().applyEvent(f) })
       break
     default: break
   }

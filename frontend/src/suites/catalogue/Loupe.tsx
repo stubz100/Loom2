@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
-import { useCatalogue } from './catalogueStore'
+import { useCat } from './catalogueContext'
 
 interface Xf { s: number; x: number; y: number }
 
@@ -41,7 +41,7 @@ function useZoomPan(fitFor: { w: number; h: number } | null) {
 const style = (xf: Xf) => ({ transform: `translate(${xf.x}px, ${xf.y}px) scale(${xf.s})` })
 
 export function Loupe({ asset }: { asset: Asset }) {
-  const c = useCatalogue()
+  const c = useCat()
   const order = c.visibleOrder()
   const idx = order.indexOf(asset.id)
   const dims = asset.w && asset.h ? { w: asset.w, h: asset.h } : null
@@ -84,7 +84,7 @@ export function Loupe({ asset }: { asset: Asset }) {
 }
 
 export function Compare({ assets }: { assets: Asset[] }) {
-  const c = useCatalogue()
+  const c = useCat()
   const [wipe, setWipe] = useState(0.5)
   const [diff, setDiff] = useState(false)
   const [two, setTwo] = useState(true)

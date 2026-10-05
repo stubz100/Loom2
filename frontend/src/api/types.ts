@@ -7,7 +7,7 @@ export type Health = 'present' | 'verified' | 'missing' | 'retired'
 
 export interface Backend { host: string; port: number; token: string }
 
-export interface HealthInfo { ok: boolean; version: string; project_open: boolean; engine_running: boolean; variant: 'full' | 'open'; start_suite?: string | null }
+export interface HealthInfo { ok: boolean; version: string; project_open: boolean; engine_running: boolean; variant: 'full' | 'open'; start_suite?: string | null; session_id?: string }
 
 export interface ProjectFormat { aspect: [number, number]; width: number; height: number; fps: number; default_tier: string }
 export interface ProjectInfo {
@@ -55,8 +55,8 @@ export interface Settings {
 }
 
 export interface Capabilities {
-  recipes: string[]; variant: string; vram_budget_gb: number
-  models: Record<string, { family: string; health: Health; steps: number; guidance: number; distilled: boolean; turbo: boolean; json_prompt: boolean; vram_gb: number | null }>
+  recipes: string[]; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
+  models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[] }>
   tiers: Record<string, Record<string, [number, number]>>
 }
 

@@ -13,7 +13,7 @@ export type Sort = 'created_desc' | 'created_asc' | 'rating_desc' | 'model' | 's
 export interface Query {
   folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render'; suite?: string; model_id?: string
   rating_min: number; tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
-  sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string
+  sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string; batch_id?: string; session_id?: string
 }
 export interface GroupHeader { key: string; label: string; count: number; first_created: string; last_created: string; cover_id: string; model_id: string | null; prompt_excerpt: string | null }
 export interface Collection { id: string; name: string; kind: 'manual' | 'smart'; filter: Record<string, unknown> | null; created_at: string; updated_at: string; count: number }
@@ -29,7 +29,7 @@ function qs(q: Query, extra: Record<string, string | number | boolean | undefine
   q.tags_any.forEach((t) => p.append('tags_any', t))
   put('aspect', q.aspect); if (q.has_children !== undefined) put('has_children', q.has_children)
   put('search', q.search.trim()); put('sort', q.sort); put('group', q.group); put('collection_id', q.collection_id); put('root_id', q.root_id)
-  put('created_from', q.created_from); put('created_to', q.created_to)
+  put('created_from', q.created_from); put('created_to', q.created_to); put('batch_id', q.batch_id); put('session_id', q.session_id)
   for (const [k, v] of Object.entries(extra)) put(k, v)
   return p.toString()
 }
@@ -78,10 +78,12 @@ export interface CatalogueState {
 
 let loadSeq = 0
 
-export const useCatalogue = create<CatalogueState>()(
+export function createCatalogueStore(name: string, defaults: Partial<Query> = {}) {
+  const DEFAULT_Q: Query = { ...DEFAULT_QUERY, ...defaults }
+  return create<CatalogueState>()(
   persist(
     (set, get) => ({
-      q: DEFAULT_QUERY, items: [], nextCursor: null, total: null, loading: false, error: null,
+      q: DEFAULT_Q, items: [], nextCursor: null, total: null, loading: false, error: null,
       groups: [], groupItems: {}, expanded: {}, groupLoading: {}, counts: {}, collections: [], tagCloud: [],
       selected: [], primary: null, anchor: null, tile: 192, fill: false, loupe: null, compare: [], compareOpen: false, pendingDelete: null,
 
@@ -240,10 +242,15 @@ export const useCatalogue = create<CatalogueState>()(
         }
       },
     }),
-    { name: 'loom2.catalogue', partialize: (s) => ({ tile: s.tile, fill: s.fill, q: { sort: s.q.sort, group: s.q.group } }) as never,
+    { name, partialize: (s) => ({ tile: s.tile, fill: s.fill, q: { sort: s.q.sort, group: s.q.group } }) as never,
       merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<CatalogueState> & { q?: Partial<Query> }; return { ...current, tile: p.tile ?? current.tile, fill: p.fill ?? current.fill, q: { ...current.q, ...(p.q ?? {}) } } } },
   ),
-)
+  )
+}
+
+export const useCatalogue = createCatalogueStore('loom2.catalogue')
+/** Generate's result grid: the same machinery filtered to this suite, grouped by batch (09 §4). */
+export const useGenerateResults = createCatalogueStore('loom2.generate-results', { suite: 'generate', group: 'batch' })
 
 async function patchMany(ids: string[], changes: Record<string, unknown>, set: (p: Partial<CatalogueState>) => void, get: () => CatalogueState) {
   if (!ids.length) return

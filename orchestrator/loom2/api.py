@@ -181,7 +181,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def health():
         return {"ok": True, "version": __version__, "project_open": svc.ws is not None,
                 "engine_running": svc.engine.state()["running"], "variant": svc.app.settings.variant,
-                "start_suite": os.environ.get("LOOM2_START_SUITE")}   # dev affordance: open the app on a suite
+                "start_suite": os.environ.get("LOOM2_START_SUITE"), "session_id": svc.app.session_id}   # start_suite: dev affordance
 
     @app.get("/version")
     async def version():

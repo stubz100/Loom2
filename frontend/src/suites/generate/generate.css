@@ -1,0 +1,45 @@
+/* Generate suite (09) */
+.gen-form { display: grid; grid-template-columns: 96px 1fr; gap: 8px 10px; align-items: start; }
+.gen-form label { color: var(--fg2); padding-top: 5px; }
+.gen-form textarea { width: 100%; resize: vertical; min-height: 54px; }
+.gen-form input[type=text] { width: 100%; }
+.gen-form .full { grid-column: 1 / -1; }
+.gen-form .hint { grid-column: 2; color: var(--fg3); font-size: 11px; margin-top: -4px; }
+.subject { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; display: grid; grid-template-columns: 80px 1fr; gap: 6px 8px; background: var(--bg2); }
+.subject label { font-size: 12px; }
+.subject .head { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; color: var(--fg2); font-size: 12px; }
+.subject .head .spacer { flex: 1; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip-row button { padding: 1px 8px; min-height: 22px; font-size: 11px; background: var(--bg2); }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line2); position: relative; cursor: pointer; }
+.swatch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.swatch i { position: absolute; right: -6px; top: -6px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg4); color: var(--fg2); font-size: 10px; display: grid; place-items: center; font-style: normal; }
+.counter { font-size: 11px; color: var(--fg3); }
+.counter.ok { color: var(--keep); } .counter.warn { color: var(--warn); }
+.preview-box { font: var(--mono); font-size: 11px; background: var(--bg0); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--fg2); }
+.model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.model-card { text-align: left; display: grid; gap: 2px; padding: 8px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); }
+.model-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.model-card.off { opacity: .5; }
+.model-card small { color: var(--fg3); }
+.disabled-why { color: var(--fg3); font-size: 11px; }
+.ref-slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.ref-slot { position: relative; border: 1px dashed var(--line2); border-radius: var(--radius); aspect-ratio: 16 / 10; display: grid; place-items: center; color: var(--fg3); font-size: 12px; overflow: hidden; background: var(--bg2); }
+.ref-slot img { width: 100%; height: 100%; object-fit: cover; }
+.ref-slot .n { position: absolute; top: 4px; left: 4px; background: var(--accent); color: #111; font-weight: 700; font-size: 11px; border-radius: 4px; padding: 0 6px; }
+.ref-slot .x { position: absolute; top: 4px; right: 4px; }
+.ref-slot.over { border-color: var(--accent); color: var(--fg); }
+.estimate { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--fg2); margin-top: 8px; }
+.estimate .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.estimate .dot.ok { background: var(--keep); } .estimate .dot.tight { background: var(--warn); } .estimate .dot.over { background: var(--reject); }
+.interim { display: flex; gap: 8px; padding: 8px; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--bg1); }
+.interim .card { width: 160px; flex: none; border-radius: var(--radius); background: var(--bg2); overflow: hidden; font-size: 11px; color: var(--fg2); }
+.interim .card .img { height: 90px; background: #000; display: grid; place-items: center; }
+.interim .card .img img { width: 100%; height: 100%; object-fit: contain; }
+.interim .card .bar { height: 4px; background: var(--bg3); }
+.interim .card .bar i { display: block; height: 100%; background: var(--accent); }
+.interim .card .t { padding: 4px 6px; display: flex; justify-content: space-between; }
+.tiers { display: flex; gap: 4px; flex-wrap: wrap; }
+.tiers button.active { border-color: var(--accent); color: var(--fg); }
+.gen-strip-show { display: inline-flex; gap: 2px; }

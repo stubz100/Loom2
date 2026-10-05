@@ -309,7 +309,7 @@ class JobQueue:
                     self._fail(job, f"reference image {key} is missing")
                     return
                 fitted = await asyncio.to_thread(self._fit_reference, Path(src), int(getattr(recipe, "ref_max_px", 0) or 0), key)
-                ref_files[key] = await self.engine.client.upload_image(fitted, subfolder="loom2_refs")
+                ref_files[key] = await self.engine.client.upload_image(fitted)   # top level: LoadImage's enum ignores sub-folders
             if ref_files:                                   # uploaded names appear in LoadImage's enum only after a refresh (E8)
                 object_info = await self.engine.client.object_info()
                 self._object_info, self._object_info_at = object_info, time.time()
@@ -386,7 +386,7 @@ class JobQueue:
         from PIL import Image
         out_dir = self.ws.temp_dir / "refs"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / f"{key[:24]}.png"
+        out = out_dir / f"loom2ref-{key[:24]}.png"                 # unique in the engine's input dir
         with Image.open(src) as im:
             im = im.convert("RGB")
             if max_px and (im.width > max_px or im.height > max_px):

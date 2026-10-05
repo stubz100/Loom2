@@ -758,3 +758,36 @@ read the clock)*
   counts 0.06 s, FTS "harbour market" 0.04 s (123 hits).
 - Verified by screenshot (headless Edge): batch and flat grids, loupe with inspector, 2-up compare with wipe.
   Not yet verified interactively: keyboard-by-row, scroll FPS, OS pickers — next pass in the real window.
+
+## 2026-10-05 16:08 — M3 Generate: dev wired end to end; bench and acceptance on the rig
+
+- Backend (`recipes.py`, `engine/graphs.py`, queue + API; 28 tests): `prompt_mode` tree / json / text,
+  `serialize_prompt` (compact JSON for dev, prose for Klein, text verbatim), `effective_params` (what runs is what
+  the UI shows: distilled steps/CFG fixed, negatives only on base, sampler/scheduler from the allowed lists,
+  ×16 sizes, 64 px – 4 MP), references fitted to ≤ `ref_max_px`², uploaded, `/object_info` refreshed, chained
+  through `ReferenceLatent`; staged jobs + `/queue/release`; `estimate_seconds` from the project's history or the
+  spike baselines; `/recipes/preview`, `/project/presets`, `/snippets`.
+- Frontend (`suites/generate`): the Catalogue store is now a factory — Generate's results live on a second
+  instance read through `CatalogueStoreCtx`, so grid, loupe, compare and inspector are shared code. Panel tabs
+  per 09 §3; the pinned primary action is a component (`SuiteDef.PrimaryAction`) so the frame can show
+  "Generate N", Stage, the ETA line and the disabled reason.
+- **10-prompt JSON bench on dev Turbo (960×544, seed 20261005) through the API** — `engine/spikes/out/m3_bench_dev_turbo.jsonl`:
+
+  | prompt | status | wall s | words |
+  | --- | --- | --- | --- |
+  | 01-alley-rain | done | 63.5 | 183 |
+  | 02-captain-cabin | done | 43.3 | 189 |
+  | 03-cliff-chase | done | 43.4 | 156 |
+  | 04-wanted-poster | done | 43.9 | 164 |
+  | 05-rooftop-night | done | 43.4 | 173 |
+  | 06-fish-market | done | 43.2 | 181 |
+  | 07-portrait-grief | done | 43.2 | 147 |
+  | 08-storm-deck | done | 43.4 | 198 |
+  | 09-lighthouse-map | done | 43.0 | 202 |
+  | 10-dawn-departure | done | 43.0 | 183 |
+
+  10/10 done, mean 45.3 s per image (engine warm after the first). The first alley-rain image
+  was checked in the loupe: the braided woman, green cloak, compass, "MARLOW & SONS" sign, cyan neon, crates and
+  harbour cranes are all there; adherence scoring per field is still to be done by eye (04 §6).
+- **Acceptance `scripts/m3_acceptance.py`: 17/17 in 521.2 s** (47–59 s at 640×352 Turbo; reference job: done 55.7 s ).
+  Every check passed: preview rules, staged → released, hard kill mid-batch, paused resume, 8 assets with seeds / recipe / serialised prompt / graph hash, batch grouping, reference-image job with lineage.

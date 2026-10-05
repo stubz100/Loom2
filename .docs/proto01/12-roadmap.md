@@ -160,6 +160,16 @@ shown greyed "coming in M5". Upsample as a queued LLM job (optional within the m
 Acceptance: 09 §10 checklist on dev; the 10-prompt JSON bench on dev recorded with timings; a staged batch of 8
 completes unattended and resumes after a kill.
 
+**M3 status 2026-10-05** (journal 16:08): dev fp8mixed wired end to end — Prompt tree / JSON / text with the
+exact serialisation preview and word/token counter, Model (dev + Klein entries greyed "coming in M5", sampling
+controls with disabled reasons, Turbo, seed modes, LoRA slots disabled), Size & Batch (tiers, aspects, ×16
+snapping, count, ETA + VRAM fit), References (drop / `R`, downscale, dev chain through `ReferenceLatent`),
+Presets + snippets, Stage / release, results on the Catalogue grid with interim preview tiles, Catalogue verbs
+(reference, re-run, variations, load into panel). Bench: 10/10 dev Turbo images, mean 45 s.
+Acceptance `scripts/m3_acceptance.py`: 17/17.
+**Open in M3:** Upsample LLM pass (optional), adherence scoring of the bench by eye, "fetch then run" automation,
+diff-against-panel in the Params tab.
+
 ## 5. M4 · Edit core (5–7 weeks) — gate: 10 approved (editor sections)
 
 Document model + ORA I/O (Python writer/reader, 16-bit layers); PixiJS tiled compositor with layers, groups,

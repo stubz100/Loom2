@@ -129,13 +129,15 @@ height, seeds[], steps, guidance, sampler, scheduler, turbo_lora, refs: [asset_i
 Manifests record the exact serialised prompt and the compiled engine graph hash.
 
 ## 10. Acceptance checklist
-- [ ] Tree ↔ JSON round-trip is lossless for schema fields; preview shows the exact string sent.
-- [ ] Klein receives prose, dev receives JSON; adherence on the 10-prompt bench recorded (04 §6).
-- [ ] Distilled variants show fixed steps/CFG disabled with reasons; base variants enable CFG + negative.
-- [ ] A batch of 8 streams previews and lands 8 assets with seeds, params and lineage in the Catalogue.
-- [ ] Reference slots work on Klein 4B/9B and dev; the token hint appears above 1024².
-- [ ] Missing weights → inline Fetch; after fetch the same job runs without re-entry.
-- [ ] Timings on the rig for Klein 4B, 9B and dev recorded in the journal.
+- [x] Tree ↔ JSON round-trip is lossless for schema fields; preview shows the exact string sent — `treeFromJson` /
+  `cleanTree` in the store, `/recipes/preview` returns `serialized_prompt` (2026-10-05).
+- [~] Klein receives prose, dev receives JSON (tested: `serialize_prompt`); the 10-prompt bench ran on dev Turbo
+  through the API (10/10 done, mean 45 s at 960×544) — adherence scoring by eye is pending.
+- [x] Distilled variants show fixed steps/CFG disabled with reasons; base variants enable CFG + negative — `effective_params`, acceptance checks.
+- [x] A batch of 8 streams previews and lands 8 assets with seeds, params and lineage — `scripts/m3_acceptance.py` (17/17).
+- [~] Reference slots work on dev (done 55.7 s ); Klein 4B/9B references wait for M5; the token hint is shown in the panel.
+- [~] Missing weights → the primary action is disabled with the reason and a Fetch button opens Models; "after fetch the same job runs" is not automated yet.
+- [~] Timings on the rig for dev recorded in the journal; Klein 4B/9B follow in M5.
 
 ## 11. Open questions
 - Whether to expose per-subject "reference binding" UI (prompt convention only) or keep it textual.

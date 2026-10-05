@@ -2,5 +2,6 @@ import { useSuite } from './suiteRegistry'
 
 export function Stage() {
   const suite = useSuite()
-  return <section className="stage">{suite.Stage()}</section>
+  const SuiteStage = suite.Stage
+  return <section className="stage"><SuiteStage key={suite.id} /></section>
 }

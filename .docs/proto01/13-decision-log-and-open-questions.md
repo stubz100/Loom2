@@ -56,7 +56,7 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | Q5 | ~~Project format defaults?~~ **Resolved 2026-10-04 → D18**: small drafts by default (720p images, 480p/576p video), FHD as a per-model option; constraints in 04 §9 | 06 §5, 09, 11 | — |
 | Q14 | ~~fps conform?~~ **Resolved → D27**: spike E9 measures interpolation quality; masters keep native fps meanwhile | 11, 12 E9 | — |
 
-| Q15 | **Why does dev Turbo sampling alternate between ≈ 4.5 and ≈ 7.2 s/it under sustained load** (vs 3.5 s/it when fresh)? Not the text encoder (cached). Candidates: thermal throttling (hot-spot), DynamicVRAM residency variance, per-weight LoRA patching | 12 E0 follow-up, M3 | instrument in M3: hot-spot/clock log next to the driver, no-LoRA control, `--disable-dynamic-vram` control |
+| Q15 | **Why does dev Turbo sampling alternate between ≈ 4.5 and ≈ 7.2 s/it under sustained load** (vs 3.5 s/it when fresh)? Not the text encoder (cached); reproduced in every E7 run (warm 8-step KSampler 58–74 s vs 27 s sampling cold). Candidates: thermal throttling (hot-spot), DynamicVRAM residency variance, per-weight LoRA patching. 2026-10-05: `torch.cuda.temperature()/clock_rate()` need `amdsmi`, which has no Windows build → telemetry must come from HWiNFO shared memory or ADLX | 12 E0 follow-up, M3 | instrument in M3: HWiNFO/ADLX hot-spot + clock log next to the driver, no-LoRA control, `--disable-dynamic-vram` control |
 | Q16 | ~~Accept D28?~~ **Resolved 2026-10-04 → D28 accepted** | 06 §3, 12 M1 | — |
 
 Q1–Q14 and Q16 are resolved; Q15 is open as of 2026-10-04 evening.

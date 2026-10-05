@@ -404,3 +404,20 @@ measured (no upscale model on disk); revisit when SeedVR2/ESRGAN enter the roste
 **M0 spike board after E7:** E0 ✅ · E1 ✅ · E2 ✅ · E3 ✅ · E6 ✅ · E7 ✅ · **E4, E5, E8 pending the weight
 downloads (author's go)** · E9 scheduled in M6. Q15 (bimodal sampling speed) remains open — every E7 run showed
 it again: KSampler ≈ 58–74 s for 8 steps at 960×544 in warm runs vs 27 s sampling in cold run 1.
+
+## 2026-10-05 09:05 — HF cache on F: cleaned for loom2 (author's request); FLUX.1 Fill = official gated file (Q2)
+
+- Author decisions: delete the old loom weights from `F:\HF_HOME`; fetch FLUX.1 Fill from the official gated
+  repo (not the community GGUF); go for the E4/E5/E8 downloads.
+- Kept by **hardlinking into `F:\loom2-models`** first (same volume, no copy): FLUX.2 dev fp8mixed, Mistral fp8,
+  flux2 VAE, Turbo LoRA, dev Q4_K_M GGUF + Mistral Q4_K_M GGUF, **Klein single files** (4B, base-4B, 9B, 9B-KV,
+  base-9B), FLUX.2 small decoder. All still intact after the cleanup (link count 1 each).
+- Deleted from the hub (22 repos ≈ 630 GB on disk): Comfy-Org/flux2-dev remainder (bf16 + fp4 encoders), Krea 2,
+  SD3.5 large/large-turbo/medium, Z-Image + Turbo, SVD, the Klein repos' diffusers shards + HF Qwen3 encoders,
+  Qwen/Qwen3-4B/8B, InstantX Tile CN, inswapper, facefusion mirror, BFL FLUX.2-dev (ae only), the unsloth GGUF
+  cache entries (data survives via the hardlinks); plus `insightface/` and `xet/`. **Kept:** BiRefNet, BiRefNet_HR.
+- **F: free space 350 GB → 832 GB.** `datasets/parquet` (41.6 GB, four HF `datasets` caches from 2026-06-05)
+  inspected next; `modules/` (BiRefNet remote code) kept.
+- `scripts/fetch_weights.py` written: manifest-driven fetch into the ComfyUI layout with sha256 + licence into
+  `F:\loom2-models\roster.index.json` (the roster's seed). Order: E8 (Klein 9B TE, FLUX.1 Fill official + ae,
+  CLIP-L, T5 fp8) → E4 (Wan 2.2 set) → E5 (LTX-2.3 set) → Klein 4B TE.

@@ -60,7 +60,12 @@ Saved workflows show FLUX.2-dev t2i (fp8mixed transformer + Mistral fp8 TE, `res
 
 ## 3. Weights already on disk
 
-### 3a. Hugging Face cache `F:\HF_HOME\hub` (≈632 GB total)
+> **Superseded on 2026-10-05.** The HF cache was cleaned at the author's request (journal 09:05): everything loom2
+> uses was hardlinked into **`F:\loom2-models`** (ComfyUI layout, indexed by `roster.index.json` with sha256 and
+> licence), the old loom repos were deleted, and only BiRefNet remains in `F:\HF_HOME\hub`. F: free space went
+> from 350 GB to ≈ 870 GB. The tables below are the state at planning time, kept for reference.
+
+### 3a. Hugging Face cache `F:\HF_HOME\hub` (≈632 GB total — historical)
 
 | Repo | Large files present | Relevance |
 | --- | --- | --- |

@@ -482,3 +482,19 @@ read the clock)*
   file-name input by **basename** against the node's current enum (`fix_names`). Lesson for the roster/recipe
   compiler (06 §3b): file identity must be by roster id → resolved path, never by a hand-typed string.
 - Run 1 rows kept as `e8_results_contract_errors_run1.jsonl`; run 2 started 09:38.
+
+## 2026-10-05 10:45 — E8 run 2 invalid (my error): wrong source image + a duplicate driver
+
+- All 24 run-2 jobs **succeeded** (Klein ICM 34 s, Klein base 60 s, Klein+LanPaint 23 s, dev+LanPaint 254 s,
+  Fill 78 s, Qwen-Edit 480 s at 960×544), but on the **wrong image**: `tasks.json` pointed at the E0 output file
+  `e0_fp8-20st-960x544_s20261004.png`, and the 09:22 frame-rendering run re-used that name for every prompt, so
+  the file had become the portrait-grief render while the masks were drawn for the alley scene. Every output shows
+  the portrait; the fill/outpaint results are plausible but unscorable against the tasks.
+- A second instance of the driver also ran concurrently: the superseded first E8 chain's waiter timed out and,
+  because its remaining lines were not chained with `&&`, it still launched the driver against run 2's engine
+  (duplicate task-01 rows, inflated task-04 times from model swapping).
+- Fixes: `bench/inpaint/source.png` is a **frozen copy** (bench inputs never point into spike output folders);
+  the e0 driver now prefixes outputs with the prompt stem for non-default prompts; all drivers and the engine were
+  stopped; run-2 artefacts kept under `e8_invalid_run2/` and `e8_results_run2_wrong_source.jsonl`. Lesson for
+  06 §4: assets are content-addressed, never "newest file with this name" (loom's manifest-as-truth rule, again).
+- **Run 3 started 10:45** on the frozen source. The E4 chain waits for its 24 rows.

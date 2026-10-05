@@ -195,7 +195,10 @@ def main() -> int:
         print("FAIL: missing node classes:", missing)
         return 2
 
+    prompt_stem = Path(a.prompt_file).stem
     tag = f"{a.config}{'-turbo' if a.turbo else ''}{'-tecpu' if a.te_device == 'cpu' else ''}-{a.steps}st-{a.width}x{a.height}"
+    if prompt_stem != "01-alley-rain":  # keep the historical E0 file names for the default prompt; never overwrite them with other prompts
+        tag = f"{prompt_stem}-{tag}"
     for i in range(a.runs):
         seed = a.seed + i
         graph = build_graph(a.config, prompt, a.width, a.height, seed, a.steps, a.guidance, a.sampler,

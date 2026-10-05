@@ -1,0 +1,120 @@
+"""M3 Generate backend: serialisation per model, effective params, references, staging, ETA, preview endpoint."""
+import json
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from loom2.api import create_app
+from loom2.config import AppState
+from loom2.engine import graphs
+from loom2.recipes import T2I, parse_recipe
+from loom2.roster import Roster
+
+TREE = {"scene": "a rainy alley", "subjects": [{"description": "a woman in a green cloak", "action": "turning", "color_match": "exact"}],
+        "style": "painterly", "color_palette": ["#0E1B2A"], "camera": {"angle": "low angle", "lens": "35mm"}, "mood": ""}
+
+
+def _tree(tmp_path: Path) -> Roster:
+    root = tmp_path / "models"
+    for rel in ("diffusion_models/flux2_dev_fp8mixed.safetensors", "diffusion_models/flux-2-klein-9b.safetensors", "diffusion_models/flux-2-klein-base-9b.safetensors",
+                "text_encoders/mistral_3_small_flux2_fp8.safetensors", "text_encoders/qwen_3_8b_fp8mixed.safetensors", "vae/flux2-vae.safetensors", "loras/Flux2TurboComfyv2.safetensors"):
+        p = root / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(b"x")
+    return Roster(root).scan()
+
+
+def test_serialisation_per_model():
+    dev = T2I(prompt_mode="tree", prompt_json=TREE)
+    text, mode = graphs.serialize_prompt(dev)
+    assert mode == "json" and json.loads(text)["scene"] == "a rainy alley" and "mood" not in json.loads(text)   # empty fields dropped, compact
+    klein = T2I(model_id="klein-9b", prompt_mode="tree", prompt_json=TREE, prompt_text="storyboard frame")
+    text, mode = graphs.serialize_prompt(klein)
+    assert mode == "prose" and text.startswith("storyboard frame. scene: a rainy alley") and "low angle, 35mm" in text
+    plain = T2I(prompt_mode="text", prompt_text="just words", prompt_json=TREE)
+    assert graphs.serialize_prompt(plain) == ("just words", "text")
+
+
+def test_effective_params_rules():
+    ep = graphs.effective_params(T2I(prompt_json=TREE, turbo=True, sampler="res_multistep", scheduler="sgm_uniform", width=950, height=540))
+    assert ep["steps"] == 8 and ep["sampler"] == "res_multistep" and ep["scheduler"] == "sgm_uniform" and (ep["width"], ep["height"]) == (944, 544)
+    ep = graphs.effective_params(T2I(model_id="klein-9b", prompt_text="x", steps=30, cfg=5, negative="blurry", sampler="bogus"))
+    assert ep["steps"] == 4 and ep["cfg"] == 1.0 and ep["negative_used"] is False and ep["sampler"] == "euler" and ep["distilled"]
+    ep = graphs.effective_params(T2I(model_id="klein-base-9b", prompt_text="x", negative="blurry"))
+    assert ep["steps"] == 20 and ep["cfg"] == 3.5 and ep["negative_used"] is True
+    assert ep["word_count"] == 1 and ep["token_estimate"] >= 8
+    with pytest.raises(graphs.CompileError):
+        graphs.effective_params(T2I(prompt_text="x", width=4000, height=4000))
+
+
+def test_compile_with_references(tmp_path: Path, object_info: dict):
+    roster = _tree(tmp_path)
+    import copy
+    object_info = copy.deepcopy(object_info)
+    object_info["LoadImage"]["input"]["required"]["image"][0] += ["loom2_refs/a.png", "loom2_refs/b.png"]   # as a refreshed /object_info would list them
+    r = T2I(prompt_json=TREE, refs=[{"asset_id": "ast_a"}, {"asset_id": "ast_b"}], ref_max_px=1024)
+    c = graphs.compile_recipe(r, roster, object_info, 1, "p", ref_files={"ast_a": "loom2_refs/a.png", "ast_b": "loom2_refs/b.png"})
+    assert c.problems == [], c.problems
+    kinds = [n["class_type"] for n in c.graph.values()]
+    assert kinds.count("ReferenceLatent") == 2 and kinds.count("LoadImage") == 2 and kinds.count("VAEEncode") == 2
+    assert c.graph["6"]["inputs"]["conditioning"] != ["5", 0]                       # guidance takes the referenced conditioning
+    assert c.serialized_prompt.startswith("{") and c.summary["refs"] == 2
+    with pytest.raises(graphs.CompileError):
+        graphs.compile_recipe(r, roster, object_info, 1, "p", ref_files={"ast_a": "x.png"})   # second ref not uploaded
+    # Klein base with a negative prompt gets a real negative encode
+    c2 = graphs.compile_recipe(T2I(model_id="klein-base-9b", prompt_text="x", negative="blurry"), roster, object_info, 1, "p")
+    assert c2.graph["7"]["class_type"] == "CLIPTextEncode" and c2.graph["9"]["inputs"]["cfg"] == 3.5
+
+
+def test_estimate_seconds():
+    r = T2I(prompt_json=TREE, turbo=True)
+    base = graphs.estimate_seconds(r)
+    assert base["source"].startswith("baseline") and 30 < base["seconds"] < 60
+    hist = [{"model_id": "flux2-dev-fp8mixed", "px": 960 * 544, "steps": 8, "wall_s": 42.0}, {"model_id": "flux2-dev-fp8mixed", "px": 960 * 544, "steps": 8, "wall_s": 38.0}]
+    m = graphs.estimate_seconds(r, hist)
+    assert m["seconds"] == 40.0 and m["source"].startswith("measured")
+    big = graphs.estimate_seconds(T2I(prompt_json=TREE, width=1920, height=1088))
+    assert big["seconds"] > 3 * graphs.estimate_seconds(T2I(prompt_json=TREE)).get("seconds", 0)
+
+
+def test_preview_stage_release_presets(tmp_path: Path):
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(_tree(tmp_path).models_root), "mounted_model_trees": []})
+    app = create_app(state)
+    client = TestClient(app)
+    H = {"X-Loom-Token": app.state.services.app.token}
+    with client:
+        client.post("/project", json={"path": str(tmp_path / "proj"), "name": "G", "size_cap_gb": 10}, headers=H)
+        caps = client.get("/capabilities").json()
+        assert "res_multistep" in caps["samplers"] and caps["models"]["flux2-dev-fp8mixed"]["wired"] and caps["tiers"]["draft"]["flux2"] == [960, 544]
+        pv = client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "prompt_mode": "tree", "prompt_json": TREE, "turbo": True, "seeds": [1, 2, 3]}}, headers=H).json()
+        assert pv["prompt_mode"] == "json" and pv["steps"] == 8 and pv["count"] == 3 and pv["missing"] == [] and pv["estimate"]["seconds"] > 0 and pv["estimate"]["vram_fit"] in ("ok", "tight")
+        pv2 = client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "model_id": "klein-4b", "prompt_text": "x"}}, headers=H).json()
+        assert [m["model_id"] for m in pv2["missing"]] == ["klein-4b", "qwen3-4b"]
+        assert client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "prompt_text": "x", "width": 5000, "height": 5000}}, headers=H).status_code == 422
+        # staging: not picked up; release → queued
+        client.post("/queue/pause", headers=H)
+        jobs = client.post("/jobs", json={"recipe": {"kind": "t2i", "prompt_text": "x", "seeds": [1, 2]}, "stage": True}, headers=H).json()["jobs"]
+        assert all(j["status"] == "staged" for j in jobs) and client.get("/queue").json()["counts"] == {"staged": 2}
+        assert client.post(f"/jobs/{jobs[0]['id']}/release", headers=H).json()["released"] == [jobs[0]["id"]]
+        assert client.post(f"/jobs/{jobs[0]['id']}/release", headers=H).status_code == 409
+        assert client.post("/queue/release", headers=H).json()["released"] == [jobs[1]["id"]]
+        assert client.get("/queue").json()["counts"] == {"queued": 2}
+        # presets per project, snippets per app
+        body = {"presets": [{"name": "alley", "panel": {"model_id": "flux2-dev-fp8mixed"}}], "last": "alley"}
+        assert client.put("/project/presets", json=body, headers=H).json() == body and client.get("/project/presets").json()["last"] == "alley"
+        assert (tmp_path / "proj" / "generate" / "presets.json").is_file()
+        assert client.put("/snippets", json={"snippets": [{"name": "rim", "field": "lighting", "text": "golden hour rim light"}]}, headers=H).json()["snippets"][0]["name"] == "rim"
+        client.post("/project/close", headers=H)
+
+
+def test_manifest_records_serialised_prompt(tmp_path: Path):
+    """The queue stores the exact serialised prompt and the recipe on the asset (09 §9)."""
+    from loom2.catalogue import Catalogue
+    from loom2.workspace import Workspace
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
+    cat = Catalogue(ws, [32])
+    Image.new("RGB", (16, 16)).save(tmp_path / "o.png")
+    rec = cat.ingest_file(tmp_path / "o.png", prompt_text='{"scene":"x"}', prompt_json={"scene": "x"}, params={"recipe": parse_recipe({"kind": "t2i", "prompt_json": {"scene": "x"}}).model_dump(), "prompt_mode": "json"})
+    assert rec.params["recipe"]["kind"] == "t2i" and rec.prompt_text == '{"scene":"x"}'
+    cat.close()

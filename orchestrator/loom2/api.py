@@ -21,11 +21,12 @@ from pydantic import BaseModel
 from . import __version__
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
-from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB
+from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB, CompileError, effective_params
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError
 from .queue import JobQueue
+from .recipes import SAMPLERS, SCHEDULERS, T2I, parse_recipe
 from .roster import ROSTER_BY_ID, Roster
 from .tools.fetch import FetchJob, sha256_of
 from .tools.pngmeta import parse_image_metadata
@@ -89,6 +90,11 @@ class ProjectOpen(BaseModel):
 
 
 class JobSubmit(BaseModel):
+    recipe: dict[str, Any]
+    stage: bool = False
+
+
+class RecipeBody(BaseModel):
     recipe: dict[str, Any]
 
 
@@ -189,10 +195,35 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             if svc.app.settings.variant == "open" and "open" not in e.variants:
                 continue
             r = svc.roster.resolve(mid)
-            models[mid] = {"family": e.family, "health": r.health, "steps": preset.steps, "guidance": preset.guidance, "distilled": preset.distilled,
-                           "turbo": preset.turbo_lora is not None, "json_prompt": preset.json_prompt, "vram_gb": VRAM_ESTIMATE_GB.get(mid)}
+            models[mid] = {"family": e.family, "label": preset.label, "health": r.health, "steps": preset.steps, "guidance": preset.guidance, "cfg": preset.cfg,
+                           "distilled": preset.distilled, "turbo": preset.turbo_lora is not None, "turbo_steps": preset.turbo_steps, "json_prompt": preset.json_prompt,
+                           "max_refs": preset.max_refs, "sampler": preset.sampler, "scheduler": preset.scheduler, "vram_gb": VRAM_ESTIMATE_GB.get(mid),
+                           "wired": mid == "flux2-dev-fp8mixed" or e.family == "klein", "license": e.license, "variants": e.variants}
         return {"recipes": ["t2i"], "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
-                "tiers": {"draft": {"flux2": [960, 544], "klein": [1280, 720]}, "hd": {"flux2": [1920, 1088]}}}
+                "samplers": SAMPLERS, "schedulers": SCHEDULERS,
+                "tiers": {"thumb": {"flux2": [896, 512], "klein": [896, 512]}, "draft": {"flux2": [960, 544], "klein": [1280, 720]}, "full": {"flux2": [1920, 1088], "klein": [1920, 1088]}}}
+
+    @app.post("/recipes/preview")
+    async def recipe_preview(body: RecipeBody):
+        """09 §3a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights."""
+        try:
+            recipe = parse_recipe(body.recipe)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        if not isinstance(recipe, T2I):
+            raise HTTPException(422, "preview supports t2i recipes in M3")
+        try:
+            ep = effective_params(recipe)
+        except CompileError as e:
+            raise HTTPException(422, str(e))
+        missing = []
+        preset = PRESETS[recipe.model_id]
+        for mid in [recipe.model_id, preset.te_id, preset.vae_id, *([preset.turbo_lora] if ep["turbo"] and preset.turbo_lora else []), *[l.model_id for l in recipe.loras]]:
+            r = svc.roster.resolve(mid)
+            if r.path is None:
+                missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
+        est = svc.queue.estimate(recipe) if svc.queue else {"seconds": None, "source": "no project"}
+        return {**ep, "missing": missing, "estimate": est, "count": len(recipe.seeds or [0])}
 
     @app.get("/settings")
     async def get_settings():
@@ -228,6 +259,30 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         info["usage_gb"] = round((svc.catalogue.usage_bytes() if svc.catalogue else 0) / 2**30, 2)
         info["jobs_indexed"] = svc.catalogue.jobs_indexed() if svc.catalogue else 0
         return info
+
+    @app.get("/project/presets")
+    async def presets_get():
+        ws, _, _ = svc.require_project()
+        from .fsio import read_json_or
+        return read_json_or(ws.path / "generate" / "presets.json", {"presets": [], "last": None})
+
+    @app.put("/project/presets")
+    async def presets_put(body: dict):
+        ws, _, _ = svc.require_project()
+        from .fsio import atomic_write_json
+        atomic_write_json(ws.path / "generate" / "presets.json", body)
+        return body
+
+    @app.get("/snippets")
+    async def snippets_get():
+        from .fsio import read_json_or
+        return read_json_or(svc.app.state_dir / "snippets.json", {"snippets": []})
+
+    @app.put("/snippets")
+    async def snippets_put(body: dict):
+        from .fsio import atomic_write_json
+        atomic_write_json(svc.app.state_dir / "snippets.json", body)
+        return body
 
     @app.get("/projects")
     async def projects():
@@ -421,10 +476,23 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def jobs_submit(body: JobSubmit):
         _, _, q = svc.require_project()
         try:
-            jobs = q.submit(body.recipe)
+            jobs = q.submit(body.recipe, stage=body.stage)
         except ValueError as e:
             raise HTTPException(422, str(e))
         return {"jobs": [j.model_dump() for j in jobs]}
+
+    @app.post("/jobs/{job_id}/release")
+    async def job_release(job_id: str):
+        _, _, q = svc.require_project()
+        out = q.release(job_id)
+        if not out:
+            raise HTTPException(409, "job is not staged")
+        return {"released": [j.id for j in out]}
+
+    @app.post("/queue/release")
+    async def queue_release():
+        _, _, q = svc.require_project()
+        return {"released": [j.id for j in q.release()]}
 
     @app.get("/jobs")
     async def jobs_list(status: str | None = None):

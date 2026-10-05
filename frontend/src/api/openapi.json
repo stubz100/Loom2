@@ -53,6 +53,43 @@
     }
    }
   },
+  "/recipes/preview": {
+   "post": {
+    "summary": "Recipe Preview",
+    "description": "09 \u00a73a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights.",
+    "operationId": "recipe_preview_recipes_preview_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecipeBody"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/settings": {
    "get": {
     "summary": "Get Settings",
@@ -201,6 +238,110 @@
       "content": {
        "application/json": {
         "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/project/presets": {
+   "get": {
+    "summary": "Presets Get",
+    "operationId": "presets_get_project_presets_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "summary": "Presets Put",
+    "operationId": "presets_put_project_presets_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "additionalProperties": true,
+        "type": "object",
+        "title": "Body"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/snippets": {
+   "get": {
+    "summary": "Snippets Get",
+    "operationId": "snippets_get_snippets_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "summary": "Snippets Put",
+    "operationId": "snippets_put_snippets_put",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "additionalProperties": true,
+        "type": "object",
+        "title": "Body"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
        }
       }
      }
@@ -1913,6 +2054,59 @@
     }
    }
   },
+  "/jobs/{job_id}/release": {
+   "post": {
+    "summary": "Job Release",
+    "operationId": "job_release_jobs__job_id__release_post",
+    "parameters": [
+     {
+      "name": "job_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Job Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/queue/release": {
+   "post": {
+    "summary": "Queue Release",
+    "operationId": "queue_release_queue_release_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
   "/jobs/{job_id}": {
    "get": {
     "summary": "Job Get",
@@ -3047,6 +3241,11 @@
       "additionalProperties": true,
       "type": "object",
       "title": "Recipe"
+     },
+     "stage": {
+      "type": "boolean",
+      "title": "Stage",
+      "default": false
      }
     },
     "type": "object",
@@ -3133,6 +3332,20 @@
     },
     "type": "object",
     "title": "PurgeRequest"
+   },
+   "RecipeBody": {
+    "properties": {
+     "recipe": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Recipe"
+     }
+    },
+    "type": "object",
+    "required": [
+     "recipe"
+    ],
+    "title": "RecipeBody"
    },
    "ValidationError": {
     "properties": {

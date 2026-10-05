@@ -16,11 +16,11 @@ from pydantic import BaseModel, Field
 from .catalogue import Catalogue
 from .config import AppState
 from .engine.client import EngineError, EngineEvent
-from .engine.graphs import compile_recipe, estimate_vram_gb
+from .engine.graphs import compile_recipe, estimate_seconds, estimate_vram_gb
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
-from .recipes import parse_recipe, warm_group
+from .recipes import T2I, parse_recipe, warm_group
 from .roster import Roster
 from .workspace import Workspace
 
@@ -126,14 +126,14 @@ class JobQueue:
         self.persist(clean_shutdown=True)
 
     # ---- API --------------------------------------------------------------------------------------
-    def submit(self, recipe_data: dict) -> list[JobRecord]:
+    def submit(self, recipe_data: dict, stage: bool = False) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         seeds = recipe.seeds or [0]
         batch_id = new_id("bat") if len(seeds) > 1 else None
         out: list[JobRecord] = []
         for seed in seeds:
             seed = int(seed) if int(seed) > 0 else int(time.time_ns() % (2**32))
-            rec = JobRecord(kind=recipe.kind, recipe=recipe.model_dump(), seed=seed, batch_id=batch_id,
+            rec = JobRecord(kind=recipe.kind, recipe=recipe.model_dump(), seed=seed, batch_id=batch_id, status="staged" if stage else "queued",
                             vram_estimate_gb=estimate_vram_gb(recipe), warm_group=warm_group(recipe), variant=self.app.settings.variant)
             if rec.vram_estimate_gb > self.app.settings.vram_budget_gb:
                 rec.status, rec.error, rec.finished_at = "failed", f"VRAM estimate {rec.vram_estimate_gb} GB exceeds the budget {self.app.settings.vram_budget_gb} GB", utc_now()
@@ -159,6 +159,34 @@ class JobQueue:
         self.persist()
         self.hub.broadcast("job.updated", rec.model_dump())
         return True
+
+    def release(self, job_id: str | None = None) -> list[JobRecord]:
+        """Staged → queued (one job, or every staged job when no id is given) — 09 §3 'Stage' for overnight runs."""
+        out = []
+        for rec in self.jobs.values():
+            if rec.status == "staged" and (job_id is None or rec.id == job_id):
+                rec.status = "queued"
+                out.append(rec)
+                self.hub.broadcast("job.updated", rec.model_dump())
+        if out:
+            self.persist()
+            self._wake.set()
+        return out
+
+    def timing_history(self) -> list[dict]:
+        rows = []
+        for j in self.jobs.values():
+            if j.status == "done" and j.wall_s and j.kind == "t2i":
+                comp = j.result.get("compiled") or {}
+                rows.append({"model_id": j.recipe.get("model_id"), "px": (comp.get("width") or 0) * (comp.get("height") or 0), "steps": comp.get("steps"), "wall_s": j.wall_s})
+        return rows
+
+    def estimate(self, recipe: T2I) -> dict:
+        est = estimate_seconds(recipe, self.timing_history())
+        vram = estimate_vram_gb(recipe)
+        budget = self.app.settings.vram_budget_gb
+        est.update({"vram_gb": vram, "vram_budget_gb": budget, "vram_fit": "ok" if vram <= budget * 0.85 else "tight" if vram <= budget else "over"})
+        return est
 
     def delete(self, job_id: str) -> bool:
         rec = self.jobs.get(job_id)
@@ -268,12 +296,30 @@ class JobQueue:
             object_info = await self._object_info_fresh()
             recipe = parse_recipe(job.recipe)
             self.roster.scan()
-            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}")
+            ref_files: dict[str, str] = {}
+            for ref in getattr(recipe, "refs", []) or []:
+                key = ref.asset_id or ref.blob or ""
+                src = None
+                if ref.asset_id:
+                    a = self.catalogue.get(ref.asset_id)
+                    src = self.catalogue.abs_path(a) if a else None
+                elif ref.blob:
+                    src = self.ws.temp_dir / "blobs" / ref.blob
+                if not src or not Path(src).is_file():
+                    self._fail(job, f"reference image {key} is missing")
+                    return
+                fitted = await asyncio.to_thread(self._fit_reference, Path(src), int(getattr(recipe, "ref_max_px", 0) or 0), key)
+                ref_files[key] = await self.engine.client.upload_image(fitted, subfolder="loom2_refs")
+            if ref_files:                                   # uploaded names appear in LoadImage's enum only after a refresh (E8)
+                object_info = await self.engine.client.object_info()
+                self._object_info, self._object_info_at = object_info, time.time()
+            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files)
             if compiled.problems:
                 self._fail(job, "contract: " + "; ".join(compiled.problems)[:1500])
                 return
             job.log_tail += [f"resolved {n}" for n in compiled.notes]
             job.result["compiled"] = compiled.summary | {"graph_hash": compiled.graph_hash}
+            job.result["serialized_prompt"] = compiled.serialized_prompt
             self.ws.engine_out_dir.mkdir(exist_ok=True)
             while not self._events.empty():
                 self._events.get_nowait()
@@ -306,9 +352,9 @@ class JobQueue:
                 rec = await asyncio.to_thread(
                     self.catalogue.ingest_file, src, kind="video" if src.suffix.lower() in (".mp4", ".webm", ".mov") else "image", move=True,
                     job_id=job.id, batch_id=job.batch_id, suite="generate", model_id=recipe.model_id, seed=job.seed,
-                    prompt_text=getattr(recipe, "prompt_text", None), prompt_json=getattr(recipe, "prompt_json", None),
-                    params=compiled.summary, timings={"wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times},
-                    compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=list(getattr(recipe, "refs", []) or []))
+                    prompt_text=compiled.serialized_prompt or getattr(recipe, "prompt_text", None), prompt_json=getattr(recipe, "prompt_json", None),
+                    params=compiled.summary | {"recipe": recipe.model_dump()}, timings={"wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times},
+                    compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=[r.asset_id for r in (getattr(recipe, "refs", []) or []) if getattr(r, "asset_id", None)])
                 assets.append(rec)
                 self.hub.broadcast("asset.created", rec.model_dump())
             job.progress_text = "thumbnails"
@@ -334,6 +380,19 @@ class JobQueue:
             self._fail(job, f"{type(e).__name__}: {e}")
         finally:
             self._running_id = None
+
+    def _fit_reference(self, src: Path, max_px: int, key: str) -> Path:
+        """References are downscaled to ≤ max_px² before upload (09 §3d); PNG so the engine's LoadImage is exact."""
+        from PIL import Image
+        out_dir = self.ws.temp_dir / "refs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out = out_dir / f"{key[:24]}.png"
+        with Image.open(src) as im:
+            im = im.convert("RGB")
+            if max_px and (im.width > max_px or im.height > max_px):
+                im.thumbnail((max_px, max_px), Image.LANCZOS)
+            im.save(out, "PNG")
+        return out
 
     async def _follow(self, job: JobRecord, idle_timeout_s: float = 900.0) -> bool:
         """Consume engine events for this prompt until success / error / interrupt; poll history as a fallback."""

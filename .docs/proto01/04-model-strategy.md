@@ -5,7 +5,7 @@ Research date 2026-10-04. Hardware: RX 9070 XT (gfx1201, 16 GB), Windows 11, 128
 venv is an A/B reference only). This document answers the user's point 1 (anchor model sourcing to one
 convention) and evaluates the models for MVP targets a, b, c.
 
-## 1. Decision: anchor on the ComfyUI convention, with GGUF as a format inside it
+## 1. Decision: anchor on the ComfyUI convention, with GGUF as a format inside it (D30: fp8 first, GGUF only when it cannot stream)
 
 ### 1a. The two candidate anchors
 

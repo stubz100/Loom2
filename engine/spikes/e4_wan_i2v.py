@@ -50,10 +50,16 @@ def upload(server, path: Path) -> str:
     return (j.get("subfolder") + "/" if j.get("subfolder") else "") + j["name"]
 
 
+WAN_FORMAT = "gguf"   # set from --wan-format
+
+
 def build(recipe: str, prompt: str, start: str, end: str | None, w: int, h: int, frames: int, fps: int, seed: int, tag: str) -> dict:
     g = {
-        "1h": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf"}},
-        "1l": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "Wan2.2-I2V-A14B-LowNoise-Q5_K_M.gguf"}},
+        # E4c (D30): fp8-scaled experts streamed from RAM vs the GGUF Q5_K_M pair
+        "1h": ({"class_type": "UNETLoader", "inputs": {"unet_name": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "weight_dtype": "default"}}
+               if WAN_FORMAT == "fp8" else {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf"}}),
+        "1l": ({"class_type": "UNETLoader", "inputs": {"unet_name": "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", "weight_dtype": "default"}}
+               if WAN_FORMAT == "fp8" else {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "Wan2.2-I2V-A14B-LowNoise-Q5_K_M.gguf"}}),
         "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": "wan_2.1_vae.safetensors"}},
         "5": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
@@ -162,10 +168,13 @@ def main():
     ap.add_argument("--server", default="127.0.0.1:8188")
     ap.add_argument("--tasks", default="01,02,03,04,05")
     ap.add_argument("--recipe", choices=["lightning", "quality", "lightning44", "motion"], default="lightning")
+    ap.add_argument("--wan-format", choices=["gguf", "fp8"], default="gguf")
     ap.add_argument("--width", type=int, default=832); ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--frames", type=int, default=81); ap.add_argument("--fps", type=int, default=16)
     ap.add_argument("--seed", type=int, default=20261005); ap.add_argument("--timeout", type=float, default=3600)
     a = ap.parse_args()
+    global WAN_FORMAT
+    WAN_FORMAT = a.wan_format
     OUT.mkdir(parents=True, exist_ok=True)
     spec = json.loads((BENCH / "tasks.json").read_text(encoding="utf-8"))
     obj = http(a.server, "/object_info")
@@ -177,11 +186,11 @@ def main():
             print(f"[{t['id']}] missing frame(s): {start_p.name}{' / ' + end_p.name if end_p else ''}"); continue
         start = upload(a.server, start_p); end = upload(a.server, end_p) if end_p else None
         obj = http(a.server, "/object_info")  # refresh enums after the uploads
-        tag = f"{t['id']}_{a.recipe}"
+        tag = f"{t['id']}_{a.recipe}" + ("-fp8" if a.wan_format == "fp8" else "")
         g = build(a.recipe, t["prompt"], start, end, a.width, a.height, a.frames, a.fps, a.seed, tag)
         for n in fix_names(obj, g): print("   resolved", n)
         problems = contract_check(obj, g)
-        row = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "task": t["id"], "kind": t["kind"], "recipe": a.recipe, "size": [a.width, a.height],
+        row = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "task": t["id"], "kind": t["kind"], "recipe": a.recipe, "format": a.wan_format, "size": [a.width, a.height],
                "frames": a.frames, "fps": a.fps, "seed": a.seed}
         if problems:
             row.update(status="contract_error", error=problems); print(f"[{t['id']}] CONTRACT: " + "; ".join(problems)[:600])

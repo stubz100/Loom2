@@ -649,3 +649,25 @@ read the clock)*
   identity-safe primary (D8). 13 and 12 E5 updated.
 - **M0 closed** (12 §1): E0–E8 all passed or decided; carried forward Q15 (M3), Q18 (M6), E9 (M6), inpaint
   bench task 03 (M5). Next: M1 foundation (06) — engine service, roster/resolver, job queue, project store.
+
+## 2026-10-05 13:25 — D30 performance-first weights: GGUF twins and FLUX.1 Fill deleted, Wan fp8 experts on the way
+
+- User instruction: performance is the most important aspect; use fp8 wherever it is faster, apply the same to
+  other models and scenarios; delete every model we do not need (re-download later if wanted); then move on
+  to M1. Recorded as **D30** (13) and in the 04 §1 heading.
+- Deleted with the new `scripts/prune_weights.py` (drops the roster index entry too; hard-link aware):
+  `flux1-fill-dev.safetensors` 22.17 GiB (E8), `ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf` 13.22 (E5b),
+  `flux2-dev-Q4_K_M.gguf` 18.59 (E0: 11× slower than fp8mixed), `Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf`
+  13.35 (its TE), `gemma-3-12b-it-Q4_K_M.gguf` 6.80 (E5 used the fp8) — **74.1 GiB freed**, F: now 820 GB free.
+  Manifest entries carry `retired=...` and are skipped unless `--include-retired`. The e0 driver's `gguf`
+  configs are now historical (files gone); the Klein family, dev fp8mixed and all fp8 text encoders stay.
+  Note for M1's roster scan: the index lists 14 fetched files, but the hard-linked Klein / dev / TE files were
+  never indexed — `POST /models/scan` must pick them up.
+- `D:\comfyui\ComfyUI\models` (the user's backup tree, ≈ 150 GB) was not touched; loom2 still mounts it for
+  SAM 3 / BiRefNet-class tools. Pruning it is the user's call.
+- **E4c** queued: Comfy-Org's fp8-scaled Wan 2.2 I2V experts (2 × 13.3 GiB, manifest `e4`) are downloading;
+  the chain then runs bench task 02 with `--wan-format fp8` (GGUF Q5_K_M reference: 322 s, sampling 106 s).
+  If faster, the GGUF pair is deleted and D8's recipe switches to fp8.
+- Next: M1 foundation (06) starts now — orchestrator core first (workspace, roster + resolver, engine
+  supervisor + ComfyUI client, recipe compiler with contract tests, durable queue, API + WS), then the shell
+  and frame skeleton.

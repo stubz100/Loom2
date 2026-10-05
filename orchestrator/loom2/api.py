@@ -15,12 +15,13 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from . import __version__
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
+from .documents import DocumentStore
 from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB, CompileError, effective_params
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
@@ -46,6 +47,7 @@ class Services:
         self.ws: Workspace | None = None
         self.catalogue: Catalogue | None = None
         self.queue: JobQueue | None = None
+        self.documents: DocumentStore | None = None
         self.fetches: dict[str, FetchJob] = {}
 
     # ---- project binding ------------------------------------------------------------------------
@@ -55,6 +57,7 @@ class Services:
         self.ws = ws
         self.catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes, session_id=self.app.session_id)
         self.queue = JobQueue(ws, self.app, self.engine, self.roster, self.catalogue, self.hub)
+        self.documents = DocumentStore(ws)
         await self.queue.start()
         self.app.touch_project(ws.path)
         info = ws.info()
@@ -68,6 +71,7 @@ class Services:
         if self.catalogue:
             self.catalogue.close()
             self.catalogue = None
+        self.documents = None
         if self.ws:
             self.hub.broadcast("project.closed", {"path": str(self.ws.path)})
             self.ws = None
@@ -138,6 +142,23 @@ class CollectionPatch(BaseModel):
     name: str | None = None
     kind: str | None = None
     filter: dict | None = None
+
+
+class DocumentCreate(BaseModel):
+    from_asset: str | None = None
+    name: str | None = None
+    w: int | None = None
+    h: int | None = None
+    background: str = "transparent"
+
+
+class FlattenRequest(BaseModel):
+    to_catalogue: bool = True
+    name: str | None = None
+
+
+class ExportRequest(BaseModel):
+    format: str = "png"
 
 
 def create_app(state_dir: Path | None = None, project: Path | None = None, ready_cb=None) -> FastAPI:
@@ -470,6 +491,147 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         _, cat, _ = svc.require_project()
         n = await asyncio.to_thread(cat.rebuild)
         return {"indexed": n}
+
+    # ---- documents (10 §7, §13) ---------------------------------------------------------------------
+    def _docs() -> DocumentStore:
+        svc.require_project()
+        assert svc.documents is not None
+        return svc.documents
+
+    @app.get("/documents")
+    async def documents_list():
+        return {"items": _docs().list()}
+
+    @app.post("/documents")
+    async def documents_create(body: DocumentCreate):
+        import numpy as np
+        from PIL import Image
+        docs = _docs()
+        _, cat, _ = svc.require_project()
+        base = None
+        name = body.name
+        w, h = body.w, body.h
+        if body.from_asset:
+            a = cat.get(body.from_asset)
+            if not a:
+                raise HTTPException(404, "asset not found")
+            with Image.open(cat.abs_path(a)) as im:
+                base = np.asarray(im.convert("RGBA"))
+            h, w = base.shape[:2]
+            name = name or f"{a.model_id or a.suite} {a.seed or a.id[-6:]}"
+        if not w or not h:
+            raise HTTPException(422, "w and h are required without from_asset")
+        od = await asyncio.to_thread(docs.create, name or "Untitled", int(w), int(h), body.background, body.from_asset, base)
+        svc.hub.broadcast("document.changed", {"id": od.doc.id})
+        return od.doc.model_dump()
+
+    @app.get("/documents/{doc_id}")
+    async def documents_get(doc_id: str):
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        return od.doc.model_dump()
+
+    @app.put("/documents/{doc_id}")
+    async def documents_put(doc_id: str, body: dict):
+        od = await asyncio.to_thread(_docs().update_stack, doc_id, body)
+        return od.doc.model_dump()
+
+    @app.get("/documents/{doc_id}/layers/{lid}/pixels")
+    async def layer_pixels_get(doc_id: str, lid: str, kind: str = "image", raw: int = 0):
+        import numpy as np
+        from PIL import Image
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        arr = od.masks.get(lid) if kind == "mask" else od.pixels.get(lid)
+        if arr is None:
+            raise HTTPException(404, "no pixels for this layer")
+        if raw:
+            return Response(content=arr.tobytes(), media_type="application/octet-stream",
+                            headers={"X-Loom-Width": str(arr.shape[1]), "X-Loom-Height": str(arr.shape[0]), "X-Loom-Channels": str(1 if arr.ndim == 2 else 4), "Cache-Control": "no-store"})
+        import io
+        buf = io.BytesIO()
+        Image.fromarray(arr, "L" if arr.ndim == 2 else "RGBA").save(buf, "PNG", compress_level=3)
+        return Response(content=buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+    @app.put("/documents/{doc_id}/layers/{lid}/pixels")
+    async def layer_pixels_put(doc_id: str, lid: str, request: Request, w: int, h: int, kind: str = "image"):
+        """Raw uint8 body: RGBA (w·h·4 bytes) for images, grey (w·h) for masks; the fast path from the compositor (E2)."""
+        import numpy as np
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        body = await request.body()
+        ch = 1 if kind == "mask" else 4
+        if len(body) != w * h * ch:
+            raise HTTPException(400, f"expected {w * h * ch} bytes for {w}×{h}×{ch}, got {len(body)}")
+        arr = np.frombuffer(body, dtype=np.uint8).reshape((h, w) if ch == 1 else (h, w, 4)).copy()
+        if kind == "mask":
+            od.set_mask(lid, arr)
+            return {"layer": lid, "kind": "mask", "w": w, "h": h}
+        node = od.set_pixels(lid, arr)
+        return {"layer": lid, "kind": "image", "w": node.w, "h": node.h}
+
+    @app.post("/documents/{doc_id}/save")
+    async def documents_save(doc_id: str):
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        await asyncio.to_thread(od.save)
+        svc.hub.broadcast("document.changed", {"id": doc_id, "saved_at": od.doc.saved_at})
+        return od.doc.model_dump()
+
+    @app.post("/documents/{doc_id}/flatten")
+    async def documents_flatten(doc_id: str, body: FlattenRequest):
+        from PIL import Image
+        _, cat, _ = svc.require_project()
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        merged = await asyncio.to_thread(od.flatten)
+        out = svc.ws.temp_dir / "flatten" / f"{doc_id}.png"   # type: ignore[union-attr]
+        out.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(lambda: Image.fromarray(merged, "RGBA").save(out, "PNG"))
+        if not body.to_catalogue:
+            return {"path": str(out)}
+        src = cat.get(od.doc.source_asset_id) if od.doc.source_asset_id else None
+        rec = await asyncio.to_thread(cat.ingest_file, out, kind="image", move=True, suite="edit", parents=[src.id] if src else [],
+                                      model_id=src.model_id if src else None, seed=src.seed if src else None, prompt_text=src.prompt_text if src else None,
+                                      params={"document_id": doc_id, "document_name": body.name or od.doc.name, "layers": len(list(od.doc.walk()))})
+        rec = await asyncio.to_thread(cat.make_thumbs, rec)
+        if src:
+            cat.patch(src.id, {"has_document": True})
+            svc.hub.broadcast("asset.updated", cat.get(src.id).model_dump())   # type: ignore[union-attr]
+        od.doc.meta["last_flatten_asset"] = rec.id
+        svc.hub.broadcast("asset.created", rec.model_dump())
+        return {"asset": rec.model_dump()}
+
+    @app.post("/documents/{doc_id}/export")
+    async def documents_export(doc_id: str, body: ExportRequest):
+        import io
+        from PIL import Image
+        if body.format != "png":
+            raise HTTPException(422, "the orchestrator exports PNG; PSD is written by the editor (ag-psd)")
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        merged = await asyncio.to_thread(od.flatten)
+        buf = io.BytesIO()
+        Image.fromarray(merged, "RGBA").save(buf, "PNG")
+        return Response(content=buf.getvalue(), media_type="image/png", headers={"Content-Disposition": f'attachment; filename="{od.doc.name}.png"'})
+
+    @app.get("/documents/{doc_id}/thumbnail")
+    async def documents_thumbnail(doc_id: str):
+        import io
+        import zipfile
+        docs = _docs()
+        p = docs.path_for(doc_id)
+        if not p.is_file():
+            raise HTTPException(404, "no document")
+        with zipfile.ZipFile(p) as z:
+            data = z.read("Thumbnails/thumbnail.png") if "Thumbnails/thumbnail.png" in z.namelist() else z.read("mergedimage.png")
+        return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+    @app.post("/documents/{doc_id}/close")
+    async def documents_close(doc_id: str):
+        _docs().close(doc_id)
+        return {"closed": doc_id}
+
+    @app.delete("/documents/{doc_id}")
+    async def documents_delete(doc_id: str):
+        if not _docs().delete(doc_id):
+            raise HTTPException(404, "no document")
+        svc.hub.broadcast("document.changed", {"id": doc_id, "deleted": True})
+        return {"deleted": doc_id}
 
     # ---- jobs / queue ---------------------------------------------------------------------------
     @app.post("/jobs")

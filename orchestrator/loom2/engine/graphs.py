@@ -40,7 +40,7 @@ PRESETS: dict[str, ModelPreset] = {
 # VRAM estimates (GB) for the queue's admission check (06 §3d `Engine.estimate`); measured peaks from the spikes
 VRAM_ESTIMATE_GB: dict[str, float] = {
     "flux2-dev-fp8mixed": 14.0, "klein-4b": 8.5, "klein-base-4b": 9.2, "klein-9b": 15.0, "klein-base-9b": 15.0, "klein-9b-kv": 15.0,
-    "wan22-i2v-high-fp8": 14.5, "wan22-i2v-high-q5": 13.5, "ltx23-distilled-fp8": 14.0,
+    "wan22-i2v-high-fp8": 14.5, "ltx23-distilled-fp8": 14.0,
 }
 
 

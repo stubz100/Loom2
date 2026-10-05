@@ -1,14 +1,12 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "loom2 — storyboard studio shell (Tauri 2)"
+authors = ["stubz100"]
 license = ""
-repository = ""
+repository = "https://github.com/stubz100/Loom2"
 edition = "2024"
 rust-version = "1.90"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
@@ -23,3 +21,5 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.12.1", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-single-instance = "2"
+ureq = { version = "3", default-features = false }

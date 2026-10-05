@@ -30,9 +30,9 @@ MANIFEST = [
     # text_encoders/clip_l.safetensors, text_encoders/t5/t5xxl_fp8_e4m3fn_scaled.safetensors) — not re-fetched.
     # ---- E4 Wan 2.2 I2V-A14B ----
     dict(spike="e4", repo="QuantStack/Wan2.2-I2V-A14B-GGUF", file="HighNoise/Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf",
-         dest="diffusion_models", license="apache-2.0 (QuantStack GGUF)"),
+         dest="diffusion_models", license="apache-2.0 (QuantStack GGUF)", retired="E4c 2026-10-05: fp8 scaled is 1.8x faster at sampling"),
     dict(spike="e4", repo="QuantStack/Wan2.2-I2V-A14B-GGUF", file="LowNoise/Wan2.2-I2V-A14B-LowNoise-Q5_K_M.gguf",
-         dest="diffusion_models", license="apache-2.0 (QuantStack GGUF)"),
+         dest="diffusion_models", license="apache-2.0 (QuantStack GGUF)", retired="E4c 2026-10-05: fp8 scaled is 1.8x faster at sampling"),
     dict(spike="e4", repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
          dest="text_encoders", license="apache-2.0"),
     dict(spike="e4", repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/vae/wan_2.1_vae.safetensors",

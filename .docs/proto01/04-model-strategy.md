@@ -199,8 +199,9 @@ composition" instruction. Tiled refine (Ultimate-SD-Upscale pattern) with Klein 
 
 ### 5b. Decisions D8 / D9
 
-- **Primary (start image + prompt, and start + end image): Wan 2.2 I2V-A14B**, GGUF Q5_K_M (or Q6_K) high +
-  low experts, umT5 fp8 offloaded to CPU, Wan 2.1 VAE, **Lightning 4-step LoRAs** (high expert 0.6–0.8
+- **Primary (start image + prompt, and start + end image): Wan 2.2 I2V-A14B**, **fp8-scaled high + low experts
+  (Comfy-Org repack, 2 × 13.3 GiB; E4c 2026-10-05: 236 s per clip vs 322 s with the GGUF Q5_K_M pair, sampling
+  60 s vs 106 s — the GGUF pair is struck, D30)**, umT5 fp8 offloaded to CPU, Wan 2.1 VAE, **Lightning 4-step LoRAs** (high expert 0.6–0.8
   strength, low 1.0, 4 + 4 steps, CFG ≈ 2.5 on high to keep motion), 480p–576p, 81 frames @ 16 fps. End frame
   via `WanFirstLastFrameToVideo` on the same weights. Reasons: the only quantitative identity evidence
   favours it; zero extra weights for FLF; Apache; the largest LoRA/control ecosystem (VACE, Fun-InP, Animate,

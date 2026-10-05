@@ -698,3 +698,16 @@ read the clock)*
   thumbnails must exist before a job reads as done.
 - Remaining M1 (12 §2): Tauri shell sidecar supervision + READY handshake + token injection + graceful
   shutdown; frame skeleton (07) with Models suite and Settings; generated TS client; variant plumbing in the UI.
+
+## 2026-10-05 14:04 — E4c: Wan 2.2 fp8-scaled experts beat the GGUF pair; D8 recipe switched, GGUF deleted
+
+- Task 02 (walk toward camera), Lightning 2 + 2, 832×480 × 81 f, same seed: **fp8 236 s vs GGUF 322 s** per clip;
+  sampling 60 s vs 106 s (high expert 42 s vs 78 s, low 40 s vs 70 s at 19 s/it); VAE decode 106 s vs 131 s
+  (warm vs cold engine); image encode 39 s both. VRAM free after the run 10.8 GB vs 6.7 GB — the fp8 experts
+  are streamed rather than held. Same policy result as E0 (FLUX.2 dev) and E5b (LTX): on this card the
+  fp8-scaled file streamed from RAM is the fast path.
+- Applied: `wan22-i2v-high-fp8` / `-low-fp8` are the D8 weights (04 §5b, 12 E4, 13 D8, roster presets);
+  `Wan2.2-I2V-A14B-*-Q5_K_M.gguf` deleted with `prune_weights.py` (20.1 GiB freed, manifest + roster entries
+  `retired=`). F: now holds no GGUF at all; the remaining open i2v cost is the Wan VAE (Q18).
+- Driver: `e4_wan_i2v.py --wan-format fp8` (default stays `gguf` for reproducing the old rows; flip the default
+  in M6 when the Animate recipe compiler takes over).

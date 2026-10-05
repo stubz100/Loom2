@@ -159,6 +159,212 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assets/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assets Groups */
+        get: operations["assets_groups_assets_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assets Counts */
+        get: operations["assets_counts_assets_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assets Tags */
+        get: operations["assets_tags_assets_tags_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Assets Bulk */
+        patch: operations["assets_bulk_assets_bulk_patch"];
+        trace?: never;
+    };
+    "/assets/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assets Trash */
+        post: operations["assets_trash_assets_trash_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assets Restore */
+        post: operations["assets_restore_assets_restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assets Purge */
+        post: operations["assets_purge_assets_purge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lineage/tree/{root_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lineage Tree */
+        get: operations["lineage_tree_lineage_tree__root_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Collections List */
+        get: operations["collections_list_collections_get"];
+        put?: never;
+        /** Collections Create */
+        post: operations["collections_create_collections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collections/{cid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Collections Delete */
+        delete: operations["collections_delete_collections__cid__delete"];
+        options?: never;
+        head?: never;
+        /** Collections Patch */
+        patch: operations["collections_patch_collections__cid__patch"];
+        trace?: never;
+    };
+    "/collections/{cid}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Collections Add */
+        post: operations["collections_add_collections__cid__assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collections/{cid}/assets/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Collections Remove */
+        post: operations["collections_remove_collections__cid__assets_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -579,6 +785,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssetPage */
+        AssetPage: {
+            /** Items */
+            items: components["schemas"]["AssetRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total */
+            total?: number | null;
+        };
         /** AssetPatch */
         AssetPatch: {
             /** State */
@@ -590,15 +805,201 @@ export interface components {
             /** Collection Ids */
             collection_ids?: string[] | null;
         };
+        /** AssetRecord */
+        AssetRecord: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Id */
+            id?: string;
+            /**
+             * Kind
+             * @default image
+             * @enum {string}
+             */
+            kind: "image" | "video" | "mask" | "document-render";
+            /** Path */
+            path: string;
+            /** W */
+            w?: number | null;
+            /** H */
+            h?: number | null;
+            /** Frames */
+            frames?: number | null;
+            /** Fps */
+            fps?: number | null;
+            /** Created At */
+            created_at?: string;
+            /** Job Id */
+            job_id?: string | null;
+            /** Batch Id */
+            batch_id?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Root Id */
+            root_id?: string | null;
+            /** Parents */
+            parents?: string[];
+            /**
+             * Suite
+             * @default generate
+             */
+            suite: string;
+            /** Model Id */
+            model_id?: string | null;
+            /** Format */
+            format?: string | null;
+            /** Seed */
+            seed?: number | null;
+            /** Prompt Text */
+            prompt_text?: string | null;
+            /** Prompt Json */
+            prompt_json?: {
+                [key: string]: unknown;
+            } | null;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+            /** Timings */
+            timings?: {
+                [key: string]: unknown;
+            };
+            /** Compiled Graph Hash */
+            compiled_graph_hash?: string | null;
+            /**
+             * Variant
+             * @default full
+             */
+            variant: string;
+            /**
+             * State
+             * @default none
+             * @enum {string}
+             */
+            state: "none" | "keep" | "reject";
+            /**
+             * Rating
+             * @default 0
+             */
+            rating: number;
+            /** Tags */
+            tags?: string[];
+            /** Collection Ids */
+            collection_ids?: string[];
+            /**
+             * Has Document
+             * @default false
+             */
+            has_document: boolean;
+            /**
+             * Thumb Status
+             * @default pending
+             * @enum {string}
+             */
+            thumb_status: "pending" | "done" | "failed";
+            /** Trashed At */
+            trashed_at?: string | null;
+            /** Bytes */
+            bytes?: number | null;
+            /** Sha256 */
+            sha256?: string | null;
+        };
+        /** BulkPatch */
+        BulkPatch: {
+            /** Ids */
+            ids: string[];
+            /** Changes */
+            changes: {
+                [key: string]: unknown;
+            };
+        };
+        /** CollectionCreate */
+        CollectionCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @default manual
+             */
+            kind: string;
+            /** Filter */
+            filter?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** CollectionPatch */
+        CollectionPatch: {
+            /** Name */
+            name?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Filter */
+            filter?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** CollectionRecord */
+        CollectionRecord: {
+            /** Id */
+            id?: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @default manual
+             * @enum {string}
+             */
+            kind: "manual" | "smart";
+            /** Filter */
+            filter?: {
+                [key: string]: unknown;
+            } | null;
+            /** Created At */
+            created_at?: string;
+            /** Updated At */
+            updated_at?: string;
+            /**
+             * Count
+             * @default 0
+             */
+            count: number;
+        };
         /** FetchRequest */
         FetchRequest: {
             /** Model Id */
             model_id: string;
         };
+        /** GroupHeader */
+        GroupHeader: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Count */
+            count: number;
+            /** First Created */
+            first_created: string;
+            /** Last Created */
+            last_created: string;
+            /** Cover Id */
+            cover_id: string;
+            /** Model Id */
+            model_id?: string | null;
+            /** Prompt Excerpt */
+            prompt_excerpt?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IdList */
+        IdList: {
+            /** Ids */
+            ids: string[];
         };
         /** ImportRequest */
         ImportRequest: {
@@ -637,6 +1038,13 @@ export interface components {
         ProjectOpen: {
             /** Path */
             path: string;
+        };
+        /** PurgeRequest */
+        PurgeRequest: {
+            /** Ids */
+            ids?: string[] | null;
+            /** Older Than Days */
+            older_than_days?: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -904,12 +1312,29 @@ export interface operations {
     assets_list_assets_get: {
         parameters: {
             query?: {
-                state?: string | null;
+                folder?: "all" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                kind?: ("image" | "video" | "mask" | "document-render") | null;
                 suite?: string | null;
+                state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
-                job_id?: string | null;
+                rating_min?: number;
+                tags_any?: string[];
+                tags_all?: string[];
+                has_document?: boolean | null;
+                has_children?: boolean | null;
+                aspect?: ("landscape" | "portrait" | "square") | null;
+                min_px?: number | null;
+                created_from?: string | null;
+                created_to?: string | null;
                 search?: string | null;
-                sort?: string;
+                seed?: number | null;
+                batch_id?: string | null;
+                root_id?: string | null;
+                session_id?: string | null;
+                collection_id?: string | null;
+                job_id?: string | null;
+                sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
+                group?: "none" | "batch" | "lineage" | "session" | "model";
                 limit?: number;
                 cursor?: string | null;
             };
@@ -918,6 +1343,453 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_groups_assets_groups_get: {
+        parameters: {
+            query?: {
+                folder?: "all" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                kind?: ("image" | "video" | "mask" | "document-render") | null;
+                suite?: string | null;
+                state?: ("none" | "keep" | "reject") | "all";
+                model_id?: string | null;
+                rating_min?: number;
+                tags_any?: string[];
+                tags_all?: string[];
+                has_document?: boolean | null;
+                has_children?: boolean | null;
+                aspect?: ("landscape" | "portrait" | "square") | null;
+                min_px?: number | null;
+                created_from?: string | null;
+                created_to?: string | null;
+                search?: string | null;
+                seed?: number | null;
+                batch_id?: string | null;
+                root_id?: string | null;
+                session_id?: string | null;
+                collection_id?: string | null;
+                job_id?: string | null;
+                sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
+                group?: "none" | "batch" | "lineage" | "session" | "model";
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupHeader"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_counts_assets_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    assets_tags_assets_tags_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    assets_bulk_assets_bulk_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_trash_assets_trash_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdList"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_restore_assets_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdList"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_purge_assets_purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lineage_tree_lineage_tree__root_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collections_list_collections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionRecord"][];
+                };
+            };
+        };
+    };
+    collections_create_collections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collections_delete_collections__cid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collections_patch_collections__cid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collections_add_collections__cid__assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdList"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collections_remove_collections__cid__assets_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdList"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

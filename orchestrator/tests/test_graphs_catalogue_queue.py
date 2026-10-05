@@ -80,8 +80,8 @@ def test_catalogue_ingest_thumbs_list_patch_delete_rebuild(tmp_path: Path):
     cat.record_job({"id": "job_1", "kind": "t2i", "status": "done", "created_at": "2026", "finished_at": "2026"})
     assert cat.jobs_indexed() == 1
     page = cat.list(limit=10)
-    assert [a["id"] for a in page["items"]] == [rec.id] and page["next_cursor"] is None
-    assert cat.list(search="hell")["items"] and not cat.list(search="zzz")["items"]
+    assert [a.id for a in page.items] == [rec.id] and page.next_cursor is None and page.total == 1
+    assert cat.list(search="hell").items and not cat.list(search="zzz").items
     assert cat.lineage(rec.id)["parents"][0]["from_id"] == "ast_parent"
     rec2 = cat.patch(rec.id, {"state": "keep", "rating": 4, "tags": ["a"], "path": "hack"})
     assert rec2.state == "keep" and rec2.rating == 4 and rec2.path == rec.path

@@ -229,19 +229,46 @@
     "operationId": "assets_list_assets_get",
     "parameters": [
      {
-      "name": "state",
+      "name": "folder",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "all",
+        "today",
+        "last_session",
+        "images",
+        "clips",
+        "documents",
+        "imported",
+        "rejected",
+        "trash"
+       ],
+       "type": "string",
+       "default": "all",
+       "title": "Folder"
+      }
+     },
+     {
+      "name": "kind",
       "in": "query",
       "required": false,
       "schema": {
        "anyOf": [
         {
+         "enum": [
+          "image",
+          "video",
+          "mask",
+          "document-render"
+         ],
          "type": "string"
         },
         {
          "type": "null"
         }
        ],
-       "title": "State"
+       "title": "Kind"
       }
      },
      {
@@ -261,6 +288,29 @@
       }
      },
      {
+      "name": "state",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "keep",
+          "reject"
+         ],
+         "type": "string"
+        },
+        {
+         "const": "all",
+         "type": "string"
+        }
+       ],
+       "default": "all",
+       "title": "State"
+      }
+     },
+     {
       "name": "model_id",
       "in": "query",
       "required": false,
@@ -277,7 +327,110 @@
       }
      },
      {
-      "name": "job_id",
+      "name": "rating_min",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Rating Min"
+      }
+     },
+     {
+      "name": "tags_any",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "title": "Tags Any"
+      }
+     },
+     {
+      "name": "tags_all",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "title": "Tags All"
+      }
+     },
+     {
+      "name": "has_document",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Has Document"
+      }
+     },
+     {
+      "name": "has_children",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Has Children"
+      }
+     },
+     {
+      "name": "aspect",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "landscape",
+          "portrait",
+          "square"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Aspect"
+      }
+     },
+     {
+      "name": "min_px",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Px"
+      }
+     },
+     {
+      "name": "created_from",
       "in": "query",
       "required": false,
       "schema": {
@@ -289,7 +442,23 @@
          "type": "null"
         }
        ],
-       "title": "Job Id"
+       "title": "Created From"
+      }
+     },
+     {
+      "name": "created_to",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Created To"
       }
      },
      {
@@ -309,13 +478,133 @@
       }
      },
      {
+      "name": "seed",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Seed"
+      }
+     },
+     {
+      "name": "batch_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Batch Id"
+      }
+     },
+     {
+      "name": "root_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Root Id"
+      }
+     },
+     {
+      "name": "session_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Session Id"
+      }
+     },
+     {
+      "name": "collection_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Collection Id"
+      }
+     },
+     {
+      "name": "job_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Job Id"
+      }
+     },
+     {
       "name": "sort",
       "in": "query",
       "required": false,
       "schema": {
+       "enum": [
+        "created_desc",
+        "created_asc",
+        "rating_desc",
+        "model",
+        "size_desc"
+       ],
        "type": "string",
        "default": "created_desc",
        "title": "Sort"
+      }
+     },
+     {
+      "name": "group",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "none",
+        "batch",
+        "lineage",
+        "session",
+        "model"
+       ],
+       "type": "string",
+       "default": "none",
+       "title": "Group"
       }
      },
      {
@@ -345,6 +634,896 @@
       }
      }
     ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AssetPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/groups": {
+   "get": {
+    "summary": "Assets Groups",
+    "operationId": "assets_groups_assets_groups_get",
+    "parameters": [
+     {
+      "name": "folder",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "all",
+        "today",
+        "last_session",
+        "images",
+        "clips",
+        "documents",
+        "imported",
+        "rejected",
+        "trash"
+       ],
+       "type": "string",
+       "default": "all",
+       "title": "Folder"
+      }
+     },
+     {
+      "name": "kind",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "image",
+          "video",
+          "mask",
+          "document-render"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Kind"
+      }
+     },
+     {
+      "name": "suite",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Suite"
+      }
+     },
+     {
+      "name": "state",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "keep",
+          "reject"
+         ],
+         "type": "string"
+        },
+        {
+         "const": "all",
+         "type": "string"
+        }
+       ],
+       "default": "all",
+       "title": "State"
+      }
+     },
+     {
+      "name": "model_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Model Id"
+      }
+     },
+     {
+      "name": "rating_min",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Rating Min"
+      }
+     },
+     {
+      "name": "tags_any",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "title": "Tags Any"
+      }
+     },
+     {
+      "name": "tags_all",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "title": "Tags All"
+      }
+     },
+     {
+      "name": "has_document",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Has Document"
+      }
+     },
+     {
+      "name": "has_children",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Has Children"
+      }
+     },
+     {
+      "name": "aspect",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "landscape",
+          "portrait",
+          "square"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Aspect"
+      }
+     },
+     {
+      "name": "min_px",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Min Px"
+      }
+     },
+     {
+      "name": "created_from",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Created From"
+      }
+     },
+     {
+      "name": "created_to",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Created To"
+      }
+     },
+     {
+      "name": "search",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Search"
+      }
+     },
+     {
+      "name": "seed",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Seed"
+      }
+     },
+     {
+      "name": "batch_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Batch Id"
+      }
+     },
+     {
+      "name": "root_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Root Id"
+      }
+     },
+     {
+      "name": "session_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Session Id"
+      }
+     },
+     {
+      "name": "collection_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Collection Id"
+      }
+     },
+     {
+      "name": "job_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Job Id"
+      }
+     },
+     {
+      "name": "sort",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "created_desc",
+        "created_asc",
+        "rating_desc",
+        "model",
+        "size_desc"
+       ],
+       "type": "string",
+       "default": "created_desc",
+       "title": "Sort"
+      }
+     },
+     {
+      "name": "group",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "enum": [
+        "none",
+        "batch",
+        "lineage",
+        "session",
+        "model"
+       ],
+       "type": "string",
+       "default": "none",
+       "title": "Group"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 200,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "cursor",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Cursor"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/GroupHeader"
+         },
+         "title": "Response Assets Groups Assets Groups Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/counts": {
+   "get": {
+    "summary": "Assets Counts",
+    "operationId": "assets_counts_assets_counts_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/tags": {
+   "get": {
+    "summary": "Assets Tags",
+    "operationId": "assets_tags_assets_tags_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/bulk": {
+   "patch": {
+    "summary": "Assets Bulk",
+    "operationId": "assets_bulk_assets_bulk_patch",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BulkPatch"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/trash": {
+   "post": {
+    "summary": "Assets Trash",
+    "operationId": "assets_trash_assets_trash_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IdList"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/restore": {
+   "post": {
+    "summary": "Assets Restore",
+    "operationId": "assets_restore_assets_restore_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IdList"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/purge": {
+   "post": {
+    "summary": "Assets Purge",
+    "operationId": "assets_purge_assets_purge_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PurgeRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/lineage/tree/{root_id}": {
+   "get": {
+    "summary": "Lineage Tree",
+    "operationId": "lineage_tree_lineage_tree__root_id__get",
+    "parameters": [
+     {
+      "name": "root_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Root Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/collections": {
+   "get": {
+    "summary": "Collections List",
+    "operationId": "collections_list_collections_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/CollectionRecord"
+         },
+         "type": "array",
+         "title": "Response Collections List Collections Get"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "Collections Create",
+    "operationId": "collections_create_collections_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CollectionCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CollectionRecord"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/collections/{cid}": {
+   "patch": {
+    "summary": "Collections Patch",
+    "operationId": "collections_patch_collections__cid__patch",
+    "parameters": [
+     {
+      "name": "cid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Cid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CollectionPatch"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CollectionRecord"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "summary": "Collections Delete",
+    "operationId": "collections_delete_collections__cid__delete",
+    "parameters": [
+     {
+      "name": "cid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Cid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/collections/{cid}/assets": {
+   "post": {
+    "summary": "Collections Add",
+    "operationId": "collections_add_collections__cid__assets_post",
+    "parameters": [
+     {
+      "name": "cid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Cid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IdList"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/collections/{cid}/assets/remove": {
+   "post": {
+    "summary": "Collections Remove",
+    "operationId": "collections_remove_collections__cid__assets_remove_post",
+    "parameters": [
+     {
+      "name": "cid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Cid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IdList"
+       }
+      }
+     }
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -1206,6 +2385,44 @@
  },
  "components": {
   "schemas": {
+   "AssetPage": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/AssetRecord"
+      },
+      "type": "array",
+      "title": "Items"
+     },
+     "next_cursor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next Cursor"
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total"
+     }
+    },
+    "type": "object",
+    "required": [
+     "items"
+    ],
+    "title": "AssetPage"
+   },
    "AssetPatch": {
     "properties": {
      "state": {
@@ -1262,6 +2479,445 @@
     "type": "object",
     "title": "AssetPatch"
    },
+   "AssetRecord": {
+    "properties": {
+     "schema_version": {
+      "type": "integer",
+      "title": "Schema Version",
+      "default": 1
+     },
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "image",
+       "video",
+       "mask",
+       "document-render"
+      ],
+      "title": "Kind",
+      "default": "image"
+     },
+     "path": {
+      "type": "string",
+      "title": "Path"
+     },
+     "w": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "W"
+     },
+     "h": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H"
+     },
+     "frames": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Frames"
+     },
+     "fps": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fps"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "job_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Job Id"
+     },
+     "batch_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Batch Id"
+     },
+     "session_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session Id"
+     },
+     "root_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Root Id"
+     },
+     "parents": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Parents"
+     },
+     "suite": {
+      "type": "string",
+      "title": "Suite",
+      "default": "generate"
+     },
+     "model_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Id"
+     },
+     "format": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Format"
+     },
+     "seed": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Seed"
+     },
+     "prompt_text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prompt Text"
+     },
+     "prompt_json": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prompt Json"
+     },
+     "params": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Params"
+     },
+     "timings": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Timings"
+     },
+     "compiled_graph_hash": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Compiled Graph Hash"
+     },
+     "variant": {
+      "type": "string",
+      "title": "Variant",
+      "default": "full"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "none",
+       "keep",
+       "reject"
+      ],
+      "title": "State",
+      "default": "none"
+     },
+     "rating": {
+      "type": "integer",
+      "title": "Rating",
+      "default": 0
+     },
+     "tags": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Tags"
+     },
+     "collection_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Collection Ids"
+     },
+     "has_document": {
+      "type": "boolean",
+      "title": "Has Document",
+      "default": false
+     },
+     "thumb_status": {
+      "type": "string",
+      "enum": [
+       "pending",
+       "done",
+       "failed"
+      ],
+      "title": "Thumb Status",
+      "default": "pending"
+     },
+     "trashed_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trashed At"
+     },
+     "bytes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bytes"
+     },
+     "sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sha256"
+     }
+    },
+    "type": "object",
+    "required": [
+     "path"
+    ],
+    "title": "AssetRecord"
+   },
+   "BulkPatch": {
+    "properties": {
+     "ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Ids"
+     },
+     "changes": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Changes"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ids",
+     "changes"
+    ],
+    "title": "BulkPatch"
+   },
+   "CollectionCreate": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind",
+      "default": "manual"
+     },
+     "filter": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filter"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "CollectionCreate"
+   },
+   "CollectionPatch": {
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "kind": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kind"
+     },
+     "filter": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filter"
+     }
+    },
+    "type": "object",
+    "title": "CollectionPatch"
+   },
+   "CollectionRecord": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "manual",
+       "smart"
+      ],
+      "title": "Kind",
+      "default": "manual"
+     },
+     "filter": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filter"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "title": "Updated At"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count",
+      "default": 0
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "CollectionRecord"
+   },
    "FetchRequest": {
     "properties": {
      "model_id": {
@@ -1275,6 +2931,66 @@
     ],
     "title": "FetchRequest"
    },
+   "GroupHeader": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     },
+     "first_created": {
+      "type": "string",
+      "title": "First Created"
+     },
+     "last_created": {
+      "type": "string",
+      "title": "Last Created"
+     },
+     "cover_id": {
+      "type": "string",
+      "title": "Cover Id"
+     },
+     "model_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model Id"
+     },
+     "prompt_excerpt": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prompt Excerpt"
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "label",
+     "count",
+     "first_created",
+     "last_created",
+     "cover_id"
+    ],
+    "title": "GroupHeader"
+   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -1287,6 +3003,22 @@
     },
     "type": "object",
     "title": "HTTPValidationError"
+   },
+   "IdList": {
+    "properties": {
+     "ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Ids"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ids"
+    ],
+    "title": "IdList"
    },
    "ImportRequest": {
     "properties": {
@@ -1370,6 +3102,37 @@
      "path"
     ],
     "title": "ProjectOpen"
+   },
+   "PurgeRequest": {
+    "properties": {
+     "ids": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ids"
+     },
+     "older_than_days": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Older Than Days"
+     }
+    },
+    "type": "object",
+    "title": "PurgeRequest"
    },
    "ValidationError": {
     "properties": {

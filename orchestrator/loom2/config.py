@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .fsio import atomic_write_json, read_json_or, utc_now
+from .fsio import atomic_write_json, new_id, read_json_or, utc_now
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_SCHEMA_VERSION = 1
@@ -71,6 +71,7 @@ class AppState:
         self.app_json = self.state_dir / "app.json"
         self.record = AppRecord.model_validate(read_json_or(self.app_json, AppRecord().model_dump()))
         self.token = os.environ.get("LOOM2_TOKEN") or secrets.token_urlsafe(24)
+        self.session_id = new_id("ses")
 
     @property
     def settings(self) -> Settings:

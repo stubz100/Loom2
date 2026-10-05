@@ -10,13 +10,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from typing import Annotated
+
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from . import __version__
-from .catalogue import Catalogue
+from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
 from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB
 from .engine.supervisor import EngineSupervisor
@@ -25,6 +27,7 @@ from .fsio import StateError
 from .queue import JobQueue
 from .roster import ROSTER_BY_ID, Roster
 from .tools.fetch import FetchJob, sha256_of
+from .tools.pngmeta import parse_image_metadata
 from .workspace import Workspace
 
 FileResponse.chunk_size = 4 * 2**20   # E2: 64 KiB chunks cap loopback at ~400 MiB/s; 4 MiB gives > 1 GiB/s
@@ -48,7 +51,7 @@ class Services:
         await self.close_project()
         ws = Workspace.open(path)
         self.ws = ws
-        self.catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes)
+        self.catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes, session_id=self.app.session_id)
         self.queue = JobQueue(ws, self.app, self.engine, self.roster, self.catalogue, self.hub)
         await self.queue.start()
         self.app.touch_project(ws.path)
@@ -102,6 +105,32 @@ class ImportRequest(BaseModel):
 
 class FetchRequest(BaseModel):
     model_id: str
+
+
+class IdList(BaseModel):
+    ids: list[str]
+
+
+class BulkPatch(BaseModel):
+    ids: list[str]
+    changes: dict[str, Any]
+
+
+class PurgeRequest(BaseModel):
+    ids: list[str] | None = None
+    older_than_days: int | None = None
+
+
+class CollectionCreate(BaseModel):
+    name: str
+    kind: str = "manual"
+    filter: dict | None = None
+
+
+class CollectionPatch(BaseModel):
+    name: str | None = None
+    kind: str | None = None
+    filter: dict | None = None
 
 
 def create_app(state_dir: Path | None = None, project: Path | None = None, ready_cb=None) -> FastAPI:
@@ -203,11 +232,106 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         return {"last": svc.app.record.last_project, "recents": svc.app.record.recents}
 
     # ---- assets ---------------------------------------------------------------------------------
-    @app.get("/assets")
-    async def assets_list(state: str | None = None, suite: str | None = None, model_id: str | None = None, job_id: str | None = None,
-                          search: str | None = None, sort: str = "created_desc", limit: int = 200, cursor: str | None = None):
+    @app.get("/assets", response_model=AssetPage)
+    async def assets_list(q: Annotated[AssetQuery, Query()]):
         _, cat, _ = svc.require_project()
-        return cat.list(state=state, suite=suite, model_id=model_id, job_id=job_id, search=search, sort=sort, limit=min(limit, 1000), cursor=cursor)
+        return await asyncio.to_thread(cat.list, q)
+
+    @app.get("/assets/groups", response_model=list[GroupHeader])
+    async def assets_groups(q: Annotated[AssetQuery, Query()]):
+        _, cat, _ = svc.require_project()
+        return await asyncio.to_thread(cat.groups, q)
+
+    @app.get("/assets/counts")
+    async def assets_counts():
+        _, cat, _ = svc.require_project()
+        return await asyncio.to_thread(cat.counts)
+
+    @app.get("/assets/tags")
+    async def assets_tags():
+        _, cat, _ = svc.require_project()
+        return {"items": cat.tags()}
+
+    @app.patch("/assets/bulk")
+    async def assets_bulk(body: BulkPatch):
+        _, cat, _ = svc.require_project()
+        recs = cat.patch_many(body.ids, body.changes)
+        for r in recs:
+            svc.hub.broadcast("asset.updated", r.model_dump())
+        return {"items": [r.model_dump() for r in recs]}
+
+    @app.post("/assets/trash")
+    async def assets_trash(body: IdList):
+        _, cat, _ = svc.require_project()
+        recs = cat.trash(body.ids)
+        for r in recs:
+            svc.hub.broadcast("asset.updated", r.model_dump())
+        return {"trashed": [r.id for r in recs]}
+
+    @app.post("/assets/restore")
+    async def assets_restore(body: IdList):
+        _, cat, _ = svc.require_project()
+        recs = cat.restore(body.ids)
+        for r in recs:
+            svc.hub.broadcast("asset.updated", r.model_dump())
+        return {"restored": [r.id for r in recs]}
+
+    @app.post("/assets/purge")
+    async def assets_purge(body: PurgeRequest):
+        _, cat, _ = svc.require_project()
+        gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days)
+        for i in gone:
+            svc.hub.broadcast("asset.deleted", {"id": i})
+        return {"purged": gone}
+
+    @app.get("/lineage/tree/{root_id}")
+    async def lineage_tree(root_id: str):
+        _, cat, _ = svc.require_project()
+        return cat.lineage_tree(root_id)
+
+    # ---- collections ----------------------------------------------------------------------------
+    @app.get("/collections", response_model=list[CollectionRecord])
+    async def collections_list():
+        _, cat, _ = svc.require_project()
+        return cat.collections()
+
+    @app.post("/collections", response_model=CollectionRecord)
+    async def collections_create(body: CollectionCreate):
+        _, cat, _ = svc.require_project()
+        rec = cat.collection_create(body.name, body.kind, body.filter)
+        svc.hub.broadcast("collection.changed", {"id": rec.id})
+        return rec
+
+    @app.patch("/collections/{cid}", response_model=CollectionRecord)
+    async def collections_patch(cid: str, body: CollectionPatch):
+        _, cat, _ = svc.require_project()
+        rec = cat.collection_update(cid, name=body.name, kind=body.kind, filter_=body.filter)
+        if not rec:
+            raise HTTPException(404, "collection not found")
+        svc.hub.broadcast("collection.changed", {"id": cid})
+        return rec
+
+    @app.delete("/collections/{cid}")
+    async def collections_delete(cid: str):
+        _, cat, _ = svc.require_project()
+        if not cat.collection_delete(cid):
+            raise HTTPException(404, "collection not found")
+        svc.hub.broadcast("collection.changed", {"id": cid})
+        return {"deleted": cid}
+
+    @app.post("/collections/{cid}/assets")
+    async def collections_add(cid: str, body: IdList):
+        _, cat, _ = svc.require_project()
+        n = cat.collection_add(cid, body.ids)
+        svc.hub.broadcast("collection.changed", {"id": cid})
+        return {"count": n}
+
+    @app.post("/collections/{cid}/assets/remove")
+    async def collections_remove(cid: str, body: IdList):
+        _, cat, _ = svc.require_project()
+        n = cat.collection_remove(cid, body.ids)
+        svc.hub.broadcast("collection.changed", {"id": cid})
+        return {"count": n}
 
     @app.get("/assets/{asset_id}")
     async def asset_get(asset_id: str):
@@ -264,11 +388,21 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def assets_import(body: ImportRequest):
         _, cat, _ = svc.require_project()
         out = []
+        files: list[Path] = []
         for p in body.paths:
             src = Path(p)
-            if not src.is_file():
-                raise HTTPException(400, f"not a file: {p}")
-            rec = await asyncio.to_thread(cat.ingest_file, src, kind="image", move=False, suite=body.suite, params={"imported_from": str(src)})
+            if src.is_dir():
+                files += sorted(x for x in src.iterdir() if x.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"))
+            elif src.is_file():
+                files.append(src)
+            else:
+                raise HTTPException(400, f"not a file or folder: {p}")
+        for src in files:
+            meta = parse_image_metadata(src) if src.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp") else {}
+            kind = "video" if src.suffix.lower() in (".mp4", ".webm") else "image"
+            rec = await asyncio.to_thread(cat.ingest_file, src, kind=kind, move=False, suite=body.suite, prompt_text=meta.get("prompt_text"),
+                                          prompt_json=meta.get("prompt_json"), seed=meta.get("seed") if isinstance(meta.get("seed"), int) else None,
+                                          params={"imported_from": str(src), **{k: v for k, v in meta.items() if k not in ("prompt_text", "prompt_json", "seed", "w", "h")}})
             rec = await asyncio.to_thread(cat.make_thumbs, rec)
             svc.hub.broadcast("asset.created", rec.model_dump())
             out.append(rec.model_dump())

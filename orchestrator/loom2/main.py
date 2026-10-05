@@ -35,7 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     port = a.port or svc.app.settings.api_port
     level = (a.log_level or svc.app.settings.log_level).lower()
     logging.basicConfig(level=level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    uvicorn.run(app, host=host, port=port, log_level=level, access_log=False)
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level=level, access_log=False))
+
+    def request_shutdown() -> None:
+        server.should_exit = True
+
+    app.state.request_shutdown = request_shutdown
+    server.run()
     return 0
 
 

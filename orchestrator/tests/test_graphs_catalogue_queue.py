@@ -77,6 +77,8 @@ def test_catalogue_ingest_thumbs_list_patch_delete_rebuild(tmp_path: Path):
     assert cat.manifest_path(rec).is_file() and rec.thumb_status == "pending"
     rec = cat.make_thumbs(rec)
     assert rec.thumb_status == "done" and ws.thumb_path(rec.id, 32).is_file() and ws.thumb_path(rec.id, 128).is_file()
+    cat.record_job({"id": "job_1", "kind": "t2i", "status": "done", "created_at": "2026", "finished_at": "2026"})
+    assert cat.jobs_indexed() == 1
     page = cat.list(limit=10)
     assert [a["id"] for a in page["items"]] == [rec.id] and page["next_cursor"] is None
     assert cat.list(search="hell")["items"] and not cat.list(search="zzz")["items"]

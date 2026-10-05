@@ -161,7 +161,7 @@ class Catalogue:
 
     def record_job(self, job: dict) -> None:
         with self._lock:
-            self._db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?,?,?,?)",
+            self._db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?,?,?,?,?)",
                              (job["id"], job.get("kind"), job.get("status"), job.get("created_at"), job.get("finished_at"), json.dumps(job, default=str)))
             self._db.commit()
 
@@ -256,6 +256,10 @@ class Catalogue:
                 self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.suite)
             n += 1
         return n
+
+    def jobs_indexed(self) -> int:
+        with self._lock:
+            return self._db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
 
     def usage_bytes(self) -> int:
         with self._lock:

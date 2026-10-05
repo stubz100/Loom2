@@ -671,3 +671,30 @@ read the clock)*
 - Next: M1 foundation (06) starts now — orchestrator core first (workspace, roster + resolver, engine
   supervisor + ComfyUI client, recipe compiler with contract tests, durable queue, API + WS), then the shell
   and frame skeleton.
+
+## 2026-10-05 13:49 — M1 orchestrator core landed; rig acceptance 20/20
+
+- `orchestrator/loom2` (uv, Python 3.13.16, fastapi 0.142, pydantic 2.13, websockets 17, httpx): `fsio` (ids,
+  atomic fsync writes, readers that refuse torn JSON), `config` (app.json, per-launch token, engine paths),
+  `workspace` (06 §4 tree, format geometry lock), `roster` (29 authored entries incl. 3 retired; disk scan
+  over the models root + mounted trees; ledger sha merge; `open` variant filter), `recipes` (T2I/I2I/Inpaint/I2V
+  pydantic, `loras[]`), `engine.client` (REST + WS, binary previews), `engine.supervisor` (Job Object
+  kill-on-close + `taskkill /T`, health probe, restart-every-N), `engine.contract` (object_info checks, basename
+  resolution), `engine.graphs` (T2I dev JSON-through-Mistral / Klein prose, Turbo + LoRA chain, ×16 sizes,
+  graph hash), `queue` (durable `jobs/queue.json`, one engine job at a time, VRAM admission, warm-group order,
+  resume paused after an unclean shutdown, cancel = `/interrupt`), `catalogue` (assets + sidecar manifests,
+  lineage, rebuildable SQLite index, WebP thumb pyramid), `events` (WS hub), `tools.fetch`, `api` (06 §6 subset,
+  token gate, 4 MiB `FileResponse` chunks, blobs, `/shutdown`), `main` (READY line for the shell).
+- Offline tests: 16 pass (contract tests run against `tests/fixtures/object_info.json`, 53 node classes reduced
+  from a live capture by `scripts/make_object_info_fixture.py`).
+- **Rig acceptance `scripts/m1_acceptance.py`: 20/20 in 120 s** (`engine/spikes/out/m1_acceptance.jsonl`):
+  project → dev fp8 + Turbo 960×544 generation through the supervised engine in 66 s warm (101 s cold) → asset,
+  manifest, lineage, thumbnail, job index → live `/object_info` matches the fixture and the compiled graph is
+  contract-clean → hard `taskkill` of the orchestrator mid-job takes the engine down in 1.5 s (Job Object) →
+  relaunch comes back **paused** with the job queued, retry 1 → unpause, cancel interrupts the running job and
+  the engine stays alive → `POST /shutdown` stops engine and marks the queue clean.
+- Bugs the acceptance caught before any UI existed: a 5-placeholder insert into a 6-column jobs table (turned
+  done/cancelled jobs into failed), `Popen.terminate()` is a hard kill on Windows (hence `/shutdown`),
+  thumbnails must exist before a job reads as done.
+- Remaining M1 (12 §2): Tauri shell sidecar supervision + READY handshake + token injection + graceful
+  shutdown; frame skeleton (07) with Models suite and Settings; generated TS client; variant plumbing in the UI.

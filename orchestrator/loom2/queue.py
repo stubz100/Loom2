@@ -71,6 +71,7 @@ class JobQueue:
         self._ws_task: asyncio.Task | None = None
         self._events: asyncio.Queue[EngineEvent] = asyncio.Queue()
         self._cancel_requested: set[str] = set()
+        self.resumed_unclean = False
 
     # ---- persistence ------------------------------------------------------------------------------
     def load(self) -> None:
@@ -87,6 +88,8 @@ class JobQueue:
                     rec.status, rec.progress, rec.prompt_id = "queued", 0.0, None
                     rec.retry_count += 1
                     rec.log_tail.append("re-queued after an unclean shutdown")
+                    self.paused = True          # 12 M1 acceptance: relaunch resumes *paused* with the job queued
+                    self.resumed_unclean = True
                 else:
                     rec.status, rec.error, rec.finished_at = "failed", "interrupted by shutdown", utc_now()
             self.jobs[rec.id] = rec
@@ -191,7 +194,8 @@ class JobQueue:
         return c
 
     def state(self) -> dict:
-        return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group}
+        return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
+                "resumed_unclean": self.resumed_unclean}
 
     # ---- scheduling -------------------------------------------------------------------------------
     def _next(self) -> JobRecord | None:
@@ -307,15 +311,16 @@ class JobQueue:
                     compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=list(getattr(recipe, "refs", []) or []))
                 assets.append(rec)
                 self.hub.broadcast("asset.created", rec.model_dump())
+            job.progress_text = "thumbnails"
+            for i, rec in enumerate(assets):
+                assets[i] = await asyncio.to_thread(self.catalogue.make_thumbs, rec)
+                self.hub.broadcast("asset.updated", assets[i].model_dump())
             job.result["asset_ids"] = [a.id for a in assets]
             job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
             job.wall_s = round(time.time() - self._t0, 1)
             self.catalogue.record_job(job.model_dump())
             self.persist()
             self.hub.broadcast("job.updated", job.model_dump())
-            for rec in assets:
-                rec = await asyncio.to_thread(self.catalogue.make_thumbs, rec)
-                self.hub.broadcast("asset.updated", rec.model_dump())
             self.engine.jobs_since_start += 1
             self._last_group = job.warm_group
         except NotImplementedError as e:

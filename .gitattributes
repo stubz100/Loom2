@@ -1,8 +1,14 @@
-# Normalise line endings in the repo; scripts stay CRLF-tolerant on Windows.
 * text=auto
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.lock text eol=lf
 *.ps1 text eol=crlf
-*.cmd text eol=crlf
 *.png binary
-*.jpg binary
-*.gguf binary
-*.safetensors binary
+*.webp binary
+*.mp4 binary
+*.patch text eol=lf

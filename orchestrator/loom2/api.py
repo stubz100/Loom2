@@ -194,6 +194,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         info = svc.ws.info()
         info["assets"] = svc.catalogue.count() if svc.catalogue else 0
         info["usage_gb"] = round((svc.catalogue.usage_bytes() if svc.catalogue else 0) / 2**30, 2)
+        info["jobs_indexed"] = svc.catalogue.jobs_indexed() if svc.catalogue else 0
         return info
 
     @app.get("/projects")
@@ -426,6 +427,15 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         if not p.is_file():
             raise HTTPException(404, "blob not found")
         return FileResponse(p, media_type="application/octet-stream")
+
+    @app.post("/shutdown")
+    async def shutdown():
+        """Graceful exit for the shell (06 §1): the lifespan teardown stops the queue (clean mark) and the engine."""
+        fn = getattr(app.state, "request_shutdown", None)
+        if fn is None:
+            raise HTTPException(501, "no shutdown hook installed")
+        asyncio.get_running_loop().call_later(0.2, fn)
+        return {"shutting_down": True}
 
     # ---- events ---------------------------------------------------------------------------------
     @app.websocket("/events")

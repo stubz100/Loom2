@@ -72,6 +72,8 @@ export const useSession = create<SessionState>()(
         const deep = new URLSearchParams(location.search).get('suite')
         if (deep && ['catalogue', 'generate', 'edit', 'animate', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
         await get().refreshAll()
+        const start = get().health?.start_suite
+        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'models'].includes(start)) set({ ui: { ...get().ui, suite: start as Suite } })
         socket?.close()
         socket = new EventsSocket(
           (f) => applyEvent(f, set, get),

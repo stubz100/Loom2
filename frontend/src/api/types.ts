@@ -7,7 +7,7 @@ export type Health = 'present' | 'verified' | 'missing' | 'retired'
 
 export interface Backend { host: string; port: number; token: string }
 
-export interface HealthInfo { ok: boolean; version: string; project_open: boolean; engine_running: boolean; variant: 'full' | 'open' }
+export interface HealthInfo { ok: boolean; version: string; project_open: boolean; engine_running: boolean; variant: 'full' | 'open'; start_suite?: string | null }
 
 export interface ProjectFormat { aspect: [number, number]; width: number; height: number; fps: number; default_tier: string }
 export interface ProjectInfo {

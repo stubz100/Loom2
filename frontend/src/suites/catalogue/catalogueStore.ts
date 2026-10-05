@@ -13,7 +13,7 @@ export type Sort = 'created_desc' | 'created_asc' | 'rating_desc' | 'model' | 's
 export interface Query {
   folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render'; suite?: string; model_id?: string
   rating_min: number; tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
-  sort: Sort; group: GroupMode; collection_id?: string; root_id?: string
+  sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string
 }
 export interface GroupHeader { key: string; label: string; count: number; first_created: string; last_created: string; cover_id: string; model_id: string | null; prompt_excerpt: string | null }
 export interface Collection { id: string; name: string; kind: 'manual' | 'smart'; filter: Record<string, unknown> | null; created_at: string; updated_at: string; count: number }
@@ -29,6 +29,7 @@ function qs(q: Query, extra: Record<string, string | number | boolean | undefine
   q.tags_any.forEach((t) => p.append('tags_any', t))
   put('aspect', q.aspect); if (q.has_children !== undefined) put('has_children', q.has_children)
   put('search', q.search.trim()); put('sort', q.sort); put('group', q.group); put('collection_id', q.collection_id); put('root_id', q.root_id)
+  put('created_from', q.created_from); put('created_to', q.created_to)
   for (const [k, v] of Object.entries(extra)) put(k, v)
   return p.toString()
 }

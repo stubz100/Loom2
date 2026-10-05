@@ -1,0 +1,43 @@
+{
+ "schema_version": 1,
+ "settings": {
+  "schema_version": 1,
+  "models_root": "F:/loom2-models",
+  "mounted_model_trees": [
+   "D:/comfyui/ComfyUI/models"
+  ],
+  "vram_budget_gb": 16.0,
+  "variant": "full",
+  "hf_home": "F:\\HF_HOME",
+  "engine": {
+   "python": "F:\\source\\repos\\stubz003_loom2\\engine\\.venv\\Scripts\\python.exe",
+   "main": "F:\\source\\repos\\stubz003_loom2\\engine\\comfyui\\main.py",
+   "extra_model_paths": "F:\\source\\repos\\stubz003_loom2\\engine\\extra_model_paths.yaml",
+   "host": "127.0.0.1",
+   "port": 8188,
+   "flags": [
+    "--disable-auto-launch",
+    "--use-pytorch-cross-attention",
+    "--disable-pinned-memory",
+    "--preview-method",
+    "none"
+   ],
+   "restart_every_jobs": 0,
+   "health_timeout_s": 120.0
+  },
+  "api_host": "127.0.0.1",
+  "api_port": 8765,
+  "thumbnail_sizes": [
+   256,
+   512,
+   1024
+  ],
+  "log_level": "INFO",
+  "reopen_last_project": true
+ },
+ "last_project": "F:\\loom2-projects\\synthetic-10k",
+ "recents": [
+  "F:\\loom2-projects\\synthetic-10k"
+ ],
+ "updated_at": "2026-10-05T13:24:32+00:00"
+}

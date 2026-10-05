@@ -2,9 +2,10 @@
 # builds and opens the shell, and the shell spawns the orchestrator (which spawns the engine on the first job).
 #   scripts/dev.ps1            # app
 #   scripts/dev.ps1 -Browser   # orchestrator on 8766 with a fixed token + Vite only; open the printed URL in a browser
-param([switch]$Browser)
+param([switch]$Browser, [string]$Suite)
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
+if ($Suite) { $env:LOOM2_START_SUITE = $Suite }   # open the app on a suite (catalogue|generate|edit|animate|models)
 if ($Browser) {
     $env:LOOM2_TOKEN = "devtoken"
     $env:PYTHONIOENCODING = "utf-8"

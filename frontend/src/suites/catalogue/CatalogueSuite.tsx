@@ -26,6 +26,8 @@ function Panel({ tab }: { tab: string }) {
     if (!s.project?.open) return
     const p = new URLSearchParams(location.search)
     const g = p.get('group')
+    const tab = p.get('tab')
+    if (tab && ['library', 'filters', 'collections', 'import'].includes(tab)) setRailTab('catalogue', tab)
     const loaded = g && ['none', 'batch', 'lineage', 'session', 'model'].includes(g) && g !== c.q.group ? c.setQuery({ group: g as GroupMode }) : c.load()
     void loaded.then(() => {                      // deep links for screenshots and sharing: ?loupe=<id>  ?compare=a,b
       const l = p.get('loupe'); const cmp = p.get('compare')
@@ -47,7 +49,10 @@ function Panel({ tab }: { tab: string }) {
       ))}
       <h4>Collections</h4>
       {c.collections.map((col) => (
-        <button key={col.id} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })} title={col.kind}>
+        <button key={col.id} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })} title={col.kind === 'manual' ? 'drop assets here to add them' : 'smart collection'}
+          onDragOver={(e) => { if (col.kind === 'manual') { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)' } }}
+          onDragLeave={(e) => { e.currentTarget.style.borderColor = '' }}
+          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = ''; const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (ids.length && col.kind === 'manual') void c.addToCollection(col.id, ids) }}>
           <span>{col.kind === 'smart' ? '◈ ' : ''}{col.name}</span><span className="n">{col.count}</span>
         </button>
       ))}
@@ -77,11 +82,16 @@ function Filters() {
       <select value={q.aspect ?? ''} onChange={(e) => c.setQuery({ aspect: (e.target.value || undefined) as never })}><option value="">any</option><option value="landscape">landscape</option><option value="portrait">portrait</option><option value="square">square</option></select>
       <label>Children</label>
       <select value={q.has_children === undefined ? '' : String(q.has_children)} onChange={(e) => c.setQuery({ has_children: e.target.value === '' ? undefined : e.target.value === 'true' })}><option value="">any</option><option value="true">has derivations</option><option value="false">none</option></select>
+      <label>Created</label>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <input type="date" value={q.created_from?.slice(0, 10) ?? ''} onChange={(e) => c.setQuery({ created_from: e.target.value ? `${e.target.value}T00:00:00` : undefined })} />
+        <input type="date" value={q.created_to?.slice(0, 10) ?? ''} onChange={(e) => c.setQuery({ created_to: e.target.value ? `${e.target.value}T23:59:59` : undefined })} />
+      </div>
       <label>Tags</label>
       <div className="chips">{c.tagCloud.slice(0, 24).map((t) => <span key={t.tag} className="chip-f" style={q.tags_any.includes(t.tag) ? { borderColor: 'var(--accent)', color: 'var(--fg)' } : undefined} onClick={() => toggleTag(t.tag)}>{t.tag} <small>{t.count}</small></span>)}{!c.tagCloud.length && <span style={{ color: 'var(--fg3)' }}>no tags yet</span>}</div>
       <label />
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => c.setQuery({ state: 'all', suite: undefined, model_id: undefined, rating_min: 0, tags_any: [], aspect: undefined, has_children: undefined, search: '' })}>Clear filters</button>
+        <button onClick={() => c.setQuery({ state: 'all', suite: undefined, model_id: undefined, rating_min: 0, tags_any: [], aspect: undefined, has_children: undefined, search: '', created_from: undefined, created_to: undefined })}>Clear filters</button>
         <button onClick={() => { const name = window.prompt('Smart collection name'); if (name) void c.createCollection(name, 'smart', { folder: q.folder, state: q.state, suite: q.suite, model_id: q.model_id, rating_min: q.rating_min, tags_any: q.tags_any, aspect: q.aspect, has_children: q.has_children, search: q.search || undefined }) }}>Save as smart collection</button>
       </div>
     </div>
@@ -145,7 +155,7 @@ function Strip() {
   const ids = selectedOrPrimary(c)
   const [tagText, setTagText] = useState('')
   if (!s.project?.open) return <span>Catalogue</span>
-  const activeChips = [c.q.search && `"${c.q.search}"`, c.q.state !== 'all' && c.q.state, c.q.model_id, c.q.rating_min > 0 && `★≥${c.q.rating_min}`, ...c.q.tags_any.map((t) => `#${t}`), c.q.aspect, c.q.has_children !== undefined && (c.q.has_children ? 'has derivations' : 'no derivations')].filter(Boolean) as string[]
+  const activeChips = [c.q.search && `"${c.q.search}"`, c.q.state !== 'all' && c.q.state, c.q.model_id, c.q.rating_min > 0 && `★≥${c.q.rating_min}`, ...c.q.tags_any.map((t) => `#${t}`), c.q.aspect, c.q.has_children !== undefined && (c.q.has_children ? 'has derivations' : 'no derivations'), (c.q.created_from || c.q.created_to) && `${c.q.created_from?.slice(0, 10) ?? '…'} → ${c.q.created_to?.slice(0, 10) ?? '…'}`].filter(Boolean) as string[]
   return (
     <>
       <span>group</span>
@@ -209,8 +219,18 @@ function Stage() {
     return out
   }, [c.items, c.groups, c.groupItems, c.expanded, c.q.group, cols])
   const rowKey = useCallback((i: number) => { const r = rows[i]; return r.kind === 'header' ? `h:${r.g.key}` : r.kind === 'tiles' ? `t:${r.items[0]?.id}:${r.items.length}` : `n:${i}` }, [rows])
+  const headerIdx = useMemo(() => rows.map((r, i) => (r.kind === 'header' ? i : -1)).filter((i) => i >= 0), [rows])
+  const activeSticky = useRef(-1)
   const virt = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, getItemKey: rowKey,
-    estimateSize: (i) => (rows[i].kind === 'tiles' ? cellH + gap : rows[i].kind === 'header' ? 36 : 28), overscan: 6 })
+    estimateSize: (i) => (rows[i].kind === 'tiles' ? cellH + gap : rows[i].kind === 'header' ? 36 : 28), overscan: 6,
+    rangeExtractor: (range) => {
+      const active = [...headerIdx].reverse().find((i) => i <= range.startIndex) ?? -1
+      activeSticky.current = active
+      const out = new Set<number>()
+      if (active >= 0) out.add(active)
+      for (let i = Math.max(0, range.startIndex - range.overscan); i <= Math.min(range.count - 1, range.endIndex + range.overscan); i++) out.add(i)
+      return [...out].sort((a, b) => a - b)
+    } })
   const vitems = virt.getVirtualItems()
   useEffect(() => {
     if (c.q.group === 'none' && c.nextCursor && vitems.length && vitems[vitems.length - 1].index >= rows.length - 3) void c.loadMore()
@@ -276,9 +296,10 @@ function Stage() {
       <div className="cat-rows" style={{ height: virt.getTotalSize() }}>
         {vitems.map((v) => {
           const r = rows[v.index]
-          const st = { transform: `translateY(${v.start}px)` }
+          const sticky = r.kind === 'header' && v.index === activeSticky.current
+          const st = sticky ? { position: 'sticky' as const, top: 0, zIndex: 2 } : { transform: `translateY(${v.start}px)` }
           if (r.kind === 'header') return (
-            <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement} onClick={() => c.toggleGroup(r.g.key)}>
+            <div key={v.key} className={`cat-header${sticky ? ' sticky' : ''}`} style={st} data-index={v.index} ref={sticky ? undefined : virt.measureElement} onClick={() => c.toggleGroup(r.g.key)}>
               <span>{c.expanded[r.g.key] ? '▾' : '▸'}</span>
               {r.g.cover_id && <img className="cover" src={api.thumbUrl(r.g.cover_id, 256)} alt="" loading="lazy" />}
               <b>{r.g.label}</b>{r.g.model_id && <span>· {r.g.model_id}</span>}<span className="excerpt">{r.g.prompt_excerpt ? `· "${r.g.prompt_excerpt}"` : ''}</span>
@@ -288,7 +309,7 @@ function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st}><span className="excerpt">{r.text}</span></div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} dragIds={() => selectedOrPrimary(c)} />)}
             </div>
           )
         })}

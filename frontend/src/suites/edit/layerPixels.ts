@@ -35,8 +35,8 @@ export class LayerPixels {
     return lp
   }
 
-  static fromImage(img: ImageBitmap | HTMLImageElement, width?: number, height?: number): LayerPixels {
-    const lp = new LayerPixels(width ?? img.width, height ?? img.height)
+  static fromImage(img: ImageBitmap | HTMLImageElement | HTMLCanvasElement, width?: number, height?: number, grey = false): LayerPixels {
+    const lp = new LayerPixels(width ?? img.width, height ?? img.height, grey)
     lp.ctx.drawImage(img, 0, 0)
     lp.refresh()
     return lp

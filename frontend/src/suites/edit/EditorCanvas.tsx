@@ -1,8 +1,9 @@
-// The PixiJS stage for the Edit suite (10 §2, 05 §3b): one Application, a world container with the document's
-// layers as sprites (masks as alpha masks, groups as containers, blend modes from the advanced set), a selection
-// overlay, a checkerboard, and the pointer handling for the tools (brush, eraser, move, hand, zoom, marquee, lasso,
-// wand, fill, eyedropper).
-import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite, UPDATE_PRIORITY } from 'pixi.js'
+// The PixiJS stage for the Edit suite (10 §2, 05 §3b): one Application rendered on demand, a world container
+// with the document's layers as sprites (masks and isolated groups through render-texture passes, exact W3C blend
+// shaders, adjustment/filter layers as per-layer filters), the selection's marching ants, the free-transform
+// box, a checkerboard, and the pointer handling for the tools (brush, eraser, move/transform, hand, zoom,
+// marquee, lasso, wand, fill, eyedropper).
+import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useRef } from 'react'
 import { useSession } from '../../store/session'
@@ -12,6 +13,7 @@ import { blendName } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
+import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
 
 /** Inverts RGB (keeps alpha) and adds: red where a mask/selection is black, nothing where it is white. */
 function negativeAdd(): ColorMatrixFilter { const f = new ColorMatrixFilter(); f.negative(false); f.blendMode = 'add'; return f }
@@ -24,6 +26,31 @@ function checkerTexture(): Texture {
   return Texture.from(c)
 }
 
+/** Axis-aligned boundary runs of the selection (value > 127), as [x0, y0, x1, y1, …] in document pixels. */
+function outlineSegments(sel: LayerPixels): number[] {
+  const W = sel.width, H = sel.height
+  const d = sel.ctx.getImageData(0, 0, W, H).data
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && d[(y * W + x) * 4] > 127
+  const segs: number[] = []
+  for (let y = 0; y <= H; y++) {
+    let run = -1
+    for (let x = 0; x <= W; x++) {
+      const edge = x < W && inside(x, y) !== inside(x, y - 1)
+      if (edge && run < 0) run = x
+      if (!edge && run >= 0) { segs.push(run, y, x, y); run = -1 }
+    }
+  }
+  for (let x = 0; x <= W; x++) {
+    let run = -1
+    for (let y = 0; y <= H; y++) {
+      const edge = y < H && inside(x, y) !== inside(x - 1, y)
+      if (edge && run < 0) run = y
+      if (!edge && run >= 0) { segs.push(x, run, x, y); run = -1 }
+    }
+  }
+  return segs
+}
+
 type Pt = { x: number; y: number }
 
 export function EditorCanvas() {
@@ -34,6 +61,9 @@ export function EditorCanvas() {
   const overlayRef = useRef<Container | null>(null)
   const spritesRef = useRef<Map<string, Sprite | Container>>(new Map())
   const passesRef = useRef<{ rt: RenderTexture; content: Container; transform: Matrix; dirty: boolean }[]>([])
+  const renderPending = useRef(0)
+  const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
+  const phaseRef = useRef(0)
   /** Render every dirty pass (inner passes were pushed first, so nesting resolves bottom-up). */
   const renderPasses = () => {
     const app = appRef.current
@@ -46,6 +76,11 @@ export function EditorCanvas() {
     }
   }
   const markPassesDirty = () => { for (const p of passesRef.current) p.dirty = true }
+  /** On-demand rendering (10 §11): one frame on the next animation frame, nothing while idle. */
+  const requestRender = () => {
+    if (renderPending.current) return
+    renderPending.current = requestAnimationFrame(() => { renderPending.current = 0; renderPasses(); appRef.current?.render() })
+  }
   const doc = useEditor((s) => s.doc)
   const revision = useEditor((s) => s.revision)
   const fitRequested = useEditor((s) => s.fitRequested)
@@ -57,6 +92,56 @@ export function EditorCanvas() {
   const editingMask = useEditor((s) => s.editingMask)
   const activeId = useEditor((s) => s.activeId)
   const pixelGrid = useEditor((s) => s.pixelGrid)
+  const hasSel = useEditor((s) => !!s.selection)
+  const transform = useEditor((s) => s.transform)
+
+  // ---- overlay drawers (marching ants, transform box) ------------------------------------------------
+  const drawAnts = () => {
+    const ov = overlayRef.current; if (!ov) return
+    let g = ov.getChildByLabel('ants') as Graphics | null
+    if (!g) { g = new Graphics(); g.label = 'ants'; ov.addChild(g) }
+    g.clear()
+    const st = useEditor.getState()
+    const segs = antsRef.current.segs
+    if (!st.selection || !st.overlay || st.quickMask || !segs.length) return
+    const z = st.zoom, w = 1 / z
+    for (let i = 0; i < segs.length; i += 4) g.moveTo(segs[i], segs[i + 1]).lineTo(segs[i + 2], segs[i + 3])
+    g.stroke({ color: 0xffffff, width: w, alpha: 0.95 })
+    const dash = 4 / z, period = dash * 2, off = (phaseRef.current % 8) / 8 * period
+    for (let i = 0; i < segs.length; i += 4) {
+      const x0 = segs[i], y0 = segs[i + 1], x1 = segs[i + 2], y1 = segs[i + 3]
+      const len = Math.abs(x1 - x0) + Math.abs(y1 - y0)
+      const dx = Math.sign(x1 - x0), dy = Math.sign(y1 - y0)
+      for (let s = off - period; s < len; s += period) {
+        const a = Math.max(0, s), b = Math.min(len, s + dash)
+        if (b <= a) continue
+        g.moveTo(x0 + dx * a, y0 + dy * a).lineTo(x0 + dx * b, y0 + dy * b)
+      }
+    }
+    g.stroke({ color: 0x000000, width: w })
+  }
+  const drawTransformBox = () => {
+    const ov = overlayRef.current; if (!ov) return
+    let g = ov.getChildByLabel('xform') as Graphics | null
+    if (!g) { g = new Graphics(); g.label = 'xform'; ov.addChild(g) }
+    g.clear()
+    const st = useEditor.getState(); const t = st.transform
+    if (!t) return
+    const z = st.zoom, hs = 5 / z
+    g.poly(corners(t).flatMap((p) => [p.x, p.y]), true).stroke({ color: 0xf0a63a, width: 1 / z })
+    for (const p of handles(t)) g.rect(p.x - hs, p.y - hs, hs * 2, hs * 2).fill(0xffffff).stroke({ color: 0x000000, width: 1 / z })
+    g.circle(t.cx, t.cy, 3 / z).stroke({ color: 0xf0a63a, width: 1 / z })
+  }
+  const applyTransformPreview = () => {
+    const t = useEditor.getState().transform
+    if (!t) return
+    const obj = spritesRef.current.get(t.nodeId)
+    if (!obj) return
+    obj.pivot.set(t.w / 2, t.h / 2)
+    obj.position.set(t.cx, t.cy)
+    obj.scale.set(t.sx, t.sy)
+    obj.rotation = t.rot
+  }
 
   // ---- app lifecycle --------------------------------------------------------------------------
   useEffect(() => {
@@ -64,7 +149,8 @@ export function EditorCanvas() {
     if (!host) return
     let cancelled = false
     const app = new Application()
-    void app.init({ preference: 'webgpu', background: 0x141414, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance' }).then(() => {
+    let ro: ResizeObserver | null = null
+    void app.init({ preference: 'webgpu', background: 0x141414, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false }).then(() => {
       if (cancelled) { app.destroy(true); return }
       host.replaceChildren(app.canvas)
       app.canvas.style.touchAction = 'none'
@@ -88,12 +174,15 @@ export function EditorCanvas() {
         c.getContext('2d')!.drawImage(src, 0, 0)
         return c
       })
-      app.ticker.add(renderPasses, undefined, UPDATE_PRIORITY.HIGH)   // passes render before the stage each frame
+      ro = new ResizeObserver(() => { app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })
+      ro.observe(host)
       useEditor.getState().bump()
       useEditor.getState().requestFit()
     })
     return () => {
       cancelled = true
+      ro?.disconnect()
+      if (renderPending.current) cancelAnimationFrame(renderPending.current)
       useEditor.getState().setExtractor(null)
       for (const p of passesRef.current) p.rt.destroy(true)
       passesRef.current = []
@@ -186,16 +275,14 @@ export function EditorCanvas() {
       }
     }
     build(doc.layers, layers)
-    renderPasses()
     // selection / quick-mask / mask-editing overlays
     const ov = overlayRef.current!
     ov.removeChildren()
     const sel = st.selection
-    if (sel && overlay) {
-      // selection: additive orange tint on the selected area; quick mask: additive red where NOT selected
+    if (sel && overlay && quickMask) {
+      // quick mask: additive red where NOT selected
       const s = new Sprite(sel.texture)
-      s.blendMode = 'add'
-      if (quickMask) { s.filters = [negativeAdd()]; s.tint = 0xff2020; s.alpha = 0.5 } else { s.tint = 0xf0a63a; s.alpha = 0.25 }
+      s.blendMode = 'add'; s.filters = [negativeAdd()]; s.tint = 0xff2020; s.alpha = 0.5
       ov.addChild(s)
     }
     if (editingMask && activeNode?.mask && overlay) {
@@ -207,7 +294,13 @@ export function EditorCanvas() {
         ov.addChild(s)
       }
     }
-  }, [doc, revision, before, overlay, quickMask, editingMask, activeId])
+    // marching ants: recomputed only when the selection changed (every selection edit bumps the revision)
+    if (sel) { if (antsRef.current.rev !== revision) antsRef.current = { rev: revision, segs: outlineSegments(sel) } } else antsRef.current = { rev: -1, segs: [] }
+    drawAnts()
+    applyTransformPreview()
+    drawTransformBox()
+    requestRender()
+  }, [doc, revision, before, overlay, quickMask, editingMask, activeId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- view (zoom / pan / fit), document frame and pixel grid -------------------------------------
   useEffect(() => {
@@ -216,7 +309,7 @@ export function EditorCanvas() {
     world.scale.set(zoom); world.position.set(pan.x, pan.y)
     if (!ov || !doc || !host) return
     let g = ov.getChildByLabel('frame') as Graphics | null
-    if (!g) { g = new Graphics(); g.label = 'frame'; ov.addChild(g) }
+    if (!g) { g = new Graphics(); g.label = 'frame'; ov.addChildAt(g, 0) }
     g.clear()
     g.rect(0, 0, doc.w, doc.h).stroke({ color: 0x555555, width: 1 / zoom })
     if (pixelGrid && zoom >= 8) {
@@ -226,7 +319,10 @@ export function EditorCanvas() {
       for (let y = y0; y <= y1; y++) g.moveTo(x0, y).lineTo(x1, y)
       g.stroke({ color: 0xffffff, width: 1 / zoom, alpha: 0.15 })
     }
-  }, [zoom, pan, revision, pixelGrid, doc])
+    drawAnts()
+    drawTransformBox()
+    requestRender()
+  }, [zoom, pan, revision, pixelGrid, doc]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const app = appRef.current, host = hostRef.current
     if (!app || !host || !doc) return
@@ -234,17 +330,26 @@ export function EditorCanvas() {
     const z = Math.min((w - 40) / doc.w, (h - 40) / doc.h)
     useEditor.getState().setView({ zoom: z, pan: { x: (w - doc.w * z) / 2, y: (h - doc.h * z) / 2 } })
   }, [fitRequested, doc?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // free-transform preview follows the live numbers
+  useEffect(() => { applyTransformPreview(); drawTransformBox(); requestRender() }, [transform]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the ants march only while there is a selection to outline (and nothing else renders while idle)
+  useEffect(() => {
+    if (!hasSel || !overlay || quickMask) return
+    const t = setInterval(() => { phaseRef.current = (phaseRef.current + 1) % 8; drawAnts(); requestRender() }, 120)
+    return () => clearInterval(t)
+  }, [hasSel, overlay, quickMask]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- input ----------------------------------------------------------------------------------------
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    const toDoc = (e: PointerEvent | WheelEvent): Pt => {
+    const toDoc = (e: PointerEvent | WheelEvent | MouseEvent): Pt => {
       const r = host.getBoundingClientRect()
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    let drag: null | { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; dab?: HTMLCanvasElement; dist?: number; spaceHeld?: boolean } = null
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; dab?: HTMLCanvasElement; dist?: number; t0?: Xform; hx?: number; hy?: number; a0?: number }
+    let drag: Drag | null = null
     let spaceHeld = false
     const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') { if ((e.target as HTMLElement)?.closest('input, textarea, select')) return; spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : '' } }
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey)
@@ -281,6 +386,14 @@ export function EditorCanvas() {
       const p = toDoc(e)
       const tool = spaceHeld || e.button === 1 || st.tool === 'hand' ? 'hand' : st.tool
       if (tool === 'hand') { drag = { kind: 'pan', start: { x: e.clientX, y: e.clientY }, last: p, startPan: { ...st.pan } }; host.style.cursor = 'grabbing'; return }
+      if (st.transform) {                                               // free transform owns the pointer
+        const t = st.transform
+        const hit = handles(t).find((h) => Math.hypot(h.x - p.x, h.y - p.y) <= 7 / st.zoom)
+        if (hit) drag = { kind: 'xscale', start: p, last: p, t0: { ...t }, hx: hit.hx, hy: hit.hy }
+        else if (insideQuad(t, p)) drag = { kind: 'xmove', start: p, last: p, t0: { ...t } }
+        else drag = { kind: 'xrotate', start: p, last: p, t0: { ...t }, a0: Math.atan2(p.y - t.cy, p.x - t.cx) }
+        return
+      }
       if (tool === 'zoom') { zoomAt(e, e.altKey ? 1 / 1.5 : 1.5); return }
       if (tool === 'eyedropper') { void pick(p); return }
       if (tool === 'brush' || tool === 'eraser') {
@@ -293,7 +406,7 @@ export function EditorCanvas() {
         t.lp.beginStroke()
         drag = { kind: 'paint', start: p, last: p, target: t.lp, dab, dist: 0 }
         stamp(t.lp, dab, p.x - t.offset.x, p.y - t.offset.y, erase, t.kind === 'mask', b.flow)
-        t.lp.refresh()
+        t.lp.refresh(); markPassesDirty(); requestRender()
         return
       }
       if (tool === 'move') {
@@ -313,6 +426,20 @@ export function EditorCanvas() {
       st.setCursor({ x: Math.floor(p.x), y: Math.floor(p.y) })
       if (!drag) return
       if (drag.kind === 'pan') { st.setView({ pan: { x: drag.startPan!.x + e.clientX - drag.start.x, y: drag.startPan!.y + e.clientY - drag.start.y } }); return }
+      if (drag.kind === 'xmove') { st.setTransform({ cx: drag.t0!.cx + p.x - drag.start.x, cy: drag.t0!.cy + p.y - drag.start.y }); return }
+      if (drag.kind === 'xrotate') {
+        let a = drag.t0!.rot + Math.atan2(p.y - drag.t0!.cy, p.x - drag.t0!.cx) - drag.a0!
+        if (e.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12)
+        st.setTransform({ rot: a }); return
+      }
+      if (drag.kind === 'xscale') {
+        const t0 = drag.t0!
+        const u = toLocal(t0, p)
+        let sx = drag.hx ? u.x / (drag.hx * t0.w / 2) : t0.sx
+        let sy = drag.hy ? u.y / (drag.hy * t0.h / 2) : t0.sy
+        if (e.shiftKey && drag.hx && drag.hy) { const s = (Math.abs(sx) + Math.abs(sy)) / 2; sx = Math.sign(sx) * s; sy = Math.sign(sy) * s }
+        st.setTransform({ sx: Math.abs(sx) < 0.01 ? 0.01 * Math.sign(sx || 1) : sx, sy: Math.abs(sy) < 0.01 ? 0.01 * Math.sign(sy || 1) : sy }); return
+      }
       if (drag.kind === 'paint' && drag.target && drag.dab) {
         const t = paintTarget(); if (!t) return
         const b = st.brush
@@ -338,6 +465,7 @@ export function EditorCanvas() {
         }
         drag.target.refresh()
         markPassesDirty()                                            // strokes inside masked layers / isolated groups
+        requestRender()
         return
       }
       if (drag.kind === 'move') {
@@ -345,7 +473,7 @@ export function EditorCanvas() {
         if (!n) return
         const nx = Math.round(drag.nodeStart!.x + p.x - drag.start.x), ny = Math.round(drag.nodeStart!.y + p.y - drag.start.y)
         const sp = spritesRef.current.get(n.id) as Sprite | undefined
-        if (sp) sp.position.set(nx, ny)
+        if (sp) { sp.position.set(nx, ny); requestRender() }
         drag.last = { x: nx, y: ny }
         return
       }
@@ -369,6 +497,7 @@ export function EditorCanvas() {
       if (drag.kind === 'lasso') commitLasso(drag.pts!, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode)
       drag = null
     }
+    const onDouble = (e: MouseEvent) => { const st = useEditor.getState(); if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform() }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
       const st = useEditor.getState()
       const r = host.getBoundingClientRect()
@@ -385,6 +514,7 @@ export function EditorCanvas() {
     const pick = async (p: Pt) => {
       const app = appRef.current, layers = layersRef.current
       if (!app || !layers) return
+      renderPasses()
       const px = await app.renderer.extract.pixels({ target: layers, frame: { x: Math.floor(p.x), y: Math.floor(p.y), width: 1, height: 1 } as never })
       const d = px.pixels
       const hex = '#' + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')
@@ -412,8 +542,9 @@ export function EditorCanvas() {
       let g = ov.getChildByLabel('preview') as Graphics | null
       if (!g) { g = new Graphics(); g.label = 'preview'; ov.addChild(g) }
       g.clear(); shape(g); g.stroke({ color: 0xffffff, width: 1 / useEditor.getState().zoom, alpha: 0.9 })
+      requestRender()
     }
-    const clearPreview = () => { const ov = overlayRef.current; const g = ov?.getChildByLabel('preview'); if (g) g.destroy() }
+    const clearPreview = () => { const ov = overlayRef.current; const g = ov?.getChildByLabel('preview'); if (g) g.destroy(); requestRender() }
     const commitMarquee = (a: Pt, b: Pt, mode: 'replace' | 'add' | 'subtract') => {
       clearPreview()
       const x = Math.round(Math.min(a.x, b.x)), y = Math.round(Math.min(a.y, b.y)), w = Math.round(Math.abs(b.x - a.x)), h = Math.round(Math.abs(b.y - a.y))
@@ -484,15 +615,17 @@ export function EditorCanvas() {
     host.addEventListener('pointermove', onMove)
     host.addEventListener('pointerup', onUp)
     host.addEventListener('pointercancel', onUp)
+    host.addEventListener('dblclick', onDouble)
     host.addEventListener('wheel', onWheel, { passive: false })
     const onContext = (e: MouseEvent) => { e.preventDefault(); if (drag) return; showMenu(e, canvasMenu()) }
     host.addEventListener('contextmenu', onContext)
     return () => {
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
+      host.removeEventListener('dblclick', onDouble)
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={hostRef} className="edit-canvas" />
 }

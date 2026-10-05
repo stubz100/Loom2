@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware'
 import { api, ApiError } from '../../api/client'
 import { useSession } from '../../store/session'
 import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
+import { isIdentity, resample, type Xform } from './transform'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
 export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number }
@@ -40,7 +41,7 @@ export const FILTER_DEFAULTS: Record<string, Record<string, unknown>> = {
 
 export interface CompareResult { mean: number; p99: number; max: number; rgb_mean: number; rgb_p99: number; rgb_max: number; w: number; h: number; at: string }
 export interface BrushOptions { size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; color: string; background: string }
-export interface HistoryEntry { label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number }
+export interface HistoryEntry { label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null } }
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance'
 
 export interface EditorState {
@@ -55,6 +56,14 @@ export interface EditorState {
   extractor: (() => HTMLCanvasElement | null) | null
   lastCompare: CompareResult | null
   compareWithExact: () => Promise<CompareResult | null>
+  // free transform (10 §4): live numbers for the preview; applied by resampling the layer (and a linked mask)
+  transform: Xform | null
+  beginTransform: () => void
+  setTransform: (patch: Partial<Xform>) => void
+  applyTransform: () => void
+  cancelTransform: () => void
+  flipLayer: (axis: 'h' | 'v') => void
+  rotateLayer: (deg: number) => void
   // documents
   openDocument: (id: string) => Promise<void>
   openFromAsset: (assetId: string) => Promise<void>
@@ -151,10 +160,44 @@ async function putRaw(docId: string, lid: string, kind: 'image' | 'mask', lp: La
 export const useEditor = create<EditorState>()(
   persist(
     (set, get) => {
+      /** Put the history entry's canvases back and return the ones they replaced (so redo is the same operation). */
+      const swapPixels = (s: NonNullable<HistoryEntry['swap']>): NonNullable<HistoryEntry['swap']> => {
+        const cur = get().pixels.get(s.layerId) ?? null
+        get().pixels.set(s.layerId, s.lp); s.lp.dirty = true
+        let curMask: LayerPixels | null = null
+        if (s.mask) { curMask = get().masks.get(s.layerId) ?? null; get().masks.set(s.layerId, s.mask); s.mask.dirty = true }
+        return { layerId: s.layerId, lp: cur ?? s.lp, mask: curMask }
+      }
       /** Replace the stack, mark dirty, and record the previous stack as one undoable step. */
       const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}) => {
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
         get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now() })
+      }
+      /** Bake `t` into the layer's pixels (and its linked mask); the old canvases ride along in history for undo. */
+      const resampleLayer = (t: Xform, label: string) => {
+        const doc = get().doc
+        const n = findNode(doc, t.nodeId)
+        const lp = n ? get().pixels.get(n.id) : undefined
+        if (!doc || !n || !lp) return
+        const before = clone(doc)
+        const r = resample(lp.canvas, t, n.x ?? 0, n.y ?? 0)
+        const nlp = LayerPixels.fromImage(r.canvas); nlp.dirty = true
+        const oldMask = get().masks.get(n.id) ?? null
+        let newMask: LayerPixels | null = null
+        let maskPatch: Partial<Node> = {}
+        if (n.mask?.linked && oldMask) {
+          const m = resample(oldMask.canvas, t, (n.x ?? 0) + n.mask.x, (n.y ?? 0) + n.mask.y)
+          newMask = LayerPixels.fromImage(m.canvas); newMask.dirty = true
+          // keep it grey: fromImage makes an RGBA canvas, the mask flag only changes what toRaw() uploads
+          Object.defineProperty(newMask, 'grey', { value: true })
+          maskPatch = { mask: { ...n.mask, x: m.x - r.x, y: m.y - r.y } }
+          get().masks.set(n.id, newMask)
+        }
+        get().pixels.set(n.id, nlp)
+        const next = clone(doc)
+        walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: r.x, y: r.y, w: nlp.width, h: nlp.height }, maskPatch); return true } })
+        set({ doc: next, docDirty: true, revision: get().revision + 1 })
+        get().pushHistory({ label, layerId: n.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: n.id, lp, mask: newMask ? oldMask : null } })
       }
       const setCanvas = (w: number, h: number, dx: number, dy: number, label: string) => {
         const doc = get().doc
@@ -174,6 +217,36 @@ export const useEditor = create<EditorState>()(
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
+        transform: null,
+
+        beginTransform: () => {
+          const n = findNode(get().doc, get().activeId)
+          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
+          if (!n || !lp || n.locked) { useSession.getState().toast('Free transform needs an unlocked raster layer', 'info'); return }
+          set({ transform: { nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: 1, sy: 1, rot: 0 }, tool: 'move' })
+        },
+        setTransform: (patch) => { const t = get().transform; if (t) set({ transform: { ...t, ...patch } }) },
+        cancelTransform: () => set({ transform: null, revision: get().revision + 1 }),
+        applyTransform: () => {
+          const t = get().transform
+          const n = t ? findNode(get().doc, t.nodeId) : null
+          if (!t || !n) { set({ transform: null }); return }
+          if (isIdentity(t, n.x ?? 0, n.y ?? 0)) { get().cancelTransform(); return }
+          resampleLayer(t, 'free transform')
+          set({ transform: null })
+        },
+        flipLayer: (axis) => {
+          const n = findNode(get().doc, get().activeId)
+          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
+          if (!n || !lp || n.locked) return
+          resampleLayer({ nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: axis === 'h' ? -1 : 1, sy: axis === 'v' ? -1 : 1, rot: 0 }, axis === 'h' ? 'flip horizontal' : 'flip vertical')
+        },
+        rotateLayer: (deg) => {
+          const n = findNode(get().doc, get().activeId)
+          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
+          if (!n || !lp || n.locked) return
+          resampleLayer({ nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: 1, sy: 1, rot: deg * Math.PI / 180 }, `rotate ${deg}°`)
+        },
 
         /** GPU composite vs the orchestrator's exact flatten (10 §14 item 1); PixiJS un-premultiplies on extract. */
         compareWithExact: async () => {
@@ -488,25 +561,27 @@ export const useEditor = create<EditorState>()(
           const h = get().history
           if (!h.length) return
           const e = h[h.length - 1]
-          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined }
+          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? get().selection : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) redoEntry.tiles = target.restore(e.tiles)
           }
+          if (e.swap) redoEntry.swap = swapPixels(e.swap)
           if (e.stack) set({ doc: e.stack, activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
-          set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, revision: get().revision + 1 })
+          set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         redo: () => {
           const f = get().future
           if (!f.length) return
           const e = f[f.length - 1]
-          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined }
+          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? get().selection : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) undoEntry.tiles = target.restore(e.tiles)
           }
+          if (e.swap) undoEntry.swap = swapPixels(e.swap)
           if (e.stack) set({ doc: e.stack, activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
-          set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, revision: get().revision + 1 })
+          set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         touch: () => set({ docDirty: true }),
         bump: () => set({ revision: get().revision + 1 }),

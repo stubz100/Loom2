@@ -75,6 +75,7 @@ function ToolOptions() {
   const doc = useEditor((s) => s.doc)
   const hasSel = useEditor((s) => !!s.selection)
   const activeId = useEditor((s) => s.activeId)
+  const transforming = useEditor((s) => !!s.transform)
   const [cv, setCv] = useState({ w: 0, h: 0, ax: 0.5, ay: 0.5 })
   useEffect(() => { if (doc) setCv((c) => ({ ...c, w: doc.w, h: doc.h })) }, [doc?.w, doc?.h]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (p: Partial<typeof b>) => ed().setBrush(p)
@@ -101,7 +102,13 @@ function ToolOptions() {
       {tool === 'lasso' && <div className="tool-opts"><label>mode</label>{modeSeg}<span className="hint full">freehand; Shift adds, Alt subtracts</span></div>}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} /><span className="hint full">contiguous on the active raster layer</span></div>}
       {tool === 'fill' && <div className="tool-opts"><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} /><span className="hint full">fills the selection, or the whole layer (mask: white) when nothing is selected · gradient arrives in M5</span></div>}
-      {tool === 'move' && <div className="tool-opts"><label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div><span className="hint full">drag the active raster layer on the canvas; free transform (Ctrl+T) arrives with M5</span></div>}
+      {tool === 'move' && (
+        <div className="tool-opts">
+          <label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div>
+          <label>transform</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{transforming ? <CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /> : <CommandButton id="edit.transform" text />}<CommandRow ids={['edit.layer.flipH', 'edit.layer.flipV', 'edit.layer.rot270', 'edit.layer.rot90']} /></div>
+          <span className="hint full">{transforming ? 'drag inside to move, handles to scale (Shift keeps the ratio), outside to rotate (Shift snaps 15°); Enter / double-click applies, Esc cancels' : 'drag the active raster layer on the canvas; Ctrl+T enters free transform'}</span>
+        </div>
+      )}
       {tool === 'crop' && (
         <div className="tool-opts">
           <label>canvas</label><div><input type="number" value={cv.w} min={1} max={16384} onChange={(e) => setCv({ ...cv, w: Number(e.target.value) })} style={{ width: 76 }} /> × <input type="number" value={cv.h} min={1} max={16384} onChange={(e) => setCv({ ...cv, h: Number(e.target.value) })} style={{ width: 76 }} /></div>
@@ -233,11 +240,13 @@ function Strip() {
   const quickMask = useEditor((s) => s.quickMask)
   const cursor = useEditor((s) => s.cursor)
   const renderer = useEditor((s) => s.renderer)
+  const transforming = useEditor((s) => !!s.transform)
   const [zt, setZt] = useState<string | null>(null)
   const apply = () => { if (zt !== null) { const v = parseFloat(zt); if (v > 0) ed().zoomTo(v / 100) } setZt(null) }
   return (
     <>
       <span>{doc ? `${doc.name}${dirty ? ' •' : ''} · ${doc.w}×${doc.h}` : 'Edit'}</span>
+      {transforming && <><span style={{ color: 'var(--accent)' }}>free transform</span><CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /></>}
       <CommandRow ids={['edit.undo', 'edit.redo', 'gap', 'edit.view.zoomOut']} />
       <input className="edit-strip-zoom" value={zt ?? String(Math.round(zoom * 100))} onChange={(e) => setZt(e.target.value)} onBlur={apply} onKeyDown={(e) => { if (e.key === 'Enter') apply() }} disabled={!doc} /><span style={{ marginLeft: -4 }}>%</span>
       <CommandRow ids={['edit.view.zoomIn', 'edit.view.fit']} />
@@ -434,7 +443,7 @@ function useEditKeys() {
       const st = ed()
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
-      if (k === 'Escape') { if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
+      if (k === 'Escape') { if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
       // every other key is an accelerator for a registry command; a handled key stops here so the global
       // suite switch (Ctrl+1/2, 07 §4) yields to the view keys of 10 §5 while a document is open
@@ -452,7 +461,12 @@ function useEditKeys() {
       const tryOpen = () => {
         const st = ed()
         if (!useSession.getState().project?.open || st.doc || st.loading) return false
-        void st.openDocument(deep).then(() => { if (q.get('verify')) setTimeout(() => void ed().compareWithExact(), 2000) })
+        void st.openDocument(deep).then(() => {
+          if (q.get('verify')) setTimeout(() => void ed().compareWithExact(), 2000)
+          if (q.get('sel') === 'all') ed().selectAll()                                                   // dev: marching ants
+          if (q.get('sel') === 'half') { const s = ed().ensureSelection(); s.ctx.fillStyle = '#fff'; s.ctx.beginPath(); s.ctx.ellipse(s.width / 2, s.height / 2, s.width / 3, s.height / 3, 0, 0, Math.PI * 2); s.ctx.fill(); s.refresh(); ed().bump() }
+          if (q.get('xform')) { ed().beginTransform(); ed().setTransform({ rot: 0.25, sx: 0.8, sy: 0.9 }) }   // dev: transform box
+        })
         return true
       }
       if (!tryOpen()) unsubDeep = useSession.subscribe(() => { if (tryOpen()) unsubDeep() })

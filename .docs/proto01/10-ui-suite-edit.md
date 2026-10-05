@@ -168,6 +168,9 @@ selection/load mask/crop) and the Tool options (brush size/hardness steps, colou
 `1–4` pick candidate · `Delete` clear selection pixels · `X` swap colours · `D` default colours.
 
 ## 11. Performance budgets (from 05 §9 spikes)
+The stage renders **on demand** (one frame per change: stroke, view, stack, transform, ants tick) — nothing is
+drawn while idle, so adjustment/filter shaders cost nothing between edits.
+
 60 fps compositing 6 × 4K layers with 3 advanced blend modes; brush ≤ 1 frame visible lag at 2K preview; 10 ×
 8K layers < 3 GB GPU memory with tile eviction; inpaint round-trip (upload region + mask, engine, paste-back,
 new layer) ≤ engine time + 1.5 s for a 1024² region; ORA save of a 4K 8-layer document < 3 s.

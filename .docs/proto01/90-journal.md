@@ -922,3 +922,27 @@ read the clock)*
   whose mount effect set state) that hung the page — fixed with `useMemo` in both the loupe and Compare.
 - Docs: 07 §3c (rule + registry + menu inventory), 07 §4 (`Shift+F10`, `Ctrl+K` built), 08 §6, 09 §8, 10 §10,
   12 §10 (standing rule), 13 D32. Lint: warnings only (pre-existing fast-refresh and purity notes).
+
+## 2026-10-05 21:45 — M4 closed: free transform, marching ants, on-demand rendering
+
+- **On-demand rendering** (10 §11): the Pixi application starts with `autoStart: false`; `requestRender()`
+  schedules one frame on the next animation frame after a change (stroke, view, stack, transform, ants tick,
+  host resize via a ResizeObserver). Nothing renders while idle, so adjustment/filter shaders cost nothing
+  between edits. The acceptance still passes (12/12, preview vs exact p99 4/255 on the 39-node stack).
+- **Marching ants** (10 §3): the selection's boundary is traced on the CPU as axis-aligned runs (two passes over
+  the selection canvas, recomputed only when the selection changes) and drawn as a 1-px white line with black
+  dashes whose phase advances every 120 ms while a selection exists; width follows the zoom. The orange tint is
+  gone; quick mask keeps its red overlay.
+- **Free transform** (10 §4, `Ctrl+T`): `transform.ts` holds the centre / scale / rotation model and the
+  resampler; the preview applies the same numbers to the layer's sprite (or its mask pass); the box has 8 scale
+  handles (Shift keeps the ratio), drag inside moves, drag outside rotates (Shift snaps 15°); Enter or a
+  double-click bakes the transform through a high-quality Canvas2D resample into a new layer canvas (bounds
+  recomputed, linked masks resampled with it), Esc cancels. Flip horizontal/vertical and rotate 90°/180° use the
+  same path. Undo swaps the old canvases back (a new `swap` field on history entries), so a transform is one
+  step like everything else. All of it is in the Move tool options, the strip (while transforming), the layer
+  and canvas menus, and the palette (D32).
+- Loupe facts bar wraps instead of clipping; strip labels no longer wrap. Verified in headless Edge with the dev
+  deep links `&sel=half` (ants) and `&xform=1` (box).
+- **M4 is closed**: 10 §14 items 1, 6 and 7 pass by script; item 2's undo/redo is instant across strokes and the
+  pen-latency half waits for a tablet (D19). 12 §5 updated. Next: M5 Edit AI (inpaint / refine / segment on the
+  E8 recipes; gradient fill arrives with it per 10 §4).

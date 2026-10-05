@@ -189,8 +189,9 @@ Layers/Properties/History/Info inspector, Save / Save to Catalogue / PNG / PSD, 
 every blend mode plus 8 adjustment/filter layers, ≤ 1 per feature and per adjustment/filter type), item 6 (ORA
 round trip lossless; PSD written — opening it in Photoshop/Krita is a manual check), item 7 (lineage +
 `has_document`). Item 2's undo/redo is in; the tablet latency half waits for a pen (D19). Adjustment and filter
-previews landed (journal 18:56). Remaining in M4: free transform (Ctrl+T), gradient fill, marching ants, and an
-on-demand render loop (the ticker currently re-renders every frame, which a blur layer makes costly).
+previews landed (journal 18:56); free transform (move / scale / rotate with handles, flips and 90° rotations,
+linked masks follow), marching ants and the on-demand render loop landed (journal 21:45). **M4 closed
+2026-10-05**; gradient fill stays with M5 as planned (10 §4), pen pressure with D19.
 
 ## 6. M5 · Edit AI (3–4 weeks) — gate: 10 approved (AI section), E8 decided
 

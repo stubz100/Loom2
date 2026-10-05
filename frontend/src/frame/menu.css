@@ -19,6 +19,7 @@
 .cmd-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
 .cmd-row .gap { width: 8px; }
 .strip .cmd-row, .facts .cmd-row { flex-wrap: nowrap; }
+.strip > span, .strip > label, .strip > button { white-space: nowrap; }
 .strip .cmd-btn, .facts .cmd-btn { height: 24px; min-width: 24px; padding: 0 4px; }
 
 .cmd-help { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }

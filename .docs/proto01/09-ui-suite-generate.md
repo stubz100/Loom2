@@ -132,7 +132,7 @@ Manifests record the exact serialised prompt and the compiled engine graph hash.
 - [x] Tree ↔ JSON round-trip is lossless for schema fields; preview shows the exact string sent — `treeFromJson` /
   `cleanTree` in the store, `/recipes/preview` returns `serialized_prompt` (2026-10-05).
 - [~] Klein receives prose, dev receives JSON (tested: `serialize_prompt`); the 10-prompt bench ran on dev Turbo
-  through the API (10/10 done, mean 45 s at 960×544) — adherence scoring by eye is pending.
+  through the API (10/10 done, mean 45 s at 960×544); adherence checked by eye on the contact sheet (journal 16:1x): consistent character, literal text and bound colours in every frame.
 - [x] Distilled variants show fixed steps/CFG disabled with reasons; base variants enable CFG + negative — `effective_params`, acceptance checks.
 - [x] A batch of 8 streams previews and lands 8 assets with seeds, params and lineage — `scripts/m3_acceptance.py` (17/17).
 - [~] Reference slots work on dev (done 55.7 s ); Klein 4B/9B references wait for M5; the token hint is shown in the panel.

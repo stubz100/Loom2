@@ -791,3 +791,18 @@ read the clock)*
   harbour cranes are all there; adherence scoring per field is still to be done by eye (04 §6).
 - **Acceptance `scripts/m3_acceptance.py`: 17/17 in 521.2 s** (47–59 s at 640×352 Turbo; reference job: done 55.7 s ).
   Every check passed: preview rules, staged → released, hard kill mid-batch, paused resume, 8 assets with seeds / recipe / serialised prompt / graph hash, batch grouping, reference-image job with lineage.
+
+## 2026-10-05 16:09 — M3 bench adherence by eye; reference editing on dev confirmed
+
+- Contact sheet of the 10 dev Turbo bench images (seed 20261005, 960×544): the character is consistent across
+  all ten (red braids, pale freckles, dark green hooded cloak); scene, lighting and camera fields land in
+  every frame; literal text renders correctly ("MARLOW & SONS", "HARBOUR MARKET", "WANTED … REWARD 200
+  CROWNS", the red X on the lighthouse map); palette colours show where bound to objects (cyan neon, amber
+  lamps). Weakest: 05 rooftop (crouch pose generic), 08 storm deck (lightning dominates the composition).
+  No failures — Turbo 8-step is a usable Draft tier for dev (D29 holds).
+- Reference job (acceptance step 5): "the same captain's cabin as reference image 1, but at night with the lamp
+  as the only light" → identical cabin layout, both characters, map and clock preserved; lighting changed as
+  asked. FLUX.2 dev reference editing through `ReferenceLatent` works at one reference; multi-reference and
+  Klein 9B-KV are M5.
+- 09 §10 "adherence recorded" is therefore done qualitatively; a per-field score table can follow when the
+  Catalogue's compare view is used for a second seed.

@@ -107,12 +107,16 @@ only in Loupe); thumbnail generation by a CPU worker (pyvips) within 2 s of asse
 counts computed server-side.
 
 ## 9. Acceptance checklist
-- [ ] 10k synthetic assets scroll smoothly in all group modes; keyboard navigation follows visual rows.
-- [ ] Batch triage round-trip: states, ratings and tags persist across restart (SQLite), not in session state.
-- [ ] Lineage view shows a generate → inpaint → refine → frame-extract chain correctly after the suites exist.
-- [ ] Import parses ComfyUI PNG metadata into Params.
-- [ ] Compare locks zoom/pan across 2 and 4 images; wipe works.
-- [ ] Delete is two-step with Undo; Trash purge respects the disk guard.
+- [~] 10k synthetic assets scroll smoothly in all group modes; keyboard navigation follows visual rows —
+  2026-10-05: virtualised rows render in every mode (`scripts/make_synthetic_assets.py`, queries ≤ 60 ms);
+  FPS to be confirmed interactively on the rig.
+- [x] Batch triage round-trip: states, ratings and tags persist across restart (SQLite), not in session state —
+  manifests + index (`PATCH /assets/bulk`), tested.
+- [ ] Lineage view shows a generate → inpaint → refine → frame-extract chain correctly after the suites exist
+  (roots, edges and the Lineage group exist; chain layout pending).
+- [x] Import parses ComfyUI PNG metadata into Params — `tools/pngmeta.py` (ComfyUI `prompt`, A1111 `parameters`), tested.
+- [x] Compare locks zoom/pan across 2 and 4 images; wipe works — plus a difference toggle and swap.
+- [~] Delete is two-step with Undo (done); Trash purge respects the disk guard (purge exists, guard wiring in M3).
 
 ## 10. Open questions
 - Masonry vs uniform grid (proposed: uniform with aspect-fit, masonry as an option later).

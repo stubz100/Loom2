@@ -220,7 +220,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     }
     case 'project.opened': set({ project: d as unknown as ProjectInfo }); break
     case 'project.closed': set({ project: { open: false } }); break
-    case 'asset.created': case 'asset.updated': case 'asset.deleted': break   // the Catalogue suite subscribes in M2
+    case 'asset.created': case 'asset.updated': case 'asset.deleted':
+      void import('../suites/catalogue/catalogueStore').then((m) => m.useCatalogue.getState().applyEvent(f))
+      break
     default: break
   }
 }

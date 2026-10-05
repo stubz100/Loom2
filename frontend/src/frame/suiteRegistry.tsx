@@ -27,6 +27,8 @@ export const SUITE_DEFS: Record<string, SuiteDef> = {
 interface RailState { active: Record<string, string>; setActive: (suite: string, tab: string) => void }
 const useRailState = create<RailState>()((set, get) => ({ active: {}, setActive: (suite, tab) => set({ active: { ...get().active, [suite]: tab } }) }))
 
+export const setRailTab = (suite: string, tab: string) => useRailState.getState().setActive(suite, tab)
+
 export function useSuiteRail() {
   const suite = useSession((s) => s.ui.suite)
   const tabs = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []

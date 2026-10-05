@@ -736,3 +736,25 @@ read the clock)*
   second orchestrator (`LOOM2_TOKEN=devtoken --port 8766`) is the quick visual check; `?suite=models` deep link.
 - Tooling: `npm run api:types` regenerates `src/api/schema.d.ts` from `src/api/openapi.json` (exported from the
   FastAPI app); `npm run typecheck`; spike harness kept at `spikes.html`.
+
+## 2026-10-05 15:22 — M2 Catalogue: backend + suite landed on the 10k synthetic project
+
+- Backend (`loom2/catalogue.py` rewritten, 22 tests): `AssetQuery` (folder, kind, suite, state, model, rating,
+  tags any/all, has_document, has_children, aspect, min px, dates, FTS `search`, seed, batch/root/session/
+  collection/job), cursor or offset paging with totals, `groups()` via a window function (cover = best-rated),
+  `counts()` for the smart folders, `last_session_id()`, `tags()`, trash/restore/purge, bulk patch, collections
+  (manual + smart; converting a smart one freezes its members), `lineage_tree()`, stale-index detection
+  (an index without `root_id` is dropped and rebuilt from the sidecars — found when the dev orchestrator opened
+  the M1 acceptance project). API: typed `/assets` + `/assets/groups`, `/assets/counts|tags|bulk|trash|
+  restore|purge`, `/collections` CRUD, folder import with `tools/pngmeta.py` (ComfyUI `prompt` chunk → longest
+  CLIPTextEncode text, seed, steps, model; A1111 `parameters`).
+- Frontend (`suites/catalogue`): zustand store with paged flat mode and lazily loaded groups, selection
+  (single / Ctrl / Shift range over the visual order), tile zoom 96–512 with fit/fill, loupe and compare in the
+  store (deep links `?loupe=` / `?compare=a,b` / `?group=` for screenshots), two-step Delete with Undo
+  (trash → restore), live events. Grid: TanStack Virtual rows keyed by content and measured — the first cut
+  cached the "loading…" row estimate for rows that later became tiles and everything overlapped.
+- Synthetic project: `scripts/make_synthetic_assets.py` → 10 000 assets with sidecars, index and thumbs in
+  229 s (2 612 batches, 12 sessions, 15 % derived). Query timings on it: groups 0.06 s, first page 0.05 s,
+  counts 0.06 s, FTS "harbour market" 0.04 s (123 hits).
+- Verified by screenshot (headless Edge): batch and flat grids, loupe with inspector, 2-up compare with wipe.
+  Not yet verified interactively: keyboard-by-row, scroll FPS, OS pickers — next pass in the real window.

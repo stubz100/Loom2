@@ -120,3 +120,18 @@ def test_png_metadata(tmp_path: Path):
     assert m["source"] == "a1111" and m["prompt_text"] == "masterpiece, a dog" and m["negative"] == "blurry" and m["seed"] == 1234 and m["steps"] == 30 and m["model"] == "dreamshaper"
     assert parse_image_metadata(_png(tmp_path / "plain.png")) == {"w": 64, "h": 32}
     assert parse_image_metadata(tmp_path / "missing.png") == {}
+
+
+def test_stale_index_is_rebuilt(tmp_path: Path):
+    import sqlite3
+    cat = _cat(tmp_path)
+    x = _seed(cat, tmp_path)
+    cat.close()
+    db = cat.ws.catalogue_db
+    con = sqlite3.connect(str(db))
+    con.executescript("DROP TABLE assets; DROP TABLE meta; CREATE TABLE assets (id TEXT PRIMARY KEY, kind TEXT, path TEXT, manifest TEXT);")
+    con.execute("INSERT INTO assets VALUES ('old', 'image', 'x', '{}')")
+    con.commit(); con.close()
+    cat2 = Catalogue(cat.ws, [32], session_id="ses_now")        # old columns → drop + rebuild from sidecars
+    assert cat2.count() == 4 and cat2.get(x["c"].id).root_id == x["a"].id and cat2.get("old") is None
+    cat2.close()

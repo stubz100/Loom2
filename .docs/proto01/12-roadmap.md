@@ -136,6 +136,18 @@ pipeline (pyvips worker), cross-suite verbs wired to stubs.
 
 Acceptance: 08 §9 checklist on 10k synthetic assets + the M1 real assets.
 
+**M2 status 2026-10-05** (journal 15:22): backend — `AssetQuery` filters, FTS5 search over prompt text /
+JSON / tags, server-side group headers (batch, lineage root, session, model) and smart-folder counts, lineage
+roots and per-launch session ids on every asset, trash / restore / purge, bulk edits, collections (manual +
+smart, freeze on convert), ComfyUI / A1111 PNG metadata on import, stale-index rebuild; 22 offline tests. Frontend
+— `suites/catalogue`: Library / Filters / Collections / Import panel, strip (group, state, sort, bulk Keep /
+Reject / tag / collection / trash, zoom, fit/fill), virtualised grid with group headers and keyboard-by-row,
+loupe (zoom/pan, prev/next, facts), compare (2-up / 4-up, locked zoom/pan, wipe, difference, swap), inspector
+Info / Params / Lineage / Tags, two-step delete with Undo, live `asset.*` events. On the 10k synthetic project:
+groups 60 ms, page 50 ms, counts 60 ms, FTS 40 ms. **Open in M2:** sticky group headers, drag-to-add
+collections, date-range filter, lineage chain layout (left → right), video hover-scrub (needs clips, M6),
+document tiles (M4), duplicate hints, disk-guard purge, an interactive scroll-FPS pass on the rig.
+
 ## 4. M3 · Generate, dev-first (3–4 weeks) — gate: 09 approved
 
 **FLUX.2 dev is the only wired model in this milestone (D21).** Prompt tree/JSON/text with the exact-string

@@ -184,6 +184,11 @@ class Catalogue:
         self._db.row_factory = sqlite3.Row
         self.fts = True
         with self._lock:
+            # an index from an older schema is dropped and rebuilt from the sidecars (the files are the truth)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(assets)").fetchall()}
+            stale = bool(cols) and "root_id" not in cols
+            if stale:
+                self._db.executescript("DROP TABLE IF EXISTS assets; DROP TABLE IF EXISTS lineage; DROP TABLE IF EXISTS assets_fts; DROP TABLE IF EXISTS meta;")
             self._db.executescript(_DDL)
             try:
                 self._db.execute(_FTS)
@@ -191,8 +196,8 @@ class Catalogue:
                 self.fts = False
             self._db.commit()
             version = self._meta("index_schema")
-            if version != str(INDEX_SCHEMA_VERSION):
-                if version is not None or self.count() > 0:
+            if stale or version != str(INDEX_SCHEMA_VERSION):
+                if stale or version is not None or self.count() > 0:
                     self.rebuild()
                 self._meta("index_schema", str(INDEX_SCHEMA_VERSION))
 

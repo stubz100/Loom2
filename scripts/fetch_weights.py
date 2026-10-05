@@ -58,6 +58,9 @@ MANIFEST = [
          dest="text_encoders", license="ltx-2.x community (Kijai repack)"),
     dict(spike="e5", repo="Comfy-Org/ltx-2", file="split_files/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors",
          dest="text_encoders", license="gemma (Comfy-Org repack)"),
+    # E5b (2026-10-05): GGUF Q4 runs at 68-81 s/it on the 9070 XT; fp8 with weight streaming is the fast path (E0)
+    dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+         dest="diffusion_models", license="ltx-2.x community (Kijai repack)"),
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),

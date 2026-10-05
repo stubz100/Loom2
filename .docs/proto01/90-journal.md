@@ -569,3 +569,29 @@ read the clock)*
   rows kept as `e5_results_contract_errors_run1.jsonl`; **run 2 started 12:17** (preflight, then tasks
   01 and 03). Lesson for the recipe compiler (06 §3b): contract checks must run against the pinned core before
   a weight is declared "enough" — the audio VAE was missing from the roster, not from the node graph.
+
+## 2026-10-05 12:42 — E5 LTX-2.3 run 2: both tasks pass; GGUF speed is the problem → E5b (fp8 streaming) started
+
+- Run 2 (audio VAE wired in, contract OK) 12:17–12:40: tasks 01 and 03 at 1024×576 × 121 f @ 24 fps, 8 distilled
+  steps, seed 20261005, 0 errors. Sheets: `engine/spikes/out/e5_sheets/`.
+
+  | task | exec s | sampling | s/it | VRAM |
+  | --- | --- | --- | --- | --- |
+  | 01 character turn | 649 | 9 min 01 s | 68 | "loaded partially": 13.3 GB in VRAM, 0.5 GB offloaded |
+  | 03 FLF crouch → stand | 715 | 10 min 49 s | 81 | 13.0 GB in VRAM, 0.8 GB offloaded |
+
+- Scores (identity / motion / prompt or end reach, 0–2): **01 = 1/2/2** — she does turn to the camera and lowers
+  the compass (Wan did not), motion is fluid at 24 fps, but the "subtle handheld" became a full reframing and by
+  4–5 s the face and costume soften (a white top appears under the cloak, the hood changes shape).
+  **03 = 2/2/1** — a fluid rise with the cloak flaring, braids and cloak kept, the standing pose at 5 s is close
+  to the end frame but not on it, and a glowing blue chimney artefact appears at 4 s.
+- Speed: 68–81 s per step is the GGUF dequant path (E0: GGUF ≈ 11× slower than fp8 on this card). Per second of
+  Draft video LTX costs ≈ 2× Wan (121 f @ 1024×576 vs 81 f @ 832×480), so the "fastest open model" line in
+  04 §5 does not hold in GGUF form on 16 GB. **E5b:** fetch Kijai's
+  `ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors` (≈ 22 GB; should stream the way FLUX.2
+  dev fp8mixed does) and re-run task 01 with `--ltx-format fp8`. Download started 12:42; the run goes
+  on the engine after the E8b/E4b chain.
+- **D9 stays provisional until E5b.** LTX earns its place on motion / prompt adherence and arbitrary keyframes,
+  not on speed; Wan remains primary on identity (D8).
+- Driver gap: the e5 driver does not collect per-node times (the e4 driver does, via the websocket) — the
+  engine log's progress bars were used instead; port the e4 collector before M6.

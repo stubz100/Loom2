@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.parse
@@ -220,6 +221,11 @@ def main() -> int:
             exec_ms = (ts.get("execution_success") or ts.get("execution_error")) - ts["execution_start"]
         steps = live["steps"]
         sample_s = (steps[-1][0] - steps[0][0]) if len(steps) >= 2 else None
+        # per-node wall time from the engine's "executing" events: node N lasts until the next node starts
+        starts = sorted(((v["start"], k) for k, v in live["nodes"].items() if "start" in v))
+        node_s = {}
+        for (t_a, k), (t_b, _) in zip(starts, starts[1:] + [(t_done, "end")]):
+            node_s[f"{k}:{graph[k]['class_type']}" if k in graph else k] = round(t_b - t_a, 2)
         outputs = []
         for node_out in hist.get("outputs", {}).values():
             for img in node_out.get("images", []):
@@ -238,7 +244,8 @@ def main() -> int:
             "wall_s": round(t_done - t_submit, 1),
             "engine_exec_s": round(exec_ms / 1000, 1) if exec_ms else None,
             "sampling_s_first_to_last_step": round(sample_s, 1) if sample_s else None,
-            "steps_seen": len(steps), "ws": live["ws"],
+            "steps_seen": len(steps), "ws": live["ws"], "node_s": node_s,
+            "env": {k: os.environ.get(k) for k in ("COMFYUI_ENABLE_MIOPEN", "MIOPEN_FIND_MODE") if os.environ.get(k)},
             "vram_free_before_gb": round(free_before / 2**30, 2), "vram_free_after_gb": round(free_after / 2**30, 2),
             "comfyui": sysinfo.get("comfyui_version"), "torch": sysinfo.get("pytorch_version"),
             "outputs": outputs, "error": live["error"] or (status if status.get("status_str") != "success" else None),

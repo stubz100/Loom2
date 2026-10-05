@@ -26,7 +26,7 @@ models are the heaviest and benefit from a hardened queue.
 | **E4** | Wan 2.2 I2V-A14B GGUF Q5_K_M + umT5 fp8 + Lightning 4+4 via ComfyUI on the rig; FLF with `WanFirstLastFrameToVideo` | 81 f @ 480p completes; time and peak VRAM recorded; identity visually acceptable | D8 primary i2v |
 | **E5** | LTX-2.3 distilled GGUF Q4_K_M + Gemma-3 Q4 via ComfyUI; one mid keyframe | 121 f completes; time recorded | D9 secondary i2v |
 | **E6** | Mediabunny `CanvasSink` scrub on a 121-frame MP4; exact seek on the backend (PyAV; TorchCodec optional) | every frame reachable, step < 50 ms — **PASS 2026-10-05**: 0 wrong frames in 3 × 222 seeks; GOP 24 random 17.8 ms, **GOP 6 ≈ 10 ms** for every pattern (proxy policy), intra ≈ 7.5 ms; backend PyAV 6–15 ms | video stack |
-| **E7** | MIOpen on/off for VAE decode and ESRGAN on gfx1201 under ComfyUI | pick the faster, document | runtime policy |
+| **E7** | MIOpen on/off for VAE decode and ESRGAN on gfx1201 under ComfyUI | pick the faster, document — **DONE 2026-10-05: MIOpen off** (VAE decode 0.9 s Draft / 5.6 s Full; MIOpen costs 12–16 s search per new shape, wins 0.7 s warm); ESRGAN deferred until an upscaler is in the roster | runtime policy (04 §2, D13) |
 | **E8** | Inpaint quality bake-off on 5 bench tasks: Klein+ICM, Klein+LanPaint, FLUX.1 Fill Q8, Qwen-Image-Edit (2509 on disk) | ranked results with timings | D7 inpaint stack |
 
 **E0 status — closed PASS on 2026-10-04** (journal 18:44–20:40): environment and engine verified; dev fp8mixed

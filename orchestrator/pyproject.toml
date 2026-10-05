@@ -1,0 +1,42 @@
+[project]
+name = "loom2-orchestrator"
+version = "0.1.0"
+description = "loom2 orchestrator: project workspace, catalogue, durable queue, weights roster and the ComfyUI engine adapter (06)"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "httpx>=0.27",
+    "websockets>=13",
+    "pillow>=10.4",
+    "numpy>=2.0",
+    "av>=13",
+    "huggingface_hub>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-timeout>=2.3",
+]
+
+[project.scripts]
+loom2-orchestrator = "loom2.main:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["loom2"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+timeout = 120
+markers = [
+    "rig: needs the GPU engine running on the rig (excluded by default: -m 'not rig')",
+]
+addopts = "-m 'not rig'"

@@ -143,23 +143,28 @@ BFL schema; loom2 adopts the full BFL field set plus loom's pose/angle directive
 
 | Model | Type | Footprint on 16 GB | License | Verdict |
 | --- | --- | --- | --- | --- |
-| **FLUX.2 Klein 4B / 9B** | unified gen + reference edit; masked fill at the sampler level (`InpaintModelConditioning` + `ReferenceLatent` + differential diffusion + crop-and-stitch) | shares the t2i weights | Apache (4B) / NC (9B) | **Primary.** Seconds per fill, good colour harmonisation; weaker than Fill on hard texture seams |
-| **LanPaint 2.2** (Sep 2026) | sampler-level masked inpaint/outpaint for any model incl. Klein, Qwen-Image 2.1, Wan; alpha-channel inpainting | no weights, extra "thinking" steps | node licence to check | **Primary "hard fill" sampler** on top of Klein |
-| **FLUX.1 Fill dev** | true mask-conditioned fill + outpaint | GGUF Q8_0 ≈ 12.7 GB + T5 fp8 4.9 GB + CLIP-L; guidance 30, 50 steps | FLUX NC, gated | **Quality fallback** for seamless fills and outpainting; still the reference in 2026 |
-| **Qwen-Image-Edit-2511** (Dec 2025) | instruction edit, multi-image | GGUF Q4_K_M 13.2 GB + Qwen2.5-VL-7B fp8 offloaded; 4–8 steps with Lightning LoRA | **Apache-2.0** | **Semantic edits** ("make the jacket red", multi-subject compositing). The 2509 fp8 + Lightning LoRAs already on disk are a usable stand-in until 2511 is fetched |
+| **FLUX.2 Klein 4B / 9B** | unified gen + reference edit; masked fill at the sampler level (`InpaintModelConditioning` + `ReferenceLatent` + differential diffusion + crop-and-stitch) | shares the t2i weights | Apache (4B) / NC (9B) | **Primary (E8 2026-10-05).** 18–33 s per 960×544 fill incl. model swap; seamless, colour-matched, identity kept; the ICM graph is conservative — continues texture well, keeps objects the prompt says to remove |
+| **LanPaint 2.2** (Sep 2026) | sampler-level masked inpaint/outpaint for any model incl. Klein, Qwen-Image 2.1, Wan; alpha-channel inpainting | no weights, extra "thinking" steps | node licence to check | **Default fill sampler on Klein (E8).** 22–28 s, best prompt adherence of the fast methods (cloak → red leather, lit doorway), identity kept; also the only way dev works as a fill |
+| **FLUX.1 Fill dev** | true mask-conditioned fill + outpaint | official bf16 file 22.2 GB cast to fp8 at load + T5 fp8 4.9 GB + CLIP-L; guidance 30, 20 steps in E8 | FLUX NC, gated | **Dropped by E8 (2026-10-05).** 76–82 s and the weakest on 3 of 4 tasks: muddy cloak, smeared outpaint strip, *added* crates, and the only method that changed the face. File kept on disk, not in the MVP roster |
+| **Qwen-Image-Edit-2511** (Dec 2025) | instruction edit, multi-image | GGUF Q4_K_M 13.2 GB + Qwen2.5-VL-7B fp8 offloaded; 4–8 steps with Lightning LoRA | **Apache-2.0** | **Deferred post-MVP (E8).** 2509 fp8 + Lightning + LanPaint kept identity and made decent semantic edits, but softer than Klein, no removal, and 19.5 GB does not fit 16 GB: 475 s per job cold (4 min 55 s model init from D:), ≈ 95 s warm. 2511 GGUF Q4 only if a use case appears that Klein + LanPaint cannot do |
 | Qwen-Image-2.1 (Sep 2026) | unified gen + edit, native RGBA, mask/annotation local edits | GGUF Q4 ≈ 5 GB + Qwen3-VL-8B int8 9.4 GB | Qwen Research (non-commercial) | watch; strong transparent-layer inpainting with LanPaint |
 | FLUX.1 Kontext dev | instruction edit, no mask | Q8 ≈ 12.7 GB | NC | superseded by Qwen-Image-Edit for loom2's needs |
-| FLUX.2 dev | edit with up to 10 refs | needs offload | NC | too slow for interactive inpaint; usable for hero edits |
+| FLUX.2 dev | edit with up to 10 refs; masked fill via LanPaint | fp8mixed + Turbo LoRA, 8 LanPaint steps | NC | **Fill Hero (E8):** 255–281 s at 960×544, best material detail, and the only method that actually removed the crates |
 | SDXL inpaint / ControlNet Union, BrushNet, PowerPaint | legacy mask-conditioned | tiny | permissive | lightweight fallback only |
 | HiDream-E1.1, OmniGen2 | instruction edit | heavy / mediocre | MIT / Apache | no |
 
-**Decision D7 (inpaint stack):** Klein (same weights as Generate) + `InpaintModelConditioning` /
-`ReferenceLatent` + crop-and-stitch at the document's native resolution, with LanPaint for stubborn fills and
-outpaint; FLUX.1 Fill Q8 as the quality fallback; Qwen-Image-Edit-2511 for instruction edits. The editor's
-"AI inpaint" verb exposes these as **Fill (Klein) · Fill+ (LanPaint) · Fill Pro (FLUX.1 Fill) · Fill Hero
-(FLUX.2 dev, slow) · Edit by instruction (Qwen)** with the same selection → mask → new-layer contract.
-Candidate defaults (D22): **4 on Klein, 2 on dev / Fill Pro**. In the `open` variant Fill Pro and Fill Hero are
-absent and Fill runs on Klein 4B.
+**Decision D7 (inpaint stack) — accepted with amendments 2026-10-05 after E8 (journal 11:50):** Klein 9B
+(same weights as Generate) with **LanPaint as the default fill sampler** and the `InpaintModelConditioning` /
+`ReferenceLatent` graph as the conservative "match surroundings" mode, both with crop-and-stitch at the
+document's native resolution; **FLUX.2 dev + LanPaint as Fill Hero** (slow, best detail, the only method that
+removed an object). FLUX.1 Fill is dropped (second-slowest and weakest on 3 of 4 bench tasks), Qwen-Image-Edit
+is deferred post-MVP (does not fit 16 GB, softer, no removal), and Klein base brought nothing to inpaint (wrong
+cloak colour, 46–155 s) and stays on the refine path only. The editor's "AI inpaint" verb exposes **Fill
+(Klein + LanPaint) · Fill-Match (Klein ICM) · Fill Hero (dev + LanPaint)** with the same selection → mask →
+new-layer contract; "Edit by instruction" waits for a model that beats Klein on this bench. Candidate defaults
+(D22): **4 on Klein, 2 on dev**. In the `open` variant Fill Hero is absent and Fill runs on Klein 4B
+(unmeasured). Open: **Q17** — a Klein recipe for object removal (E8b: ICM without `ReferenceLatent` on the
+masked region, LanPaint "Prompt First"); until then removal is a Fill Hero job.
 
 **Masks:** SAM 3 (`sam3.pt` on disk) for click/box/text-prompt segmentation, BiRefNet / BiRefNet_HR (MIT) for
 subject matting, YOLOv8 face/hand/person/skin/hair detectors for one-click region masks.
@@ -228,7 +233,9 @@ A fixed benchmark set lives in `.docs/proto01/bench/` (to be created in M0):
   VRAM, model/format/steps. Run on Klein 4B, Klein 9B, dev Q4.
 - **Inpaint**: 5 tasks (object removal on texture, clothing change, background swap, outpaint 25 %, face
   region fix). Score seam visibility, colour match, identity preservation, time. Run Klein+ICM, Klein+LanPaint,
-  FLUX.1 Fill, Qwen-Edit.
+  FLUX.1 Fill, Qwen-Edit. **Run 2026-10-05 (E8 run 3)** on the frozen `bench/inpaint/source.png`: tasks
+  01/02/04/05 × 6 methods, scored on side-by-side sheets from `engine/spikes/e8_sheets.py`; task 03 (BiRefNet
+  matte) waits for the AI Select path in M5.
 - **I2V**: 5 tasks (character turn, walk cycle, two-board FLF with pose change, camera push, dialogue gesture).
   Score face/clothing identity (ArcFace FaceSim within the clip, advisory), motion plausibility, end-frame
   reach, time. Run Wan 2.2 Q5 + Lightning, LTX-2.3 distilled, optionally H3.

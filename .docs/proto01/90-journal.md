@@ -498,3 +498,42 @@ read the clock)*
   stopped; run-2 artefacts kept under `e8_invalid_run2/` and `e8_results_run2_wrong_source.jsonl`. Lesson for
   06 §4: assets are content-addressed, never "newest file with this name" (loom's manifest-as-truth rule, again).
 - **Run 3 started 10:45** on the frozen source. The E4 chain waits for its 24 rows.
+
+## 2026-10-05 11:50 — E8 run 3 scored: D7 accepted with amendments
+
+- Run 3 (frozen `bench/inpaint/source.png`, seed 20261004, 960×544, tasks 01/02/04/05 × 6 methods): 24 jobs,
+  0 errors, engine 10:42–11:45. Task 03 (background swap) needs the BiRefNet matte and waits for M5's AI Select
+  path. Scored on side-by-side sheets (`engine/spikes/e8_sheets.py` → `engine/spikes/out/e8_sheets/`:
+  half-size overview plus full-resolution crops around the repainted region).
+- Wall time per job in seconds (includes the model swap after the previous method):
+
+  | method | 01 remove crates | 02 change cloak | 04 outpaint right | 05 face fix |
+  | --- | --- | --- | --- | --- |
+  | Klein 9B ICM (4 steps) | 18.2 | 29.6 | 33.3 | 30.4 |
+  | Klein base ICM (20 steps, CFG 3.5) | 45.6 | 54.7 | 61.7 | 155.2 |
+  | Klein 9B + LanPaint (4 steps × 5 inner) | 22.3 | 22.3 | 27.5 | 23.3 |
+  | dev fp8mixed + Turbo + LanPaint (8 × 5) | 256.8 | 255.4 | 281.3 | 255.6 |
+  | FLUX.1 Fill (official file, fp8 cast, 20 steps, guidance 30) | 76.1 | 76.9 | 81.6 | 77.8 |
+  | Qwen-Image-Edit 2509 fp8 + Lightning + LanPaint (8) | 473.2 | 475.7 | 481.6 | 474.7 |
+
+- Findings per task:
+  - **01 removal**: only **dev + LanPaint** removed the crates (the floor became grey brick with a drain grate
+    rather than the golden cobbles). Both Klein ICM graphs kept them (`ReferenceLatent` feeds the masked content
+    back in), Klein + LanPaint swapped them for a steaming tub, Qwen for a cyan AC unit, and Fill **added**
+    crates. → Q17.
+  - **02 cloak**: Klein ICM (red leather cape), Klein + LanPaint (red leather biker jacket) and dev + LanPaint
+    (best: studded leather, rain beads, pose and compass kept) all pass; Klein base went brown; Fill muddy and
+    flat; Qwen red wool instead of leather. Face, hand and compass untouched in every method.
+  - **04 outpaint (+240 px)**: Klein ICM seamless but no doorway; base, LanPaint, dev and Qwen all put a lit
+    doorway in, with a small tone step at x = 960 for base / LanPaint / Qwen; dev seamless; Fill smeared the strip.
+  - **05 face**: every method except Fill kept the identity (freckles, hairline, eyes); Fill changed the face.
+- Qwen's 475 s is 4 min 55 s of model init per job: the 19.5 GB fp8 file exceeds 16 GB VRAM, sits on D:
+  (`fast_disk=False`) and is evicted by every other method; sampling itself is ≈ 90 s at 11.4 s/it. Even warm
+  it is 4× Klein + LanPaint, and it never beat Klein on quality.
+- **Verdict D7 (accepted with amendments — 04 §4, 12 E8, 13):** Fill = Klein 9B + LanPaint (default),
+  Fill-Match = Klein ICM (texture continuation, conservative), Fill Hero = dev + LanPaint. FLUX.1 Fill is
+  dropped from the roster (the 22 GB file stays on disk until the user decides); Qwen-Image-Edit is deferred
+  post-MVP; Klein base stays on the refine path only. The 2-candidate-per-model default (D22) holds.
+- Follow-up **E8b** (once E4/E5 free the engine): a Klein removal recipe on task 01 — ICM without the reference
+  on the hole, LanPaint "Prompt First" / higher λ. Until then removal is a Fill Hero job.
+- E4 started 11:46 on the freed engine (Wan 2.2 I2V-A14B Q5_K_M + Lightning 4+4, 5 tasks incl. FLF).

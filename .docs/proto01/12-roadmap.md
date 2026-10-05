@@ -27,7 +27,7 @@ models are the heaviest and benefit from a hardened queue.
 | **E5** | LTX-2.3 distilled GGUF Q4_K_M + Gemma-3 Q4 via ComfyUI; one mid keyframe | 121 f completes; time recorded | D9 secondary i2v |
 | **E6** | Mediabunny `CanvasSink` scrub on a 121-frame MP4; exact seek on the backend (PyAV; TorchCodec optional) | every frame reachable, step < 50 ms — **PASS 2026-10-05**: 0 wrong frames in 3 × 222 seeks; GOP 24 random 17.8 ms, **GOP 6 ≈ 10 ms** for every pattern (proxy policy), intra ≈ 7.5 ms; backend PyAV 6–15 ms | video stack |
 | **E7** | MIOpen on/off for VAE decode and ESRGAN on gfx1201 under ComfyUI | pick the faster, document — **DONE 2026-10-05: MIOpen off** (VAE decode 0.9 s Draft / 5.6 s Full; MIOpen costs 12–16 s search per new shape, wins 0.7 s warm); ESRGAN deferred until an upscaler is in the roster | runtime policy (04 §2, D13) |
-| **E8** | Inpaint quality bake-off on 5 bench tasks: Klein+ICM, Klein+LanPaint, FLUX.1 Fill Q8, Qwen-Image-Edit (2509 on disk) | ranked results with timings | D7 inpaint stack |
+| **E8** | Inpaint quality bake-off on the bench tasks: Klein+ICM, Klein base+ICM, Klein+LanPaint, dev+LanPaint, FLUX.1 Fill (official file), Qwen-Image-Edit 2509 | ranked results with timings — **DONE 2026-10-05** (run 3: 4 tasks × 6 methods, 0 errors): Klein+LanPaint 22–28 s is the best fast method; Klein ICM 18–33 s conservative; dev+LanPaint 255–281 s is the hero tier and the only removal; FLUX.1 Fill 76–82 s dropped; Qwen-Edit 475 s (≈ 95 s warm) deferred. Follow-up **E8b**: Klein removal recipe (Q17); task 03 in M5 | D7 inpaint stack — **accepted with amendments** |
 
 **E0 status — closed PASS on 2026-10-04** (journal 18:44–20:40): environment and engine verified; dev fp8mixed
 **62 s warm / 107 s cold** for 20 steps at 960×544 (loom's worker: 649 s); GGUF Q4 ≈ 11× slower (kept as a
@@ -140,7 +140,7 @@ Acceptance: 10 §14 items 1, 2, 6, 7.
 
 ## 6. M5 · Edit AI (3–4 weeks) — gate: 10 approved (AI section), E8 decided
 
-AI Select (SAM 3, BiRefNet); Inpaint Fill (Klein) / Fill+ / Fill Pro / Fill Hero (dev) / Instruct with region
+AI Select (SAM 3, BiRefNet); Inpaint Fill (Klein + LanPaint) / Fill-Match (Klein ICM) / Fill Hero (dev + LanPaint; Fill Pro and Instruct dropped by E8) with region
 crop, min working size, paste-back feather, candidate strip (4 Klein / 2 dev, D22); Refine (Klein base/dev)
 with exact schedule; Upscale (ESRGAN, tiled refine); Outpaint; recipes stored per layer with re-run. **Because
 the Klein graphs now exist, Generate gains the Klein 9B / 4B entries here** (prose flattening, 4-step presets) —

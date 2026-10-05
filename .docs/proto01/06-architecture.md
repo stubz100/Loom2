@@ -40,7 +40,7 @@ Processes: shell (1) · orchestrator (1) · engine (1 resident, restartable) · 
 | Data | Path |
 | --- | --- |
 | Commands, metadata, small JSON | Tauri IPC (shell ↔ UI) and REST (UI ↔ orchestrator) |
-| Images, masks, latents, thumbnails, video proxies | **loopback HTTP** from the orchestrator: raw octet-stream / PNG / WebP / MP4 with `Range`, `ETag`, `Cache-Control`; never base64 |
+| Images, masks, latents, thumbnails, video proxies | **loopback HTTP** from the orchestrator: raw octet-stream / PNG / WebP / MP4 with `Range`, `ETag`, `Cache-Control`; never base64. **Measured (E2, 2026-10-05):** `FileResponse.chunk_size` must be raised to 4 MiB (64 KiB gives ~400 MiB/s, 4 MiB gives ~1.3 GiB/s single-stream, ~2 GiB/s with 4 parallel ranges); 8K raw RGBA → WebGPU texture at 782 MiB/s end-to-end; prefer raw over PNG when the GPU is the destination (8K PNG decode costs 0.5 s). Video proxies: h264 **GOP 6** (E6: ≈ 10 ms frame-accurate seeks for any access pattern) |
 | Progress, previews, job state, catalogue change events | WebSocket (JSON frames; preview JPEG frames binary with a small header) |
 | Uploads from the UI (edited layers, masks, imported files) | `PUT /blobs/{sha256}` streaming body; the orchestrator never buffers whole bodies in Python |
 | Inside the webview | `SharedArrayBuffer` (COOP/COEP set by Tauri `app.security.headers`) between brush worker and main thread |

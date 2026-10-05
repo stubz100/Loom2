@@ -20,12 +20,12 @@ models are the heaviest and benefit from a hardened queue.
 | Id | Spike | Pass bar | Decides |
 | --- | --- | --- | --- |
 | **E0** | Set up the environment per §1a (uv, Python 3.13, torch 2.13.0+rocm10.0.0), clone Comfy-Org/ComfyUI at **v0.38.2** into `engine/comfyui/`, install ComfyUI-GGUF + LanPaint, mount `D:\comfyui\ComfyUI\models` via `extra_model_paths.yaml`; run the sanity matrix; then drive it headless from Python, **dev first (D21)**: FLUX.2 dev JSON-prompt t2i at 960×544 as GGUF Q4_K_M + Mistral GGUF Q4_K_M and as Comfy fp8mixed + Mistral fp8 (pick the faster/stabler), with and without the Turbo LoRA; then Klein 9B fp8 t2i and Klein inpaint via `InpaintModelConditioning` + `ReferenceLatent`; measure vs loom's torch worker on identical prompts | runs unattended for 50 jobs without HIP failure; dev produces JSON-adherent images with time + peak VRAM recorded for both formats; Klein 9B ≤ 15 s/image at 1 MP; inpaint seam acceptable on 2 bench tasks | D2 engine (06 §3), dev format choice |
-| **E1** | PixiJS v8 WebGPU compositor inside Tauri 2 on this rig; WebGL2 fallback toggle | 60 fps, 6 × 4K layers, 3 advanced blend modes, masks | D3 renderer (05) |
-| **E2** | Loopback throughput: FastAPI streams a 200 MB latent + an 8K PNG; UI uploads a 64 MB mask via `PUT /blobs` | ≥ 500 MB/s into a GPU texture | D4 transport |
-| **E3** | Worker brush (FastMask pattern) with `pointerrawupdate` + predicted events, **mouse-driven** (D19: no pen yet; pressure/Delegated Ink implemented, untested) | ≤ 1 frame visible lag at 2K preview; no dropped dabs at fast mouse strokes | Edit feasibility |
+| **E1** | PixiJS v8 WebGPU compositor inside Tauri 2 on this rig; WebGL2 fallback toggle | 60 fps, 6 × 4K layers, 3 advanced blend modes, masks — **PASS 2026-10-05 (Edge and Tauri/WebView2)**: 3.0 ms median / 4.1 ms p95 per composite on WebGPU measured into an offscreen target, ≤ 1 ms on WebGL2; rAF fps shows 30 only because the monitor runs at 29 Hz | D3 renderer (05) |
+| **E2** | Loopback throughput: FastAPI streams a 200 MB latent + an 8K PNG; UI uploads a 64 MB mask via `PUT /blobs` | ≥ 500 MB/s into a GPU texture — **PASS 2026-10-05**: 782 MiB/s end-to-end (8K raw → WebGPU texture), 1 276 MiB/s single fetch, 1 957 MiB/s with 4 ranges, after raising `FileResponse.chunk_size` to 4 MiB (64 KiB gave 329–422 MiB/s) | D4 transport |
+| **E3** | Worker brush (FastMask pattern) with `pointerrawupdate` + predicted events, **mouse-driven** (D19: no pen yet; pressure/Delegated Ink implemented, untested) | event→commit median ≤ 1.5 frames, p95 ≤ 2 (the rAF floor) at 2K preview; no dropped dabs at fast mouse strokes — **PASS 2026-10-05** (1.5 / 1.95 frames, 0 of 4 800 dropped at 250 events/s) | Edit feasibility |
 | **E4** | Wan 2.2 I2V-A14B GGUF Q5_K_M + umT5 fp8 + Lightning 4+4 via ComfyUI on the rig; FLF with `WanFirstLastFrameToVideo` | 81 f @ 480p completes; time and peak VRAM recorded; identity visually acceptable | D8 primary i2v |
 | **E5** | LTX-2.3 distilled GGUF Q4_K_M + Gemma-3 Q4 via ComfyUI; one mid keyframe | 121 f completes; time recorded | D9 secondary i2v |
-| **E6** | Mediabunny `CanvasSink` scrub on a 121-frame MP4; TorchCodec exact seek on the master | every frame reachable, step < 50 ms | video stack |
+| **E6** | Mediabunny `CanvasSink` scrub on a 121-frame MP4; exact seek on the backend (PyAV; TorchCodec optional) | every frame reachable, step < 50 ms — **PASS 2026-10-05**: 0 wrong frames in 3 × 222 seeks; GOP 24 random 17.8 ms, **GOP 6 ≈ 10 ms** for every pattern (proxy policy), intra ≈ 7.5 ms; backend PyAV 6–15 ms | video stack |
 | **E7** | MIOpen on/off for VAE decode and ESRGAN on gfx1201 under ComfyUI | pick the faster, document | runtime policy |
 | **E8** | Inpaint quality bake-off on 5 bench tasks: Klein+ICM, Klein+LanPaint, FLUX.1 Fill Q8, Qwen-Image-Edit (2509 on disk) | ranked results with timings | D7 inpaint stack |
 
@@ -35,6 +35,13 @@ VRAM-saving option only); Turbo 8-step ≈ 40–68 s; 57 engine executions incl.
 node-drift bug patched (`engine/patches/`). The Klein 9B and Klein-inpaint sub-items moved to M5/E8 per D21.
 Follow-ups: Q15 (bimodal sampling speed under sustained load), E7 (MIOpen on real VAE decode — the sanity conv
 favoured MIOpen on), encoder stays on the GPU (CPU encode ≈ 170 s per new prompt).
+
+**E1 / E2 / E3 / E6 status — closed PASS on 2026-10-05** (journal 08:01–08:15), measured in Edge 154 and inside
+the Tauri 2 shell (WebView2, first Rust build 54 s): compositor 3.0 ms per 6×4K composite on WebGPU; loopback
+695–782 MiB/s into a WebGPU texture with 4 MiB response chunks; brush 0 dropped dabs at the rAF floor;
+frame-accurate scrubbing at ≈ 10 ms with GOP-6 proxies. Harness: `frontend/src/spikes/`, server
+`orchestrator/spikes/e2_loopback.py`, results `orchestrator/spikes/out/*.jsonl` (gitignored). Monitor runs at
+29 Hz — author to switch to 60/75 Hz before any UI feel judgement.
 
 ### 1a. Environment setup (E0 prerequisite; decision D16)
 

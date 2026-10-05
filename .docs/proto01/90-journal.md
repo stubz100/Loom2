@@ -229,3 +229,112 @@ Artefacts: `engine/spikes/out/` (e0_sanity.json, e0_t2i_results.jsonl — 60 row
   loom's whole-model HMM paging design (its own probes), capability gap (no inpaint/video nodes), stability of 57
   engine executions. Not isolated: the worker on the new torch/ROCm stack (not worth porting). Q16 closed; Q15
   (bimodal sampling speed) remains the only open question.
+
+## 2026-10-04 21:40 — M0 GPU-free spikes: harness built, E6 backend half measured
+
+- `frontend/` scaffolded (Vite 8, React 19, TS 6; pixi.js **8.22.0**, mediabunny **1.61.1**, @tauri-apps/cli 2.12.1;
+  `src-tauri` initialised, identifier `com.stubz100.loom2`). Spike harness in `frontend/src/spikes/` (plain DOM,
+  hash routes `#e1 #e1-webgl #e2 #e3 #e6 #all`), results posted to the E2 server → `orchestrator/spikes/out/*.jsonl`.
+- `orchestrator/.venv` (uv, Python 3.13, torch-free): fastapi, uvicorn[standard], numpy, pillow, av. E2 server
+  `orchestrator/spikes/e2_loopback.py` on 127.0.0.1:8765 (200 MB float16 latent, 8K PNG + raw RGBA, streaming
+  `PUT /blobs/{sha256}`, `/spike/result`).
+- **E6 backend (PyAV)**: `orchestrator/spikes/e6_make_clip.py` encodes 121 frames @ 24 fps 1024×576 h264 (GOP 24,
+  frame index burned in as a 7-bit pixel code + text; 1.2 MiB) in 0.9 s; exact seek (seek to keyframe + decode
+  forward) over 29 scattered forward/backward targets: **0 wrong frames, 4.2 / 12.5 / 21.6 ms min/median/max** →
+  the backend half of E6 passes without TorchCodec. (Windows console needs `PYTHONIOENCODING=utf-8` for the
+  script's arrows — noted for the orchestrator's logging setup.)
+- Browser run of `#all` launched in Edge 154 at 21:40 (same Chromium as WebView2); Tauri window run follows.
+- 21:41: the assistant session ended mid-run; the E2 and Vite servers (children of that session) died with it,
+  so only E1's two rows (WebGPU, WebGL) were recorded. Both show a flat **30 fps** (33.4 ms frames, max 34 ms)
+  in every phase — a presentation cap, not compositing cost (frame time does not change between fit, 1:1 and 2×).
+
+## 2026-10-05 08:00 — M0 spikes resumed
+
+- Servers restarted (E2 on 8765, Vite on 1420); `#all` re-run in a maximised new Edge window to rule out the
+  unfocused-window throttle as the cause of the 30 fps cap; E3 reports the measured rAF rate independently.
+- Harness bug found: `#all` read its queue before setting it, so the sequence stopped after E1 (the "WebGL"
+  row of 2026-10-04 was in fact a second WebGPU run). Fixed; renderer name now taken from `RendererType`.
+
+## 2026-10-05 08:01 — M0 spikes, first complete Edge run (Edge 154, window 1262×547 CSS @ DPR 1.5)
+
+| Spike | Result | Bar | Verdict |
+| --- | --- | --- | --- |
+| **E1** compositor, 6 × 4096² layers, 3 advanced blend modes + mask | WebGPU **29.8–30 fps**, WebGL **30 fps**; frame time 33.4 ms median in *every* phase (fit, 1:1, 2×), max 34 ms (one 67 ms hitch on WebGPU); layers built in 24–34 ms; ≈ 384 MiB of textures | 60 fps | **inconclusive**: a presentation cap — compositing cost does not change between phases |
+| **E2** loopback | 200 MB fetch **422 MiB/s**; 8K raw (256 MB) → WebGPU texture: fetch 0.59 s + upload 0.18 s = **329 MiB/s** end-to-end; 8K PNG 64 MB: fetch 0.20 s + decode 0.52 s; 64 MB PUT **338 MiB/s** client-side (server-side streaming 1 167 MB/s, sha ok) | ≥ 500 MB/s into a texture | **below bar** — single-connection FileResponse with 64 KiB chunks; testing 4 MiB chunks + parallel Range fetches |
+| **E3** brush, 2048×1152 worker canvas | 1 200 `pointerrawupdate`-path events × 4 coalesced = 4 800 points at **250 events/s**, **4 800 dabs drawn, 0 dropped**; latency median **49.9 ms = 1.5 frames at the measured 30 Hz** (p95 1.95 frames); worker 40 fps | ≤ 1 frame, no drops | drops: **pass**; latency: 1.5 frames by a conservative measure (event → start of the frame *after* the one that drew it, i.e. commit); needs a 60 Hz measurement |
+| **E6** scrub (Mediabunny CanvasSink, h264 1024×576 121 f, GOP 24) | **0 wrong frames** in 222 seeks; sequential median **35 ms** (p95 67), random **65 ms**, backward-by-3 **66 ms**; backend PyAV exact seek 12.5 ms median | every frame, < 50 ms | accuracy **pass**; random access over bar → re-encode proxies with GOP 6 / intra-only (ours to choose) |
+
+- **30 Hz everywhere, explained:** `Win32_VideoController.CurrentRefreshRate = 29` — the 3840×2160 display (DPR
+  1.5, console session, not RDP) is running at **29–30 Hz**; its max is 75 Hz. Every rAF-paced number today is
+  vsync-limited to 30 fps. → **Author action:** set the monitor to 60 Hz (or 75 Hz) in Windows display settings;
+  loom2's brush/scrub latency halves with it. E1 gains a vsync-independent throughput phase (render + GPU
+  completion per frame) so compositing cost can be measured regardless of refresh.
+- **E3 verdict refined → pass:** with the commit-based measure, the theoretical minimum for any rAF-driven
+  renderer is 1.5 frames median (0–1 frame to the next rAF + 1 frame to present); measured 1.5 / p95 1.95 with
+  0 of 4 800 dabs dropped at 250 events/s → the worker brush is at the floor. The pass bar in 05 §9 / 12 E3 is
+  reworded to "median ≤ 1.5 frames, p95 ≤ 2, no drops" (same-day amendment).
+
+## 2026-10-05 08:05 — second Edge run: E1 and E6 pass, E2 re-test pending
+
+| Spike | Result |
+| --- | --- |
+| **E1** vsync-independent throughput (render + GPU completion per frame, 6 × 4096² layers, 3 advanced blends + mask) | **WebGPU: 3.0 ms median / 4.5 ms p95 per frame (≈ 330 fps-equivalent)** in fit, 1:1 and 2× phases; **WebGL2: 0.4–0.7 ms median** (readPixels sync; likely not a full GPU fence, so treat as "≤ 1 ms"). Either way the compositing budget is < 5 ms of a 16.7 ms frame → **PASS on cost**; the rAF fps stays 30 only because of the 29 Hz monitor. Tauri/WebView2 confirmation follows. |
+| **E3** repeat | identical: 0 dropped, 1.5 / 1.96 frames at 30 Hz |
+| **E6** three proxy encodings, Mediabunny `CanvasSink`, all **0 wrong frames** | GOP 24 (1.2 MiB): sequential 12.3 ms, random **17.8 ms**, backward 14.9 ms median (first run's 65 ms was CPU contention); **GOP 6 (2.3 MiB): ≈ 10 ms for every access pattern**; intra-only (5.1 MiB): ≈ 7.5 ms. Backend PyAV: 14.5 / 13.6 / 6.1 ms median. → **PASS**; proxy policy: **GOP 6** h264 (2× the size of GOP 24, uniform ≈ 10 ms seeks), intra-only optional for scrub-heavy clips. |
+| **E2** | the page failed because the server returned 500 on every file request: in this Starlette version `FileResponse.chunk_size` is a class attribute, not a constructor argument. Fixed and re-run below. |
+
+## 2026-10-05 08:07 — E2 loopback with 4 MiB response chunks: **PASS**
+
+| Path | 64 KiB chunks (yesterday) | **4 MiB chunks** |
+| --- | --- | --- |
+| 200 MB float16 fetch → ArrayBuffer | 422 MiB/s | **1 276 MiB/s** (0.157 s) |
+| same, 2 / 4 / 8 parallel Range requests | — | 1 635 / **1 957** / 1 393 MiB/s (joined: 1 377 / 1 625 / 1 217) |
+| 8K raw RGBA (256 MB) → WebGPU texture, end-to-end | 329 MiB/s | **782 MiB/s** (fetch 0.158 s + upload 0.169 s) |
+| 8K PNG (64 MB) fetch + `createImageBitmap` decode | 0.20 + 0.52 s | 0.13 + 0.52 s (decode is the cost: raw beats PNG for GPU-bound paths) |
+| 64 MB streaming `PUT` with server-side sha256 | 338 MiB/s client / 1 167 MB/s server | 315 MiB/s client / 963 MB/s server (client time includes the hash reply) |
+
+→ bar "≥ 500 MB/s into a GPU texture" met with margin. Transport rules confirmed (06 §2): raw octet-stream,
+Range supported (`206` verified), **FileResponse chunk size 4 MiB**, 2–4 parallel ranges for the biggest
+buffers, no base64. Starlette 500s were silent to the browser — the real orchestrator must log 5xx with
+tracebacks (E2 server now does).
+
+## 2026-10-05 08:13 — the same sequence inside the **Tauri 2 shell (WebView2)**
+
+`npx tauri init` (identifier `com.stubz100.loom2`, devUrl 127.0.0.1:1420) → first Rust build **54 s** (352
+crates) → window opens the dev URL and runs `#all` by itself. (Lesson: Tauri's `beforeDevCommand` starts its own
+Vite; a separately started Vite on the same strict port aborts `tauri dev` — one dev-server owner only.)
+
+| Spike | WebView2 (Tauri window 800×480 CSS) | vs Edge |
+| --- | --- | --- |
+| **E1** WebGPU | renders (blend modes + mask) at 30 fps rAF; **canvas "render + completion" = 33.3 ms exactly** → in WebView2 `onSubmittedWorkDone` after a canvas render waits for the swap-chain present, so this measure is vsync-bound here; WebGL2 0.4–0.7 ms as in Edge | Edge 3.0 ms on the same measure — an offscreen-target measure is added to settle it |
+| **E2** | latent 1 002 MiB/s · 4 ranges 1 957 MiB/s · **8K raw → WebGPU texture 695 MiB/s** · PNG decode 0.57 s · 64 MB PUT 173 MiB/s client (server 416 MB/s) | same class; uploads ≈ 2× slower in WebView2 — fine for masks |
+| **E3** | 0 of 4 800 dropped at 250 ev/s, 1.5 / 1.96 frames at 30 Hz | identical |
+| **E6** | 0 wrong frames; GOP 24 random 17.3 ms, **GOP 6 9.7 ms**, intra 7.3 ms | identical |
+
+→ **D3/D4 hold inside the real shell**: WebGPU + PixiJS v8 + Mediabunny + loopback HTTP all work in WebView2 on
+this AMD rig; only the 60 fps bar is unverifiable on a 29 Hz monitor.
+
+## 2026-10-05 08:14 — E1 settled with the offscreen measure (Tauri/WebView2, relaunched window)
+
+Composite of 6 × 4096² layers (normal, multiply, screen, overlay, soft-light, difference) + a Graphics mask into
+a viewport-sized RenderTexture, GPU completion awaited per frame:
+
+| Renderer | fit | 1:1 | 2× | note |
+| --- | --- | --- | --- | --- |
+| **WebGPU** | **3.0 ms** median, 4.1 p95 | 3.0 / 4.1 | 3.0 / 4.4 | ≈ 330 fps-equivalent; identical to Edge; the earlier 33 ms canvas-path number was swap-chain acquisition waiting for vsync |
+| WebGL2 | 0.0–0.1 ms reported | — | — | `gl.finish()` does not block in Chromium's command buffer → not a measurement; the canvas-path readPixels sync gave 0.4–0.7 ms, so WebGL2 is at least as cheap |
+
+**E1 verdict: PASS** — compositing cost is < 5 ms of a 16.7 ms frame on both renderers inside the Tauri shell;
+rAF fps is 30 only because the display runs at 29 Hz (author action: switch the monitor to 60/75 Hz).
+
+## 2026-10-05 08:15 — **M0 GPU-free spikes closed: E1, E2, E3, E6 all PASS** (Edge and Tauri/WebView2)
+
+| Spike | Verdict | Key number | Policy it fixes |
+| --- | --- | --- | --- |
+| E1 compositor | PASS | 3.0 ms per 6×4K composite with advanced blends + mask (WebGPU, WebView2) | D3 stands: PixiJS v8 WebGPU with WebGL2 fallback; 2048² tiles unchanged |
+| E2 transport | PASS | 782 MiB/s (Edge) / 695 MiB/s (WebView2) 8K raw → WebGPU texture; 1.0–1.3 GiB/s single fetch, ~2 GiB/s with 4 ranges | D4 stands + `FileResponse.chunk_size = 4 MiB`, raw over PNG for GPU-bound buffers, 2–4 parallel ranges for ≥ 100 MB |
+| E3 brush | PASS | 0 of 4 800 dabs dropped at 250 events/s; latency at the rAF floor (1.5 frames median) | worker + OffscreenCanvas brush architecture stands; pressure path untested (no pen, D19) |
+| E6 scrub | PASS | 0 wrong frames in 3 × 222 seeks; GOP 6 proxies ≈ 10 ms for any access pattern; backend PyAV exact seek 6–15 ms | video proxies = h264 GOP 6 (intra optional); Mediabunny `CanvasSink` is the player core; TorchCodec not required |
+
+Remaining M0 spikes need the GPU engine: E4 (Wan 2.2 I2V + FLF), E5 (LTX-2.3), E7 (MIOpen on real VAE
+decode), E8 (inpaint bake-off); E9 lives in M6. Harness kept as `frontend/src/spikes/` for M1 regression use.

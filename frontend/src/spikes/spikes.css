@@ -1,0 +1,8 @@
+html, body { margin: 0; background: #1a1a1a; color: #ddd; font: 13px/1.4 system-ui, sans-serif; }
+nav { padding: 6px 10px; background: #111; border-bottom: 1px solid #333; }
+nav a { color: #f0a832; margin-right: 10px; }
+nav .host { color: #888; float: right; }
+main { position: relative; }
+main canvas { display: block; }
+.out { padding: 8px 10px; }
+.out pre { background: #111; padding: 8px; border: 1px solid #333; white-space: pre-wrap; }

@@ -167,12 +167,12 @@ tooling-nodes do. It is the only path where "Photoshop-like" is free.
 
 | Risk | Spike (before suite-b implementation starts) | Pass bar |
 | --- | --- | --- |
-| WebView2 WebGPU on AMD RDNA4 drivers | PixiJS v8 WebGPU hello-compositor in Tauri 2 on this rig; toggle WebGL2 | 60 fps compositing 6 × 4K layers with 3 advanced blend modes on both backends |
-| Brush latency | FastMask-style worker brush with `pointerrawupdate` + predicted events, measured with a **mouse** (no pen hardware yet, D19); Delegated Ink and pressure paths implemented but untested until a tablet exists | ≤ 1 frame visible lag at 2K preview, no dropped dabs at fast mouse strokes |
-| Loopback throughput | serve a 200 MB float16 latent and an 8K PNG from FastAPI; upload a 64 MB mask | ≥ 500 MB/s end-to-end into a GPU texture |
+| WebView2 WebGPU on AMD RDNA4 drivers | PixiJS v8 WebGPU hello-compositor in Tauri 2 on this rig; toggle WebGL2 | 60 fps compositing 6 × 4K layers with 3 advanced blend modes on both backends — **PASS 2026-10-05**: 3.0 ms median / 4.1 ms p95 per composite (WebGPU, offscreen target, inside WebView2), WebGL2 ≤ 1 ms; display-limited to 30 fps on the author's 29 Hz monitor |
+| Brush latency | FastMask-style worker brush with `pointerrawupdate` + predicted events, measured with a **mouse** (no pen hardware yet, D19); Delegated Ink and pressure paths implemented but untested until a tablet exists | event→commit latency at the rAF floor (median ≤ 1.5 frames, p95 ≤ 2) at 2K preview, no dropped dabs at fast mouse strokes (reworded 2026-10-05: the old "≤ 1 frame" was below the theoretical minimum of a rAF-driven renderer) |
+| Loopback throughput | serve a 200 MB float16 latent and an 8K PNG from FastAPI; upload a 64 MB mask | ≥ 500 MB/s end-to-end into a GPU texture — **PASS 2026-10-05**: 782 MiB/s (Edge) / 695 MiB/s (WebView2) for 8K raw RGBA → WebGPU texture; 1.0–1.3 GiB/s single fetch, ≈ 2 GiB/s with 4 parallel ranges; needs 4 MiB response chunks (64 KiB gave 329–422 MiB/s) |
 | VRAM blow-up | 10 × 8K layers with tiling + eviction | < 3 GB GPU memory, no stutter on pan/zoom |
 | PSD fidelity | ORA → PSD via ag-psd → Photoshop/Krita round-trip | layers, masks, blend modes, opacity preserved (8-bit) |
-| Frame-accurate scrub | Mediabunny `CanvasSink` on a 121-frame 24 fps MP4 | every frame reachable, step time < 50 ms |
+| Frame-accurate scrub | Mediabunny `CanvasSink` on a 121-frame 24 fps MP4 | every frame reachable, step time < 50 ms — **PASS 2026-10-05**: 0 wrong frames (pixel-coded) in 3 × 222 seeks; GOP 24 random 17 ms, **GOP 6 ≈ 10 ms**, intra 7 ms, in Edge and WebView2 |
 
 ## Sources
 

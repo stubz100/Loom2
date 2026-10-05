@@ -449,7 +449,9 @@ it again: KSampler ≈ 58–74 s for 8 steps at 960×544 in warm runs vs 27 s sa
   images uploaded through `POST /upload/image`, masks via `LoadImageMask(channel=red)`, outpaint via
   `ImagePadForOutpaint`, results → `engine/spikes/out/e8/` + `e8_results.jsonl`.
 
-## 2026-10-05 10:05 — E4 / E5 drivers and the i2v bench frames (GPU idle while weights land)
+## 2026-10-05 09:30 — E4 / E5 drivers and the i2v bench frames (GPU idle while weights land)
+*(stamp corrected from a guessed "10:05": the frames rendered 09:22–09:29 and the drivers followed — loom lesson 12,
+read the clock)*
 
 - Wan/LTX node signatures dumped from `/object_info` (`engine/spikes/out/node_signatures_e4e5.json`):
   `WanImageToVideo` / `WanFirstLastFrameToVideo(positive, negative, vae, width 832, height 480, length 81, …,
@@ -469,3 +471,14 @@ it again: KSampler ≈ 58–74 s for 8 steps at 960×544 in warm runs vs 27 s sa
   **05b (rooftop standing — new end frame for the FLF task)**, 02, 07 → `bench/i2v/frames/`.
 - Chains scheduled: E8 starts when the Fill file is indexed; E4 starts when the Wan files are indexed *and*
   E8 has finished (24 result rows, port 8188 free).
+
+## 2026-10-05 09:38 — E8 run 1: 24 contract errors (harness), no sampling — fixed, re-run
+
+- FLUX.1 Fill (22.17 GiB, official gated file) landed and was indexed with sha256; E8 chain fired on time.
+- Every job failed my own contract check, not the engine: (1) `/object_info` was fetched before the uploads, so
+  the uploaded source/mask names were not in `LoadImage`'s enum yet; (2) ComfyUI lists files from mounted
+  sub-folders with the OS separator (`t5\t5xxl_fp8_e4m3fn_scaled.safetensors`, `flux1\ae.safetensors`), which an
+  exact-string check rejects. Fix in all three drivers: refresh `/object_info` after uploads and resolve every
+  file-name input by **basename** against the node's current enum (`fix_names`). Lesson for the roster/recipe
+  compiler (06 §3b): file identity must be by roster id → resolved path, never by a hand-typed string.
+- Run 1 rows kept as `e8_results_contract_errors_run1.jsonl`; run 2 started 09:38.

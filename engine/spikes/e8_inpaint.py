@@ -149,6 +149,30 @@ def build_qwen_edit(prompt: str, image, mask, seed: int, g: dict):
 METHODS = ["klein_icm", "klein_base_icm", "klein_lanpaint", "dev_lanpaint", "fill", "qwen_edit"]
 
 
+NAME_INPUTS = {"unet_name", "clip_name", "clip_name1", "clip_name2", "vae_name", "lora_name", "image"}
+
+
+def fix_names(obj: dict, graph: dict) -> list[str]:
+    """Resolve file-name inputs against the node's current enum by basename (ComfyUI lists sub-folder files with
+    OS separators, e.g. 't5\\\\t5xxl…', and newly uploaded images only appear after a fresh /object_info)."""
+    notes = []
+    for nid, node in graph.items():
+        d = obj.get(node["class_type"], {}).get("input", {})
+        for k, v in list(node["inputs"].items()):
+            if k not in NAME_INPUTS or not isinstance(v, str):
+                continue
+            spec = d.get("required", {}).get(k) or d.get("optional", {}).get(k)
+            choices = spec[0] if isinstance(spec, list) and spec and isinstance(spec[0], list) else None
+            if not choices or v in choices:
+                continue
+            base = Path(v).name.lower()
+            match = next((c for c in choices if Path(c.replace("\\", "/")).name.lower() == base), None)
+            if match:
+                notes.append(f"{nid} {k}: {v} -> {match}")
+                node["inputs"][k] = match
+    return notes
+
+
 def contract_check(obj: dict, graph: dict) -> list[str]:
     problems = []
     for nid, node in graph.items():
@@ -200,6 +224,7 @@ def main() -> int:
         mask_name = None
         if "boxes" in (t.get("mask") or {}):
             mask_name = upload(a.server, BENCH / "masks" / f"{t['id']}.png")
+        obj = http(a.server, "/object_info")  # refresh: uploaded images only appear in the enums after upload
         outpaint = t.get("canvas")
         for method in a.methods.split(","):
             g: dict = {}
@@ -216,6 +241,8 @@ def main() -> int:
             else:
                 print("unknown method", method); continue
             g["99"] = {"class_type": "SaveImage", "inputs": {"images": [out_id, 0], "filename_prefix": f"e8/{t['id']}_{method}"}}
+            for n in fix_names(obj, g):
+                print("   resolved", n)
             problems = contract_check(obj, g)
             row = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "task": t["id"], "method": method, "seed": a.seed, "size": [tw, th]}
             if problems:

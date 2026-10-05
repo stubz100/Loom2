@@ -87,6 +87,26 @@ def build(recipe: str, prompt: str, start: str, end: str | None, w: int, h: int,
     return g
 
 
+NAME_INPUTS = {"unet_name", "clip_name", "clip_name1", "clip_name2", "vae_name", "lora_name", "image"}
+
+
+def fix_names(obj, graph):
+    """Resolve file-name inputs by basename against each node's current enum (sub-folder files are listed with OS
+    separators; uploaded images appear only after a fresh /object_info)."""
+    notes = []
+    for nid, node in graph.items():
+        d = obj.get(node["class_type"], {}).get("input", {})
+        for k, v in list(node["inputs"].items()):
+            if k not in NAME_INPUTS or not isinstance(v, str): continue
+            spec = d.get("required", {}).get(k) or d.get("optional", {}).get(k)
+            choices = spec[0] if isinstance(spec, list) and spec and isinstance(spec[0], list) else None
+            if not choices or v in choices: continue
+            base = Path(v).name.lower()
+            match = next((c for c in choices if Path(c.replace("\\", "/")).name.lower() == base), None)
+            if match: notes.append(f"{nid} {k}: {v} -> {match}"); node["inputs"][k] = match
+    return notes
+
+
 def contract_check(obj, graph):
     problems = []
     for nid, node in graph.items():
@@ -149,8 +169,10 @@ def main():
         if not start_p.exists() or (end_p and not end_p.exists()):
             print(f"[{t['id']}] missing frame(s): {start_p.name}{' / ' + end_p.name if end_p else ''}"); continue
         start = upload(a.server, start_p); end = upload(a.server, end_p) if end_p else None
+        obj = http(a.server, "/object_info")  # refresh enums after the uploads
         tag = f"{t['id']}_{a.recipe}"
         g = build(a.recipe, t["prompt"], start, end, a.width, a.height, a.frames, a.fps, a.seed, tag)
+        for n in fix_names(obj, g): print("   resolved", n)
         problems = contract_check(obj, g)
         row = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "task": t["id"], "kind": t["kind"], "recipe": a.recipe, "size": [a.width, a.height],
                "frames": a.frames, "fps": a.fps, "seed": a.seed}

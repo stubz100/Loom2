@@ -203,6 +203,15 @@ a small item, deferrable to post-MVP if M5 runs long (D21).
 
 Acceptance: 10 §14 items 3, 4, 5; the 5 inpaint bench tasks recorded; Klein t2i from Generate if included.
 
+**M5 status 2026-10-06** (journal 05-10 22:20, 06-10 06:54 / 07:03): slice 1 is in — Inpaint Fill / Fill-Match
+/ Fill Hero / Remove, Outpaint, Refine and Upscale run from the editor's AI panel on the saved document and come
+back as candidate layers with recipes (`scripts/m5_acceptance.py` **13/13** on the rig: crates removed seamlessly
+by Fill, cloak → red leather jacket with identity kept, face fill keeps the freckles, outpaint right 240 with a lit
+doorway and no seam; Klein 40 s per candidate warm, ICM 20 s, outpaint 32 s, refine 45 s, ESRGAN 6 s). Item 4
+passes for the 4 mask-based bench tasks; task 03 (background swap) and item 3 wait for **AI Select** (SAM 3 /
+BiRefNet nodes are not in the engine yet — slice 2); tiled refine and the gradient fill are slice 2 as well; Klein
+already appears in Generate (D21). The 2026-10-05 GPU TDR during the first run is closed (06 §10 row).
+
 ## 7. M6 · Animate (4–5 weeks) — gate: 11 approved, E4/E5 decided
 
 Inputs/model/length panels; Wan I2V + FLF graphs; LTX keyframe graphs; H3 opt-in behind the licence

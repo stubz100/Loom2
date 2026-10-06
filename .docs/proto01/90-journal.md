@@ -985,3 +985,14 @@ read the clock)*
   engine, pause the queue), launches ComfyUI with `--reserve-vram 1.5` (`engine.reserve_vram_gb`), caps inpaint
   engine images at ≈ 1 MP (`max_pixels`, scale reduced until the 16-rounded size fits) and shows the engine size
   in the AI panel. 06 §10 row added.
+
+## 2026-10-06 07:03 — M5 acceptance rerun after the fixes: 13/13
+
+- Same script, same bench, TDR at 60 s, cache freed after each job, `--reserve-vram 1.5`: Fill (Klein + LanPaint)
+  crates ×2 in 169 s cold (engine + model load) then **40 s per candidate warm**; Fill-Match **20 s**; Remove **20 s**
+  (both back to the E8 numbers — the 88/130 s of the first run were the VRAM thrash); cloak ×2 at 41 s each;
+  face 50 s; outpaint right 240 at 32 s (document grew to 1200×544, layers shifted, selection padded); refine
+  0.25 on Klein base 45 s; Real-ESRGAN ×2 6 s → Catalogue asset `ast_a5c6f3c5` + 1× detail layer; 19 nodes saved.
+  No stall, no watchdog trigger. Contact sheets in `engine/spikes/out/m5/`: crates gone with continuous
+  cobbles and wall; cloak → wet red leather jacket, face / hair / compass untouched; face fill keeps freckles and
+  eyes; outpaint continues the alley with a lit doorway, no seam at x = 960. 12 §6 status written.

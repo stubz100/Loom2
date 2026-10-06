@@ -39,6 +39,7 @@ class ClipRecord(BaseModel):
     extracted_asset_ids: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
     timings: dict[str, Any] = Field(default_factory=dict)
+    identity: dict[str, Any] | None = None       # FaceSim advisory (tools/facesim.py), filled after the proxy
 
 
 class ClipStore:
@@ -123,3 +124,17 @@ class ClipStore:
             return False
         shutil.rmtree(d, ignore_errors=True)
         return True
+
+
+def compute_identity(models_root: Path | str, store: ClipStore, rec: ClipRecord, reference: Path | None) -> dict[str, Any]:
+    """FaceSim across the clip: the start frame (or master frame 0) is the reference; ≤ 12 frames are sampled (11 §11 item 6)."""
+    from PIL import Image
+
+    from .tools import facesim
+
+    if not facesim.available(models_root):
+        return {"status": "weights missing — scripts/fetch_facesim.py", "sampled": 0, "with_face": 0}
+    ref_path = reference if reference and Path(reference).is_file() else store.frame_path(rec.id, 0)
+    ref = np.asarray(Image.open(ref_path).convert("RGB"))
+    frames = [store.frame_path(rec.id, i) for i in range(rec.frames)]
+    return facesim.clip_identity(facesim.FaceSim(models_root), ref, frames)

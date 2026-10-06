@@ -43,6 +43,9 @@ export function SettingsModal() {
           <label>Reserve VRAM (GB)</label><input type="number" min={0} max={8} step={0.5} value={draft.engine.reserve_vram_gb ?? 1.5} onChange={(e) => setEngine({ reserve_vram_gb: Number(e.target.value) })} />
           <span className="hint">ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas</span>
           <h4>App</h4>
+          <h4>Licences</h4>
+          <label>MiniMax H3</label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
+          <span className="hint">Records the confirmation that unlocks the H3 hero tier in Animate once its graph and weights land (04 §5b). Licence checks are read against EU terms.</span>
           <label>Thumbnail sizes</label><input type="text" value={draft.thumbnail_sizes.join(',')} onChange={(e) => set({ thumbnail_sizes: e.target.value.split(',').map(Number).filter(Boolean) })} />
           <label>Log level</label>
           <select value={draft.log_level} onChange={(e) => set({ log_level: e.target.value })}>{['DEBUG', 'INFO', 'WARNING', 'ERROR'].map((l) => <option key={l}>{l}</option>)}</select>

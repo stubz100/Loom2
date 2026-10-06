@@ -200,6 +200,7 @@ export const useSession = create<SessionState>()(
         const s = get()
         const out: Banner[] = []
         if (s.backendError) out.push({ id: 'backend', kind: 'error', text: `Orchestrator unavailable: ${s.backendError}`, action: { label: 'Retry', run: () => void s.init() } })
+        for (const [i, note] of (s.queue?.recovery ?? []).entries()) out.push({ id: `recovery-${i}`, kind: 'error', text: note })
         if (s.queue?.paused && s.queue.resumed_unclean) out.push({ id: 'resumed', kind: 'warn', text: 'Queue paused — resumed from last session with the interrupted job re-queued.', action: { label: 'Resume', run: () => void s.pauseQueue(false) } })
         else if (s.queue?.paused) out.push({ id: 'paused', text: 'Queue paused.', action: { label: 'Resume', run: () => void s.pauseQueue(false) } })
         if (s.engine && !s.engine.running && s.engine.last_error) out.push({ id: 'engine', kind: 'error', text: `Engine down: ${s.engine.last_error}`, action: { label: 'Restart', run: () => void s.engineAction('restart') } })
@@ -253,6 +254,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { m.useCatalogue.getState().applyEvent(f); m.useGenerateResults.getState().applyEvent(f) })
+      break
+    case 'clip.updated':
+      void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(d as { clip_id: string }))
       break
     case 'clip.ready':
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipReady(d as { clip_id: string; asset_id?: string }))

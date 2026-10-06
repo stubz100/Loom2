@@ -6,7 +6,8 @@ image-to-video, and a catalogue with full provenance. Successor to the author's 
 
 **Status (2026-10-06):** M0 spikes closed; M1 foundation, M2 Catalogue, M3 Generate (dev fp8mixed, 17/17), M4 Edit core
 (PixiJS editor, 12/12) and **M5 Edit AI** (inpaint / refine / outpaint / upscale + tiled refine, AI Select with SAM 3 and BiRefNet,
-24/24) closed on the rig. Next: M6 Animate, then M7 hardening. The 2026-10-06 code review's bug register (B1–B24) is in the
+24/24), **M6 Animate** (Wan 2.2 / LTX-2.3 clips through the Animate suite, all five i2v bench tasks, FaceSim advisory, E9 fps
+conform decided) closed on the rig. Now: M7 hardening (durability suite, performance passes, pin review, installers, docs). The 2026-10-06 code review's bug register (B1–B24) is in the
 journal and fixed.
 
 - Plan and decisions: [`.docs/proto01/00-README.md`](.docs/proto01/00-README.md) (read in order 01 → 14)

@@ -22,7 +22,7 @@ export interface EngineState {
   vram_free_gb?: number; vram_total_gb?: number
 }
 
-export interface QueueState { paused: boolean; running: string | null; counts: Partial<Record<JobStatus, number>>; last_warm_group: string | null; resumed_unclean?: boolean }
+export interface QueueState { paused: boolean; running: string | null; counts: Partial<Record<JobStatus, number>>; last_warm_group: string | null; resumed_unclean?: boolean; recovery?: string[] }
 
 export interface Job {
   id: string; batch_id: string | null; kind: string; recipe: Record<string, unknown>; seed: number; status: JobStatus
@@ -52,10 +52,11 @@ export interface EngineSettings { python: string; main: string; extra_model_path
 export interface Settings {
   schema_version: number; models_root: string; mounted_model_trees: string[]; vram_budget_gb: number; variant: 'full' | 'open'; hf_home: string
   engine: EngineSettings; api_host: string; api_port: number; thumbnail_sizes: number[]; log_level: string
+  reopen_last_project?: boolean; h3_licence_confirmed?: boolean
 }
 
 export interface Capabilities {
-  recipes: string[]; i2v?: I2vCaps; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
+  recipes: string[]; i2v?: I2vCaps; facesim?: { available: boolean; dir: string }; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
   models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[] }>
   tiers: Record<string, Record<string, [number, number]>>
   weight_dtypes: string[]; te_devices: string[]
@@ -71,6 +72,7 @@ export interface Clip {
   start_asset_id: string; end_asset_id: string | null; beats: { frame: number; asset_id: string; strength: number }[]
   master_dir: string; proxy_path: string | null; proxy_bytes: number; extracted_asset_ids: string[]
   params: Record<string, unknown>; timings: Record<string, unknown>
+  identity?: { status: string; sampled: number; with_face: number; mean?: number; min?: number; min_frame?: number; per_frame?: { frame: number; sim: number | null; faces: number }[]; scale?: string } | null
 }
 export interface I2vModelCaps {
   family: string; label: string; health: string; missing: string[]; fps: number; frames: number; frame_step: number; size_mult: number; size: [number, number]

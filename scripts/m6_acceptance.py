@@ -112,6 +112,7 @@ def main() -> int:
     ap.add_argument("--tasks", default="01,03,ltx")
     ap.add_argument("--project", default="F:/loom2-projects/m6-acceptance")
     ap.add_argument("--timeout", type=float, default=1800)
+    ap.add_argument("--identity-only", action="store_true", help="FaceSim on the project's existing clips (11 §11 item 6), no rendering")
     a = ap.parse_args()
     base = f"http://127.0.0.1:{a.port}"
     results: list[tuple[str, bool, str]] = []
@@ -126,6 +127,21 @@ def main() -> int:
             call(base, "POST", "/project/open", {"path": a.project})
         except Exception:
             call(base, "POST", "/project", {"path": a.project, "name": "M6 acceptance", "size_cap_gb": 50})
+    if a.identity_only:
+        caps_all = call(base, "GET", "/capabilities")
+        check("FaceSim weights present", caps_all.get("facesim", {}).get("available") is True, caps_all.get("facesim", {}).get("dir", ""))
+        for c in call(base, "GET", "/clips")["items"]:
+            t0 = time.time()
+            r = call(base, "POST", f"/clips/{c['id']}/identity")
+            ident = r.get("identity") or {}
+            ok = ident.get("status") == "ok" and (ident.get("mean") or 0) > 0.3
+            check(f"identity · {c['prompt'][:40] or c['id']} ({c['model_id'].split('-')[0]})", ok,
+                  f"mean {ident.get('mean')} · min {ident.get('min')} at frame {ident.get('min_frame')} · {ident.get('with_face')}/{ident.get('sampled')} frames with a face · {round(time.time() - t0, 1)} s" if ident.get("status") == "ok" else str(ident.get("status")))
+            with RESULTS.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"when": time.strftime("%Y-%m-%d %H:%M:%S"), "label": "identity", "clip_id": c["id"], "identity": ident}, ensure_ascii=False) + "\n")
+        passed = sum(1 for _, ok, _ in results if ok)
+        print(f"\nM6 identity: {passed}/{len(results)} checks passed")
+        return 0 if passed == len(results) else 1
     call(base, "POST", "/queue/unpause")
     spec = json.loads((BENCH / "tasks.json").read_text(encoding="utf-8"))
     tasks = {t["id"][:2]: t for t in spec["tasks"]}
@@ -180,6 +196,16 @@ def main() -> int:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     wanted = a.tasks.split(",")
+    for tid in [w for w in wanted if w in tasks and w not in ("01", "03")]:      # the other bench tasks on Wan Draft (04 §6: all five recorded)
+        t = tasks[tid]
+        s = imported(Path(t["start"]).name)
+        rec = {"kind": "i2v", "model_id": "wan22-i2v-high-fp8", "start_asset": s["id"], "prompt_text": t["prompt"], "frames": 81, "fps": 16, "width": 832, "height": 480, "preset": "draft", "seeds": [SEED]}
+        stills = [("start", frames_dir / Path(t["start"]).name)]
+        if t.get("end"):
+            e = imported(Path(t["end"]).name)
+            rec["end_asset"] = e["id"]
+            stills.append(("end", frames_dir / Path(t["end"]).name))
+        run(f"wan draft · {t['id']}", rec, stills)
     if "01" in wanted:
         t = tasks["01"]
         s = imported(Path(t["start"]).name)

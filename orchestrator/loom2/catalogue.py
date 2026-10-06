@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import logging
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -23,6 +25,8 @@ from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 1
 INDEX_SCHEMA_VERSION = 2
+log = logging.getLogger(__name__)
+
 AssetKind = Literal["image", "video", "mask", "document-render"]
 AssetState = Literal["none", "keep", "reject"]
 GroupMode = Literal["none", "batch", "lineage", "session", "model"]
@@ -186,9 +190,30 @@ class Catalogue:
         self.session_id = session_id
         self._lock = threading.RLock()
         self._closed = False
-        self._db = sqlite3.connect(str(ws.catalogue_db), check_same_thread=False)
+        self.recovery: list[str] = []
+        self._connect()
+        try:
+            self._open_schema()
+        except sqlite3.DatabaseError as e:           # M7: a torn or foreign file where the index should be → quarantine, rebuild from the manifests
+            try:
+                self._db.close()
+            except Exception:  # noqa: BLE001
+                pass
+            quarantine = ws.catalogue_db.with_name(f"catalogue.sqlite.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+            ws.catalogue_db.replace(quarantine)
+            log.error("catalogue index unreadable (%s); moved aside as %s and rebuilt", e, quarantine.name)
+            self._connect()
+            self._open_schema()
+            n = self.rebuild()
+            self._meta("index_schema", str(INDEX_SCHEMA_VERSION))
+            self.recovery.append(f"The Catalogue index was unreadable and was rebuilt from the asset manifests ({n} assets); the old file is {quarantine.name}.")
+
+    def _connect(self) -> None:
+        self._db = sqlite3.connect(str(self.ws.catalogue_db), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self.fts = True
+
+    def _open_schema(self) -> None:
         with self._lock:
             # an index from an older schema is dropped and rebuilt from the sidecars (the files are the truth)
             cols = {r[1] for r in self._db.execute("PRAGMA table_info(assets)").fetchall()}

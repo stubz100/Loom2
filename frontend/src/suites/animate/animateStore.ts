@@ -73,6 +73,8 @@ interface AnimateState {
   loadClips: () => Promise<void>
   select: (id: string | null) => void
   onClipReady: (d: { clip_id: string; asset_id?: string }) => void
+  onClipUpdated: (d: { clip_id: string; identity?: Clip['identity'] }) => void
+  measureIdentity: () => Promise<void>
   loadAsset: (id: string) => Promise<Asset | undefined>
   clip: () => Clip | undefined
   animate: (stage: boolean) => Promise<void>
@@ -179,6 +181,14 @@ export const useAnimate = create<AnimateState>()(
           get().select(d.clip_id)
           useSession.getState().toast('Clip ready — playing in Animate', 'success')
         }).catch(() => undefined)
+      },
+      onClipUpdated: (d) => set({ clips: get().clips.map((c) => c.id === d.clip_id ? { ...c, identity: d.identity ?? c.identity } : c) }),
+      measureIdentity: async () => {
+        const c = get().clip()
+        if (!c) return
+        set({ busy: 'measuring identity' })
+        try { const r = await api.post<Clip>(`/clips/${c.id}/identity`); set({ clips: get().clips.map((x) => x.id === r.id ? r : x) }) }
+        catch (e) { useSession.getState().toast(`FaceSim failed: ${(e as ApiError).detail ?? e}`, 'error') } finally { set({ busy: null }) }
       },
       loadAsset: async (id) => {
         const have = get().assets[id]

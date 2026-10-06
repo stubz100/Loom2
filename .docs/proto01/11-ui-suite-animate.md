@@ -92,6 +92,7 @@ Frames ruler with **S** and **E** markers (end only in FLF mode); in/out handles
   `frame-extract` (from the PNG master, not the proxy), **Extract range** (every k-th between in/out, max 24),
   **Send frame to Edit** (`E`). Extracted frames carry the clip's prompt, model and frame index.
 - **Lineage**: start/end source assets, extracted children, sibling variations.
+- **Identity (FaceSim)** in the Clip tab (implemented 2026-10-06): mean and minimum cosine similarity of the start frame's face across ≤ 12 sampled frames, the frame of the minimum, how many sampled frames had a face; advisory only (same person ≈ 0.45–0.7, E4 0.578). Measured automatically after the proxy when the weights are present, otherwise a hint names `scripts/fetch_facesim.py`; **Measure identity** recomputes.
 
 ## 7. Workflows
 1. **Animate a board**: Catalogue → `Shift+A` on the hero → prompt "she turns toward the window, soft push-in"
@@ -127,7 +128,7 @@ seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame),
 - [x] LTX-2.3 distilled renders 121 frames @ 24 fps with one mid beat; time recorded — task 03 with the standing frame as a beat at 60 and as the end: 172 s at 1024×576, lowest free VRAM 2.7 GB; the beat pose is reached by frame 48 and held.
 - [x] Player steps every frame exactly (frame counter matches the PNG master); compare syncs two clips — 2026-10-06, `scripts/edit_headed_check.py animate`: a 24-frame coded clip, every frame's code matched forwards / backwards / random; compare view synced by normalised time (two-clip sync is exercised once the rig has two clips).
 - [x] Extracted frames appear in the Catalogue with lineage and open in Edit — 2026-10-06 (same check: extract every 8th in 4–20 → 3 images with `frame_index` and `frame-extract` lineage; Send frame to Edit reuses Edit's open-from-asset).
-- [ ] Identity check: ArcFace FaceSim across the clip shown as an advisory number in Clip info (never blocks).
+- [x] Identity check: ArcFace FaceSim across the clip shown as an advisory number in Clip info (never blocks) — 2026-10-06: `tools/facesim.py` (InsightFace buffalo_l: SCRFD det_10g + ArcFace w600k_r50 on ONNX Runtime CPU, fetched by `scripts/fetch_facesim.py`), computed as a side task after every clip (`clip.updated`) and on demand (`POST /clips/{id}/identity`, inspector button). Rig clips: task 01 Wan mean 0.70 (min 0.62); task 03 Wan FLF 0.41 (min 0.28, 9/12 frames with a detected face); task 03 LTX 0.39 (min 0.11 at the frame-22 morph) — the numbers agree with the sheets.
 
 ## 12. Open questions
 - Default resolution for Wan on this rig (480p vs 576p) after measurement.
@@ -136,4 +137,4 @@ seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame),
 - fps conform (Wan 16 fps → project 24 fps): **decided by E9 2026-10-06 (D27)** — RIFE v4.6 over the whole sequence at export,
   master stays native, duplication never; LTX native 24 fps when motion matters more than detail. The export step itself is
   post-MVP (Q14); the player shows the clip's own fps.
-- H3 eligibility: the user confirms territory/licence before the option unlocks (Q1 in 13).
+- H3 eligibility: the user confirms territory/licence before the option unlocks (Q1 in 13) — the Settings toggle exists (2026-10-06, `h3_licence_confirmed`); the H3 card shows the confirmation but stays disabled until its graph and weights land (post-MVP, 04 §5b).

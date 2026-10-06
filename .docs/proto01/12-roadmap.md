@@ -239,8 +239,10 @@ upgrade). **Slice 1 (backend) done:** `I2V` recipe with Wan presets / FLF / LTX 
 with Range and `frame-extract` harvest; 78 offline tests. **Slice 2 (the suite) done 2026-10-06** (journal 21:10): panels,
 Mediabunny player with frame-exact stepping verified in a visible window, filmstrip, compare, timeline, harvest with lineage,
 Clip / Frames / Lineage inspector. **Rig run 2026-10-06 (journal 22:30): 17/17** — Wan Draft 256 s / FLF 255 s at 480p × 81 f, LTX
-172 s at 1024×576 × 121 f with a beat; **E9 decided** (RIFE v4.6 conform at export, D27). Open before M6 closes: FaceSim advisory
-(11 §11 item 6), the H3 unlock in Settings (D17).
+172 s at 1024×576 × 121 f with a beat; **E9 decided** (RIFE v4.6 conform at export, D27). **M6 closed 2026-10-06** (journal 23:30):
+FaceSim advisory (InsightFace buffalo_l on ONNX Runtime CPU, per clip), the H3 licence toggle (D17), compare sync verified, and
+the remaining bench tasks 02 / 04 / 05 through the app (17/17; identity 0.49 / 0.77 / 0.87) — 11 §11 six of six. Carried to
+post-MVP: the H3 graph + weights, native LTX extension, the conform export step (Q14).
 
 ## 8. M7 · MVP hardening (2–3 weeks)
 
@@ -251,6 +253,27 @@ producing both installers** (`full`, `open`) with the `open` build smoke-tested 
 
 Exit: all suite acceptance checklists green on the rig; decision log closed for the MVP; a post-MVP backlog
 ordered.
+
+**M7 opened 2026-10-06** (journal 23:30). Re-check (12 §10): engine pin **v0.38.2** (2026-10-02) — **v0.39.0 was released
+2026-10-05**; torch **2.13.0+rocm10.0.0** (HIP 7.15) on the AMD stable index; no CI workflows yet; the Tauri bundle targets
+`all`. Slices:
+1. **Durability suite** — offline (`tests/test_durability_m7.py`): power loss mid-job (relaunch paused, job re-queued), a torn
+   `queue.json` is quarantined as `queue.json.corrupt-*` and the queue starts paused with a recovery banner, a corrupt
+   `catalogue.sqlite` is quarantined and rebuilt from the manifests, a truncated manifest is skipped, the engine dying mid-job
+   fails the job and frees the queue, a **disk guard** refuses new jobs below 2 GB free or over the project cap (422);
+   rig (`scripts/m7_durability.py`): `taskkill /F` of the orchestrator while a Wan clip samples → the engine dies with it
+   (Job Object), relaunch resumes paused with the job queued, unpausing finishes the clip; engine crash mid-clip → prompt
+   failure, a fresh engine for the next job.
+2. **Performance passes** against 03 §6 — Catalogue 10 000 assets (first paint < 1 s warm, smooth scroll), editor 6 × 4K
+   layers at 60 fps and brush lag ≤ 1 frame at 2K (in-app, through the headed check), thumbnail and transfer budgets (E2),
+   the Animate player at 24 fps; regressions fixed, numbers in the journal.
+3. **Pin review** — capture `/object_info` from a scratch v0.39.0 checkout, run the contract suite against it, decide the bump
+   (D15: a deliberate task gated by the contract tests); confirm the torch / custom-node locks.
+4. **Setup and installers** — `scripts/setup.ps1` (both venvs, node, submodule, weights check), CI on `windows-latest`:
+   offline tests + `tsc -b` + Tauri bundles for `full` and `open` (D26); the `open` smoke test is the contract suite on the
+   open roster (Klein 4B + Wan 2.2) — CI has no GPU.
+5. **Docs refresh** (00–14 + journal) and the author's end-to-end click-through of the four suites against the acceptance
+   checklists (07 §5, 08 §10, 09 §10, 10 §14, 11 §11); the post-MVP backlog ordered in 13.
 
 ## 9. Totals and parallelism
 

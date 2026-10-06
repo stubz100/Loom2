@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from . import __version__
-from .clips import ClipStore
+from .clips import ClipStore, compute_identity
+from .tools import facesim
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
 from .documents import DocumentStore
@@ -244,7 +245,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
                                "vram_gb": VRAM_ESTIMATE_GB.get(mid), "license": e.license, "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
         i2v_caps = {"models": i2v_models, "tiers": {"draft": {"wan22": [832, 480], "ltx23": [1024, 576]}, "hd": {"wan22": [1280, 720], "ltx23": [1280, 704]}},
                     "portrait": {"wan22": [480, 832], "ltx23": [576, 1024]}, "square": {"wan22": [640, 640], "ltx23": [640, 640]}}
-        return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"], "i2v": i2v_caps, "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
+        return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"], "i2v": i2v_caps, "models": models,
+                "facesim": {"available": facesim.available(svc.app.settings.models_root), "dir": str(facesim.weights_dir(svc.app.settings.models_root))}, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
                 "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
                 "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES,
                 "advanced": {"model_shift": {"flux2-dev-fp8mixed": 2.02, "klein": 2.02}, "shift_node_defaults": {"base": 0.5, "max": 1.15}, "tile_size_default": 512,
@@ -797,6 +799,23 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         if not rec or n < 0 or n >= rec.frames:
             raise HTTPException(404, "frame not found")
         return FileResponse(store.frame_path(clip_id, n), media_type="image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+    @app.post("/clips/{clip_id}/identity")
+    async def clip_identity(clip_id: str):
+        """FaceSim advisory on demand (11 §6): cosine similarity of the start frame's face across the clip."""
+        ws, cat, _ = svc.require_project()
+        store = ClipStore(ws)
+        rec = store.get(clip_id)
+        if not rec:
+            raise HTTPException(404, "clip not found")
+        if not facesim.available(svc.app.settings.models_root):
+            raise HTTPException(409, "FaceSim weights are not fetched (scripts/fetch_facesim.py)")
+        start = cat.get(rec.start_asset_id)
+        ref = cat.abs_path(start) if start else None
+        rec.identity = await asyncio.to_thread(compute_identity, svc.app.settings.models_root, store, rec, ref)
+        store.save(rec)
+        svc.hub.broadcast("clip.updated", {"clip_id": rec.id, "identity": rec.identity})
+        return rec.model_dump()
 
     @app.post("/clips/{clip_id}/extract")
     async def clip_extract(clip_id: str, body: ClipExtract):

@@ -86,6 +86,7 @@ function ModelTab() {
   const caps = useSession((s) => s.capabilities?.i2v)
   const models: [string, I2vModelCaps | undefined][] = Object.keys(MODEL_RULES).map((id) => [id, caps?.models[id]])
   const cur = caps?.models[p.model_id]
+  const h3 = useSession((s) => !!s.settings?.h3_licence_confirmed)
   const presetLabel = (k: string) => cur?.presets[k] ?? k
   return (
     <div className="anim-form">
@@ -100,8 +101,9 @@ function ModelTab() {
             <span className={`badge ${m?.health ?? 'missing'} health`}>{m ? (m.health === 'missing' ? `fetch ${m.approx_gb} GB` : m.health) : '…'}</span>
           </button>
         })}
-        <button className="model-card locked" disabled title="MiniMax H3 unlocks once Settings records that the EU licence application is filed (D17)">
-          <b><Lock size={12} /> H3 (hero)</b><small>MiniMax H3 FL2VA · 864×480 · 5 s · ≈ 13 min</small><small>locked: confirm the licence application in Settings (D17)</small>
+        <button className={`model-card locked${h3 ? ' confirmed' : ''}`} disabled title={h3 ? 'Licence confirmed (D17) — the H3 graph and weights arrive post-MVP (04 §5b)' : 'MiniMax H3 unlocks once Settings records that the EU licence application is filed (D17)'}>
+          <b>{h3 ? null : <Lock size={12} />} H3 (hero)</b><small>MiniMax H3 FL2VA · 864×480 · 5 s · ≈ 13 min</small>
+          <small>{h3 ? 'licence confirmed · graph + weights post-MVP (04 §5b)' : 'locked: confirm the licence application in Settings (D17)'}</small>
         </button>
       </div>
       <label>preset</label>
@@ -430,6 +432,7 @@ function Stage() {
 function ClipTab({ clip }: { clip: Clip }) {
   const asset = useAnimate((s) => (clip.asset_id ? s.assets[clip.asset_id] : undefined))
   const caps = useSession((s) => s.capabilities?.i2v)
+  const facesim = useSession((s) => s.capabilities?.facesim)
   const wall = (clip.timings as { wall_s?: number }).wall_s
   return (
     <div>
@@ -445,6 +448,11 @@ function ClipTab({ clip }: { clip: Clip }) {
           <img src={api.thumbUrl(clip.start_asset_id, 256)} alt="" title="start frame — click to reuse as the next start" onClick={() => an().setStart(clip.start_asset_id)} />
           {clip.end_asset_id && <img src={api.thumbUrl(clip.end_asset_id, 256)} alt="" title="end frame — click to reuse as the next end" onClick={() => an().setEnd(clip.end_asset_id)} />}
           {clip.beats.map((b, i) => <img key={i} src={api.thumbUrl(b.asset_id, 256)} alt="" title={`beat at ${b.frame}`} />)}
+        </dd>
+        <dt>identity</dt><dd>
+          {clip.identity?.status === 'ok' ? <><b>{clip.identity.mean?.toFixed(2)}</b> mean · min {clip.identity.min?.toFixed(2)} at frame {clip.identity.min_frame} · {clip.identity.with_face}/{clip.identity.sampled} frames with a face <span className="hint">(FaceSim, advisory; same person ≈ 0.45–0.7)</span></>
+            : clip.identity ? <span className="hint">{clip.identity.status}</span> : facesim?.available ? <span className="hint">measuring…</span> : <span className="hint">FaceSim weights not fetched (scripts/fetch_facesim.py)</span>}
+          {' '}<CommandButton id="anim.identity" text />
         </dd>
         <dt>clip</dt><dd className="mono">{clip.id}{clip.job_id ? ` · job ${clip.job_id}` : ''}</dd>
         <dt>extend</dt><dd><CommandButton id="anim.useAsStart" text /> <span className="hint">native extension waits for LTX-2.3 (post-MVP)</span></dd>

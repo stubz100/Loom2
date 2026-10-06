@@ -90,3 +90,4 @@
 .insp-thumbs img { width: 72px; height: 44px; object-fit: cover; border-radius: 4px; background: #000; cursor: pointer; }
 .insp-thumbs img.cur { outline: 2px solid var(--accent); }
 .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.model-card.locked.confirmed { opacity: .75; border-style: dashed; }

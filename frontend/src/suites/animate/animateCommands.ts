@@ -46,6 +46,7 @@ registerCommands([
   { id: 'anim.variations', scope: 'animate', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], when: hasClip, run: () => void an().variations() },
   { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },
   { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: hasClip, run: () => void an().tryOther() },
+  { id: 'anim.identity', scope: 'animate', label: 'Measure identity (FaceSim)', icon: Eye, placement: ['inspector', 'context'], when: () => hasClip() && !!useSession.getState().capabilities?.facesim?.available, run: () => void an().measureIdentity() },
   { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
 

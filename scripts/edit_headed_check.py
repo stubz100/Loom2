@@ -385,7 +385,7 @@ def make_coded_clip(project: Path, *, frames: int, fps: int, size: tuple[int, in
     return rec.id
 
 
-def animate_check(cdp: CDP, clip_id: str, asset_id: str) -> list[str]:
+def animate_check(cdp: CDP, clip_id: str, asset_id: str, clip_b: str | None = None) -> list[str]:
     fails: list[str] = []
     A, C = "window.__loom2Animate.getState()", "window.__loom2Commands"
     READ = ("(() => { const c = document.querySelector('.anim-canvas'); if (!c) return -2; const ctx = c.getContext('2d'); let v = 0;"
@@ -460,6 +460,18 @@ def animate_check(cdp: CDP, clip_id: str, asset_id: str) -> list[str]:
     check(n_thumbs == 24, f"filmstrip shows one thumbnail per frame for a short clip ({n_thumbs})")
     cdp.eval(f"{C}.runCommand('anim.view.compare')"); time.sleep(0.8)
     check(cdp.eval("document.querySelectorAll('.anim-compare .side').length") == 2 and cdp.eval("!!document.querySelector('.anim-compare img.still')"), "compare view: player A beside the start still")
+    if clip_b:
+        READ_B = READ.replace("document.querySelector('.anim-canvas')", "document.querySelectorAll('.anim-compare .side canvas')[1]")
+        cdp.eval(f"window.__loom2Animate.setState({{ compareWith: '{clip_b}' }}); {A}.setFrame(12); 1")
+        want_b = round(12 / 23 * 47)                                   # B's frame at the same normalised time (12 of 0..23 → 25 of 0..47)
+        a_code, b_code = -1, -1
+        for _ in range(40):
+            a_code, b_code = cdp.eval(READ), cdp.eval(READ_B)
+            if a_code == 12 and b_code == want_b:
+                break
+            time.sleep(0.1)
+        check(a_code == 12 and b_code == want_b, f"compare syncs two clips by normalised time: A frame 12 of 24 ↔ B frame {b_code} of 48 (expected {want_b})")
+        cdp.eval("window.__loom2Animate.setState({ compareWith: null }); 1")
     cdp.eval(f"{C}.runCommand('anim.view.player')"); time.sleep(0.3)
     # the panel: a start frame makes the preview snap and arms Animate (not clicked: the engine is off)
     cdp.eval(f"{A}.setStart('{asset_id}'); 1")
@@ -513,6 +525,7 @@ def main() -> int:
         asset = api("POST", "/assets/import", {"paths": [str(ROOT / "bench/inpaint/source.png")]})["items"][0]
         if mode == "animate":
             clip_id = make_coded_clip(tmp / "proj", frames=24, fps=16, size=(320, 192), asset_id=asset["id"])
+            clip_b = make_coded_clip(tmp / "proj", frames=48, fps=16, size=(320, 192), asset_id=asset["id"])      # the compare partner (twice the frames)
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=animate&clip={clip_id}{extra}"
         else:
             doc = api("POST", "/documents", {"from_asset": asset["id"]})
@@ -543,7 +556,7 @@ def main() -> int:
                 badge = None; time.sleep(0.5)
         time.sleep(1.5)
         if mode == "animate":
-            failures += animate_check(cdp, clip_id, asset["id"])
+            failures += animate_check(cdp, clip_id, asset["id"], clip_b)
             try:
                 cdp.call("Browser.close")
             except Exception:

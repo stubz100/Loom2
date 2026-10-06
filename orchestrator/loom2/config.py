@@ -53,6 +53,7 @@ class Settings(BaseModel):
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])
     log_level: str = "INFO"
     reopen_last_project: bool = True
+    h3_licence_confirmed: bool = False      # D17: the author confirms the MiniMax H3 community-licence application is filed
 
 
 class AppRecord(BaseModel):

@@ -1430,3 +1430,38 @@ read the clock)*
 - Also tonight: `Catalogue.rebuild` re-indexes clip proxies from `clips/*/proxy.json` and video thumbnails fall back to
   the clip's first master frame (test added; 78 offline tests). Open in M6: FaceSim advisory, the H3 unlock in Settings
   (D17), the two-clip compare sync on the rig (the suite supports it; the acceptance project now has three clips).
+
+## 2026-10-06 23:30 — M6 closed: all five bench tasks through the app, FaceSim advisory, H3 toggle, compare sync; M7 opened
+
+- **Leftovers done.** (1) **FaceSim** — `tools/facesim.py`: InsightFace `buffalo_l` (SCRFD det_10g + ArcFace w600k_r50,
+  fetched by `scripts/fetch_facesim.py`, 275 MB zip → 182 MB kept under `<models_root>/insightface/`) on ONNX Runtime CPU
+  (`onnxruntime` 1.30 added to the orchestrator). The geometry (Umeyama alignment to the ArcFace template, SCRFD decode,
+  NMS) is unit-tested without weights; a side task measures every new clip after its proxy (`clip.updated`), `POST
+  /clips/{id}/identity` and the inspector's *Measure identity* recompute; the Clip tab shows mean · min @ frame · frames
+  with a face. ≈ 1 s per clip on the CPU. (2) **H3 toggle** (D17): `Settings.h3_licence_confirmed`, Settings → Licences;
+  the Animate card reflects it but stays disabled until the H3 graph and weights land (post-MVP, 04 §5b). (3) **Compare
+  sync** verified in the headed check with two coded clips (24 and 48 frames): A frame 12 ↔ B frame 25 by normalised time.
+- **Rig run 2 — the remaining bench tasks on Wan Draft** (`m6_acceptance.py --tasks 02,04,05`, 17/17):
+
+  | task | engine wall | lowest free VRAM | FaceSim mean · min | sheet |
+  | --- | --- | --- | --- | --- |
+  | 02 walk toward camera | 254 s | 4.99 GB | 0.49 · 0.05 at frame 80 (the reference face is tiny in the crowd) | walks in, scale grows, freckles resolve, crowd parallax |
+  | 04 camera push cabin | 250 s | 3.24 GB | 0.77 · 0.57 | geometry and both characters stable, the captain nods, dolly minimal (E4b: a control problem) |
+  | 05 dialogue gesture | 243 s | 3.09 GB | **0.87** · 0.79 | blink, look down and back up, a tear, no mouth artefacts |
+  | 01 character turn (run 1) | 256 s | 5.31 GB | 0.70 · 0.62 | |
+  | 03 crouch → stand FLF (run 1) | 255 s | 5.06 GB | 0.41 · 0.28 (9/12 frames with a face) | |
+  | 03 LTX with a beat (run 1) | 172 s | 2.69 GB | 0.39 · 0.11 at frame 22 (the morph) | |
+
+  With E4's five tasks on the spike driver and these five through the app, **04 §6's i2v bench is recorded end to end**;
+  identity, time and VRAM match the spikes (fp8 experts, Lightning 2 + 2). FaceSim orders the clips the way the eye does.
+- **11 §11: six of six ticked.** M6 acceptance met: the checklist, the five bench tasks, the E9 verdict (D27). **M6 closed.**
+  Open items carried to post-MVP (13): the H3 graph + weights, native LTX extension, Wan latent previews (11 §12), the
+  fps-conform export step (Q14), an unsharp pass after RIFE (E9 note).
+- **M7 opened** (12 §8, slices 1–5): slice 1's offline half is in — `tests/test_durability_m7.py`: power loss mid-job
+  (relaunch paused + re-queued), a **torn `queue.json` is quarantined** as `queue.json.corrupt-<ts>` and the queue starts
+  paused with a recovery banner (it used to be fatal: `read_json_or` refuses torn records by design), a **corrupt
+  `catalogue.sqlite` is quarantined and rebuilt** from the manifests, a truncated manifest is skipped, the engine dying
+  mid-job fails the job and frees the queue, and a **disk guard** at submission (422 below 2 GB free or over the project's
+  size cap). `/queue.recovery` carries the notes, the frame shows them as error banners. 89 offline tests. The rig half
+  (`scripts/m7_durability.py`: `taskkill /F` the orchestrator while a clip samples, relaunch; kill ComfyUI mid-clip) runs
+  tonight — results in the next entry.

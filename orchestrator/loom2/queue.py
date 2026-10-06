@@ -19,11 +19,12 @@ from pydantic import BaseModel, Field
 from .catalogue import Catalogue
 from .config import AppState
 from .engine.client import EngineError, EngineEvent
-from .clips import ClipStore
+from .clips import ClipStore, compute_identity
+from .tools import facesim
 from .engine.graphs import I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
-from .fsio import atomic_write_json, new_id, read_json_or, utc_now
+from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
 from .recipes import T2I, I2I, I2V, Inpaint, Segment, Upscale, parse_recipe, warm_group
 from .documents import DocumentStore, GroupLayer, RasterLayer
 from .edit_ai import RegionPlan, assemble_layer, combine_selection, crop_inputs, dilate, layer_plan, mask_from_engine, outpaint_inputs, outpaint_plan, plan_region, whole_plan
@@ -43,6 +44,7 @@ def _age_s(iso: str) -> float:
     except ValueError:
         return 0.0
 JobStatus = Literal["staged", "queued", "running", "done", "failed", "cancelled"]
+MIN_FREE_GB = 2.0                            # disk guard: refuse new jobs below this much free space
 TERMINAL = {"done", "failed", "cancelled"}
 
 
@@ -89,11 +91,24 @@ class JobQueue:
         self._events: asyncio.Queue[EngineEvent] = asyncio.Queue()
         self._cancel_requested: set[str] = set()
         self.resumed_unclean = False
+        self.recovery: list[str] = []            # M7: what was quarantined on load (shown as a banner)
 
     # ---- persistence ------------------------------------------------------------------------------
     def load(self) -> None:
-        data = read_json_or(self.ws.queue_path, {"schema_version": QUEUE_SCHEMA_VERSION, "paused": False, "jobs": []})
-        self.paused = bool(data.get("paused"))
+        empty = {"schema_version": QUEUE_SCHEMA_VERSION, "paused": False, "jobs": []}
+        try:
+            data = read_json_or(self.ws.queue_path, empty)
+        except StateError as e:                      # M7: a torn queue.json is quarantined — never fatal, never silently reset
+            q = self.ws.queue_path.with_name(f"queue.json.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+            try:
+                self.ws.queue_path.replace(q)
+            except OSError:
+                q = self.ws.queue_path
+            log.error("queue.json unreadable (%s); moved aside as %s", e, q.name)
+            self.recovery.append(f"The job queue file was unreadable and was moved aside as {q.name}; jobs that were in flight are lost (their finished outputs are still in the Catalogue).")
+            self.paused = True
+            data = dict(empty)
+        self.paused = bool(data.get("paused")) or bool(self.recovery)          # a quarantined queue file starts paused
         for j in data.get("jobs", []):
             try:
                 rec = JobRecord.model_validate(j)
@@ -172,6 +187,7 @@ class JobQueue:
     def submit(self, recipe_data: dict, stage: bool = False) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
+        self._disk_guard()
         seeds = recipe.seeds or [0]
         batch_id = new_id("bat") if len(seeds) > 1 else None
         out: list[JobRecord] = []
@@ -268,7 +284,7 @@ class JobQueue:
 
     def state(self) -> dict:
         return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
-                "resumed_unclean": self.resumed_unclean}
+                "resumed_unclean": self.resumed_unclean, "recovery": list(self.recovery) + list(getattr(self.catalogue, "recovery", []) or [])}
 
     @staticmethod
     def _validate_models(recipe: Any) -> None:
@@ -283,6 +299,18 @@ class JobQueue:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
             if recipe.beats and ROSTER_BY_ID[recipe.model_id].family != "ltx23":
                 raise ValueError("keyframe beats need LTX-2.3; Wan takes a start and an end frame")
+
+    def _disk_guard(self) -> None:
+        """03 §6 / 06 §4: refuse new work before the engine starts when the work disk is nearly full or the project is over
+        its size cap — a clear 422 at submission instead of a torn output half-way through a clip."""
+        free = free_space_gb(self.ws.path)
+        if free < MIN_FREE_GB:
+            raise ValueError(f"disk guard: only {free:.1f} GB free on the project drive (minimum {MIN_FREE_GB:g} GB) — free space or move the project")
+        cap = float((self.ws.info() or {}).get("size_cap_gb") or 0)
+        if cap:
+            used = self.catalogue.usage_bytes() / 2**30
+            if used > cap:
+                raise ValueError(f"disk guard: the project holds {used:.1f} GB of assets, over its {cap:g} GB cap — empty the trash or raise the cap in project.json")
 
     # ---- scheduling -------------------------------------------------------------------------------
     def _next(self) -> JobRecord | None:
@@ -762,6 +790,32 @@ class JobQueue:
         job.result["clip_id"] = rec.id
         job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
         self.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h})
+        if facesim.available(self.app.settings.models_root):             # advisory, off the job's critical path
+            self._side(self._identity_task(rec.id))
+
+    def _side(self, coro: Any) -> None:
+        tasks: set = getattr(self, "_side_tasks", None) or set()
+        self._side_tasks = tasks
+        t = asyncio.get_running_loop().create_task(coro)
+        tasks.add(t)
+        t.add_done_callback(tasks.discard)
+
+    async def _identity_task(self, clip_id: str) -> None:
+        clips = ClipStore(self.ws)
+        rec = clips.get(clip_id)
+        if not rec:
+            return
+        start = self.catalogue.get(rec.start_asset_id)
+        ref = self.catalogue.abs_path(start) if start else None
+        try:
+            result = await asyncio.wait_for(asyncio.to_thread(compute_identity, self.app.settings.models_root, clips, rec, ref), 240)
+        except Exception as e:  # noqa: BLE001
+            result = {"status": f"error: {type(e).__name__}: {e}", "sampled": 0, "with_face": 0}
+        rec = clips.get(clip_id)
+        if rec:
+            rec.identity = result
+            clips.save(rec)
+            self.hub.broadcast("clip.updated", {"clip_id": clip_id, "identity": result})
 
     def _fit_reference(self, src: Path, max_px: int, key: str) -> Path:
         """References are downscaled to ≤ max_px² before upload (09 §3d); PNG so the engine's LoadImage is exact."""

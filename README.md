@@ -27,7 +27,7 @@ orchestrator/    Python package `loom2` (uv, 3.13): workspace, roster, ComfyUI c
 frontend/        Vite 8 + React 19 + TS app (frame, suites, store, api) and the Tauri 2 shell in src-tauri/
 scripts/         engine-setup/start/stop · fetch_weights · prune_weights · make_object_info_fixture ·
                  m1/m3/m4/m5_acceptance · m4_compositor_diag · make_synthetic_assets · csp_check ·
-                 edit_headed_check (editor in a visible Edge window) · dev.ps1
+                 edit_headed_check (editor / Animate player in a visible Edge window) · dev.ps1
 ```
 
 ## Quickstart (Windows 11, ROCm 10.0, Python 3.13 via uv, Node 22, Rust 1.90)

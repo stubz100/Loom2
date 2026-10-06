@@ -35,7 +35,10 @@ registerCommands([
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
   { id: 'cat.compare', scope: 'catalogue', label: 'Open compare', icon: Columns2, keys: 'Shift+C', placement: ['context', 'strip'], when: () => cat().compare.length >= 2, run: () => cat().setCompareOpen(true) },
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },
-  { id: 'cat.animate', scope: 'catalogue', label: 'Send to Animate (M6)', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector'], when: hasSel, run: () => useSession.getState().toast('Send to Animate arrives in M6', 'info') },
+  { id: 'cat.animate', scope: 'catalogue', label: 'Animate from this frame (start)', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector', 'strip'], when: () => !!primary(), run: () => { const a = primary(); if (!a) return
+      void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); const clipId = (a.params as { clip_id?: string }).clip_id
+        if (a.kind === 'video' && clipId) { useSession.getState().setSuite('animate'); void an.loadClips().then(() => an.select(clipId)) } else an.setStart(a.id, true) }) } },
+  { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame in Animate', icon: Film, keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind !== 'video', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
   { id: 'cat.reveal', scope: 'catalogue', label: 'Reveal in folder', icon: ExternalLink, keys: 'Ctrl+Shift+R', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (a) void revealPath(a.path) } },
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),
     run: () => { const list = ids(); const c = cat(); void c.trash(list).then(() => useSession.getState().toast(`Moved ${list.length} to trash`, 'info', () => void c.restore(list))) } },
@@ -64,7 +67,7 @@ export function tileMenu(): MenuItem[] {
   return [
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
-    { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, sep,
+    { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, sep,
     { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin from compare' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,
     ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),

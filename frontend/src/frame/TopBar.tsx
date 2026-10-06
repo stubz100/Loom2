@@ -36,11 +36,12 @@ export function TopBar() {
     <header className="top" ref={ref}>
       <nav className="tabs" aria-label="suites">
         {SUITES.map((t) => (
-          <button key={t.id} className={`tab${s.ui.suite === t.id ? ' active' : ''}`} onClick={() => s.setSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : ''}`}
-            onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets') && (t.id === 'edit' || t.id === 'generate')) { e.preventDefault(); e.dataTransfer.dropEffect = 'link' } }}
+          <button key={t.id} className={`tab${s.ui.suite === t.id ? ' active' : ''}`} onClick={() => s.setSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets') && (t.id === 'edit' || t.id === 'generate' || t.id === 'animate')) { e.preventDefault(); e.dataTransfer.dropEffect = 'link' } }}
             onDrop={(e) => { const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (!ids.length) return; e.preventDefault()
               if (t.id === 'edit') void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(ids[0]))
-              else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id))) }}>
+              else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id)))
+              else if (t.id === 'animate') void import('../suites/animate/animateStore').then((m) => { const a = m.useAnimate.getState(); a.setStart(ids[0], true); if (ids[1]) a.setEnd(ids[1]) }) }}>
             {t.label}<kbd>⌃{t.key}</kbd>
           </button>
         ))}

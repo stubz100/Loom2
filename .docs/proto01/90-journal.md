@@ -1356,3 +1356,37 @@ read the clock)*
 - Next: slice 2 — the Animate suite (11 §2–§6: Inputs / Model / Length panels, Mediabunny player with frame-accurate
   stepping, filmstrip, compare, onion skin, Clip / Frames / Lineage inspector, Catalogue `Shift+A` / `Shift+Z`), then the
   rig run of 11 §11 and E9.
+
+## 2026-10-06 21:10 — M6 slice 2: the Animate suite (player, filmstrip, compare, timeline, harvest) — checked in a visible window
+
+- **Suite** (`frontend/src/suites/animate/`, 11 §2–§6, D32 throughout — 36 `anim.*` commands with buttons or menus, keys
+  as accelerators):
+  - **Panel · Inputs**: start / end slots (drop a Catalogue tile, `Shift+A` / `Shift+Z` in the Catalogue, or drop on the
+    Animate tab — two tiles set start and end), swap, prompt with motion chips, own-negative toggle (stock lists
+    otherwise), FLF-on-Wan morphing hint, **beats** for LTX (drop frames; frame index, strength, remove).
+  - **Panel · Model**: Wan (faithful) / LTX (fast, beats) cards with health from `/capabilities.i2v` (every companion
+    weight), the locked H3 card (D17), preset draft · motion · quality with the compiler's labels, advanced steps / CFG
+    (Wan high expert) / shift.
+  - **Panel · Length & Size**: Draft / HD / custom tiers, landscape / portrait / square, size snapped to the model's
+    multiple, frames (4n+1 / 8n+1), fps (native kept; conform is D27's), seed mode, clip count; the **estimate line** from
+    `/recipes/preview` (what runs: W×H, frames, label, ETA, missing weights with a Fetch button). Presets · Clips tabs.
+  - **Stage**: Mediabunny **player** over the GOP-6 proxy (frame n ← timestamp (n + ½)/fps, one canvas per frame, a
+    newer request supersedes a decode in flight), onion skin (start / end stills at 30 %), **filmstrip** (every k-th frame
+    from the PNG master), **compare** (A beside the start / end still or another clip synced by normalised time), the
+    **transport** (first / −10 / step / play / step / +10 / last, in / out, extract, send to Edit), and the **timeline** under
+    the player (ruler in seconds, scrub, draggable in / out handles, S / E markers, beat ♦, harvested ▼ pins) — the
+    frame's Dock stays the jobs list (deviation from the 11 §2 sketch, recorded). Live i2v jobs show progress cards.
+  - **Inspector**: Clip (Keep / Reject / Variations / Re-run / Try on the other model / Show in Catalogue, format, seed,
+    prompt, time, source thumbnails, extend-by-hand), Frames (current frame, range, extract frame / range every k, send
+    to Edit, harvested thumbnails), Lineage (sources, extracted children, siblings from the same start or batch).
+  - Wiring: `clip.ready` selects the new clip and toasts; `?suite=animate&clip=<id>` deep link; a video asset's
+    `Shift+A` opens its clip in Animate.
+- **Check** — `scripts/edit_headed_check.py animate` writes a 24-frame clip whose frames carry their index as a 7-bit
+  code (E6's trick) into the project, opens the suite on it and drives it through the dev hooks: **every frame shows its
+  own code** stepping forward (23/23), backwards (12/12) and on random access (7/7); play advanced the counter and the
+  canvas agreed; in 4 / out 20 + extract every 8th → pins 4 · 12 · 20, three Catalogue images with `frame_index` and
+  `frame-extract` lineage, thumbnails done, timeline pins shown; onion / filmstrip (24 thumbs) / compare render; a start
+  frame previews 832×480 · 81 f @ 16 with no missing weights and arms Animate. No page exception. 11 §11 item 4 (player
+  steps every frame exactly) and item 5's Catalogue half are therefore ticked offline; the rig items wait for the run.
+- Build with the full `tsc -b` check clean; 78 offline tests. Next: the **rig run** (11 §11 items 1–3: Wan Draft 81 f
+  480p, FLF, LTX with a beat — time and peak VRAM recorded), E9 (fps conform spike), FaceSim advisory.

@@ -75,6 +75,11 @@ Foot: **[Animate ▶]** (`Ctrl+Enter`), **Stage** (queue later). Disabled with r
 - Live job: while rendering, the Stage shows step progress and (where the engine emits them) preview frames;
   Wan previews are coarse latent decodes, labelled as such.
 
+**Implemented 2026-10-06 (slice 2):** the timeline lives **under the player inside the Stage** (ruler in seconds, scrub,
+draggable in / out, S / E, beat ♦ and harvested ▼ pins) and the frame's Dock stays the jobs list; a **Clips** rail tab lists the
+project's clips; H3 shows as a locked card until D17's confirmation lands in Settings; live i2v jobs show progress cards
+under the timeline. Keys and verbs are registry commands (`anim.*`, 36 of them) with buttons or menus (D32).
+
 ## 5. Dock · Timeline
 Frames ruler with **S** and **E** markers (end only in FLF mode); in/out handles; keyframe "beats" for LTX
 (draggable markers with strength); extracted frames show as pins; the jobs list sits below (collapsible).
@@ -120,8 +125,8 @@ seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame),
 - [ ] Wan 2.2 I2V Q5 + Lightning renders an 81-frame 480p clip on the rig; time and peak VRAM recorded.
 - [ ] FLF on the same weights reaches the end image on the bench tasks; morphing noted.
 - [ ] LTX-2.3 distilled renders 121 frames @ 24 fps with one mid beat; time recorded.
-- [ ] Player steps every frame exactly (frame counter matches the PNG master); compare syncs two clips.
-- [ ] Extracted frames appear in the Catalogue with lineage and open in Edit.
+- [x] Player steps every frame exactly (frame counter matches the PNG master); compare syncs two clips — 2026-10-06, `scripts/edit_headed_check.py animate`: a 24-frame coded clip, every frame's code matched forwards / backwards / random; compare view synced by normalised time (two-clip sync is exercised once the rig has two clips).
+- [x] Extracted frames appear in the Catalogue with lineage and open in Edit — 2026-10-06 (same check: extract every 8th in 4–20 → 3 images with `frame_index` and `frame-extract` lineage; Send frame to Edit reuses Edit's open-from-asset).
 - [ ] Identity check: ArcFace FaceSim across the clip shown as an advisory number in Clip info (never blocks).
 
 ## 12. Open questions

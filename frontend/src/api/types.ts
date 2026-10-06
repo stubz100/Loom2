@@ -55,7 +55,7 @@ export interface Settings {
 }
 
 export interface Capabilities {
-  recipes: string[]; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
+  recipes: string[]; i2v?: I2vCaps; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
   models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[] }>
   tiers: Record<string, Record<string, [number, number]>>
   weight_dtypes: string[]; te_devices: string[]
@@ -63,3 +63,17 @@ export interface Capabilities {
 }
 
 export interface EventFrame { seq: number; type: string; t: number; data: Record<string, unknown> }
+
+// ---- M6 Animate (11 §10, 06 §5) ------------------------------------------------------------------------------------
+export interface Clip {
+  schema_version: number; id: string; created_at: string; job_id: string | null; batch_id: string | null; asset_id: string | null
+  model_id: string; preset: string; prompt: string; seed: number; frames: number; fps: number; w: number; h: number
+  start_asset_id: string; end_asset_id: string | null; beats: { frame: number; asset_id: string; strength: number }[]
+  master_dir: string; proxy_path: string | null; proxy_bytes: number; extracted_asset_ids: string[]
+  params: Record<string, unknown>; timings: Record<string, unknown>
+}
+export interface I2vModelCaps {
+  family: string; label: string; health: string; missing: string[]; fps: number; frames: number; frame_step: number; size_mult: number; size: [number, number]
+  presets: Record<string, string>; beats: boolean; flf: boolean; vram_gb: number | null; license: string; approx_gb: number
+}
+export interface I2vCaps { models: Record<string, I2vModelCaps>; tiers: Record<string, Record<string, [number, number]>>; portrait: Record<string, [number, number]>; square: Record<string, [number, number]> }

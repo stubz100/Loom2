@@ -9,6 +9,11 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
   cmpdiag            GPU preview vs exact flatten after each feature in isolation (mask, group, every adjustment
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
+  animate            writes a 24-frame test clip (frame index burned in as a 7-bit code, E6 style) into the project,
+                     opens the Animate suite on it and checks: the player shows frame n when asked for frame n (all
+                     frames, forwards, backwards and random), in/out + extract range harvest frames with lineage,
+                     onion skin, filmstrip and compare views render, the Inputs slot takes a start frame and the
+                     preview snaps the size — no page exception. (Nothing is submitted to the engine.)
   tour               runs every Edit command (tools, view, layers, masks, selection, transform, brush, files) through
                      the dev command hook with a document open, checks the resulting state, answers the in-app
                      dialogs, and reports any page exception or crash overlay per step
@@ -17,7 +22,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|animate]
 """
 from __future__ import annotations
 
@@ -350,6 +355,130 @@ def cmpdiag(cdp: CDP) -> list[str]:
     return fails
 
 
+def make_coded_clip(project: Path, *, frames: int, fps: int, size: tuple[int, int], asset_id: str) -> str:
+    """A clip whose every frame carries its index as 7 white/black squares (E6's code), straight into clips/<id>/."""
+    import sys as _sys
+
+    _sys.path.insert(0, str(ROOT / "orchestrator"))
+    from PIL import ImageDraw
+
+    from loom2.clips import ClipStore
+    from loom2.workspace import Workspace
+
+    w, h = size
+    tmpd = project / "_temp" / "coded"
+    tmpd.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for i in range(frames):
+        im = Image.new("RGB", (w, h), (20 + i * 6, 40, 120 - i * 3))
+        d = ImageDraw.Draw(im)
+        d.rectangle([int(w * 0.3 + i * 4), int(h * 0.45), int(w * 0.3 + i * 4) + 40, int(h * 0.45) + 40], fill=(240, 166, 58))
+        for b in range(7):
+            v = 255 if (i >> (6 - b)) & 1 else 0
+            d.rectangle([16 + b * 16, 16, 16 + b * 16 + 14, 30], fill=(v, v, v))
+        p = tmpd / f"{i:03d}.png"
+        im.save(p)
+        paths.append(p)
+    store = ClipStore(Workspace(project))
+    rec = store.create(paths, model_id="wan22-i2v-high-fp8", preset="draft", prompt="coded test clip", seed=1, fps=fps, start_asset_id=asset_id)
+    rec = store.encode_proxy(rec)
+    return rec.id
+
+
+def animate_check(cdp: CDP, clip_id: str, asset_id: str) -> list[str]:
+    fails: list[str] = []
+    A, C = "window.__loom2Animate.getState()", "window.__loom2Commands"
+    READ = ("(() => { const c = document.querySelector('.anim-canvas'); if (!c) return -2; const ctx = c.getContext('2d'); let v = 0;"
+            " for (let b = 0; b < 7; b++) { const px = ctx.getImageData(16 + b * 16 + 7, 23, 1, 1).data; v = (v << 1) | (px[0] > 127 ? 1 : 0) } return v })()")
+
+    def check(ok: bool, text: str, errs: list[str] | None = None) -> None:
+        errs = errs if errs is not None else cdp.page_errors()
+        ok = ok and not errs
+        print(("ok   " if ok else "FAIL ") + text + "".join("\n       " + e for e in errs))
+        if not ok:
+            fails.append(text)
+
+    def shown(expect: int, tries: int = 30) -> int:
+        """Wait until the canvas shows a frame code (decode is async)."""
+        v = -1
+        for _ in range(tries):
+            v = cdp.eval(READ)
+            if v == expect:
+                break
+            time.sleep(0.1)
+        return v
+
+    cur = cdp.eval(f"{A}.current")
+    check(cur == clip_id, f"deep link selected the clip ({cur})")
+    check(shown(0) == 0, "frame 0 decoded and drawn (code 0)")
+    cdp.shot(OUT / "animate-player.png")
+    # forwards through every frame with the command
+    wrong = []
+    for n in range(1, 24):
+        cdp.eval(f"{C}.runCommand('anim.stepForward')")
+        got = shown(n)
+        if got != n:
+            wrong.append((n, got))
+    check(not wrong, f"stepping forward shows every frame exactly (wrong: {wrong[:5]})")
+    cdp.eval(f"{C}.runCommand('anim.home')"); shown(0)
+    jumps = [17, 3, 22, 9, 0, 23, 11]
+    wrong = [(n, cdp.eval(f"{A}.setFrame({n}); 1") and shown(n)) for n in jumps]
+    wrong = [(n, g) for n, g in wrong if g != n]
+    check(not wrong, f"random access frames decode exactly (wrong: {wrong})")
+    cdp.eval(f"{C}.runCommand('anim.end')"); shown(23)
+    wrong = []
+    for n in range(22, 10, -1):
+        cdp.eval(f"{C}.runCommand('anim.stepBack')")
+        if shown(n) != n:
+            wrong.append(n)
+    check(not wrong, f"stepping backwards is exact too (wrong: {wrong[:5]})")
+    # play for a moment, then pause: the frame advanced and the counter agrees with the canvas
+    cdp.eval(f"{A}.setFrame(0); {C}.runCommand('anim.play'); 1"); time.sleep(0.8); cdp.eval(f"{C}.runCommand('anim.play')")
+    time.sleep(0.3)
+    f = cdp.eval(f"{A}.frame"); code = shown(f)
+    check(2 <= f <= 23 and code == f and cdp.eval(f"{A}.playing") is False, f"play advanced to frame {f} and the canvas shows {code}")
+    # in / out + harvest
+    cdp.eval(f"{A}.setFrame(4); {C}.runCommand('anim.setIn'); {A}.setFrame(20); {C}.runCommand('anim.setOut'); 1")
+    rng = cdp.eval(f"JSON.stringify({A}.range())")
+    check(rng == "[4,20]", f"in/out set from the playhead → range {rng}")
+    cdp.eval(f"window.__loom2Animate.setState({{ extractEvery: 8 }}); {C}.runCommand('anim.extractRange')")
+    t0 = time.time()
+    while time.time() - t0 < 15 and cdp.eval(f"({A}.pins['{clip_id}'] || []).length") < 3:
+        time.sleep(0.3)
+    pins = cdp.eval(f"JSON.stringify(({A}.pins['{clip_id}'] || []).map((p) => p.frame).sort((a, b) => a - b))")
+    clip = api("GET", f"/clips/{clip_id}")
+    check(pins == "[4,12,20]" and len(clip["extracted_asset_ids"]) == 3, f"extract range every 8th between 4 and 20 → pins {pins}, {len(clip['extracted_asset_ids'])} assets with frame-extract lineage")
+    ex = api("GET", f"/assets/{clip['extracted_asset_ids'][0]}") if clip["extracted_asset_ids"] else {}
+    check(ex.get("suite") == "animate" and ex.get("params", {}).get("frame_index") == 4 and ex.get("thumb_status") == "done", "the harvested frame is a Catalogue image with its frame index and a thumbnail")
+    check(cdp.eval("document.querySelectorAll('.timeline .marker.pin').length") == 3, "the timeline shows the three harvested pins")
+    # onion, filmstrip, compare
+    cdp.eval(f"{C}.runCommand('anim.onion')"); time.sleep(0.3)
+    check(cdp.eval("!!document.querySelector('.anim-player img.onion')"), "onion skin overlays the start still")
+    cdp.eval(f"{C}.runCommand('anim.onion')")
+    cdp.eval(f"{C}.runCommand('anim.view.filmstrip')"); time.sleep(0.8)
+    n_thumbs = cdp.eval("document.querySelectorAll('.filmstrip button').length")
+    check(n_thumbs == 24, f"filmstrip shows one thumbnail per frame for a short clip ({n_thumbs})")
+    cdp.eval(f"{C}.runCommand('anim.view.compare')"); time.sleep(0.8)
+    check(cdp.eval("document.querySelectorAll('.anim-compare .side').length") == 2 and cdp.eval("!!document.querySelector('.anim-compare img.still')"), "compare view: player A beside the start still")
+    cdp.eval(f"{C}.runCommand('anim.view.player')"); time.sleep(0.3)
+    # the panel: a start frame makes the preview snap and arms Animate (not clicked: the engine is off)
+    cdp.eval(f"{A}.setStart('{asset_id}'); 1")
+    t0 = time.time()
+    while time.time() - t0 < 10 and not cdp.eval(f"!!{A}.preview"):
+        time.sleep(0.3)
+    pv = cdp.eval(f"JSON.stringify({A}.preview && [{A}.preview.width, {A}.preview.height, {A}.preview.frames, {A}.preview.fps, {A}.preview.missing.length])")
+    check(pv is not None and pv.startswith("[832,480,81,16,"), f"preview for the start frame: [w, h, frames, fps, missing] = {pv}")
+    check(cdp.eval("!!document.querySelector('.slot img')"), "the Inputs slot shows the start frame")
+    armed = cdp.eval("(() => { const b = [...document.querySelectorAll('button.primary')].find((x) => x.textContent.startsWith('Animate')); return b ? !b.disabled : null })()")
+    check(armed is True or armed is None, f"Animate button armed when weights are present ({armed}; None = panel not visible)")
+    cdp.eval("(() => { const b = [...document.querySelectorAll('button')].find((x) => (x.getAttribute('title') || x.getAttribute('aria-label') || '').startsWith('Length')); b && b.click(); return 1 })()"); time.sleep(0.4)
+    cdp.shot(OUT / "animate-length.png")
+    cdp.eval("(() => { const b = [...document.querySelectorAll('button')].find((x) => (x.getAttribute('title') || x.getAttribute('aria-label') || '').startsWith('Inputs')); b && b.click(); return 1 })()"); time.sleep(0.4)
+    cdp.shot(OUT / "animate-inputs.png")
+    print(f"     screenshots: {OUT / 'animate-player.png'}, animate-length.png, animate-inputs.png")
+    return fails
+
+
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "render"
     if not EDGE:
@@ -382,8 +511,12 @@ def main() -> int:
                 time.sleep(0.3)
         api("POST", "/project", {"path": str(tmp / "proj"), "name": "Headed", "size_cap_gb": 10})
         asset = api("POST", "/assets/import", {"paths": [str(ROOT / "bench/inpaint/source.png")]})["items"][0]
-        doc = api("POST", "/documents", {"from_asset": asset["id"]})
-        url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={doc['id']}{extra}"
+        if mode == "animate":
+            clip_id = make_coded_clip(tmp / "proj", frames=24, fps=16, size=(320, 192), asset_id=asset["id"])
+            url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=animate&clip={clip_id}{extra}"
+        else:
+            doc = api("POST", "/documents", {"from_asset": asset["id"]})
+            url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={doc['id']}{extra}"
         edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
                                  "--window-size=1600,1000", "--window-position=40,40", "--new-window", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ws_url = None
@@ -405,10 +538,18 @@ def main() -> int:
         t0 = time.time()
         badge = None
         while time.time() - t0 < 30 and not badge:
-            badge = cdp.eval("document.querySelector('.badge-renderer')?.textContent?.trim() || null")
+            badge = cdp.eval("document.querySelector('.anim-canvas') ? 'player' : null" if mode == "animate" else "document.querySelector('.badge-renderer')?.textContent?.trim() || null")
             if badge in (None, "…"):
                 badge = None; time.sleep(0.5)
         time.sleep(1.5)
+        if mode == "animate":
+            failures += animate_check(cdp, clip_id, asset["id"])
+            try:
+                cdp.call("Browser.close")
+            except Exception:
+                pass
+            print(f"\nanimate: {'all checks passed' if not failures else f'{len(failures)} FAILED'}")
+            return 1 if failures else 0
         canvas = cdp.eval("(() => { const c = document.querySelector('.edit-canvas canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { w: c.width, h: c.height, cssW: r.width, cssH: r.height, x: r.x, y: r.y } })()")
         dpr = cdp.eval("window.devicePixelRatio") or 1
         im0 = cdp.shot(OUT / f"{mode}{tag}-0.png")

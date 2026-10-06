@@ -236,7 +236,9 @@ Acceptance: 11 §11 checklist; the 5 i2v bench tasks recorded; E9 verdict logged
 **M6 opened 2026-10-06** (journal 19:40): volatile facts re-checked (pin v0.38.2 has every node; LTX-2.5 noted as a later
 upgrade). **Slice 1 (backend) done:** `I2V` recipe with Wan presets / FLF / LTX beats, `build_i2v` contract-checked, queue →
 `clips/<id>/` PNG master + GOP-6 h264 proxy + `clip.json`, Catalogue video asset with poster and lineage, `/clips/*` API
-with Range and `frame-extract` harvest; 78 offline tests. Slice 2 (the suite UI) next, then the rig run and E9.
+with Range and `frame-extract` harvest; 78 offline tests. **Slice 2 (the suite) done 2026-10-06** (journal 21:10): panels,
+Mediabunny player with frame-exact stepping verified in a visible window, filmstrip, compare, timeline, harvest with lineage,
+Clip / Frames / Lineage inspector. Next: the rig run of 11 §11 items 1–3, E9, FaceSim.
 
 ## 8. M7 · MVP hardening (2–3 weeks)
 

@@ -229,16 +229,22 @@ class Catalogue:
         return self.abs_path(rec).with_suffix(".json")
 
     # ---- ingest -----------------------------------------------------------------------------------
-    def ingest_file(self, src: Path, *, kind: AssetKind = "image", move: bool = True, **fields: Any) -> AssetRecord:
-        """Move (or copy) a produced file into `assets/<yyyy-mm>/`, write its manifest, index it."""
+    def ingest_file(self, src: Path, *, kind: AssetKind = "image", move: bool = True, in_place: bool = False, **fields: Any) -> AssetRecord:
+        """Move (or copy) a produced file into `assets/<yyyy-mm>/`, write its manifest, index it. `in_place` indexes a
+        file that already lives inside the project where it is (M6 clip proxies stay in `clips/<id>/`)."""
         src = Path(src)
         asset_id = fields.pop("id", None) or new_id("ast")
+        lineage_kind = fields.pop("lineage_kind", None)              # e.g. "frame-extract"; default = the suite
         ext = src.suffix.lower().lstrip(".") or "bin"
-        dest = self.ws.asset_path(asset_id, ext, datetime.now())
-        if move:
-            atomic_move(src, dest)
+        if in_place:
+            dest = src
+            dest.relative_to(self.ws.path)                            # must be inside the project
         else:
-            atomic_copy(src, dest)
+            dest = self.ws.asset_path(asset_id, ext, datetime.now())
+            if move:
+                atomic_move(src, dest)
+            else:
+                atomic_copy(src, dest)
         fields.setdefault("session_id", self.session_id)
         rec = AssetRecord(id=asset_id, kind=kind, path=dest.relative_to(self.ws.path).as_posix(), **fields)
         rec.bytes = dest.stat().st_size
@@ -257,11 +263,12 @@ class Catalogue:
         atomic_write_json(self.manifest_path(rec), rec.model_dump())
         self._index(rec)
         for parent in rec.parents:
-            self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.suite)
+            self.add_lineage(parent, rec.id, rec.job_id or "", kind=lineage_kind or rec.suite)
         return rec
 
-    def make_thumbs(self, rec: AssetRecord) -> AssetRecord:
-        src = self.abs_path(rec)
+    def make_thumbs(self, rec: AssetRecord, source: Path | None = None) -> AssetRecord:
+        """Thumbnails from the asset file, or from `source` (a clip's first master frame stands in for its mp4)."""
+        src = source or self.abs_path(rec)
         try:
             with Image.open(src) as im:
                 # B11: transparent sources (edit flattens) keep their alpha in WebP; opaque ones stay RGB (smaller)

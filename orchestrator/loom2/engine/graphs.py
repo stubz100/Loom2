@@ -13,7 +13,7 @@ from typing import Any
 
 from ..recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Segment, Upscale
 from ..edit_ai import plan_tiles
-from ..roster import Roster
+from ..roster import ROSTER_BY_ID, Roster
 from .contract import check_graph, resolve_names
 
 
@@ -56,6 +56,191 @@ BASE_SECONDS: dict[tuple[str, bool], float] = {
     ("flux2-dev-fp8mixed", False): 65.0, ("flux2-dev-fp8mixed", True): 40.0,
     ("klein-4b", False): 10.0, ("klein-base-4b", False): 30.0, ("klein-9b", False): 18.0, ("klein-base-9b", False): 50.0, ("klein-9b-kv", False): 18.0,
 }
+
+# ---- image-to-video (M6; 11 §3b; D8 Wan 2.2, D9 LTX-2.3; recipes from the E4/E4b/E4c/E5b spikes) -------------
+WAN_NEGATIVE = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，"
+                "多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走")
+LTX_NEGATIVE = "blurry, distorted, low quality, static, watermark"
+# every roster id a video model needs on disk; the queue validates the set at submission and /capabilities reports it
+I2V_WEIGHTS: dict[str, list[str]] = {
+    "wan22-i2v-high-fp8": ["wan22-i2v-high-fp8", "wan22-i2v-low-fp8", "umt5-xxl-fp8", "wan21-vae", "wan22-lightning-high", "wan22-lightning-low"],
+    "ltx23-distilled-fp8": ["ltx23-distilled-fp8", "gemma3-12b-fp8", "ltx23-text-projection", "ltx23-video-vae", "ltx23-audio-vae"],
+}
+I2V_RULES: dict[str, dict[str, Any]] = {   # 04 §9a: spatial multiple, frame rule, native fps, Draft tier
+    "wan22": {"size_mult": 16, "frame_step": 4, "fps": 16, "frames": 81, "size": (832, 480), "label": "Wan 2.2 I2V-A14B · faithful"},
+    "ltx23": {"size_mult": 32, "frame_step": 8, "fps": 24, "frames": 121, "size": (1024, 576), "label": "LTX-2.3 distilled · fast, beats"},
+}
+
+
+@dataclass
+class WanPreset:
+    steps: int
+    split: int                       # high expert runs steps [0, split), low expert [split, steps)
+    cfg_high: float
+    cfg_low: float
+    shift: float
+    lora_high: bool                  # Lightning 4-step LoRA on the expert (E4b: dropping it on the high expert buys motion)
+    lora_low: bool
+    label: str
+
+
+WAN_PRESETS: dict[str, WanPreset] = {
+    "draft": WanPreset(4, 2, 1.0, 1.0, 5.0, True, True, "Draft · Lightning 2 + 2 (≈ 4 min at 480p)"),
+    "motion": WanPreset(8, 4, 3.5, 1.0, 5.0, False, True, "Motion · undistilled high expert at CFG 3.5 (≈ 8 min)"),
+    "quality": WanPreset(20, 10, 3.5, 3.5, 8.0, False, False, "Quality · 10 + 10 steps, no LoRA (slow)"),
+}
+LTX_STEPS: dict[str, int] = {"draft": 8, "motion": 12, "quality": 20}
+I2V_BASE_SECONDS: dict[tuple[str, str], float] = {   # E4c / E4b / E5b at the Draft tier
+    ("wan22", "draft"): 236.0, ("wan22", "motion"): 495.0, ("wan22", "quality"): 900.0,
+    ("ltx23", "draft"): 141.0, ("ltx23", "motion"): 165.0, ("ltx23", "quality"): 210.0,
+}
+
+
+def i2v_family(model_id: str) -> str:
+    e = ROSTER_BY_ID.get(model_id)
+    if e is None or e.family not in I2V_RULES:
+        raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
+    return e.family
+
+
+def _snap(v: int, mult: int, lo: int) -> int:
+    return max(lo, int(round(v / mult)) * mult)
+
+
+def i2v_params(recipe: I2V) -> dict[str, Any]:
+    """What will actually run: sizes snapped to the model's multiple, frames to 4n+1 / 8n+1, preset values with overrides."""
+    fam = i2v_family(recipe.model_id)
+    rule = I2V_RULES[fam]
+    mult = rule["size_mult"]
+    w, h = _snap(recipe.width, mult, mult * 8), _snap(recipe.height, mult, mult * 8)
+    step = rule["frame_step"]
+    frames = max(1, int(round((recipe.frames - 1) / step))) * step + 1
+    out: dict[str, Any] = {"family": fam, "width": w, "height": h, "frames": frames, "fps": recipe.fps, "preset": recipe.preset,
+                           "flf": bool(recipe.end_asset), "beats": len(recipe.beats)}
+    if fam == "wan22":
+        p = WAN_PRESETS[recipe.preset]
+        steps = recipe.steps or p.steps
+        out |= {"steps": steps, "split": max(1, min(steps - 1, round(steps * p.split / p.steps))), "cfg_high": recipe.cfg if recipe.cfg is not None else p.cfg_high,
+                "cfg_low": p.cfg_low, "shift": recipe.shift if recipe.shift is not None else p.shift, "lora_high": p.lora_high, "lora_low": p.lora_low, "label": p.label}
+    else:
+        steps = recipe.steps or LTX_STEPS[recipe.preset]
+        out |= {"steps": steps, "shift": recipe.shift, "label": f"LTX-2.3 distilled · {steps} steps"}
+    return out
+
+
+def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_name: str, end_name: str | None = None,
+              beat_names: dict[str, str] | None = None) -> Compiled:
+    """Wan: loaders → ModelSamplingSD3 ×2 → WanImageToVideo / WanFirstLastFrameToVideo → KSamplerAdvanced high → low → VAEDecode
+    → SaveImage (one PNG per frame: the clip master; the proxy is encoded by the orchestrator). LTX: the E5 graph — joint
+    audio-video latent, LTXVAddGuide for the end frame (frame_idx −1) and every beat — ending in SaveImage the same way."""
+    ep = i2v_params(recipe)
+    w, h, frames, fps = ep["width"], ep["height"], ep["frames"], ep["fps"]
+    g: dict[str, Any] = {}
+
+    def load_scaled(nid: str, name: str) -> list:
+        g[nid] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        g[nid + "s"] = {"class_type": "ImageScale", "inputs": {"image": [nid, 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        return [nid + "s", 0]
+
+    if ep["family"] == "wan22":
+        _, high = roster.require("wan22-i2v-high-fp8")
+        _, low = roster.require("wan22-i2v-low-fp8")
+        _, te = roster.require("umt5-xxl-fp8")
+        _, vae = roster.require("wan21-vae")
+        g["1h"] = {"class_type": "UNETLoader", "inputs": {"unet_name": high, "weight_dtype": "default"}}
+        g["1l"] = {"class_type": "UNETLoader", "inputs": {"unet_name": low, "weight_dtype": "default"}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        mh: list = ["1h", 0]
+        ml: list = ["1l", 0]
+        if ep["lora_high"]:
+            _, lh = roster.require("wan22-lightning-high")
+            g["4h"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": mh, "lora_name": lh, "strength_model": 0.7}}
+            mh = ["4h", 0]
+        if ep["lora_low"]:
+            _, ll = roster.require("wan22-lightning-low")
+            g["4l"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ml, "lora_name": ll, "strength_model": 1.0}}
+            ml = ["4l", 0]
+        g["8h"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": mh, "shift": ep["shift"]}}
+        g["8l"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ml, "shift": ep["shift"]}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.prompt_text, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative if recipe.negative is not None else WAN_NEGATIVE, "clip": ["2", 0]}}
+        cond: dict[str, Any] = {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames, "batch_size": 1,
+                                "start_image": load_scaled("100", start_name)}
+        if end_name:
+            cond["end_image"] = load_scaled("101", end_name)
+            g["7"] = {"class_type": "WanFirstLastFrameToVideo", "inputs": cond}
+        else:
+            g["7"] = {"class_type": "WanImageToVideo", "inputs": cond}
+        g["9"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8h", 0], "add_noise": "enable", "noise_seed": seed, "steps": ep["steps"], "cfg": ep["cfg_high"],
+                                                              "sampler_name": "euler", "scheduler": "simple", "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["7", 2],
+                                                              "start_at_step": 0, "end_at_step": ep["split"], "return_with_leftover_noise": "enable"}}
+        g["10"] = {"class_type": "KSamplerAdvanced", "inputs": {"model": ["8l", 0], "add_noise": "disable", "noise_seed": seed, "steps": ep["steps"], "cfg": ep["cfg_low"],
+                                                               "sampler_name": "euler", "scheduler": "simple", "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["9", 0],
+                                                               "start_at_step": ep["split"], "end_at_step": 10000, "return_with_leftover_noise": "disable"}}
+        g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+        out_node = "12"
+        g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": out_prefix}}
+    else:
+        _, unet = roster.require("ltx23-distilled-fp8")
+        _, te1 = roster.require("gemma3-12b-fp8")
+        _, te2 = roster.require("ltx23-text-projection")
+        _, vvae = roster.require("ltx23-video-vae")
+        _, avae = roster.require("ltx23-audio-vae")
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["2"] = {"class_type": "DualCLIPLoader", "inputs": {"clip_name1": te1, "clip_name2": te2, "type": "ltxv"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vvae}}
+        g["99"] = {"class_type": "VAELoader", "inputs": {"vae_name": avae}}      # core 0.38: the joint AV latent needs an audio VAE even for silent clips (E5)
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.prompt_text, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative if recipe.negative is not None else LTX_NEGATIVE, "clip": ["2", 0]}}
+        g["7"] = {"class_type": "LTXVConditioning", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "frame_rate": float(fps)}}
+
+        def guide_image(nid: str, name: str) -> list:
+            scaled = load_scaled(nid, name)
+            g[nid + "p"] = {"class_type": "LTXVPreprocess", "inputs": {"image": scaled, "img_compression": 35}}
+            return [nid + "p", 0]
+
+        g["8"] = {"class_type": "LTXVImgToVideo", "inputs": {"positive": ["7", 0], "negative": ["7", 1], "vae": ["3", 0], "image": guide_image("100", start_name),
+                                                            "width": w, "height": h, "length": frames, "batch_size": 1, "strength": 1.0}}
+        pos, neg, lat = ["8", 0], ["8", 1], ["8", 2]
+        guides: list[tuple[str, int, float, str]] = []
+        if end_name:
+            guides.append((end_name, -1, 1.0, "101"))
+        for i, b in enumerate(recipe.beats):
+            name = (beat_names or {}).get(b.asset_id)
+            if not name:
+                raise CompileError(f"beat at frame {b.frame}: asset {b.asset_id} was not uploaded")
+            guides.append((name, min(b.frame, frames - 1), b.strength, f"13{i}"))
+        for k, (name, idx, strength, nid) in enumerate(guides):
+            gid = f"guide{k}"
+            g[gid] = {"class_type": "LTXVAddGuide", "inputs": {"positive": pos, "negative": neg, "vae": ["3", 0], "latent": lat, "image": guide_image(nid, name),
+                                                             "frame_idx": idx, "strength": strength}}
+            pos, neg, lat = [gid, 0], [gid, 1], [gid, 2]
+        g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1, "audio_vae": ["99", 0]}}
+        g["13"] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": lat, "audio_latent": ["12", 0]}}
+        g["14"] = {"class_type": "BasicGuider", "inputs": {"model": ["1", 0], "conditioning": pos}}
+        g["15"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
+        g["16"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
+        g["17"] = {"class_type": "LTXVScheduler", "inputs": {"steps": ep["steps"], "max_shift": 2.05, "base_shift": 0.95, "stretch": True, "terminal": 0.1, "latent": ["13", 0]}}
+        g["18"] = {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["15", 0], "guider": ["14", 0], "sampler": ["16", 0], "sigmas": ["17", 0], "latent_image": ["13", 0]}}
+        g["19"] = {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["18", 0]}}
+        g["20"] = {"class_type": "LTXVCropGuides", "inputs": {"positive": pos, "negative": neg, "latent": ["19", 0]}}
+        g["21"] = {"class_type": "VAEDecode", "inputs": {"samples": ["20", 2], "vae": ["3", 0]}}
+        out_node = "22"
+        g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["21", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": recipe.model_id, **{k: v for k, v in ep.items() if k != "label"}, "label": ep["label"]}
+    return Compiled(graph=g, output_node=out_node, summary=summary, serialized_prompt=recipe.prompt_text)
+
+
+def estimate_i2v_seconds(recipe: I2V) -> dict[str, Any]:
+    """ETA from the E4/E5 spike baselines at the Draft tier, scaled by pixel-frames and (half) by the step ratio — the VAE
+    passes are a fixed share of a Wan clip (Q18)."""
+    ep = i2v_params(recipe)
+    rule = I2V_RULES[ep["family"]]
+    base = I2V_BASE_SECONDS[(ep["family"], recipe.preset)]
+    work = (ep["width"] * ep["height"] * ep["frames"]) / (rule["size"][0] * rule["size"][1] * rule["frames"])
+    steps_ref = WAN_PRESETS[recipe.preset].steps if ep["family"] == "wan22" else LTX_STEPS[recipe.preset]
+    return {"seconds": round(base * work * (0.5 + 0.5 * ep["steps"] / steps_ref), 1), "source": "baseline (E4/E5 spikes)"}
 
 
 class CompileError(ValueError):
@@ -462,8 +647,13 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
     elif isinstance(recipe, Segment):
         i = inputs or {}
         c = build_segment(recipe, roster, out_prefix, i["image"], i.get("points"), i.get("box"), int(i.get("w", 0)), int(i.get("h", 0)))
+    elif isinstance(recipe, I2V):
+        i = inputs or {}
+        if "start" not in i:
+            raise CompileError("i2v needs the uploaded start frame (queue._prepare_i2v_inputs)")
+        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"))
     else:
-        raise NotImplementedError(f"recipe kind '{recipe.kind}' is compiled in a later milestone (M6 video)")
+        raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
     c.problems = check_graph(object_info, c.graph)
     c.graph_hash = hashlib.sha256(json.dumps(c.graph, sort_keys=True).encode("utf-8")).hexdigest()[:16]

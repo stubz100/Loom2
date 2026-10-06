@@ -96,14 +96,21 @@ class FakeComfy:
             return
         for v in (1, 2):
             await self._send({"type": "progress", "data": {"prompt_id": pid, "value": v, "max": 2, "node": "1"}})
-        w, h = self._output_size()
+        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo")), None)
+        if vid:                                                  # M6: a video graph decodes `length` frames; SaveImage writes one PNG each
+            w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
+        else:
+            (w, h), count = self._output_size(), 1
         out_dir = self.output_dir / subfolder if subfolder else self.output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
-        n = sum(1 for p in out_dir.glob(f"{base}_*")) + 1
-        fname = f"{base}_{n:05d}_.png"
-        Image.new("RGBA", (w, h), self.color).save(out_dir / fname)
-        self.histories[pid] = {"outputs": {"99": {"images": [{"filename": fname, "subfolder": subfolder, "type": "output"}]}},
-                               "status": {"completed": True, "status_str": "success"}}
+        n0 = sum(1 for p in out_dir.glob(f"{base}_*"))
+        images = []
+        for i in range(count):
+            fname = f"{base}_{n0 + i + 1:05d}_.png"
+            col = self.color if not vid else (self.color[0], (i * 29) % 256, self.color[2], 255)      # frames differ, so the proxy encode is real work
+            Image.new("RGBA", (w, h), col).save(out_dir / fname)
+            images.append({"filename": fname, "subfolder": subfolder, "type": "output"})
+        self.histories[pid] = {"outputs": {"99": {"images": images}}, "status": {"completed": True, "status_str": "success"}}
         await self._send({"type": "executing", "data": {"prompt_id": pid, "node": None}})
         await self._send({"type": "execution_success", "data": {"prompt_id": pid}})
 

@@ -19,15 +19,16 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from . import __version__
+from .clips import ClipStore
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
 from .documents import DocumentStore
-from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB, CompileError, effective_params
+from .engine.graphs import CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, VRAM_ESTIMATE_GB, WAN_PRESETS, effective_params, estimate_i2v_seconds, i2v_params
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, _tmp_for
 from .queue import JobQueue
-from .recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, parse_recipe
+from .recipes import FLUX2_SCHEDULE, I2V, SAMPLERS, SCHEDULERS, T2I, TE_DEVICES, WEIGHT_DTYPES, parse_recipe
 from .roster import ROSTER_BY_ID, Roster
 from .tools.fetch import FetchJob, sha256_of
 from .tools.pngmeta import parse_image_metadata
@@ -86,6 +87,10 @@ class Services:
         if not (self.ws and self.catalogue and self.queue):
             raise HTTPException(409, "no project is open")
         return self.ws, self.catalogue, self.queue
+
+
+class ClipExtract(BaseModel):
+    frames: list[int]
 
 
 class ProjectCreate(BaseModel):
@@ -227,7 +232,19 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
                            "max_refs": preset.max_refs, "sampler": preset.sampler, "scheduler": preset.scheduler, "vram_gb": VRAM_ESTIMATE_GB.get(mid),
                            "wired": mid == "flux2-dev-fp8mixed" or e.family == "klein", "license": e.license, "variants": e.variants}
         live = svc.queue.engine_enum if svc.queue else (lambda cls, key: None)      # the running engine's own enums when it has answered
-        return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment"], "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
+        i2v_models = {}
+        for mid, needs in I2V_WEIGHTS.items():
+            e = ROSTER_BY_ID[mid]
+            rule = I2V_RULES[e.family]
+            healths = {x: svc.roster.resolve(x).health for x in needs}
+            missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+            i2v_models[mid] = {"family": e.family, "label": rule["label"], "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+                               "missing": missing, "fps": rule["fps"], "frames": rule["frames"], "frame_step": rule["frame_step"], "size_mult": rule["size_mult"], "size": list(rule["size"]),
+                               "presets": {k: (v.label if e.family == "wan22" else f"{LTX_STEPS[k]} steps") for k, v in WAN_PRESETS.items()}, "beats": e.family == "ltx23", "flf": True,
+                               "vram_gb": VRAM_ESTIMATE_GB.get(mid), "license": e.license, "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+        i2v_caps = {"models": i2v_models, "tiers": {"draft": {"wan22": [832, 480], "ltx23": [1024, 576]}, "hd": {"wan22": [1280, 720], "ltx23": [1280, 704]}},
+                    "portrait": {"wan22": [480, 832], "ltx23": [576, 1024]}, "square": {"wan22": [640, 640], "ltx23": [640, 640]}}
+        return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"], "i2v": i2v_caps, "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
                 "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
                 "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES,
                 "advanced": {"model_shift": {"flux2-dev-fp8mixed": 2.02, "klein": 2.02}, "shift_node_defaults": {"base": 0.5, "max": 1.15}, "tile_size_default": 512,
@@ -241,8 +258,19 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             recipe = parse_recipe(body.recipe)
         except ValueError as e:
             raise HTTPException(422, str(e))
+        if isinstance(recipe, I2V):                                  # M6: snapped size / frames, the preset that runs, missing weights, ETA
+            try:
+                ep = i2v_params(recipe)
+            except CompileError as e:
+                raise HTTPException(422, str(e))
+            missing = []
+            for mid in I2V_WEIGHTS[recipe.model_id]:
+                r = svc.roster.resolve(mid)
+                if r.path is None:
+                    missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
+            return {**ep, "missing": missing, "estimate": estimate_i2v_seconds(recipe), "count": len(recipe.seeds or [0])}
         if not isinstance(recipe, T2I):
-            raise HTTPException(422, "preview supports t2i recipes in M3")
+            raise HTTPException(422, "preview supports t2i and i2v recipes")
         try:
             ep = effective_params(recipe)
         except CompileError as e:
@@ -735,6 +763,67 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         return {"deleted": doc_id}
 
     # ---- jobs / queue ---------------------------------------------------------------------------
+    # ---- clips (M6, 11 §10): PNG master + h264 proxy per clip; frame harvest with lineage -------------------------------
+    @app.get("/clips")
+    async def clips_list():
+        ws, _, _ = svc.require_project()
+        return {"items": [c.model_dump() for c in ClipStore(ws).list()]}
+
+    @app.get("/clips/{clip_id}")
+    async def clip_get(clip_id: str):
+        ws, _, _ = svc.require_project()
+        rec = ClipStore(ws).get(clip_id)
+        if not rec:
+            raise HTTPException(404, "clip not found")
+        return rec.model_dump()
+
+    @app.get("/clips/{clip_id}/proxy.mp4")
+    async def clip_proxy(clip_id: str):
+        ws, _, _ = svc.require_project()
+        rec = ClipStore(ws).get(clip_id)
+        if not rec or not rec.proxy_path:
+            raise HTTPException(404, "proxy not ready")
+        return FileResponse(ws.path / rec.proxy_path, media_type="video/mp4", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+    @app.get("/clips/{clip_id}/frames/{name}")
+    async def clip_frame(clip_id: str, name: str):
+        ws, _, _ = svc.require_project()
+        store = ClipStore(ws)
+        rec = store.get(clip_id)
+        try:
+            n = int(name.split(".")[0])
+        except ValueError:
+            raise HTTPException(400, "a frame index is expected, e.g. 37.png")
+        if not rec or n < 0 or n >= rec.frames:
+            raise HTTPException(404, "frame not found")
+        return FileResponse(store.frame_path(clip_id, n), media_type="image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+    @app.post("/clips/{clip_id}/extract")
+    async def clip_extract(clip_id: str, body: ClipExtract):
+        """Master frames → Catalogue images with `frame-extract` lineage from the clip's asset (11 §6)."""
+        ws, cat, _ = svc.require_project()
+        store = ClipStore(ws)
+        rec = store.get(clip_id)
+        if not rec:
+            raise HTTPException(404, "clip not found")
+        wanted = sorted({n for n in body.frames if 0 <= n < rec.frames})[:64]
+        if not wanted:
+            raise HTTPException(422, "no valid frame indices")
+        out = []
+        for n in wanted:
+            tmp = ws.temp_dir / "extract" / f"{rec.id}_{n:06d}.png"
+            tmp.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_bytes(store.frame_path(rec.id, n).read_bytes())
+            a = await asyncio.to_thread(cat.ingest_file, tmp, kind="image", move=True, suite="animate", lineage_kind="frame-extract", job_id=rec.job_id, batch_id=rec.batch_id,
+                                        model_id=rec.model_id, seed=rec.seed, prompt_text=rec.prompt, parents=[rec.asset_id] if rec.asset_id else [],
+                                        params={"clip_id": rec.id, "frame_index": n, "fps": rec.fps, "time_s": round(n / rec.fps, 3), "preset": rec.preset})
+            a = await asyncio.to_thread(cat.make_thumbs, a)
+            svc.hub.broadcast("asset.created", a.model_dump())
+            out.append(a.model_dump())
+            rec.extracted_asset_ids.append(a.id)
+        store.save(rec)
+        return {"items": out, "clip": rec.model_dump()}
+
     @app.post("/jobs")
     async def jobs_submit(body: JobSubmit):
         _, _, q = svc.require_project()

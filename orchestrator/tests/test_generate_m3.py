@@ -166,7 +166,7 @@ def test_capabilities_list_the_engine_configuration(tmp_path: Path):
     AppState(state).update_settings({"models_root": str(tmp_path / "models"), "mounted_model_trees": []})
     with TestClient(create_app(state)) as client:
         caps = client.get("/capabilities").json()
-        assert caps["recipes"] == ["t2i", "inpaint", "i2i", "upscale", "segment"]
+        assert caps["recipes"] == ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"]
         assert len(caps["samplers"]) == 45 and "flux2" in caps["schedulers"] and len(caps["schedulers"]) == 10
         assert caps["weight_dtypes"] == ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"] and caps["te_devices"] == ["default", "cpu"]
         assert caps["advanced"]["shift_node_defaults"] == {"base": 0.5, "max": 1.15}

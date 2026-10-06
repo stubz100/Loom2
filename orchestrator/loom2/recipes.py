@@ -150,17 +150,32 @@ class Segment(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
 
 
+class Beat(BaseModel):
+    """LTX keyframe guide (11 §3b): the asset is encoded as a guide at `frame` with `strength`."""
+    frame: int = Field(ge=0, le=1000)
+    asset_id: str
+    strength: float = Field(1.0, ge=0.1, le=1.0)
+
+
 class I2V(BaseModel):
+    """Image-to-video (11 §10; D8 Wan 2.2 I2V-A14B fp8 experts + Lightning, FLF on the same weights; D9 LTX-2.3 distilled
+    fp8 with keyframe beats). Sizes and frame counts snap to the model's rule in the compiler (Wan ×16 and 4n+1,
+    LTX ×32 and 8n+1); `graphs.i2v_params` shows the UI what will run."""
     kind: Literal["i2v"] = "i2v"
-    model_id: str = "wan22-i2v-high-fp8"
+    model_id: str = "wan22-i2v-high-fp8"          # wan22-i2v-high-fp8 (Wan) | ltx23-distilled-fp8 (LTX)
     start_asset: str
-    end_asset: str | None = None
+    end_asset: str | None = None                  # first/last-frame mode
     prompt_text: str = ""
-    frames: int = 81
-    fps: int = 16
-    width: int = 832
-    height: int = 480
-    preset: Literal["draft", "motion", "quality"] = "draft"
+    negative: str | None = None                   # None = the model's stock negative (Wan: the official list; LTX: a short one)
+    frames: int = Field(81, ge=9, le=257)
+    fps: int = Field(16, ge=8, le=48)
+    width: int = Field(832, ge=128, le=1920)
+    height: int = Field(480, ge=128, le=1920)
+    preset: Literal["draft", "motion", "quality"] = "draft"   # Wan: Lightning 2+2 / undistilled high + distilled low / 10+10; LTX: 8 / 12 / 20 steps
+    steps: int | None = Field(None, ge=1, le=60)  # overrides the preset's step count
+    cfg: float | None = Field(None, ge=1.0, le=12.0)          # Wan high expert CFG (motion / quality); the distilled paths ignore it
+    shift: float | None = Field(None, ge=0.5, le=12.0)
+    beats: list[Beat] = Field(default_factory=list)           # LTX only
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 

@@ -58,7 +58,7 @@ def test_compile_errors(dev_roster: Roster, object_info: dict):
         graphs.compile_recipe(T2I(model_id="klein-4b", prompt_text="x"), dev_roster, object_info, 1, "p")
     with pytest.raises(graphs.CompileError):
         graphs.compile_recipe(T2I(prompt_text="   "), dev_roster, object_info, 1, "p")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(graphs.CompileError):                  # M6: i2v compiles, but only with the uploaded start frame
         graphs.compile_recipe(parse_recipe({"kind": "i2v", "start_asset": "ast_1"}), dev_roster, object_info, 1, "p")
     assert graphs.flatten_json_prompt({"a": {"b": "c", "d": ["e", "f"]}, "g": None}) == "a: c, e, f"
 

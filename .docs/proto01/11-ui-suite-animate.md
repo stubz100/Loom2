@@ -108,8 +108,10 @@ frame · `Shift+F` extract range · `N` onion skin · `E` send frame to Edit · 
 `K`/`X` keep/reject (on the clip) · `Shift+A`/`Shift+Z` set start/end from the Catalogue.
 
 ## 10. Data and API
-`POST /jobs` with `I2V{model_id, start_asset, end_asset?, prompt, negative?, frames, fps, width, height,
-seed, lightning: {high, low}, steps, cfg, beats?: [{frame, asset, strength}]}` → clip in `clips/<id>/`
+`POST /jobs` with `I2V{model_id, start_asset, end_asset?, prompt_text, negative?, frames, fps, width, height,
+seeds, preset: draft|motion|quality, steps?, cfg?, shift?, beats?: [{frame, asset_id, strength}]}` (implemented 2026-10-06:
+the preset replaces per-knob Lightning fields — Draft = Lightning 2 + 2, Motion = undistilled high expert, Quality = 10 + 10;
+`/recipes/preview` returns the snapped size / frames and the ETA) → clip in `clips/<id>/`
 (master PNG sequence + `proxy.mp4` + `clip.json`); `GET /clips/{id}/proxy.mp4` (Range) for the player;
 `GET /clips/{id}/frames/{n}.png` and `POST /clips/{id}/extract {frames[]}` for harvesting (TorchCodec exact
 seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame), `clip.ready`, `proxy.ready`.

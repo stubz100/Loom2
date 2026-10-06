@@ -233,6 +233,11 @@ decide the export conform policy (interpolate · duplicate · keep native) and r
 
 Acceptance: 11 §11 checklist; the 5 i2v bench tasks recorded; E9 verdict logged.
 
+**M6 opened 2026-10-06** (journal 19:40): volatile facts re-checked (pin v0.38.2 has every node; LTX-2.5 noted as a later
+upgrade). **Slice 1 (backend) done:** `I2V` recipe with Wan presets / FLF / LTX beats, `build_i2v` contract-checked, queue →
+`clips/<id>/` PNG master + GOP-6 h264 proxy + `clip.json`, Catalogue video asset with poster and lineage, `/clips/*` API
+with Range and `frame-extract` harvest; 78 offline tests. Slice 2 (the suite UI) next, then the rig run and E9.
+
 ## 8. M7 · MVP hardening (2–3 weeks)
 
 Durability suite (power-loss simulation, corrupt-file recovery, engine crash mid-job, disk hard-stop),

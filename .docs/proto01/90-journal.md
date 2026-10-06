@@ -1315,3 +1315,44 @@ read the clock)*
   field's statistics. `cmpdiag` on the rig: noise [mean 0.02, p99 1, max 1]/255 — the same as blur and black & white;
   every feature now lands at 0–1/255. 10 §3 updated ("preview ≈" now only means large blur radii and dissolve).
   72 offline tests.
+
+## 2026-10-06 19:40 — M6 Animate opened: volatile facts re-checked; slice 1 = the image-to-video backend
+
+- **Re-check (12 §10 standing rule, 04 §8):** the engine pin v0.38.2 (cloned 2026-10-02) already carries the Wan 2.2
+  and LTX-2 node families the E4/E5 drivers used; the fixture recaptured today lists all 27 node classes the two
+  graphs need. LTX-2.5 exists (diffusion decoder, native multi-shot, core support merged before v0.32; 2.3 workflows
+  carry over, checkpoints do not) — a candidate upgrade once an fp8 transformer is benchmarked on 16 GB, not an M6
+  task; D9 stays on LTX-2.3 distilled fp8. Wan-Animate-2 is a reference/pose model, not i2v — irrelevant here.
+  Weights on disk: both Wan fp8 experts, umT5 fp8, Wan VAE, Lightning LoRAs, LTX-2.3 fp8 transformer, Gemma fp8,
+  projection, video + audio VAE — the M6 set is complete (04 §1).
+- **Slice 1 — backend (11 §10, 06 §7):**
+  - `I2V` recipe: model (`wan22-i2v-high-fp8` | `ltx23-distilled-fp8`), start / optional end asset (FLF), prompt,
+    optional negative (stock lists by default), frames / fps / size, **preset** draft · motion · quality with step / CFG /
+    shift overrides, LTX **beats** (`{frame, asset_id, strength}`), seeds, loras (D25, empty). `graphs.i2v_params`
+    snaps size to ×16 / ×32 and frames to 4n+1 / 8n+1 and resolves the preset — the UI previews exactly that through
+    `/recipes/preview`, which now answers i2v (snapped values, missing weights, ETA from the E4/E5 baselines).
+  - `graphs.build_i2v`: the E4c Wan graph (fp8 experts, Lightning on both experts for Draft, undistilled high expert at
+    CFG 3.5 for Motion per E4b, 10 + 10 without LoRA for Quality; `WanFirstLastFrameToVideo` when an end frame is set)
+    and the E5b LTX graph (joint AV latent with the audio VAE, `LTXVAddGuide` for the end frame at −1 and for every beat
+    at its index, clamped to the clip). Both end in **`SaveImage`** — one PNG per decoded frame is the clip **master**;
+    no engine mp4 (the orchestrator encodes the proxy with the GOP it wants). Contract-checked against the fixture
+    for every preset, FLF and beats.
+  - Queue: start / end / beat frames are uploaded as PNG (the graph's `ImageScale` fits them), the frames come back as
+    `clips/<clp_id>/master/%06d.png`, **`clips.ClipStore`** writes `clip.json`, encodes `proxy.mp4` (PyAV libx264,
+    yuv420p, crf 18, **GOP 6** per E6, faststart), and the proxy is indexed **in place** as the Catalogue asset (kind
+    `video`, frames / w / h, poster thumbnail from frame 0, parents = start / end / beats, params.clip_id). Events
+    `job.updated` ("uploading frames" · "writing the master" · "encoding the proxy"), `asset.created`, **`clip.ready`**.
+    Submission rejects non-video models and beats on Wan (422).
+  - API: `GET /clips`, `GET /clips/{id}`, `GET /clips/{id}/proxy.mp4` (Range → 206 for Mediabunny), `GET
+    /clips/{id}/frames/{n}.png` (master), `POST /clips/{id}/extract {frames}` → Catalogue images with
+    **`frame-extract` lineage** (≤ 64 per call); `/capabilities` lists `i2v` with per-model health (all companion
+    weights), rules, presets and the video tiers.
+  - Fake engine: a graph with a video node yields `length` differing frames, so the proxy encode is exercised. Tests
+    (`test_animate_m6.py`): snapping, Wan presets + FLF contract, LTX end + beats contract and ETA, queue end to end
+    for Wan and for LTX with end + beat (clip, 9-frame h264 proxy decoded back, asset, lineage, `clip.ready`, engine_out
+    clean), submission validation, the `/clips` API incl. Range and harvest. **78 offline tests.**
+- Design notes: the timeline will live under the player inside the Stage (the frame's Dock stays the jobs list);
+  `Catalogue.rebuild` does not yet re-index clip proxies from `clips/` (follow-up before M7's durability suite).
+- Next: slice 2 — the Animate suite (11 §2–§6: Inputs / Model / Length panels, Mediabunny player with frame-accurate
+  stepping, filmstrip, compare, onion skin, Clip / Frames / Lineage inspector, Catalogue `Shift+A` / `Shift+Z`), then the
+  rig run of 11 §11 and E9.

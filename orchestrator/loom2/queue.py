@@ -19,11 +19,12 @@ from pydantic import BaseModel, Field
 from .catalogue import Catalogue
 from .config import AppState
 from .engine.client import EngineError, EngineEvent
-from .engine.graphs import PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb
+from .clips import ClipStore
+from .engine.graphs import I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
-from .recipes import T2I, I2I, Inpaint, Segment, Upscale, parse_recipe, warm_group
+from .recipes import T2I, I2I, I2V, Inpaint, Segment, Upscale, parse_recipe, warm_group
 from .documents import DocumentStore, GroupLayer, RasterLayer
 from .edit_ai import RegionPlan, assemble_layer, combine_selection, crop_inputs, dilate, layer_plan, mask_from_engine, outpaint_inputs, outpaint_plan, plan_region, whole_plan
 import numpy as np
@@ -277,6 +278,11 @@ class JobQueue:
                 raise ValueError(f"unknown model id {mid!r}")
         if isinstance(recipe, T2I) and recipe.model_id not in PRESETS:
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
+        if isinstance(recipe, I2V):
+            if recipe.model_id not in I2V_WEIGHTS:
+                raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
+            if recipe.beats and ROSTER_BY_ID[recipe.model_id].family != "ltx23":
+                raise ValueError("keyframe beats need LTX-2.3; Wan takes a start and an end frame")
 
     # ---- scheduling -------------------------------------------------------------------------------
     def _next(self) -> JobRecord | None:
@@ -425,6 +431,14 @@ class JobQueue:
                 self._object_info, self._object_info_at = object_info, time.time()
                 if self._cancelled(job):
                     return
+            if isinstance(recipe, I2V):                                # M6: start / end / beat frames go in through /upload/image
+                job.progress_text = "uploading frames"
+                self.hub.broadcast("job.updated", job.model_dump())
+                inputs = await self._prepare_i2v_inputs(job, recipe)
+                object_info = await self.engine.client.object_info()
+                self._object_info, self._object_info_at = object_info, time.time()
+                if self._cancelled(job):
+                    return
             compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs)
             if compiled.problems:
                 self._fail(job, "contract: " + "; ".join(compiled.problems)[:1500])
@@ -455,6 +469,17 @@ class JobQueue:
             files = self._outputs_from_history(hist)
             if not files:
                 self._fail(job, "the engine finished but produced no output files")
+                return
+            if isinstance(recipe, I2V):
+                await self._finish_i2v_job(job, recipe, files, compiled)
+                await self._free_engine_cache()
+                job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
+                job.wall_s = round(time.time() - self._t0, 1)
+                self.catalogue.record_job(job.model_dump())
+                self.persist()
+                self.hub.broadcast("job.updated", job.model_dump())
+                self.engine.jobs_since_start += 1
+                self._last_group = job.warm_group
                 return
             if isinstance(recipe, (Inpaint, I2I, Upscale, Segment)):
                 await self._finish_document_job(job, recipe, files, inputs or {})
@@ -680,6 +705,63 @@ class JobQueue:
         job.result.setdefault("layers", []).append(lid)
         job.result["group"] = gid
         self.hub.broadcast("document.changed", {"id": od.doc.id, "job_id": job.id, "batch_id": job.batch_id, "added": [lid], "group": gid, "w": od.doc.w, "h": od.doc.h, "candidate": n})
+
+    # ---- M6 video jobs (11 §10): frames in through /upload/image, a clip out -------------------------
+    async def _prepare_i2v_inputs(self, job: JobRecord, recipe: I2V) -> dict[str, Any]:
+        """Upload the start, end and beat frames as PNG (the graph's ImageScale fits them to the clip size)."""
+        names: dict[str, Any] = {"beats": {}}
+
+        async def up(asset_id: str, what: str) -> str:
+            a = self.catalogue.get(asset_id)
+            src = self.catalogue.abs_path(a) if a else None
+            if not src or not Path(src).is_file():
+                raise ValueError(f"the {what} frame ({asset_id}) is missing from the Catalogue")
+            fitted = await asyncio.to_thread(self._fit_reference, Path(src), 0, f"i2v-{asset_id}")
+            return await self.engine.client.upload_image(fitted)
+
+        names["start"] = await up(recipe.start_asset, "start")
+        names["end"] = await up(recipe.end_asset, "end") if recipe.end_asset else None
+        for b in recipe.beats:
+            names["beats"][b.asset_id] = await up(b.asset_id, f"beat {b.frame}")
+        job.log_tail.append("frames uploaded: start" + (", end" if names["end"] else "") + (f", {len(recipe.beats)} beat(s)" if recipe.beats else ""))
+        return names
+
+    async def _finish_i2v_job(self, job: JobRecord, recipe: I2V, files: list[dict], compiled: Any) -> None:
+        """The decoded frames become `clips/<id>/master`, the proxy is encoded, and the proxy is the Catalogue asset."""
+        paths: list[Path] = []
+        for f in sorted(files, key=lambda x: x["filename"]):
+            src = self.app.state_dir / "engine_out" / f["subfolder"] / f["filename"] if f["subfolder"] else self.app.state_dir / "engine_out" / f["filename"]
+            if src.is_file():
+                paths.append(src)
+        if not paths:
+            raise ValueError("the engine produced no frames")
+        clips = ClipStore(self.ws)
+        ep = compiled.summary
+        job.progress_text = "writing the master"
+        self.hub.broadcast("job.updated", job.model_dump())
+        rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id=recipe.model_id, preset=recipe.preset, prompt=recipe.prompt_text,
+                                      seed=job.seed, fps=int(ep.get("fps", recipe.fps)), start_asset_id=recipe.start_asset, end_asset_id=recipe.end_asset,
+                                      beats=[b.model_dump() for b in recipe.beats], params={"recipe": recipe.model_dump(), "compiled": ep | {"graph_hash": compiled.graph_hash}},
+                                      timings={"engine_wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times})
+        job.progress_text = "encoding the proxy"
+        self.hub.broadcast("job.updated", job.model_dump())
+        rec = await asyncio.to_thread(clips.encode_proxy, rec)
+        parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats]
+        parents = list(dict.fromkeys(parents))
+        asset = await asyncio.to_thread(self.catalogue.ingest_file, self.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
+                                        suite="animate", model_id=recipe.model_id, seed=job.seed, prompt_text=recipe.prompt_text,
+                                        params={"clip_id": rec.id, "preset": recipe.preset, "recipe": recipe.model_dump(), **ep},
+                                        timings={"wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash,
+                                        parents=parents, frames=rec.frames, w=rec.w, h=rec.h, variant=job.variant)
+        asset = await asyncio.to_thread(self.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
+        rec.asset_id = asset.id
+        rec.timings["wall_s"] = round(time.time() - self._t0, 1)
+        clips.save(rec)
+        self.hub.broadcast("asset.created", asset.model_dump())
+        job.result["asset_ids"] = [asset.id]
+        job.result["clip_id"] = rec.id
+        job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
+        self.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h})
 
     def _fit_reference(self, src: Path, max_px: int, key: str) -> Path:
         """References are downscaled to ≤ max_px² before upload (09 §3d); PNG so the engine's LoadImage is exact."""

@@ -36,7 +36,11 @@ export function TopBar() {
     <header className="top" ref={ref}>
       <nav className="tabs" aria-label="suites">
         {SUITES.map((t) => (
-          <button key={t.id} className={`tab${s.ui.suite === t.id ? ' active' : ''}`} onClick={() => s.setSuite(t.id)} title={`${t.label} (Ctrl+${t.key})`}>
+          <button key={t.id} className={`tab${s.ui.suite === t.id ? ' active' : ''}`} onClick={() => s.setSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : ''}`}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets') && (t.id === 'edit' || t.id === 'generate')) { e.preventDefault(); e.dataTransfer.dropEffect = 'link' } }}
+            onDrop={(e) => { const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (!ids.length) return; e.preventDefault()
+              if (t.id === 'edit') void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(ids[0]))
+              else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id))) }}>
             {t.label}<kbd>⌃{t.key}</kbd>
           </button>
         ))}

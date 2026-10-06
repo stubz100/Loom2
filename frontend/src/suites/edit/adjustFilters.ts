@@ -7,7 +7,7 @@
 // Per-channel adjustments (levels, curves, exposure, brightness/contrast, invert) are evaluated on the CPU into a
 // 256-entry LUT with the exact formulas; hue/saturation, colour balance and black & white run the same math in the
 // shader; blur-based filters sample the premultiplied backdrop with compose.py's Gaussian (exact up to a 12-tap
-// radius, strided above); noise is a hash approximation of the seeded normal noise.
+// radius, strided above); noise hashes (seed, x, y) with the same integer hash + Box-Muller as compose.py, so it is exact too.
 import { BufferImageSource, ExtensionType, extensions, Filter, GlProgram, GpuProgram, Texture } from 'pixi.js'
 import type { Node } from './editorStore'
 
@@ -60,8 +60,16 @@ vec3 aj_hsl2rgb(vec3 hsl) {
   else if (hp < 4.0) rgb = vec3(0.0, x, c); else if (hp < 5.0) rgb = vec3(x, 0.0, c); else rgb = vec3(c, 0.0, x);
   return rgb + m;
 }
-float aj_hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-float aj_gauss(vec2 p) { float u1 = max(1e-6, aj_hash(p)); float u2 = aj_hash(p + 17.31); return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2); }
+// noise: lowbias32 integer hash of (seed, x, y) → 23-bit uniforms → Box-Muller; compose.py runs the identical arithmetic
+uint aj_h(uint x) { x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
+float aj_u(uint v) { return (float(v >> 9u) + 0.5) / 8388608.0; }
+vec3 aj_noise3(vec2 px, float seed) {
+  uint k = aj_h(aj_h(aj_h(uint(int(seed))) + uint(px.x)) + uint(px.y));
+  uint k2 = aj_h(k); uint k3 = aj_h(k2); uint k4 = aj_h(k3);
+  float r1 = sqrt(-2.0 * log(aj_u(k))); float a1 = 6.283185307179586 * aj_u(k2);
+  float r2 = sqrt(-2.0 * log(aj_u(k3))); float a2 = 6.283185307179586 * aj_u(k4);
+  return vec3(r1 * cos(a1), r1 * sin(a1), r2 * cos(a2));
+}
 float aj_lut1(float v, int ch) { vec4 t = texture(uLutTexture, vec2((floor(v * 255.0 + 0.5) + 0.5) / 256.0, 0.5)); return ch == 0 ? t.r : ch == 1 ? t.g : t.b; }
 vec3 aj_lut(vec3 c) { return vec3(aj_lut1(c.r, 0), aj_lut1(c.g, 1), aj_lut1(c.b, 2)); }
 vec4 aj_blur(vec2 uv, float sigma, int r, int stride) {
@@ -127,8 +135,15 @@ fn aj_hsl2rgb(hsl: vec3<f32>) -> vec3<f32> {
   else if (hp < 4.0) { rgb = vec3<f32>(0.0, x, c); } else if (hp < 5.0) { rgb = vec3<f32>(x, 0.0, c); }
   return rgb + vec3<f32>(m);
 }
-fn aj_hash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.5453); }
-fn aj_gauss(p: vec2<f32>) -> f32 { let u1 = max(1e-6, aj_hash(p)); let u2 = aj_hash(p + vec2<f32>(17.31)); return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2); }
+fn aj_h(x0: u32) -> u32 { var x = x0; x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
+fn aj_u(v: u32) -> f32 { return (f32(v >> 9u) + 0.5) / 8388608.0; }
+fn aj_noise3(px: vec2<f32>, seed: f32) -> vec3<f32> {
+  let k = aj_h(aj_h(aj_h(u32(i32(seed))) + u32(px.x)) + u32(px.y));
+  let k2 = aj_h(k); let k3 = aj_h(k2); let k4 = aj_h(k3);
+  let r1 = sqrt(-2.0 * log(aj_u(k))); let a1 = 6.283185307179586 * aj_u(k2);
+  let r2 = sqrt(-2.0 * log(aj_u(k3))); let a2 = 6.283185307179586 * aj_u(k4);
+  return vec3<f32>(r1 * cos(a1), r1 * sin(a1), r2 * cos(a2));
+}
 fn aj_lut1(v: f32, ch: i32) -> f32 { let t = textureSampleLevel(uLutTexture, uLutSampler, vec2<f32>((floor(v * 255.0 + 0.5) + 0.5) / 256.0, 0.5), 0.0); if (ch == 0) { return t.r; } if (ch == 1) { return t.g; } return t.b; }
 fn aj_lut(c: vec3<f32>) -> vec3<f32> { return vec3<f32>(aj_lut1(c.r, 0), aj_lut1(c.g, 1), aj_lut1(c.b, 2)); }
 fn aj_blur(uv: vec2<f32>, sigma: f32, r: i32, stride: i32) -> vec4<f32> {
@@ -186,8 +201,8 @@ function mains(type: string, kind: 'adjustment' | 'filter'): [string, string] {
     ]
     case 'high_pass': return [fltGl(`${blurGl} vec3 fr = clamp(cb - bl + 0.5, 0.0, 1.0); float fa = ab;`), fltWg(`${blurWg} let fr = clamp(cb - bl + vec3<f32>(0.5), vec3<f32>(0.0), vec3<f32>(1.0)); let fa = ab;`)]
     case 'noise': return [
-      fltGl('vec2 px = floor(vTextureCoord * uInputPixel.xy) + uP0.w; float n0 = aj_gauss(px) * uP0.x; vec3 n = uP0.y > 0.5 ? vec3(n0) : vec3(n0, aj_gauss(px + 101.0) * uP0.x, aj_gauss(px + 211.0) * uP0.x); vec3 fr = clamp(cb + n, 0.0, 1.0); float fa = ab;'),
-      fltWg('let px = floor(uv * gfu.uInputPixel.xy) + vec2<f32>(uP0.w); let n0 = aj_gauss(px) * uP0.x; var n = vec3<f32>(n0, aj_gauss(px + vec2<f32>(101.0)) * uP0.x, aj_gauss(px + vec2<f32>(211.0)) * uP0.x); if (uP0.y > 0.5) { n = vec3<f32>(n0); } let fr = clamp(cb + n, vec3<f32>(0.0), vec3<f32>(1.0)); let fa = ab;'),
+      fltGl('vec2 px = floor(vTextureCoord * uInputPixel.xy); vec3 n = aj_noise3(px, uP0.w) * uP0.x; if (uP0.y > 0.5) n = vec3(n.x); vec3 fr = clamp(cb + n, 0.0, 1.0); float fa = ab;'),
+      fltWg('let px = floor(uv * gfu.uInputPixel.xy); var n = aj_noise3(px, uP0.w) * uP0.x; if (uP0.y > 0.5) { n = vec3<f32>(n.x); } let fr = clamp(cb + n, vec3<f32>(0.0), vec3<f32>(1.0)); let fa = ab;'),
     ]
     default: return [fltGl('vec3 fr = cb; float fa = ab;'), fltWg('let fr = cb; let fa = ab;')]
   }

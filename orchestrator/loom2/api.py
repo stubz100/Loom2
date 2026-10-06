@@ -377,9 +377,12 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def assets_purge(body: PurgeRequest):
         _, cat, _ = svc.require_project()
         gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days)
-        for i in gone:
-            svc.hub.broadcast("asset.deleted", {"id": i})
-        return {"purged": gone}
+        if len(gone) > 50:                                # emptying a 10k trash: one event, the clients reload (not 10k frames)
+            svc.hub.broadcast("catalogue.changed", {"purged": len(gone)})
+        else:
+            for i in gone:
+                svc.hub.broadcast("asset.deleted", {"id": i})
+        return {"purged": len(gone), "ids": gone if len(gone) <= 50 else []}
 
     @app.get("/lineage/tree/{root_id}")
     async def lineage_tree(root_id: str):

@@ -1,0 +1,501 @@
+"""Editor check in a *visible* Edge window (10 §14 acceptance; the verification loop of 10 §11).
+
+Headless Chromium cannot present WebGPU canvases, so the headless `csp_check.py` screenshots say nothing about the
+editor's stage. This script drives a headed Edge — the same Chromium as WebView2 — over the DevTools protocol:
+
+  render  (default)  open a bench document; the stage must show pixels at once (no resize needed), Ctrl+wheel must
+                     zoom, and a window resize must not break either (the 2026-10-06 render-loop regression)
+  paint              B + drag paints a visible stroke on the layer; Add mask, E + drag hides a band of the layer
+                     (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
+  cmpdiag            GPU preview vs exact flatten after each feature in isolation (mask, group, every adjustment
+                     and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
+  tour               runs every Edit command (tools, view, layers, masks, selection, transform, brush, files) through
+                     the dev command hook with a document open, checks the resulting state, answers the in-app
+                     dialogs, and reports any page exception or crash overlay per step
+
+Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 1420 (`npm run dev` in frontend/, or
+`npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
+everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
+
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour]
+"""
+from __future__ import annotations
+
+import base64
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from io import BytesIO
+from pathlib import Path
+
+from PIL import Image
+from websockets.sync.client import connect
+
+ROOT = Path(__file__).resolve().parents[1]
+EDGE = next((p for p in ("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Microsoft/Edge/Application/msedge.exe") if Path(p).exists()), None)
+OUT = Path(os.environ.get("OUT") or (ROOT / ".loom2_state" / "headed"))
+PORT, TOKEN, DBG, DEV = 8769, "headed", 9333, 1420
+STORE = "window.__loom2Editor.getState()"
+ZOOM_SEL = f"Math.round({STORE}.zoom * 1000) / 1000"          # dev builds expose the editor store (10 §11a)
+
+
+def api(method: str, path: str, body=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", method=method, headers={"X-Loom-Token": TOKEN, "Content-Type": "application/json"},
+                                 data=json.dumps(body).encode() if body is not None else None)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read() or b"null")
+
+
+class CDP:
+    def __init__(self, ws_url: str) -> None:
+        self.ws = connect(ws_url, max_size=50 * 2**20)
+        self.n = 0
+        self.events: list[dict] = []
+
+    def call(self, method: str, **params):
+        self.n += 1
+        self.ws.send(json.dumps({"id": self.n, "method": method, "params": params}))
+        while True:
+            msg = json.loads(self.ws.recv())
+            if msg.get("id") == self.n:
+                if "error" in msg:
+                    raise RuntimeError(msg["error"])
+                return msg.get("result", {})
+            if "method" in msg:
+                self.events.append(msg)
+
+    def page_errors(self) -> list[str]:
+        """Uncaught exceptions, console.error lines and browser log errors since the last call; drained."""
+        out: list[str] = []
+        for ev in self.events:
+            m, pr = ev.get("method"), ev.get("params", {})
+            if m == "Runtime.exceptionThrown":
+                d = pr.get("exceptionDetails", {})
+                out.append("exception: " + (d.get("exception", {}).get("description") or d.get("text", "?")).split("\n")[0])
+            elif m == "Runtime.consoleAPICalled" and pr.get("type") == "error":
+                out.append("console.error: " + " ".join(str(a.get("value", a.get("description", ""))) for a in pr.get("args", []))[:200])
+            elif m == "Log.entryAdded" and pr.get("entry", {}).get("level") == "error":
+                out.append("log: " + str(pr["entry"].get("text", ""))[:200])
+        self.events.clear()
+        toasts = self.eval("(() => { const t = [...document.querySelectorAll('.toast.error')].map((e) => e.textContent); document.querySelectorAll('.toast.error button[aria-label=dismiss]').forEach((b) => b.click()); return t })()") or []
+        out += ["error toast: " + str(t)[:200] for t in toasts]
+        crash = self.eval("document.getElementById('crash')?.textContent || ''")
+        if crash:
+            out.append("crash overlay: " + crash.split("\n")[0][:200])
+            self.eval("document.getElementById('crash')?.remove(); 1")
+        return out
+
+    def eval(self, expr: str):
+        r = self.call("Runtime.evaluate", expression=expr, returnByValue=True, awaitPromise=True)
+        return r.get("result", {}).get("value")
+
+    def shot(self, path: Path) -> Image.Image:
+        data = base64.b64decode(self.call("Page.captureScreenshot", format="png")["data"])
+        path.write_bytes(data)
+        return Image.open(BytesIO(data)).convert("RGB")
+
+    def key(self, ch: str) -> None:
+        self.call("Input.dispatchKeyEvent", type="keyDown", key=ch, code=f"Key{ch.upper()}", text=ch)
+        self.call("Input.dispatchKeyEvent", type="keyUp", key=ch, code=f"Key{ch.upper()}")
+
+    def drag(self, x0: float, y0: float, x1: float, y1: float, steps: int = 12) -> None:
+        self.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0, y=y0)
+        self.call("Input.dispatchMouseEvent", type="mousePressed", x=x0, y=y0, button="left", buttons=1, clickCount=1)
+        for i in range(1, steps + 1):
+            self.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0 + (x1 - x0) * i / steps, y=y0 + (y1 - y0) * i / steps, button="left", buttons=1)
+            time.sleep(0.02)
+        self.call("Input.dispatchMouseEvent", type="mouseReleased", x=x1, y=y1, button="left", buttons=0, clickCount=1)
+
+    def ctrl_wheel(self, x: float, y: float, n: int = 1) -> None:
+        for _ in range(n):
+            self.call("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y)
+            self.call("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=0, deltaY=-240, modifiers=2)
+            time.sleep(0.3)
+
+
+def stage_bright(im: Image.Image) -> float:
+    """Share of non-dark pixels in the stage area (a 1600×1000 window): ~0 % when nothing is drawn, 20 %+ with a document."""
+    w, h = im.size
+    st = im.crop((int(w * 0.24), int(h * 0.09), int(w * 0.78), int(h * 0.96)))
+    px = list(st.getdata())
+    return sum(1 for p in px if max(p) > 60) / len(px) * 100
+
+
+def tour(cdp: CDP, tmp: Path) -> list[str]:
+    """Every Edit command once, with state checks. Returns the failed step descriptions."""
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    run = lambda cid: f"{C}.runCommand('{cid}')"  # noqa: E731
+    COUNT = f"(() => {{ let n = 0; const w = (xs) => xs.forEach((x) => {{ n++; if (x.children) w(x.children) }}); w({S}.doc.layers); return n }})()"
+    ACTIVE = f"(() => {{ const s = {S}; let hit = null; const w = (xs) => xs.forEach((x) => {{ if (x.id === s.activeId) hit = x; if (x.children) w(x.children) }}); w(s.doc.layers); return hit }})()"
+
+    ANY = object()                                                   # expect=ANY: truthy; expect=None: null
+
+    def step(name: str, js: str, check: str | None = None, expect=ANY, settle: float = 0.3) -> None:
+        ran = cdp.eval(js)
+        time.sleep(settle)
+        got = cdp.eval(check) if check else None
+        errs = cdp.page_errors()
+        ok = (ran is not False) and (check is None or (bool(got) if expect is ANY else got == expect)) and not errs
+        detail = f" → {got!r}" if check else ""
+        if expect is not ANY and got != expect:
+            detail += f" (expected {expect!r})"
+        if ran is False:
+            detail += " (command disabled or unknown)"
+        print(("ok   " if ok else "FAIL ") + name + detail + ("".join("\n       " + e for e in errs)))
+        if not ok:
+            fails.append(name)
+
+    def answer_dialog(text: str | None = None) -> bool:
+        """Fill the in-app ask dialog (if any) and confirm it; returns whether one was open."""
+        has = cdp.eval("!!document.querySelector('.modal.ask')")
+        if not has:
+            return False
+        if text is not None:
+            cdp.eval("(() => { const i = document.querySelector('.modal.ask input'); i.focus(); i.select(); return 1 })()")
+            cdp.call("Input.insertText", text=text)
+            time.sleep(0.1)
+        cdp.eval("(() => { const b = [...document.querySelectorAll('.modal.ask .foot button')].pop(); b.click(); return 1 })()")
+        time.sleep(0.3)
+        return True
+
+    print("--- tools")
+    for t in ["move", "marquee", "lasso", "wand", "ai", "brush", "eraser", "fill", "eyedropper", "crop", "hand", "zoom"]:
+        step(f"tool {t}", run(f"edit.tool.{t}"), f"{S}.tool", t, settle=0.1)
+    print("--- view")
+    z0 = cdp.eval(f"{S}.zoom")
+    step("zoom in", run("edit.view.zoomIn"), f"{S}.zoom > {z0}")
+    step("zoom out", run("edit.view.zoomOut"), f"Math.abs({S}.zoom - {z0}) < 1e-6")
+    step("zoom 100 %", run("edit.view.100"), f"{S}.zoom", 1)
+    step("zoom 200 %", run("edit.view.200"), f"{S}.zoom", 2)
+    step("fit", run("edit.view.fit"), f"{S}.zoom < 2")
+    g0 = cdp.eval(f"{S}.pixelGrid")
+    step("pixel grid", run("edit.view.grid"), f"{S}.pixelGrid", not g0)
+    cdp.eval(run("edit.view.grid"))
+    o0 = cdp.eval(f"{S}.overlay")
+    step("mask overlay", run("edit.view.overlay"), f"{S}.overlay", not o0)
+    cdp.eval(run("edit.view.overlay"))
+    step("before on", run("edit.view.before"), f"{S}.before", True)
+    step("before off", run("edit.view.before"), f"{S}.before", False)
+    print("--- layers")
+    n0 = cdp.eval(COUNT)
+    base_id = cdp.eval(f"{S}.doc.layers[{S}.doc.layers.length - 1].id")
+    step("new layer", run("edit.layer.new"), COUNT, n0 + 1)
+    step("duplicate", run("edit.layer.duplicate"), COUNT, n0 + 2)
+    step("merge down", run("edit.layer.mergeDown"), COUNT, n0 + 1)
+    cdp.eval(run("edit.layer.rename")); time.sleep(0.3)
+    had = answer_dialog("Tour layer")
+    step("rename via in-app prompt", "1", f"{ACTIVE}.name", "Tour layer" if had else "(no dialog opened)")
+    step("hide layer", run("edit.layer.visibility"), f"{ACTIVE}.visible", False)
+    step("show layer", run("edit.layer.visibility"), f"{ACTIVE}.visible", True)
+    step("solo", run("edit.layer.solo"), f"{S}.doc.layers.filter((l) => l.visible).length", 1)
+    step("undo solo", run("edit.undo"), f"{S}.doc.layers.filter((l) => l.visible).length", n0 + 1)
+    step("lock", run("edit.layer.lock"), f"{ACTIVE}.locked", True)
+    step("unlock", run("edit.layer.lock"), f"{ACTIVE}.locked", False)
+    step("move layer down", run("edit.layer.down"), f"{S}.doc.layers.findIndex((l) => l.id === {S}.activeId)", 1)
+    step("move layer up", run("edit.layer.up"), f"{S}.doc.layers.findIndex((l) => l.id === {S}.activeId)", 0)
+    step("new empty group", run("edit.layer.newGroup"), COUNT, n0 + 2)
+    cdp.eval(f"{S}.setActive('{base_id}', false)")
+    step("group the active layer", run("edit.layer.group"), f"{ACTIVE}.kind", "group")
+    adj = cdp.eval(f"JSON.stringify({C}.commandsFor('edit').map((c) => c.id).filter((i) => i.startsWith('edit.layer.adjustment.')))")
+    flt = cdp.eval(f"JSON.stringify({C}.commandsFor('edit').map((c) => c.id).filter((i) => i.startsWith('edit.layer.filter.')))")
+    n = cdp.eval(COUNT)
+    for cid in json.loads(adj) + json.loads(flt):
+        n += 1
+        step(cid.replace("edit.layer.", "add "), run(cid), COUNT, n, settle=0.15)
+    print("--- masks (on the first raster, from the Zoom tool)")
+    cdp.eval(f"{S}.setTool('zoom'); {S}.setActive('{base_id}', false); 1")
+    step("add mask → editing it on the brush", run("edit.mask.add"), f"JSON.stringify([{S}.editingMask, {S}.tool, !!{ACTIVE}.mask])", "[true,\"brush\",true]")
+    step("mask hint shown under the layers", "1", "!!document.querySelector('.mask-hint')", True)
+    step("disable mask", run("edit.mask.toggle"), f"{ACTIVE}.mask.enabled", False)
+    step("enable mask", run("edit.mask.toggle"), f"{ACTIVE}.mask.enabled", True)
+    step("edit pixels", run("edit.mask.edit"), f"{S}.editingMask", False)
+    step("edit mask", run("edit.mask.edit"), f"{S}.editingMask", True)
+    step("load mask as selection", run("edit.mask.load"), f"!!{S}.selection", True)
+    step("remove mask", run("edit.mask.remove"), f"{ACTIVE}.mask", None)
+    step("mask from selection", run("edit.mask.fromSelection"), f"!!{ACTIVE}.mask", True)
+    step("deselect", run("edit.sel.none"), f"{S}.selection", None)
+    print("--- selection")
+    step("select all", run("edit.sel.all"), f"!!{S}.selection", True)
+    step("invert", run("edit.sel.invert"), f"!!{S}.selection", True)
+    step("feather… (opens the Selection panel)", run("edit.sel.feather"))
+    step("quick mask on", run("edit.sel.quickMask"), f"{S}.quickMask", True)
+    step("quick mask off", run("edit.sel.quickMask"), f"{S}.quickMask", False)
+    cdp.eval(run("edit.sel.all"))
+    h = cdp.eval(f"{S}.history.length")
+    step("clear selected pixels", run("edit.sel.clear"), f"{S}.history.length", h + 1)
+    step("undo clear", run("edit.undo"), f"{S}.history.length", h)
+    w0 = cdp.eval(f"{S}.doc.w")
+    step("crop to selection (all → unchanged size, selection consumed)", run("edit.sel.crop"), f"JSON.stringify([{S}.doc.w, {S}.selection])", f"[{w0},null]")
+    print("--- transform")
+    step("free transform", run("edit.transform"), f"!!{S}.transform && {S}.tool === 'move'", True)
+    step("cancel transform", run("edit.transform.cancel"), f"{S}.transform", None)
+    step("free transform again", run("edit.transform"), f"!!{S}.transform", True)
+    step("apply transform", run("edit.transform.apply"), f"{S}.transform", None, settle=0.8)
+    h = cdp.eval(f"{S}.history.length")
+    for i, cid in enumerate(["edit.layer.flipH", "edit.layer.flipH", "edit.layer.flipV", "edit.layer.flipV", "edit.layer.rot90", "edit.layer.rot270", "edit.layer.rot180", "edit.layer.rot180"]):
+        step(cid.replace("edit.layer.", ""), run(cid), f"{S}.history.length", h + i + 1, settle=0.5)
+    print("--- brush and colours")
+    sz = cdp.eval(f"{S}.brush.size")
+    step("larger brush", run("edit.brush.larger"), f"{S}.brush.size > {sz}")
+    step("smaller brush", run("edit.brush.smaller"), f"{S}.brush.size", sz)
+    hd = cdp.eval(f"{S}.brush.hardness")
+    step("harder", run("edit.brush.harder"), f"{S}.brush.hardness >= {hd}")
+    step("softer", run("edit.brush.softer"), f"Math.abs({S}.brush.hardness - {hd}) < 0.011")
+    bg = cdp.eval(f"{S}.brush.background")
+    step("swap colours", run("edit.colour.swap"), f"{S}.brush.color", bg)
+    step("default colours", run("edit.colour.default"), f"{S}.brush.color", "#000000")
+    print("--- delete with undo toast")
+    cdp.eval(f"(() => {{ const s = {S}; let id = null; const w = (xs) => xs.forEach((x) => {{ if (x.name === 'Tour layer') id = x.id; if (x.children) w(x.children) }}); w(s.doc.layers); if (id) s.setActive(id, false); return id }})()")
+    n = cdp.eval(COUNT)
+    step("delete layer (no confirm)", run("edit.layer.delete"), COUNT, n - 1)
+    step("undo offered in a toast", "(() => { const b = [...document.querySelectorAll('.toast button')].find((x) => x.textContent === 'Undo'); if (!b) return false; b.click(); return true })()", COUNT, n)
+    print("--- undo / redo ×8")
+    f0 = cdp.eval(f"{S}.future.length")
+    for _ in range(8):
+        cdp.eval(run("edit.undo")); time.sleep(0.15)
+    step("undo ×8", "1", f"{S}.future.length", f0 + 8)
+    for _ in range(8):
+        cdp.eval(run("edit.redo")); time.sleep(0.15)
+    step("redo ×8", "1", f"{S}.future.length", f0)
+    print("--- files")
+    cdp.eval(run("edit.save"))
+    t0 = time.time()
+    while time.time() - t0 < 15 and cdp.eval(f"{S}.saving || {S}.docDirty"):
+        time.sleep(0.3)
+    step("save", "1", f"{S}.docDirty", False)
+    before = api("GET", "/assets?limit=1000")
+    n_assets = before.get("total", len(before.get("items", []))) if isinstance(before, dict) else len(before)
+    cdp.eval(run("edit.saveToCatalogue"))
+    t0 = time.time()
+    while time.time() - t0 < 15:
+        after = api("GET", "/assets?limit=1000")
+        n_after = after.get("total", len(after.get("items", []))) if isinstance(after, dict) else len(after)
+        if n_after > n_assets:
+            break
+        time.sleep(0.4)
+    step(f"save to catalogue (assets {n_assets} → {n_after})", "1") if n_after > n_assets else (fails.append("save to catalogue") or print(f"FAIL save to catalogue (assets {n_assets} → {n_after})"))
+    cdp.eval(run("edit.exportPng")); time.sleep(2.5)
+    pngs = list((tmp / "dl").glob("*.png"))
+    step("export PNG downloads a file", "1", "1") if pngs else (fails.append("export PNG") or print("FAIL export PNG: no .png downloaded"))
+    cdp.eval(run("edit.exportPsd"))
+    t0 = time.time()
+    while time.time() - t0 < 25 and not list((tmp / "dl").glob("*.psd")):
+        time.sleep(0.5)
+    psds = list((tmp / "dl").glob("*.psd"))
+    step("export PSD downloads a file", "1", "1") if psds else (fails.append("export PSD") or print("FAIL export PSD: no .psd downloaded"))
+    cdp.eval(run("edit.compare"))
+    t0 = time.time()
+    while time.time() - t0 < 20 and not cdp.eval(f"!!{S}.lastCompare"):
+        time.sleep(0.4)
+    step("compare with the exact flatten (p99 ≤ 4/255)", "1", f"JSON.stringify({S}.lastCompare && [{S}.lastCompare.rgb_mean, {S}.lastCompare.rgb_p99, {S}.lastCompare.rgb_max])")
+    cmp_ = cdp.eval(f"{S}.lastCompare && {S}.lastCompare.rgb_p99")
+    if cmp_ is None or cmp_ > 4:
+        fails.append("compare p99"); print(f"FAIL compare p99 = {cmp_!r}")
+    cdp.eval(run("edit.layer.new")); time.sleep(0.3)
+    cdp.eval(run("edit.close")); time.sleep(0.4)
+    had = answer_dialog()
+    step("close with unsaved changes asks in-app, then closes", "1", f"{S}.doc === null && {had and 'true' or 'false'}", True)
+    errs = cdp.page_errors()
+    if errs:
+        print("FAIL trailing page errors: " + "; ".join(errs)); fails.append("trailing errors")
+    return fails
+
+
+def cmpdiag(cdp: CDP) -> list[str]:
+    """Compare the GPU preview with the exact flatten after each feature, one at a time, on the bench document."""
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+
+    def compare(label: str) -> None:
+        cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+        t0 = time.time()
+        while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+            time.sleep(0.3)
+        r = cdp.eval("JSON.stringify(window.__cmp && window.__cmp.rgb_p99 !== undefined ? [window.__cmp.rgb_mean, window.__cmp.rgb_p99, window.__cmp.rgb_max] : window.__cmp)")
+        errs = cdp.page_errors()
+        p99 = None
+        try:
+            p99 = json.loads(r)[1]
+        except Exception:
+            pass
+        ok = p99 is not None and p99 <= 4 and not errs
+        print(("ok   " if ok else "FAIL ") + f"{label}: [mean, p99, max] = {r}" + "".join("\n       " + e for e in errs))
+        if not ok:
+            fails.append(label)
+
+    compare("base layer only")
+    run("edit.mask.add"); time.sleep(0.3); compare("white mask on the base layer")
+    cdp.eval(f"(() => {{ const s = {S}; const m = s.masks.get(s.activeId); m.ctx.fillStyle = '#000'; m.ctx.fillRect(0, 0, m.width / 2, m.height); m.refresh(); m.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.4)
+    compare("mask black on the left half")
+    run("edit.mask.remove"); time.sleep(0.3); compare("mask removed")
+    run("edit.layer.group"); time.sleep(0.3); compare("base inside a pass-through group")
+    cdp.eval(f"{S}.updateNode({S}.activeId, {{ passthrough: false }}, 'group mode'); 1"); time.sleep(0.3); compare("… isolated group")
+    cdp.eval(f"{S}.updateNode({S}.activeId, {{ opacity: 0.5 }}, 'opacity'); 1"); time.sleep(0.3); compare("… isolated group at 50 %")
+    run("edit.undo"); run("edit.undo"); run("edit.undo"); time.sleep(0.4); compare("group undone")
+    for cid in json.loads(cdp.eval(f"JSON.stringify({C}.commandsFor('edit').map((c) => c.id).filter((i) => /^edit\\.layer\\.(adjustment|filter)\\./.test(i)))")):
+        run(cid); time.sleep(0.4); compare(cid.replace("edit.layer.", "") + " (defaults, above the base)")
+        run("edit.layer.delete"); time.sleep(0.3)
+    cdp.eval(f"{S}.setActive({S}.doc.layers[0].id, false); 1")
+    run("edit.transform"); time.sleep(0.2); run("edit.transform.apply"); time.sleep(0.8); compare("identity free transform applied")
+    run("edit.layer.flipH"); run("edit.layer.flipH"); time.sleep(0.6); compare("flipH ×2")
+    run("edit.layer.rot90"); time.sleep(0.6); compare("rot90")
+    run("edit.layer.rot270"); time.sleep(0.6); compare("rot270 (back)")
+    run("edit.layer.new"); time.sleep(0.3); compare("empty raster layer above")
+    return fails
+
+
+def main() -> int:
+    mode = sys.argv[1] if len(sys.argv) > 1 else "render"
+    if not EDGE:
+        print("Edge not found"); return 2
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{DEV}/", timeout=3)
+    except Exception:
+        print(f"frontend dev server not reachable on {DEV}: run `npm run dev` in frontend/ first"); return 2
+    OUT.mkdir(parents=True, exist_ok=True)
+    extra = os.environ.get("EXTRA", "")
+    tag = extra.replace("&", "_").replace("=", "-") or ""
+    tmp = Path(tempfile.mkdtemp(prefix="loom2-headed-"))
+    env = {**os.environ, "LOOM2_TOKEN": TOKEN, "PYTHONIOENCODING": "utf-8"}
+    orch = subprocess.Popen([sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")],
+                            cwd=str(ROOT / "orchestrator"), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    edge = None
+    failures: list[str] = []
+
+    def check(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "FAIL ") + text)
+        if not ok:
+            failures.append(text)
+
+    try:
+        t0 = time.time()
+        while time.time() - t0 < 60:
+            try:
+                api("GET", "/health"); break
+            except Exception:
+                time.sleep(0.3)
+        api("POST", "/project", {"path": str(tmp / "proj"), "name": "Headed", "size_cap_gb": 10})
+        asset = api("POST", "/assets/import", {"paths": [str(ROOT / "bench/inpaint/source.png")]})["items"][0]
+        doc = api("POST", "/documents", {"from_asset": asset["id"]})
+        url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={doc['id']}{extra}"
+        edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
+                                 "--window-size=1600,1000", "--window-position=40,40", "--new-window", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ws_url = None
+        t0 = time.time()
+        while time.time() - t0 < 30 and not ws_url:
+            try:
+                for t in json.load(urllib.request.urlopen(f"http://127.0.0.1:{DBG}/json", timeout=3)):
+                    if t.get("type") == "page" and f"127.0.0.1:{DEV}" in t.get("url", ""):
+                        ws_url = t["webSocketDebuggerUrl"]
+            except Exception:
+                time.sleep(0.5)
+        if not ws_url:
+            print("no page target"); return 1
+        cdp = CDP(ws_url)
+        cdp.call("Page.enable"); cdp.call("Runtime.enable"); cdp.call("Log.enable")
+        (tmp / "dl").mkdir()
+        cdp.call("Browser.setDownloadBehavior", behavior="allow", downloadPath=str(tmp / "dl"))
+        # wait for the renderer badge (the editor booted) plus a moment for the first frame
+        t0 = time.time()
+        badge = None
+        while time.time() - t0 < 30 and not badge:
+            badge = cdp.eval("document.querySelector('.badge-renderer')?.textContent?.trim() || null")
+            if badge in (None, "…"):
+                badge = None; time.sleep(0.5)
+        time.sleep(1.5)
+        canvas = cdp.eval("(() => { const c = document.querySelector('.edit-canvas canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { w: c.width, h: c.height, cssW: r.width, cssH: r.height, x: r.x, y: r.y } })()")
+        dpr = cdp.eval("window.devicePixelRatio") or 1
+        im0 = cdp.shot(OUT / f"{mode}{tag}-0.png")
+        b0 = stage_bright(im0)
+        print(f"renderer badge {badge!r} · canvas {canvas} · dpr {dpr}")
+        check(badge is not None and canvas is not None, "editor booted (renderer badge + canvas present)")
+        check(b0 > 10, f"stage shows the document right away: {b0:.1f} % bright (expect > 10)")
+        if not canvas:
+            return 1
+        cx, cy = canvas["x"] + canvas["cssW"] / 2, canvas["y"] + canvas["cssH"] / 2
+
+        def region_diff(a: Image.Image, b: Image.Image, box) -> float:
+            """Mean per-channel difference inside a CSS-pixel box (screenshots are in device pixels)."""
+            box = tuple(int(v * dpr) for v in box)
+            pa, pb = list(a.crop(box).getdata()), list(b.crop(box).getdata())
+            return sum(abs(x[0] - y[0]) + abs(x[1] - y[1]) + abs(x[2] - y[2]) for x, y in zip(pa, pb)) / (3 * len(pa))
+
+        if mode == "render":
+            zoom0 = cdp.eval(ZOOM_SEL)
+            cdp.ctrl_wheel(cx, cy, 3); time.sleep(1.0)
+            zoom1 = cdp.eval(ZOOM_SEL)
+            im1 = cdp.shot(OUT / f"{mode}{tag}-1.png")
+            check(zoom1 != zoom0 and stage_bright(im1) > b0 + 5, f"Ctrl+wheel zooms and re-renders: zoom {zoom0} → {zoom1}, bright {b0:.1f} → {stage_bright(im1):.1f} %")
+            cdp.call("Browser.setWindowBounds", windowId=cdp.call("Browser.getWindowForTarget")["windowId"], bounds={"width": 1500, "height": 950})
+            time.sleep(1.5)
+            im2 = cdp.shot(OUT / f"{mode}{tag}-2.png")
+            check(stage_bright(im2) > 10, f"stage still drawn after a window resize: {stage_bright(im2):.1f} %")
+            cdp.ctrl_wheel(cx, cy, 1); time.sleep(1.0)
+            zoom2 = cdp.eval(ZOOM_SEL)
+            check(zoom2 != zoom1, f"zoom keeps working after the resize: {zoom1} → {zoom2}")
+        elif mode == "paint":
+            cdp.eval("document.body.focus(); 1")
+            cdp.key("b"); time.sleep(0.2)
+            tool = cdp.eval(f"{STORE}.tool")
+            check(tool == "brush", f"B selects the brush (tool = {tool!r})")
+            band = (canvas["x"] + canvas["cssW"] * 0.25, cy - 40, canvas["x"] + canvas["cssW"] * 0.75, cy + 40)
+            before = cdp.shot(OUT / f"{mode}{tag}-paint0.png")
+            cdp.drag(canvas["x"] + canvas["cssW"] * 0.3, cy, canvas["x"] + canvas["cssW"] * 0.7, cy); time.sleep(0.6)
+            after = cdp.shot(OUT / f"{mode}{tag}-paint1.png")
+            hist = cdp.eval(f"JSON.stringify({STORE}.history.map(h => h.label))")
+            d1 = region_diff(before, after, band)
+            check(d1 > 5, f"brush stroke is visible on the stage: band changed by {d1:.1f}/255 (history {hist})")
+            added = cdp.eval("(() => { const b = document.querySelector('button[aria-label=\"Add mask\"]'); if (!b) return false; b.click(); return true })()")
+            time.sleep(0.5)
+            check(bool(added) and bool(cdp.eval(f"{STORE}.editingMask")), "Add mask (Layers toolbar) adds a mask and switches to editing it")
+            cdp.key("e"); time.sleep(0.2)
+            before2 = cdp.shot(OUT / f"{mode}{tag}-mask0.png")
+            cdp.drag(canvas["x"] + canvas["cssW"] * 0.3, cy + 60, canvas["x"] + canvas["cssW"] * 0.7, cy + 60); time.sleep(0.6)
+            after2 = cdp.shot(OUT / f"{mode}{tag}-mask1.png")
+            d2 = region_diff(before2, after2, (band[0], cy + 20, band[2], cy + 100))
+            check(d2 > 5, f"eraser on the mask hides the layer there (checker shows): band changed by {d2:.1f}/255")
+            cdp.eval("document.querySelector('.layer-row button.eye')?.click(); 1"); time.sleep(0.5)
+            hidden = cdp.shot(OUT / f"{mode}{tag}-hidden.png")
+            d3 = region_diff(after2, hidden, (canvas["x"] + canvas["cssW"] * 0.2, canvas["y"] + canvas["cssH"] * 0.3, canvas["x"] + canvas["cssW"] * 0.8, canvas["y"] + canvas["cssH"] * 0.7))
+            check(d3 > 20, f"layer eye off re-renders the stage: changed by {d3:.1f}/255")
+            cdp.eval("document.querySelector('.layer-row button.eye')?.click(); 1"); time.sleep(0.3)
+            cdp.eval("(() => { const b = [...document.querySelectorAll('button')].find(b => (b.getAttribute('title') || b.getAttribute('aria-label') || '').startsWith('Brushes')); b && b.click(); return !!b })()")
+            time.sleep(0.5)
+            cdp.shot(OUT / f"{mode}{tag}-brushes.png")
+            print(f"     Brushes tab screenshot: {OUT / f'{mode}{tag}-brushes.png'}")
+        elif mode == "tour":
+            failures += tour(cdp, tmp)
+        elif mode == "cmpdiag":
+            failures += cmpdiag(cdp)
+        else:
+            print(f"unknown mode {mode!r}"); return 2
+        try:
+            cdp.call("Browser.close")
+        except Exception:
+            pass
+        print(f"\n{mode}{tag}: {'all checks passed' if not failures else f'{len(failures)} FAILED'} · screenshots in {OUT}")
+        return 1 if failures else 0
+    finally:
+        try:
+            api("POST", "/shutdown")
+        except Exception:
+            pass
+        try:
+            orch.wait(timeout=15)
+        except Exception:
+            orch.kill()
+        if edge:
+            try:
+                edge.wait(timeout=10)
+            except Exception:
+                edge.kill()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

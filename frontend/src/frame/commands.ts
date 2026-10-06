@@ -43,6 +43,8 @@ export function runCommand(id: string): boolean {
 }
 /** Menus and toolbars call this when they render a command, so the dev audit can list the ones nothing shows. */
 export function markUsed(id: string): void { USED.add(id) }
+// dev: the headed check (`scripts/edit_headed_check.py tour`) runs every command of a scope through this hook
+if (import.meta.env.DEV) (window as unknown as { __loom2Commands?: unknown }).__loom2Commands = { commandsFor, runCommand, isEnabled, command }
 export function unusedCommands(scope: Scope): Command[] { return commandsFor(scope).filter((c) => !USED.has(c.id)) }
 
 // ---- shortcuts ---------------------------------------------------------------------------------------------

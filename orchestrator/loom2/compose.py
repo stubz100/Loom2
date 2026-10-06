@@ -283,10 +283,42 @@ def _sharpen(rgba: Arr, p: dict) -> Arr:
     return out
 
 
+def _hash32(x: np.ndarray) -> np.ndarray:
+    """lowbias32 (Wellons) on uint32 arrays; the editor's shaders run the same five steps (adjustFilters.ts aj_h)."""
+    x = x.astype(np.uint32, copy=True)
+    x ^= x >> np.uint32(16)
+    x *= np.uint32(0x7FEB352D)
+    x ^= x >> np.uint32(15)
+    x *= np.uint32(0x846CA68B)
+    x ^= x >> np.uint32(16)
+    return x
+
+
+def noise_field(w: int, h: int, seed: int) -> np.ndarray:
+    """Unit-variance normal noise (h, w, 3) that is a pure function of (seed, x, y): hash → two 23-bit uniforms per pair →
+    Box-Muller. The GPU preview evaluates exactly this per fragment, so preview and flatten agree to rounding."""
+    xs = np.arange(w, dtype=np.uint32)[None, :]
+    ys = np.arange(h, dtype=np.uint32)[:, None]
+    s = _hash32(np.full((1, 1), seed & 0xFFFFFFFF, dtype=np.uint32))
+    with np.errstate(over="ignore"):
+        k = _hash32(_hash32(s + xs) + ys)
+        k2 = _hash32(k)
+        k3 = _hash32(k2)
+        k4 = _hash32(k3)
+
+    def u(v: np.ndarray) -> np.ndarray:                       # (0, 1), exactly representable in float32 like the shader's
+        return ((v >> np.uint32(9)).astype(np.float32) + np.float32(0.5)) / np.float32(8388608.0)
+
+    r1 = np.sqrt(-2.0 * np.log(u(k)))
+    a1 = 2.0 * np.pi * u(k2)
+    r2 = np.sqrt(-2.0 * np.log(u(k3)))
+    a2 = 2.0 * np.pi * u(k4)
+    return np.stack([r1 * np.cos(a1), r1 * np.sin(a1), r2 * np.cos(a2)], axis=-1).astype(np.float32)
+
+
 def _noise(rgba: Arr, p: dict) -> Arr:
-    rng = np.random.default_rng(int(p.get("seed", 0)))
-    amt = p.get("amount", 10) / 100
-    n = rng.normal(0, amt, rgba[..., :3].shape).astype(np.float32)
+    amt = np.float32(p.get("amount", 10) / 100)
+    n = noise_field(rgba.shape[1], rgba.shape[0], int(p.get("seed", 0))) * amt
     if p.get("monochrome", True):
         n = np.repeat(n[..., :1], 3, axis=-1)
     out = rgba.copy()

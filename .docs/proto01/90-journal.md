@@ -1221,3 +1221,97 @@ read the clock)*
   test document was left in the project; fixed in the script, the 24 check lines stand.)
 - Not run / carried: Fill Hero on the bench (unchanged since E8, `--hero` flag), SeedVR2 and LoRA slots (post-MVP), a
   Photoshop/Krita open of the PSD (manual). Next: **M6 Animate** (11 approved, E4/E5 decided; E9 fps-conform spike inside it).
+
+## 2026-10-06 14:30 — Empty trash; tiles dropped on Edit open there; renderer probe + WebGL2 fallback (user reports)
+
+- **Report 1:** 10 000 assets moved to the trash, no way to delete them all. Added **Empty trash**: `cat.emptyTrash`
+  command (panel · context · strip · palette) and an `EmptyTrashButton` in the Library panel under the folders and in the
+  strip's selection bar — two-step, no native dialog: first click arms for 4 s ("Click again: delete N permanently"),
+  second click calls `POST /assets/purge {ids: null}` (every trashed asset). The server now answers `{purged: n, ids}`
+  and, above 50 assets, broadcasts one `catalogue.changed {purged}` instead of n `asset.deleted` frames (the clients
+  reload both grids); test added (60 imports, 55 trashed → one frame, 5 left; a small purge still lists its ids).
+- **Report 2:** "pull an image to edit mode: it doesn't show on the work area". Two readings, both handled:
+  (a) *drag*: Catalogue tiles already carry `text/loom2-assets`, but nothing accepted the drop. Now the **Edit tab**
+  opens the dropped asset as a document, the **Edit stage / empty state** opens it (no document) or adds it as a new
+  raster layer above the active one (`addLayerFromAsset`: fetched through `/assets/{id}/file`, `LayerPixels.fromImage`,
+  lineage to the asset), and the **Generate tab** takes dropped tiles as references.
+  (b) *the canvas itself*: a headless check (`scratchpad` diag; the editor opened from a bench asset, console captured)
+  showed the document loads and the Pixi scene is built — 1 raster 960×544, checker visible — yet on WebGPU nothing is
+  drawn and the GPU-vs-exact compare never completes, while on WebGL2 (`&renderer=webgl`, new dev deep link) the stage
+  renders and the compare is exact (mean 0.0). Headless WebGPU is not representative of WebView2 (E1 measured 3 ms
+  composites there), so the real-app cause could not be confirmed from here; the design's D3 fallback is now
+  **automatic**: after init a 4×4 white sprite is drawn and read back through the exact-compare path; a renderer that
+  yields no pixels is destroyed and the editor boots again on WebGL2 ("WebGL2 (fallback)" badge + toast). The badge is a
+  button cycling auto → forced WebGL2 → forced WebGPU (persisted; the canvas remounts). The on-demand render loop
+  gained a 60 ms timer alongside the animation frame so a paused frame (hidden window) cannot leave the canvas stale.
+  The `&verify=1` deep link now waits for the renderer instead of a fixed 2 s. 08 §12, 10 §11a, 13 D3 updated.
+  Build with the full `tsc -b` check clean; 68 offline tests. Not verified from here: WebGPU in the user's WebView2 —
+  if the work area still stays empty after this, the badge text (WebGPU / WebGL2 (fallback)) is the first thing to read.
+
+## 2026-10-06 16:40 — Editor "not working" report: one render-loop bug behind four symptoms; brush panel rebuilt
+
+- **Report:** "the image was invisible, but when I resized the window it popped out · zoom is not working · layers have
+  no relevance yet · masks cannot be painted · the brush selection is very limited and most options are unconfigurable
+  (like brush diameter)".
+- **Root cause (first four symptoms):** the on-demand render loop (10 §11) coalesces requests through a pending flag
+  that held the `requestAnimationFrame` id. The canvas's cleanup cancelled that frame but left the flag set, and React
+  StrictMode (dev) mounts → unmounts → mounts the canvas once, with the zoom/pan effect requesting a frame before the
+  renderer existed. Every later request saw "a frame is pending" and returned: strokes, mask edits, layer toggles and
+  zooms all went into the store and the CPU canvases, nothing reached the screen until Pixi's own resize path drew a
+  frame. Fix in `EditorCanvas.tsx`: a request before the renderer exists is dropped (init renders once itself), the
+  frame callback clears the flag first, cleanup cancels *and* clears, and the 60 ms timer added yesterday as a belt is
+  gone (it masked nothing and ticked while idle). The headless diagnosis of yesterday could not show any of this —
+  headless Edge does not present WebGPU at all — so the editor was driven in a **visible Edge window over the DevTools
+  protocol**; that harness is now `scripts/edit_headed_check.py` (modes `render` and `paint`; dev builds expose
+  `window.__loom2App` / `window.__loom2Editor` for it). Numbers on the rig, WebGPU: stage 21.6 % bright at once (was 0
+  until a resize), Ctrl+wheel → 70.5 %, after a window resize 73.9 % and zoom still works; `paint`: brush band changed
+  34.8/255, eraser on a fresh mask 11.0/255 (checker shows through), layer eye off 45.5/255; WebGL2 identical. Painting
+  itself had never been broken: the stroke was in the layer canvas and in the GPU composite all along.
+- **Brush panel (fifth symptom):** every slider in the editor now has a **number field** (px for size, % for the rest;
+  typed values are clamped), size runs to 1024 px, and the Brushes tab carries the full current brush (size, hardness,
+  opacity, flow, spacing, smoothing, colour) under a preset list of seven built-ins with their own diameters (hard round ·
+  soft round · airbrush · pencil · inker · marker · wash) plus **Save current as preset…** (named, persisted in the
+  browser, deletable). The `[` `]` / `Shift+[` `]` step buttons got icons (±, dashed/solid circle) instead of the zoom
+  glasses. 10 §4 Panel · Brushes, §11, §11a, §14 updated; README scripts line.
+- Build with the full `tsc -b` check clean; 68 offline tests. Pixi's shared ticker still requests ~32 animation frames
+  a second while idle (it renders nothing); left as a follow-up for the M6 power budget.
+
+## 2026-10-06 17:50 — Native dialogs crash in WebView2; mask editing from the Move tool; whole-suite tour (user reports)
+
+- **Report:** "If I click on the image it moves it — also after creating a mask and selecting it; deleting a new layer
+  gives *unhandled: dialog.confirm not allowed. Command not found*; check the whole edit suite once again."
+- **Dialogs.** `window.confirm` / `window.prompt` are routed by Tauri 2 to its dialog plugin, which the capabilities
+  (rightly, 07 §1: no native dialogs) do not allow — so every confirm/prompt crashed with the overlay the user saw.
+  Nine call sites existed (layer delete / rename / close document / delete .ora in Edit; purge, new / smart / rename
+  collection in Catalogue; save preset in Generate). Replaced by the frame's own **AskDialog** (`askConfirm` /
+  `askText` in the session store, promise-based, Enter / Escape, danger styling) and, for **Delete layer**, by no
+  question at all: the layer goes at once and the toast offers **Undo** (guarded: only while nothing else happened).
+  The crash overlay itself is now dismissible by click. 07 §1 amended.
+- **Mask painting.** Add mask / clicking a mask thumbnail entered mask editing but left the tool alone, so with Move
+  active the first click dragged the layer. Now a tool that cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper)
+  switches to the **Brush** when mask editing starts, a one-time toast and a hint row under the layer list say
+  "white shows, black hides — B · E · G" with an *Edit pixels instead* button. 10 §6.
+- **Whole-suite check.** `scripts/edit_headed_check.py tour` runs every Edit command through a dev hook
+  (`window.__loom2Commands`) in a visible Edge window with a document open — 12 tools, 9 view toggles, 14 layer
+  operations, 12 adjustment / filter types, 10 mask steps, 8 selection steps, transform begin / cancel / apply, 8
+  flips and rotations, 6 brush / colour commands, delete + Undo toast, undo / redo ×8, save, Save to Catalogue, PNG
+  and PSD export, exact compare, close via the in-app dialog — checking the state after each step and failing on any
+  page exception, error toast or crash overlay: **all pass**. `cmpdiag` compares the GPU preview with the exact
+  flatten feature by feature: 0/255 for masks, groups (isolated at 50 %: 1/255), every adjustment, blur / sharpen /
+  high-pass (≤ 1/255), identity transform, flips and 90° rotations; the **noise** filter differs (p99 86) because its
+  preview is a hash approximation of the seeded numpy noise *by design* (10 §3) — the tour hides it before comparing.
+  Two things the tour surfaced on the way: **Compare** flattened the *saved* document, so with unsaved changes it
+  reported nonsense (now saves first, like Export); and the first PSD export in a dev session failed because Vite
+  discovered `ag-psd` lazily ("Outdated Optimize Dep" reload) — pre-bundled via `optimizeDeps.include`.
+- Build with the full `tsc -b` check clean; the Python side is unchanged (68 tests). 10 §14 gained the tour line.
+
+## 2026-10-06 18:20 — Noise filter preview made exact
+
+- The noise filter was the one feature where the GPU preview and the exact flatten disagreed by design (hash
+  approximation vs numpy's seeded normal). Both sides now evaluate the **same function of (seed, x, y)**: the
+  lowbias32 integer hash (five shifts/multiplies on uint32, wrapping) → two 23-bit uniforms per pair → Box-Muller;
+  three independent channels, monochrome repeats the first. GLSL ES 3.00 and WGSL run it per fragment,
+  `compose.noise_field` runs it vectorised in numpy; four tests pin the hash against a scalar reference and the
+  field's statistics. `cmpdiag` on the rig: noise [mean 0.02, p99 1, max 1]/255 — the same as blur and black & white;
+  every feature now lands at 0–1/255. 10 §3 updated ("preview ≈" now only means large blur radii and dissolve).
+  72 offline tests.

@@ -18,7 +18,7 @@ export function useKeyboardMap() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const s = useSession.getState()
-      const inField = (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')
+      const inField = (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')    // a modal owns its keys
       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openContextMenuAtFocus(); return }
       if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); usePalette.getState().toggle(); return }
       if (usePalette.getState().open) return

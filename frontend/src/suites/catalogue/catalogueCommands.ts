@@ -5,7 +5,7 @@ import { Check, ChevronLeft, ChevronRight, Circle, Columns2, Expand, ExternalLin
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { setRailTab } from '../../frame/suiteRegistry'
 import { revealPath } from '../../shell/tauri'
-import { useSession } from '../../store/session'
+import { askConfirm, useSession } from '../../store/session'
 import { activeCatalogue } from './catalogueContext'
 import { selectedOrPrimary, type GroupMode } from './catalogueStore'
 
@@ -40,7 +40,10 @@ registerCommands([
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),
     run: () => { const list = ids(); const c = cat(); void c.trash(list).then(() => useSession.getState().toast(`Moved ${list.length} to trash`, 'info', () => void c.restore(list))) } },
   { id: 'cat.restore', scope: 'catalogue', label: 'Restore from trash', icon: Undo, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && inTrash(), run: () => void cat().restore(ids()) },
-  { id: 'cat.purge', scope: 'catalogue', label: 'Delete permanently…', icon: Trash, danger: true, placement: ['context', 'strip'], when: () => hasSel() && inTrash(), run: () => { const list = ids(); if (window.confirm(`Permanently delete ${list.length}? This cannot be undone.`)) void cat().purge(list) } },
+  { id: 'cat.purge', scope: 'catalogue', label: 'Delete permanently…', icon: Trash, danger: true, placement: ['context', 'strip'], when: () => hasSel() && inTrash(), run: () => { const list = ids(); void askConfirm({ title: `Delete ${list.length} permanently?`, text: 'The files are removed from the project. This cannot be undone.', okLabel: 'Delete permanently', danger: true }).then((ok) => { if (ok) void cat().purge(list) }) } },
+  // Empty trash: the button in the Library panel / strip is a two-step confirm (07 §1.5); this entry arms it from menus and the palette
+  { id: 'cat.emptyTrash', scope: 'catalogue', label: 'Empty trash…', icon: Trash, danger: true, placement: ['panel', 'context', 'strip'], when: () => inTrash() && (cat().total ?? 0) > 0,
+    run: () => { const c = cat(); const n = c.total ?? 0; useSession.getState().toast(`Permanently delete all ${n} trashed items? Use the Empty trash button (click it twice) in the Library panel or the strip.`, 'info') } },
   { id: 'cat.groupCycle', scope: 'catalogue', label: 'Cycle grouping', icon: ListTree, keys: 'G', placement: ['strip', 'context'], run: () => { const c = cat(); const i = GROUP_MODES.findIndex(([g]) => g === c.q.group); void c.setQuery({ group: GROUP_MODES[(i + 1) % GROUP_MODES.length][0] }) } },
   { id: 'cat.expandAll', scope: 'catalogue', label: 'Expand all groups', icon: Expand, placement: ['strip', 'context'], when: () => cat().q.group !== 'none', run: () => cat().expandAll(true) },
   { id: 'cat.collapseAll', scope: 'catalogue', label: 'Collapse all groups', icon: Shrink, placement: ['strip', 'context'], when: () => cat().q.group !== 'none', run: () => cat().expandAll(false) },
@@ -64,7 +67,7 @@ export function tileMenu(): MenuItem[] {
     { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, sep,
     { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin from compare' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,
-    ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }] : [{ cmd: 'cat.trash' }]),
+    ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),
   ]
 }
 /** Right-click on empty grid space. */

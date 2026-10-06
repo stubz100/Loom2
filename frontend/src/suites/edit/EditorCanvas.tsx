@@ -77,11 +77,15 @@ export function EditorCanvas() {
     }
   }
   const markPassesDirty = () => { for (const p of passesRef.current) p.dirty = true }
-  /** On-demand rendering (10 §11): one frame on the next animation frame, nothing while idle. */
+  /** On-demand rendering (10 §11): one frame on the next animation frame, nothing while idle. A request made before the
+   * renderer exists is dropped (init renders once itself), so a cancelled frame can never leave the flag set. */
   const requestRender = () => {
+    if (!appRef.current) return
     if (renderPending.current) return
-    renderPending.current = requestAnimationFrame(() => { renderPending.current = 0; renderPasses(); appRef.current?.render() })
+    const run = () => { renderPending.current = 0; renderPasses(); appRef.current?.render() }
+    renderPending.current = requestAnimationFrame(run)
   }
+  const cancelPendingRender = () => { if (renderPending.current) cancelAnimationFrame(renderPending.current); renderPending.current = 0 }
   const doc = useEditor((s) => s.doc)
   const revision = useEditor((s) => s.revision)
   const fitRequested = useEditor((s) => s.fitRequested)
@@ -176,9 +180,44 @@ export function EditorCanvas() {
     const host = hostRef.current
     if (!host) return
     let cancelled = false
-    const app = new Application()
     let ro: ResizeObserver | null = null
-    void app.init({ preference: 'webgpu', background: 0x141414, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false }).then(() => {
+    const devOverride = import.meta.env.DEV ? new URLSearchParams(location.search).get('renderer') : null      // dev deep link: &renderer=webgl|webgpu
+    const pref = useEditor.getState().rendererPref
+    const want: 'webgpu' | 'webgl' = devOverride === 'webgl' || (devOverride !== 'webgpu' && pref === 'webgl') ? 'webgl' : 'webgpu'
+    const boot = async (preference: 'webgpu' | 'webgl') => {
+      const a = new Application()
+      await a.init({ preference, background: 0x141414, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false })
+      return a
+    }
+    /** D3 fallback probe: draw a white 4×4 sprite and read it back through the path the exact-compare uses. A renderer
+     * that initialises but yields no pixels (WebGPU in some WebView2 / headless contexts) is swapped for WebGL2. */
+    const rendersPixels = (a: Application): boolean => {
+      const src = document.createElement('canvas'); src.width = src.height = 4
+      const sx = src.getContext('2d')!; sx.fillStyle = '#ffffff'; sx.fillRect(0, 0, 4, 4)
+      const probe = new Container(); probe.addChild(new Sprite(Texture.from(src)))
+      try {
+        const out = a.renderer.extract.canvas({ target: probe, frame: new Rectangle(0, 0, 4, 4), resolution: 1 }) as HTMLCanvasElement
+        const c = document.createElement('canvas'); c.width = c.height = 4
+        const cx = c.getContext('2d')!; cx.drawImage(out, 0, 0)
+        const d = cx.getImageData(1, 1, 1, 1).data
+        return d[0] > 200 && d[3] > 200
+      } catch { return false } finally { probe.destroy({ children: true, texture: true, textureSource: true }) }
+    }
+    void (async () => {
+      let app: Application
+      let fellBack = false
+      try {
+        app = await boot(want)
+        const skipProbe = import.meta.env.DEV && new URLSearchParams(location.search).get('probe') === '0'   // dev deep link for bisecting
+        if (!cancelled && !skipProbe && want === 'webgpu' && pref === 'auto' && app.renderer.type === RendererType.WEBGPU && !rendersPixels(app)) {
+          app.destroy(true)
+          if (cancelled) return
+          app = await boot('webgl'); fellBack = true
+        }
+      } catch (e) {
+        if (!cancelled) useSession.getState().toast(`The editor's renderer could not start: ${(e as Error).message}`, 'error')
+        return
+      }
       if (cancelled) { app.destroy(true); return }
       host.replaceChildren(app.canvas)
       app.canvas.style.touchAction = 'none'
@@ -190,7 +229,10 @@ export function EditorCanvas() {
       world.addChild(checker, layers, overlayC)
       app.stage.addChild(world)
       appRef.current = app; worldRef.current = world; layersRef.current = layers; overlayRef.current = overlayC
-      useEditor.getState().setRenderer(app.renderer.type === RendererType.WEBGPU ? 'WebGPU' : app.renderer.type === RendererType.WEBGL ? 'WebGL2' : 'canvas')
+      if (import.meta.env.DEV) { const w = window as unknown as { __loom2App?: Application; __loom2Editor?: typeof useEditor }; w.__loom2App = app; w.__loom2Editor = useEditor }      // dev: inspect / drive the editor from DevTools or the headed check
+      const kind = app.renderer.type === RendererType.WEBGPU ? 'WebGPU' : app.renderer.type === RendererType.WEBGL ? 'WebGL2' : 'canvas'
+      useEditor.getState().setRenderer(fellBack ? `${kind} (fallback)` : kind)
+      if (fellBack) useSession.getState().toast('WebGPU initialised but drew nothing here — the editor is using WebGL2 (the renderer badge in the strip switches)', 'info')
       useEditor.getState().setExtractor(() => {
         const d = useEditor.getState().doc
         if (!d || !layersRef.current) return null
@@ -204,13 +246,14 @@ export function EditorCanvas() {
       })
       ro = new ResizeObserver(() => { app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })
       ro.observe(host)
-      useEditor.getState().bump()
+      useEditor.getState().bump()                                      // re-run the scene effects now that the renderer exists
       useEditor.getState().requestFit()
-    })
+      requestRender()
+    })()
     return () => {
       cancelled = true
       ro?.disconnect()
-      if (renderPending.current) cancelAnimationFrame(renderPending.current)
+      cancelPendingRender()                                              // and clear the flag: a stale id blocked every later request (2026-10-06)
       useEditor.getState().setExtractor(null)
       for (const p of passesRef.current) p.rt.destroy(true)
       passesRef.current = []
@@ -676,6 +719,10 @@ export function EditorCanvas() {
       st.pushHistory({ label: 'fill', layerId: t.id, kind: t.kind, tiles: t.lp.endStroke(), at: Date.now() })
       st.touch(); st.bump()
     }
+    const onDragOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('text/loom2-assets')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' } }
+    const onDropAsset = (e: DragEvent) => { const ids = (e.dataTransfer?.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (!ids.length) return; e.preventDefault(); ids.forEach((id) => void useEditor.getState().addLayerFromAsset(id)) }
+    host.addEventListener('dragover', onDragOver)
+    host.addEventListener('drop', onDropAsset)
     host.addEventListener('pointerdown', onDown)
     host.addEventListener('pointermove', onMove)
     host.addEventListener('pointerup', onUp)
@@ -685,6 +732,7 @@ export function EditorCanvas() {
     const onContext = (e: MouseEvent) => { e.preventDefault(); if (drag) return; showMenu(e, canvasMenu()) }
     host.addEventListener('contextmenu', onContext)
     return () => {
+      host.removeEventListener('dragover', onDragOver); host.removeEventListener('drop', onDropAsset)
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
       host.removeEventListener('dblclick', onDouble)
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)

@@ -54,9 +54,10 @@ measured and replaced) and renders masked layers and isolated groups through ren
 p99 ≤ 1/255 per feature and 3/255 over a 25-layer stack against the Python flatten (`scripts/m4_acceptance.py`,
 Info tab "compare"). Dissolve is seeded noise and only ≈. Adjustment/filter layers are previewed on the canvas
 with the same formulas (per-channel types through a 256-entry LUT, the rest in the shader; Gaussian blur exact
-up to a 12-tap radius and strided above; noise is a hash approximation of the seeded normal noise — measured
-p99 ≤ 1/255 for every type) and **re-rendered exactly in Python on save/export** (05 §3b); "preview ≈" therefore
-only applies to noise, large blur radii and dissolve.
+up to a 12-tap radius and strided above; noise is a pure function of (seed, x, y) — one integer hash + Box-Muller
+in both the shader and compose.py, exact since 2026-10-06 — measured p99 ≤ 1/255 for every type) and
+**re-rendered exactly in Python on save/export** (05 §3b); "preview ≈" therefore only applies to large blur radii
+and dissolve.
 
 ## 4. Toolbox (Rail) and Panel · Tool options
 
@@ -78,8 +79,11 @@ only applies to noise, large blur radii and dissolve.
 | `T` | Text | | post-MVP |
 
 ### Panel · Brushes
-Preset list (hard round, soft round, airbrush, textured) with preview strokes; save current as preset; pen
-pressure curve (also in Settings).
+Preset list — built-in hard round · soft round · airbrush · pencil · inker · marker · wash, each with its own diameter, plus
+the user's **saved presets** ("Save current as preset…", persisted per browser, deletable) — with a dab preview; below it the
+**current brush** in full: size (1–1024 px), hardness, opacity, flow, spacing, smoothing, colour. Every slider in the editor
+has a **number field** beside it (px for size, % for the rest) so a value can be typed; the same controls appear in Tool
+options for `B`/`E`, with `[` `]` / `Shift+[` `]` step buttons. The pen pressure curve arrives with the tablet (D19).
 
 ### Panel · Selection
 Feather, expand/contract (px), smooth, grow/shrink similar, invert (`Ctrl+Shift+I`), select all/none,
@@ -120,6 +124,12 @@ Zoom % (input, `Ctrl+wheel`, `Ctrl+0` fit, `Ctrl+1` 1:1, `Ctrl+2` 200 %), pixel 
   off (Photoshop-like linear) in MVP.
 - **Info**: document size, colour space, memory (GPU tiles, CPU), source asset, saved state, cursor position
   and colour readout.
+
+**Mask editing (2026-10-06).** Adding a mask, or clicking a mask thumbnail, enters mask editing: the thumbnail gets the
+editing frame, a hint under the layer list says "paint white to show, black to hide" with an *Edit pixels instead*
+button, and when the current tool cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper) the **Brush** is selected,
+so the first click paints the mask instead of dragging the layer. A one-time toast explains the same. **Delete layer**
+deletes at once (undoable; the toast offers Undo) — no confirmation dialog anywhere in the suite (07 §1).
 
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
@@ -169,11 +179,24 @@ selection/load mask/crop) and the Tool options (brush size/hardness steps, colou
 
 ## 11. Performance budgets (from 05 §9 spikes)
 The stage renders **on demand** (one frame per change: stroke, view, stack, transform, ants tick) — nothing is
-drawn while idle, so adjustment/filter shaders cost nothing between edits.
+drawn while idle, so adjustment/filter shaders cost nothing between edits. The request coalesces into one animation
+frame through a pending flag; a request made before the renderer exists is dropped (init renders once itself) and the
+canvas's cleanup cancels a pending frame *and* clears the flag — the 2026-10-06 regression was exactly that flag staying set
+after React StrictMode's first unmount, which silently swallowed every later frame (image invisible until a resize, zoom
+and strokes applied but never drawn). `scripts/edit_headed_check.py` guards it in a visible Edge window (headless Chromium
+cannot present WebGPU, so the headless screenshots say nothing about the stage).
 
 60 fps compositing 6 × 4K layers with 3 advanced blend modes; brush ≤ 1 frame visible lag at 2K preview; 10 ×
 8K layers < 3 GB GPU memory with tile eviction; inpaint round-trip (upload region + mask, engine, paste-back,
 new layer) ≤ engine time + 1.5 s for a 1024² region; ORA save of a 4K 8-layer document < 3 s.
+
+### 11a. Renderer fallback (D3, 2026-10-06)
+After the PixiJS application initialises, a 4×4 white sprite is drawn and read back through the same `extract.canvas` path
+the exact-compare uses. A renderer that initialised but yields no pixels — seen with WebGPU in headless Edge — is replaced by
+WebGL2 and the strip's renderer badge reads "WebGL2 (fallback)" (a toast says so). The badge is a button: auto → forced
+WebGL2 → forced WebGPU (persisted per browser); changing it remounts the canvas. Headed Edge (the same Chromium as WebView2)
+renders on WebGPU without the fallback; the probe only ever trips in headless runs. A dev build also exposes
+`window.__loom2App` and `window.__loom2Editor` for DevTools and the headed check.
 
 ## 12. States
 No document (drop zone + "Open from Catalogue"); renderer fallback to WebGL2 (badge + banner once); engine busy
@@ -197,6 +220,8 @@ transfers run at loopback speed (52 MB of layers in < 1 s in the M4 acceptance).
 - [x] Layers, groups, masks, 24 blend modes, adjustment and filter layers render correctly vs a Python
       reference flatten (ΔE small on a test document) — M4: p99 ≤ 4/255 over 39 nodes.
 - [~] Brush with pressure on the tablet meets the latency budget; undo/redo across 100 strokes is instant — undo/redo done (M4); the pen half waits for a tablet (D19).
+- [x] Every Edit command runs once in a visible Edge window with a document open — tools, view, layers (incl. every adjustment and filter type), masks, selection, transform, brush, delete + Undo toast, undo/redo, save, Save to Catalogue, PNG and PSD export, exact compare, close with the in-app dialog — with the state checked after each and no page exception or crash overlay: `scripts/edit_headed_check.py tour`, 2026-10-06. `cmpdiag` compares GPU preview vs exact flatten per feature: 0–1/255 everywhere, the noise filter included once it shared compose.py's hash.
+- [x] In a visible Edge window the stage shows the document at once, zooms, survives a resize, and a brush stroke / mask erase / layer eye toggle each change the pixels on screen — `scripts/edit_headed_check.py render|paint`, 2026-10-06 (stroke band 34.7/255, mask band 11.0/255, eye 45.5/255).
 - [x] SAM click/box/text and BiRefNet produce masks on the canvas within 3 s — 2026-10-06: BiRefNet 2.3 s, SAM 3 point 3.3 s warm (text 33 s including the 3.4 GB checkpoint load); `scripts/m5_acceptance.py`.
 - [x] Inpaint Fill / Fill-Match / Fill Hero / Remove each return candidate layers with masks; paste-back has no
       visible seam on the 5 bench tasks (04 §6) — tasks 01, 02, 04, 05 (2026-10-05/06) and 03 on the inverted BiRefNet matte (2026-10-06: subject alpha 0.027, background 0.996).

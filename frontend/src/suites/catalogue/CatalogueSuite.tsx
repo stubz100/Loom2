@@ -1,20 +1,20 @@
 // Catalogue suite (08): Library/Filters/Collections/Import panel, strip with group/state/sort/bulk/zoom, a
 // virtualised grid with keyboard-by-row, loupe and compare on the stage, and an Info/Params/Lineage/Tags inspector.
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { FolderOpen, Upload } from 'lucide-react'
+import { FolderOpen, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { isTauri, pickFiles, pickFolder } from '../../shell/tauri'
-import { useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
 import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
 import { selectedOrPrimary, type Folder, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
 import { useActiveCatalogue, useCat } from './catalogueContext'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
-import { handleKeyFor, runCommand } from '../../frame/commands'
+import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
 import './catalogue.css'
@@ -27,6 +27,28 @@ const GROUPS: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'
 const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'oldest'], ['rating_desc', 'rating'], ['model', 'model'], ['size_desc', 'size']]
 
 // ---------------------------------------------------------------- Panel
+/** Two-step confirm (07 §1.5: no native dialogs): the first click arms the button for 4 s, the second purges every trashed asset. */
+function EmptyTrashButton({ compact = false }: { compact?: boolean }) {
+  const c = useCat()
+  const [armed, setArmed] = useState(false)
+  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 4000); return () => clearTimeout(t) }, [armed])
+  markUsed('cat.emptyTrash')
+  const n = c.total ?? 0
+  if (!n && !c.purging) return null
+  const run = () => {
+    if (!armed) { setArmed(true); return }
+    setArmed(false)
+    void c.emptyTrash().then((k) => useSession.getState().toast(`Trash emptied: ${k} asset${k === 1 ? '' : 's'} deleted permanently`, 'success'))
+      .catch((e) => useSession.getState().toast(`Empty trash failed: ${(e as Error).message}`, 'error'))
+  }
+  return (
+    <button className={`danger${armed ? ' armed' : ''}`} disabled={c.purging} onClick={run} style={compact ? undefined : { marginTop: 8 }}
+      title={armed ? 'Click again to delete permanently' : `Delete all ${n} trashed assets permanently (files, manifests, thumbnails)`}>
+      <Trash2 size={13} /> {c.purging ? 'Emptying…' : armed ? `Click again: delete ${n} permanently` : compact ? 'Empty trash' : `Empty trash (${n})`}
+    </button>
+  )
+}
+
 function Panel({ tab }: { tab: string }) {
   const c = useCat()
   const s = useSession()
@@ -56,6 +78,7 @@ function Panel({ tab }: { tab: string }) {
           <span>{label}</span><span className="n">{c.counts[f] ?? ''}</span>
         </button>
       ))}
+      {c.q.folder === 'trash' && !c.q.collection_id && <EmptyTrashButton />}
       <h4>Collections</h4>
       {c.collections.map((col) => (
         <button key={col.id} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })} title={col.kind === 'manual' ? 'drop assets here to add them' : 'smart collection'}
@@ -65,7 +88,7 @@ function Panel({ tab }: { tab: string }) {
           <span>{col.kind === 'smart' ? '◈ ' : ''}{col.name}</span><span className="n">{col.count}</span>
         </button>
       ))}
-      <button onClick={() => { const name = window.prompt('Collection name'); if (name) void c.createCollection(name) }}><span>+ new collection</span><span /></button>
+      <button onClick={() => void askText({ title: 'New collection', placeholder: 'collection name' }).then((name) => { if (name) void c.createCollection(name) })}><span>+ new collection</span><span /></button>
     </div>
   )
 }
@@ -101,7 +124,7 @@ export function Filters() {
       <label />
       <div style={{ display: 'flex', gap: 6 }}>
         <button onClick={() => c.setQuery({ state: 'all', suite: undefined, model_id: undefined, rating_min: 0, tags_any: [], aspect: undefined, has_children: undefined, search: '', created_from: undefined, created_to: undefined })}>Clear filters</button>
-        <button onClick={() => { const name = window.prompt('Smart collection name'); if (name) void c.createCollection(name, 'smart', { folder: q.folder, state: q.state, suite: q.suite, model_id: q.model_id, rating_min: q.rating_min, tags_any: q.tags_any, aspect: q.aspect, has_children: q.has_children, search: q.search || undefined }) }}>Save as smart collection</button>
+        <button onClick={() => void askText({ title: 'Save as smart collection', text: 'The current filters are saved as a collection that stays up to date.', placeholder: 'collection name' }).then((name) => { if (name) void c.createCollection(name, 'smart', { folder: q.folder, state: q.state, suite: q.suite, model_id: q.model_id, rating_min: q.rating_min, tags_any: q.tags_any, aspect: q.aspect, has_children: q.has_children, search: q.search || undefined }) })}>Save as smart collection</button>
       </div>
     </div>
   )
@@ -115,7 +138,7 @@ function Collections() {
       {c.collections.map((col) => (
         <div key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <button style={{ flex: 1 }} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })}><span>{col.kind === 'smart' ? '◈ ' : ''}{col.name}</span><span className="n">{col.count}</span></button>
-          <button className="quiet" title="rename" onClick={() => { const n = window.prompt('Rename', col.name); if (n) void c.renameCollection(col.id, n) }}>✎</button>
+          <button className="quiet" title="rename" onClick={() => void askText({ title: 'Rename collection', initial: col.name }).then((n) => { if (n && n !== col.name) void c.renameCollection(col.id, n) })}>✎</button>
           {col.kind === 'smart' && <button className="quiet" title="convert to manual (freeze members)" onClick={() => void c.convertCollection(col.id)}>◈→▣</button>}
           <button className="quiet" title={confirm === col.id ? 'click again to delete' : 'delete'} style={confirm === col.id ? { color: 'var(--error)' } : undefined}
             onClick={() => { if (confirm === col.id) { void c.deleteCollection(col.id); setConfirm(null) } else { setConfirm(col.id); setTimeout(() => setConfirm((x) => (x === col.id ? null : x)), 2000) } }}>✕</button>
@@ -183,7 +206,7 @@ export function Strip() {
           <input id="strip-tag" type="text" value={tagText} placeholder="tag…" style={{ width: 90, minHeight: 24 }} onChange={(e) => setTagText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && tagText.trim()) { const t = tagText.trim(); void Promise.all(ids.map((id) => { const a = c.byId(id); return a && !a.tags.includes(t) ? c.setTags([id], [...a.tags, t]) : Promise.resolve() })); setTagText('') } }} />
           <select value="" onChange={(e) => { if (e.target.value) void c.addToCollection(e.target.value, ids) }} title="Add to collection"><option value="">+ collection</option>{c.collections.filter((x) => x.kind === 'manual').map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-          {c.q.folder === 'trash' ? <CommandRow ids={['cat.restore', 'cat.purge']} /> : <CommandButton id="cat.trash" />}
+          {c.q.folder === 'trash' ? <><CommandRow ids={['cat.restore', 'cat.purge']} /><EmptyTrashButton compact /></> : <CommandButton id="cat.trash" />}
         </>
       )}
       {c.compare.length >= 2 && <button className="quiet" onClick={() => runCommand('cat.compare')} style={{ color: 'var(--accent)' }} title="Open compare (⇧C)">Compare {c.compare.length}</button>}

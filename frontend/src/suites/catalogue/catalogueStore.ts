@@ -62,6 +62,8 @@ export interface CatalogueState {
   trash: (ids: string[]) => Promise<void>
   restore: (ids: string[]) => Promise<void>
   purge: (ids: string[]) => Promise<void>
+  emptyTrash: () => Promise<number>
+  purging: boolean
   setTile: (n: number) => void
   setFill: (fill: boolean) => void
   openLoupe: (id: string | null) => void
@@ -213,6 +215,15 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       },
       restore: async (ids) => { await api.post('/assets/restore', { ids }); await get().load(); void get().refreshMeta() },
       purge: async (ids) => { await api.post('/assets/purge', { ids }); removeLocal(ids, set, get); void get().refreshMeta() },
+      purging: false,
+      emptyTrash: async () => {
+        set({ purging: true })
+        try {
+          const r = await api.post<{ purged: number }>('/assets/purge', { ids: null })   // every trashed asset, files and index rows
+          await get().load(); void get().refreshMeta()
+          return r.purged
+        } finally { set({ purging: false }) }
+      },
 
       setTile: (n) => set({ tile: Math.max(96, Math.min(512, Math.round(n))) }),
       setFill: (fill) => set({ fill }),

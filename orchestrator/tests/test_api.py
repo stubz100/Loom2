@@ -98,3 +98,34 @@ def test_api_error_codes_and_alpha_thumbs(tmp_path: Path):
         with Image.open(io.BytesIO(thumb.content)) as im:
             assert im.mode == "RGBA" and im.getextrema()[3] == (0, 0)             # alpha survived (not flattened to black)
         client.post("/project/close", headers=H)
+
+
+def test_empty_trash_purges_everything_with_one_event(tmp_path: Path):
+    """Emptying a big trash is one purge call and one catalogue.changed frame, not thousands of asset.deleted frames."""
+    client, token = _client(tmp_path)
+    H = {"X-Loom-Token": token}
+    with client:
+        client.post("/project", json={"path": str(tmp_path / "proj"), "name": "T", "size_cap_gb": 10}, headers=H)
+        paths = []
+        for i in range(60):
+            png = tmp_path / f"in{i}.png"
+            Image.new("RGB", (8, 8), (i, 0, 0)).save(png)
+            paths.append(str(png))
+        items = client.post("/assets/import", json={"paths": paths}, headers=H).json()["items"]
+        ids = [a["id"] for a in items]
+        client.post("/assets/trash", json={"ids": ids[:55]}, headers=H)
+        with client.websocket_connect(f"/events?token={token}") as ws:
+            ws.receive_json()                                                       # hello
+            r = client.post("/assets/purge", json={"ids": None}, headers=H).json()
+            assert r["purged"] == 55 and r["ids"] == []
+            frame = ws.receive_json()
+            assert frame["type"] == "catalogue.changed" and frame["data"]["purged"] == 55
+        assert client.get("/assets", params={"folder": "trash"}).json()["total"] == 0
+        assert client.get("/assets").json()["total"] == 5
+        for aid in ids[:55]:
+            assert client.get(f"/assets/{aid}").status_code == 404
+        # a small purge still names its ids and emits per-asset frames
+        client.post("/assets/trash", json={"ids": ids[55:57]}, headers=H)
+        r = client.post("/assets/purge", json={"ids": None}, headers=H).json()
+        assert r["purged"] == 2 and sorted(r["ids"]) == sorted(ids[55:57])
+        client.post("/project/close", headers=H)

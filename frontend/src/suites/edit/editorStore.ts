@@ -41,6 +41,7 @@ export const FILTER_DEFAULTS: Record<string, Record<string, unknown>> = {
 
 export interface CompareResult { mean: number; p99: number; max: number; rgb_mean: number; rgb_p99: number; rgb_max: number; w: number; h: number; at: string }
 export interface BrushOptions { size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; color: string; background: string }
+export interface BrushPreset { name: string; size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; builtin?: boolean }
 export interface HistoryEntry { label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null } }
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode'
 
@@ -51,6 +52,7 @@ export interface EditorState {
   zoom: number; pan: { x: number; y: number }; fitRequested: number; overlay: boolean; before: boolean; pixelGrid: boolean; quickMask: boolean
   history: HistoryEntry[]; future: HistoryEntry[]
   renderer: string; cursor: { x: number; y: number } | null
+  rendererPref: 'auto' | 'webgpu' | 'webgl'; rendererEpoch: number     // D3: auto = WebGPU with a pixel probe, WebGL2 if it draws nothing
   pixels: Map<string, LayerPixels>; masks: Map<string, LayerPixels>; selection: LayerPixels | null
   revision: number
   extractor: (() => HTMLCanvasElement | null) | null
@@ -78,6 +80,7 @@ export interface EditorState {
   // documents
   openDocument: (id: string) => Promise<void>
   openFromAsset: (assetId: string) => Promise<void>
+  addLayerFromAsset: (assetId: string) => Promise<void>
   newDocument: (w: number, h: number, name?: string) => Promise<void>
   closeDocument: () => void
   listDocuments: () => Promise<DocSummary[]>
@@ -90,10 +93,15 @@ export interface EditorState {
   // tools / view
   setTool: (t: Tool) => void
   setBrush: (p: Partial<BrushOptions>) => void
+  brushPresets: BrushPreset[]
+  saveBrushPreset: (name: string) => void
+  deleteBrushPreset: (name: string) => void
+  applyBrushPreset: (p: BrushPreset) => void
   setView: (p: Partial<Pick<EditorState, ViewKeys>>) => void
   requestFit: () => void
   zoomTo: (z: number) => void
   setRenderer: (r: string) => void
+  setRendererPref: (p: 'auto' | 'webgpu' | 'webgl') => void
   setCursor: (c: { x: number; y: number } | null) => void
   setExtractor: (f: EditorState['extractor']) => void
   // stack
@@ -150,6 +158,14 @@ function findParent(doc: DocumentStack, id: string): { list: Node[]; index: numb
 export function countRasters(doc: DocumentStack): number { let n = 0; walk(doc.layers, (x) => { if (x.kind === 'raster') n++ }); return n }
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
 const newId = (p: string) => `${p}_${Math.random().toString(16).slice(2, 10)}`
+// 10 §6: entering mask editing from a tool that cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper) switches to the
+// brush, so the first click paints the mask instead of dragging the layer; a one-time toast explains white/black.
+const PAINTS_MASK: Tool[] = ['brush', 'eraser', 'fill', 'marquee', 'lasso', 'wand', 'ai']
+let maskHintShown = false
+const maskEditExtras = (tool: Tool): { tool?: Tool } => {
+  if (!maskHintShown) { maskHintShown = true; useSession.getState().toast('Editing the mask: paint white to show the layer, black to hide it — B brush · E eraser · G fill. Click the layer thumbnail to edit its pixels again.', 'info') }
+  return PAINTS_MASK.includes(tool) ? {} : { tool: 'brush' }
+}
 const download = (blob: Blob, name: string) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }
 const maskOffset = (n: Node) => ({ x: (n.mask?.linked ? (n.x ?? 0) : 0) + (n.mask?.x ?? 0), y: (n.mask?.linked ? (n.y ?? 0) : 0) + (n.mask?.y ?? 0) })
 
@@ -245,7 +261,7 @@ export const useEditor = create<EditorState>()(
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
-        history: [], future: [], renderer: '', cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
+        history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
         aiBatch: null, candidates: null, aiPrompt: { points: [], box: null },
 
@@ -365,6 +381,7 @@ export const useEditor = create<EditorState>()(
 
         /** GPU composite vs the orchestrator's exact flatten (10 §14 item 1); PixiJS un-premultiplies on extract. */
         compareWithExact: async () => {
+          if (get().docDirty && !(await get().save())) return null       // the exact flatten runs on the saved document
           const { doc, extractor } = get()
           const c = doc && extractor ? extractor() : null
           if (!doc || !c) return null
@@ -413,6 +430,23 @@ export const useEditor = create<EditorState>()(
             await get().openDocument(doc.id)
             s.toast(existing ? 'Opened the asset\'s document' : 'Document created from the asset', 'success')
           } catch (e) { s.toast(`Open in Edit failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        },
+        /** A Catalogue asset dropped on an open document becomes a new raster layer above the active one (10 §7 import). */
+        addLayerFromAsset: async (assetId) => {
+          const doc = get().doc
+          if (!doc) { await get().openFromAsset(assetId); return }
+          try {
+            const b = useSession.getState().backend!
+            const res = await fetch(`http://${b.host}:${b.port}/assets/${assetId}/file`, { headers: { 'X-Loom-Token': b.token } })
+            if (!res.ok) throw new Error(`asset ${res.status}`)
+            const bmp = await createImageBitmap(await res.blob())
+            const node = get().addLayer('raster', { name: `import ${assetId.slice(-6)}`, lineage_asset_id: assetId, x: 0, y: 0, w: bmp.width, h: bmp.height })
+            if (!node) return
+            const lp = LayerPixels.fromImage(bmp); lp.dirty = true
+            get().pixels.get(node.id)?.destroy(); get().pixels.set(node.id, lp)
+            set({ revision: get().revision + 1 })
+            useSession.getState().toast('Asset added as a layer', 'success')
+          } catch (e) { useSession.getState().toast(`Could not add the asset: ${(e as Error).message}`, 'error') }
         },
         newDocument: async (w, h, name) => {
           try {
@@ -513,6 +547,11 @@ export const useEditor = create<EditorState>()(
         // ---- tools / view ------------------------------------------------------------------------
         setTool: (tool) => set({ tool }),
         setBrush: (p) => set({ brush: { ...get().brush, ...p } }),
+        brushPresets: [],
+        saveBrushPreset: (name) => { const b = get().brush; const p: BrushPreset = { name, size: b.size, hardness: b.hardness, opacity: b.opacity, flow: b.flow, spacing: b.spacing, smoothing: b.smoothing }
+          set({ brushPresets: [...get().brushPresets.filter((x) => x.name !== name), p] }) },
+        deleteBrushPreset: (name) => set({ brushPresets: get().brushPresets.filter((x) => x.name !== name) }),
+        applyBrushPreset: (p) => set({ brush: { ...get().brush, size: p.size, hardness: p.hardness, opacity: p.opacity, flow: p.flow, spacing: p.spacing, smoothing: p.smoothing } }),
         setView: (p) => set(p),
         requestFit: () => set({ fitRequested: get().fitRequested + 1 }),
         zoomTo: (z) => {
@@ -523,11 +562,12 @@ export const useEditor = create<EditorState>()(
           set({ zoom: z, pan: { x: cx - (doc.w / 2) * z, y: cy - (doc.h / 2) * z } })
         },
         setRenderer: (renderer) => set({ renderer }),
+        setRendererPref: (p) => set({ rendererPref: p, rendererEpoch: get().rendererEpoch + 1 }),   // the canvas remounts on the epoch
         setCursor: (cursor) => set({ cursor }),
         setExtractor: (extractor) => set({ extractor }),
 
         // ---- stack -----------------------------------------------------------------------------------
-        setActive: (id, mask = false) => set({ activeId: id, editingMask: mask && !!findNode(get().doc, id)?.mask }),
+        setActive: (id, mask = false) => { const editing = mask && !!findNode(get().doc, id)?.mask; set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}) }) },
         updateNode: (id, patch, label) => {
           const doc = get().doc
           if (!doc) return
@@ -659,7 +699,7 @@ export const useEditor = create<EditorState>()(
           const next = clone(doc)
           // the mask covers the document and is unlinked at the document origin, so layer x/y need no compensation
           walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: false, x: 0, y: 0 }; return true } })
-          commit(next, before, fromSelection && sel ? 'mask from selection' : 'add mask', id, { activeId: id, editingMask: true })
+          commit(next, before, fromSelection && sel ? 'mask from selection' : 'add mask', id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) })
         },
         removeMask: (id) => {
           const doc = get().doc
@@ -783,7 +823,7 @@ export const useEditor = create<EditorState>()(
         },
       }
     },
-    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode }) as never },
+    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets }) as never },
   ),
 )
 

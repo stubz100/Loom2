@@ -1,9 +1,9 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Check, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { setRailTab } from '../../frame/suiteRegistry'
-import { useSession } from '../../store/session'
+import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 
 const ed = () => useEditor.getState()
@@ -25,7 +25,7 @@ registerCommands([
   { id: 'edit.saveToCatalogue', scope: 'edit', label: 'Save to Catalogue', icon: FolderInput, keys: 'Ctrl+Shift+S', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().saveToCatalogue() },
   { id: 'edit.exportPng', scope: 'edit', label: 'Export PNG', icon: FileImage, keys: 'Ctrl+Shift+E', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPng() },
   { id: 'edit.exportPsd', scope: 'edit', label: 'Export PSD', icon: FileDown, placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPsd() },
-  { id: 'edit.close', scope: 'edit', label: 'Close document', placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty || window.confirm('Close without saving the latest changes?')) ed().closeDocument() } },
+  { id: 'edit.close', scope: 'edit', label: 'Close document', placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and press Ctrl+S to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
   { id: 'edit.compare', scope: 'edit', label: 'Compare preview with the exact flatten', icon: Scan, placement: ['inspector', 'context'], when: hasDoc, run: () => void ed().compareWithExact() },
   // layers
   { id: 'edit.layer.new', scope: 'edit', label: 'New layer', icon: Plus, keys: 'Ctrl+Shift+N', placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('raster') } },
@@ -35,11 +35,12 @@ registerCommands([
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: activeRaster, run: () => ed().mergeDown(ed().activeId!) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },
-  { id: 'edit.layer.rename', scope: 'edit', label: 'Rename…', icon: Pencil, placement: ['context'], when: () => !!active(), hint: 'double-click the layer', run: () => { const n = active(); if (!n) return; const name = window.prompt('Layer name', n.name); if (name && name !== n.name) ed().updateNode(n.id, { name }, 'rename') } },
+  { id: 'edit.layer.rename', scope: 'edit', label: 'Rename…', icon: Pencil, placement: ['context'], when: () => !!active(), hint: 'double-click the layer', run: () => { const n = active(); if (!n) return; void askText({ title: 'Layer name', initial: n.name }).then((name) => { if (name && name !== n.name) ed().updateNode(n.id, { name }, 'rename') }) } },
   { id: 'edit.layer.visibility', scope: 'edit', label: 'Hide / show layer', icon: Eye, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') } },
   { id: 'edit.layer.solo', scope: 'edit', label: 'Solo layer (show only this)', icon: EyeOff, placement: ['context'], when: () => !!active(), hint: 'Alt-click the eye', run: () => ed().solo(ed().activeId!) },
   { id: 'edit.layer.lock', scope: 'edit', label: 'Lock / unlock layer', icon: Lock, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { locked: !n.locked }) } },
-  { id: 'edit.layer.delete', scope: 'edit', label: 'Delete layer', icon: Trash, danger: true, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n && window.confirm(`Delete layer "${n.name}"?`)) ed().deleteNode(n.id) } },
+  { id: 'edit.layer.delete', scope: 'edit', label: 'Delete layer', icon: Trash, danger: true, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (!n) return; ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
+      useSession.getState().toast(`Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === 'delete layer') s.undo() }) } },
   // masks
   { id: 'edit.mask.add', scope: 'edit', label: 'Add mask', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask, run: () => ed().addMask(ed().activeId!, false) },
   { id: 'edit.mask.fromSelection', scope: 'edit', label: 'Add mask from selection', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask && hasSel(), run: () => ed().addMask(ed().activeId!, true) },
@@ -76,10 +77,10 @@ registerCommands([
   // colours and brush
   { id: 'edit.colour.swap', scope: 'edit', label: 'Swap colours', icon: Shuffle, keys: 'X', placement: ['panel'], run: () => { const b = ed().brush; ed().setBrush({ color: b.background, background: b.color }) } },
   { id: 'edit.colour.default', scope: 'edit', label: 'Default colours', icon: RotateCcw, keys: 'D', placement: ['panel'], run: () => ed().setBrush({ color: '#000000', background: '#ffffff' }) },
-  { id: 'edit.brush.larger', scope: 'edit', label: 'Larger brush', icon: ZoomIn, keys: ']', placement: ['panel'], run: () => ed().setBrush({ size: Math.min(512, Math.round(ed().brush.size * 1.2)) }) },
-  { id: 'edit.brush.smaller', scope: 'edit', label: 'Smaller brush', icon: ZoomOut, keys: '[', placement: ['panel'], run: () => ed().setBrush({ size: Math.max(1, Math.round(ed().brush.size / 1.2)) }) },
-  { id: 'edit.brush.harder', scope: 'edit', label: 'Harder brush', keys: 'Shift+]', alt: ['Shift+}'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.min(1, Math.round((ed().brush.hardness + 0.1) * 100) / 100) }) },
-  { id: 'edit.brush.softer', scope: 'edit', label: 'Softer brush', keys: 'Shift+[', alt: ['Shift+{'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.max(0, Math.round((ed().brush.hardness - 0.1) * 100) / 100) }) },
+  { id: 'edit.brush.larger', scope: 'edit', label: 'Larger brush', icon: Plus, keys: ']', placement: ['panel'], run: () => ed().setBrush({ size: Math.min(1024, Math.round(ed().brush.size * 1.2)) }) },
+  { id: 'edit.brush.smaller', scope: 'edit', label: 'Smaller brush', icon: Minus, keys: '[', placement: ['panel'], run: () => ed().setBrush({ size: Math.max(1, Math.round(ed().brush.size / 1.2)) }) },
+  { id: 'edit.brush.harder', scope: 'edit', label: 'Harder brush', icon: Circle, keys: 'Shift+]', alt: ['Shift+}'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.min(1, Math.round((ed().brush.hardness + 0.1) * 100) / 100) }) },
+  { id: 'edit.brush.softer', scope: 'edit', label: 'Softer brush', icon: CircleDashed, keys: 'Shift+[', alt: ['Shift+{'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.max(0, Math.round((ed().brush.hardness - 0.1) * 100) / 100) }) },
   // tools
   ...TOOLS.map(([tool, label, key, icon]) => ({ id: `edit.tool.${tool}`, scope: 'edit' as const, label: `${label} tool`, icon, keys: key, placement: ['toolbar'] as ['toolbar'], run: setTool(tool) })),
   // layers of a kind, by type

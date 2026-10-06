@@ -112,3 +112,10 @@ table.grid tr:hover td { background: var(--bg1); }
 .keys { columns: 2; font-size: 12px; } .keys div { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; break-inside: avoid; }
 kbd { font: var(--mono); background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; }
 .events { font: var(--mono); color: var(--fg3); max-height: 180px; overflow: auto; }
+
+/* in-app confirm / prompt (AskDialog, 2026-10-06) */
+.modal.ask { min-width: 380px; max-width: 540px; }
+.modal.ask .body { display: flex; flex-direction: column; gap: 10px; }
+.modal.ask .ask-text { margin: 0; line-height: 1.45; opacity: 0.9; }
+.modal.ask input[type=text] { width: 100%; }
+.modal .foot button.danger { border-color: var(--error); color: var(--error); }

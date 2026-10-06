@@ -8,7 +8,10 @@ and fixes what did not (02 §4b). Engine decisions: 05.
 1. **Design the frame first.** Every control in every suite has a named home: Rail, Panel, Strip, Stage,
    Inspector, Dock, Banner. No floating bars, no controls "absorbed" by the stage.
 2. **Keyboard-first, pen-aware.** Every verb has a key; navigation follows the *visual* grid; no hover-only
-   affordances; no native dialogs except OS file pickers.
+   affordances; no native dialogs except OS file pickers. Confirmations and one-line text prompts use the frame's own
+   **AskDialog** (`askConfirm` / `askText` in the session store: Enter confirms, Escape cancels, the promise resolves
+   false / null on cancel) — `window.confirm` / `window.prompt` crash in WebView2 ("dialog.confirm not allowed",
+   found 2026-10-06) and are banned. Deleting a layer asks nothing: it is undoable and the toast offers Undo.
 3. **One selection model, one asset tile, one job dock** shared by all suites.
 4. **Display == reality.** Parameter controls are generated from the backend's capabilities; defaults shown are
    the defaults run.

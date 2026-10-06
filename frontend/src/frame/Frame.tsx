@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useSession } from '../store/session'
+import { AskDialog } from './AskDialog'
 import { Banner } from './Banner'
 import { CommandPalette } from './CommandPalette'
 import { unusedCommands, type Scope } from './commands'
@@ -73,6 +74,7 @@ export function Frame() {
       {settingsOpen && <SettingsModal />}
       {projectDialog && <ProjectDialog mode={projectDialog} />}
       {helpOpen && <HelpOverlay />}
+      <AskDialog />
     </div>
   )
 }

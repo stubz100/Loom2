@@ -21,6 +21,7 @@ export interface SessionState {
   models: ModelEntry[]; unlisted: { folder: string; name: string; path: string; size: number }[]; fetches: Record<string, FetchState>
   settings: Settings | null; capabilities: Capabilities | null
   events: EventFrame[]; toasts: Toast[]; settingsOpen: boolean; projectDialog: 'new' | 'open' | null; helpOpen: boolean
+  ask: AskRequest | null                                   // in-app confirm / prompt (07 §1: no native dialogs)
   ui: UiState
   selectedModel: string | null
   init: () => Promise<void>
@@ -41,6 +42,9 @@ export interface SessionState {
   verifyModel: (id: string) => Promise<{ sha256: string; matches_ledger: boolean | null }>
   saveSettings: (patch: Partial<Settings> | Record<string, unknown>) => Promise<void>
   toast: (text: string, kind?: Toast['kind'], undo?: () => void) => void
+  askConfirm: (o: AskOptions) => Promise<boolean>
+  askText: (o: AskOptions) => Promise<string | null>
+  resolveAsk: (value: string | boolean | null) => void
   dismissToast: (id: number) => void
   dismissBanner: (id: string) => void
   openSettings: (open: boolean) => void
@@ -50,6 +54,9 @@ export interface SessionState {
   banners: () => Banner[]
 }
 
+export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean }
+export interface AskRequest extends AskOptions { kind: 'confirm' | 'prompt'; resolve: (v: string | boolean | null) => void }
+
 let socket: EventsSocket | null = null
 let toastSeq = 1
 
@@ -57,7 +64,7 @@ export const useSession = create<SessionState>()(
   persist(
     (set, get) => ({
       backend: null, backendError: null, wsStatus: 'closed', health: null, project: null, recents: [], engine: null, queue: null, jobs: {}, previews: {},
-      models: [], unlisted: [], fetches: {}, settings: null, capabilities: null, events: [], toasts: [], settingsOpen: false, projectDialog: null, helpOpen: false,
+      models: [], unlisted: [], fetches: {}, settings: null, capabilities: null, events: [], toasts: [], settingsOpen: false, projectDialog: null, helpOpen: false, ask: null,
       ui: { suite: 'catalogue', panelOpen: true, inspectorOpen: true, dockOpen: false, focusMode: false, density: 'comfortable', panelWidth: 320, inspectorWidth: 340, dismissedBanners: [] },
       selectedModel: null,
 
@@ -180,6 +187,9 @@ export const useSession = create<SessionState>()(
         if (kind !== 'error') setTimeout(() => get().dismissToast(id), 6000)
       },
       dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+      askConfirm: (o) => new Promise<boolean>((resolve) => { get().ask?.resolve(null); set({ ask: { ...o, kind: 'confirm', resolve: (v) => resolve(v === true) } }) }),
+      askText: (o) => new Promise<string | null>((resolve) => { get().ask?.resolve(null); set({ ask: { ...o, kind: 'prompt', resolve: (v) => resolve(typeof v === 'string' ? v : null) } }) }),
+      resolveAsk: (value) => { const a = get().ask; set({ ask: null }); a?.resolve(value) },
       dismissBanner: (id) => set({ ui: { ...get().ui, dismissedBanners: [...get().ui.dismissedBanners, id] } }),
       openSettings: (settingsOpen) => set({ settingsOpen }),
       setProjectDialog: (projectDialog) => set({ projectDialog }),
@@ -238,6 +248,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     }
     case 'project.opened': set({ project: d as unknown as ProjectInfo }); break
     case 'project.closed': set({ project: { open: false } }); break
+    case 'catalogue.changed':
+      void import('../suites/catalogue/catalogueStore').then((m) => { for (const st of [m.useCatalogue.getState(), m.useGenerateResults.getState()]) { void st.load(); void st.refreshMeta() } })
+      break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { m.useCatalogue.getState().applyEvent(f); m.useGenerateResults.getState().applyEvent(f) })
       break
@@ -254,3 +267,7 @@ export const selectJobsByStatus = (s: SessionState) => {
   return { running: all.filter((j) => j.status === 'running'), queued: all.filter((j) => j.status === 'queued'), recent: all.filter((j) => ['done', 'failed', 'cancelled'].includes(j.status)) }
 }
 export type { Asset }
+
+/** In-app confirm (resolves false when cancelled) and text prompt (null when cancelled) — the only dialogs besides OS file pickers. */
+export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)
+export const askText = (o: AskOptions): Promise<string | null> => useSession.getState().askText(o)

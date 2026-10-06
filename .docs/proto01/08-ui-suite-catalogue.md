@@ -129,3 +129,11 @@ counts computed server-side.
 - Masonry vs uniform grid (proposed: uniform with aspect-fit, masonry as an option later).
 - Duplicate hints (dHash within a batch only, advisory) in MVP or later.
 - Should documents (ORA) appear as assets (proposed: yes, via their last flattened render).
+
+## 11. Trash (added 2026-10-06)
+The Trash folder lists trashed assets; selected ones can be restored or deleted permanently. **Empty trash** (Library
+panel under the folders, the strip's selection bar, the grid's right-click menu, `Ctrl+K`) deletes every trashed asset in
+one request — a **two-step button** (the first click arms it for 4 s: "Click again: delete N permanently"), no native
+dialog (07 §1.2/§1.5). Above 50 assets the server emits one `catalogue.changed {purged}` event and the grids reload, instead
+of one `asset.deleted` frame per asset. Catalogue tiles can also be **dropped on the Edit tab** (opens the asset as a
+document), **on the Edit stage** (adds it as a layer to the open document) and **on the Generate tab** (adds references).

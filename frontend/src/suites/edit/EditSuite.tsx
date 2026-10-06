@@ -7,10 +7,10 @@ import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
-import { useSession } from '../../store/session'
+import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { EditorCanvas } from './EditorCanvas'
-import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import './edit.css'
 
@@ -26,9 +26,14 @@ const PARAM_RANGES: Record<string, [number, number, number]> = {
   exposure: [-5, 5, 0.01], offset: [-0.5, 0.5, 0.001], r: [0, 100, 1], g: [0, 100, 1], b: [0, 100, 1],
   radius: [0, 100, 0.1], amount: [0, 500, 1], threshold: [0, 255, 1], seed: [0, 99999, 1],
 }
-const BRUSH_PRESETS = [
-  { name: 'hard round', hardness: 1, flow: 1, opacity: 1, spacing: 0.1, smoothing: 0.3 }, { name: 'soft round', hardness: 0.5, flow: 0.6, opacity: 1, spacing: 0.15, smoothing: 0.4 },
-  { name: 'airbrush', hardness: 0.05, flow: 0.12, opacity: 1, spacing: 0.06, smoothing: 0.5 }, { name: 'inker', hardness: 0.95, flow: 1, opacity: 1, spacing: 0.04, smoothing: 0.75 },
+const BRUSH_PRESETS: BrushPreset[] = [
+  { name: 'hard round', size: 48, hardness: 1, flow: 1, opacity: 1, spacing: 0.1, smoothing: 0.3, builtin: true },
+  { name: 'soft round', size: 64, hardness: 0.5, flow: 0.6, opacity: 1, spacing: 0.15, smoothing: 0.4, builtin: true },
+  { name: 'airbrush', size: 120, hardness: 0.05, flow: 0.12, opacity: 1, spacing: 0.06, smoothing: 0.5, builtin: true },
+  { name: 'pencil', size: 6, hardness: 1, flow: 1, opacity: 0.9, spacing: 0.08, smoothing: 0.2, builtin: true },
+  { name: 'inker', size: 10, hardness: 0.95, flow: 1, opacity: 1, spacing: 0.04, smoothing: 0.75, builtin: true },
+  { name: 'marker', size: 36, hardness: 0.9, flow: 0.5, opacity: 0.6, spacing: 0.1, smoothing: 0.3, builtin: true },
+  { name: 'wash', size: 160, hardness: 0.2, flow: 0.08, opacity: 0.5, spacing: 0.1, smoothing: 0.6, builtin: true },
 ]
 const pct = (v: number) => `${Math.round(v * 100)} %`
 const ed = () => useEditor.getState()
@@ -44,13 +49,17 @@ function planSize(w: number, h: number, minSize: number, maxSize: number, maxPix
 }
 const snapshot = (d: DocumentStack): DocumentStack => JSON.parse(JSON.stringify(d))
 
-function Slider({ label, value, min, max, step = 1, fmt, onChange, onStart, onCommit }: { label: string; value: number; min: number; max: number; step?: number; fmt?: (v: number) => string; onChange: (v: number) => void; onStart?: () => void; onCommit?: () => void }) {
+/** Range + value. With `num` the value is also an editable number field: `scale` 100 shows a 0–1 value as a percentage, `unit` is its suffix. */
+function Slider({ label, value, min, max, step = 1, fmt, onChange, onStart, onCommit, num, scale = 1, unit }: { label: string; value: number; min: number; max: number; step?: number; fmt?: (v: number) => string; onChange: (v: number) => void; onStart?: () => void; onCommit?: () => void; num?: boolean; scale?: number; unit?: string }) {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v))
   return (
     <>
       <label>{label}</label>
       <div className="slider">
         <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} onPointerDown={onStart} onPointerUp={onCommit} onKeyDown={(e) => { if (!e.repeat) onStart?.() }} onKeyUp={onCommit} />
-        <span className="val">{fmt ? fmt(value) : String(Math.round(value * 1000) / 1000)}</span>
+        {num
+          ? <span className="num"><input type="number" min={min * scale} max={max * scale} step={step * scale} value={Math.round(value * scale * 100) / 100} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) onChange(clamp(v / scale)) }} />{unit ? <i>{unit}</i> : null}</span>
+          : <span className="val">{fmt ? fmt(value) : String(Math.round(value * 1000) / 1000)}</span>}
       </div>
     </>
   )
@@ -99,12 +108,7 @@ function ToolOptions() {
       <h4 className="sect">{TOOLS.find((x) => x.tool === tool)?.label}</h4>
       {(tool === 'brush' || tool === 'eraser') && (
         <div className="tool-opts">
-          <Slider label="size" value={b.size} min={1} max={512} fmt={(v) => `${v} px`} onChange={(v) => set({ size: v })} />
-          <Slider label="hardness" value={b.hardness} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ hardness: v })} />
-          <Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} />
-          <Slider label="flow" value={b.flow} min={0.01} max={1} step={0.01} fmt={pct} onChange={(v) => set({ flow: v })} />
-          <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} fmt={pct} onChange={(v) => set({ spacing: v })} />
-          <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ smoothing: v })} />
+          <BrushControls />
           {tool === 'brush' && <><label>colour</label><Swatches /></>}
           <label /><CommandRow ids={['edit.brush.smaller', 'edit.brush.larger', 'edit.brush.softer', 'edit.brush.harder']} />
           <span className="hint full">[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected (D19)</span>
@@ -137,16 +141,46 @@ function ToolOptions() {
   )
 }
 
+/** The brush itself (10 §4): size in px with a number field, the rest in %; shared by the Tool options and the Brushes tab. */
+function BrushControls() {
+  const b = useEditor((s) => s.brush)
+  const set = (p: Partial<typeof b>) => ed().setBrush(p)
+  return (
+    <>
+      <Slider label="size" value={b.size} min={1} max={1024} num unit="px" onChange={(v) => set({ size: Math.round(v) })} />
+      <Slider label="hardness" value={b.hardness} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ hardness: v })} />
+      <Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ opacity: v })} />
+      <Slider label="flow" value={b.flow} min={0.01} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ flow: v })} />
+      <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ spacing: v })} />
+      <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ smoothing: v })} />
+    </>
+  )
+}
+
 function BrushesTab() {
   const b = useEditor((s) => s.brush)
+  const mine = useEditor((s) => s.brushPresets)
+  const [naming, setNaming] = useState<string | null>(null)
+  const presets = [...BRUSH_PRESETS, ...mine]
+  const isActive = (p: BrushPreset) => p.size === b.size && Math.abs(b.hardness - p.hardness) < 0.005 && Math.abs(b.flow - p.flow) < 0.005 && Math.abs(b.opacity - p.opacity) < 0.005 && Math.abs(b.spacing - p.spacing) < 0.005
   return (
     <div>
       <div className="brush-presets">
-        {BRUSH_PRESETS.map((p) => <button key={p.name} className={Math.abs(b.hardness - p.hardness) < 0.01 && Math.abs(b.flow - p.flow) < 0.01 ? 'active' : ''} onClick={() => ed().setBrush({ hardness: p.hardness, flow: p.flow, opacity: p.opacity, spacing: p.spacing, smoothing: p.smoothing })}>
-          <span className="dab" style={{ background: `radial-gradient(circle, ${b.color} ${Math.round(p.hardness * 100)}%, transparent 100%)`, opacity: Math.max(0.35, p.flow) }} />{p.name}
-        </button>)}
+        {presets.map((p) => <div key={p.name} className="row"><button className={isActive(p) ? 'active' : ''} onClick={() => ed().applyBrushPreset(p)} title={`${p.size} px · hardness ${Math.round(p.hardness * 100)} % · opacity ${Math.round(p.opacity * 100)} % · flow ${Math.round(p.flow * 100)} %`}>
+          <span className="dab" style={{ width: Math.max(8, Math.min(26, p.size / 6)), height: Math.max(8, Math.min(26, p.size / 6)), background: `radial-gradient(circle, ${b.color} ${Math.round(p.hardness * 100)}%, transparent 100%)`, opacity: Math.max(0.35, Math.min(1, p.flow + 0.3)) }} /><span>{p.name}</span><span className="n">{p.size} px</span>
+        </button>{!p.builtin && <button className="quiet" title="Delete preset" onClick={() => ed().deleteBrushPreset(p.name)}>✕</button>}</div>)}
       </div>
-      <p className="hint">Presets set hardness, flow, spacing and smoothing; size and colour stay. Saving custom presets and the pen pressure curve arrive with the tablet (D19).</p>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        {naming === null ? <button onClick={() => setNaming('')}>Save current as preset…</button> : <>
+          <input type="text" autoFocus value={naming} placeholder="preset name" onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && naming.trim()) { ed().saveBrushPreset(naming.trim()); setNaming(null) } if (e.key === 'Escape') setNaming(null) }} style={{ width: 140 }} />
+          <button className="primary" disabled={!naming.trim()} onClick={() => { ed().saveBrushPreset(naming.trim()); setNaming(null) }}>Save</button><button className="quiet" onClick={() => setNaming(null)}>Cancel</button></>}
+      </div>
+      <h4 className="sect">Current brush</h4>
+      <div className="tool-opts">
+        <BrushControls />
+        <label>colour</label><Swatches />
+      </div>
+      <p className="hint">Type a diameter or any value directly in the number fields. Pressure → size / opacity / flow and the pen curve appear once a pen is detected (D19).</p>
     </div>
   )
 }
@@ -345,7 +379,7 @@ function DocumentsTab() {
           <div key={d.id} className={`doc-row${d.id === docId ? ' active' : ''}`} onClick={() => { if (d.id !== docId) void ed().openDocument(d.id) }}>
             <img src={api.fileUrl(`/documents/${d.id}/thumbnail`)} alt="" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
             <div className="t"><b>{d.name}</b><span className="kind">{d.w}×{d.h} · {d.layers} layer{d.layers === 1 ? '' : 's'} · {d.saved_at ? new Date(d.saved_at).toLocaleString() : 'unsaved'}{d.open ? ' · open' : ''}</span></div>
-            <button className="quiet" title="delete the .ora" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete document "${d.name}"? The .ora file is removed.`)) void ed().deleteDocument(d.id).then(refresh) }}>✕</button>
+            <button className="quiet" title="delete the .ora" onClick={(e) => { e.stopPropagation(); void askConfirm({ title: 'Delete document?', text: `"${d.name}" and its .ora file are removed from the project. This cannot be undone.`, okLabel: 'Delete document', danger: true }).then((ok) => { if (ok) void ed().deleteDocument(d.id).then(refresh) }) }}>✕</button>
           </div>
         ))}
         {!items.length && <span className="muted">No documents yet. Select an asset in the Catalogue and press E.</span>}
@@ -392,6 +426,7 @@ function Strip() {
   const quickMask = useEditor((s) => s.quickMask)
   const cursor = useEditor((s) => s.cursor)
   const renderer = useEditor((s) => s.renderer)
+  const rendererPref = useEditor((s) => s.rendererPref)
   const transforming = useEditor((s) => !!s.transform)
   const [zt, setZt] = useState<string | null>(null)
   const apply = () => { if (zt !== null) { const v = parseFloat(zt); if (v > 0) ed().zoomTo(v / 100) } setZt(null) }
@@ -409,7 +444,10 @@ function Strip() {
       <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => { markUsed('edit.view.before'); runCommand('edit.sel.quickMask') }} disabled={!doc} title="Quick mask (Q)">quick mask</button>
       <span className="spacer" />
       {cursor && <span className="mono">{cursor.x}, {cursor.y}</span>}
-      <span className="badge-renderer">{renderer}</span>
+      <button className="quiet badge-renderer" onClick={() => ed().setRendererPref(rendererPref === 'auto' ? 'webgl' : rendererPref === 'webgl' ? 'webgpu' : 'auto')}
+        title={`Renderer: ${renderer || 'starting…'} · preference ${rendererPref} — click to cycle auto → WebGL2 → WebGPU (D3: auto probes WebGPU and falls back to WebGL2 when it draws nothing)`}>
+        {renderer || '…'}{rendererPref !== 'auto' ? ` · ${rendererPref === 'webgl' ? 'forced WebGL2' : 'forced WebGPU'}` : ''}
+      </button>
     </>
   )
 }
@@ -426,19 +464,21 @@ function Stage() {
   const doc = useEditor((s) => s.doc)
   const loading = useEditor((s) => s.loading)
   const error = useEditor((s) => s.error)
+  const epoch = useEditor((s) => s.rendererEpoch)
   if (!project?.open) return <div className="placeholder"><div><h2>Edit</h2>open or create a project to begin</div></div>
   if (!doc) return (
-    <div className="edit-empty"><div>
+    <div className="edit-empty" onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets')) e.preventDefault() }}
+      onDrop={(e) => { const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (ids.length) { e.preventDefault(); void ed().openFromAsset(ids[0]) } }}><div>
       <h2>Edit</h2>
       {loading ? <p>loading document…</p> : <>
-        <p>Select an asset in the Catalogue and press <kbd>E</kbd>, or start empty.</p>
+        <p>Select an asset in the Catalogue and press <kbd>E</kbd>, drop a tile here or on the Edit tab, or start empty.</p>
         <p><button onClick={() => void ed().newDocument(1920, 1080)}>New 1920×1080 document</button> <button onClick={() => useSession.getState().setSuite('catalogue')}>Open the Catalogue</button></p>
         <RecentDocuments />
       </>}
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
     </div></div>
   )
-  return <><EditorCanvas /><CandidateStrip /></>
+  return <><EditorCanvas key={epoch} /><CandidateStrip /></>
 }
 
 // ------------------------------------------------------------------ Inspector
@@ -471,6 +511,7 @@ function LayersTab() {
   return (
     <div>
       <div className="layers">{rows(doc.layers, 0)}</div>
+      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}”: paint white to show the layer, black to hide it — B brush · E eraser · G fill. <button className="quiet" onClick={() => ed().setActive(active.id, false)}>Edit pixels instead</button></div>}
       {active && (
         <div className="tool-opts" style={{ marginTop: 10 }}>
           <label>blend</label><select value={active.blend} onChange={(e) => ed().updateNode(active.id, { blend: e.target.value }, 'blend mode')}>{BLEND_MODES.map((m) => <option key={m}>{m}</option>)}</select>
@@ -528,7 +569,7 @@ function PropertiesTab() {
         })}
         {!Object.keys(params).length && <span className="hint full">no parameters</span>}
       </div>
-      <p className="hint">Previewed on the canvas with the compositor's own formulas (blur exact up to radius 4, strided above; noise approximate); rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).</p>
+      <p className="hint">Previewed on the canvas with the compositor's own formulas (blur exact up to radius 4, strided above); rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).</p>
     </div>
   )
 }
@@ -596,7 +637,7 @@ function useEditKeys() {
     const down = (e: KeyboardEvent) => {
       const s = useSession.getState()
       if (s.ui.suite !== 'edit') return
-      if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
+      if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')) return
       const st = ed()
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
@@ -623,7 +664,9 @@ function useEditKeys() {
         const st = ed()
         if (!useSession.getState().project?.open || st.doc || st.loading) return false
         void st.openDocument(deep).then(() => {
-          if (q.get('verify')) setTimeout(() => void ed().compareWithExact(), 2000)
+          if (q.get('verify')) {                                                                        // wait for the renderer (GPU init is slow headless), then compare
+            const t0 = Date.now(); const tick = () => { if (ed().extractor) void ed().compareWithExact(); else if (Date.now() - t0 < 30000) setTimeout(tick, 250) }; setTimeout(tick, 500)
+          }
           const tab = q.get('tab'); if (tab) setRailTab('edit', tab)                                      // dev: open a panel section
           if (q.get('sel') === 'all') ed().selectAll()                                                   // dev: marching ants
           if (q.get('sel') === 'half') { const s = ed().ensureSelection(); s.ctx.fillStyle = '#fff'; s.ctx.beginPath(); s.ctx.ellipse(s.width / 2, s.height / 2, s.width / 3, s.height / 3, 0, 0, Math.PI * 2); s.ctx.fill(); s.refresh(); ed().bump() }

@@ -88,7 +88,7 @@ def test_preview_stage_release_presets(tmp_path: Path):
     with client:
         client.post("/project", json={"path": str(tmp_path / "proj"), "name": "G", "size_cap_gb": 10}, headers=H)
         caps = client.get("/capabilities").json()
-        assert "res_multistep" in caps["samplers"] and caps["models"]["flux2-dev-fp8mixed"]["wired"] and caps["tiers"]["draft"]["flux2"] == [960, 544]
+        assert "res_multistep" in caps["samplers"] and caps["models"]["flux2-dev-fp8mixed" if caps["variant"] == "full" else "klein-4b"]["wired"] and caps["tiers"]["draft"]["flux2"] == [960, 544]
         pv = client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "prompt_mode": "tree", "prompt_json": TREE, "turbo": True, "seeds": [1, 2, 3]}}, headers=H).json()
         assert pv["prompt_mode"] == "json" and pv["steps"] == 8 and pv["count"] == 3 and pv["missing"] == [] and pv["estimate"]["seconds"] > 0 and pv["estimate"]["vram_fit"] in ("ok", "tight")
         pv2 = client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "model_id": "klein-4b", "prompt_text": "x"}}, headers=H).json()

@@ -2,7 +2,7 @@
 .SYNOPSIS
   Recreate the loom2 inference engine environment from the pinned sources (06 §3b, 12 §1a, D15/D16).
 .DESCRIPTION
-  1. engine/comfyui submodule at its pinned commit (Comfy-Org/ComfyUI v0.38.2)
+  1. engine/comfyui submodule at its pinned commit (Comfy-Org/ComfyUI v0.39.0 since 2026-10-07; v0.38.2 before)
   2. custom nodes at the commits recorded in engine/nodes.lock, plus the local patches in engine/patches/
   3. engine/.venv via uv on Python 3.13 with torch 2.13.0+rocm10.0.0 (AMD stable index, [device-all] extras)
      and ComfyUI's requirements under engine/constraints.txt (torch can never be swapped for a CPU build)
@@ -31,7 +31,9 @@ foreach ($line in $nodes) {
     git clone --quiet $url $dest
   }
   Push-Location $dest
-  git fetch --quiet --depth 1 origin $commit 2>$null; git checkout --quiet $commit
+  $ErrorActionPreference = 'SilentlyContinue'
+  if ((git rev-parse --short=7 HEAD) -ne $commit) { git fetch --quiet origin 2>$null }; git checkout --quiet $commit
+  $ErrorActionPreference = 'Stop'
   Pop-Location
   Write-Host "       $name @ $commit"
 }
@@ -41,9 +43,11 @@ foreach ($line in $patches) {
   $dest = "engine/comfyui/custom_nodes/$name"
   $patch = Join-Path $repo "engine/patches/$file"
   Push-Location $dest
+  $ErrorActionPreference = 'SilentlyContinue'
   git apply --check $patch 2>$null
+  $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -eq 0) { git apply $patch; Write-Host "       patched $name with $file" }
-  else { git apply --reverse --check $patch 2>$null; if ($LASTEXITCODE -eq 0) { Write-Host "       $file already applied to $name" } else { throw "patch $file does not apply to $name" } }
+  else { $ErrorActionPreference = 'SilentlyContinue'; git apply --reverse --check $patch 2>$null; $ErrorActionPreference = 'Stop'; if ($LASTEXITCODE -eq 0) { Write-Host "       $file already applied to $name" } else { throw "patch $file does not apply to $name" } }
   Pop-Location
 }
 

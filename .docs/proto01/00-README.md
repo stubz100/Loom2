@@ -21,11 +21,13 @@ author approves it; decisions and their status live in 13.
 | 10 | [Suite B · Edit UI](10-ui-suite-edit.md) | layered inpaint / refine editor (target b) |
 | 11 | [Suite C · Animate UI](11-ui-suite-animate.md) | image-to-video with start/end frames (target c) |
 | 12 | [Roadmap](12-roadmap.md) | spikes E0–E8, milestones M1–M7, gates, estimates |
-| 13 | [Decision log and open questions](13-decision-log-and-open-questions.md) | D1–D27, Q1–Q14 (all resolved as of 2026-10-04) |
+| 13 | [Decision log and open questions](13-decision-log-and-open-questions.md) | D1–D33, Q1–Q18 (Q15 and Q18 carried as post-MVP work), the ordered post-MVP backlog |
 | 14 | [Post-MVP · Story workspace](14-post-mvp-story-workspace.md) | loom's storyboard design adopted as-is for the first post-MVP phase (D23) |
+| 15 | [MVP click-through](15-click-through.md) | the author's end-to-end pass through the four suites (M7 slice 5): what to do, what must happen, where it is measured |
 
-Planned companions (created when work starts): `90-journal.md` (append-only implementation journal with
-real timestamps), `bench/` (the binding benchmark prompts and tasks from 04 §6).
+Companions: [`90-journal.md`](90-journal.md) (append-only implementation journal with real timestamps — the measurements live
+there), [`bench/`](../../bench/README.md) (the binding benchmark prompts and tasks from 04 §6), `scripts/m*_acceptance.py` (the
+rig acceptance runs per milestone), `scripts/edit_headed_check.py` (editor / Animate / performance checks in a visible window).
 
 ## The plan in one paragraph
 

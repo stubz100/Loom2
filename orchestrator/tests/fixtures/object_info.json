@@ -2,31 +2,31 @@
  "system": {
   "os": "win32",
   "ram_total": 137055920128,
-  "ram_free": 118227234816,
-  "comfyui_version": "0.38.2",
-  "required_frontend_version": "1.53.6",
-  "installed_templates_version": "0.11.74",
-  "required_templates_version": "0.11.74",
+  "ram_free": 116706238464,
+  "comfyui_version": "0.39.0",
+  "required_frontend_version": "1.53.10",
+  "installed_templates_version": "0.11.76",
+  "required_templates_version": "0.11.76",
   "comfy_package_versions": [
    {
     "name": "comfyui-frontend-package",
-    "installed": "1.53.6",
-    "required": "1.53.6"
+    "installed": "1.53.10",
+    "required": "1.53.10"
    },
    {
     "name": "comfyui-workflow-templates",
-    "installed": "0.11.74",
-    "required": "0.11.74"
+    "installed": "0.11.76",
+    "required": "0.11.76"
    },
    {
     "name": "comfyui-embedded-docs",
-    "installed": "0.5.12",
-    "required": "0.5.12"
+    "installed": "0.5.13",
+    "required": "0.5.13"
    },
    {
     "name": "comfy-kitchen",
-    "installed": "0.2.36",
-    "required": "0.2.36"
+    "installed": "0.2.37",
+    "required": "0.2.37"
    },
    {
     "name": "comfy-aimdo",
@@ -631,6 +631,15 @@
        "fish-market_s20261004.png",
        "image.png",
        "loom2ref-ast_15fc1552.png",
+       "loom2ref-i2v-ast_1f720e11.png",
+       "loom2ref-i2v-ast_33248a5b.png",
+       "loom2ref-i2v-ast_38351b31.png",
+       "loom2ref-i2v-ast_49b3a269.png",
+       "loom2ref-i2v-ast_4dceaaaf.png",
+       "loom2ref-i2v-ast_534dd950.png",
+       "loom2ref-i2v-ast_5b93444e.png",
+       "loom2ref-i2v-ast_db029be4.png",
+       "loom2ref-i2v-ast_e0d97128.png",
        "mask.png",
        "portrait-grief_s20261004.png",
        "rooftop-night_s20261004.png",
@@ -694,6 +703,15 @@
        "fish-market_s20261004.png",
        "image.png",
        "loom2ref-ast_15fc1552.png",
+       "loom2ref-i2v-ast_1f720e11.png",
+       "loom2ref-i2v-ast_33248a5b.png",
+       "loom2ref-i2v-ast_38351b31.png",
+       "loom2ref-i2v-ast_49b3a269.png",
+       "loom2ref-i2v-ast_4dceaaaf.png",
+       "loom2ref-i2v-ast_534dd950.png",
+       "loom2ref-i2v-ast_5b93444e.png",
+       "loom2ref-i2v-ast_db029be4.png",
+       "loom2ref-i2v-ast_e0d97128.png",
        "mask.png",
        "portrait-grief_s20261004.png",
        "rooftop-night_s20261004.png",
@@ -4429,7 +4447,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 23.0,
+                         "default": 18.0,
                          "min": 0.0,
                          "max": 51.0,
                          "step": 1.0
@@ -4469,7 +4487,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 30.0,
+                         "default": 24.0,
                          "min": 0.0,
                          "max": 63.0,
                          "step": 1.0
@@ -4530,7 +4548,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 23.0,
+                         "default": 18.0,
                          "min": 0.0,
                          "max": 51.0,
                          "step": 1.0
@@ -4570,7 +4588,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 30.0,
+                         "default": 24.0,
                          "min": 0.0,
                          "max": 63.0,
                          "step": 1.0
@@ -4631,7 +4649,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 23.0,
+                         "default": 18.0,
                          "min": 0.0,
                          "max": 51.0,
                          "step": 1.0
@@ -4671,7 +4689,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 30.0,
+                         "default": 24.0,
                          "min": 0.0,
                          "max": 63.0,
                          "step": 1.0
@@ -4732,7 +4750,7 @@
                         "FLOAT",
                         {
                          "tooltip": "Lower values produce higher quality and larger files.",
-                         "default": 30.0,
+                         "default": 24.0,
                          "min": 0.0,
                          "max": 63.0,
                          "step": 1.0
@@ -4795,7 +4813,7 @@
                   "FLOAT",
                   {
                    "tooltip": "Lower values produce higher quality and larger files.",
-                   "default": 23.0,
+                   "default": 18.0,
                    "min": 0.0,
                    "max": 51.0,
                    "step": 1.0
@@ -4835,7 +4853,7 @@
                   "FLOAT",
                   {
                    "tooltip": "Lower values produce higher quality and larger files.",
-                   "default": 30.0,
+                   "default": 24.0,
                    "min": 0.0,
                    "max": 63.0,
                    "step": 1.0

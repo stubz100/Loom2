@@ -1,6 +1,6 @@
 # 08 · Suite D — Catalogue (UI document)
 
-Status: proposed; approval gates M2. Frame: 07. Data model: 06 §5. Lessons applied: loom's grouped view,
+Status: **implemented — M2 closed 2026-10-05**, extended through M6 (Empty trash, drops onto Edit / Animate, clips folder); amendments dated inline. Originally: proposed; approval gates M2. Frame: 07. Data model: 06 §5. Lessons applied: loom's grouped view,
 keyboard-by-row, loupe + compare, and branching derivations were right; virtualisation, thumbnails, video
 tiles and persistent selection state were missing (02 §4b).
 
@@ -119,7 +119,7 @@ counts computed server-side.
   FPS to be confirmed interactively on the rig.
 - [x] Batch triage round-trip: states, ratings and tags persist across restart (SQLite), not in session state —
   manifests + index (`PATCH /assets/bulk`), tested.
-- [ ] Lineage view shows a generate → inpaint → refine → frame-extract chain correctly after the suites exist
+- [x] Lineage view shows a generate → inpaint → refine → frame-extract chain correctly after the suites exist — 2026-10-07: import → Wan clip (`animate`) → three `frame-extract` children, five assets in `/lineage/tree`; generate → inpaint / refine edges were verified by the M5 acceptance (lineage to the source asset)
   (roots, edges and the Lineage group exist; chain layout pending).
 - [x] Import parses ComfyUI PNG metadata into Params — `tools/pngmeta.py` (ComfyUI `prompt`, A1111 `parameters`), tested.
 - [x] Compare locks zoom/pan across 2 and 4 images; wipe works — plus a difference toggle and swap.

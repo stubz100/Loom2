@@ -73,7 +73,7 @@ torchaudio==2.11.0.2+rocm10.0.0
 uv pip install --python engine\.venv `
   --index-url https://stable.repo.amd.com/rocm/whl-next/ --extra-index-url https://pypi.org/simple `
   "torch[device-all]==2.13.0+rocm10.0.0" "torchvision[device-all]==0.28.0+rocm10.0.0" "torchaudio==2.11.0.2+rocm10.0.0"
-git clone --branch v0.38.2 --depth 1 https://github.com/Comfy-Org/ComfyUI engine\comfyui
+git clone --branch v0.39.0 --depth 1 https://github.com/Comfy-Org/ComfyUI engine\comfyui   # v0.38.2 until 2026-10-07
 uv pip install --python engine\.venv -c engine\constraints.txt `
   --index-url https://stable.repo.amd.com/rocm/whl-next/ --extra-index-url https://pypi.org/simple `
   -r engine\comfyui\requirements.txt
@@ -279,7 +279,10 @@ ordered.
 relaunch paused + re-queued, the re-queued clip finishes; engine crash detected in 6 s, fresh engine in 6 s); slice 2 **done**
 (every 03 §6 budget met; editor composite of 6 × 4K with advanced blends p95 7.1 ms; the author's panel runs at 29 Hz so frame
 rates are display-bound); slice 3 **reviewed** (v0.39.0 safe by the contract gate; the bump is a dedicated step with a rig smoke);
-slice 4 **done** (setup.ps1, ci.yml, variant baked into the shell). Slice 5 and the bump step remain.
+slice 4 **done** (setup.ps1, ci.yml, variant baked into the shell). **2026-10-07 03:20:** the **bump to v0.39.0 is done**
+(smoke: Klein 4B 20.1 s, Wan Draft 236.7 s, 89 tests on the recaptured fixture), CI's first-run failures fixed (lockfile peer
+conflict, variant-aware tests), slice 5's docs refresh done and **15 · click-through** written. **M7 closes on the author's
+click-through entry.**
 
 ## 9. Totals and parallelism
 

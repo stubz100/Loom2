@@ -1506,3 +1506,30 @@ read the clock)*
   workflow is this commit).
 - **Left in M7:** the pin bump step above; slice 5 — docs refresh (00–14) and the author's end-to-end click-through against
   07 §5 / 08 §10 / 09 §10 / 10 §14 / 11 §11; the post-MVP backlog ordered in 13; H3 remains post-MVP.
+
+## 2026-10-07 03:20 — ComfyUI pin bumped to v0.39.0 (smoke passed); CI fixed; docs refreshed; click-through guide; backlog ordered
+
+- **Pin bump (D15, M7 slice 3).** Submodule `engine/comfyui` → **v0.39.0** (`b0b7435`, 2026-10-05). Requirements diff was small
+  (frontend package 1.53.6 → 1.53.10, workflow templates 0.11.74 → 0.11.76, embedded docs 0.5.12 → 0.5.13, comfy-kitchen 0.2.36 →
+  0.2.37); `engine-setup.ps1 -SkipTorch` applied them, torch 2.13.0+rocm10.0.0 untouched. `/object_info` recaptured from the live
+  engine (988 classes) → the fixture keeps our 68 (`comfyui_version` 0.39.0), **89 offline tests pass**. **Rig smoke:** Klein 4B
+  t2i 1280×720 **20.1 s** (sampler 8.0 s, decode 5.4 s, text 5.3 s); Wan Draft task 01 through the app **236.7 s**, 7/7 pipeline
+  checks (clip, proxy, lineage, harvest), lowest free VRAM 4.81 GB. Live enums unchanged (45 samplers / 9 schedulers).
+  Rollback, if ever needed: `git -C engine/comfyui checkout v0.38.2` + `engine-setup.ps1 -SkipTorch`.
+  Two setup-script fixes on the way: GitHub cannot serve a fetch by short hash (the node step now skips the fetch when the locked
+  commit is checked out and fetches the remote fully otherwise), and PowerShell turned the expected non-zero exits of
+  `git apply --check` into terminating errors under `Stop` — both made the script abort on a clean machine.
+- **CI (first run on afac999 failed, both fixed).** (1) `npm ci` refused the lockfile: `openapi-typescript` pins TypeScript 5.x
+  as a peer while the app is on TypeScript 6.0 — the generator is only run by hand, so it left `devDependencies` and the
+  `api:types` script calls it through `npx`; the lockfile shrank by 362 lines and a clean clone now installs and builds.
+  (2) Under `LOOM2_VARIANT=open` two tests assumed the full roster (dev is non-commercial, full only); both now check Klein 4B
+  and expect dev only when the variant is full. Both variants: 89 passed.
+- **Docs refresh (slice 5).** Status lines of 06 and 08–11 state the shipped milestones (the "proposed" line is kept as history);
+  00's index covers D1–D33 / Q1–Q18, names the journal, the bench and the check scripts, and adds **15 · MVP click-through** —
+  the author's guided end-to-end pass through the frame and the four suites with the automated twin of each step; 08 §10's
+  lineage item is ticked (import → clip → three `frame-extract` children, five assets in the tree); 09 §10 ticks Klein
+  references (M5) and records the Klein timing. **13** gained the **ordered post-MVP backlog** (Story workspace first, then the
+  conform export step, Wan VAE time, LoRA slots, Klein refs in Edit AI / Fill Hero / SeedVR2, Animate extensions and H3,
+  Edit 16-bit / clone / text / pen, Q15, frame and engine items).
+- **M7 status:** slices 1–4 done, 3's bump done, 5's docs done. **What closes M7 is the author's click-through (15)** — its
+  journal entry is the exit line of 12 §8; everything it leans on has an automated twin that passed tonight.

@@ -1,6 +1,6 @@
 # 06 · System architecture
 
-Builds on 02 (what to keep), 04 (models, convention) and 05 (frontend engine). Status: proposed; the engine
+Builds on 02 (what to keep), 04 (models, convention) and 05 (frontend engine). Status: **implemented M1–M6** (2026-10-04 → 2026-10-06; amendments dated inline, the journal has the measurements); originally proposed 2026-10-04. The engine
 decision (§3) is validated by spike E0 in the roadmap before any suite is built on it.
 
 ## 1. Overview
@@ -68,14 +68,14 @@ reference and for A/B reruns. D post-MVP.
 ### 3b. How loom2 uses ComfyUI
 
 - **Managed checkout** (decision D15, accepted 2026-10-04): a **fresh clone of
-  https://github.com/Comfy-Org/ComfyUI** under `<app>/engine/comfyui/`, pinned to a release tag (**v0.38.2** on
-  2026-10-04; HEAD `f1072eb0`), as a git submodule once loom2 is a git repository. The `D:\comfyui` install
+  https://github.com/Comfy-Org/ComfyUI** under `<app>/engine/comfyui/`, pinned to a release tag (**v0.39.0** since 2026-10-07 — `b0b7435`; **v0.38.2** from
+  2026-10-04 to 2026-10-07), as a git submodule once loom2 is a git repository. The `D:\comfyui` install
   (0.19.3, 19 minor releases behind) is never used for code — only its `models/` tree is mounted. Upgrading the
   pin is a deliberate milestone task with the contract tests as the gate. Plus a pinned set of custom nodes: `ComfyUI-GGUF` (city96), `LanPaint`, `comfyui-tooling-nodes` (Acly: Load
   Image Base64 / Send Image WebSocket — or loom2 reads outputs via `/view` and the output directory). Optional:
   `ComfyUI-LTXVideo`, `ComfyUI-SeedVR2`.
 - **Environment** (D16): a dedicated `engine/.venv` created by **uv** on **Python 3.13** with **torch
-  2.13.0+rocm10.0.0** (`[device-all]` extras) from the ROCm 10.0.0 stable index, ComfyUI v0.38.2 requirements
+  2.13.0+rocm10.0.0** (`[device-all]` extras) from the ROCm 10.0.0 stable index, the pinned ComfyUI's requirements
   under a constraints file that pins torch, optional `triton-windows`, and the pinned custom nodes; `uv.lock`
   committed. The orchestrator runs in its own torch-free `orchestrator/.venv`. loom's 7.2.1 venv is never
   touched (loom rule R103) and serves only as an A/B reference. Exact commands: 12 §1a.

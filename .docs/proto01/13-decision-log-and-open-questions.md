@@ -29,7 +29,7 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | D12 | **Suites** (Catalogue · Generate · Edit · Animate · Models) with one frame (07); each suite's UI doc approved before its milestone | proposed | 03 §2, 07 | user requirement; loom lesson 10 |
 | D13 | Runtime flags: SDPA default, no Sage by default, fp8 scaled + GGUF, no INT8 convrot for UNets, tiled VAE, `--disable-pinned-memory`, engine restart-per-N available (torch pin moved to D16); **MIOpen off** (ComfyUI's AMD default) | **accepted — E7 verified MIOpen-off 2026-10-05**; restart-per-N not needed in 60+ engine jobs | 04 §2 | ROCm-on-Windows field reports 2026; E7 measurements |
 | D14 | Benchmark set (10 t2i / 5 inpaint / 5 i2v) is binding for "done"; timings bracketed by `torch.cuda.synchronize()` | proposed | 04 §6 | loom lessons 2 and 3 |
-| D15 | loom2 carries its **own fresh checkout of github.com/Comfy-Org/ComfyUI**, pinned to a release tag (v0.38.2 on 2026-10-04) with its own venv; `D:\comfyui` (0.19.3) is a model-file backup only and its code is never used | **accepted 2026-10-04** (author) | 06 §3b, 12 E0 | the backup install is 19 minor releases behind; a current pinned release carries the Wan / LTX / H3 / SeedVR2 nodes and the RDNA4 fixes |
+| D15 | loom2 carries its **own fresh checkout of github.com/Comfy-Org/ComfyUI**, pinned to a release tag (v0.38.2 on 2026-10-04) with its own venv; `D:\comfyui` (0.19.3) is a model-file backup only and its code is never used **Pin bumped to v0.39.0 on 2026-10-07** after `scripts/pin_review.py` (68 node classes unchanged, 17 recipe variants compile) and a rig smoke; rollback = submodule reset to v0.38.2 | **accepted 2026-10-04** (author) | 06 §3b, 12 E0 | the backup install is 19 minor releases behind; a current pinned release carries the Wan / LTX / H3 / SeedVR2 nodes and the RDNA4 fixes |
 | D16 | **Fresh loom2 environment, not loom's**: ROCm **10.0.0 stable** index, **torch 2.13.0+rocm10.0.0** (`[device-all]`), **Python 3.13** installed and pinned by **uv**, two venvs (torch-free orchestrator, GPU engine) with lockfiles and a torch constraints file; stable channel only, nightlies in throwaway venvs; **no FlashAttention build carried over** (SDPA/AOTriton default, rebuild only if profiling demands); `triton-windows` 3.8 optional; Adrenalin for the **driver only**, the AI Bundle's global Python/PyTorch unused; loom's 7.2.1 venv untouched as A/B reference | **accepted 2026-10-04** (author); **verified by E0** (sanity matrix green, 57 engine jobs, 0 errors) | 01 §2b, 04 §2, 06 §3b, 12 §1a | ROCm 10 is the current official Windows path with cp311–cp314 wheels and is the exact combination ComfyUI v0.38.2 documents; installed driver 26.9.2 already meets the ≥ 26.8.1 requirement; reproducibility beats an auto-managed global env |
 | D17 | **MiniMax H3 is enabled as the "hero clip" tier**: the author is EU-located, eligible and willing to complete the H3 community-licence application; the option unlocks in Settings once the author confirms the application is filed. Licensing focus is **EU-first** (all roster licence checks are read against EU terms). **Toggle implemented 2026-10-06** (`Settings.h3_licence_confirmed`, Settings → Licences; the Animate H3 card reflects it; the H3 graph + weights themselves are post-MVP) | **accepted 2026-10-04** (author, Q1) | 04 §5b/§7, 11 §3b | H3 is the quality ceiling and proven on this GPU/OS; the only blocker was the territorial application |
 | D18 | **Project format = target + draft tiers.** Target (export/finalize): 16:9, 1920×1080 @ 24 fps. Generation defaults to the **Draft** tier: images 1280×720 (Klein) / 960×544 (dev); video Wan 832×480 @ 16 fps 81 f, LTX 1024×576 @ 24 fps 121 f. **Thumb** 896×512 for composition passes. **Full** (FHD) available per model: Klein at 1920×1088 → crop 1080; LTX two-stage (base + 2× spatial upscaler) → 1920×1088 → crop; Wan and dev reach FHD via upscale, not native. Dimensions snap to each model's multiple (FLUX.2 ×16, Wan ×16 / 4n+1 frames, LTX ×32 / 8n+1 frames). Clip masters keep native fps; conforming to 24 fps is an export step (post-MVP interpolation) | **accepted 2026-10-04** (author, Q5: "small by default, FHD as an option") | 04 §9, 06 §5, 07 §6, 09 §3c, 11 §3c | quick drafts are the daily loop on a 16 GB card; FHD costs 2–5× per image and is not a native video resolution for Wan/dev |
@@ -73,6 +73,31 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | Q18 | **Wan VAE time**: decoding 81 × 832×480 frames takes 131–134 s and the start-image encode 36–40 s — 54 % of a 315 s clip (sampling 104–130 s). Try MIOpen on for the 3D convs (E7 measured image VAEs only), `VAEDecodeTiled` temporal tiling, and a lightweight preview VAE | 04 §5, 12 E4 | measure in M6 before the Animate suite sets its progress expectations |
 
 Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-06.
+
+## Post-MVP backlog (ordered 2026-10-07, M7 slice 5)
+
+The order weighs user value against the risk each item carries on the 16 GB ROCm rig; items are grouped so one phase ships
+together. Decisions that bind them are in brackets.
+
+1. **Story workspace** (14, D23) — the first post-MVP phase as designed: StoryBible → Asset Library → Shots & Takes → Narrative
+   graph on top of the Catalogue, clips and lineage that exist today.
+2. **fps-conform export step** (Q14, D27 decided): RIFE v4.6 on the whole sequence at export, master native; an unsharp pass
+   after RIFE measured first (E9 note).
+3. **Wan VAE time** (Q18): decode is 38–40 % of a clip (102 s of 256 s); tiled / lower-precision VAE decode and `--cpu-vae` for
+   the encode measured before any UI promise.
+4. **LoRA slots** (D25): roster `kind: lora` exists; loading wired in Generate and Edit; Turbo-style presets per family.
+5. **Klein references in Edit AI** and **Fill Hero on the bench** (carried from M5), **SeedVR2** as the "add real detail" upscaler
+   if it fits 16 GB.
+6. **Animate**: native LTX extension, Wan latent previews (11 §12), camera control (Wan camera LoRAs / VACE — E4b: camera moves
+   are a control problem), reference images (SkyReels / Phantom / H3 Ref2VA), **H3 graph + weights** once the licence is confirmed
+   (D17 toggle exists).
+7. **Edit**: 16-bit working mode (`rgba16float` passes), clone / heal and text tools, PSD adjustment layers (10 §15), pen
+   pressure once a tablet exists (D19), colour management (ICC).
+8. **Generate**: Q15 (dev Turbo s/it alternation under load) investigated with the engine's own profiler; Qwen-Image-Edit as
+   the instruction editor when a 16 GB path exists (04 §4).
+9. **Frame**: detachable Loupe / Player window (07 §7), sd.cpp Vulkan as the zero-driver fallback engine (06 §3 option D).
+10. **Engine**: deliberate pin bumps per milestone (D15; `scripts/pin_review.py`), LTX-2.5 fp8 when benchmarked on 16 GB
+    (04 §8), Wan-Animate for character animation (04 §5).
 
 ## Volatile facts to re-check at each milestone start
 See 04 §8 (ROCm nightlies, INT8 convrot fix, FLUX.2 fill releases, Qwen-Image-2.1 licence, sd.cpp fixes,

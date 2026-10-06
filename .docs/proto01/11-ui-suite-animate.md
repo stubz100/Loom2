@@ -1,6 +1,6 @@
 # 11 · Suite C — Animate (image-to-video) — UI document
 
-Status: proposed; approval gates M6. Models: 04 §5 (Wan 2.2 I2V-A14B primary, LTX-2.3 secondary, MiniMax H3
+Status: **implemented — M6 closed 2026-10-06** (11 §11 six of six, five bench tasks through the app, E9 decided); amendments dated inline. Originally: proposed; approval gates M6. Models: 04 §5 (Wan 2.2 I2V-A14B primary, LTX-2.3 secondary, MiniMax H3
 opt-in). Video stack: 05 §4 (Mediabunny scrubbing, PNG-sequence masters + MP4 proxy).
 
 ## 1. Purpose

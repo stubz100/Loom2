@@ -32,7 +32,8 @@ def test_api_flow(tmp_path: Path):
         assert r.status_code == 200 and r.json()["name"] == "Smoke"
         assert client.get("/projects").json()["last"].endswith("proj")
         caps = client.get("/capabilities").json()
-        assert "t2i" in caps["recipes"] and "flux2-dev-fp8mixed" in caps["models"]
+        assert "t2i" in caps["recipes"] and "klein-4b" in caps["models"]                        # Klein 4B is in both variants (D26)
+        assert ("flux2-dev-fp8mixed" in caps["models"]) == (caps["variant"] == "full")        # dev is non-commercial: full only
         models = client.get("/models").json()["items"]
         assert any(m["id"] == "klein-4b" and m["health"] == "missing" for m in models)
         # imports go straight into the catalogue with thumbnails

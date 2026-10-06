@@ -1,6 +1,6 @@
 # 10 · Suite B — Edit (layered inpaint / refine) — UI document
 
-Status: proposed; approval gates M4 (editor core) and M5 (AI operations). Engine: PixiJS v8 compositor per
+Status: **implemented — M4 closed 2026-10-05, M5 closed 2026-10-06**; amendments dated inline (brushes, mask editing, dialogs, exact noise, headed checks). Originally: proposed; approval gates M4 (editor core) and M5 (AI operations). Engine: PixiJS v8 compositor per
 05 §3b; models per 04 §4; flows per 06 §7.
 
 ## 1. Purpose

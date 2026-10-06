@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
 
 PromptMode = Literal["tree", "json", "text"]
-# The pinned engine's own enums (ComfyUI v0.38.2 `comfy.samplers.KSampler.SAMPLERS` / `SCHEDULERS`, captured in
+# The pinned engine's own enums (ComfyUI v0.39.0 `comfy.samplers.KSampler.SAMPLERS` / `SCHEDULERS` — unchanged since v0.38.2 — captured in
 # tests/fixtures/object_info.json). `/capabilities` prefers the live engine's lists; "flux2" is loom2's name for the
 # Flux2Scheduler sigmas (resolution-shifted, BFL's schedule) through SamplerCustomAdvanced instead of KSampler.
 SAMPLERS = ["euler", "euler_cfg_pp", "euler_ancestral", "euler_ancestral_cfg_pp", "heun", "heunpp2", "exp_heun_2_x0", "exp_heun_2_x0_sde", "dpm_2",

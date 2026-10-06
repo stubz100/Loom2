@@ -20,7 +20,7 @@ journal and fixed.
 .docs/proto01/   plan (01–14), decision log (13), journal (90)
 bench/           t2i JSON prompts, inpaint tasks + masks (frozen source), i2v tasks + frames
 engine/
-  comfyui/       pinned Comfy-Org/ComfyUI submodule (v0.38.2) — model and inference management only
+  comfyui/       pinned Comfy-Org/ComfyUI submodule (v0.39.0 since 2026-10-07) — model and inference management only
   nodes.lock     pinned custom nodes (ComfyUI-GGUF, LanPaint) + local patches in engine/patches/
   constraints.txt / extra_model_paths.yaml / spikes/ (E0–E8 drivers and contact-sheet tools)
 orchestrator/    Python package `loom2` (uv, 3.13): workspace, roster, ComfyUI client + supervisor, recipe

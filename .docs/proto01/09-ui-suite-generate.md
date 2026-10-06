@@ -1,6 +1,6 @@
 # 09 · Suite A — Generate (FLUX.2 text-to-image with JSON prompting) — UI document
 
-Status: proposed; approval gates M3. Frame: 07. Models and prompting rules: 04 §3. Engine: 06 §3.
+Status: **implemented — M3 closed 2026-10-05**, Klein and the ComfyUI configuration surface added in M5 / 2026-10-06; amendments dated inline. Originally: proposed; approval gates M3. Frame: 07. Models and prompting rules: 04 §3. Engine: 06 §3.
 
 ## 1. Purpose
 Produce starting images with FLUX.2 (Klein tiers for iteration, dev for hero frames) using BFL's structured
@@ -65,7 +65,7 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
 - **Sampling preset**: per variant from `/capabilities` — distilled: steps fixed (4) and CFG fixed (1.0), shown
   disabled with the reason; base: steps 20–50, CFG 3–5; dev: steps 8 (Turbo LoRA on) / 20–28 (off), guidance
   3–4.5, sampler `res_multistep` + `sgm_uniform` default (the author's working ComfyUI setting). **Sampler and
-  scheduler lists are the engine's own** (45 / 9 in v0.38.2, served live by `/capabilities`), plus loom2's
+  scheduler lists are the engine's own** (45 / 9 in v0.38.2 and v0.39.0, served live by `/capabilities`), plus loom2's
   `flux2` scheduler = BFL's resolution-shifted sigmas (`Flux2Scheduler` through `SamplerCustomAdvanced`,
   `CFGGuider` when CFG > 1). A value the engine does not offer is an error in the preview, never a silent fall-back.
   Turbo LoRA toggle (dev) with its **strength**.
@@ -154,9 +154,9 @@ Manifests record the exact serialised prompt and the compiled engine graph hash.
   through the API (10/10 done, mean 45 s at 960×544); adherence checked by eye on the contact sheet (journal 16:1x): consistent character, literal text and bound colours in every frame.
 - [x] Distilled variants show fixed steps/CFG disabled with reasons; base variants enable CFG + negative — `effective_params`, acceptance checks.
 - [x] A batch of 8 streams previews and lands 8 assets with seeds, params and lineage — `scripts/m3_acceptance.py` (17/17).
-- [~] Reference slots work on dev (done 55.7 s ); Klein 4B/9B references wait for M5; the token hint is shown in the panel.
+- [x] Reference slots work on dev (done 55.7 s); Klein 4B/9B references arrived with the Klein graphs in M5 (D21, ≤ 4 refs on Klein); the token hint is shown in the panel.
 - [~] Missing weights → the primary action is disabled with the reason and a Fetch button opens Models; "after fetch the same job runs" is not automated yet.
-- [~] Timings on the rig for dev recorded in the journal; Klein 4B/9B follow in M5.
+- [x] Timings on the rig for dev recorded in the journal; Klein 4B t2i 1280×720 measured 2026-10-07 on the v0.39.0 engine: 20.1 s (sampler 8.0 s, decode 5.4 s, text encode 5.3 s); Klein inpaint times are in the M5 entries.
 
 ## 11. Open questions
 - Whether to expose per-subject "reference binding" UI (prompt convention only) or keep it textual.

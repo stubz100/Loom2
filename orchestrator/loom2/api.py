@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from . import __version__
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
@@ -25,9 +25,9 @@ from .documents import DocumentStore
 from .engine.graphs import PRESETS, VRAM_ESTIMATE_GB, CompileError, effective_params
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
-from .fsio import StateError
+from .fsio import StateError, _tmp_for
 from .queue import JobQueue
-from .recipes import SAMPLERS, SCHEDULERS, T2I, parse_recipe
+from .recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, parse_recipe
 from .roster import ROSTER_BY_ID, Roster
 from .tools.fetch import FetchJob, sha256_of
 from .tools.pngmeta import parse_image_metadata
@@ -54,12 +54,17 @@ class Services:
     async def open_project(self, path: Path) -> dict:
         await self.close_project()
         ws = Workspace.open(path)
-        self.ws = ws
-        self.catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes, session_id=self.app.session_id)
-        self.queue = JobQueue(ws, self.app, self.engine, self.roster, self.catalogue, self.hub)
-        self.documents = DocumentStore(ws)
-        self.queue.documents = self.documents
-        await self.queue.start()
+        # B8: build everything first so a corrupt catalogue or queue file leaves no half-open project behind
+        catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes, session_id=self.app.session_id)
+        try:
+            queue = JobQueue(ws, self.app, self.engine, self.roster, catalogue, self.hub)
+            documents = DocumentStore(ws)
+            queue.documents = documents
+            await queue.start()
+        except Exception:
+            catalogue.close()
+            raise
+        self.ws, self.catalogue, self.queue, self.documents = ws, catalogue, queue, documents
         self.app.touch_project(ws.path)
         info = ws.info()
         self.hub.broadcast("project.opened", info)
@@ -172,7 +177,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         if target:
             try:
                 await svc.open_project(Path(target))
-            except StateError as e:
+            except Exception as e:  # noqa: BLE001 — B8: a damaged last project must not keep the orchestrator from starting
                 log.error("could not open project %s: %s", target, e)
         if ready_cb:
             ready_cb(svc)
@@ -221,8 +226,12 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
                            "distilled": preset.distilled, "turbo": preset.turbo_lora is not None, "turbo_steps": preset.turbo_steps, "json_prompt": preset.json_prompt,
                            "max_refs": preset.max_refs, "sampler": preset.sampler, "scheduler": preset.scheduler, "vram_gb": VRAM_ESTIMATE_GB.get(mid),
                            "wired": mid == "flux2-dev-fp8mixed" or e.family == "klein", "license": e.license, "variants": e.variants}
-        return {"recipes": ["t2i"], "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
-                "samplers": SAMPLERS, "schedulers": SCHEDULERS,
+        live = svc.queue.engine_enum if svc.queue else (lambda cls, key: None)      # the running engine's own enums when it has answered
+        return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment"], "models": models, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
+                "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
+                "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES,
+                "advanced": {"model_shift": {"flux2-dev-fp8mixed": 2.02, "klein": 2.02}, "shift_node_defaults": {"base": 0.5, "max": 1.15}, "tile_size_default": 512,
+                             "flux2_schedule": FLUX2_SCHEDULE},
                 "tiers": {"thumb": {"flux2": [896, 512], "klein": [896, 512]}, "draft": {"flux2": [960, 544], "klein": [1280, 720]}, "full": {"flux2": [1920, 1088], "klein": [1920, 1088]}}}
 
     @app.post("/recipes/preview")
@@ -241,7 +250,10 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         missing = []
         preset = PRESETS[recipe.model_id]
         for mid in [recipe.model_id, preset.te_id, preset.vae_id, *([preset.turbo_lora] if ep["turbo"] and preset.turbo_lora else []), *[l.model_id for l in recipe.loras]]:
-            r = svc.roster.resolve(mid)
+            try:
+                r = svc.roster.resolve(mid)
+            except KeyError as e:
+                raise HTTPException(422, str(e))              # B11: an unknown LoRA id is the caller's error, not a 500
             if r.path is None:
                 missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
         est = svc.queue.estimate(recipe) if svc.queue else {"seconds": None, "source": "no project"}
@@ -253,8 +265,14 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
 
     @app.put("/settings")
     async def put_settings(patch: dict):
-        s = svc.app.update_settings(patch)
+        try:
+            s = svc.app.update_settings(patch)
+        except ValidationError as e:
+            raise HTTPException(422, e.errors()[0].get("msg", "invalid settings") if e.errors() else "invalid settings")
         svc.roster = Roster(svc.app.models_root, [Path(p) for p in s.mounted_model_trees], s.variant).scan()
+        if svc.queue:                                   # B7: the live queue compiles against the new roster at once
+            svc.queue.roster = svc.roster
+        svc.engine.reconfigure()
         return s.model_dump()
 
     # ---- project --------------------------------------------------------------------------------
@@ -516,8 +534,11 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             a = cat.get(body.from_asset)
             if not a:
                 raise HTTPException(404, "asset not found")
-            with Image.open(cat.abs_path(a)) as im:
-                base = np.asarray(im.convert("RGBA"))
+
+            def decode(p: Path) -> np.ndarray:
+                with Image.open(p) as im:
+                    return np.asarray(im.convert("RGBA"))
+            base = await asyncio.to_thread(decode, cat.abs_path(a))      # B11: a 4K decode does not block the event loop
             h, w = base.shape[:2]
             name = name or f"{a.model_id or a.suite} {a.seed or a.id[-6:]}"
         if not w or not h:
@@ -533,8 +554,11 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
 
     @app.put("/documents/{doc_id}")
     async def documents_put(doc_id: str, body: dict):
+        """Replace the stack. The reply lists raster layers / masks the server has no bytes for, so the editor uploads
+        them before `/save` even when it does not consider them dirty (B15: delete · save · undo · save)."""
         od = await asyncio.to_thread(_docs().update_stack, doc_id, body)
-        return od.doc.model_dump()
+        px, mk = od.missing_pixels()
+        return od.doc.model_dump() | {"missing_pixels": px, "missing_masks": mk}
 
     @app.get("/documents/{doc_id}/layers/{lid}/pixels")
     async def layer_pixels_get(doc_id: str, lid: str, kind: str = "image", raw: int = 0):
@@ -650,6 +674,16 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             data = z.read("Thumbnails/thumbnail.png") if "Thumbnails/thumbnail.png" in z.namelist() else z.read("mergedimage.png")
         return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
 
+    @app.get("/documents/{doc_id}/selection")
+    async def documents_selection_get(doc_id: str):
+        """The document's selection as raw grey bytes (the AI Select result lands here, M5 slice 2)."""
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        if od.selection is None:
+            raise HTTPException(404, "no selection")
+        sel = od.selection
+        return Response(content=sel.tobytes(), media_type="application/octet-stream",
+                        headers={"X-Loom-Width": str(sel.shape[1]), "X-Loom-Height": str(sel.shape[0]), "X-Loom-Channels": "1", "Cache-Control": "no-store"})
+
     @app.put("/documents/{doc_id}/selection")
     async def documents_selection_put(doc_id: str, request: Request, w: int = 0, h: int = 0):
         """The editor's selection as raw grey bytes (w·h); an empty body clears it. The M5 edit jobs read it."""
@@ -662,6 +696,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             return {"selection": None}
         if len(body) != w * h or w <= 0 or h <= 0:
             raise HTTPException(400, f"expected {w * h} bytes for {w}×{h}, got {len(body)}")
+        if (w, h) != (od.doc.w, od.doc.h):              # B10: the region maths index the selection with document coordinates
+            raise HTTPException(400, f"selection {w}×{h} must match the document {od.doc.w}×{od.doc.h}")
         od.selection = np.frombuffer(body, dtype=np.uint8).reshape((h, w)).copy()
         od.doc.has_selection = True
         od.dirty = True
@@ -674,8 +710,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         _, _, q = svc.require_project()
         await asyncio.to_thread(_docs().get, doc_id)            # 404 if the document does not exist
         recipe = dict(body.recipe)
-        if recipe.get("kind") not in ("inpaint", "i2i", "upscale"):
-            raise HTTPException(422, "document jobs are inpaint, i2i (refine) or upscale")
+        if recipe.get("kind") not in ("inpaint", "i2i", "upscale", "segment"):
+            raise HTTPException(422, "document jobs are inpaint, i2i (refine), upscale or segment (AI Select)")
         recipe["document_id"] = doc_id
         try:
             jobs = q.submit(recipe, stage=body.stage)
@@ -794,7 +830,10 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
 
     @app.post("/models/{model_id}/verify")
     async def models_verify(model_id: str):
-        r = svc.roster.resolve(model_id)
+        try:
+            r = svc.roster.resolve(model_id)
+        except KeyError:
+            raise HTTPException(404, "unknown model id")
         if not r.path:
             raise HTTPException(404, f"{model_id} is {r.health}")
         digest = await asyncio.to_thread(sha256_of, Path(r.path))
@@ -836,18 +875,20 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def blob_put(sha: str, request: Request):
         dest = _blob_path(sha)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(".part")
+        tmp = _tmp_for(dest)                            # B11: unique per writer — two uploads of one blob never share a temp file
         h = hashlib.sha256()
         size = 0
-        with tmp.open("wb") as f:
-            async for chunk in request.stream():
-                f.write(chunk)
-                h.update(chunk)
-                size += len(chunk)
-        if h.hexdigest() != sha:
+        try:
+            with tmp.open("wb") as f:
+                async for chunk in request.stream():
+                    f.write(chunk)
+                    h.update(chunk)
+                    size += len(chunk)
+            if h.hexdigest() != sha:
+                raise HTTPException(400, "body sha256 does not match the blob id")
+            os.replace(tmp, dest)
+        finally:
             tmp.unlink(missing_ok=True)
-            raise HTTPException(400, "body sha256 does not match the blob id")
-        tmp.replace(dest)
         return {"sha256": sha, "bytes": size}
 
     @app.get("/blobs/{sha}")
@@ -873,9 +914,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             await ws.close(code=4401)
             return
         await ws.accept()
-        svc.hub.attach(ws)
+        svc.hub.attach(ws, hello={"seq": 0, "type": "hello", "data": {"version": __version__, "recent": svc.hub.recent[-20:]}})
         try:
-            await ws.send_json({"seq": 0, "type": "hello", "data": {"version": __version__, "recent": svc.hub.recent[-20:]}})
             while True:
                 msg = await ws.receive_text()
                 if msg == "ping":

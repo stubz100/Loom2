@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json, utc_now
 
 PROJECT_SCHEMA_VERSION = 1
-SUBDIRS = ("assets", "thumbs", "documents", "clips", "masks", "jobs", "jobs/logs", "engine_out", "_temp")
+SUBDIRS = ("assets", "thumbs", "documents", "clips", "masks", "jobs", "jobs/logs", "_temp")   # engine output lives under <app state>/engine_out (06 §4)
 Tier = Literal["thumb", "draft", "hd", "full"]
 DEFAULT_SIZE_CAP_GB = 100.0
 MIN_SIZE_CAP_GB = 10.0
@@ -80,8 +80,6 @@ class Workspace:
     def logs_dir(self) -> Path: return self.path / "jobs" / "logs"
     @property
     def queue_path(self) -> Path: return self.path / "jobs" / "queue.json"
-    @property
-    def engine_out_dir(self) -> Path: return self.path / "engine_out"
     @property
     def temp_dir(self) -> Path: return self.path / "_temp"
 

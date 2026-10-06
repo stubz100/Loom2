@@ -13,7 +13,8 @@ export function SettingsModal() {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s } })
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+          stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
   }
@@ -37,6 +38,10 @@ export function SettingsModal() {
           <label>Restart every N jobs</label><input type="number" min={0} value={draft.engine.restart_every_jobs} onChange={(e) => setEngine({ restart_every_jobs: Number(e.target.value) })} />
           <span className="hint">0 = never (HIP launch-failure mitigation, 06 §10)</span>
           <label>Health timeout (s)</label><input type="number" min={10} value={draft.engine.health_timeout_s} onChange={(e) => setEngine({ health_timeout_s: Number(e.target.value) })} />
+          <label>Stall timeout (s)</label><input type="number" min={60} value={draft.engine.stall_timeout_s ?? 420} onChange={(e) => setEngine({ stall_timeout_s: Number(e.target.value) })} />
+          <span className="hint">no engine event for this long while a job runs → the job fails, the engine restarts, the queue pauses (TDR watchdog, 06 §10)</span>
+          <label>Reserve VRAM (GB)</label><input type="number" min={0} max={8} step={0.5} value={draft.engine.reserve_vram_gb ?? 1.5} onChange={(e) => setEngine({ reserve_vram_gb: Number(e.target.value) })} />
+          <span className="hint">ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas</span>
           <h4>App</h4>
           <label>Thumbnail sizes</label><input type="text" value={draft.thumbnail_sizes.join(',')} onChange={(e) => set({ thumbnail_sizes: e.target.value.split(',').map(Number).filter(Boolean) })} />
           <label>Log level</label>

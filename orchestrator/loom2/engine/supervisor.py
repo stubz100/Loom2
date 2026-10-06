@@ -90,6 +90,7 @@ class EngineSupervisor:
         self._log_fh = None
         self._lock = asyncio.Lock()
         self.version: dict | None = None
+        self.in_job_object = False
 
     # ---- state ------------------------------------------------------------------------------------
     def state(self) -> dict:
@@ -98,7 +99,7 @@ class EngineSupervisor:
             "running": alive, "pid": self.proc.pid if alive and self.proc else None,
             "port": self.app.settings.engine.port, "started_at": self.started_at, "uptime_s": round(time.time() - self.started_at, 1) if alive and self.started_at else None,
             "jobs_since_start": self.jobs_since_start, "restarts": self.restarts, "last_error": self.last_error,
-            "log": str(self.log_path) if self.log_path else None, "version": self.version, "job_object": _JOB is not None,
+            "log": str(self.log_path) if self.log_path else None, "version": self.version, "job_object": alive and self.in_job_object,
         }
 
     def _emit(self) -> None:
@@ -131,9 +132,16 @@ class EngineSupervisor:
             self.log_path = self.app.logs_dir / f"engine-{time.strftime('%Y%m%d-%H%M%S')}.log"
             self._log_fh = self.log_path.open("ab")
             env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}
-            self.proc = subprocess.Popen(self._argv(), cwd=str(Path(e.main).parent), stdout=self._log_fh, stderr=subprocess.STDOUT, env=env,
-                                         creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0))
-            _assign_to_job(self.proc)
+            try:
+                self.proc = subprocess.Popen(self._argv(), cwd=str(Path(e.main).parent), stdout=self._log_fh, stderr=subprocess.STDOUT, env=env,
+                                             creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0))
+            except Exception as ex:
+                self._log_fh.close()
+                self._log_fh = None
+                self.last_error = f"engine could not be launched: {ex}"
+                self._emit()
+                raise
+            self.in_job_object = _assign_to_job(self.proc)
             self.started_at = time.time()
             self.jobs_since_start = 0
             self.last_error = None
@@ -141,7 +149,7 @@ class EngineSupervisor:
             ok = await wait_for_engine(self.client, timeout_s=e.health_timeout_s)
             if not ok:
                 self.last_error = f"engine did not answer within {e.health_timeout_s:.0f} s (see {self.log_path})"
-                await self.stop()
+                await self._stop_locked()        # B1: never re-enter the lock we hold (asyncio.Lock is not reentrant)
                 raise RuntimeError(self.last_error)
             self.version = (await self.client.system_stats()).get("system")
             self._emit()
@@ -149,18 +157,31 @@ class EngineSupervisor:
 
     async def stop(self, grace_s: float = 10.0) -> dict:
         async with self._lock:
-            proc, self.proc = self.proc, None
-            if proc is not None and proc.poll() is None:
-                try:
-                    await asyncio.wait_for(asyncio.to_thread(self._stop_proc, proc, grace_s), timeout=grace_s + 15)
-                except asyncio.TimeoutError:
-                    _kill_tree(proc.pid)
-            if self._log_fh:
-                self._log_fh.close()
-                self._log_fh = None
-            self.started_at = None
-            self._emit()
-            return self.state()
+            return await self._stop_locked(grace_s)
+
+    async def _stop_locked(self, grace_s: float = 10.0) -> dict:
+        """The body of `stop()`; callers must hold `self._lock`."""
+        proc, self.proc = self.proc, None
+        if proc is not None and proc.poll() is None:
+            try:
+                await asyncio.wait_for(asyncio.to_thread(self._stop_proc, proc, grace_s), timeout=grace_s + 15)
+            except asyncio.TimeoutError:
+                _kill_tree(proc.pid)
+        if self._log_fh:
+            self._log_fh.close()
+            self._log_fh = None
+        self.started_at = None
+        self.in_job_object = False
+        self._emit()
+        return self.state()
+
+    def reconfigure(self) -> None:
+        """Settings changed (B7): follow a new engine host/port while no supervised process is alive."""
+        e = self.app.settings.engine
+        alive = self.proc is not None and self.proc.poll() is None
+        if not alive and (self.client.host, self.client.port) != (e.host, e.port):
+            old, self.client = self.client, ComfyClient(e.host, e.port)
+            asyncio.get_running_loop().create_task(old.aclose())
 
     @staticmethod
     def _stop_proc(proc: subprocess.Popen, grace_s: float) -> None:

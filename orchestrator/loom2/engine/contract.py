@@ -23,6 +23,17 @@ def _spec_lists(node_info: dict) -> tuple[dict, dict]:
     return inp.get("required", {}) or {}, inp.get("optional", {}) or {}
 
 
+def _enum(spec: Any) -> list | None:
+    """The option list of an enum input: the legacy `[[...options], {...}]` form or the V3 node form `["COMBO", {"options": [...]}]`."""
+    if not spec:
+        return None
+    if isinstance(spec[0], list):
+        return spec[0]
+    if spec[0] == "COMBO" and len(spec) > 1 and isinstance(spec[1], dict) and isinstance(spec[1].get("options"), list):
+        return spec[1]["options"]
+    return None
+
+
 def _is_link(v: Any) -> bool:
     return isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and isinstance(v[1], int)
 
@@ -38,9 +49,9 @@ def resolve_names(object_info: dict, graph: dict) -> list[str]:
             if key not in NAME_INPUTS or not isinstance(val, str):
                 continue
             spec = req.get(key) or opt.get(key)
-            if not spec or not isinstance(spec[0], list):
+            options = _enum(spec)
+            if options is None:
                 continue
-            options = spec[0]
             if val in options:
                 continue
             base = PurePath(val).name
@@ -82,9 +93,10 @@ def check_graph(object_info: dict, graph: dict) -> list[str]:
                     problems.append(f"{nid} ({cls}): '{key}' links to output {out_idx} of {src['class_type']} which has {len(outs)}")
                 continue
             kind = spec[0]
-            if isinstance(kind, list):
-                if val not in kind:
-                    shown = ", ".join(repr(k) for k in kind[:6]) + (" …" if len(kind) > 6 else "")
+            options = _enum(spec)
+            if options is not None:
+                if val not in options:
+                    shown = ", ".join(repr(k) for k in options[:6]) + (" …" if len(options) > 6 else "")
                     problems.append(f"{nid} ({cls}): '{key}'={val!r} not in enum [{shown}]")
             elif kind == "INT" and not (isinstance(val, int) and not isinstance(val, bool)):
                 problems.append(f"{nid} ({cls}): '{key}' expects INT, got {type(val).__name__}")

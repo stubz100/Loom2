@@ -12,6 +12,7 @@ import { ensureAdjustment } from './adjustFilters'
 import { blendName } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
+import { useAiPanel } from './aiPanelStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
 
@@ -119,6 +120,33 @@ export function EditorCanvas() {
       }
     }
     g.stroke({ color: 0x000000, width: w })
+  }
+  /** AI Select prompts (A tool): include points green, exclude points red, the box amber; `live` is the box being dragged. */
+  const drawAiPrompt = (live?: { start: Pt; last: Pt }) => {
+    const ov = overlayRef.current
+    if (!ov) return
+    let g = ov.getChildByLabel('aiprompt') as Graphics | null
+    if (!g) { g = new Graphics(); g.label = 'aiprompt'; ov.addChild(g) }
+    g.clear()
+    const st = useEditor.getState()
+    const z = Math.max(st.zoom, 0.01)
+    const r = 5 / z
+    for (const q of st.aiPrompt.points) {
+      g.circle(q.x, q.y, r).fill({ color: q.label ? 0x3ddc84 : 0xff4d4d, alpha: 0.9 }).stroke({ color: 0x000000, width: 1.5 / z, alpha: 0.8 })
+    }
+    const box = live ? [Math.min(live.start.x, live.last.x), Math.min(live.start.y, live.last.y), Math.max(live.start.x, live.last.x), Math.max(live.start.y, live.last.y)] : st.aiPrompt.box
+    if (box) g.rect(box[0], box[1], box[2] - box[0], box[3] - box[1]).stroke({ color: 0xf2a93b, width: 1.5 / z })
+    requestRender()
+  }
+  /** Gradient guide line while dragging the G tool; called without arguments to clear it. */
+  const drawGuide = (a?: Pt, b?: Pt) => {
+    const ov = overlayRef.current
+    if (!ov) return
+    let g = ov.getChildByLabel('gguide') as Graphics | null
+    if (!g) { g = new Graphics(); g.label = 'gguide'; ov.addChild(g) }
+    g.clear()
+    if (a && b) { const z = Math.max(useEditor.getState().zoom, 0.01); g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: 0xffffff, width: 1 / z, alpha: 0.9 }); g.circle(a.x, a.y, 4 / z).fill(0xffffff); g.circle(b.x, b.y, 4 / z).fill(0x111111).stroke({ color: 0xffffff, width: 1 / z }) }
+    requestRender()
   }
   const drawTransformBox = () => {
     const ov = overlayRef.current; if (!ov) return
@@ -297,6 +325,7 @@ export function EditorCanvas() {
     // marching ants: recomputed only when the selection changed (every selection edit bumps the revision)
     if (sel) { if (antsRef.current.rev !== revision) antsRef.current = { rev: revision, segs: outlineSegments(sel) } } else antsRef.current = { rev: -1, segs: [] }
     drawAnts()
+    drawAiPrompt()
     applyTransformPreview()
     drawTransformBox()
     requestRender()
@@ -320,6 +349,7 @@ export function EditorCanvas() {
       g.stroke({ color: 0xffffff, width: 1 / zoom, alpha: 0.15 })
     }
     drawAnts()
+    drawAiPrompt()
     drawTransformBox()
     requestRender()
   }, [zoom, pan, revision, pixelGrid, doc]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -348,7 +378,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; dab?: HTMLCanvasElement; dist?: number; t0?: Xform; hx?: number; hy?: number; a0?: number }
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; dab?: HTMLCanvasElement; dist?: number; t0?: Xform; hx?: number; hy?: number; a0?: number; alt?: boolean }
     let drag: Drag | null = null
     let spaceHeld = false
     const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') { if ((e.target as HTMLElement)?.closest('input, textarea, select')) return; spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : '' } }
@@ -418,7 +448,8 @@ export function EditorCanvas() {
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
       if (tool === 'lasso') { drag = { kind: 'lasso', start: p, last: p, pts: [p] }; return }
       if (tool === 'wand') { void wandAt(p, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode); return }
-      if (tool === 'fill') { fillAt(p); return }
+      if (tool === 'ai') { drag = { kind: 'aibox', start: p, last: p, alt: e.altKey }; return }           // click = point, drag = box (decided on up)
+      if (tool === 'fill') { if (st.fillMode === 'solid') { fillAt(p); return } drag = { kind: 'gradient', start: p, last: p }; return }
     }
     const onMove = (e: PointerEvent) => {
       const st = useEditor.getState()
@@ -479,6 +510,8 @@ export function EditorCanvas() {
       }
       if (drag.kind === 'marquee') { drag.last = p; previewMarquee(drag.start, p); return }
       if (drag.kind === 'lasso') { drag.pts!.push(p); drag.last = p; previewLasso(drag.pts!); return }
+      if (drag.kind === 'aibox') { drag.last = p; drawAiPrompt({ start: drag.start, last: p }); return }
+      if (drag.kind === 'gradient') { drag.last = p; drawGuide(drag.start, p); return }
     }
     const onUp = (e: PointerEvent) => {
       const st = useEditor.getState()
@@ -495,6 +528,17 @@ export function EditorCanvas() {
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
       if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode)
       if (drag.kind === 'lasso') commitLasso(drag.pts!, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode)
+      if (drag.kind === 'aibox') {
+        const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
+        if (moved < 4) {                                                   // a click: one SAM 3 point (Alt = exclude)
+          st.setAiPrompt({ points: [...st.aiPrompt.points, { x: Math.round(drag.start.x), y: Math.round(drag.start.y), label: drag.alt ? 0 : 1 }] })
+          useAiPanel.getState().set({ selModel: 'sam3', selMode: 'points' })
+        } else {
+          st.setAiPrompt({ box: [Math.round(Math.min(drag.start.x, drag.last.x)), Math.round(Math.min(drag.start.y, drag.last.y)), Math.round(Math.max(drag.start.x, drag.last.x)), Math.round(Math.max(drag.start.y, drag.last.y))] })
+          useAiPanel.getState().set({ selModel: 'sam3', selMode: 'box' })
+        }
+      }
+      if (drag.kind === 'gradient') gradientFill(drag.start, drag.last)
       drag = null
     }
     const onDouble = (e: MouseEvent) => { const st = useEditor.getState(); if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform() }
@@ -515,7 +559,7 @@ export function EditorCanvas() {
       const app = appRef.current, layers = layersRef.current
       if (!app || !layers) return
       renderPasses()
-      const px = await app.renderer.extract.pixels({ target: layers, frame: { x: Math.floor(p.x), y: Math.floor(p.y), width: 1, height: 1 } as never })
+      const px = await app.renderer.extract.pixels({ target: layers, frame: new Rectangle(Math.floor(p.x), Math.floor(p.y), 1, 1) })   // B17: Pixi copies the frame with Rectangle.copyTo
       const d = px.pixels
       const hex = '#' + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')
       useEditor.getState().setBrush({ color: hex })
@@ -588,6 +632,27 @@ export function EditorCanvas() {
       for (let i = 0, j = 0; i < out.length; i++, j += 4) { id.data[j] = id.data[j + 1] = id.data[j + 2] = 255; id.data[j + 3] = out[i] }
       tctx.putImageData(id, 0, 0)
       applySelection((ctx) => ctx.drawImage(tmp, n!.x ?? 0, n!.y ?? 0), mode)
+    }
+    /** G tool in linear / radial mode: foreground → background colour from a to b (mask: white → black), inside the selection. */
+    const gradientFill = (a: Pt, b: Pt) => {
+      drawGuide()
+      const st = useEditor.getState()
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 1) return
+      const t = paintTarget(); if (!t) return
+      const doc = st.doc!
+      const tmp = document.createElement('canvas'); tmp.width = doc.w; tmp.height = doc.h
+      const tc = tmp.getContext('2d')!
+      const grad = st.fillMode === 'radial' ? tc.createRadialGradient(a.x, a.y, 0, a.x, a.y, Math.hypot(b.x - a.x, b.y - a.y)) : tc.createLinearGradient(a.x, a.y, b.x, b.y)
+      const [c0, c1] = t.kind === 'mask' ? ['#ffffff', '#000000'] : [st.brush.color, st.brush.background]
+      grad.addColorStop(0, c0); grad.addColorStop(1, c1)
+      tc.fillStyle = grad; tc.fillRect(0, 0, doc.w, doc.h)
+      if (st.selection) { tc.globalCompositeOperation = 'destination-in'; tc.drawImage(selectionAlphaCanvas(st.selection), 0, 0) }
+      t.lp.beginStroke(); t.lp.touch(0, 0, t.lp.width, t.lp.height)
+      const ctx = t.lp.ctx
+      ctx.save(); ctx.globalAlpha = st.brush.opacity; ctx.drawImage(tmp, -t.offset.x, -t.offset.y); ctx.restore()
+      t.lp.refresh(); t.lp.dirty = true
+      st.pushHistory({ label: `${st.fillMode} gradient`, layerId: t.id, kind: t.kind, tiles: t.lp.endStroke(), at: Date.now() })
+      st.touch(); st.bump(); markPassesDirty(); requestRender()
     }
     const fillAt = (p: Pt) => {
       const st = useEditor.getState()

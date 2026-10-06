@@ -72,10 +72,16 @@ export const useSession = create<SessionState>()(
         }
         const deep = new URLSearchParams(location.search).get('suite')
         if (deep && ['catalogue', 'generate', 'edit', 'animate', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
-        await get().refreshAll()
+        try {
+          await get().refreshAll()
+        } catch (e) {                                                   // B21: a failing first fetch shows the Retry banner, not the crash overlay
+          set({ backendError: (e as ApiError).detail ?? (e as Error).message })
+          return
+        }
         const start = get().health?.start_suite
         if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'models'].includes(start)) set({ ui: { ...get().ui, suite: start as Suite } })
         socket?.close()
+        let everOpen = false
         socket = new EventsSocket(
           (f) => applyEvent(f, set, get),
           ({ header, payload }) => {
@@ -84,7 +90,15 @@ export const useSession = create<SessionState>()(
             if (old) URL.revokeObjectURL(old)
             set({ previews: { ...get().previews, [jobId]: URL.createObjectURL(payload) } })
           },
-          (s) => set({ wsStatus: s }),
+          (s) => {
+            const reconnected = s === 'open' && everOpen
+            if (s === 'open') everOpen = true
+            set({ wsStatus: s })
+            if (reconnected) {                                          // B21: fetch what the socket missed instead of assuming nothing happened
+              void get().refreshAll().catch(() => undefined)
+              void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().resync())
+            }
+          },
         )
         socket.connect()
       },

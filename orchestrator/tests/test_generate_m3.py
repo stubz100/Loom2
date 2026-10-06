@@ -38,8 +38,10 @@ def test_serialisation_per_model():
 def test_effective_params_rules():
     ep = graphs.effective_params(T2I(prompt_json=TREE, turbo=True, sampler="res_multistep", scheduler="sgm_uniform", width=950, height=540))
     assert ep["steps"] == 8 and ep["sampler"] == "res_multistep" and ep["scheduler"] == "sgm_uniform" and (ep["width"], ep["height"]) == (944, 544)
-    ep = graphs.effective_params(T2I(model_id="klein-9b", prompt_text="x", steps=30, cfg=5, negative="blurry", sampler="bogus"))
+    ep = graphs.effective_params(T2I(model_id="klein-9b", prompt_text="x", steps=30, cfg=5, negative="blurry"))
     assert ep["steps"] == 4 and ep["cfg"] == 1.0 and ep["negative_used"] is False and ep["sampler"] == "euler" and ep["distilled"]
+    with pytest.raises(graphs.CompileError, match="unknown sampler"):            # 2026-10-06: no silent fall-back to the preset
+        graphs.effective_params(T2I(model_id="klein-9b", prompt_text="x", sampler="bogus"))
     ep = graphs.effective_params(T2I(model_id="klein-base-9b", prompt_text="x", negative="blurry"))
     assert ep["steps"] == 20 and ep["cfg"] == 3.5 and ep["negative_used"] is True
     assert ep["word_count"] == 1 and ep["token_estimate"] >= 8
@@ -118,3 +120,53 @@ def test_manifest_records_serialised_prompt(tmp_path: Path):
     rec = cat.ingest_file(tmp_path / "o.png", prompt_text='{"scene":"x"}', prompt_json={"scene": "x"}, params={"recipe": parse_recipe({"kind": "t2i", "prompt_json": {"scene": "x"}}).model_dump(), "prompt_mode": "json"})
     assert rec.params["recipe"]["kind"] == "t2i" and rec.prompt_text == '{"scene":"x"}'
     cat.close()
+
+
+def test_engine_options_reach_the_graph(tmp_path: Path, object_info):
+    """2026-10-06 audit: ComfyUI's t2i configuration is exposed end to end and contract-checked, not silently defaulted."""
+    roster = _tree(tmp_path)
+    base = dict(prompt_json=TREE, width=960, height=544)
+    # 1. every sampler and scheduler the pinned engine lists is accepted and lands in the KSampler node
+    assert len(graphs.SAMPLERS) == 45 and len(graphs.SCHEDULERS) == 9
+    c = graphs.compile_recipe(T2I(**base, sampler="dpmpp_2m_sde_gpu", scheduler="kl_optimal"), roster, object_info, 1, "loom2/t")
+    assert not c.problems and c.graph["9"]["inputs"]["sampler_name"] == "dpmpp_2m_sde_gpu" and c.graph["9"]["inputs"]["scheduler"] == "kl_optimal"
+    # 2. shift → ModelSamplingFlux in front of the Turbo LoRA; dtype and encoder device on the loaders; Turbo strength honoured
+    c = graphs.compile_recipe(T2I(**base, turbo=True, turbo_strength=0.8, base_shift=0.6, max_shift=1.3, weight_dtype="fp8_e4m3fn_fast", te_device="cpu"), roster, object_info, 1, "loom2/t")
+    assert not c.problems, c.problems
+    assert c.graph["12"]["class_type"] == "ModelSamplingFlux" and c.graph["12"]["inputs"]["base_shift"] == 0.6 and c.graph["12"]["inputs"]["max_shift"] == 1.3
+    assert c.graph["4"]["inputs"]["model"] == ["12", 0] and c.graph["4"]["inputs"]["strength_model"] == 0.8
+    assert c.graph["1"]["inputs"]["weight_dtype"] == "fp8_e4m3fn_fast" and c.graph["2"]["inputs"]["device"] == "cpu"
+    assert c.summary["base_shift"] == 0.6 and c.summary["weight_dtype"] == "fp8_e4m3fn_fast" and c.summary["turbo_strength"] == 0.8
+    # 3. only one shift value given → the node's default fills the other; none given → no node, model default
+    ep = graphs.effective_params(T2I(**base, max_shift=2.0))
+    assert ep["base_shift"] == 0.5 and ep["max_shift"] == 2.0
+    assert graphs.effective_params(T2I(**base))["base_shift"] is None
+    assert "12" not in graphs.compile_recipe(T2I(**base), roster, object_info, 1, "loom2/t").graph
+    # 4. tiled decode swaps the decoder node and keeps the output link
+    c = graphs.compile_recipe(T2I(**base, tiled_vae=True, tile_size=768), roster, object_info, 1, "loom2/t")
+    assert not c.problems and c.graph["10"]["class_type"] == "VAEDecodeTiled" and c.graph["10"]["inputs"]["tile_size"] == 768 and c.graph["11"]["inputs"]["images"] == ["10", 0]
+    # 5. the flux2 schedule takes the custom sampler path: BasicGuider at CFG 1, CFGGuider with a negative on a base model
+    c = graphs.compile_recipe(T2I(**base, scheduler="flux2", sampler="res_multistep"), roster, object_info, 7, "loom2/t")
+    assert not c.problems, c.problems
+    assert c.graph["9"]["class_type"] == "SamplerCustomAdvanced" and c.graph["15"]["class_type"] == "Flux2Scheduler" and c.graph["16"]["class_type"] == "BasicGuider"
+    assert c.graph["14"]["inputs"]["sampler_name"] == "res_multistep" and c.graph["13"]["inputs"]["noise_seed"] == 7 and c.summary["scheduler"] == "flux2"
+    c = graphs.compile_recipe(T2I(model_id="klein-base-9b", prompt_text="x", negative="blurry", scheduler="flux2", width=960, height=544), roster, object_info, 7, "loom2/t")
+    assert not c.problems, c.problems
+    assert c.graph["16"]["class_type"] == "CFGGuider" and c.graph["16"]["inputs"]["cfg"] == 3.5 and c.graph["16"]["inputs"]["negative"] == ["7", 0]
+    # 6. values the engine does not offer are errors at preview time, with the reason
+    for bad in (dict(weight_dtype="int4"), dict(te_device="gpu1"), dict(scheduler="bogus")):
+        with pytest.raises(graphs.CompileError):
+            graphs.effective_params(T2I(**base, **bad))
+    with pytest.raises(ValueError):                                          # bounds live on the recipe
+        parse_recipe({"kind": "t2i", "prompt_text": "x", "turbo_strength": 5})
+
+
+def test_capabilities_list_the_engine_configuration(tmp_path: Path):
+    state = tmp_path / "state"
+    AppState(state).update_settings({"models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    with TestClient(create_app(state)) as client:
+        caps = client.get("/capabilities").json()
+        assert caps["recipes"] == ["t2i", "inpaint", "i2i", "upscale", "segment"]
+        assert len(caps["samplers"]) == 45 and "flux2" in caps["schedulers"] and len(caps["schedulers"]) == 10
+        assert caps["weight_dtypes"] == ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"] and caps["te_devices"] == ["default", "cpu"]
+        assert caps["advanced"]["shift_node_defaults"] == {"base": 0.5, "max": 1.15}

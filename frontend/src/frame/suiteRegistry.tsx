@@ -30,6 +30,13 @@ const useRailState = create<RailState>()((set, get) => ({ active: {}, setActive:
 
 export const setRailTab = (suite: string, tab: string) => useRailState.getState().setActive(suite, tab)
 
+// ?suite=X&tab=Y opens that panel section at launch (07 §1.7 deep links; scripts/csp_check.py and the acceptance loops use it)
+{
+  const q = new URLSearchParams(location.search)
+  const s = q.get('suite'), t = q.get('tab')
+  if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(s, t)
+}
+
 export function useSuiteRail() {
   const suite = useSession((s) => s.ui.suite)
   const tabs = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []

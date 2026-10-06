@@ -75,3 +75,26 @@ def test_api_flow(tmp_path: Path):
     # the queue file records a clean shutdown
     q = json.loads((tmp_path / "proj" / "jobs" / "queue.json").read_text(encoding="utf-8"))
     assert q["clean_shutdown"] is True
+
+
+def test_api_error_codes_and_alpha_thumbs(tmp_path: Path):
+    """B11: unknown ids and malformed cursors are the caller's errors (4xx); transparent sources keep alpha in their thumbs."""
+    client, token = _client(tmp_path)
+    H = {"X-Loom-Token": token}
+    with client:
+        client.post("/project", json={"path": str(tmp_path / "proj"), "name": "Codes", "size_cap_gb": 10}, headers=H)
+        assert client.post("/models/nope/verify", headers=H).status_code == 404
+        r = client.post("/recipes/preview", json={"recipe": {"kind": "t2i", "prompt_text": "x", "loras": [{"model_id": "nope"}]}}, headers=H)
+        assert r.status_code == 422 and "nope" in r.json()["detail"]
+        assert client.post("/jobs", json={"recipe": {"kind": "t2i", "prompt_text": "x", "model_id": "nope"}}, headers=H).status_code == 422
+        assert client.get("/assets", params={"cursor": "garbage"}).status_code == 400
+        assert client.get("/assets", params={"cursor": "12x", "sort": "rating_desc"}).status_code == 400
+        assert client.put("/settings", json={"vram_budget_gb": "lots"}, headers=H).status_code == 422
+        png = tmp_path / "alpha.png"
+        Image.new("RGBA", (64, 64), (200, 40, 40, 0)).save(png)                 # fully transparent red
+        asset = client.post("/assets/import", json={"paths": [str(png)]}, headers=H).json()["items"][0]
+        thumb = client.get(f"/thumbs/{asset['id']}/256")
+        import io
+        with Image.open(io.BytesIO(thumb.content)) as im:
+            assert im.mode == "RGBA" and im.getextrema()[3] == (0, 0)             # alpha survived (not flattened to black)
+        client.post("/project/close", headers=H)

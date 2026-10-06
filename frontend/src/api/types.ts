@@ -48,7 +48,7 @@ export interface ModelEntry {
 
 export interface FetchState { model_id: string; name: string; status: string; error: string | null; bytes_done: number; bytes_total_est: number; progress: number | null; elapsed_s: number }
 
-export interface EngineSettings { python: string; main: string; extra_model_paths: string; host: string; port: number; flags: string[]; restart_every_jobs: number; health_timeout_s: number }
+export interface EngineSettings { python: string; main: string; extra_model_paths: string; host: string; port: number; flags: string[]; restart_every_jobs: number; health_timeout_s: number; stall_timeout_s: number; reserve_vram_gb: number }
 export interface Settings {
   schema_version: number; models_root: string; mounted_model_trees: string[]; vram_budget_gb: number; variant: 'full' | 'open'; hf_home: string
   engine: EngineSettings; api_host: string; api_port: number; thumbnail_sizes: number[]; log_level: string
@@ -58,6 +58,8 @@ export interface Capabilities {
   recipes: string[]; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
   models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[] }>
   tiers: Record<string, Record<string, [number, number]>>
+  weight_dtypes: string[]; te_devices: string[]
+  advanced: { model_shift: Record<string, number>; shift_node_defaults: { base: number; max: number }; tile_size_default: number; flux2_schedule: string }
 }
 
 export interface EventFrame { seq: number; type: string; t: number; data: Record<string, unknown> }

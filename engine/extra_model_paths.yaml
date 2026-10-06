@@ -7,7 +7,6 @@
 loom2_models:
   base_path: F:/loom2-models
   is_default: true
-  checkpoints: checkpoints
   diffusion_models: diffusion_models
   unet: diffusion_models
   text_encoders: text_encoders
@@ -18,10 +17,17 @@ loom2_models:
   upscale_models: upscale_models
   clip_vision: clip_vision
   embeddings: embeddings
+  background_removal: background_removal
+  checkpoints: |
+    checkpoints
+    sam3
 
 comfyui_backup:
   base_path: D:/comfyui/ComfyUI/models
-  checkpoints: checkpoints
+  # sam3.pt lives in sam3/; core ComfyUI loads it with CheckpointLoaderSimple, so that folder is also a checkpoints path
+  checkpoints: |
+    checkpoints
+    sam3
   diffusion_models: diffusion_models
   unet: unet
   text_encoders: text_encoders

@@ -18,7 +18,7 @@ from typing import Any, Literal
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .fsio import atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
+from .fsio import StateError, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 1
@@ -185,6 +185,7 @@ class Catalogue:
         self.thumb_sizes = thumb_sizes or [256, 512, 1024]
         self.session_id = session_id
         self._lock = threading.RLock()
+        self._closed = False
         self._db = sqlite3.connect(str(ws.catalogue_db), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self.fts = True
@@ -217,6 +218,7 @@ class Catalogue:
 
     def close(self) -> None:
         with self._lock:
+            self._closed = True            # B11: a worker thread finishing an ingest after the project closed writes nothing
             self._db.close()
 
     # ---- paths ------------------------------------------------------------------------------------
@@ -262,7 +264,8 @@ class Catalogue:
         src = self.abs_path(rec)
         try:
             with Image.open(src) as im:
-                im = im.convert("RGB")
+                # B11: transparent sources (edit flattens) keep their alpha in WebP; opaque ones stay RGB (smaller)
+                im = im.convert("RGBA" if im.mode in ("RGBA", "LA") or "transparency" in im.info else "RGB")
                 for size in self.thumb_sizes:
                     t = im.copy()
                     t.thumbnail((size, size), Image.LANCZOS)
@@ -282,6 +285,8 @@ class Catalogue:
     def _index(self, rec: AssetRecord) -> None:
         aspect = (rec.w / rec.h) if rec.w and rec.h else None
         with self._lock:
+            if self._closed:
+                return
             self._db.execute(
                 "INSERT OR REPLACE INTO assets (id, kind, path, w, h, aspect, frames, created_at, job_id, batch_id, session_id, root_id, model_id, seed, prompt_text,"
                 " suite, state, rating, tags, has_document, trashed_at, bytes, thumb_status, manifest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -296,11 +301,15 @@ class Catalogue:
 
     def add_lineage(self, from_id: str, to_id: str, via_job: str, kind: str = "generate") -> None:
         with self._lock:
+            if self._closed:
+                return
             self._db.execute("INSERT OR REPLACE INTO lineage VALUES (?,?,?,?,?)", (from_id, to_id, via_job, kind, utc_now()))
             self._db.commit()
 
     def record_job(self, job: dict) -> None:
         with self._lock:
+            if self._closed:
+                return
             self._db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?,?,?,?,?)",
                              (job["id"], job.get("kind"), job.get("status"), job.get("created_at"), job.get("finished_at"), json.dumps(job, default=str)))
             self._db.commit()
@@ -328,7 +337,9 @@ class Catalogue:
         trash = q.folder == "trash"
         where.append("trashed_at IS NOT NULL" if trash else "trashed_at IS NULL")
         if q.folder == "today":
-            where.append("created_at >= ?"); args.append(datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00"))
+            # B11: the user's local day, in the UTC ISO form created_at uses (an EU morning's day starts at 22:00 Z the evening before)
+            local_midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+            where.append("created_at >= ?"); args.append(local_midnight.astimezone(timezone.utc).isoformat(timespec="seconds"))
         elif q.folder == "last_session":
             last = self.last_session_id()
             where.append("session_id = ?"); args.append(last or "")
@@ -401,12 +412,16 @@ class Catalogue:
         where, args = self._where(q)
         order, _ = self._order(q.sort)
         if q.cursor and q.sort in ("created_desc", "created_asc"):
+            if "|" not in q.cursor:
+                raise StateError(f"malformed cursor {q.cursor!r}")           # B11: 400, not 500
             c_at, c_id = q.cursor.split("|", 1)
             op = "<" if q.sort == "created_desc" else ">"
             where += f" AND (created_at {op} ? OR (created_at = ? AND id {op} ?))"
             args += [c_at, c_at, c_id]
         offset = 0
         if q.cursor and q.sort not in ("created_desc", "created_asc"):
+            if not q.cursor.isdigit():
+                raise StateError(f"malformed cursor {q.cursor!r}")
             offset = int(q.cursor)
         limit = max(1, min(q.limit, 2000))
         sql = f"SELECT manifest, created_at, id FROM assets WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?"

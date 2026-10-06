@@ -9,23 +9,23 @@ JSON prompt, in batches, with optional reference images, streaming into the Cata
 ## 2. Layout
 
 ```
-Rail: [Prompt] [Model] [Size & Batch] [References] [Presets]
+Rail: [Prompt] [Model] [Size & Batch] [Presets]        (References live inside Prompt since 2026-10-06)
 ┌────────────────────────┬──────────────────────────────────────────────────┬──────────────────┐
 │ Panel · Prompt         │ Strip: show ◉ this batch ○ session ○ all   grid|loupe|compare  zoom │ Inspector      │
 │ ◉ Tree ○ JSON ○ Text   ├──────────────────────────────────────────────────┤ Image · Params · │
-│ scene ______________   │ ▾ Batch 14:02 · klein-9b · 8 · 4 steps · 1024²    │ Lineage          │
-│ subjects (2)   [+]     │ ┌────┐┌────┐┌────┐┌────┐┌──62%┐┌ ░░ ┐┌ ░░ ┐┌ ░░ ┐  │ [thumb]          │
-│  ▸ 1 description…      │ │    ││    ││    ││    ││ prev││    ││    ││    │  │ seed 8812        │
-│    position · action   │ └────┘└────┘└────┘└────┘└─────┘└────┘└────┘└────┘  │ 6.4 s · 1024²    │
-│    pose ▾ · color_match│ ▸ Batch 13:40 · flux2-dev · 4 · 8 st · 768²  (cover)│ prompt diff ▸    │
-│  ▸ 2 …                 │                                                  │ ───────────────  │
-│ style ______________   │                                                  │ Keep ✓ Reject ✗  │
-│ color_palette ■ ■ ■ [+]│                                                  │ Use as reference │
-│ lighting ___________   │                                                  │ Variations (4)   │
-│ mood · background      │                                                  │ Send to Edit     │
-│ composition            │                                                  │ Send to Animate  │
-│ camera ▸ angle ▾ lens  │                                                  │ Re-run · Pin     │
-│   dof · f-number · dist│                                                  │                  │
+│ scene ___________ [✦]  │ ▾ Batch 14:02 · klein-9b · 8 · 4 steps · 1024²    │ Lineage          │
+│ ▾ reference images 0/10│ ┌────┐┌────┐┌────┐┌────┐┌──62%┐┌ ░░ ┐┌ ░░ ┐┌ ░░ ┐  │ [thumb]          │
+│  [1][2][3][4][5]…      │ │    ││    ││    ││    ││ prev││    ││    ││    │  │ seed 8812        │
+│ SUBJECTS · optional [+]│ └────┘└────┘└────┘└────┘└─────┘└────┘└────┘└────┘  │ 6.4 s · 1024²    │
+│  subject 1      remove │ ▸ Batch 13:40 · flux2-dev · 4 · 8 st · 768²  (cover)│ prompt diff ▸    │
+│   description ___ [✦]  │                                                  │ ───────────────  │
+│   position · action [✦]│                                                  │ Keep ✓ Reject ✗  │
+│ LOOK  style _____ [✦]  │                                                  │ Use as reference │
+│ color_palette ■ ■ ■ [+]│                                                  │ Variations (4)   │
+│ lighting · mood … [✦]  │                                                  │ Send to Edit     │
+│ CAMERA angle · lens [✦]│                                                  │ Send to Animate  │
+│   dof · f-number · dist│                                                  │ Re-run · Pin     │
+│ EXTRAS lead · negative │                                                  │                  │
 │ ── 64 words · OK ──    │                                                  │                  │
 │ Preview (dev: JSON)    │                                                  │                  │
 │ {"scene":"…",…}        │                                                  │                  │
@@ -37,13 +37,17 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
 ## 3. Panel tabs
 
 ### 3a. Prompt
-- **Tree** (default): form over the BFL schema (04 §3c). Sections: `scene` (textarea), `subjects[]` (cards
-  with description, position, action, pose, `color_match`; add/remove/reorder; pose and position offer picker
-  chips from loom's directive vocabulary: angles ¾-left…, shot sizes, framing), `style`, `color_palette`
-  (hex swatches with a colour picker; hint "bind colours to objects in subject descriptions"), `lighting`,
-  `mood`, `background`, `composition`, `camera` (angle picker, lens, depth of field, f-number, distance).
-  Suggestion chips per field (lighting: "golden hour rim light", camera angle: "low angle"); free text always
-  allowed. **Word counter** with the 30–80 ideal band and a warning above ~120 (token budget 512).
+- **Tree** (default): form over the BFL schema (04 §3c), in sections: `scene`; **reference images** (the slots
+  of §3d, right under the scene because subject descriptions refer to "reference image N"); `subjects[]` —
+  **optional, none by default** (2026-10-06): cards with description, position, action, pose, `color_match`,
+  each removable; `style`, `color_palette` (hex swatches with a colour picker; hint "bind colours to objects in
+  subject descriptions"), `lighting`, `mood`, `background`, `composition`; `camera` (angle, lens, depth of field,
+  f-number, distance); lead text and the negative. **Every text field has one ✦ icon** (`ListPlus`) and no inline
+  chips: the icon opens a menu with the built-in vocabulary for that field (loom's directives: angles, shot sizes,
+  poses, lighting…), the user's own presets for that field, "Remove a preset ▸" and "Save current text as
+  preset…" (an inline name box, no native prompt). Single-valued fields (lens, f-number, distance, depth of field)
+  replace; the rest append with a comma. Free text is always allowed. **Word counter** with the 30–80 ideal band
+  and a warning above ~120 (token budget 512).
 - **JSON**: raw editor with validation against the schema (unknown keys allowed with a hint), pretty/compact,
   import from clipboard, "to Tree" (lossless for known fields).
 - **Text**: plain prompt. Switching tabs never loses data; the active tab decides what is sent.
@@ -60,8 +64,18 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
   shown greyed with "coming in M5" rather than hidden, so the picker's final shape is visible from M3.
 - **Sampling preset**: per variant from `/capabilities` — distilled: steps fixed (4) and CFG fixed (1.0), shown
   disabled with the reason; base: steps 20–50, CFG 3–5; dev: steps 8 (Turbo LoRA on) / 20–28 (off), guidance
-  3–4.5, sampler `res_multistep` + `sgm_uniform` default (the author's working ComfyUI setting). Advanced
-  disclosure: sampler, scheduler, Turbo LoRA toggle (dev), shift.
+  3–4.5, sampler `res_multistep` + `sgm_uniform` default (the author's working ComfyUI setting). **Sampler and
+  scheduler lists are the engine's own** (45 / 9 in v0.38.2, served live by `/capabilities`), plus loom2's
+  `flux2` scheduler = BFL's resolution-shifted sigmas (`Flux2Scheduler` through `SamplerCustomAdvanced`,
+  `CFGGuider` when CFG > 1). A value the engine does not offer is an error in the preview, never a silent fall-back.
+  Turbo LoRA toggle (dev) with its **strength**.
+- **Advanced · ComfyUI model and decode settings** (disclosure, 2026-10-06 audit): **shift** (model default — FLUX.2
+  2.02 — or `ModelSamplingFlux` base/max, resolution-dependent), **weight dtype** (`UNETLoader`: default /
+  fp8_e4m3fn / fp8_e4m3fn_fast / fp8_e5m2), **text encoder device** (GPU / cpu, with E0's 170 s warning),
+  **tiled VAE decode** (`VAEDecodeTiled`, tile size) for Full-tier headroom. Everything the UI shows is what runs:
+  the preview echoes the effective values (`effective_params`) and the manifest records them. Post-MVP candidates
+  that need a measured spike first: `EasyCache` / `LazyCache` step skipping, `PerturbedAttentionGuidance`,
+  `SkipLayerGuidanceDiT`, `CFGZeroStar` / `CFGNorm`, `APG`, two-stage `KSamplerAdvanced`.
 - **Seed**: random / fixed / increment; batch shows per-image seeds.
 - **LoRA slots** (D25): the section exists in the Panel from M3 — up to 4 slots (roster `kind: lora` for the
   selected family, strength 0–1.5) — rendered disabled with "post-MVP" until loading is wired; the recipe and
@@ -76,15 +90,18 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
 - Count 1–8. **Estimate line** under the primary button: ETA from engine estimate × rolling measured average
   for this variant/size, and VRAM fit (green/amber/red).
 
-### 3d. References (FLUX.2 unified editing)
-Up to 4 (Klein) / 10 (dev) slots; drop from Catalogue, Edit, or OS. Each slot: thumbnail, order number (the
-prompt refers to "reference image 1"), optional note, remove. Token-cost hint ("a 1024² reference ≈ 4 096
-tokens; references are downscaled to ≤ 1024² by default", toggle). Klein 9B-KV is auto-suggested when
-≥ 2 references are present.
+### 3d. References (FLUX.2 unified editing) — inside the Prompt tab since 2026-10-06
+Up to 4 (Klein) / 10 (dev) numbered slots in a compact grid directly under `scene` (also shown in the JSON and
+Text modes); drop Catalogue tiles or press `R` on a selection. Each slot: thumbnail, order number (the prompt refers
+to "reference image 1"), remove, move left; right-click: remove / move first / left / right / clear all. Downscale
+select (≤ 512² / 768² / 1024² / original) with the token-cost hint ("a 1024² reference ≈ 4 096 tokens"). Klein 9B-KV
+is suggested when ≥ 2 references are present.
 
 ### 3e. Presets
-Save/load the whole Panel state (prompt + model + size) as named presets; "last used" restored per project.
-A **prompt snippet library** (style blocks, lighting blocks, camera blocks) inserts into tree fields.
+Save/load the whole Panel state (prompt + model + size) as named **panel presets**; "last used" restored per
+project. **Field presets** (the former snippet library) are created from each field's ✦ menu and listed here
+(field · name · text, remove); they are stored per project in `/snippets` with the field key
+(`scene`, `subject.pose`, `camera.lens`, …).
 
 Foot: **[Generate N ▶]** (primary, `Ctrl+Enter`); **Stage** (adds to `staged.json` without running, for
 batching hero jobs overnight); the button is disabled with a reason when weights are missing (offers Fetch),

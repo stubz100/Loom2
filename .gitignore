@@ -27,6 +27,9 @@ Thumbs.db
 engine/comfyui_tmp/
 engine/comfyui_user/
 
+# app state (B23): app.json, the engine's user dir and logs are per machine, never in git
+.loom2_state/
+
 # spike + frontend artefacts
 orchestrator/spikes/out/
 frontend/public/spikes/*.mp4

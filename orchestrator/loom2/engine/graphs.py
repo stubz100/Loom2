@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import SAMPLERS, SCHEDULERS, T2I, I2I, Inpaint, I2V, LoraRef, Upscale
+from ..recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Segment, Upscale
+from ..edit_ai import plan_tiles
 from ..roster import Roster
 from .contract import check_graph, resolve_names
 
@@ -46,6 +48,7 @@ PRESETS: dict[str, ModelPreset] = {
 VRAM_ESTIMATE_GB: dict[str, float] = {
     "flux2-dev-fp8mixed": 14.0, "klein-4b": 8.5, "klein-base-4b": 9.2, "klein-9b": 15.0, "klein-base-9b": 15.0, "klein-9b-kv": 15.0,
     "wan22-i2v-high-fp8": 14.5, "ltx23-distilled-fp8": 14.0, "realesrgan-x2": 2.0, "realesrgan-x4": 2.5,
+    "sam3": 5.0, "birefnet": 2.5,
 }
 
 # Seconds per image at 960×544 from the spikes (E0, E8), used until the project has its own history
@@ -118,7 +121,8 @@ def _lora_chain(g: dict, model_link: list, loras: list[LoraRef], roster: Roster,
 
 
 def effective_params(recipe: T2I) -> dict[str, Any]:
-    """What will actually run (the UI shows exactly this: 07 §1.4 'display == reality')."""
+    """What will actually run (the UI shows exactly this: 07 §1.4 'display == reality'). A sampler, scheduler, weight
+    dtype or encoder device the engine does not offer is an error here — never a silent fall-back to the preset."""
     preset = PRESETS.get(recipe.model_id)
     if preset is None:
         raise CompileError(f"no T2I preset for model '{recipe.model_id}'")
@@ -128,14 +132,30 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
         steps = preset.steps                                  # fixed for distilled variants (09 §3b)
     guidance = recipe.guidance if recipe.guidance is not None else preset.guidance
     cfg = preset.cfg if preset.distilled else (recipe.cfg if recipe.cfg is not None else preset.cfg)
-    sampler = recipe.sampler if recipe.sampler in SAMPLERS else preset.sampler
-    scheduler = recipe.scheduler if recipe.scheduler in SCHEDULERS else preset.scheduler
+    sampler = recipe.sampler or preset.sampler
+    if sampler not in SAMPLERS:
+        raise CompileError(f"unknown sampler {sampler!r} (the pinned engine offers {len(SAMPLERS)})")
+    scheduler = recipe.scheduler or preset.scheduler
+    if scheduler not in SCHEDULERS and scheduler != FLUX2_SCHEDULE:
+        raise CompileError(f"unknown scheduler {scheduler!r}")
+    weight_dtype = recipe.weight_dtype or preset.weight_dtype
+    if weight_dtype not in WEIGHT_DTYPES:
+        raise CompileError(f"unknown weight dtype {weight_dtype!r}")
+    te_device = recipe.te_device or "default"
+    if te_device not in TE_DEVICES:
+        raise CompileError(f"unknown text-encoder device {te_device!r}")
+    shift = recipe.base_shift is not None or recipe.max_shift is not None
+    base_shift = recipe.base_shift if recipe.base_shift is not None else (0.5 if shift else None)      # ModelSamplingFlux node defaults
+    max_shift = recipe.max_shift if recipe.max_shift is not None else (1.15 if shift else None)
     w, h = _mult16(recipe.width), _mult16(recipe.height)
     if w * h > 4_200_000 or w < 64 or h < 64:
         raise CompileError(f"size {w}×{h} outside the 64 px – 4 MP range")
     text, mode = serialize_prompt(recipe, preset)
     return {"model_id": recipe.model_id, "te_id": preset.te_id, "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
-            "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "distilled": preset.distilled, "negative_used": bool(recipe.negative) and not preset.distilled,
+            "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "turbo_strength": float(recipe.turbo_strength) if turbo else None,
+            "distilled": preset.distilled, "negative_used": bool(recipe.negative) and not preset.distilled,
+            "weight_dtype": weight_dtype, "te_device": te_device, "base_shift": base_shift, "max_shift": max_shift,
+            "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
             "refs": min(len(recipe.refs), preset.max_refs), "max_refs": preset.max_refs, "loras": [l.model_dump() for l in recipe.loras]}
 
@@ -154,14 +174,19 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
     w, h = ep["width"], ep["height"]
 
     g: dict[str, Any] = {
-        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": preset.weight_dtype}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": "default"}},
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": ep["weight_dtype"]}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": ep["te_device"]}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
         "5": {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}},
         "8": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}},
-        "10": {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}},
         "11": {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}},
     }
+    # decode: plain, or tiled for headroom on the Full tier (D13)
+    if ep["tiled_vae"]:
+        g["10"] = {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["9", 0], "vae": ["3", 0], "tile_size": int(ep["tile_size"]), "overlap": min(64, int(ep["tile_size"]) // 4),
+                                                              "temporal_size": 64, "temporal_overlap": 8}}
+    else:
+        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
     # reference images: LoadImage → (downscale) → VAEEncode → ReferenceLatent chained on the conditioning
     cond: list = ["5", 0]
     nid = 30
@@ -191,14 +216,28 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
     else:
         g["7"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
     model_link: list = ["1", 0]
+    if ep["base_shift"] is not None:                          # resolution-dependent shift instead of the model's constant (FLUX.2: 2.02)
+        g["12"] = {"class_type": "ModelSamplingFlux", "inputs": {"model": model_link, "max_shift": float(ep["max_shift"]), "base_shift": float(ep["base_shift"]), "width": w, "height": h}}
+        model_link = ["12", 0]
     if ep["turbo"]:
         _, lora = roster.require(preset.turbo_lora)  # type: ignore[arg-type]
-        g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model_link, "lora_name": lora, "strength_model": 1.0}}
+        g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model_link, "lora_name": lora, "strength_model": float(ep["turbo_strength"])}}
         model_link = ["4", 0]
-    model_link, nid = _lora_chain(g, model_link, recipe.loras, roster, 20)
-    g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": int(ep["steps"]), "cfg": float(ep["cfg"]),
-                                                 "sampler_name": ep["sampler"], "scheduler": ep["scheduler"], "positive": ["6", 0], "negative": ["7", 0],
-                                                 "latent_image": ["8", 0], "denoise": 1.0}}
+    model_link, nid = _lora_chain(g, model_link, recipe.loras, roster, nid)     # B11: after the reference nodes, never over them
+    if ep["scheduler"] == FLUX2_SCHEDULE:
+        # BFL's resolution-shifted sigmas (Flux2Scheduler) need the custom sampler path; CFG > 1 keeps the negative through CFGGuider
+        g["13"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": int(seed)}}
+        g["14"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": ep["sampler"]}}
+        g["15"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": int(ep["steps"]), "width": w, "height": h}}
+        if float(ep["cfg"]) > 1.0:
+            g["16"] = {"class_type": "CFGGuider", "inputs": {"model": model_link, "positive": ["6", 0], "negative": ["7", 0], "cfg": float(ep["cfg"])}}
+        else:
+            g["16"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": ["6", 0]}}
+        g["9"] = {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["13", 0], "guider": ["16", 0], "sampler": ["14", 0], "sigmas": ["15", 0], "latent_image": ["8", 0]}}
+    else:
+        g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": int(ep["steps"]), "cfg": float(ep["cfg"]),
+                                                     "sampler_name": ep["sampler"], "scheduler": ep["scheduler"], "positive": ["6", 0], "negative": ["7", 0],
+                                                     "latent_image": ["8", 0], "denoise": 1.0}}
     summary = {k: v for k, v in ep.items() if k != "serialized_prompt"}
     return Compiled(graph=g, output_node="11", summary=summary, serialized_prompt=text)
 
@@ -310,15 +349,100 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
-def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: str) -> Compiled:
+def upscale_factor(model_id: str) -> int:
+    m = re.search(r"x(\d)", model_id)
+    return int(m.group(1)) if m else 2
+
+
+def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: str, w: int = 0, h: int = 0, seed: int = 0) -> Compiled:
+    """Model upscale, optionally followed by the tiled refine (10 §4): every tile of the upscaled image is re-sampled at
+    `strength` with the refine model and pasted back through a feathered mask, in one engine graph."""
     _, name = roster.require(recipe.model_id)
     g: dict[str, Any] = {
         "100": {"class_type": "LoadImage", "inputs": {"image": image_name}},
-        "1": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": name}},
-        "2": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["1", 0], "image": ["100", 0]}},
-        "99": {"class_type": "SaveImage", "inputs": {"images": ["2", 0], "filename_prefix": out_prefix}},
+        "101": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": name}},
+        "102": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["101", 0], "image": ["100", 0]}},
     }
-    return Compiled(graph=g, output_node="99", summary={"model_id": recipe.model_id, "source": recipe.source}, serialized_prompt="")
+    summary: dict[str, Any] = {"model_id": recipe.model_id, "source": recipe.source, "factor": upscale_factor(recipe.model_id)}
+    out: list = ["102", 0]
+    prompt = ""
+    if recipe.refine:
+        if not (w and h):
+            raise CompileError("tiled refine needs the input size")
+        preset = PRESETS.get(recipe.refine_model_id)
+        if preset is None or preset.distilled:
+            raise CompileError("tiled refine needs Klein base or FLUX.2 dev (distilled Klein cannot partial-denoise)")
+        model_link = _flux2_loaders(g, roster, recipe.refine_model_id, preset)
+        dev = recipe.refine_model_id == "flux2-dev-fp8mixed"
+        steps = int(recipe.steps or (8 if dev else preset.steps))
+        prompt = recipe.prompt_text.strip()
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(preset.guidance)}}
+        g["7"] = ({"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}} if dev
+                  else {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, text, watermark", "clip": ["2", 0]}})
+        W, H = w * summary["factor"], h * summary["factor"]
+        tiles = plan_tiles(W, H, recipe.tile, recipe.overlap)
+        half = int(recipe.overlap) // 2
+        nid = 200
+        for i, (x, y, tw, th) in enumerate(tiles):
+            crop, enc, ks, dec, solid, feath, comp = (str(nid + k) for k in range(7))
+            nid += 7
+            g[crop] = {"class_type": "ImageCrop", "inputs": {"image": ["102", 0], "width": tw, "height": th, "x": x, "y": y}}
+            g[enc] = {"class_type": "VAEEncode", "inputs": {"pixels": [crop, 0], "vae": ["3", 0]}}
+            g[ks] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed) + i, "steps": steps, "cfg": float(preset.cfg), "sampler_name": "euler",
+                                                        "scheduler": "simple", "positive": ["6", 0], "negative": ["7", 0], "latent_image": [enc, 0], "denoise": float(recipe.strength)}}
+            g[dec] = {"class_type": "VAEDecode", "inputs": {"samples": [ks, 0], "vae": ["3", 0]}}
+            g[solid] = {"class_type": "SolidMask", "inputs": {"value": 1.0, "width": tw, "height": th}}
+            g[feath] = {"class_type": "FeatherMask", "inputs": {"mask": [solid, 0], "left": half if x > 0 else 0, "top": half if y > 0 else 0,
+                                                              "right": half if x + tw < W else 0, "bottom": half if y + th < H else 0}}
+            g[comp] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": out, "source": [dec, 0], "x": x, "y": y, "resize_source": False, "mask": [feath, 0]}}
+            out = [comp, 0]
+        summary |= {"refine_model_id": recipe.refine_model_id, "strength": float(recipe.strength), "steps": steps, "tile": recipe.tile, "overlap": recipe.overlap,
+                    "tiles": len(tiles), "upscaled": [W, H]}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": out, "filename_prefix": out_prefix}}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
+def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: str, points: list[dict] | None = None, box: list[int] | None = None,
+                  w: int = 0, h: int = 0) -> Compiled:
+    """AI Select → a mask image (MaskToImage → SaveImage). `points` / `box` are already in engine pixels; `w`×`h` is the engine image."""
+    g: dict[str, Any] = {"100": {"class_type": "LoadImage", "inputs": {"image": image_name}}}
+    if recipe.mode == "subject":
+        _, name = roster.require("birefnet")
+        g["1"] = {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": name}}
+        g["2"] = {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["1", 0], "image": ["100", 0]}}
+        mask: list = ["2", 0]
+        summary: dict[str, Any] = {"model_id": "birefnet", "mode": "subject"}
+    else:
+        _, ckpt = roster.require("sam3")
+        g["1"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}}
+        inputs: dict[str, Any] = {"model": ["1", 0], "image": ["100", 0], "threshold": float(recipe.threshold), "refine_iterations": int(recipe.refine_iterations), "individual_masks": False}
+        if recipe.mode == "text":
+            if not recipe.text.strip():
+                raise CompileError("SAM 3 text mode needs a prompt")
+            g["2"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.text.strip(), "clip": ["1", 1]}}
+            inputs["conditioning"] = ["2", 0]
+        elif recipe.mode == "points":
+            pos = [{"x": int(p["x"]), "y": int(p["y"])} for p in (points or []) if int(p.get("label", 1)) == 1]
+            neg = [{"x": int(p["x"]), "y": int(p["y"])} for p in (points or []) if int(p.get("label", 1)) == 0]
+            if not pos:
+                raise CompileError("SAM 3 points mode needs at least one positive point")
+            inputs["positive_coords"] = json.dumps(pos)
+            if neg:
+                inputs["negative_coords"] = json.dumps(neg)
+        else:
+            if not box or len(box) != 4:
+                raise CompileError("SAM 3 box mode needs a box")
+            x0, y0, x1, y1 = (int(v) for v in box)
+            # CreateBoundingBoxes parses a JSON list of {x, y, width, height} in the pixel grid given by width/height (nodes_bounding_boxes.py)
+            g["3"] = {"class_type": "CreateBoundingBoxes", "inputs": {"bboxes": json.dumps([{"x": x0, "y": y0, "width": max(1, x1 - x0), "height": max(1, y1 - y0)}]), "width": int(w), "height": int(h), "editor_state": []}}   # the canvas widget's own state: empty, so the JSON boxes win
+            inputs["bboxes"] = ["3", 0]
+        g["4"] = {"class_type": "SAM3_Detect", "inputs": inputs}
+        mask = ["4", 0]
+        summary = {"model_id": "sam3", "mode": recipe.mode, "threshold": recipe.threshold, "points": len(points or []), "box": box}
+    g["5"] = {"class_type": "MaskToImage", "inputs": {"mask": mask}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["5", 0], "filename_prefix": out_prefix}}
+    return Compiled(graph=g, output_node="99", summary=summary | {"op": recipe.op, "expand": recipe.expand, "feather": recipe.feather}, serialized_prompt=recipe.text)
 
 
 def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, object_info: dict, seed: int, out_prefix: str,
@@ -334,7 +458,10 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
         c = build_i2i(recipe, roster, seed, out_prefix, i["image"], int(i["w"]), int(i["h"]))
     elif isinstance(recipe, Upscale):
         i = inputs or {}
-        c = build_upscale(recipe, roster, out_prefix, i["image"])
+        c = build_upscale(recipe, roster, out_prefix, i["image"], int(i.get("w", 0)), int(i.get("h", 0)), seed)
+    elif isinstance(recipe, Segment):
+        i = inputs or {}
+        c = build_segment(recipe, roster, out_prefix, i["image"], i.get("points"), i.get("box"), int(i.get("w", 0)), int(i.get("h", 0)))
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' is compiled in a later milestone (M6 video)")
     c.notes = resolve_names(object_info, c.graph)
@@ -343,7 +470,9 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
     return c
 
 
-def estimate_vram_gb(recipe: T2I | I2I | Inpaint | I2V) -> float:
+def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V) -> float:
+    if isinstance(recipe, Upscale) and recipe.refine:
+        return VRAM_ESTIMATE_GB.get(recipe.refine_model_id, 12.0)
     return VRAM_ESTIMATE_GB.get(recipe.model_id, 12.0)
 
 

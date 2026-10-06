@@ -6,30 +6,41 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 from pydantic import BaseModel, Field
 
 from .catalogue import Catalogue
 from .config import AppState
 from .engine.client import EngineError, EngineEvent
-from .engine.graphs import compile_recipe, estimate_seconds, estimate_vram_gb
+from .engine.graphs import PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
-from .recipes import T2I, I2I, Inpaint, Upscale, parse_recipe, warm_group
+from .recipes import T2I, I2I, Inpaint, Segment, Upscale, parse_recipe, warm_group
 from .documents import DocumentStore, GroupLayer, RasterLayer
-from .edit_ai import RegionPlan, assemble_layer, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
+from .edit_ai import RegionPlan, assemble_layer, combine_selection, crop_inputs, dilate, layer_plan, mask_from_engine, outpaint_inputs, outpaint_plan, plan_region, whole_plan
 import numpy as np
 from PIL import Image
-from .roster import Roster
+from .roster import ROSTER_BY_ID, Roster
 from .workspace import Workspace
 
 log = logging.getLogger("loom2.queue")
 QUEUE_SCHEMA_VERSION = 1
+MAX_WARM_SKIP_S = 600.0
+
+
+def _age_s(iso: str) -> float:
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(iso)).total_seconds()
+    except ValueError:
+        return 0.0
 JobStatus = Literal["staged", "queued", "running", "done", "failed", "cancelled"]
 TERMINAL = {"done", "failed", "cancelled"}
 
@@ -107,9 +118,32 @@ class JobQueue:
     # ---- lifecycle --------------------------------------------------------------------------------
     async def start(self) -> None:
         self.load()
+        self._reconcile_leftovers()
         self._task = asyncio.create_task(self._run_loop(), name="loom2-queue")
 
+    def _reconcile_leftovers(self) -> int:
+        """B6 (06 §7): engine outputs and crop inputs that belong to no queued or running job — left by a crash or a
+        kill — are removed when the project opens. Jobs that were running were re-queued by load() and render again."""
+        live = {j.id for j in self.jobs.values() if j.status in ("queued", "running")}
+        removed = 0
+        out = self.app.state_dir / "engine_out" / "loom2"
+        if out.is_dir():
+            for p in out.iterdir():
+                if p.is_file() and not any(p.name.startswith(j) for j in live):
+                    p.unlink(missing_ok=True)
+                    removed += 1
+        ai = self.ws.temp_dir / "ai"
+        if ai.is_dir():
+            for d in ai.iterdir():
+                if d.is_dir() and d.name not in live:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed += 1
+        if removed:
+            log.info("reconciled %d leftover engine file(s) from earlier runs", removed)
+        return removed
+
     async def stop(self) -> None:
+        running = self.jobs.get(self._running_id or "")      # B2: read before the cancelled task's `finally` clears it
         if self._task:
             self._task.cancel()
             try:
@@ -120,19 +154,23 @@ class JobQueue:
         if self._ws_task:
             self._ws_task.cancel()
             self._ws_task = None
-        running = self.jobs.get(self._running_id or "")
         if running and running.status == "running":
+            submitted = running.prompt_id is not None
             running.status = "queued"           # a clean shutdown re-queues the interrupted job explicitly
-            running.progress, running.prompt_id = 0.0, None
-            try:
-                await self.engine.client.interrupt()
-            except Exception:
-                pass
+            running.progress, running.prompt_id, running.progress_text = 0.0, None, ""
+            running.log_tail.append("re-queued by a clean shutdown")
+            if submitted:                       # the engine is still rendering it: stop that work now
+                try:
+                    await asyncio.wait_for(self.engine.client.interrupt(), 5.0)
+                except Exception:
+                    pass
+            self.hub.broadcast("job.updated", running.model_dump())
         self.persist(clean_shutdown=True)
 
     # ---- API --------------------------------------------------------------------------------------
     def submit(self, recipe_data: dict, stage: bool = False) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
+        self._validate_models(recipe)
         seeds = recipe.seeds or [0]
         batch_id = new_id("bat") if len(seeds) > 1 else None
         out: list[JobRecord] = []
@@ -155,10 +193,11 @@ class JobQueue:
             return False
         if rec.status == "running":
             self._cancel_requested.add(job_id)
-            try:
-                await self.engine.client.interrupt()
-            except Exception as e:
-                log.warning("interrupt failed: %s", e)
+            if rec.prompt_id:                   # B5: before submission there is nothing to interrupt; _run_one checks the flag
+                try:
+                    await self.engine.client.interrupt()
+                except Exception as e:
+                    log.warning("interrupt failed: %s", e)
             return True
         rec.status, rec.finished_at = "cancelled", utc_now()
         self.persist()
@@ -230,14 +269,26 @@ class JobQueue:
         return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
                 "resumed_unclean": self.resumed_unclean}
 
+    @staticmethod
+    def _validate_models(recipe: Any) -> None:
+        """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started."""
+        for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])]]:
+            if mid not in ROSTER_BY_ID:
+                raise ValueError(f"unknown model id {mid!r}")
+        if isinstance(recipe, T2I) and recipe.model_id not in PRESETS:
+            raise ValueError(f"no t2i preset for {recipe.model_id!r}")
+
     # ---- scheduling -------------------------------------------------------------------------------
     def _next(self) -> JobRecord | None:
         queued = [j for j in self.jobs.values() if j.status == "queued"]
         if not queued:
             return None
         queued.sort(key=lambda j: j.created_at)
+        oldest = queued[0]
         same = [j for j in queued if j.warm_group == self._last_group]
-        return same[0] if same else queued[0]
+        if same and same[0] is not oldest and _age_s(oldest.created_at) > MAX_WARM_SKIP_S:
+            return oldest                      # B11: warm-group affinity never starves another model for more than 10 min
+        return same[0] if same else oldest
 
     async def _run_loop(self) -> None:
         while True:
@@ -256,6 +307,14 @@ class JobQueue:
             except Exception as e:  # the loop must survive anything a job does
                 log.error("queue loop error: %s\n%s", e, traceback.format_exc())
                 await asyncio.sleep(1.0)
+
+    def engine_enum(self, cls: str, key: str) -> list[str] | None:
+        """An input's enum from the last `/object_info` the engine answered (None before the first job)."""
+        try:
+            spec = (self._object_info or {})[cls]["input"]["required"][key]
+            return list(spec[0]) if isinstance(spec[0], list) else None
+        except (KeyError, TypeError, IndexError):
+            return None
 
     async def _object_info_fresh(self) -> dict:
         if self._object_info is None or (self.engine.started_at and (self._object_info_at or 0) < self.engine.started_at):
@@ -289,15 +348,52 @@ class JobQueue:
         self.persist()
         self.hub.broadcast("job.updated", job.model_dump())
 
+    def _finish_cancelled(self, job: JobRecord) -> None:
+        self._cancel_requested.discard(job.id)
+        job.status, job.finished_at, job.error = "cancelled", utc_now(), None
+        job.wall_s = round(time.time() - self._t0, 1)
+        self.catalogue.record_job(job.model_dump())
+        self.persist()
+        self.hub.broadcast("job.updated", job.model_dump())
+
+    def _cancelled(self, job: JobRecord) -> bool:
+        """B5: a cancel that arrived while the job was still preparing (engine start, uploads, region crop)."""
+        if job.id in self._cancel_requested:
+            self._finish_cancelled(job)
+            return True
+        return False
+
+    def _cleanup_job_files(self, job: JobRecord) -> None:
+        """B6: the engine's files for this job (prefix `loom2/<job_id>`) and the job's crop inputs are transient."""
+        try:
+            out = self.app.state_dir / "engine_out" / "loom2"
+            if out.is_dir():
+                for p in out.glob(f"{job.id}*"):
+                    p.unlink(missing_ok=True)
+            tmp = self.ws.temp_dir / "ai" / job.id
+            if tmp.is_dir():
+                shutil.rmtree(tmp, ignore_errors=True)
+        except OSError as e:  # noqa: BLE001
+            log.debug("cleanup after %s: %s", job.id, e)
+
     async def _run_one(self, job: JobRecord) -> None:
         self._running_id = job.id
         self._t0 = time.time()
         job.status, job.started_at, job.progress, job.progress_text = "running", utc_now(), 0.0, "starting engine"
-        self.persist()
+        try:
+            self.persist()
+        except OSError as e:                        # B12 (review): a full disk must not leave a phantom running job
+            job.status, job.started_at = "queued", None
+            self._running_id = None
+            log.error("cannot persist the queue (%s); pausing", e)
+            self.paused = True
+            return
         self.hub.broadcast("job.updated", job.model_dump())
         try:
             await self.engine.ensure_running()
             await self._ensure_ws()
+            if self._cancelled(job):
+                return
             object_info = await self._object_info_fresh()
             recipe = parse_recipe(job.recipe)
             self.roster.scan()
@@ -318,13 +414,17 @@ class JobQueue:
             if ref_files:                                   # uploaded names appear in LoadImage's enum only after a refresh (E8)
                 object_info = await self.engine.client.object_info()
                 self._object_info, self._object_info_at = object_info, time.time()
+            if self._cancelled(job):
+                return
             inputs: dict[str, Any] | None = None
-            if isinstance(recipe, (Inpaint, I2I, Upscale)):            # M5: crops of the document go in through /upload/image
+            if isinstance(recipe, (Inpaint, I2I, Upscale, Segment)):   # M5: crops of the document go in through /upload/image
                 job.progress_text = "preparing region"
                 self.hub.broadcast("job.updated", job.model_dump())
                 inputs = await self._prepare_document_inputs(job, recipe)
                 object_info = await self.engine.client.object_info()
                 self._object_info, self._object_info_at = object_info, time.time()
+                if self._cancelled(job):
+                    return
             compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs)
             if compiled.problems:
                 self._fail(job, "contract: " + "; ".join(compiled.problems)[:1500])
@@ -332,20 +432,21 @@ class JobQueue:
             job.log_tail += [f"resolved {n}" for n in compiled.notes]
             job.result["compiled"] = compiled.summary | {"graph_hash": compiled.graph_hash}
             job.result["serialized_prompt"] = compiled.serialized_prompt
-            self.ws.engine_out_dir.mkdir(exist_ok=True)
             while not self._events.empty():
                 self._events.get_nowait()
+            if self._cancelled(job):
+                return
             job.prompt_id = await self.engine.client.queue_prompt(compiled.graph)
+            if job.id in self._cancel_requested:            # cancel() saw no prompt_id yet: interrupt what we just queued
+                try:
+                    await self.engine.client.interrupt()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("interrupt failed: %s", e)
             job.progress_text = "queued on engine"
             self.hub.broadcast("job.updated", job.model_dump())
             ok = await self._follow(job)
             if job.id in self._cancel_requested or not ok and job.error == "interrupted":
-                self._cancel_requested.discard(job.id)
-                job.status, job.finished_at, job.error = "cancelled", utc_now(), None
-                job.wall_s = round(time.time() - self._t0, 1)
-                self.catalogue.record_job(job.model_dump())
-                self.persist()
-                self.hub.broadcast("job.updated", job.model_dump())
+                self._finish_cancelled(job)
                 return
             if not ok:
                 self._fail(job, job.error or "engine reported an error")
@@ -355,7 +456,7 @@ class JobQueue:
             if not files:
                 self._fail(job, "the engine finished but produced no output files")
                 return
-            if isinstance(recipe, (Inpaint, I2I, Upscale)):
+            if isinstance(recipe, (Inpaint, I2I, Upscale, Segment)):
                 await self._finish_document_job(job, recipe, files, inputs or {})
                 await self._free_engine_cache()
                 job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
@@ -403,18 +504,22 @@ class JobQueue:
             self._fail(job, f"{type(e).__name__}: {e}")
         finally:
             self._running_id = None
+            if job.status in TERMINAL:
+                self._cleanup_job_files(job)
 
     # ---- M5 document jobs (10 §4, D7): region in, layer out ------------------------------------------
-    async def _prepare_document_inputs(self, job: JobRecord, recipe: Inpaint | I2I | Upscale) -> dict[str, Any]:
+    async def _prepare_document_inputs(self, job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment) -> dict[str, Any]:
         """Crop/scale the document's composite (and mask) for the engine, upload them and keep the plan (edit_ai)."""
         if self.documents is None:
             raise ValueError("documents are not available (no project open)")
         od = await asyncio.to_thread(self.documents.get, recipe.document_id)
         tmp = self.ws.temp_dir / "ai" / job.id
         tmp.mkdir(parents=True, exist_ok=True)
+        # B3: candidates of one batch are alternatives — the engine must not see the candidate layers already pasted back
+        exclude = {f"grp_{job.batch_id or job.id}"}
 
         def work() -> dict[str, Any]:
-            comp = od.flatten()
+            comp = od.flatten(exclude=exclude)
             out: dict[str, Any] = {}
             if isinstance(recipe, Inpaint):
                 if recipe.mode == "outpaint":
@@ -436,6 +541,15 @@ class JobQueue:
                 Image.fromarray(img, "RGB").save(tmp / "image.png")
                 Image.fromarray(msk, "L").save(tmp / "mask.png")          # type: ignore[arg-type]
                 out["mask_path"] = tmp / "mask.png"
+            elif isinstance(recipe, Segment):
+                # AI Select reads the whole visible composite at ≤ max_size; prompts are scaled into engine pixels
+                plan = whole_plan(od.doc.w, od.doc.h, max_size=recipe.max_size)
+                img, _ = crop_inputs(comp, None, plan)
+                sx, sy = plan.ew / od.doc.w, plan.eh / od.doc.h
+                out["points"] = [{"x": int(round(p["x"] * sx)), "y": int(round(p["y"] * sy)), "label": int(p.get("label", 1))} for p in recipe.points]
+                out["box"] = [int(round(recipe.box[0] * sx)), int(round(recipe.box[1] * sy)), int(round(recipe.box[2] * sx)), int(round(recipe.box[3] * sy))] if recipe.box else None
+                out["alpha_mask"] = None
+                Image.fromarray(img, "RGB").save(tmp / "image.png")
             elif isinstance(recipe, I2I):
                 if recipe.source == "active":
                     node = od.doc.find(recipe.layer_id or "")
@@ -476,7 +590,7 @@ class JobQueue:
             out["image_path"] = tmp / "image.png"
             return out
 
-        inputs = await asyncio.to_thread(work)
+        inputs = await asyncio.wait_for(asyncio.to_thread(work), 300.0)      # B4: region preparation is bounded too
         plan: RegionPlan = inputs["plan"]
         inputs["image"] = await self.engine.client.upload_image(inputs["image_path"])
         if inputs.get("mask_path"):
@@ -486,7 +600,7 @@ class JobQueue:
         job.log_tail.append(f"region {plan.w}×{plan.h} at {plan.x},{plan.y} → engine {plan.ew}×{plan.eh} (×{plan.scale:.2f})")
         return inputs
 
-    async def _finish_document_job(self, job: JobRecord, recipe: Inpaint | I2I | Upscale, files: list[dict], inputs: dict[str, Any]) -> None:
+    async def _finish_document_job(self, job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment, files: list[dict], inputs: dict[str, Any]) -> None:
         """Paste the engine result back as a new layer (or a Catalogue asset for upscale)."""
         assert self.documents is not None
         f = files[0]
@@ -498,9 +612,23 @@ class JobQueue:
         job.progress_text = "paste-back"
         self.hub.broadcast("job.updated", job.model_dump())
         arr = await asyncio.to_thread(lambda: np.asarray(Image.open(src).convert("RGBA")))
+        if isinstance(recipe, Segment):
+            # the mask image → document-sized selection, joined with the current one per `op`; saved so the ORA keeps it
+            def apply() -> float:
+                m = mask_from_engine(arr[..., 0], od.doc.w, od.doc.h, recipe.expand, recipe.feather)
+                od.selection = combine_selection(od.selection, m, recipe.op)
+                od.doc.has_selection = True
+                od.dirty = True
+                od.save()
+                return float(od.selection.mean() / 255.0)
+            coverage = await asyncio.to_thread(apply)
+            job.result["selection"] = {"w": od.doc.w, "h": od.doc.h, "coverage": round(coverage, 4), "op": recipe.op}
+            job.log_tail.append(f"selection {recipe.op}: {coverage * 100:.1f} % of the canvas")
+            self.hub.broadcast("document.changed", {"id": od.doc.id, "job_id": job.id, "selection": True, "coverage": round(coverage, 4)})
+            return
         if isinstance(recipe, Upscale):
             parents = [od.doc.source_asset_id] if od.doc.source_asset_id else []
-            rec = await asyncio.to_thread(self.catalogue.ingest_file, src, kind="image", move=False, job_id=job.id, batch_id=job.batch_id, suite="edit",
+            rec = await asyncio.to_thread(self.catalogue.ingest_file, src, kind="image", move=True, job_id=job.id, batch_id=job.batch_id, suite="edit",
                                           model_id=recipe.model_id, seed=job.seed, params={"recipe": recipe.model_dump(), "document_id": od.doc.id},
                                           timings={"wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times}, parents=parents)
             rec = await asyncio.to_thread(self.catalogue.make_thumbs, rec)
@@ -581,6 +709,17 @@ class JobQueue:
             job.log_tail.append(f"engine restart failed: {e}")
         self.pause()
 
+    async def _engine_alive(self) -> bool:
+        """Supervised: the process is alive. Adopted: it answers within 10 s (a slow answer counts as alive —
+        ComfyUI's HTTP thread shares the GIL with a model load; a refused connection does not)."""
+        proc = getattr(self.engine, "proc", None)
+        if proc is not None:
+            return proc.poll() is None
+        try:
+            return await asyncio.wait_for(self.engine.client.is_up(), 10.0)
+        except asyncio.TimeoutError:
+            return True
+
     async def _free_engine_cache(self) -> None:
         """After a document job: drop ComfyUI's cached outputs but keep the weights resident. Consecutive Klein jobs
         with alternating graphs (LanPaint / ICM) otherwise accumulate VRAM until the model streams from RAM."""
@@ -597,18 +736,25 @@ class JobQueue:
         last_node: str | None = None
         t_last = time.time()
         stall_s = float(idle_timeout_s or getattr(self.app.settings.engine, "stall_timeout_s", 420) or 420)
+        poll_s = max(0.5, min(5.0, stall_s / 4))
         while True:
             try:
-                ev = await asyncio.wait_for(self._events.get(), timeout=5.0)
+                ev = await asyncio.wait_for(self._events.get(), timeout=poll_s)
             except asyncio.TimeoutError:
                 if time.time() - t_last > stall_s:
                     job.error = f"engine stalled: no progress for {int(stall_s)} s (GPU hang?) — engine restarted, queue paused"
                     await self._recover_engine(job, job.error)
                     return False
-                hist = await self.engine.client.history(job.prompt_id or "")
+                try:                                        # B4: a hung or refused poll is not a crash of the queue
+                    hist = await asyncio.wait_for(self.engine.client.history(job.prompt_id or ""), 30.0)
+                except (asyncio.TimeoutError, httpx.HTTPError, OSError) as e:
+                    if not await self._engine_alive():
+                        job.error = f"engine process died ({type(e).__name__})"
+                        return False
+                    continue                                # wedged but alive: the stall timer decides
                 if hist and hist.get("status", {}).get("completed"):
                     return hist["status"].get("status_str") == "success"
-                if not await self.engine.client.is_up():
+                if not await self._engine_alive():
                     job.error = "engine process died"
                     return False
                 continue

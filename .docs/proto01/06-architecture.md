@@ -80,7 +80,7 @@ reference and for A/B reruns. D post-MVP.
   committed. The orchestrator runs in its own torch-free `orchestrator/.venv`. loom's 7.2.1 venv is never
   touched (loom rule R103) and serves only as an A/B reference. Exact commands: 12 §1a.
 - **Launch**: `python main.py --listen 127.0.0.1 --port <p> --disable-auto-launch --use-pytorch-cross-attention
-  --disable-pinned-memory [--lowvram] --output-directory <project>/engine_out --extra-model-paths-config
+  --disable-pinned-memory [--lowvram] --output-directory <app state>/engine_out --extra-model-paths-config
   <app>/models/extra_model_paths.yaml` — started and supervised by the orchestrator, restarted on failure or
   every N jobs (HIP launch-failure mitigation), killed with the orchestrator (Job Object).
 - **Models**: `extra_model_paths.yaml` mounts (1) loom2's own `models/` root (roster-managed, where fetch jobs
@@ -126,6 +126,10 @@ graph into the job manifest (provenance, loom lesson 7).
 ├── models/                  # loom2-managed weights in ComfyUI layout (diffusion_models/, text_encoders/, …)
 │   ├── extra_model_paths.yaml   # mounts this root + the user's ComfyUI tree
 │   └── roster.index.sqlite      # resolved files, sha256 status, last verify
+├── engine_out/              # ComfyUI output dir, shared by every project (the engine outlives project switches);
+│                            #   files land under loom2/<job_id>, are moved into the project or deleted when the
+│                            #   job ends, and leftovers are reconciled when a project opens (2026-10-06, B6)
+├── engine_tmp/ engine_user/ # ComfyUI temp and user dirs
 └── logs/
 
 <work disk>/<project>/
@@ -139,7 +143,6 @@ graph into the job manifest (provenance, loom lesson 7).
 ├── clips/<clip_id>/{master/%06d.png, proxy.mp4, clip.json}
 ├── masks/<asset_id>/<mask_id>.png
 ├── jobs/{queue.json, staged.json, logs/<job_id>.log}
-├── engine_out/              # ComfyUI output dir (transient; moved into assets/ on completion)
 └── _temp/
 ```
 
@@ -184,7 +187,8 @@ PUT  /documents/{id}/selection?w&h (raw grey; the region the AI recipes repaint)
 POST /documents/{id}/ai {recipe: inpaint | i2i | upscale, stage} → jobs; the queue crops the saved composite + selection
      (edit_ai.py: margin, multiples of 16, ≥ min working size), uploads to the engine, runs the E8 graphs, pastes the
      result back as a layer (alpha = feathered mask) in a per-batch "AI" group — `document.changed {added, group}` —
-     or, for upscale, as a Catalogue asset with lineage.  POST /documents/{id}/segment (SAM/BiRefNet → mask, M5b)
+     or, for upscale, as a Catalogue asset with lineage; `segment` (AI Select: BiRefNet subject / SAM 3 text · points · box) writes the
+     document's selection instead (`document.changed {selection}`) — GET /documents/{id}/selection returns it (M5 slice 2, 2026-10-06)
 POST /documents/{id}/inpaint  /refine  /instruct-edit  (recipes with crop region + paste-back policy)
 GET  /clips/{id}  GET /clips/{id}/proxy.mp4 (Range)  GET /clips/{id}/frames/{n}.png  POST /clips/{id}/extract
 GET  /models (roster + health)  POST /models/fetch  /models/{id}/verify  PUT /models/root  POST /models/scan

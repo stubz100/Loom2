@@ -4,9 +4,10 @@ A local AI image and video studio for storyboard pre-production on a single Wind
 Radeon RX 9070 XT (16 GB): FLUX.2 generation with BFL JSON prompting, a layered inpaint/refine editor,
 image-to-video, and a catalogue with full provenance. Successor to the author's "loom" / Loreweave Studio.
 
-**Status (2026-10-05):** M0 spikes closed (all model and frontend decisions taken on the rig); M1 foundation
-in place — orchestrator core with a 20/20 rig acceptance, Tauri shell with sidecar supervision, frame skeleton,
-Models suite and Settings. Next: M2 Catalogue.
+**Status (2026-10-06):** M0 spikes closed; M1 foundation, M2 Catalogue, M3 Generate (dev fp8mixed, 17/17), M4 Edit core
+(PixiJS editor, 12/12) and **M5 Edit AI** (inpaint / refine / outpaint / upscale + tiled refine, AI Select with SAM 3 and BiRefNet,
+24/24) closed on the rig. Next: M6 Animate, then M7 hardening. The 2026-10-06 code review's bug register (B1–B24) is in the
+journal and fixed.
 
 - Plan and decisions: [`.docs/proto01/00-README.md`](.docs/proto01/00-README.md) (read in order 01 → 14)
 - Implementation journal: [`.docs/proto01/90-journal.md`](.docs/proto01/90-journal.md)
@@ -25,7 +26,7 @@ orchestrator/    Python package `loom2` (uv, 3.13): workspace, roster, ComfyUI c
                  compiler + contract checks, durable queue, catalogue, FastAPI + WebSocket; tests/
 frontend/        Vite 8 + React 19 + TS app (frame, suites, store, api) and the Tauri 2 shell in src-tauri/
 scripts/         engine-setup/start/stop · fetch_weights · prune_weights · make_object_info_fixture ·
-                 m1_acceptance · dev.ps1
+                 m1/m3/m4/m5_acceptance · m4_compositor_diag · make_synthetic_assets · dev.ps1
 ```
 
 ## Quickstart (Windows 11, ROCm 10.0, Python 3.13 via uv, Node 22, Rust 1.90)

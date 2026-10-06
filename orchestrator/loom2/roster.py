@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 Folder = Literal["diffusion_models", "text_encoders", "vae", "loras", "clip_vision", "upscale_models",
-                 "controlnet", "checkpoints", "sams", "birefnet", "embeddings"]
+                 "controlnet", "checkpoints", "sam3", "background_removal", "embeddings"]
 Health = Literal["present", "verified", "missing", "retired"]
 
 
@@ -35,7 +35,13 @@ class RosterEntry(BaseModel):
 
 # The catalogue. Order: family, then role. `open` variant = Apache/MIT only (D26).
 ROSTER: list[RosterEntry] = [
-    # ---- tools (M5 Edit AI: upscalers; segmentation arrives with its nodes) ----
+    # ---- tools (M5 Edit AI: upscalers, segmentation) ----
+    RosterEntry(id="birefnet", name="BiRefNet-general.safetensors", folder="background_removal", family="tools", role="tool",
+                repo="ZhengPeng7/BiRefNet", file="model.safetensors", license="mit", variants=["full", "open"], approx_gb=0.89,
+                note="subject matte for AI Select · Subject (core LoadBackgroundRemovalModel / RemoveBackground, 1024² input)"),
+    RosterEntry(id="sam3", name="sam3.pt", folder="sam3", family="tools", role="tool",
+                repo="facebook/sam3", file="sam3.pt", license="sam-license (gated)", variants=["full"], approx_gb=3.45,
+                note="SAM 3 detector + its text encoder in one checkpoint; loads through CheckpointLoaderSimple (the sam3 folder is mounted as a checkpoints path)"),
     RosterEntry(id="realesrgan-x2", name="RealESRGAN_x2.pth", folder="upscale_models", family="tools", role="upscaler",
                 repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", license="bsd-3-clause", variants=["full", "open"], approx_gb=0.07,
                 note="Real-ESRGAN 2× (spandrel loader); cheap detail-preserving upscale (10 §4)"),

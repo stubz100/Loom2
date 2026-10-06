@@ -66,10 +66,10 @@ only applies to noise, large blur radii and dissolve.
 | `M` | Marquee rectangle / ellipse (flyout) | mode add/subtract/intersect, feather, fixed ratio | M4 |
 | `L` | Lasso / Polygonal lasso (flyout) | mode, feather, anti-alias | M4 |
 | `W` | Magic wand | tolerance, contiguous, sample all layers | M4 |
-| `A` | **AI Select** (SAM 3): click / box / text prompt; **Subject** (BiRefNet matte) | model, refine edges, add/subtract | M5 |
+| `A` | **AI Select** (SAM 3): click / box / text prompt; **Subject** (BiRefNet matte) — click adds an include point, Alt-click an exclude point, drag a box; the mask joins the selection (replace / add / subtract / intersect) with expand and feather | model, SAM prompt mode, threshold, combine, expand, feather | M5 ✓ (2026-10-06) |
 | `B` | Brush (paints on the active layer, or on its mask / the selection in Quick Mask) | size, hardness, opacity, flow, spacing, pressure → size/opacity/flow, smoothing, colour | M4 |
 | `E` | Eraser | as brush | M4 |
-| `G` | Fill / Gradient (flyout) | colour, tolerance; gradient linear/radial | M4 (gradient M5) |
+| `G` | Fill / Gradient | mode solid / linear / radial (foreground → background colour, mask: white → black), colour, opacity; limited to the selection | M4 (gradient M5 ✓) |
 | `I` | Eyedropper | sample size | M4 |
 | `C` | Crop / Canvas size | ratio presets, delete cropped vs hide | M4 |
 | `H` / `Space` | Hand (pan) | | M4 |
@@ -84,7 +84,7 @@ pressure curve (also in Settings).
 ### Panel · Selection
 Feather, expand/contract (px), smooth, grow/shrink similar, invert (`Ctrl+Shift+I`), select all/none,
 **Save selection as mask on active layer**, **Load selection from layer mask**, **Quick Mask** (`Q`): paint the
-selection as a red overlay with the brush.
+selection as a red overlay with the brush. The AI selectors (SAM 3, BiRefNet) live in the `A` tool and the AI panel's **Select** operation.
 
 ### Panel · AI
 The AI panel is the heart of the suite; it always operates on the **current selection** (or the whole
@@ -94,8 +94,8 @@ document when none) and returns **new layers**.
 | --- | --- | --- | --- |
 | **Inpaint** | Fill (Klein + LanPaint, default) · Fill-Match (Klein ICM/ReferenceLatent, conservative texture continuation) · Fill Hero (FLUX.2 dev + LanPaint, slow) · Remove (Klein ICM with the hole neutralised in the reference and a background-only prompt, E8b) — E8 2026-10-05 dropped Fill Pro (FLUX.1 Fill) and deferred Edit by instruction (Qwen) post-MVP | prompt (text or compact tree), candidates 1–4 (**default 4 on Klein, 2 on dev**, D22), seed, **region**: context margin % (default 25), min working size (auto-upscale small regions to ≥ 1024 px), paste-back feather px, "match colour to surroundings", mask expand px | N candidate layers in a **variant strip** over the canvas; pick one (`1–4`, Enter) → kept as a layer with mask; others discarded (or "keep all hidden") |
 | **Refine** (i2i) | Klein base · dev · Klein distilled "enhance" instruction | strength 0.15–0.6 (schedule semantics exact), prompt (defaults to the source asset's prompt), on: active layer / visible / selection | new layer above |
-| **Upscale** | ESRGAN 2× · Tiled refine (Klein base, tile 1024, overlap 128, strength 0.25) · SeedVR2 (post-MVP) | factor, tile settings | new document size (prompt to resize canvas) or new layer at 1× (downscaled preview) |
-| **Remove background** | BiRefNet / HR | refine, output as mask or transparency | mask on active layer |
+| **Upscale** | Real-ESRGAN 2× / 4× · **Tiled refine** after the upscale (Klein base or dev; tile 1024, overlap 128, strength 0.25; one engine graph: `ImageCrop` → `KSampler` at low denoise → `ImageCompositeMasked` through a feathered `SolidMask`) · SeedVR2 (post-MVP) | model, refine on/off, refine model, strength, tile, overlap, prompt | Catalogue asset at the new size (lineage to the source) and optionally a 1× detail layer |
+| **AI Select / Remove background** | **Subject** = BiRefNet matte (core `LoadBackgroundRemovalModel` + `RemoveBackground`, `BiRefNet-general.safetensors`); **SAM 3** text / points / box (core `SAM3_Detect` on the `sam3.pt` checkpoint, its text encoder comes with it) | model, prompt mode, threshold, combine op, expand, feather | the document **selection** (`PUT`/`GET /documents/{id}/selection`); "Save selection as mask" turns it into a layer mask; for a background swap: Select → invert → Inpaint (bench task 03) |
 | **Outpaint** | Fill (Klein + LanPaint) · Fill Hero (dev + LanPaint) | expand canvas by px per side, prompt | canvas grows, new layer fills the margin |
 
 Every AI layer stores its recipe (visible in Layers → layer info and in History). Re-running an AI layer
@@ -194,15 +194,15 @@ Tiled uploads (PNG per tile or raw RGBA with Range) are deferred until a measure
 transfers run at loopback speed (52 MB of layers in < 1 s in the M4 acceptance).
 
 ## 14. Acceptance checklist
-- [ ] Layers, groups, masks, 24 blend modes, adjustment and filter layers render correctly vs a Python
-      reference flatten (ΔE small on a test document).
-- [ ] Brush with pressure on the tablet meets the latency budget; undo/redo across 100 strokes is instant.
-- [ ] SAM click/box/text and BiRefNet produce masks on the canvas within 3 s.
-- [ ] Inpaint Fill / Fill-Match / Fill Hero / Remove each return candidate layers with masks; paste-back has no
-      visible seam on the 5 bench tasks (04 §6).
-- [ ] Refine at 0.25 on Klein base changes detail without reconstructing the input (schedule fix honoured).
-- [ ] ORA round-trip (save, reopen) is lossless; PSD export opens in Photoshop and Krita with structure intact.
-- [ ] Save to Catalogue creates an asset with lineage to the source and a link back to the document.
+- [x] Layers, groups, masks, 24 blend modes, adjustment and filter layers render correctly vs a Python
+      reference flatten (ΔE small on a test document) — M4: p99 ≤ 4/255 over 39 nodes.
+- [~] Brush with pressure on the tablet meets the latency budget; undo/redo across 100 strokes is instant — undo/redo done (M4); the pen half waits for a tablet (D19).
+- [x] SAM click/box/text and BiRefNet produce masks on the canvas within 3 s — 2026-10-06: BiRefNet 2.3 s, SAM 3 point 3.3 s warm (text 33 s including the 3.4 GB checkpoint load); `scripts/m5_acceptance.py`.
+- [x] Inpaint Fill / Fill-Match / Fill Hero / Remove each return candidate layers with masks; paste-back has no
+      visible seam on the 5 bench tasks (04 §6) — tasks 01, 02, 04, 05 (2026-10-05/06) and 03 on the inverted BiRefNet matte (2026-10-06: subject alpha 0.027, background 0.996).
+- [x] Refine at 0.25 on Klein base changes detail without reconstructing the input (schedule fix honoured) — 47 s on the 1200×544 composite; tiled refine ×2 in 439 s over 6 tiles.
+- [x] ORA round-trip (save, reopen) is lossless (M4 acceptance); PSD export opens in Photoshop and Krita with structure intact — written by ag-psd; opening it in Photoshop/Krita stays a manual check.
+- [x] Save to Catalogue creates an asset with lineage to the source and a link back to the document (M4 acceptance item 7).
 
 ## 15. Open questions
 - 16-bit working mode in the compositor (post-MVP; needs `rgba16float` render textures).

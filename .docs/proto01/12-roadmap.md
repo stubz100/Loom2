@@ -210,7 +210,16 @@ by Fill, cloak → red leather jacket with identity kept, face fill keeps the fr
 doorway and no seam; Klein 40 s per candidate warm, ICM 20 s, outpaint 32 s, refine 45 s, ESRGAN 6 s). Item 4
 passes for the 4 mask-based bench tasks; task 03 (background swap) and item 3 wait for **AI Select** (SAM 3 /
 BiRefNet nodes are not in the engine yet — slice 2); tiled refine and the gradient fill are slice 2 as well; Klein
-already appears in Generate (D21). The 2026-10-05 GPU TDR during the first run is closed (06 §10 row).
+already appears in Generate (D21). The 2026-10-05 GPU TDR during the first run is closed (06 §10 row). **2026-10-06 08:45:** a code review of M0–M5 produced the bug register B1–B24 (journal 08:29); B1–B24 are fixed with a fake-ComfyUI lifecycle suite and a headless-Edge CSP check (journal 08:45, 09:20); the M5 acceptance is to be rerun before slice 2 because candidates of one batch were chained (B3).
+
+**M5 closed 2026-10-06** (journal 13:05): slice 2 landed — **AI Select** (BiRefNet subject matte and SAM 3 text / points / box through
+ComfyUI's core nodes, D33; the mask joins the document selection with replace / add / subtract / intersect, expand and feather),
+**tiled refine** on Upscale (one graph: crop → low-denoise KSampler → feathered composite per tile), **gradient fill** (linear /
+radial, G tool), bench **task 03** (background swap on the inverted matte). `scripts/m5_acceptance.py` **24/24** on the rig with
+the B3 fix in place (candidates are now independent): Fill 69 s cold / 40 s warm, Fill-Match 20 s, Remove 20 s, cloak 41 s,
+face 48 s, outpaint 32 s, refine 47 s, ESRGAN 6 s, BiRefNet 2.3 s, SAM 3 text 33 s (cold) / point 3.3 s, task 03 fill 31 s
+with the subject's alpha at 0.027, tiled refine ×2 439 s (6 tiles → 2400×1088). 10 §14: items 1, 3–7 ticked; item 2's pen half
+waits for a tablet (D19). Open from M5, carried to post-MVP: Fill Hero on the bench (unchanged since E8), SeedVR2, LoRA slots (D25).
 
 ## 7. M6 · Animate (4–5 weeks) — gate: 11 approved, E4/E5 decided
 

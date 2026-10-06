@@ -144,6 +144,53 @@ def outpaint_inputs(composite_rgba: np.ndarray, plan: RegionPlan, band: int = 24
     return _resize_rgb(rgb, plan.ew, plan.eh), _resize_mask(engine_mask, plan.ew, plan.eh), strips
 
 
+def plan_tiles(w: int, h: int, tile: int = 1024, overlap: int = 128) -> list[tuple[int, int, int, int]]:
+    """Overlapping tiles (x, y, tw, th) covering w×h for the tiled refine (10 §4). Tile sides are multiples of 16 and
+    clamped to the image; the last column / row is pulled back to the edge so every tile has the full size and the
+    whole image is covered."""
+    tw = max(16, min(tile, w) // 16 * 16)
+    th = max(16, min(tile, h) // 16 * 16)
+    ov = max(0, min(overlap, tw - 16, th - 16))
+
+    def starts(n: int, t: int) -> list[int]:
+        if t >= n:
+            return [0]
+        step = max(16, t - ov)
+        xs = list(range(0, n - t, step))
+        xs.append(n - t)
+        return xs
+    return [(x, y, tw, th) for y in starts(h, th) for x in starts(w, tw)]
+
+
+def erode(mask: np.ndarray, px: int) -> np.ndarray:
+    if px <= 0:
+        return mask
+    return np.asarray(Image.fromarray(mask, "L").filter(ImageFilter.MinFilter(2 * int(px) + 1)))
+
+
+def mask_from_engine(gray: np.ndarray, doc_w: int, doc_h: int, expand: int = 0, feather_px: int = 0) -> np.ndarray:
+    """An engine mask (any size, uint8 grey) back at document size with the Segment recipe's expand / feather."""
+    m = _resize_mask(np.ascontiguousarray(gray), doc_w, doc_h)
+    if expand > 0:
+        m = dilate(m, expand)
+    elif expand < 0:
+        m = erode(m, -expand)
+    return feather(m, feather_px) if feather_px else m
+
+
+def combine_selection(current: np.ndarray | None, mask: np.ndarray, op: str) -> np.ndarray:
+    """replace · add · subtract · intersect of a new mask with the document's selection (both uint8 grey)."""
+    if current is None or op == "replace":
+        return mask
+    if op == "add":
+        return np.maximum(current, mask)
+    if op == "subtract":
+        return np.clip(current.astype(np.int16) - mask.astype(np.int16), 0, 255).astype(np.uint8)
+    if op == "intersect":
+        return np.minimum(current, mask)
+    raise ValueError(f"unknown selection op {op!r}")
+
+
 def assemble_layer(result: np.ndarray, plan: RegionPlan, alpha_mask: np.ndarray | None, feather_px: int) -> np.ndarray:
     """The new layer's RGBA (h×w) from the engine result: resized back to the crop, alpha = feathered mask
     (document-sized `alpha_mask` cropped to the plan, or opaque when None)."""

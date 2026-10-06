@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import threading
 import zipfile
 from pathlib import Path
 from typing import Any, Literal, Union
@@ -28,7 +29,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from .compose import BLEND_MODES, Renderer
-from .fsio import StateError, new_id, utc_now
+from .fsio import StateError, _tmp_for, new_id, utc_now
 from .workspace import Workspace
 
 DOC_SCHEMA_VERSION = 1
@@ -138,6 +139,7 @@ class OpenDocument:
         self.masks: dict[str, np.ndarray] = {}
         self.selection: np.ndarray | None = None
         self.dirty = False
+        self._save_lock = threading.Lock()
 
     # ---- pixels -----------------------------------------------------------------------------------
     def set_pixels(self, lid: str, rgba: np.ndarray) -> RasterLayer:
@@ -165,37 +167,52 @@ class OpenDocument:
             node.mask = node.mask or Mask()
         self.dirty = True
 
-    def nodes_dict(self) -> list[dict]:
-        return [n.model_dump() for n in self.doc.layers]
+    def nodes_dict(self, exclude: set[str] | None = None) -> list[dict]:
+        return [n.model_dump() for n in self.doc.layers if not exclude or n.id not in exclude]
 
-    def flatten(self) -> np.ndarray:
-        return Renderer(self.doc.w, self.doc.h, self.pixels, self.masks, self.doc.background).flatten_u8(self.nodes_dict())
+    def flatten(self, exclude: set[str] | None = None) -> np.ndarray:
+        """The exact composite; `exclude` drops top-level nodes (the AI candidate group while its siblings render, B3)."""
+        return Renderer(self.doc.w, self.doc.h, self.pixels, self.masks, self.doc.background).flatten_u8(self.nodes_dict(exclude))
+
+    def missing_pixels(self) -> tuple[list[str], list[str]]:
+        """Raster layers without pixels and masked nodes without mask bytes — what a client must upload before a save."""
+        px = [n.id for n in self.doc.walk() if isinstance(n, RasterLayer) and n.id not in self.pixels]
+        mk = [n.id for n in self.doc.walk() if n.mask is not None and n.id not in self.masks]
+        return px, mk
 
     # ---- ORA --------------------------------------------------------------------------------------
     def save(self) -> Path:
-        _validate_modes(self.doc)
-        self.doc.saved_at = utc_now()
-        self.doc.has_selection = self.selection is not None
-        merged = self.flatten()
-        tmp = self.path.with_suffix(".ora.tmp")
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-            z.writestr(zipfile.ZipInfo("mimetype"), "image/openraster", compress_type=zipfile.ZIP_STORED)
-            z.writestr("stack.xml", self._stack_xml())
-            for n in self.doc.walk():
-                if isinstance(n, RasterLayer) and n.id in self.pixels:
-                    z.writestr(f"data/{n.id}.png", _png(self.pixels[n.id]))
-                if n.mask and n.id in self.masks:
-                    z.writestr(f"data/{n.id}.mask.png", _png(self.masks[n.id]))
-            if self.selection is not None:
-                z.writestr("data/selection.png", _png(self.selection))
-            z.writestr("mergedimage.png", _png(merged))
-            thumb = Image.fromarray(merged, "RGBA")
-            thumb.thumbnail((256, 256))
-            z.writestr("Thumbnails/thumbnail.png", _png(np.asarray(thumb)))
-            z.writestr("loom2.json", json.dumps(self.doc.model_dump(), indent=1, ensure_ascii=False))
-        os.replace(tmp, self.path)
-        self.dirty = False
-        return self.path
+        """Whole-or-nothing like fsio (B9): a unique temp name per writer, fsync, replace; one writer at a time per document."""
+        with self._save_lock:
+            _validate_modes(self.doc)
+            self.doc.saved_at = utc_now()
+            self.doc.has_selection = self.selection is not None
+            merged = self.flatten()
+            tmp = _tmp_for(self.path)
+            try:
+                with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+                    z.writestr(zipfile.ZipInfo("mimetype"), "image/openraster", compress_type=zipfile.ZIP_STORED)
+                    z.writestr("stack.xml", self._stack_xml())
+                    for n in self.doc.walk():
+                        if isinstance(n, RasterLayer) and n.id in self.pixels:
+                            z.writestr(f"data/{n.id}.png", _png(self.pixels[n.id]))
+                        if n.mask and n.id in self.masks:
+                            z.writestr(f"data/{n.id}.mask.png", _png(self.masks[n.id]))
+                    if self.selection is not None:
+                        z.writestr("data/selection.png", _png(self.selection))
+                    z.writestr("mergedimage.png", _png(merged))
+                    thumb = Image.fromarray(merged, "RGBA")
+                    thumb.thumbnail((256, 256))
+                    z.writestr("Thumbnails/thumbnail.png", _png(np.asarray(thumb)))
+                    z.writestr("loom2.json", json.dumps(self.doc.model_dump(), indent=1, ensure_ascii=False))
+                with open(tmp, "rb+") as f:
+                    os.fsync(f.fileno())
+                os.replace(tmp, self.path)
+            except BaseException:
+                tmp.unlink(missing_ok=True)
+                raise
+            self.dirty = False
+            return self.path
 
     def _stack_xml(self) -> str:
         image = ET.Element("image", {"version": "0.0.3", "w": str(self.doc.w), "h": str(self.doc.h), "xres": "72", "yres": "72"})

@@ -66,8 +66,17 @@ fn push_log(info: &Mutex<BackendInfo>, line: String) {
     }
 }
 
+/// `LOOM2_PORT` when set; otherwise a free loopback port (B24: a stale orchestrator or another app on 8765 no longer
+/// blocks startup — the READY line carries whatever port the orchestrator was given).
+fn pick_port() -> u16 {
+    if let Some(p) = std::env::var("LOOM2_PORT").ok().and_then(|p| p.parse().ok()) {
+        return p;
+    }
+    std::net::TcpListener::bind("127.0.0.1:0").ok().and_then(|l| l.local_addr().ok()).map(|a| a.port()).unwrap_or(8765)
+}
+
 fn spawn_backend(backend: Shared) {
-    let port: u16 = std::env::var("LOOM2_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8765);
+    let port: u16 = pick_port();
     let (exe, args, cwd) = orchestrator_command(port);
     let mut cmd = Command::new(&exe);
     cmd.args(&args).current_dir(&cwd).env("PYTHONIOENCODING", "utf-8").env("PYTHONUNBUFFERED", "1").stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -172,7 +181,9 @@ fn shutdown_backend(backend: &Backend, grace: Duration) -> String {
     };
     if ready {
         let url = format!("http://{host}:{port}/shutdown");
-        let _ = ureq::post(&url).header("X-Loom-Token", &token).config().http_status_as_error(false).build().send_empty();
+        // B24: a wedged orchestrator that accepts but never answers must not make the window unclosable
+        let _ = ureq::post(&url).header("X-Loom-Token", &token).config().http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(5))).build().send_empty();
     }
     let t0 = Instant::now();
     let mut guard = backend.child.lock().unwrap();

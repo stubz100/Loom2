@@ -10,12 +10,13 @@ import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { EditorCanvas } from './EditorCanvas'
-import { BLEND_MODES, countRasters, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import './edit.css'
 
 const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
   { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' },
-  { key: 'A', tool: 'ai', label: 'AI select', later: 'M5' }, { key: 'B', tool: 'brush', label: 'Brush' }, { key: 'E', tool: 'eraser', label: 'Eraser' }, { key: 'G', tool: 'fill', label: 'Fill' },
+  { key: 'A', tool: 'ai', label: 'AI select' }, { key: 'B', tool: 'brush', label: 'Brush' }, { key: 'E', tool: 'eraser', label: 'Eraser' }, { key: 'G', tool: 'fill', label: 'Fill / gradient' },
   { key: 'I', tool: 'eyedropper', label: 'Eyedropper' }, { key: 'C', tool: 'crop', label: 'Crop / canvas' }, { key: 'H', tool: 'hand', label: 'Hand' }, { key: 'Z', tool: 'zoom', label: 'Zoom' },
 ]
 /** min, max, step for the numeric adjustment / filter parameters (names from compose.py). */
@@ -82,6 +83,7 @@ function ToolOptions() {
   const marqueeShape = useEditor((s) => s.marqueeShape)
   const mode = useEditor((s) => s.selectionMode)
   const tolerance = useEditor((s) => s.tolerance)
+  const fillMode = useEditor((s) => s.fillMode)
   const doc = useEditor((s) => s.doc)
   const hasSel = useEditor((s) => !!s.selection)
   const activeId = useEditor((s) => s.activeId)
@@ -111,7 +113,7 @@ function ToolOptions() {
       {tool === 'marquee' && <div className="tool-opts"><label>shape</label><div className="segmented">{(['rect', 'ellipse'] as const).map((m) => <button key={m} className={marqueeShape === m ? 'active' : ''} onClick={() => ed().setView({ marqueeShape: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}<span className="hint full">Shift adds, Alt subtracts while dragging</span></div>}
       {tool === 'lasso' && <div className="tool-opts"><label>mode</label>{modeSeg}<span className="hint full">freehand; Shift adds, Alt subtracts</span></div>}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} /><span className="hint full">contiguous on the active raster layer</span></div>}
-      {tool === 'fill' && <div className="tool-opts"><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} /><span className="hint full">fills the selection, or the whole layer (mask: white) when nothing is selected · gradient arrives in M5</span></div>}
+      {tool === 'fill' && <div className="tool-opts"><label>mode</label><div className="segmented">{(['solid', 'linear', 'radial'] as const).map((m) => <button key={m} className={fillMode === m ? 'active' : ''} onClick={() => ed().setView({ fillMode: m })}>{m}</button>)}</div><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} /><span className="hint full">{fillMode === 'solid' ? 'click fills the selection, or the whole layer (mask: white) when nothing is selected' : `drag from the foreground colour to the background colour (${fillMode}); limited to the selection when there is one; on a mask: white → black`}</span></div>}
       {tool === 'move' && (
         <div className="tool-opts">
           <label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div>
@@ -130,7 +132,7 @@ function ToolOptions() {
       {tool === 'eyedropper' && <p className="hint">Click the canvas to pick the composited colour into the foreground swatch.</p>}
       {tool === 'hand' && <p className="hint">Drag to pan. Space + drag pans with any tool; middle mouse too.</p>}
       {tool === 'zoom' && <p className="hint">Click zooms in, Alt-click out; Ctrl+wheel zooms anywhere; Ctrl+0 fit, Ctrl+1 1:1.</p>}
-      {tool === 'ai' && <p className="hint">AI Select (SAM 3 click / box / text) and Subject (BiRefNet matte) arrive in M5 (10 §4).</p>}
+      {tool === 'ai' && <SelectControls compact />}
     </div>
   )
 }
@@ -168,21 +170,46 @@ function SelectionTab() {
   )
 }
 
-type AiOp = 'inpaint' | 'refine' | 'upscale' | 'outpaint'
-interface AiPanelState {
-  op: AiOp; mode: 'fill' | 'fill_match' | 'fill_hero' | 'remove'; prompt: string; candidates: number; seedMode: 'random' | 'fixed'; seed: number
-  margin: number; minSize: number; feather: number; expand: number; promptMode: 'image_first' | 'prompt_first'
-  refineModel: string; strength: number; refineSource: 'visible' | 'active' | 'selection'
-  upscaleModel: string; upscaleSource: 'visible' | 'active'; asLayer: boolean
-  pad: { left: number; top: number; right: number; bottom: number }; outpaintHero: boolean
+// AI panel settings live in aiPanelStore.ts (shared with the A-tool options)
+
+/** AI Select (10 §4, M5 slice 2): shared by the AI tab's Select operation and the A tool's options. */
+function SelectControls({ compact = false }: { compact?: boolean }) {
+  const p = useAiPanel()
+  const setP = p.set
+  const models = useSession((s) => s.models)
+  const aiPrompt = useEditor((s) => s.aiPrompt)
+  const doc = useEditor((s) => s.doc)
+  const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
+  const sam = p.selModel === 'sam3'
+  const pos = aiPrompt.points.filter((q) => q.label === 1).length, neg = aiPrompt.points.length - pos
+  const reason = !doc ? 'no document' : health(p.selModel) === 'missing' ? `weights missing: fetch ${p.selModel} in Models`
+    : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
+    : sam && p.selMode === 'box' && !aiPrompt.box ? 'drag a box on the canvas' : null
+  const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: p.selModel, mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
+    threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, seeds: [0] }, stage)
+  return (
+    <div className="tool-opts">
+      <label>model</label><div className="segmented"><button className={!sam ? 'active' : ''} onClick={() => setP({ selModel: 'birefnet', selMode: 'subject' })}>Subject · BiRefNet</button><button className={sam ? 'active' : ''} onClick={() => setP({ selModel: 'sam3', selMode: p.selMode === 'subject' ? 'text' : p.selMode })}>SAM 3</button></div>
+      {sam && <>
+        <label>prompt</label><div className="segmented">{(['text', 'points', 'box'] as const).map((m) => <button key={m} className={p.selMode === m ? 'active' : ''} onClick={() => setP({ selMode: m })}>{m}</button>)}</div>
+        {p.selMode === 'text' && <><label>text</label><input type="text" value={p.selText} placeholder='"the woman in the green cloak"' onChange={(e) => setP({ selText: e.target.value })} /></>}
+        {p.selMode === 'points' && <><label>points</label><div>{pos} include · {neg} exclude <button className="quiet" disabled={!aiPrompt.points.length} onClick={() => ed().setAiPrompt({ points: [] })}>clear</button></div></>}
+        {p.selMode === 'box' && <><label>box</label><div>{aiPrompt.box ? `${aiPrompt.box[2] - aiPrompt.box[0]}×${aiPrompt.box[3] - aiPrompt.box[1]} at ${aiPrompt.box[0]},${aiPrompt.box[1]}` : 'none'} <button className="quiet" disabled={!aiPrompt.box} onClick={() => ed().setAiPrompt({ box: null })}>clear</button></div></>}
+        <Slider label="threshold" value={p.selThreshold} min={0.05} max={0.95} step={0.05} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ selThreshold: v })} />
+      </>}
+      <label>combine</label><div className="segmented">{(['replace', 'add', 'subtract', 'intersect'] as const).map((m) => <button key={m} className={p.selOp === m ? 'active' : ''} onClick={() => setP({ selOp: m })}>{m}</button>)}</div>
+      <Slider label="expand" value={p.selExpand} min={-64} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ selExpand: v })} />
+      <Slider label="feather" value={p.selFeather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ selFeather: v })} />
+      <label /><div style={{ display: 'flex', gap: 6 }}><button className="primary" disabled={!!reason} onClick={() => run(false)} title="AI Select">Select ▶</button>{!compact && <button disabled={!!reason} onClick={() => run(true)}>Stage</button>}</div>
+      {reason && <span className="hint full">{reason}</span>}
+      <span className="hint full">{sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'}</span>
+    </div>
+  )
 }
-const AI_DEFAULT: AiPanelState = { op: 'inpaint', mode: 'fill', prompt: '', candidates: 4, seedMode: 'random', seed: 1, margin: 25, minSize: 1024, feather: 8, expand: 0, promptMode: 'image_first',
-  refineModel: 'klein-base-9b', strength: 0.3, refineSource: 'visible', upscaleModel: 'realesrgan-x2', upscaleSource: 'visible', asLayer: true, pad: { left: 0, top: 0, right: 256, bottom: 0 }, outpaintHero: false }
-let aiPanelMemory: AiPanelState = AI_DEFAULT
 
 function AiTab() {
-  const [p, setPRaw] = useState<AiPanelState>(aiPanelMemory)
-  const setP = (patch: Partial<AiPanelState>) => setPRaw((s) => { const n = { ...s, ...patch }; aiPanelMemory = n; return n })
+  const p = useAiPanel()
+  const setP = p.set
   const doc = useEditor((s) => s.doc)
   const hasSel = useEditor((s) => !!s.selection)
   const activeId = useEditor((s) => s.activeId)
@@ -208,7 +235,7 @@ function AiTab() {
     const w = Math.min(d.w, Math.ceil((x1 + 1 - x0 + 2 * m) / 16) * 16), h = Math.min(d.h, Math.ceil((y1 + 1 - y0 + 2 * m) / 16) * 16)
     return planSize(w, h, p.minSize, 2048)
   }, [revision, p.op, p.margin, p.minSize, p.pad]) // eslint-disable-line react-hooks/exhaustive-deps
-  const reason = !doc ? 'no document' : p.op === 'inpaint' && !hasSel ? 'select the region to repaint first (M, L, W, Q or AI select)'
+  const reason = !doc ? 'no document' : p.op === 'select' ? null : p.op === 'inpaint' && !hasSel ? 'select the region to repaint first (M, L, W, Q or AI select)'
     : p.op === 'refine' && p.refineSource === 'selection' && !hasSel ? 'no selection' : (p.op === 'refine' || p.op === 'upscale') && (p.op === 'refine' ? p.refineSource : p.upscaleSource) === 'active' && active?.kind !== 'raster' ? 'the active layer is not a raster layer'
     : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
   const run = (stage = false) => {
@@ -216,13 +243,15 @@ function AiTab() {
     if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode: p.mode, model_id: 'klein-9b', margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, prompt_mode: p.promptMode, ...base }, stage)
     else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: p.outpaintHero ? 'flux2-dev-fp8mixed' : 'klein-9b', outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
     else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: p.refineModel, source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, ...base }, stage)
-    else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: [0] }, stage)
+    else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
+      refine: p.refineTiled, refine_model_id: p.tiledModel, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
   }
-  const ops: [AiOp, string][] = [['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
+  const ops: [AiOp, string][] = [['select', 'Select'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
   return (
     <div>
       <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => setP({ op: k, candidates: k === 'inpaint' || k === 'outpaint' || k === 'refine' ? (hero ? 2 : 4) : 1 })}>{l}</button>)}</div>
-      <div className="tool-opts">
+      {p.op === 'select' && <SelectControls />}
+      {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
           <label>mode</label><select value={p.mode} onChange={(e) => { const mode = e.target.value as AiPanelState['mode']; setP({ mode, candidates: mode === 'fill_hero' ? 2 : 4 }) }}>
             <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option><option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option><option value="remove">Remove — background-only prompt</option>
@@ -251,20 +280,28 @@ function AiTab() {
           <label>model</label><select value={p.upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}><option value="realesrgan-x2">Real-ESRGAN 2× {health('realesrgan-x2') === 'missing' ? '(not fetched)' : ''}</option><option value="realesrgan-x4">Real-ESRGAN 4× {health('realesrgan-x4') === 'missing' ? '(not fetched)' : ''}</option></select>
           <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.upscaleSource === s ? 'active' : ''} onClick={() => setP({ upscaleSource: s })}>{s}</button>)}</div>
           <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
+          <label>refine</label><label className="chk"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> tiled refine after the upscale (10 §4: re-sample every tile at low strength)</label>
+          {p.refineTiled && <>
+            <label>model</label><select value={p.tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}><option value="klein-base-9b">Klein 9B base</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo (slow)</option></select>
+            <Slider label="strength" value={p.tiledStrength} min={0.05} max={0.6} step={0.01} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ tiledStrength: v })} />
+            <Slider label="tile" value={p.tile} min={512} max={2048} step={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ tile: v })} />
+            <Slider label="overlap" value={p.overlap} min={0} max={256} step={16} fmt={(v) => `${v} px`} onChange={(v) => setP({ overlap: v })} />
+            <label>prompt</label><textarea value={p.prompt} rows={2} placeholder="what the image shows (helps the refine keep its subject)" onChange={(e) => setP({ prompt: e.target.value })} />
+          </>}
         </>}
         {p.op !== 'upscale' && <>
           <Slider label="candidates" value={p.candidates} min={1} max={4} onChange={(v) => setP({ candidates: v })} />
           <label>seed</label><div><div className="segmented">{(['random', 'fixed'] as const).map((m) => <button key={m} className={p.seedMode === m ? 'active' : ''} onClick={() => setP({ seedMode: m })}>{m}</button>)}</div>{p.seedMode === 'fixed' && <input type="number" value={p.seed} onChange={(e) => setP({ seed: Number(e.target.value) })} style={{ width: 120, marginLeft: 6 }} />}</div>
         </>}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      </div>}
+      {p.op !== 'select' && <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="primary" disabled={!!reason} onClick={() => run(false)} title="Ctrl+Enter">AI ▶ {ops.find(([k]) => k === p.op)?.[1]}{p.op !== 'upscale' ? ` ×${p.candidates}` : ''}</button>
         <button disabled={!!reason} onClick={() => run(true)} title="add to the queue as staged">Stage</button>
         {running.length > 0 && <span className="kind">{running.filter((j) => j.status === 'running').length ? `running · ${Math.round((running.find((j) => j.status === 'running')?.progress ?? 0) * 100)} %` : `${running.length} queued`}</span>}
-      </div>
+      </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
       {engineSize && <p className="hint" style={{ marginTop: 6 }}>engine image ≈ {engineSize.w}×{engineSize.h} ({engineSize.scale > 1.01 ? `upscaled ×${engineSize.scale.toFixed(2)}` : engineSize.scale < 0.99 ? `downscaled ×${engineSize.scale.toFixed(2)} to stay within 1 MP` : '1:1'})</p>}
-      <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached. {hero ? 'Hero / dev: ≈ 4–5 min per candidate.' : 'Klein: ≈ 20–35 s per candidate incl. model swap (E8).'}</p>
+      {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached. {hero ? 'Hero / dev: ≈ 4–5 min per candidate.' : p.op === 'upscale' && p.refineTiled ? 'Tiled refine: ≈ 30–45 s per 1024² tile on Klein base.' : 'Klein: ≈ 20–35 s per candidate incl. model swap (E8).'}</p>}
     </div>
   )
 }
@@ -596,9 +633,8 @@ function useEditKeys() {
       }
       if (!tryOpen()) unsubDeep = useSession.subscribe(() => { if (tryOpen()) unsubDeep() })
     }
-    const auto = setInterval(() => { const st = ed(); if (st.doc && st.docDirty && !st.saving) void st.save() }, 120_000)
-    const unsub = useSession.subscribe((s, prev) => { if (prev.ui.suite === 'edit' && s.ui.suite !== 'edit' && ed().docDirty) s.toast('Unsaved changes in Edit — autosave runs every 2 min, Ctrl+S saves now', 'info') })
-    return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); clearInterval(auto); unsub(); unsubDeep() }
+    ensureEditorAutosave()                                       // B20: survives suite switches (this hook unmounts with the strip)
+    return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); unsubDeep() }
   }, [])
 }
 

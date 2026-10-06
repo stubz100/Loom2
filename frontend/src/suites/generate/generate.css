@@ -24,8 +24,8 @@
 .model-card.off { opacity: .5; }
 .model-card small { color: var(--fg3); }
 .disabled-why { color: var(--fg3); font-size: 11px; }
-.ref-slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.ref-slot { position: relative; border: 1px dashed var(--line2); border-radius: var(--radius); aspect-ratio: 16 / 10; display: grid; place-items: center; color: var(--fg3); font-size: 12px; overflow: hidden; background: var(--bg2); }
+.ref-slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ref-slot { position: relative; border: 1px dashed var(--line2); border-radius: var(--radius); aspect-ratio: 1; display: grid; place-items: center; color: var(--fg3); font-size: 11px; overflow: hidden; background: var(--bg2); }
 .ref-slot img { width: 100%; height: 100%; object-fit: cover; }
 .ref-slot .n { position: absolute; top: 4px; left: 4px; background: var(--accent); color: #111; font-weight: 700; font-size: 11px; border-radius: 4px; padding: 0 6px; }
 .ref-slot .x { position: absolute; top: 4px; right: 4px; }
@@ -43,3 +43,26 @@
 .tiers { display: flex; gap: 4px; flex-wrap: wrap; }
 .tiers button.active { border-color: var(--accent); color: var(--fg); }
 .gen-strip-show { display: inline-flex; gap: 2px; }
+
+/* prompt tree rework (2026-10-06): one preset icon per field, optional subjects, references inside the prompt */
+.field { display: grid; gap: 4px; min-width: 0; }
+.field .row { display: flex; gap: 4px; align-items: flex-start; }
+.field .row > input, .field .row > textarea, .field .row > select { flex: 1; min-width: 0; }
+.preset-btn { flex: none; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; color: var(--fg3); background: var(--bg2); border-color: var(--line); }
+.preset-btn:hover { color: var(--accent); }
+.saver { display: flex; gap: 4px; align-items: center; font-size: 12px; }
+.saver input { flex: 1; min-width: 0; }
+.subject { grid-template-columns: 76px 1fr; }
+.subject .head button { margin-left: auto; }
+.gen-tree h5 { grid-column: 1 / -1; margin: 6px 0 0; font-size: 11px; color: var(--fg3); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.refs-block { grid-column: 1 / -1; }
+.refs-block summary { cursor: pointer; color: var(--fg2); font-size: 12px; margin-bottom: 6px; }
+.ref-slot .empty { color: var(--fg3); opacity: .7; }
+.ref-slot .quiet.x, .ref-slot .quiet.mv { position: absolute; padding: 0 4px; min-height: 16px; font-size: 10px; }
+.ref-slot .quiet.x { top: 2px; right: 2px; } .ref-slot .quiet.mv { bottom: 2px; left: 2px; }
+.advanced { margin-top: 10px; }
+.advanced summary { cursor: pointer; color: var(--fg2); font-size: 12px; margin-bottom: 6px; }
+.preset-list { display: grid; gap: 4px; }
+.preset-list .row { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.preset-list .row .f { color: var(--fg3); min-width: 110px; }
+.preset-list .row .t { flex: 1; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

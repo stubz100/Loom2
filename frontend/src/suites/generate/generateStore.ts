@@ -16,6 +16,8 @@ export interface RefSlot { asset_id: string; note?: string }
 export interface Panel {
   prompt_mode: PromptMode; tree: Tree; json_text: string; text: string; negative: string
   model_id: string; steps: number | null; guidance: number | null; cfg: number | null; sampler: string | null; scheduler: string | null; turbo: boolean
+  // ComfyUI configuration surfaced 2026-10-06 (null = the model preset's value; see /capabilities)
+  turbo_strength: number; weight_dtype: string | null; te_device: string | null; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number
   seed_mode: SeedMode; seed: number; count: number
   width: number; height: number; tier: 'thumb' | 'draft' | 'full' | 'custom'
   refs: RefSlot[]; ref_max_px: number
@@ -25,15 +27,19 @@ export interface Panel {
 export interface Preview {
   serialized_prompt: string; prompt_mode: string; width: number; height: number; steps: number; guidance: number; cfg: number; sampler: string; scheduler: string
   turbo: boolean; distilled: boolean; negative_used: boolean; word_count: number; token_estimate: number; refs: number; max_refs: number
+  turbo_strength: number | null; weight_dtype: string; te_device: string; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number | null
   missing: { model_id: string; health: string; approx_gb: number | null }[]; estimate: { seconds: number | null; source: string; vram_gb?: number; vram_budget_gb?: number; vram_fit?: 'ok' | 'tight' | 'over' }; count: number
 }
 export interface Preset { name: string; panel: Panel; saved_at: string }
 export interface Snippet { name: string; field: string; text: string }
 
-const EMPTY_TREE: Tree = { scene: '', subjects: [{ description: '', position: '', action: '', pose: '', color_match: 'exact' }], style: '', color_palette: [], lighting: '', mood: '', background: '', composition: '', camera: { angle: '', lens: '', depth_of_field: '', 'f-number': '', distance: '' } }
-const DEFAULT_PANEL: Panel = {
+/** A fresh subject card; subjects are optional — none by default (2026-10-06). */
+export const NEW_SUBJECT: Subject = { description: '', position: '', action: '', pose: '', color_match: 'exact' }
+const EMPTY_TREE: Tree = { scene: '', subjects: [], style: '', color_palette: [], lighting: '', mood: '', background: '', composition: '', camera: { angle: '', lens: '', depth_of_field: '', 'f-number': '', distance: '' } }
+export const DEFAULT_PANEL: Panel = {
   prompt_mode: 'tree', tree: EMPTY_TREE, json_text: '', text: '', negative: '',
   model_id: 'flux2-dev-fp8mixed', steps: null, guidance: null, cfg: null, sampler: null, scheduler: null, turbo: true,
+  turbo_strength: 1, weight_dtype: null, te_device: null, base_shift: null, max_shift: null, tiled_vae: false, tile_size: 512,
   seed_mode: 'random', seed: 1, count: 4, width: 960, height: 544, tier: 'draft', refs: [], ref_max_px: 1024, loras: [],
 }
 
@@ -61,7 +67,6 @@ export function treeFromJson(j: Record<string, unknown>): Tree {
   const str = (x: unknown) => (typeof x === 'string' ? x : x == null ? '' : JSON.stringify(x))
   for (const k of ['scene', 'style', 'lighting', 'mood', 'background', 'composition'] as const) if (k in j) t[k] = str(j[k])
   if (Array.isArray(j.subjects)) t.subjects = (j.subjects as Record<string, unknown>[]).map((s) => ({ description: str(s.description), position: str(s.position), action: str(s.action), pose: str(s.pose), color_match: str(s.color_match ?? 'exact') }))
-  if (!t.subjects?.length) t.subjects = [{ ...EMPTY_TREE.subjects![0] }]
   if (Array.isArray(j.color_palette)) t.color_palette = (j.color_palette as unknown[]).map(str)
   if (j.camera && typeof j.camera === 'object') { const c = j.camera as Record<string, unknown>; t.camera = { angle: str(c.angle), lens: str(c.lens), depth_of_field: str(c.depth_of_field), 'f-number': str(c['f-number']), distance: str(c.distance) } }
   return t
@@ -75,6 +80,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): Record<string, unkn
   return {
     kind: 't2i', model_id: p.model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo,
+    turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
   }
 }
@@ -85,6 +91,8 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     text: String(r.prompt_text ?? ''), negative: String(r.negative ?? ''), width: Number(r.width ?? 960), height: Number(r.height ?? 544),
     steps: (r.steps as number | null) ?? null, guidance: (r.guidance as number | null) ?? null, cfg: (r.cfg as number | null) ?? null,
     sampler: (r.sampler as string | null) ?? null, scheduler: (r.scheduler as string | null) ?? null, turbo: Boolean(r.turbo), tier: 'custom',
+    turbo_strength: Number(r.turbo_strength ?? 1), weight_dtype: (r.weight_dtype as string | null) ?? null, te_device: (r.te_device as string | null) ?? null,
+    base_shift: (r.base_shift as number | null) ?? null, max_shift: (r.max_shift as number | null) ?? null, tiled_vae: Boolean(r.tiled_vae), tile_size: Number(r.tile_size ?? 512),
     refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string }[]).filter((x) => x.asset_id).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
     ref_max_px: Number(r.ref_max_px ?? 1024), loras: (r.loras as Panel['loras']) ?? [],
   }
@@ -121,7 +129,7 @@ export interface GenerateState {
   deletePreset: (name: string) => Promise<void>
   loadSnippets: () => Promise<void>
   saveSnippet: (s: Snippet) => Promise<void>
-  insertSnippet: (s: Snippet) => void
+  deleteSnippet: (name: string) => Promise<void>
 }
 
 let previewTimer: number | null = null
@@ -135,7 +143,7 @@ export const useGenerate = create<GenerateState>()(
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); schedulePreview(get) },
       setTree: (patch) => { get().set({ tree: { ...get().panel.tree, ...patch } }) },
       setSubject: (i, patch) => { const subs = [...(get().panel.tree.subjects ?? [])]; subs[i] = { ...subs[i], ...patch }; get().setTree({ subjects: subs }) },
-      addSubject: () => get().setTree({ subjects: [...(get().panel.tree.subjects ?? []), { ...EMPTY_TREE.subjects![0] }] }),
+      addSubject: () => get().setTree({ subjects: [...(get().panel.tree.subjects ?? []), { ...NEW_SUBJECT }] }),
       removeSubject: (i) => get().setTree({ subjects: (get().panel.tree.subjects ?? []).filter((_, j) => j !== i) }),
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
       treeToJson: () => get().set({ json_text: JSON.stringify(cleanTree(get().panel.tree), null, 2), prompt_mode: 'json' }),
@@ -210,16 +218,12 @@ export const useGenerate = create<GenerateState>()(
       applyPreset: (name) => { const p = get().presets.find((x) => x.name === name); if (p) { get().set({ ...p.panel }); set({ lastPreset: name }) } },
       deletePreset: async (name) => { const presets = get().presets.filter((p) => p.name !== name); await api.put('/project/presets', { presets, last: get().lastPreset === name ? null : get().lastPreset }); set({ presets }) },
       loadSnippets: async () => { try { set({ snippets: (await api.get<{ snippets: Snippet[] }>('/snippets')).snippets ?? [] }) } catch { set({ snippets: [] }) } },
-      saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => x.name !== sn.name), sn]; await api.put('/snippets', { snippets }); set({ snippets }) },
-      insertSnippet: (sn) => {
-        const t = get().panel.tree
-        const f = sn.field as keyof Tree
-        if (f === 'camera' || f === 'subjects' || f === 'color_palette') return
-        const cur = String(t[f] ?? '')
-        get().setTree({ [f]: cur ? `${cur}, ${sn.text}` : sn.text } as Partial<Tree>)
-      },
+      saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => !(x.name === sn.name && x.field === sn.field)), sn]; await api.put('/snippets', { snippets }); set({ snippets }) },
+      deleteSnippet: async (name) => { const snippets = get().snippets.filter((x) => x.name !== name); await api.put('/snippets', { snippets }); set({ snippets }) },
     }),
-    { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show }) as never },
+    { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show }) as never,
+      // a panel persisted before a field existed gets that field's default (new engine options, 2026-10-06)
+      merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<GenerateState>; return { ...current, ...p, panel: { ...DEFAULT_PANEL, ...(p.panel ?? {}) } } } },
   ),
 )
 

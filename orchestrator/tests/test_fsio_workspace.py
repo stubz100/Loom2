@@ -31,7 +31,7 @@ def test_ids_and_slugs():
 def test_workspace_create_open(tmp_path: Path):
     ws = Workspace.create(tmp_path / "proj", name="Test", size_cap_gb=10)
     assert ws.project_json.is_file()
-    for sub in ("assets", "thumbs", "documents", "clips", "masks", "jobs/logs", "engine_out", "_temp"):
+    for sub in ("assets", "thumbs", "documents", "clips", "masks", "jobs/logs", "_temp"):      # engine_out moved to <app state> (06 §4, B6)
         assert (ws.path / sub).is_dir()
     rec = ws.load()
     assert rec.name == "Test" and rec.format.width == 1920 and rec.format.default_tier == "draft"

@@ -996,3 +996,228 @@ read the clock)*
   No stall, no watchdog trigger. Contact sheets in `engine/spikes/out/m5/`: crates gone with continuous
   cobbles and wall; cloak → wet red leather jacket, face / hair / compass untouched; face fill keeps freckles and
   eyes; outpaint continues the alley with a lit doorway, no seam at x = 960. 12 §6 status written.
+
+## 2026-10-06 08:29 — Code review of M0–M5 slice 1: bug register (B1–B24)
+
+- Full read of `orchestrator/loom2`, `frontend/src`, the Tauri shell and the scripts against 06/07/10, with the
+  offline suite (46 passed), `tsc` (clean) and `oxlint` (warnings only). B1 and B2 were reproduced with probe
+  scripts before being recorded; the rest are confirmed at the cited lines. Status column is updated in place as
+  fixes land (this entry is the register; fixes get their own entries below).
+
+  **Backend (orchestrator)**
+
+  | Id | Sev | Where | Defect | Status |
+  | --- | --- | --- | --- | --- |
+  | B1 | critical | `engine/supervisor.py` `start()` → `stop()` | `start()` holds the non-reentrant `asyncio.Lock` and awaits `stop()`, which takes it again: an engine that fails its health probe hangs the queue on "starting engine" forever and `/engine/*` with it | **fixed 08:45** |
+  | B2 | high | `queue.py` `stop()` | reads `_running_id` after cancelling the task whose `finally` clears it → the running job is persisted as `running` with `clean_shutdown=true` and reloads as **failed** ("interrupted by shutdown"); `/interrupt` never sent. The unclean path (M1 acceptance) is fine | **fixed 08:45** |
+  | B3 | high | `queue.py` `_prepare_document_inputs` / `_add_result_layer` | candidate 1 is inserted *visible* and saved; the next seed of the same batch flattens the document with it included → candidates chain instead of being alternatives (M5 acceptance ran 2 and did not notice) | **fixed 08:45** |
+  | B4 | high | `queue.py` `_follow`; `recipes.py` | a hung `/history` poll raises out of `_follow` → `_fail` only (no engine restart, no pause); region preparation has no watchdog and `Inpaint.expand / margin_pct / min_size` are unbounded (`dilate(sel, 10**6)` wedges the worker thread) | **fixed 08:45** |
+  | B5 | medium | `queue.py` `cancel` / `_run_one` | cancel while the job is still starting the engine / uploading / preparing → `/interrupt` is a no-op, the job renders to completion, then is marked cancelled and its outputs orphaned | **fixed 08:45** |
+  | B6 | medium | `engine/supervisor.py` `_argv`; `queue.py` | engine outputs go to `<state>/engine_out` (06 §4 says `<project>/engine_out`, which is created and unused); nothing reconciles or cleans `engine_out`, `_temp/ai`, `_temp/refs`, `_temp/blobs` | **fixed 09:20** (per-job cleanup 08:45; reconciliation at project open and 06 §4 corrected 09:20) |
+  | B7 | medium | `api.py` `PUT /settings` | the live `JobQueue.roster` and `EngineSupervisor.client` keep the old root / port; invalid payloads 500 instead of 422 | **fixed 08:45** |
+  | B8 | medium | `api.py` `open_project` / lifespan | `self.ws` is set before the catalogue/queue open; a corrupt `catalogue.sqlite` leaves `GET /project` open while everything else 409s, and at startup only `StateError` is caught so the orchestrator does not start at all | **fixed 08:45** |
+  | B9 | medium | `documents.py` `save` | fixed temp name `<doc>.ora.tmp`, no fsync; editor save and queue paste-back can write it concurrently | **fixed 08:45** |
+  | B10 | medium | `api.py` `PUT /documents/{id}/selection` | selection size is not checked against the document → shape errors deep in `edit_ai` instead of a 400 | **fixed 08:45** |
+  | B11 | low | `events.py`, `catalogue.py`, `compose.py`, `graphs.py` | fire-and-forget WS tasks without references; catalogue closed while a worker thread may still use it; `dissolve` seeded with salted `hash()`; node-id collision at ≥ 10 LoRAs; warm-group starvation; unknown roster ids → 500 | **fixed 09:20** |
+
+  **Editor and catalogue (frontend)**
+
+  | Id | Sev | Where | Defect | Status |
+  | --- | --- | --- | --- | --- |
+  | B12 | critical | `editorStore.ts` `save()` / `deleteNode` | dirty pixels of a layer deleted from the stack are still uploaded → server 400 "not a raster layer" → save aborts and keeps failing (autosave too); only close/reopen exits, losing the work | **fixed 08:45** |
+  | B13 | critical | `catalogueStore.ts` module scope | `loadSeq` is shared by the Catalogue and Generate-results store instances; every `asset.created` discards the Catalogue's reload and leaves it on "loading" with stale tiles | **fixed 08:45** |
+  | B14 | high | `editorStore.ts` `save()` | `lp.dirty = false` after the await: strokes finished during the upload are lost; `docDirty: false` set unconditionally | **fixed 08:45** |
+  | B15 | high | `editorStore.ts` / `documents.py` | the server drops pixels of layers absent from the PUT stack, the client only re-uploads dirty ones → delete · save · undo · save leaves a raster layer with no pixels in the ORA | **fixed 08:45** |
+  | B16 | high | `editorStore.ts` `addMask` | "mask from selection" fills white then draws the selection canvas, which is transparent where unselected → an all-white no-op mask for every marquee / lasso / wand selection | **fixed 08:45** |
+  | B17 | high | `EditorCanvas.tsx` eyedropper | `extract.pixels({ frame: {…} as never })` — Pixi needs a `Rectangle` (`copyTo`) → always throws → crash overlay | **fixed 08:45** |
+  | B18 | medium | `editorStore.ts` `pickCandidate` / `removeMask` | destroy pixels / masks that the history entry they push still references → undo shows empty layers / an unmasked layer | **fixed 08:45** |
+  | B19 | medium | `editorStore.ts` history | `swap` canvases (free transform) are never destroyed when entries leave `history`/`future` or on close; Pixi's cache pins their textures | **fixed 08:45** |
+  | B20 | medium | `EditSuite.tsx` `useEditKeys` | autosave interval and the unsaved-changes watcher live in the Edit strip, so they stop on every suite switch — exactly when the toast promises autosave | **fixed 08:45** |
+  | B21 | medium | `api/client.ts`, `store/session.ts` | WS reconnect never resyncs (missed `job.updated` / `document.changed`); `init()`'s `refreshAll()` unguarded → crash overlay instead of the Retry banner | **fixed 08:45** |
+  | B22 | medium | `catalogueStore.ts` `applyEvent` | grouped mode reloads everything on `asset.created` and wipes the selection | **fixed 08:45** |
+
+  **Shell and repository**
+
+  | Id | Sev | Where | Defect | Status |
+  | --- | --- | --- | --- | --- |
+  | B23 | high | `.gitignore`, `config.py` | `.loom2_state/` (app.json, ComfyUI user DB + WAL, an engine log) is tracked; every run dirties the tree | **fixed 08:45** |
+  | B24 | medium | `src-tauri/src/lib.rs` `shutdown_backend`; `tauri.conf.json` | the `/shutdown` POST has no timeout (Alt-F4 can hang); `csp: null`; port fixed at 8765 with no fallback | **fixed 09:20** (timeout 08:45; CSP + ephemeral port 09:20) |
+
+- Also noted, not bugs: no disk guard / per-job logs / structured logs / engine adapter interface (06 §4, §3d, §9);
+  LoRAs compiled only for t2i; `fetch_weights.py` records but never verifies sha256; `prune_weights.py` deletes on a
+  bare name match; engine venv has no lockfile; README and 00-README three milestones stale; 13's D table is
+  appended newest-first after D28 and the Q table is split. Fix order: B1–B5 with a fake-ComfyUI lifecycle test
+  (none exists), then B12–B18, then B23/B24 and the docs.
+
+## 2026-10-06 08:45 — Review fixes B1–B5, B7–B10, B12–B23 landed; fake ComfyUI lifecycle tests
+
+- **Backend.** B1: `EngineSupervisor.stop()` body moved to `_stop_locked()`, which `start()` calls while holding the
+  lock; a failed health probe now raises `RuntimeError` and releases the lock (the launch failure path also closes
+  the log handle, and `state()["job_object"]` reports the real assignment). B2: `JobQueue.stop()` reads the running
+  job *before* cancelling the loop task, re-queues it, sends `/interrupt` if it had been submitted, and persists
+  `queued` — a relaunch continues it instead of marking it failed. B3: `OpenDocument.flatten(exclude=…)` drops the
+  batch's `grp_<batch>` group while a candidate's inputs are cropped, so candidates are alternatives. B4: a hung or
+  refused `/history` poll is caught (30 s), the engine is checked with `_engine_alive()` (process poll or a 10 s
+  probe), and the stall timer decides; the poll interval scales with `stall_timeout_s`; region preparation runs under
+  a 300 s `wait_for`; every size knob on `Inpaint` / `I2I` is bounded (`expand` ≤ 256, `margin_pct` ≤ 200,
+  `min_size` ≤ 4096, `max_pixels` ≤ 4 MP, `outpaint` sides ≤ 4096, `strength` 0–1). B5: `_cancelled()` checkpoints
+  after engine start, uploads and region preparation and right before `/prompt`; `cancel()` only interrupts a
+  submitted prompt; a cancel racing the submission interrupts what was just queued. B6 (part): `_cleanup_job_files()`
+  removes `engine_out/loom2/<job>*` and `_temp/ai/<job>` when a job ends in any state; Upscale results are moved,
+  not copied. B7: `PUT /settings` returns 422 on bad payloads, hands the new roster to the live queue and lets the
+  supervisor follow a new host/port while no process is alive. B8: `open_project` binds the services only after
+  catalogue, queue and documents all opened; the lifespan catches any exception from the last project. B9: ORA
+  saves use a unique temp name, fsync, replace, and a per-document lock. B10: `PUT /documents/{id}/selection`
+  rejects a selection whose size is not the document's. `PUT /documents/{id}` now answers with `missing_pixels`
+  / `missing_masks` (for B15). `_run_one` survives a failed first `persist()` (disk full) by re-queuing and pausing.
+- **Tests.** `tests/fake_comfy.py` is a fake ComfyUI (REST + `/ws`, uvicorn on an ephemeral port; behaviours
+  success / silent / error; LoadImage's enum grows with uploads; outputs take the uploaded crop's size) that the
+  supervisor adopts. `tests/test_lifecycle.py` (8 tests, ≈ 12 s): start failure raises and releases the lock;
+  clean stop re-queues + interrupts; t2i end to end with the output moved into the project and `engine_out` empty;
+  cancel before submission reaches no `/prompt`; stall → failed + restarted + paused; hung history poll ends in the
+  watchdog, not a traceback; two inpaint candidates whose engine inputs contain no trace of each other, one AI group
+  with the first visible, `/free(unload_models=false)` after each, no leftovers; recipe bounds. Run against the
+  pre-fix code they fail (B1, B2, B3, B5, bounds). `python-multipart` joins the dev extras. **54 passed.**
+- **Frontend.** B12/B14/B15: `save()` clears the dirty flags before uploading (an edit during the save re-dirties and
+  rides the next one), uploads only layers / masks that are in the stack *and* (dirty or listed by the server as
+  missing), restores the flag on failure, and returns a boolean that `runAi` / `saveToCatalogue` / `exportPng` honour.
+  B13: `loadSeq` moved into the catalogue store factory. B16: "mask from selection" draws the selection's alpha over
+  black. B17: eyedropper passes a `Rectangle`. B18: `pickCandidate` / `removeMask` keep canvases for undo; B19:
+  `releaseEntries()` destroys swapped-out transform canvases when history entries drop or the document closes, and
+  `gcPixels()` drops canvases no stack (current, undo, redo) refers to. B20: `ensureEditorAutosave()` runs the
+  autosave interval and the unsaved-changes toast for the app's lifetime. B21: a reconnect refreshes session state
+  and `useEditor.resync()` merges layers added meanwhile; `init()` catches a failing first fetch (Retry banner) and a
+  bad WS frame is dropped. B22: event-driven catalogue reloads keep the selection. `tsc` clean; `oxlint` warnings
+  unchanged.
+- **Shell / repo.** B23: `.loom2_state/` ignored and untracked (`git rm --cached`, staged). B24 (part): the shutdown
+  POST has a 5 s global timeout (`cargo check` clean). README status refreshed to M5 slice 1.
+- Still open from the register: B11 (low), B6's startup reconciliation and output location, B24's CSP and port
+  fallback, and the non-bug notes (disk guard, per-job logs, engine lockfile, sha256 verification in
+  `fetch_weights.py`, 13's table order). Not re-run: the rig acceptances (no engine involvement changed in the
+  graphs; `scripts/m5_acceptance.py` should be rerun before M5 slice 2 to confirm B3 on real candidates).
+
+## 2026-10-06 09:20 — Review fixes B6 (rest), B11, B24 (rest); CSP verified in headless Edge
+
+- **B6.** `JobQueue.start()` runs `_reconcile_leftovers()`: files under `<state>/engine_out/loom2/` and dirs under
+  `<project>/_temp/ai/` that belong to no queued or running job are removed (a crashed run's outputs; the job that was
+  running is re-queued by `load()` and renders again). The engine output location stays `<app state>/engine_out`
+  (the engine outlives project switches); 06 §3b/§4 now say so, and the project tree lost its unused `engine_out/`.
+- **B11.** `EventHub` has one outbound queue and sender task per client — frames arrive in broadcast order, nothing
+  is sent concurrently on one socket, a slow client drops *previews* (never state) past 500 pending, and a dead
+  client is detached on its first failure; the `/events` hello goes through the same queue. `Catalogue.close()`
+  marks the index closed so an ingest finishing on a worker thread after the project closed writes nothing.
+  `dissolve` is seeded with `crc32(layer id)` (deterministic across processes). The t2i LoRA chain starts after
+  the reference nodes (no collision at ≥ 10 LoRAs). `_next()` ages out warm-group affinity after 10 min
+  (`MAX_WARM_SKIP_S`). `submit()` rejects unknown model / LoRA ids (422) before anything starts; `/models/{id}/verify`
+  404s and `/recipes/preview` 422s on unknown ids; malformed cursors are 400; `PUT /blobs` writes a unique temp per
+  request; thumbnails of transparent sources keep their alpha (WebP RGBA); "today" is the user's local day; the
+  source-asset decode in `POST /documents` runs off the event loop.
+- **B24.** `tauri.conf.json` sets a `csp` (`default-src 'self'`; loopback `http://127.0.0.1:*` / `ws://` for the
+  orchestrator in `connect-src`, `img-src`, `media-src`; `data:`/`blob:` for layer thumbnails and previews;
+  `ipc: http://ipc.localhost` for Tauri; `object-src 'none'`, `frame-src 'none'`) and a `devCsp` that only adds
+  `'unsafe-inline'` scripts for Vite's React Refresh preamble. COOP/COEP stay unset: nothing uses
+  `SharedArrayBuffer` yet (06 §2 names it for the brush worker; set them with that work, CORP on the orchestrator's
+  responses included). The shell picks a free loopback port when `LOOM2_PORT` is unset (`pick_port()`); the READY
+  line already carried the port. `cargo check` clean.
+- **Verification.** `scripts/csp_check.py` (new) serves `frontend/dist` from the dev origin `127.0.0.1:1420` with
+  the exact `csp` read from `tauri.conf.json` as a response header, runs the orchestrator in browser mode with a
+  project, an imported bench image and a document, loads Catalogue / Edit (with the document) / Generate in
+  headless Edge and greps the console for CSP refusals → **0 violations, 0 JS errors on all three pages**; the
+  screenshots in `engine/spikes/out/csp/` show the Catalogue tile with its loopback thumbnail and the Edit
+  document with its layer thumbnail (`data:`), so `img-src`, `connect-src` and the WebSocket were all exercised.
+  Negative control with `CSP_OVERRIDE="default-src 'self'"`: 14 refusals, so the harness sees violations when
+  they exist. (A first run served the page from an ephemeral port that the orchestrator's CORS allowlist rejects —
+  "clean" there meant only that the static assets loaded; the harness now pins the dev origin.) Tests:
+  `tests/test_events.py` (order, preview drop, dead client), reconciliation, warm-group aging, unknown ids at
+  submit, API 404/422/400 codes, alpha thumbnails; the workspace test no longer expects `engine_out/` in a project.
+  **60 passed.**
+- Register state: **B1–B24 fixed.** Still open as notes, not bugs: disk guard, per-job logs, engine lockfile,
+  sha256 verification in `fetch_weights.py`, and the M5 acceptance rerun on the rig (B3 changed candidate inputs).
+
+## 2026-10-06 09:35 — Generate panel rework (clean tree, per-field presets, optional subjects, references in the prompt) and the ComfyUI configuration audit
+
+- **User direction:** the prompt tree was littered with preset chips; presets must exist for every field but only
+  behind an icon next to the input; subject 1 must be as optional as subject 2; the 10 reference images of JSON
+  prompting belong in the same panel; and check whether ComfyUI's configuration layer is fully available.
+- **Panel.** `fieldPresets.ts`: a field key per input (`scene`, `subject.pose`, `camera.lens`, …), built-in
+  vocabulary per field (loom's directives + BFL examples), `presetMenu()` = built-ins · the user's presets for that
+  field · "Remove a preset ▸" · "Save current text as preset…" (inline name box, no native prompt). `Field` renders
+  label + input + one ✦ `ListPlus` button; single-valued camera fields replace, the rest append. Subjects start
+  empty (`NEW_SUBJECT`, `treeFromJson` no longer injects one); every card has a remove button. The reference slots
+  (`RefSlots`, 10 on dev / 4 on Klein, compact 5-column grid, numbered, drop target, right-click menu, downscale)
+  sit directly under `scene` in all three prompt modes; the References rail tab is gone (rail: Prompt · Model ·
+  Size & Batch · Presets). Presets tab = panel presets + the list of field presets (remove). Persisted panels get
+  the new fields' defaults through the store's `merge`. 09 §2/§3a/§3b/§3d/§3e updated.
+- **Audit — what the t2i graph exposed vs what ComfyUI v0.38.2 offers for FLUX.2:**
+
+  | Option (node.input) | Before | Now |
+  | --- | --- | --- |
+  | `KSampler.sampler_name` (45) | 7 whitelisted; others silently reverted to the preset | all 45, served live from `/object_info` via `/capabilities`; unknown = error in the preview |
+  | `KSampler.scheduler` (9) | 6 | all 9 + `flux2` |
+  | `Flux2Scheduler` sigmas (BFL's resolution-shifted schedule; the inpaint graphs already use it) | not for t2i | scheduler `flux2` → `RandomNoise` + `KSamplerSelect` + `Flux2Scheduler` + `BasicGuider` / `CFGGuider` (CFG > 1) + `SamplerCustomAdvanced` |
+  | `ModelSamplingFlux.max_shift/base_shift` (FLUX.2 inherits Flux sampling, default constant shift 2.02) | not exposed (09 §3b named "shift") | Advanced: model default or custom base/max (node defaults 0.5 / 1.15) |
+  | `UNETLoader.weight_dtype` | fixed per preset | Advanced select (default / fp8_e4m3fn / fp8_e4m3fn_fast / fp8_e5m2) — `_fast` is the speed candidate to measure on gfx1201 |
+  | `CLIPLoader.device` | fixed GPU | Advanced (cpu = VRAM headroom, ≈ 170 s per new prompt per E0) |
+  | Turbo `LoraLoaderModelOnly.strength_model` | fixed 1.0 | strength field next to the Turbo toggle |
+  | `VAEDecodeTiled` (D13 "tiled VAE") | not used | Advanced: tiled decode + tile size |
+  | `KSampler.denoise` | fixed 1.0 | unchanged — meaningless for t2i; Refine (I2I) carries it |
+  | `EmptyFlux2LatentImage.batch_size` | 1 | unchanged by design — one job per seed streams, cancels and ingests per image |
+  | `ImageScale.upscale_method` for references | lanczos | unchanged |
+  | Engine flags (`--reserve-vram`, stall timeout) | in app.json only | Settings shows **Stall timeout** and **Reserve VRAM**; the raw flags field covers any other CLI flag |
+  | Not exposed — candidates for a spike: `EasyCache` / `LazyCache` (step skipping on DiT, likely the biggest speed win on 16 GB), `PerturbedAttentionGuidance`, `SkipLayerGuidanceDiT`, `CFGZeroStar` / `CFGNorm`, `APG`, two-stage `KSamplerAdvanced`; LoRA slots (D25) | — | listed in 09 §3b as post-MVP measurements |
+
+  `effective_params` validates sampler / scheduler / dtype / device against the pinned lists and raises
+  `CompileError` (preview 422) instead of falling back; the compiled graph is still contract-checked against the live
+  `/object_info`. The fixture gained `VAEDecodeTiled` and `CFGGuider` hand-built from the pinned source (flagged
+  `hand_added`; `make_object_info_fixture.py` lists them for the next capture).
+- **Verification.** `tsc` clean, lint unchanged; 62 offline tests (new: every exposed option reaches the graph and
+  the contract; `/capabilities` lists 45 / 10 / 4 / 2). `scripts/csp_check.py` now also opens `&suite=generate&tab=model`
+  (a generic `?suite=&tab=` deep link was added to `suiteRegistry`): screenshots in `engine/spikes/out/csp/` show the
+  Prompt tab (scene → reference slots → optional subjects → look → camera → extras, one ✦ per field) and the Model tab
+  (Turbo strength, full sampler list, Advanced disclosure) under the production CSP with 0 violations. Not run: a
+  rig generation with the new options — the fp8 `_fast` dtype, shift and the flux2 schedule want E0-style timings
+  before any default changes.
+
+## 2026-10-06 13:05 — M5 closed: AI Select (SAM 3 + BiRefNet), tiled refine, gradient fill, bench task 03; acceptance 24/24
+
+- **Finding first:** the 2026-10-05 entry said the SAM 3 / BiRefNet nodes were "not in the engine yet". ComfyUI v0.38.2 ships
+  both in core — `comfy_extras/nodes_sam3.py` (`SAM3_Detect`, loaded from `sam3.pt` through `CheckpointLoaderSimple`, text
+  encoder included) and `nodes_bg_removal.py` (`LoadBackgroundRemovalModel` / `RemoveBackground`, BiRefNet). No custom node
+  pin was needed (D33). `sam3.pt` (3.4 GB) was already on disk in the backup install's `sam3/` folder, now mounted as a
+  checkpoints path; BiRefNet came through the roster fetch (`ZhengPeng7/BiRefNet` `model.safetensors`, 424 MB fp16, MIT,
+  stored as `background_removal/BiRefNet-general.safetensors`, sha256 in the ledger).
+- **Backend.** `Segment` recipe (`subject` · `text` · `points` · `box`; threshold, refine iterations; `op` replace / add /
+  subtract / intersect; expand ±256, feather; engine image ≤ 1024). The queue sends the whole visible composite, scales the
+  prompts into engine pixels, and on completion turns the `MaskToImage` result into a document-sized mask
+  (`edit_ai.mask_from_engine`), joins it with the selection (`combine_selection`), saves the ORA and broadcasts
+  `document.changed {selection, coverage}`; `GET /documents/{id}/selection` returns the bytes. The box prompt goes through
+  core `CreateBoundingBoxes` (a canvas widget node: JSON `{x, y, width, height}` boxes on the engine grid, `editor_state: []`).
+  `Upscale` gained `refine` (Klein base / dev, strength, tile, overlap, steps, prompt): `edit_ai.plan_tiles` lays 16-aligned
+  tiles with the last row/column pulled to the edge, and `build_upscale` emits per tile `ImageCrop` → `VAEEncode` →
+  `KSampler` at `denoise = strength` → `VAEDecode` → `ImageCompositeMasked` through a `SolidMask` feathered only on inner edges —
+  one engine graph, one job. `contract.py` now reads V3 `["COMBO", {options}]` enums (the new nodes use them), so file names
+  and sampler names are validated there too. The fixture was **recaptured from the live engine** (988 classes → 68 kept, the
+  two hand-added entries replaced; `make_object_info_fixture.py` lists the slice 2 classes).
+- **Frontend.** `aiPanelStore.ts` holds the AI panel settings so the **A tool** options and the AI tab's new **Select**
+  operation share them: Subject (BiRefNet) or SAM 3 with text / points / box, threshold, combine, expand, feather, Select ▶.
+  On the canvas the A tool collects prompts: click = include point, Alt-click = exclude, drag = box (green / red dots and an
+  amber box drawn in the overlay; a click switches the panel to the matching SAM mode). `document.changed {selection}` →
+  `loadSelectionFromServer()` replaces the selection canvas. Upscale has a **tiled refine** disclosure (model, strength, tile,
+  overlap, prompt). The **G tool** has solid / linear / radial: a drag paints foreground → background (mask: white → black)
+  inside the selection, as one history step. The `A` tool lost its "arrives in M5" flag. Build with the full `tsc -b` type-check
+  clean (note: `tsc --noEmit -p tsconfig.json` type-checks nothing — that file only references the app and node configs; the
+  earlier "tsc clean" lines in this journal relied on the builds that followed them, which did run `tsc -b`).
+- **Acceptance `scripts/m5_acceptance.py` — 24/24 on the rig** (log `engine/spikes/out/m5/acceptance-20261006-slice2.log`;
+  the orchestrator in browser mode, engine started on the first job, candidates 2, B3 fix in place so candidates are
+  independent): Fill crates 68.8 s cold / 39.8 s warm · Fill-Match 19.9 s · Remove 20.1 s · cloak 40.6 / 40.8 s · face 47.7 s ·
+  outpaint right 240 31.5 s (1200×544) · refine 0.25 Klein base 47.0 s · ESRGAN ×2 5.8 s → asset. **New:** BiRefNet subject
+  **2.3 s** — face 0.96 / cloak box 0.62 / crates box 0.00 / canvas 0.16 coverage; **task 03** background swap on the inverted
+  matte 31.4 s — layer alpha **0.027 on the subject, 0.996 on the background** (subject preserved, sheet shows the sunlit harbour
+  square around an unchanged figure); **SAM 3** text "the young woman in the hooded cloak" 33.0 s (includes the checkpoint load)
+  — face 0.95 / cloak 0.62 / crates 0.00; SAM 3 point on the face, `add` → face 0.95 in **3.3 s**; **tiled refine** ×2 (Klein
+  base, 1024 / 128, 0.25) 439.2 s → **2400×1088** asset over 6 tiles. 21 nodes saved in the ORA. 10 §14 items 1, 3, 4, 5, 6, 7
+  ticked; item 2's pen half stays with D19. **M5 is closed** (12 §6). (After its last check the script crashed on its own
+  cleanup line — a local named `a` shadowed the argparse namespace — so the summary line is missing from the log and the
+  test document was left in the project; fixed in the script, the 24 check lines stand.)
+- Not run / carried: Fill Hero on the bench (unchanged since E8, `--hero` flag), SeedVR2 and LoRA slots (post-MVP), a
+  Photoshop/Krita open of the PSD (manual). Next: **M6 Animate** (11 approved, E4/E5 decided; E9 fps-conform spike inside it).

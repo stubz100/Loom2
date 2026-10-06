@@ -44,7 +44,7 @@ export interface CatalogueState {
   loupe: string | null; compare: string[]; compareOpen: boolean
   pendingDelete: number | null
   setQuery: (patch: Partial<Query>) => Promise<void>
-  load: () => Promise<void>
+  load: (opts?: { keepSelection?: boolean }) => Promise<void>
   loadMore: () => Promise<void>
   loadGroup: (key: string) => Promise<void>
   toggleGroup: (key: string, open?: boolean) => void
@@ -77,7 +77,6 @@ export interface CatalogueState {
   applyEvent: (f: EventFrame) => void
 }
 
-let loadSeq = 0
 const MAX_INFLIGHT = 6
 let inflight = 0
 const waiting: (() => void)[] = []
@@ -89,6 +88,7 @@ async function limited<T>(fn: () => Promise<T>): Promise<T> {
 
 export function createCatalogueStore(name: string, defaults: Partial<Query> = {}) {
   const DEFAULT_Q: Query = { ...DEFAULT_QUERY, ...defaults }
+  let loadSeq = 0            // B13: per store — the Catalogue and Generate results reload independently on the same event
   return create<CatalogueState>()(
   persist(
     (set, get) => ({
@@ -98,10 +98,10 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
 
       setQuery: (patch) => { set({ q: { ...get().q, ...patch } }); return get().load() },
 
-      load: async () => {
+      load: async (opts) => {
         const seq = ++loadSeq
         const q = get().q
-        set({ loading: true, error: null, selected: [], primary: null, anchor: null })
+        set({ loading: true, error: null, ...(opts?.keepSelection ? {} : { selected: [], primary: null, anchor: null }) })   // B22
         try {
           if (q.group === 'none') {
             const page = await api.get<Page>(`/assets?${qs(q, { limit: 200 })}`)
@@ -253,7 +253,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
           if (s.q.group === 'none') {
             if (s.q.sort === 'created_desc') set({ items: [d as Asset, ...s.items], total: (s.total ?? 0) + 1 })
           } else {
-            void s.load()
+            void s.load({ keepSelection: true })                   // B22: a landing batch must not clear what the user is selecting
           }
           void s.refreshMeta()
         }

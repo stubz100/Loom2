@@ -42,12 +42,12 @@ export const FILTER_DEFAULTS: Record<string, Record<string, unknown>> = {
 export interface CompareResult { mean: number; p99: number; max: number; rgb_mean: number; rgb_p99: number; rgb_max: number; w: number; h: number; at: string }
 export interface BrushOptions { size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; color: string; background: string }
 export interface HistoryEntry { label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null } }
-type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance'
+type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode'
 
 export interface EditorState {
   doc: DocumentStack | null; docDirty: boolean; loading: boolean; saving: boolean; error: string | null
   activeId: string | null; editingMask: boolean
-  tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: 'replace' | 'add' | 'subtract'; tolerance: number
+  tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: 'replace' | 'add' | 'subtract'; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
   zoom: number; pan: { x: number; y: number }; fitRequested: number; overlay: boolean; before: boolean; pixelGrid: boolean; quickMask: boolean
   history: HistoryEntry[]; future: HistoryEntry[]
   renderer: string; cursor: { x: number; y: number } | null
@@ -60,9 +60,13 @@ export interface EditorState {
   aiBatch: string | null                      // batch id of the last AI run (its candidates form the strip)
   candidates: { group: string; ids: string[] } | null
   runAi: (recipe: Record<string, unknown>, stage?: boolean) => Promise<void>
-  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null }) => void
+  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null; selection?: boolean }) => void
   mergeServerLayers: (added: string[], group?: string) => Promise<void>
   pickCandidate: (keepId: string | null) => void
+  // AI Select (10 §4, A tool): the prompt collected on the canvas, and the selection the segment job writes on the server
+  aiPrompt: { points: { x: number; y: number; label: 1 | 0 }[]; box: [number, number, number, number] | null }
+  setAiPrompt: (p: Partial<EditorState['aiPrompt']>) => void
+  loadSelectionFromServer: () => Promise<void>
   // free transform (10 §4): live numbers for the preview; applied by resampling the layer (and a linked mask)
   transform: Xform | null
   beginTransform: () => void
@@ -78,7 +82,8 @@ export interface EditorState {
   closeDocument: () => void
   listDocuments: () => Promise<DocSummary[]>
   deleteDocument: (id: string) => Promise<void>
-  save: () => Promise<void>
+  save: () => Promise<boolean>
+  resync: () => Promise<void>
   saveToCatalogue: () => Promise<void>
   exportPng: () => Promise<void>
   exportPsd: () => Promise<void>
@@ -175,6 +180,23 @@ export const useEditor = create<EditorState>()(
         if (s.mask) { curMask = get().masks.get(s.layerId) ?? null; get().masks.set(s.layerId, s.mask); s.mask.dirty = true }
         return { layerId: s.layerId, lp: cur ?? s.lp, mask: curMask }
       }
+      /** Destroy the canvases that only these (dropped) history entries referenced: swapped-out transform sources. */
+      const releaseEntries = (entries: HistoryEntry[]) => {
+        const live = new Set<LayerPixels>([...get().pixels.values(), ...get().masks.values()])
+        for (const e of entries) {
+          if (!e.swap) continue
+          if (!live.has(e.swap.lp)) e.swap.lp.destroy()
+          if (e.swap.mask && !live.has(e.swap.mask)) e.swap.mask.destroy()
+        }
+      }
+      /** Drop pixel / mask canvases no stack (current, undo or redo) refers to any more — deleted layers, picked-over candidates, removed masks. */
+      const gcPixels = () => {
+        const nodes = new Set<string>(), maskIds = new Set<string>()
+        const add = (d: DocumentStack | undefined) => { if (d) walk(d.layers, (n) => { nodes.add(n.id); if (n.mask) maskIds.add(n.id) }) }
+        add(get().doc ?? undefined); get().history.forEach((e) => add(e.stack)); get().future.forEach((e) => add(e.stack))
+        for (const [id, lp] of get().pixels) if (!nodes.has(id)) { lp.destroy(); get().pixels.delete(id) }
+        for (const [id, lp] of get().masks) if (!maskIds.has(id)) { lp.destroy(); get().masks.delete(id) }
+      }
       /** Replace the stack, mark dirty, and record the previous stack as one undoable step. */
       const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}) => {
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
@@ -221,18 +243,18 @@ export const useEditor = create<EditorState>()(
       }
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
-        tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32,
+        tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
-        aiBatch: null, candidates: null,
+        aiBatch: null, candidates: null, aiPrompt: { points: [], box: null },
 
         runAi: async (recipe, stage = false) => {
           const { doc, selection } = get()
           const s = useSession.getState()
           if (!doc) return
           try {
-            await get().save()                                              // the job reads the saved document
+            if (!(await get().save())) return                               // the job reads the saved document
             const b = s.backend!
             const body = selection ? (selection.toRaw() as BodyInit) : new Uint8Array(0)
             const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
@@ -247,8 +269,25 @@ export const useEditor = create<EditorState>()(
         },
         onDocumentChanged: (d) => {
           const doc = get().doc
-          if (!doc || d.id !== doc.id || !d.added?.length) return
-          void get().mergeServerLayers(d.added, d.group)
+          if (!doc || d.id !== doc.id) return
+          if (d.selection) { void get().loadSelectionFromServer(); return }
+          if (d.added?.length) void get().mergeServerLayers(d.added, d.group)
+        },
+        setAiPrompt: (p) => set({ aiPrompt: { ...get().aiPrompt, ...p }, revision: get().revision + 1 }),
+        loadSelectionFromServer: async () => {
+          const doc = get().doc
+          if (!doc) return
+          try {
+            const b = useSession.getState().backend!
+            const res = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection`, { headers: { 'X-Loom-Token': b.token } })
+            if (res.status === 404) { get().clearSelection(); return }
+            if (!res.ok) throw new Error(`selection ${res.status}`)
+            const w = Number(res.headers.get('x-loom-width')), h = Number(res.headers.get('x-loom-height'))
+            const sel = LayerPixels.fromRaw(w, h, new Uint8Array(await res.arrayBuffer()), 1)
+            get().selection?.destroy()
+            set({ selection: sel, quickMask: false, revision: get().revision + 1 })
+            useSession.getState().toast('AI Select: selection updated', 'success')
+          } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
         },
         mergeServerLayers: async (added, group) => {
           const doc = get().doc
@@ -289,7 +328,7 @@ export const useEditor = create<EditorState>()(
           if (g?.children) {
             for (const ch of g.children) ch.visible = ch.id === keepId
             g.children = g.children.filter((ch) => ch.id === keepId)
-            for (const id of c.ids) if (id !== keepId) { get().pixels.get(id)?.destroy(); get().pixels.delete(id); get().masks.get(id)?.destroy(); get().masks.delete(id) }
+            // B18: the other candidates' canvases stay in the maps for undo; gc drops them when the history entry goes
           }
           set({ doc: next, candidates: null, activeId: keepId, docDirty: true, revision: get().revision + 1 })
           get().pushHistory({ label: 'pick candidate', layerId: keepId, kind: 'image', tiles: [], stack: before, at: Date.now() })
@@ -384,8 +423,9 @@ export const useEditor = create<EditorState>()(
           } catch (e) { useSession.getState().toast(`New document failed: ${(e as ApiError).detail ?? e}`, 'error') }
         },
         closeDocument: () => {
+          releaseEntries([...get().history, ...get().future])              // B19: swapped-out transform canvases
           get().pixels.forEach((p) => p.destroy()); get().masks.forEach((p) => p.destroy()); get().selection?.destroy()
-          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, activeId: null, history: [], future: [], docDirty: false, error: null })
+          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, transform: null })
         },
         listDocuments: async () => (await api.get<{ items: DocSummary[] }>('/documents')).items,
         deleteDocument: async (id) => {
@@ -396,22 +436,54 @@ export const useEditor = create<EditorState>()(
 
         save: async () => {
           const { doc, pixels, masks } = get()
-          if (!doc) return
-          set({ saving: true })
+          if (!doc) return false
+          // B14: clear the flags *before* the uploads — a stroke that lands meanwhile re-dirties the document and its
+          // layer and rides the next save; a failure below puts the document flag back
+          set({ saving: true, docDirty: false })
           try {
-            await api.put(`/documents/${doc.id}`, doc)
-            for (const [lid, lp] of pixels) if (lp.dirty) { await putRaw(doc.id, lid, 'image', lp); lp.dirty = false }
-            for (const [lid, lp] of masks) if (lp.dirty) { await putRaw(doc.id, lid, 'mask', lp); lp.dirty = false }
+            const rasters = new Set<string>(), masked = new Set<string>()
+            walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.add(n.id); if (n.mask) masked.add(n.id) })
+            const server = await api.put<DocumentStack & { missing_pixels?: string[]; missing_masks?: string[] }>(`/documents/${doc.id}`, doc)
+            const upload = async (map: Map<string, LayerPixels>, kind: 'image' | 'mask', inStack: Set<string>, missing: string[] | undefined) => {
+              const need = new Set(missing ?? [])
+              for (const [lid, lp] of map) {
+                if (!inStack.has(lid)) continue                      // B12: deleted here (kept for undo) and dropped by the server
+                if (!lp.dirty && !need.has(lid)) continue            // B15: the server has no bytes for it → upload even when clean
+                lp.dirty = false
+                try { await putRaw(doc.id, lid, kind, lp) } catch (e) { lp.dirty = true; throw e }
+              }
+            }
+            await upload(pixels, 'image', rasters, server.missing_pixels)
+            await upload(masks, 'mask', masked, server.missing_masks)
             const saved = await api.post<DocumentStack>(`/documents/${doc.id}/save`)
-            set({ doc: { ...get().doc!, saved_at: saved.saved_at }, docDirty: false })
+            const cur = get().doc
+            if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at } })
             useSession.getState().toast('Saved', 'success')
-          } catch (e) { useSession.getState().toast(`Save failed: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
-          finally { set({ saving: false }) }
+            return true
+          } catch (e) {
+            set({ docDirty: true })
+            useSession.getState().toast(`Save failed: ${(e as ApiError).detail ?? (e as Error).message}`, 'error')
+            return false
+          } finally { set({ saving: false }) }
+        },
+        resync: async () => {
+          // B21: after a WebSocket reconnect, layers an AI job added while we were offline are merged like a live event
+          const doc = get().doc
+          if (!doc) return
+          try {
+            const server = await api.get<DocumentStack>(`/documents/${doc.id}`)
+            const local = new Set<string>(); walk(doc.layers, (n) => { local.add(n.id) })
+            const added: string[] = []
+            walk(server.layers, (n) => { if (n.kind === 'raster' && !local.has(n.id)) added.push(n.id) })
+            if (!added.length) return
+            const group = server.layers.find((t) => t.kind === 'group' && t.children?.some((c) => added.includes(c.id)))?.id
+            await get().mergeServerLayers(added, group)
+          } catch { /* the next event or save reconciles */ }
         },
         saveToCatalogue: async () => {
           const { doc } = get()
           if (!doc) return
-          await get().save()
+          if (!(await get().save())) return                          // the flatten runs on the saved document
           try {
             const r = await api.post<{ asset: { id: string } }>(`/documents/${doc.id}/flatten`, { to_catalogue: true })
             useSession.getState().toast(`Saved to Catalogue as ${r.asset.id}`, 'success')
@@ -420,7 +492,7 @@ export const useEditor = create<EditorState>()(
         exportPng: async () => {
           const { doc } = get()
           if (!doc) return
-          await get().save()
+          if (!(await get().save())) return
           const b = useSession.getState().backend!
           const res = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/export`, { method: 'POST', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ format: 'png' }) })
           if (!res.ok) { useSession.getState().toast(`Export failed: ${res.status}`, 'error'); return }
@@ -578,9 +650,10 @@ export const useEditor = create<EditorState>()(
           if (!doc || !n || n.mask) return
           const before = clone(doc)
           const lp = new LayerPixels(doc.w, doc.h, true)
-          lp.ctx.fillStyle = '#ffffff'; lp.ctx.fillRect(0, 0, doc.w, doc.h)
           const sel = get().selection
-          if (fromSelection && sel) lp.ctx.drawImage(sel.canvas, 0, 0)
+          // B16: the selection canvas is transparent where nothing is selected, so its *alpha* (white = selected) goes over black
+          lp.ctx.fillStyle = fromSelection && sel ? '#000000' : '#ffffff'; lp.ctx.fillRect(0, 0, doc.w, doc.h)
+          if (fromSelection && sel) lp.ctx.drawImage(selectionAlphaCanvas(sel), 0, 0)
           lp.refresh(); lp.dirty = true
           get().masks.set(id, lp)
           const next = clone(doc)
@@ -592,8 +665,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!doc) return
           const before = clone(doc)
-          get().masks.get(id)?.destroy(); get().masks.delete(id)
-          const next = clone(doc)
+          const next = clone(doc)                                   // B18: the mask canvas stays for undo (gc drops it later)
           walk(next.layers, (m) => { if (m.id === id) { m.mask = null; return true } })
           commit(next, before, 'remove mask', id, { editingMask: false })
         },
@@ -636,7 +708,12 @@ export const useEditor = create<EditorState>()(
         },
 
         // ---- history ---------------------------------------------------------------------------------
-        pushHistory: (e) => set({ history: [...get().history.slice(-199), e], future: [] }),
+        pushHistory: (e) => {
+          const h = get().history, f = get().future
+          const dropped = [...h.slice(0, Math.max(0, h.length - 199)), ...f]
+          set({ history: [...h.slice(-199), e], future: [] })
+          if (dropped.length) { releaseEntries(dropped); gcPixels() }      // B19: canvases only history referenced go with it
+        },
         undo: () => {
           const h = get().history
           if (!h.length) return
@@ -706,9 +783,18 @@ export const useEditor = create<EditorState>()(
         },
       }
     },
-    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance }) as never },
+    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode }) as never },
   ),
 )
+
+/** B20: autosave (10 §7) and the unsaved-changes toast (10 §12) run for the app's lifetime, not only while the Edit strip is mounted. */
+let autosaveStarted = false
+export function ensureEditorAutosave(): void {
+  if (autosaveStarted) return
+  autosaveStarted = true
+  setInterval(() => { const st = useEditor.getState(); if (st.doc && st.docDirty && !st.saving) void st.save() }, 120_000)
+  useSession.subscribe((s, prev) => { if (prev.ui.suite === 'edit' && s.ui.suite !== 'edit' && useEditor.getState().docDirty) s.toast('Unsaved changes in Edit — autosave runs every 2 min, Ctrl+S saves now', 'info') })
+}
 
 /** Canvas2D composite op for merge-down (the exact set lives in Python; this covers the common modes). */
 export function canvasBlend(mode: string): GlobalCompositeOperation {

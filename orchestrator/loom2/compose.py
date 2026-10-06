@@ -8,6 +8,8 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+import zlib
+
 import numpy as np
 
 Arr = np.ndarray
@@ -367,7 +369,7 @@ class Renderer:
                 if px is None:
                     continue
                 src = place(self.h, self.w, to_float(px), int(node.get("x", 0)), int(node.get("y", 0)))
-                acc = composite(acc, src, mode, self._layer_alpha(node, acc), seed=hash(node["id"]) & 0xFFFF)
+                acc = composite(acc, src, mode, self._layer_alpha(node, acc), seed=zlib.crc32(node["id"].encode("utf-8")) & 0xFFFF)
             elif kind == "group":
                 children = node.get("children", [])
                 passthrough = node.get("passthrough", True) and mode in ("normal", "pass-through") and not node.get("mask")

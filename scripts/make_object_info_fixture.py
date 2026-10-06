@@ -20,7 +20,10 @@ CLASSES = [
     "CLIPTextEncode", "FluxGuidance", "ConditioningZeroOut", "EmptyFlux2LatentImage", "KSampler", "KSamplerAdvanced", "VAEDecode", "VAEEncode",
     "SaveImage", "PreviewImage", "ReferenceLatent", "InpaintModelConditioning", "DifferentialDiffusion", "ImageCompositeMasked", "EmptyImage",
     "ImagePadForOutpaint", "ImageScale", "ImageCrop", "Flux2Scheduler", "BasicGuider", "RandomNoise", "KSamplerSelect", "SamplerCustomAdvanced",
-    "ModelSamplingFlux", "ModelSamplingSD3",
+    "ModelSamplingFlux", "ModelSamplingSD3", "VAEDecodeTiled", "CFGGuider",
+    # M5 slice 2: AI Select and the tiled refine
+    "CheckpointLoaderSimple", "SAM3_Detect", "CreateBoundingBoxes", "LoadBackgroundRemovalModel", "RemoveBackground", "MaskToImage", "ImageToMask",
+    "SolidMask", "FeatherMask", "GrowMask", "InvertMask", "ThresholdMask", "PrimitiveString",
     # LanPaint (custom node, pinned)
     "LanPaint_ImageEncode", "LanPaint_ImageDecode", "LanPaint_SamplerCustomAdvanced", "LanPaint_KSampler",
     # Wan 2.2

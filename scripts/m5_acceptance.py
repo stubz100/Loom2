@@ -1,10 +1,12 @@
-"""M5 Edit AI acceptance (10 §14 items 4 and 5, 12 §6) against a running dev orchestrator with the real engine.
+"""M5 Edit AI acceptance (10 §14 items 3, 4 and 5, 12 §6) against a running dev orchestrator with the real engine.
 
 Imports the frozen E8 bench source, opens it as a document, feeds the bench masks as the document's selection and
 runs the editor's AI recipes through `POST /documents/{id}/ai`: Fill, Fill-Match and Remove on task 01 (crates),
-Fill on task 02 (cloak), Outpaint right 240 (task 04), Refine 0.25 on the visible composite, and Upscale when the
-weights are present. Each result must come back as a layer with the recipe attached; contact sheets of the
-candidates (crop region, original on the left) land in engine/spikes/out/m5/ for scoring by eye (04 §6).
+Fill on task 02 (cloak), Outpaint right 240 (task 04), Refine 0.25 on the visible composite, Upscale when the
+weights are present; then slice 2 (2026-10-06): AI Select — BiRefNet subject matte and SAM 3 text / point — scored
+against the bench boxes, task 03 (background swap on the inverted matte: the subject must stay untouched), and the
+tiled refine upscale. Each generative result must come back as a layer with the recipe attached; contact sheets of
+the candidates (crop region, original on the left) land in engine/spikes/out/m5/ for scoring by eye (04 §6).
 
     LOOM2_TOKEN=devtoken python scripts/m5_acceptance.py --port 8766 [--hero] [--candidates 2]
 """
@@ -118,12 +120,16 @@ def main() -> int:
         m = np.asarray(Image.open(BENCH / "masks" / f"{tasks[task_id]['id']}.png").convert("L").resize((W, H)))
         call(base, "PUT", f"/documents/{did}/selection?w={W}&h={H}", m.tobytes())
 
-    def run(name: str, recipe: dict, timeout_s: float = 1500) -> tuple[list[dict], dict | None]:
+    def run(name: str, recipe: dict, timeout_s: float = 1500, layers_expected: bool = True) -> tuple[list[dict], dict | None]:
         t0 = time.time()
         jobs = call(base, "POST", f"/documents/{did}/ai", {"recipe": recipe})["jobs"]
         print(f"    {name}: {len(jobs)} job(s) queued", flush=True)
         done = wait_jobs(base, [j["id"] for j in jobs], timeout_s)
         ok = all(j["status"] == "done" for j in done)
+        if not layers_expected:
+            info = " · ".join(f"{j['wall_s']} s" for j in done) + ("" if ok else " · " + "; ".join(str(j.get("error")) for j in done if j["status"] != "done"))
+            check(f"{name}: job done", ok, info)
+            return done, call(base, "GET", f"/documents/{did}")
         lids = [l for j in done for l in (j["result"].get("layers") or [])]
         d = call(base, "GET", f"/documents/{did}")
         nodes = {}
@@ -169,6 +175,73 @@ def main() -> int:
         check("upscale produced a Catalogue asset", bool(done and done[0]["result"].get("asset_ids")), str(done[0]["result"].get("asset_ids") if done else ""))
     else:
         print("  [skip] upscale: realesrgan-x2 not fetched (Models → fetch)")
+    # ---- slice 2 (2026-10-06): AI Select, task 03, tiled refine ---------------------------------------------------
+    d = call(base, "GET", f"/documents/{did}")
+    DW, DH = d["w"], d["h"]
+
+    def get_selection() -> np.ndarray | None:
+        try:
+            raw = call(base, "GET", f"/documents/{did}/selection", raw=True)
+        except Exception:
+            return None
+        return np.frombuffer(raw, dtype=np.uint8).reshape((DH, DW))
+
+    def box_mean(sel: np.ndarray, box: list[int]) -> float:
+        x0, y0, x1, y1 = box
+        return float(sel[y0:y1, x0:x1].mean() / 255.0)
+
+    box_subject = tasks["02"]["mask"]["boxes"][0]        # the cloak box: mostly figure
+    box_crates = tasks["01"]["mask"]["boxes"][0]         # the crates: no figure
+    face_box = tasks["05"]["mask"]["boxes"][0]
+
+    def score_matte(name: str, sel: np.ndarray | None) -> None:
+        if sel is None:
+            check(f"{name}: selection present", False, "GET /selection returned nothing"); return
+        cov, subj, crates, face = float(sel.mean() / 255), box_mean(sel, box_subject), box_mean(sel, box_crates), box_mean(sel, face_box)
+        check(f"{name}: matte covers the figure (face + cloak), not the crates", face > 0.6 and subj > 0.35 and crates < 0.15 and 0.05 < cov < 0.6,
+              f"face {face:.2f} · cloak box {subj:.2f} · crates box {crates:.2f} · canvas {cov:.2f}")
+
+    if models.get("birefnet", {}).get("health") in ("present", "verified"):
+        call(base, "PUT", f"/documents/{did}/selection", b"")
+        run("AI select · subject (BiRefNet)", {"kind": "segment", "model_id": "birefnet", "mode": "subject", "feather": 2, "seeds": [0]}, layers_expected=False)
+        matte = get_selection()
+        score_matte("BiRefNet subject", matte)
+        if matte is not None:
+            # bench task 03: background swap — fill everything but the subject; the subject must come back untouched (alpha 0 there)
+            inv = (255 - matte).astype(np.uint8)
+            call(base, "PUT", f"/documents/{did}/selection?w={DW}&h={DH}", inv.tobytes())
+            done, d2 = run("fill · 03 background swap (inverted matte)", {"kind": "inpaint", "mode": "fill", "prompt_text": tasks["03"]["prompt"], "feather": 6, "margin_pct": 0, "seeds": seeds[:1]})
+            lids = [l for j in done for l in (j["result"].get("layers") or [])]
+            if lids and done[0]["result"].get("region"):
+                layer = layer_png(base, did, lids[0]); reg = done[0]["result"]["region"]
+                full = Image.new("RGBA", (DW, DH), (0, 0, 0, 0)); full.paste(layer, (reg["x"], reg["y"]))
+                a = np.asarray(full)[..., 3]
+                inside = float(a[matte > 200].mean() / 255) if (matte > 200).any() else 1.0
+                outside = float(a[matte < 30].mean() / 255) if (matte < 30).any() else 0.0
+                check("03: subject preserved (layer alpha ≈ 0 on the matte), background repainted", inside < 0.08 and outside > 0.85, f"alpha on subject {inside:.3f} · on background {outside:.3f}")
+    else:
+        print("  [skip] AI select · subject: birefnet not fetched (Models → fetch)")
+    if models.get("sam3", {}).get("health") in ("present", "verified"):
+        call(base, "PUT", f"/documents/{did}/selection", b"")
+        run("AI select · SAM 3 text", {"kind": "segment", "model_id": "sam3", "mode": "text", "text": "the young woman in the hooded cloak", "seeds": [0]}, layers_expected=False)
+        score_matte("SAM 3 text", get_selection())
+        cx, cy = (face_box[0] + face_box[2]) // 2, (face_box[1] + face_box[3]) // 2
+        run("AI select · SAM 3 point (face) added to the selection", {"kind": "segment", "model_id": "sam3", "mode": "points", "points": [{"x": cx, "y": cy, "label": 1}], "op": "add", "seeds": [0]}, layers_expected=False)
+        sel = get_selection()
+        check("SAM 3 point: the face is selected", sel is not None and box_mean(sel, face_box) > 0.5, f"face {box_mean(sel, face_box):.2f}" if sel is not None else "no selection")
+    else:
+        print("  [skip] AI select · SAM 3: sam3.pt not found (mounted sam3/ folder)")
+    if models.get("realesrgan-x2", {}).get("health") in ("present", "verified") and models.get("klein-base-9b", {}).get("health") in ("present", "verified"):
+        call(base, "PUT", f"/documents/{did}/selection", b"")
+        done, _ = run("upscale ×2 + tiled refine (Klein base, tile 1024 / 128, strength 0.25)", {"kind": "upscale", "model_id": "realesrgan-x2", "source": "visible", "as_layer": False,
+                                                                                               "refine": True, "refine_model_id": "klein-base-9b", "strength": 0.25, "tile": 1024, "overlap": 128,
+                                                                                               "prompt_text": tasks["01"]["prompt"], "seeds": [20261006]}, timeout_s=1800, layers_expected=False)
+        aid = (done[0]["result"].get("asset_ids") or [None])[0] if done else None
+        arow = call(base, "GET", f"/assets/{aid}") if aid else None            # not `a`: that is the argparse namespace
+        check("tiled refine produced the 2× asset", bool(arow) and arow["w"] == 2 * DW and arow["h"] == 2 * DH, f"{arow['w']}×{arow['h']} · tiles {done[0]['result'].get('compiled', {}).get('tiles')}" if arow else "no asset")
+    else:
+        print("  [skip] tiled refine: realesrgan-x2 or klein-base-9b not present")
+
     saved = call(base, "GET", "/documents")["items"]
     me = next((x for x in saved if x["id"] == did), None)
     check("document saved after each result (ORA on disk)", bool(me and me["saved_at"]), str(me and me["layers"]) + " nodes")

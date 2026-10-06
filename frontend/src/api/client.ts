@@ -67,8 +67,9 @@ export class EventsSocket {
     ws.onopen = () => { this.backoff = 500; this.onStatus('open') }
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
-        const f = JSON.parse(ev.data)
-        if (f.type !== 'pong') this.onEvent(f as EventFrame)
+        let f: EventFrame
+        try { f = JSON.parse(ev.data) as EventFrame } catch { return }           // one bad frame must not take the app down
+        if (f.type !== 'pong') this.onEvent(f)
         return
       }
       const buf = ev.data as ArrayBuffer

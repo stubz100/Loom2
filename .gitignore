@@ -36,3 +36,5 @@ frontend/public/spikes/*.mp4
 frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/schemas/
+# third-party CLI tools fetched by scripts (rife-ncnn-vulkan for E9), never in git
+engine/tools/

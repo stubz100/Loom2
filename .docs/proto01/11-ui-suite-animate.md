@@ -122,9 +122,9 @@ the preset replaces per-knob Lightning fields — Draft = Lightning 2 + 2, Motio
 seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame), `clip.ready`, `proxy.ready`.
 
 ## 11. Acceptance checklist
-- [ ] Wan 2.2 I2V Q5 + Lightning renders an 81-frame 480p clip on the rig; time and peak VRAM recorded.
-- [ ] FLF on the same weights reaches the end image on the bench tasks; morphing noted.
-- [ ] LTX-2.3 distilled renders 121 frames @ 24 fps with one mid beat; time recorded.
+- [x] Wan 2.2 I2V fp8 (D8, GGUF struck by E4c) + Lightning renders an 81-frame 480p clip on the rig; time and peak VRAM recorded — 2026-10-06 `scripts/m6_acceptance.py`: 256 s incl. cold start, lowest free VRAM 5.3 GB (journal 22:30).
+- [x] FLF on the same weights reaches the end image on the bench tasks; morphing noted — task 03: standing end pose reached, the rise jumps between frames 16 and 32 (255 s, 5.1 GB free).
+- [x] LTX-2.3 distilled renders 121 frames @ 24 fps with one mid beat; time recorded — task 03 with the standing frame as a beat at 60 and as the end: 172 s at 1024×576, lowest free VRAM 2.7 GB; the beat pose is reached by frame 48 and held.
 - [x] Player steps every frame exactly (frame counter matches the PNG master); compare syncs two clips — 2026-10-06, `scripts/edit_headed_check.py animate`: a 24-frame coded clip, every frame's code matched forwards / backwards / random; compare view synced by normalised time (two-clip sync is exercised once the rig has two clips).
 - [x] Extracted frames appear in the Catalogue with lineage and open in Edit — 2026-10-06 (same check: extract every 8th in 4–20 → 3 images with `frame_index` and `frame-extract` lineage; Send frame to Edit reuses Edit's open-from-asset).
 - [ ] Identity check: ArcFace FaceSim across the clip shown as an advisory number in Clip info (never blocks).
@@ -133,6 +133,7 @@ seek on the master if PNGs are pruned); WS `job.progress` (step, preview frame),
 - Default resolution for Wan on this rig (480p vs 576p) after measurement.
 - Whether to show Wan's latent previews at all (may mislead) or only step progress.
 - Audio (LTX generates audio): off for MVP; expose later as a toggle.
-- fps conform (Wan 16 fps → project 24 fps): decided by spike E9 (D27); until then masters keep native fps and
-  the player shows the clip's own fps.
+- fps conform (Wan 16 fps → project 24 fps): **decided by E9 2026-10-06 (D27)** — RIFE v4.6 over the whole sequence at export,
+  master stays native, duplication never; LTX native 24 fps when motion matters more than detail. The export step itself is
+  post-MVP (Q14); the player shows the clip's own fps.
 - H3 eligibility: the user confirms territory/licence before the option unlocks (Q1 in 13).

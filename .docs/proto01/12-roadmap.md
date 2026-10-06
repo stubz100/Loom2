@@ -238,7 +238,9 @@ upgrade). **Slice 1 (backend) done:** `I2V` recipe with Wan presets / FLF / LTX 
 `clips/<id>/` PNG master + GOP-6 h264 proxy + `clip.json`, Catalogue video asset with poster and lineage, `/clips/*` API
 with Range and `frame-extract` harvest; 78 offline tests. **Slice 2 (the suite) done 2026-10-06** (journal 21:10): panels,
 Mediabunny player with frame-exact stepping verified in a visible window, filmstrip, compare, timeline, harvest with lineage,
-Clip / Frames / Lineage inspector. Next: the rig run of 11 §11 items 1–3, E9, FaceSim.
+Clip / Frames / Lineage inspector. **Rig run 2026-10-06 (journal 22:30): 17/17** — Wan Draft 256 s / FLF 255 s at 480p × 81 f, LTX
+172 s at 1024×576 × 121 f with a beat; **E9 decided** (RIFE v4.6 conform at export, D27). Open before M6 closes: FaceSim advisory
+(11 §11 item 6), the H3 unlock in Settings (D17).
 
 ## 8. M7 · MVP hardening (2–3 weeks)
 

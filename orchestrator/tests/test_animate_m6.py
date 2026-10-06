@@ -118,6 +118,13 @@ async def test_i2v_job_makes_a_clip_with_master_proxy_asset_and_lineage(tmp_path
         assert rig.catalogue.abs_path(a) == proxy and rec.asset_id == a.id
         assert any(e["type"] == "clip.ready" and e["data"]["clip_id"] == rec.id for e in rig.hub.recent)
         assert not list((rig.state / "engine_out" / "loom2").glob("*")), "engine frames were not moved into the clip"
+        # a Catalogue rebuild re-indexes the clip proxy from clips/<id>/proxy.json and can re-make its poster thumbnail
+        n = rig.catalogue.rebuild()
+        again = rig.catalogue.get(a.id)
+        assert n >= 2 and again and again.kind == "video" and again.params["clip_id"] == rec.id
+        for f in (rig.ws.thumbs_dir / a.id).glob("*.webp"):
+            f.unlink()
+        assert rig.catalogue.make_thumbs(again).thumb_status == "done"
         # LTX with an end frame and a beat: three uploads, the beat resolves to its uploaded name
         job2 = rig.queue.submit({"kind": "i2v", "model_id": "ltx23-distilled-fp8", "start_asset": start.id, "end_asset": start.id, "frames": 9, "fps": 24,
                                  "width": 256, "height": 256, "beats": [{"frame": 4, "asset_id": start.id, "strength": 0.5}], "seeds": [2]})[0]

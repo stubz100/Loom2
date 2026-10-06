@@ -269,6 +269,11 @@ class Catalogue:
     def make_thumbs(self, rec: AssetRecord, source: Path | None = None) -> AssetRecord:
         """Thumbnails from the asset file, or from `source` (a clip's first master frame stands in for its mp4)."""
         src = source or self.abs_path(rec)
+        if source is None and rec.kind == "video":
+            cid = (rec.params or {}).get("clip_id")
+            poster = self.ws.clips_dir / str(cid) / "master" / "000000.png" if cid else None
+            if poster and poster.is_file():
+                src = poster
         try:
             with Image.open(src) as im:
                 # B11: transparent sources (edit flattens) keep their alpha in WebP; opaque ones stay RGB (smaller)
@@ -649,7 +654,8 @@ class Catalogue:
             if self.fts:
                 self._db.execute("DELETE FROM assets_fts")
             self._db.commit()
-        for m in sorted(self.ws.assets_dir.rglob("*.json")):
+        manifests = sorted(self.ws.assets_dir.rglob("*.json")) + sorted(self.ws.clips_dir.glob("*/proxy.json"))     # M6: clip proxies are indexed in place
+        for m in manifests:
             try:
                 rec = AssetRecord.model_validate(read_json(m))
             except Exception:

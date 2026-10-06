@@ -1390,3 +1390,43 @@ read the clock)*
   steps every frame exactly) and item 5's Catalogue half are therefore ticked offline; the rig items wait for the run.
 - Build with the full `tsc -b` check clean; 78 offline tests. Next: the **rig run** (11 §11 items 1–3: Wan Draft 81 f
   480p, FLF, LTX with a beat — time and peak VRAM recorded), E9 (fps conform spike), FaceSim advisory.
+
+## 2026-10-06 22:30 — M6 rig run 17/17 (11 §11 items 1–3); E9 fps-conform spike measured (D27 decided)
+
+- **Rig run** — `scripts/m6_acceptance.py` against the dev orchestrator (`.loom2_state`, project `F:/loom2-projects/m6-acceptance`),
+  real engine started by the queue, seed 20261005, bench frames of 04 §6:
+
+  | clip | model · preset | format | engine wall | VAE decode / samplers / image encode | lowest free VRAM |
+  | --- | --- | --- | --- | --- | --- |
+  | 01 character turn | Wan 2.2 Draft (Lightning 2 + 2) | 832×480 × 81 f @ 16 | **256 s** (incl. cold start + weight load) | 102 s / 44 + 43 s / 44 s | 5.31 GB |
+  | 03 crouch → stand, FLF | Wan 2.2 Draft, `WanFirstLastFrameToVideo` | 832×480 × 81 f @ 16 | **255 s** | 96 s / 45 + 45 s / 63 s | 5.06 GB |
+  | 03 with a beat at 60 (+ end) | LTX-2.3 distilled, 8 steps | 1024×576 × 121 f @ 24 | **172 s** | 78 s / 58 s / text 16 + 11 s | **2.69 GB** |
+
+  Every clip: `clips/<id>/master` with the requested frame count, h264 proxy that decodes to the same count at the
+  requested fps (1.4–1.8 MiB), a Catalogue video asset with lineage to the start (and end) frame and a poster
+  thumbnail, three frames harvested with `frame-extract` lineage → **17/17 checks**. Sheets in `engine/spikes/out/m6/`:
+  01 — identity intact (braids, cloak, compass, sign), she lowers the compass and looks down (as E4); 03 FLF — reaches
+  the standing end pose, the rise happens early between frames 16 and 32 (E4's "position jump"); 03 LTX — the beat at
+  60 is reached by frame 48 and held, one wild intermediate pose around frame 24, identity softer. The Wan VAE decode
+  is still 38–40 % of the clip (Q18); LTX at 1024×576 leaves only 2.7 GB free on the card — HD tiers stay "selective".
+- **E9 (D27)** — `scripts/e9_fps_conform.py`: the Wan FLF master (81 f @ 16) → 121 f @ 24 with **rife-ncnn-vulkan
+  20221029, rife-v4.6** (Vulkan on the RX 9070 XT, `engine/tools/`, fetched tonight): **1.8–3.3 s** for the clip.
+  Scores (mean |Δ luma| between frames = flicker; its std = judder; Laplacian variance = sharpness):
+
+  | sequence | flicker mean · p95 · std | 2nd-difference | sharpness | notes |
+  | --- | --- | --- | --- | --- |
+  | Wan 16 fps native | 4.97 · 6.66 · 1.47 | 8.32 | 520 | reference |
+  | Wan → 24 fps **RIFE** | 3.70 · 5.40 · **1.22** | 5.92 | 409 (in-betweens 0.98 × RIFE's own source frames) | even motion; every output frame keeps **80 %** of the master's Laplacian variance |
+  | Wan → 24 fps hybrid (originals kept at source timestamps) | 3.74 · 6.17 · 1.43 | 6.04 | 443 (in-betweens 0.79 × neighbours) | sharpness alternates frame to frame — the classic ghost flicker |
+  | Wan → 24 fps duplication | 3.31 · 6.56 · **2.63** | 6.09 | 522 | sawtooth: judder |
+  | LTX-2.3 native 24 fps | 0.77 · 2.63 · 0.85 | 1.24 | 195 | smoothest by far, far softer image |
+
+  **Verdict (recorded in 13 D27):** conform Wan drafts to the project's 24 fps **at export with RIFE v4.6 on the whole
+  sequence** (not hybrid, never duplication); the clip master stays native 16 fps; where fluid motion matters more than
+  detail, render natively on LTX. The 20 % softening is uniform (no ghosting visible on the sheet) — a mild unsharp
+  pass after RIFE is a candidate follow-up, unmeasured. Identity: RIFE interpolates existing frames, so no drift by
+  construction; FaceSim (11 §11 item 6) still waits for ArcFace on the rig (not installed; `insightface` needs a build
+  toolchain on Windows — the ONNX pair from `buffalo_l` with onnxruntime is the lighter route).
+- Also tonight: `Catalogue.rebuild` re-indexes clip proxies from `clips/*/proxy.json` and video thumbnails fall back to
+  the clip's first master frame (test added; 78 offline tests). Open in M6: FaceSim advisory, the H3 unlock in Settings
+  (D17), the two-clip compare sync on the rig (the suite supports it; the acceptance project now has three clips).

@@ -946,3 +946,42 @@ read the clock)*
 - **M4 is closed**: 10 §14 items 1, 6 and 7 pass by script; item 2's undo/redo is instant across strokes and the
   pen-latency half waits for a tablet (D19). 12 §5 updated. Next: M5 Edit AI (inpaint / refine / segment on the
   E8 recipes; gradient fill arrives with it per 10 §4).
+
+## 2026-10-05 22:20 — M5 slice 1: inpaint / refine / outpaint / upscale through the editor (written up 06-10 06:54)
+
+- **Backend:** `edit_ai.py` (region planning: mask bbox + margin %, multiples of 16, auto-upscale to ≥ min
+  working size, crop/scale of the exact composite + mask, outpaint edge-padding with an inner blend band,
+  paste-back as a layer whose alpha is the feathered mask); recipes `Inpaint` (fill · fill_match · fill_hero ·
+  remove · outpaint), `I2I` (refine on visible / active / selection) and `Upscale`; `graphs.py` ports the E8
+  graphs (LanPaint ImageEncode → ReferenceLatent → BasicGuider → Flux2Scheduler → LanPaint sampler → ImageDecode;
+  ICM = InpaintModelConditioning + ReferenceLatent + DifferentialDiffusion, hole variant for Remove; dev + Turbo for
+  Fill Hero; partial-denoise KSampler for refine; UpscaleModelLoader for ESRGAN); the queue prepares the inputs
+  from the saved document (uploads through `/upload/image`, refreshes object_info), runs the job and adds the
+  result as a layer in a per-batch "AI" group (first candidate visible, recipe + seed + region on the layer) and
+  saves the ORA; `PUT /documents/{id}/selection`, `POST /documents/{id}/ai`; Real-ESRGAN ×2/×4 in the roster and
+  fetched (BSD-3). 46 tests.
+- **Frontend:** AI panel (Inpaint / Refine / Upscale / Outpaint with the 10 §4 controls, candidates, seed), run =
+  save → upload selection → job; `document.changed {added}` merges the server stack and fetches the new layers
+  (undo keeps working: local canvases stay); candidate strip over the canvas (hover previews, 1–4 / Enter pick,
+  keep all), resumed when a document reopens with an unpicked AI group; Properties → **Re-run (new seed)**.
+- **First rig run** (`scripts/m5_acceptance.py`, bench source + masks, 2 candidates): Fill (Klein + LanPaint) on
+  the crates **removed them seamlessly** (70 s cold incl. model load, 38 s warm); Fill-Match (ICM) 88 s, Remove
+  (ICM hole) 130 s — both slower than E8's 18–33 s; the first cloak candidate took **548 s** with "Model
+  Initializing 2 min 23 s" and the model *staged for dynamic VRAM loading* (streamed from RAM), and the second
+  candidate hit a **GPU driver reset** (next entry).
+
+## 2026-10-06 06:54 — GPU driver TDR during the M5 run: cause and fixes
+
+- Windows: `LiveKernelEvent 141`, bucket `LKD_0x141_Tdr … amdkmdag.sys` at 22:16:54 — the GPU exceeded the
+  default 2 s TDR limit (keys unset) and the AMD driver was reset while the engine sampled the second cloak
+  candidate (Klein + LanPaint, 1024×880, step 2/4). The engine process kept answering `/history` with a dead GPU,
+  so the orchestrator polled for 3 min; earlier `Kernel_141` dumps on 10-02 and 10-04 predate loom2's engine work.
+- Cause: VRAM pressure building across consecutive Klein jobs (job times 59 → 37 → 87 → 129 → 548 s at the same
+  size class; ComfyUI switched the 9 GB fp8 model to "8658 MB staged" streaming) — alternating LanPaint and ICM
+  graphs re-patch the model and nothing freed ComfyUI's cached outputs between jobs; regions were upscaled to ≈ 0.9
+  MP (E8: 0.5 MP); the engine ran without a VRAM reserve next to the editor's WebGPU canvas.
+- Fixes: the user set `TdrDelay`/`TdrDdiDelay` = 60 s; loom2 frees the engine cache after every edit job
+  (`/free`, weights resident), gains a **stall watchdog** (`engine.stall_timeout_s` 420: fail the job, restart the
+  engine, pause the queue), launches ComfyUI with `--reserve-vram 1.5` (`engine.reserve_vram_gb`), caps inpaint
+  engine images at ≈ 1 MP (`max_pixels`, scale reduced until the 16-rounded size fits) and shows the engine size
+  in the AI panel. 06 §10 row added.

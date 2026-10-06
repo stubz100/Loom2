@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import SAMPLERS, SCHEDULERS, T2I, I2I, Inpaint, I2V, LoraRef
+from ..recipes import SAMPLERS, SCHEDULERS, T2I, I2I, Inpaint, I2V, LoraRef, Upscale
 from ..roster import Roster
 from .contract import check_graph, resolve_names
 
@@ -45,7 +45,7 @@ PRESETS: dict[str, ModelPreset] = {
 # VRAM estimates (GB) for the queue's admission check (06 §3d `Engine.estimate`); measured peaks from the spikes
 VRAM_ESTIMATE_GB: dict[str, float] = {
     "flux2-dev-fp8mixed": 14.0, "klein-4b": 8.5, "klein-base-4b": 9.2, "klein-9b": 15.0, "klein-base-9b": 15.0, "klein-9b-kv": 15.0,
-    "wan22-i2v-high-fp8": 14.5, "ltx23-distilled-fp8": 14.0,
+    "wan22-i2v-high-fp8": 14.5, "ltx23-distilled-fp8": 14.0, "realesrgan-x2": 2.0, "realesrgan-x4": 2.5,
 }
 
 # Seconds per image at 960×544 from the spikes (E0, E8), used until the project has its own history
@@ -203,12 +203,140 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
     return Compiled(graph=g, output_node="11", summary=summary, serialized_prompt=text)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | I2V, roster: Roster, object_info: dict, seed: int, out_prefix: str,
-                   ref_files: dict[str, str] | None = None) -> Compiled:
+# ---- M5 edit recipes (10 §4, D7; graphs ported from engine/spikes/e8_inpaint.py) ------------------------------
+def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: ModelPreset) -> list:
+    """UNET / text encoder / VAE loaders for a FLUX.2-family model; returns the model link (Turbo LoRA for dev)."""
+    _, unet = roster.require(model_id)
+    _, te = roster.require(preset.te_id)
+    _, vae = roster.require(preset.vae_id)
+    g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": preset.weight_dtype}}
+    g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": "default"}}
+    g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+    if preset.turbo_lora:
+        _, lora = roster.require(preset.turbo_lora)
+        g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora, "strength_model": 1.0}}
+        return ["4", 0]
+    return ["1", 0]
+
+
+def inpaint_model_id(recipe: Inpaint) -> str:
+    if recipe.mode == "fill_hero":
+        return "flux2-dev-fp8mixed"
+    if recipe.mode in ("fill_match", "remove"):
+        return recipe.model_id if recipe.model_id.startswith("klein") and "base" not in recipe.model_id else "klein-9b"
+    return recipe.model_id
+
+
+def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, image_name: str, mask_name: str, w: int, h: int) -> Compiled:
+    model_id = inpaint_model_id(recipe)
+    preset = PRESETS.get(model_id)
+    if preset is None:
+        raise CompileError(f"no preset for inpaint model '{model_id}'")
+    g: dict[str, Any] = {}
+    model_link = _flux2_loaders(g, roster, model_id, preset)
+    dev = model_id == "flux2-dev-fp8mixed"
+    prompt = recipe.prompt_text.strip()
+    g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
+    g["102"] = {"class_type": "LoadImageMask", "inputs": {"image": mask_name, "channel": "red"}}
+    image, mask = ["100", 0], ["102", 0]
+    summary: dict[str, Any] = {"mode": recipe.mode, "model_id": model_id, "width": w, "height": h, "seed": int(seed), "feather": recipe.feather, "margin_pct": recipe.margin_pct}
+    if recipe.mode in ("fill", "fill_hero", "outpaint"):
+        # LanPaint: image-encode with the mask, ReferenceLatent of the same image, custom sampler with LanPaint steps
+        steps, guidance = (8, 4.0) if dev else (int(preset.steps), float(preset.guidance))
+        prompt_first = recipe.prompt_mode == "prompt_first"
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": guidance}}
+        g["7"] = {"class_type": "LanPaint_ImageEncode", "inputs": {"image": image, "vae": ["3", 0], "mask": mask}}
+        g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["6", 0], "latent": ["7", 0]}}
+        g["9"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": ["8", 0]}}
+        g["10"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": int(seed)}}
+        g["11"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
+        g["12"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": steps, "width": w, "height": h}}
+        g["13"] = {"class_type": "LanPaint_SamplerCustomAdvanced", "inputs": {"noise": ["10", 0], "guider": ["9", 0], "sampler": ["11", 0], "sigmas": ["12", 0],
+                                                                              "latent_image": ["7", 0], "LanPaint_NumSteps": 5, "LanPaint_Lambda": 8.0 if prompt_first else 5.0,
+                                                                              "LanPaint_StepSize": 0.15, "LanPaint_PromptMode": "Prompt First" if prompt_first else "Image First", "LanPaint_Info": "loom2"}}
+        g["14"] = {"class_type": "LanPaint_ImageDecode", "inputs": {"samples": ["13", 0], "vae": ["3", 0], "image": image, "mask": mask, "blend_overlap": 9}}
+        out = "14"
+        summary |= {"sampler": "lanpaint", "steps": steps, "guidance": guidance, "lambda": 8.0 if prompt_first else 5.0, "prompt_mode": recipe.prompt_mode}
+    else:
+        # ICM: InpaintModelConditioning + ReferenceLatent (+ the hole neutralised to mid grey for Remove, E8b / Q17)
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}}
+        ref_pixels: list = image
+        if recipe.mode == "remove":
+            g["15"] = {"class_type": "EmptyImage", "inputs": {"width": w, "height": h, "batch_size": 1, "color": 0x808080}}
+            g["16"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["15", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
+            ref_pixels = ["16", 0]
+        g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ref_pixels, "vae": ["3", 0]}}
+        g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
+        g["9"] = {"class_type": "InpaintModelConditioning", "inputs": {"positive": ["8", 0], "negative": ["6", 0], "vae": ["3", 0], "pixels": image, "mask": mask, "noise_mask": True}}
+        g["10"] = {"class_type": "DifferentialDiffusion", "inputs": {"model": model_link}}
+        g["11"] = {"class_type": "KSampler", "inputs": {"model": ["10", 0], "seed": int(seed), "steps": int(preset.steps), "cfg": float(preset.cfg),
+                                                        "sampler_name": "euler", "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1],
+                                                        "latent_image": ["9", 2], "denoise": 1.0}}
+        g["12"] = {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}}
+        g["13"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["12", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
+        out = "13"
+        summary |= {"sampler": "icm", "steps": int(preset.steps), "cfg": float(preset.cfg), "hole": recipe.mode == "remove"}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": [out, 0], "filename_prefix": out_prefix}}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
+def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_name: str, w: int, h: int) -> Compiled:
+    preset = PRESETS.get(recipe.model_id)
+    if preset is None:
+        raise CompileError(f"no preset for refine model '{recipe.model_id}'")
+    if preset.distilled:
+        raise CompileError("refine needs Klein base or FLUX.2 dev: distilled Klein cannot partial-denoise (04 §4)")
+    g: dict[str, Any] = {}
+    model_link = _flux2_loaders(g, roster, recipe.model_id, preset)
+    dev = recipe.model_id == "flux2-dev-fp8mixed"
+    steps = int(recipe.steps or (8 if dev else preset.steps))
+    strength = max(0.05, min(1.0, float(recipe.strength)))
+    prompt = recipe.prompt_text.strip()
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+    g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(preset.guidance)}}
+    if dev:
+        g["7"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
+    else:
+        g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, text, watermark", "clip": ["2", 0]}}
+    g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
+    g["8"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
+    g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": steps, "cfg": float(preset.cfg), "sampler_name": "euler", "scheduler": "simple",
+                                                 "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["8", 0], "denoise": strength}}
+    g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": recipe.model_id, "source": recipe.source, "strength": strength, "steps": steps, "cfg": float(preset.cfg), "guidance": float(preset.guidance), "width": w, "height": h, "seed": int(seed)}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
+def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: str) -> Compiled:
+    _, name = roster.require(recipe.model_id)
+    g: dict[str, Any] = {
+        "100": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "1": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": name}},
+        "2": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["1", 0], "image": ["100", 0]}},
+        "99": {"class_type": "SaveImage", "inputs": {"images": ["2", 0], "filename_prefix": out_prefix}},
+    }
+    return Compiled(graph=g, output_node="99", summary={"model_id": recipe.model_id, "source": recipe.source}, serialized_prompt="")
+
+
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+                   ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None) -> Compiled:
+    """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
         c = build_t2i(recipe, roster, seed, out_prefix, ref_files)
+    elif isinstance(recipe, Inpaint):
+        i = inputs or {}
+        c = build_inpaint(recipe, roster, seed, out_prefix, i["image"], i["mask"], int(i["w"]), int(i["h"]))
+    elif isinstance(recipe, I2I):
+        i = inputs or {}
+        c = build_i2i(recipe, roster, seed, out_prefix, i["image"], int(i["w"]), int(i["h"]))
+    elif isinstance(recipe, Upscale):
+        i = inputs or {}
+        c = build_upscale(recipe, roster, out_prefix, i["image"])
     else:
-        raise NotImplementedError(f"recipe kind '{recipe.kind}' is compiled in a later milestone (M5 edit, M6 video)")
+        raise NotImplementedError(f"recipe kind '{recipe.kind}' is compiled in a later milestone (M6 video)")
     c.notes = resolve_names(object_info, c.graph)
     c.problems = check_graph(object_info, c.graph)
     c.graph_hash = hashlib.sha256(json.dumps(c.graph, sort_keys=True).encode("utf-8")).hexdigest()[:16]

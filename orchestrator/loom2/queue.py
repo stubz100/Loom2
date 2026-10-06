@@ -20,7 +20,11 @@ from .engine.graphs import compile_recipe, estimate_seconds, estimate_vram_gb
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
-from .recipes import T2I, parse_recipe, warm_group
+from .recipes import T2I, I2I, Inpaint, Upscale, parse_recipe, warm_group
+from .documents import DocumentStore, GroupLayer, RasterLayer
+from .edit_ai import RegionPlan, assemble_layer, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
+import numpy as np
+from PIL import Image
 from .roster import Roster
 from .workspace import Workspace
 
@@ -59,6 +63,7 @@ class JobRecord(BaseModel):
 
 class JobQueue:
     def __init__(self, ws: Workspace, app: AppState, engine: EngineSupervisor, roster: Roster, catalogue: Catalogue, hub: EventHub) -> None:
+        self.documents: DocumentStore | None = None      # set by Services once the project is open (M5 edit jobs)
         self.ws, self.app, self.engine, self.roster, self.catalogue, self.hub = ws, app, engine, roster, catalogue, hub
         self.jobs: dict[str, JobRecord] = {}
         self.paused = False
@@ -313,7 +318,14 @@ class JobQueue:
             if ref_files:                                   # uploaded names appear in LoadImage's enum only after a refresh (E8)
                 object_info = await self.engine.client.object_info()
                 self._object_info, self._object_info_at = object_info, time.time()
-            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files)
+            inputs: dict[str, Any] | None = None
+            if isinstance(recipe, (Inpaint, I2I, Upscale)):            # M5: crops of the document go in through /upload/image
+                job.progress_text = "preparing region"
+                self.hub.broadcast("job.updated", job.model_dump())
+                inputs = await self._prepare_document_inputs(job, recipe)
+                object_info = await self.engine.client.object_info()
+                self._object_info, self._object_info_at = object_info, time.time()
+            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs)
             if compiled.problems:
                 self._fail(job, "contract: " + "; ".join(compiled.problems)[:1500])
                 return
@@ -342,6 +354,17 @@ class JobQueue:
             files = self._outputs_from_history(hist)
             if not files:
                 self._fail(job, "the engine finished but produced no output files")
+                return
+            if isinstance(recipe, (Inpaint, I2I, Upscale)):
+                await self._finish_document_job(job, recipe, files, inputs or {})
+                await self._free_engine_cache()
+                job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
+                job.wall_s = round(time.time() - self._t0, 1)
+                self.catalogue.record_job(job.model_dump())
+                self.persist()
+                self.hub.broadcast("job.updated", job.model_dump())
+                self.engine.jobs_since_start += 1
+                self._last_group = job.warm_group
                 return
             assets = []
             for f in files:
@@ -381,6 +404,155 @@ class JobQueue:
         finally:
             self._running_id = None
 
+    # ---- M5 document jobs (10 §4, D7): region in, layer out ------------------------------------------
+    async def _prepare_document_inputs(self, job: JobRecord, recipe: Inpaint | I2I | Upscale) -> dict[str, Any]:
+        """Crop/scale the document's composite (and mask) for the engine, upload them and keep the plan (edit_ai)."""
+        if self.documents is None:
+            raise ValueError("documents are not available (no project open)")
+        od = await asyncio.to_thread(self.documents.get, recipe.document_id)
+        tmp = self.ws.temp_dir / "ai" / job.id
+        tmp.mkdir(parents=True, exist_ok=True)
+
+        def work() -> dict[str, Any]:
+            comp = od.flatten()
+            out: dict[str, Any] = {}
+            if isinstance(recipe, Inpaint):
+                if recipe.mode == "outpaint":
+                    plan = outpaint_plan(od.doc.w, od.doc.h, recipe.outpaint or {}, max_pixels=recipe.max_pixels)
+                    if plan.w == od.doc.w and plan.h == od.doc.h:
+                        raise ValueError("outpaint needs at least one side to grow")
+                    img, msk, strips = outpaint_inputs(comp, plan)
+                    out["alpha_mask"] = strips
+                else:
+                    sel = od.selection
+                    if sel is None or not sel.any():
+                        raise ValueError("inpaint needs a selection (the region to repaint)")
+                    mask = dilate(sel, recipe.expand) if recipe.expand else sel
+                    plan = plan_region(mask, od.doc.w, od.doc.h, recipe.margin_pct, recipe.min_size, max_pixels=recipe.max_pixels)
+                    if plan is None:
+                        raise ValueError("the selection is empty")
+                    img, msk = crop_inputs(comp, mask, plan)
+                    out["alpha_mask"] = mask
+                Image.fromarray(img, "RGB").save(tmp / "image.png")
+                Image.fromarray(msk, "L").save(tmp / "mask.png")          # type: ignore[arg-type]
+                out["mask_path"] = tmp / "mask.png"
+            elif isinstance(recipe, I2I):
+                if recipe.source == "active":
+                    node = od.doc.find(recipe.layer_id or "")
+                    px = od.pixels.get(recipe.layer_id or "")
+                    if node is None or px is None or not isinstance(node, RasterLayer):
+                        raise ValueError("refine on the active layer needs a raster layer with pixels")
+                    plan = layer_plan(node.x, node.y, int(px.shape[1]), int(px.shape[0]))
+                    img = np.ascontiguousarray(px[..., :3])
+                    if (plan.ew, plan.eh) != (plan.w, plan.h):
+                        img = np.asarray(Image.fromarray(img).resize((plan.ew, plan.eh), Image.Resampling.LANCZOS))
+                    out["alpha_mask"] = np.ascontiguousarray(px[..., 3])
+                elif recipe.source == "selection":
+                    sel = od.selection
+                    if sel is None or not sel.any():
+                        raise ValueError("refine on the selection needs a selection")
+                    plan = plan_region(sel, od.doc.w, od.doc.h, recipe.margin_pct, 0)
+                    if plan is None:
+                        raise ValueError("the selection is empty")
+                    img, _ = crop_inputs(comp, None, plan)
+                    out["alpha_mask"] = sel
+                else:
+                    plan = whole_plan(od.doc.w, od.doc.h)
+                    img, _ = crop_inputs(comp, None, plan)
+                    out["alpha_mask"] = None
+                Image.fromarray(img, "RGB").save(tmp / "image.png")
+            else:
+                if recipe.source == "active":
+                    node = od.doc.find(recipe.layer_id or "")
+                    px = od.pixels.get(recipe.layer_id or "")
+                    if node is None or px is None or not isinstance(node, RasterLayer):
+                        raise ValueError("upscale of the active layer needs a raster layer with pixels")
+                    plan = layer_plan(node.x, node.y, int(px.shape[1]), int(px.shape[0]), max_size=0)
+                    Image.fromarray(px, "RGBA").save(tmp / "image.png")
+                else:
+                    plan = whole_plan(od.doc.w, od.doc.h, max_size=0)
+                    Image.fromarray(comp, "RGBA").save(tmp / "image.png")
+            out["plan"] = plan
+            out["image_path"] = tmp / "image.png"
+            return out
+
+        inputs = await asyncio.to_thread(work)
+        plan: RegionPlan = inputs["plan"]
+        inputs["image"] = await self.engine.client.upload_image(inputs["image_path"])
+        if inputs.get("mask_path"):
+            inputs["mask"] = await self.engine.client.upload_image(inputs["mask_path"])
+        inputs["w"], inputs["h"] = plan.ew, plan.eh
+        job.result["region"] = plan.to_dict()
+        job.log_tail.append(f"region {plan.w}×{plan.h} at {plan.x},{plan.y} → engine {plan.ew}×{plan.eh} (×{plan.scale:.2f})")
+        return inputs
+
+    async def _finish_document_job(self, job: JobRecord, recipe: Inpaint | I2I | Upscale, files: list[dict], inputs: dict[str, Any]) -> None:
+        """Paste the engine result back as a new layer (or a Catalogue asset for upscale)."""
+        assert self.documents is not None
+        f = files[0]
+        src = self.app.state_dir / "engine_out" / f["subfolder"] / f["filename"] if f["subfolder"] else self.app.state_dir / "engine_out" / f["filename"]
+        if not src.is_file():
+            raise ValueError(f"missing output {src}")
+        od = await asyncio.to_thread(self.documents.get, recipe.document_id)
+        plan: RegionPlan = inputs["plan"]
+        job.progress_text = "paste-back"
+        self.hub.broadcast("job.updated", job.model_dump())
+        arr = await asyncio.to_thread(lambda: np.asarray(Image.open(src).convert("RGBA")))
+        if isinstance(recipe, Upscale):
+            parents = [od.doc.source_asset_id] if od.doc.source_asset_id else []
+            rec = await asyncio.to_thread(self.catalogue.ingest_file, src, kind="image", move=False, job_id=job.id, batch_id=job.batch_id, suite="edit",
+                                          model_id=recipe.model_id, seed=job.seed, params={"recipe": recipe.model_dump(), "document_id": od.doc.id},
+                                          timings={"wall_s": round(time.time() - self._t0, 1), "node_s": job.node_times}, parents=parents)
+            rec = await asyncio.to_thread(self.catalogue.make_thumbs, rec)
+            self.hub.broadcast("asset.created", rec.model_dump())
+            job.result["asset_ids"] = [rec.id]
+            if recipe.as_layer:
+                factor = max(1, round(arr.shape[1] / max(1, plan.w)))
+                rgba = np.asarray(Image.fromarray(arr).resize((plan.w, plan.h), Image.Resampling.LANCZOS))
+                await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, f"upscale ×{factor} at 1×")
+            return
+        if isinstance(recipe, Inpaint) and recipe.mode == "outpaint":
+            p = plan.pad or {}
+            left, top = int(p.get("left", 0)), int(p.get("top", 0))
+            for n in od.doc.walk():
+                if isinstance(n, RasterLayer):
+                    n.x += left; n.y += top
+                if n.mask is not None and not n.mask.linked:
+                    n.mask.x += left; n.mask.y += top
+            old_w, old_h = od.doc.w, od.doc.h
+            od.doc.w, od.doc.h = plan.w, plan.h
+            if od.selection is not None:
+                od.selection = np.pad(od.selection, ((top, plan.h - old_h - top), (left, plan.w - old_w - left)))
+            rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), recipe.feather)
+            await self._add_result_layer(job, od, recipe, rgba, 0, 0, "outpaint")
+            return
+        feather_px = recipe.feather if isinstance(recipe, Inpaint) or recipe.source == "selection" else 0
+        rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), feather_px)
+        label = recipe.mode.replace("_", " ") if isinstance(recipe, Inpaint) else f"refine {recipe.strength:.2f}"
+        await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, label)
+
+    async def _add_result_layer(self, job: JobRecord, od: Any, recipe: Inpaint | I2I | Upscale, rgba: np.ndarray, x: int, y: int, label: str) -> None:
+        """Candidates of one batch share a group at the top of the stack; only the first is visible (10 §4 variant strip)."""
+        gid = f"grp_{job.batch_id or job.id}"
+        group = od.doc.find(gid)
+        if not isinstance(group, GroupLayer):
+            prompt = str(getattr(recipe, "prompt_text", "") or "")
+            group = GroupLayer(id=gid, name=f"AI {label}" + (f": {prompt[:28]}" if prompt else ""), passthrough=True)
+            od.doc.layers.insert(0, group)
+        n = len(group.children) + 1
+        lid = new_id("lyr")
+        multi = len(getattr(recipe, "seeds", [0])) > 1
+        layer = RasterLayer(id=lid, name=f"candidate {n}" if multi else label, x=int(x), y=int(y), w=int(rgba.shape[1]), h=int(rgba.shape[0]), visible=(n == 1),
+                            recipe={**recipe.model_dump(), "seed": job.seed, "job_id": job.id, "batch_id": job.batch_id, "region": job.result.get("region")},
+                            lineage_asset_id=od.doc.source_asset_id)
+        group.children.append(layer)
+        od.set_pixels(lid, np.ascontiguousarray(rgba))
+        od.dirty = True
+        await asyncio.to_thread(od.save)
+        job.result.setdefault("layers", []).append(lid)
+        job.result["group"] = gid
+        self.hub.broadcast("document.changed", {"id": od.doc.id, "job_id": job.id, "batch_id": job.batch_id, "added": [lid], "group": gid, "w": od.doc.w, "h": od.doc.h, "candidate": n})
+
     def _fit_reference(self, src: Path, max_px: int, key: str) -> Path:
         """References are downscaled to ≤ max_px² before upload (09 §3d); PNG so the engine's LoadImage is exact."""
         from PIL import Image
@@ -394,17 +566,44 @@ class JobQueue:
             im.save(out, "PNG")
         return out
 
-    async def _follow(self, job: JobRecord, idle_timeout_s: float = 900.0) -> bool:
-        """Consume engine events for this prompt until success / error / interrupt; poll history as a fallback."""
+    async def _recover_engine(self, job: JobRecord, why: str) -> None:
+        """A stalled job means a hung GPU context (the 2026-10-05 TDR): interrupt, restart the engine, pause the queue
+        so the next job does not walk into the same wall (06 §10)."""
+        log.error("job %s: %s — restarting the engine and pausing the queue", job.id, why)
+        job.log_tail.append(why)
+        try:
+            await asyncio.wait_for(self.engine.client.interrupt(), 5.0)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(self.engine.restart(), 90.0)
+        except Exception as e:  # noqa: BLE001
+            job.log_tail.append(f"engine restart failed: {e}")
+        self.pause()
+
+    async def _free_engine_cache(self) -> None:
+        """After a document job: drop ComfyUI's cached outputs but keep the weights resident. Consecutive Klein jobs
+        with alternating graphs (LanPaint / ICM) otherwise accumulate VRAM until the model streams from RAM."""
+        try:
+            await asyncio.wait_for(self.engine.client.free(unload_models=False, free_memory=True), 30.0)
+        except Exception as e:  # noqa: BLE001
+            log.warning("free_memory after job failed: %s", e)
+
+    async def _follow(self, job: JobRecord, idle_timeout_s: float | None = None) -> bool:
+        """Consume engine events for this prompt until success / error / interrupt; poll history as a fallback.
+        No event at all for `stall_timeout_s` (cold model loads take ≈ 2–3 min, a hung GPU never speaks again) fails
+        the job and restarts the engine."""
         node_t0: dict[str, float] = {}
         last_node: str | None = None
         t_last = time.time()
+        stall_s = float(idle_timeout_s or getattr(self.app.settings.engine, "stall_timeout_s", 420) or 420)
         while True:
             try:
                 ev = await asyncio.wait_for(self._events.get(), timeout=5.0)
             except asyncio.TimeoutError:
-                if time.time() - t_last > idle_timeout_s:
-                    job.error = "engine went silent"
+                if time.time() - t_last > stall_s:
+                    job.error = f"engine stalled: no progress for {int(stall_s)} s (GPU hang?) — engine restarted, queue paused"
+                    await self._recover_engine(job, job.error)
                     return False
                 hist = await self.engine.client.history(job.prompt_id or "")
                 if hist and hist.get("status", {}).get("completed"):

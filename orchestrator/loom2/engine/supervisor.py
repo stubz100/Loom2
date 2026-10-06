@@ -109,7 +109,8 @@ class EngineSupervisor:
     def _argv(self) -> list[str]:
         e = self.app.settings.engine
         state = self.app.state_dir
-        return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, "--log-stdout",
+        reserve = [] if "--reserve-vram" in e.flags or not e.reserve_vram_gb else ["--reserve-vram", str(float(e.reserve_vram_gb))]
+        return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, "--log-stdout",
                 "--extra-model-paths-config", e.extra_model_paths,
                 "--output-directory", str(state / "engine_out"), "--temp-directory", str(state / "engine_tmp"),
                 "--user-directory", str(state / "engine_user")]

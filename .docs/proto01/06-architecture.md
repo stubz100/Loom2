@@ -180,7 +180,11 @@ GET  /documents (list)  POST /documents (from asset | w,h)  GET/PUT /documents/{
 GET/PUT /documents/{id}/layers/{lid}/pixels?kind=image|mask&raw=1 (raw RGBA / grey bytes, X-Loom-Width/Height/Channels)
 POST /documents/{id}/flatten {to_catalogue}  POST /documents/{id}/export (png; psd is written by the editor via ag-psd)
 POST /documents/{id}/compare?w&h (editor composite → delta vs the exact flatten, 10 §14)  GET /documents/{id}/thumbnail
-POST /documents/{id}/close  DELETE /documents/{id}   POST /documents/{id}/segment (SAM/BiRefNet → mask, M5)
+PUT  /documents/{id}/selection?w&h (raw grey; the region the AI recipes repaint)   POST /documents/{id}/close  DELETE /documents/{id}
+POST /documents/{id}/ai {recipe: inpaint | i2i | upscale, stage} → jobs; the queue crops the saved composite + selection
+     (edit_ai.py: margin, multiples of 16, ≥ min working size), uploads to the engine, runs the E8 graphs, pastes the
+     result back as a layer (alpha = feathered mask) in a per-batch "AI" group — `document.changed {added, group}` —
+     or, for upscale, as a Catalogue asset with lineage.  POST /documents/{id}/segment (SAM/BiRefNet → mask, M5b)
 POST /documents/{id}/inpaint  /refine  /instruct-edit  (recipes with crop region + paste-back policy)
 GET  /clips/{id}  GET /clips/{id}/proxy.mp4 (Range)  GET /clips/{id}/frames/{n}.png  POST /clips/{id}/extract
 GET  /models (roster + health)  POST /models/fetch  /models/{id}/verify  PUT /models/root  POST /models/scan
@@ -245,6 +249,7 @@ Edit-suite engine (05): PixiJS v8 WebGPU with WebGL2 fallback, 2048² tiles, wor
 | --- | --- |
 | ComfyUI graph API drift | pinned version, contract tests, builders isolated in one module, upgrade as a deliberate milestone |
 | Engine process instability on ROCm (HIP launch failures after many runs) | restart-per-N-jobs, health probe, automatic re-queue of the interrupted job |
+| **GPU driver TDR under VRAM pressure** (2026-10-05: consecutive Klein inpaints streamed the model from RAM, a stalled kernel exceeded Windows' 2 s default and `amdkmdag.sys` reset; the engine kept answering HTTP with a dead GPU) | Windows `TdrDelay`/`TdrDdiDelay` = 60 s (user, admin + reboot); the queue frees ComfyUI's cached outputs after every edit job (`/free`, weights stay resident); a **stall watchdog** (`engine.stall_timeout_s`, 420 s without an engine event) fails the job, restarts the engine and pauses the queue; the engine launches with `--reserve-vram` (`engine.reserve_vram_gb`, 1.5) so the desktop and the editor's WebGPU canvas keep headroom; inpaint engine images are capped at ≈ 1 MP (`max_pixels`) and the AI panel shows the size it will send |
 | Two Python environments | both created by `uv` from committed `pyproject.toml` + `uv.lock`; a `setup.ps1` recreates them; interpreter paths stored in loom2 settings, nothing on PATH |
 | ROCm 10.0 on Windows is young (Aug 2026) | E0 sanity matrix first (12 §1a); fallbacks torch 2.12/2.11 on the same index; loom's venv for A/B |
 | Progress granularity | node-level progress + sampler step callbacks (ComfyUI emits `progress` per step) |

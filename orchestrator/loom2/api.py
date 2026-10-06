@@ -58,6 +58,7 @@ class Services:
         self.catalogue = Catalogue(ws, self.app.settings.thumbnail_sizes, session_id=self.app.session_id)
         self.queue = JobQueue(ws, self.app, self.engine, self.roster, self.catalogue, self.hub)
         self.documents = DocumentStore(ws)
+        self.queue.documents = self.documents
         await self.queue.start()
         self.app.touch_project(ws.path)
         info = ws.info()
@@ -648,6 +649,39 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         with zipfile.ZipFile(p) as z:
             data = z.read("Thumbnails/thumbnail.png") if "Thumbnails/thumbnail.png" in z.namelist() else z.read("mergedimage.png")
         return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+    @app.put("/documents/{doc_id}/selection")
+    async def documents_selection_put(doc_id: str, request: Request, w: int = 0, h: int = 0):
+        """The editor's selection as raw grey bytes (w·h); an empty body clears it. The M5 edit jobs read it."""
+        import numpy as np
+        od = await asyncio.to_thread(_docs().get, doc_id)
+        body = await request.body()
+        if not body:
+            od.selection = None
+            od.doc.has_selection = False
+            return {"selection": None}
+        if len(body) != w * h or w <= 0 or h <= 0:
+            raise HTTPException(400, f"expected {w * h} bytes for {w}×{h}, got {len(body)}")
+        od.selection = np.frombuffer(body, dtype=np.uint8).reshape((h, w)).copy()
+        od.doc.has_selection = True
+        od.dirty = True
+        return {"selection": [w, h]}
+
+    @app.post("/documents/{doc_id}/ai")
+    async def documents_ai(doc_id: str, body: JobSubmit):
+        """Queue an inpaint / refine / upscale job on this document (10 §13); results come back as layers
+        (`document.changed` events with `added`) or, for upscale, as a Catalogue asset too."""
+        _, _, q = svc.require_project()
+        await asyncio.to_thread(_docs().get, doc_id)            # 404 if the document does not exist
+        recipe = dict(body.recipe)
+        if recipe.get("kind") not in ("inpaint", "i2i", "upscale"):
+            raise HTTPException(422, "document jobs are inpaint, i2i (refine) or upscale")
+        recipe["document_id"] = doc_id
+        try:
+            jobs = q.submit(recipe, stage=body.stage)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return {"jobs": [j.model_dump() for j in jobs]}
 
     @app.post("/documents/{doc_id}/close")
     async def documents_close(doc_id: str):

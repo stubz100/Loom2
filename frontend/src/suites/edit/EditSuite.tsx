@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
-import type { SuiteDef } from '../../frame/suiteRegistry'
+import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { EditorCanvas } from './EditorCanvas'
@@ -31,6 +31,16 @@ const BRUSH_PRESETS = [
 ]
 const pct = (v: number) => `${Math.round(v * 100)} %`
 const ed = () => useEditor.getState()
+/** Mirrors edit_ai._engine_size: ≥ min on the longer side, ≤ max, ≤ 1 MP, multiples of 16. */
+function planSize(w: number, h: number, minSize: number, maxSize: number, maxPixels = 1048576): { w: number; h: number; scale: number } {
+  const longer = Math.max(w, h)
+  let s = 1
+  if (minSize && longer < minSize) s = minSize / longer
+  if (maxSize && longer * s > maxSize) s = maxSize / longer
+  if (maxPixels && w * h * s * s > maxPixels) s = Math.sqrt(maxPixels / (w * h))
+  const r16 = (n: number) => Math.max(16, Math.ceil(n / 16) * 16)
+  return { w: r16(w * s), h: r16(h * s), scale: s }
+}
 const snapshot = (d: DocumentStack): DocumentStack => JSON.parse(JSON.stringify(d))
 
 function Slider({ label, value, min, max, step = 1, fmt, onChange, onStart, onCommit }: { label: string; value: number; min: number; max: number; step?: number; fmt?: (v: number) => string; onChange: (v: number) => void; onStart?: () => void; onCommit?: () => void }) {
@@ -158,18 +168,123 @@ function SelectionTab() {
   )
 }
 
+type AiOp = 'inpaint' | 'refine' | 'upscale' | 'outpaint'
+interface AiPanelState {
+  op: AiOp; mode: 'fill' | 'fill_match' | 'fill_hero' | 'remove'; prompt: string; candidates: number; seedMode: 'random' | 'fixed'; seed: number
+  margin: number; minSize: number; feather: number; expand: number; promptMode: 'image_first' | 'prompt_first'
+  refineModel: string; strength: number; refineSource: 'visible' | 'active' | 'selection'
+  upscaleModel: string; upscaleSource: 'visible' | 'active'; asLayer: boolean
+  pad: { left: number; top: number; right: number; bottom: number }; outpaintHero: boolean
+}
+const AI_DEFAULT: AiPanelState = { op: 'inpaint', mode: 'fill', prompt: '', candidates: 4, seedMode: 'random', seed: 1, margin: 25, minSize: 1024, feather: 8, expand: 0, promptMode: 'image_first',
+  refineModel: 'klein-base-9b', strength: 0.3, refineSource: 'visible', upscaleModel: 'realesrgan-x2', upscaleSource: 'visible', asLayer: true, pad: { left: 0, top: 0, right: 256, bottom: 0 }, outpaintHero: false }
+let aiPanelMemory: AiPanelState = AI_DEFAULT
+
 function AiTab() {
+  const [p, setPRaw] = useState<AiPanelState>(aiPanelMemory)
+  const setP = (patch: Partial<AiPanelState>) => setPRaw((s) => { const n = { ...s, ...patch }; aiPanelMemory = n; return n })
+  const doc = useEditor((s) => s.doc)
+  const hasSel = useEditor((s) => !!s.selection)
+  const activeId = useEditor((s) => s.activeId)
+  const active = findNode(doc, activeId)
+  const models = useSession((s) => s.models)
+  const jobs = useSession((s) => s.jobs)
+  const running = useMemo(() => Object.values(jobs).filter((j) => (j.recipe as { document_id?: string }).document_id === doc?.id && ['running', 'queued', 'staged'].includes(j.status)), [jobs, doc?.id])
+  const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
+  const seeds = () => { const n = Math.max(1, Math.min(4, p.candidates)); return Array.from({ length: n }, (_, i) => (p.seedMode === 'random' ? Math.floor(Math.random() * 2 ** 31) : p.seed + i)) }
+  const hero = p.op === 'inpaint' ? p.mode === 'fill_hero' : p.op === 'outpaint' ? p.outpaintHero : p.op === 'refine' ? p.refineModel === 'flux2-dev-fp8mixed' : false
+  const revision = useEditor((s) => s.revision)
+  // the engine image the orchestrator will build (edit_ai.plan_region): shown so a big region is a conscious choice
+  const engineSize = useMemo(() => {
+    const st = ed(); const sel = st.selection; const d = st.doc
+    if (!d) return null
+    if (p.op === 'outpaint') { const w = d.w + p.pad.left + p.pad.right, h = d.h + p.pad.top + p.pad.bottom; return planSize(w, h, 0, 2048) }
+    if (p.op !== 'inpaint' || !sel) return null
+    const img = sel.ctx.getImageData(0, 0, sel.width, sel.height).data
+    let x0 = sel.width, y0 = sel.height, x1 = -1, y1 = -1
+    for (let y = 0; y < sel.height; y++) for (let x = 0; x < sel.width; x++) if (img[(y * sel.width + x) * 4] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    if (x1 < 0) return null
+    const m = Math.max(32, Math.round(Math.max(x1 + 1 - x0, y1 + 1 - y0) * p.margin / 100))
+    const w = Math.min(d.w, Math.ceil((x1 + 1 - x0 + 2 * m) / 16) * 16), h = Math.min(d.h, Math.ceil((y1 + 1 - y0 + 2 * m) / 16) * 16)
+    return planSize(w, h, p.minSize, 2048)
+  }, [revision, p.op, p.margin, p.minSize, p.pad]) // eslint-disable-line react-hooks/exhaustive-deps
+  const reason = !doc ? 'no document' : p.op === 'inpaint' && !hasSel ? 'select the region to repaint first (M, L, W, Q or AI select)'
+    : p.op === 'refine' && p.refineSource === 'selection' && !hasSel ? 'no selection' : (p.op === 'refine' || p.op === 'upscale') && (p.op === 'refine' ? p.refineSource : p.upscaleSource) === 'active' && active?.kind !== 'raster' ? 'the active layer is not a raster layer'
+    : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
+  const run = (stage = false) => {
+    const base = { seeds: seeds(), prompt_text: p.prompt }
+    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode: p.mode, model_id: 'klein-9b', margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, prompt_mode: p.promptMode, ...base }, stage)
+    else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: p.outpaintHero ? 'flux2-dev-fp8mixed' : 'klein-9b', outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
+    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: p.refineModel, source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, ...base }, stage)
+    else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: [0] }, stage)
+  }
+  const ops: [AiOp, string][] = [['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
   return (
     <div>
-      <p className="hint">The AI panel operates on the current selection and returns new layers (10 §4). Arrives in M5 on the E8 recipes:</p>
-      <dl className="kv">
-        <dt>Inpaint</dt><dd>Fill (Klein + LanPaint) · Fill-Match (Klein ICM) · Fill Hero (dev + LanPaint) · Remove</dd>
-        <dt>Refine</dt><dd>Klein base · dev · strength 0.15–0.6</dd>
-        <dt>Upscale</dt><dd>ESRGAN 2× · tiled refine</dd>
-        <dt>Remove bg</dt><dd>BiRefNet → mask or transparency</dd>
-        <dt>Outpaint</dt><dd>Fill / Fill Hero per side</dd>
-      </dl>
-      <button className="primary" disabled title="M5">AI ▶ Inpaint</button>
+      <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => setP({ op: k, candidates: k === 'inpaint' || k === 'outpaint' || k === 'refine' ? (hero ? 2 : 4) : 1 })}>{l}</button>)}</div>
+      <div className="tool-opts">
+        {p.op === 'inpaint' && <>
+          <label>mode</label><select value={p.mode} onChange={(e) => { const mode = e.target.value as AiPanelState['mode']; setP({ mode, candidates: mode === 'fill_hero' ? 2 : 4 }) }}>
+            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option><option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option><option value="remove">Remove — background-only prompt</option>
+          </select>
+          <label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
+          {p.mode !== 'fill_match' && p.mode !== 'remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
+          <Slider label="margin" value={p.margin} min={0} max={100} fmt={(v) => `${v} %`} onChange={(v) => setP({ margin: v })} />
+          <Slider label="min size" value={p.minSize} min={512} max={2048} step={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ minSize: v })} />
+          <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />
+          <Slider label="expand" value={p.expand} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ expand: v })} />
+        </>}
+        {p.op === 'outpaint' && <>
+          <label>grow</label><div className="pad-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <label key={k}>{k}<input type="number" min={0} max={2048} step={16} value={p.pad[k]} onChange={(e) => setP({ pad: { ...p.pad, [k]: Math.max(0, Number(e.target.value)) } })} /></label>)}</div>
+          <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="what continues beyond the edge" onChange={(e) => setP({ prompt: e.target.value })} />
+          <label>model</label><div className="segmented"><button className={!p.outpaintHero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>Klein + LanPaint</button><button className={p.outpaintHero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>dev (hero)</button></div>
+          <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />
+        </>}
+        {p.op === 'refine' && <>
+          <label>model</label><select value={p.refineModel} onChange={(e) => setP({ refineModel: e.target.value, candidates: e.target.value === 'flux2-dev-fp8mixed' ? 2 : 4 })}><option value="klein-base-9b">Klein 9B base (CFG, negatives)</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo</option></select>
+          <label>on</label><div className="segmented">{(['visible', 'active', 'selection'] as const).map((s) => <button key={s} className={p.refineSource === s ? 'active' : ''} onClick={() => setP({ refineSource: s })}>{s}</button>)}</div>
+          <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ strength: v })} />
+          <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
+          {p.refineSource === 'selection' && <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />}
+        </>}
+        {p.op === 'upscale' && <>
+          <label>model</label><select value={p.upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}><option value="realesrgan-x2">Real-ESRGAN 2× {health('realesrgan-x2') === 'missing' ? '(not fetched)' : ''}</option><option value="realesrgan-x4">Real-ESRGAN 4× {health('realesrgan-x4') === 'missing' ? '(not fetched)' : ''}</option></select>
+          <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.upscaleSource === s ? 'active' : ''} onClick={() => setP({ upscaleSource: s })}>{s}</button>)}</div>
+          <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
+        </>}
+        {p.op !== 'upscale' && <>
+          <Slider label="candidates" value={p.candidates} min={1} max={4} onChange={(v) => setP({ candidates: v })} />
+          <label>seed</label><div><div className="segmented">{(['random', 'fixed'] as const).map((m) => <button key={m} className={p.seedMode === m ? 'active' : ''} onClick={() => setP({ seedMode: m })}>{m}</button>)}</div>{p.seedMode === 'fixed' && <input type="number" value={p.seed} onChange={(e) => setP({ seed: Number(e.target.value) })} style={{ width: 120, marginLeft: 6 }} />}</div>
+        </>}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="primary" disabled={!!reason} onClick={() => run(false)} title="Ctrl+Enter">AI ▶ {ops.find(([k]) => k === p.op)?.[1]}{p.op !== 'upscale' ? ` ×${p.candidates}` : ''}</button>
+        <button disabled={!!reason} onClick={() => run(true)} title="add to the queue as staged">Stage</button>
+        {running.length > 0 && <span className="kind">{running.filter((j) => j.status === 'running').length ? `running · ${Math.round((running.find((j) => j.status === 'running')?.progress ?? 0) * 100)} %` : `${running.length} queued`}</span>}
+      </div>
+      {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
+      {engineSize && <p className="hint" style={{ marginTop: 6 }}>engine image ≈ {engineSize.w}×{engineSize.h} ({engineSize.scale > 1.01 ? `upscaled ×${engineSize.scale.toFixed(2)}` : engineSize.scale < 0.99 ? `downscaled ×${engineSize.scale.toFixed(2)} to stay within 1 MP` : '1:1'})</p>}
+      <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached. {hero ? 'Hero / dev: ≈ 4–5 min per candidate.' : 'Klein: ≈ 20–35 s per candidate incl. model swap (E8).'}</p>
+    </div>
+  )
+}
+
+function CandidateStrip() {
+  const cands = useEditor((s) => s.candidates)
+  const revision = useEditor((s) => s.revision)
+  const doc = useEditor((s) => s.doc)
+  const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); cands?.ids.forEach((id) => { const lp = st.pixels.get(id); if (lp) m.set(id, lp.thumbnail(96)) }); return m }, [cands, revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!cands || !doc) return null
+  const g = findNode(doc, cands.group)
+  return (
+    <div className="cand-strip">
+      <span className="muted">{g?.name ?? 'candidates'} — pick one (1–4, Enter keeps the visible one) or keep all:</span>
+      {cands.ids.map((id, i) => { const n = findNode(doc, id); return (
+        <button key={id} className={`cand${n?.visible ? ' on' : ''}`} title={`candidate ${i + 1} · seed ${(n?.recipe as { seed?: number } | undefined)?.seed ?? '?'}`} onMouseEnter={() => { const st = ed(); st.updateNode(id, { visible: true }); cands.ids.filter((o) => o !== id).forEach((o) => st.updateNode(o, { visible: false })) }} onClick={() => ed().pickCandidate(id)}>
+          {thumbs.get(id) ? <img src={thumbs.get(id)} alt="" /> : <span className="muted">…</span>}<b>{i + 1}</b>
+        </button>
+      ) })}
+      <button className="quiet" onClick={() => ed().pickCandidate(null)}>keep all</button>
     </div>
   )
 }
@@ -286,7 +401,7 @@ function Stage() {
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
     </div></div>
   )
-  return <EditorCanvas />
+  return <><EditorCanvas /><CandidateStrip /></>
 }
 
 // ------------------------------------------------------------------ Inspector
@@ -353,7 +468,12 @@ function PropertiesTab() {
       <dt>position</dt><dd><input type="number" value={n.x ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { x: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /> , <input type="number" value={n.y ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { y: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /></dd>
       <dt>size</dt><dd>{n.w}×{n.h}</dd>
       <dt>lineage</dt><dd className="mono">{n.lineage_asset_id ?? '—'}</dd>
-      <dt>recipe</dt><dd>{n.recipe ? <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre> : <span className="muted">— AI layers carry their recipe from M5 (Re-run with a new seed)</span>}</dd>
+      <dt>recipe</dt><dd>{n.recipe ? <>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <button onClick={() => { const r = { ...n.recipe } as Record<string, unknown>; delete r.seed; delete r.job_id; delete r.batch_id; delete r.region; delete r.document_id; void ed().runAi({ ...r, seeds: [Math.floor(Math.random() * 2 ** 31)] }) }} title="runs the same recipe on the current document with a new seed (the selection must still cover the region)">Re-run (new seed)</button>
+          <button className="quiet" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2))}>copy JSON</button>
+        </div>
+        <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre></> : <span className="muted">— AI layers carry their recipe (seed, region, model)</span>}</dd>
       {n.mask && <><dt>mask</dt><dd>{n.mask.enabled ? 'enabled' : 'disabled'} · {n.mask.linked ? 'linked' : 'unlinked'} · offset {n.mask.x}, {n.mask.y}</dd></>}
     </dl>
   )
@@ -444,6 +564,10 @@ function useEditKeys() {
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
       if (k === 'Escape') { if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
+      if (st.candidates && !e.ctrlKey && !e.altKey) {                                                   // 10 §10: 1–4 pick, Enter keeps the visible one
+        if (/^[1-4]$/.test(k)) { const id = st.candidates.ids[Number(k) - 1]; if (id) st.pickCandidate(id); return }
+        if (k === 'Enter' && !st.transform) { const vis = st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]; st.pickCandidate(vis); return }
+      }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
       // every other key is an accelerator for a registry command; a handled key stops here so the global
       // suite switch (Ctrl+1/2, 07 §4) yields to the view keys of 10 §5 while a document is open
@@ -463,6 +587,7 @@ function useEditKeys() {
         if (!useSession.getState().project?.open || st.doc || st.loading) return false
         void st.openDocument(deep).then(() => {
           if (q.get('verify')) setTimeout(() => void ed().compareWithExact(), 2000)
+          const tab = q.get('tab'); if (tab) setRailTab('edit', tab)                                      // dev: open a panel section
           if (q.get('sel') === 'all') ed().selectAll()                                                   // dev: marching ants
           if (q.get('sel') === 'half') { const s = ed().ensureSelection(); s.ctx.fillStyle = '#fff'; s.ctx.beginPath(); s.ctx.ellipse(s.width / 2, s.height / 2, s.width / 3, s.height / 3, 0, 0, Math.PI * 2); s.ctx.fill(); s.refresh(); ed().bump() }
           if (q.get('xform')) { ed().beginTransform(); ed().setTransform({ rot: 0.25, sx: 0.8, sy: 0.9 }) }   // dev: transform box

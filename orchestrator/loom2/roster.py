@@ -35,6 +35,13 @@ class RosterEntry(BaseModel):
 
 # The catalogue. Order: family, then role. `open` variant = Apache/MIT only (D26).
 ROSTER: list[RosterEntry] = [
+    # ---- tools (M5 Edit AI: upscalers; segmentation arrives with its nodes) ----
+    RosterEntry(id="realesrgan-x2", name="RealESRGAN_x2.pth", folder="upscale_models", family="tools", role="upscaler",
+                repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", license="bsd-3-clause", variants=["full", "open"], approx_gb=0.07,
+                note="Real-ESRGAN 2× (spandrel loader); cheap detail-preserving upscale (10 §4)"),
+    RosterEntry(id="realesrgan-x4", name="RealESRGAN_x4.pth", folder="upscale_models", family="tools", role="upscaler",
+                repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x4.pth", license="bsd-3-clause", variants=["full", "open"], approx_gb=0.07,
+                note="Real-ESRGAN 4×"),
     # ---- FLUX.2 dev (Hero / Generate default, D21/D29) ----
     RosterEntry(id="flux2-dev-fp8mixed", name="flux2_dev_fp8mixed.safetensors", folder="diffusion_models", family="flux2", role="transformer",
                 repo="Comfy-Org/flux2-dev", file="split_files/diffusion_models/flux2_dev_fp8mixed.safetensors", license="flux-nc", approx_gb=33.0),

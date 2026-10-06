@@ -21,6 +21,9 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 
 MANIFEST = [
+    # ---- M5 Edit AI tools ----
+    dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", dest="upscale_models", license="bsd-3-clause"),
+    dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x4.pth", dest="upscale_models", license="bsd-3-clause"),
     # ---- E8 inpaint bake-off (and M5 Klein tiers) ----
     dict(spike="e8", repo="Comfy-Org/flux2-klein-9B", file="split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors",
          dest="text_encoders", license="flux-nc (TE: Qwen3 Apache-2.0 repack)"),

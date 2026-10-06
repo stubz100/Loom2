@@ -50,22 +50,53 @@ class T2I(BaseModel):
 
 
 class I2I(BaseModel):
+    """Refine (10 §4): partial-denoise img2img over the visible composite, the active layer or the selection crop.
+    Distilled Klein cannot partial-denoise (04 §4), so the model is Klein base or dev."""
     kind: Literal["i2i"] = "i2i"
-    model_id: str
-    source_asset: str
+    model_id: str = "klein-base-9b"
+    document_id: str = ""
+    source: Literal["visible", "active", "selection"] = "visible"
+    layer_id: str | None = None                   # for source == active
     prompt_text: str = ""
-    strength: float = 0.3
+    strength: float = 0.3                         # denoise (schedule semantics exact)
+    steps: int | None = None
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
+    margin_pct: int = 25                          # selection source: context ring
+    feather: int = 8                              # selection source: paste-back feather
 
 
 class Inpaint(BaseModel):
+    """Inpaint / outpaint (10 §4, D7): Fill (Klein + LanPaint), Fill-Match (Klein ICM), Fill Hero (dev + LanPaint),
+    Remove (Klein ICM with the hole neutralised), Outpaint (LanPaint on an edge-padded canvas). The region comes
+    from the document's selection (uploaded by the editor) unless the mode is outpaint."""
     kind: Literal["inpaint"] = "inpaint"
-    model_id: str = "klein-9b"
-    mode: Literal["fill", "fill_match", "fill_hero", "remove"] = "fill"
-    image_blob: str                               # sha256 of the uploaded region PNG
-    mask_blob: str
+    model_id: str = "klein-9b"                    # fill / outpaint: klein-9b (or klein-4b); fill_hero forces dev
+    mode: Literal["fill", "fill_match", "fill_hero", "remove", "outpaint"] = "fill"
+    document_id: str = ""
     prompt_text: str = ""
+    seeds: list[int] = Field(default_factory=lambda: [0])
+    loras: list[LoraRef] = Field(default_factory=list)
+    margin_pct: int = 25                          # context ring around the mask (% of its longer side)
+    min_size: int = 1024                          # auto-upscale small regions to ≥ this on the longer side
+    max_pixels: int = 1_048_576                   # cap on the engine image (≈ 1 MP; VRAM headroom on 16 GB, TDR 2026-10-05)
+    feather: int = 8                              # paste-back feather on the layer's alpha (px)
+    expand: int = 0                               # grow the mask before sampling (px)
+    prompt_mode: Literal["image_first", "prompt_first"] = "image_first"   # LanPaint (E8b: prompt_first λ 8)
+    outpaint: dict[str, int] | None = None        # {left, top, right, bottom} for mode == outpaint
+    image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id
+    mask_blob: str | None = None
+
+
+class Upscale(BaseModel):
+    """Upscale (10 §4): ESRGAN-class model on the visible composite or the active layer → a Catalogue asset at the
+    new size (lineage to the document's source) and, optionally, a 1× "detail" layer in the document."""
+    kind: Literal["upscale"] = "upscale"
+    model_id: str = "realesrgan-x2"
+    document_id: str = ""
+    source: Literal["visible", "active"] = "visible"
+    layer_id: str | None = None
+    as_layer: bool = True
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 
@@ -85,17 +116,20 @@ class I2V(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, I2V], Field(discriminator="kind")]
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, I2V], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | I2V
 
 
 class RecipeEnvelope(BaseModel):
     recipe: Recipe
 
 
-def parse_recipe(data: dict) -> T2I | I2I | Inpaint | I2V:
+def parse_recipe(data: dict) -> AnyRecipe:
     return RecipeEnvelope.model_validate({"recipe": data}).recipe
 
 
-def warm_group(recipe: T2I | I2I | Inpaint | I2V) -> str:
+def warm_group(recipe: AnyRecipe) -> str:
     """Scheduling hint: jobs sharing a warm group run back to back so the engine keeps the weights resident."""
+    if isinstance(recipe, Inpaint) and recipe.mode == "fill_hero":
+        return "flux2-dev-fp8mixed"
     return recipe.model_id

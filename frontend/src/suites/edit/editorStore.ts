@@ -56,6 +56,13 @@ export interface EditorState {
   extractor: (() => HTMLCanvasElement | null) | null
   lastCompare: CompareResult | null
   compareWithExact: () => Promise<CompareResult | null>
+  // AI (10 §4, M5): jobs run on the saved server document; results arrive as layers via document.changed
+  aiBatch: string | null                      // batch id of the last AI run (its candidates form the strip)
+  candidates: { group: string; ids: string[] } | null
+  runAi: (recipe: Record<string, unknown>, stage?: boolean) => Promise<void>
+  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null }) => void
+  mergeServerLayers: (added: string[], group?: string) => Promise<void>
+  pickCandidate: (keepId: string | null) => void
   // free transform (10 §4): live numbers for the preview; applied by resampling the layer (and a linked mask)
   transform: Xform | null
   beginTransform: () => void
@@ -218,6 +225,75 @@ export const useEditor = create<EditorState>()(
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
+        aiBatch: null, candidates: null,
+
+        runAi: async (recipe, stage = false) => {
+          const { doc, selection } = get()
+          const s = useSession.getState()
+          if (!doc) return
+          try {
+            await get().save()                                              // the job reads the saved document
+            const b = s.backend!
+            const body = selection ? (selection.toRaw() as BodyInit) : new Uint8Array(0)
+            const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
+              { method: 'PUT', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
+            if (!r0.ok) throw new Error(`selection upload ${r0.status}`)
+            const r = await api.post<{ jobs: { id: string; batch_id: string | null }[] }>(`/documents/${doc.id}/ai`, { recipe, stage })
+            const jobs = r.jobs
+            set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null })
+            s.toast(stage ? `Staged ${jobs.length} AI job${jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
+            void s.refreshAll()
+          } catch (e) { s.toast(`AI job failed to start: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
+        },
+        onDocumentChanged: (d) => {
+          const doc = get().doc
+          if (!doc || d.id !== doc.id || !d.added?.length) return
+          void get().mergeServerLayers(d.added, d.group)
+        },
+        mergeServerLayers: async (added, group) => {
+          const doc = get().doc
+          if (!doc) return
+          try {
+            const server = await api.get<DocumentStack>(`/documents/${doc.id}`)
+            const before = clone(doc)
+            const grown = server.w !== doc.w || server.h !== doc.h
+            const pixels = get().pixels, masks = get().masks
+            await Promise.all(added.map(async (lid) => {
+              const lp = await fetchRaw(doc.id, lid, 'image')
+              if (lp) pixels.set(lid, lp)
+              const n = findNode(server, lid)
+              if (n?.mask) { const m = await fetchRaw(doc.id, lid, 'mask'); if (m) masks.set(lid, m) }
+            }))
+            let selection = get().selection
+            if (grown && selection) { const sel = new LayerPixels(server.w, server.h, true); sel.ctx.drawImage(selection.canvas, 0, 0); sel.refresh(); selection.destroy(); selection = sel }
+            // the server stack is the truth after an AI job (positions shift on outpaint); local pixels stay
+            const gnode = group ? findNode(server, group) : null
+            const ids = gnode?.children?.map((c) => c.id) ?? added
+            set({ doc: { ...server, saved_at: server.saved_at }, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
+            get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now() })
+            if (grown) get().requestFit()
+            useSession.getState().toast(ids.length > 1 ? `Candidate ${ids.indexOf(added[0]) + 1} of ${ids.length} arrived — pick with 1–4 or the strip` : 'AI layer added', 'success')
+          } catch (e) { useSession.getState().toast(`Could not load the AI result: ${(e as Error).message}`, 'error') }
+        },
+        pickCandidate: (keepId) => {
+          const c = get().candidates
+          const doc = get().doc
+          if (!c || !doc) return
+          if (keepId === null) {                                            // keep all (hidden except the visible one)
+            set({ candidates: null })
+            return
+          }
+          const before = clone(doc)
+          const next = clone(doc)
+          const g = findNode(next, c.group)
+          if (g?.children) {
+            for (const ch of g.children) ch.visible = ch.id === keepId
+            g.children = g.children.filter((ch) => ch.id === keepId)
+            for (const id of c.ids) if (id !== keepId) { get().pixels.get(id)?.destroy(); get().pixels.delete(id); get().masks.get(id)?.destroy(); get().masks.delete(id) }
+          }
+          set({ doc: next, candidates: null, activeId: keepId, docDirty: true, revision: get().revision + 1 })
+          get().pushHistory({ label: 'pick candidate', layerId: keepId, kind: 'image', tiles: [], stack: before, at: Date.now() })
+        },
 
         beginTransform: () => {
           const n = findNode(get().doc, get().activeId)
@@ -280,7 +356,11 @@ export const useEditor = create<EditorState>()(
               ...masked.map(async (n) => { const m = await fetchRaw(id, n.id, 'mask'); if (m) masks.set(n.id, m) }),
             ])
             const first = rasters[0]?.id ?? null
-            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, revision: get().revision + 1 })
+            // an AI candidate group left unpicked (several children, one visible) resumes its strip
+            const top = doc.layers[0]
+            const candidates = top?.kind === 'group' && top.name.startsWith('AI ') && (top.children?.length ?? 0) > 1 && top.children!.filter((c) => c.visible).length <= 1
+              ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
+            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1 })
             get().requestFit()
           } catch (e) { set({ error: (e as ApiError).detail ?? (e as Error).message }) }
           finally { set({ loading: false }) }

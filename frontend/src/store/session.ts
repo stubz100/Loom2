@@ -227,6 +227,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { m.useCatalogue.getState().applyEvent(f); m.useGenerateResults.getState().applyEvent(f) })
       break
+    case 'document.changed':
+      void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(d as { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string }))
+      break
     default: break
   }
 }

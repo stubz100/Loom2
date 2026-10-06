@@ -1,0 +1,90 @@
+# loom2 CI (12 §8 M7, D26): the offline test suite and the frontend build on every push and pull request, and the two Windows
+# installers (`full` and `open`) on pushes to main and on tags. The runners have no GPU: the `open` smoke test is the
+# offline suite run with LOOM2_VARIANT=open (roster filtering, contract checks on the open models — Klein 4B, Wan 2.2).
+# The engine (ComfyUI submodule + ROCm torch venv) is set up on the target machine by scripts/setup.ps1, never built here.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: offline tests + frontend (${{ matrix.variant }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [full, open]
+    env:
+      LOOM2_VARIANT: ${{ matrix.variant }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: orchestrator venv
+        run: uv sync --project orchestrator --extra dev
+      - name: offline tests
+        run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q --timeout 180
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: frontend build (tsc -b + vite)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  installers:
+    name: installer (${{ matrix.variant }})
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [full, open]
+    env:
+      LOOM2_VARIANT: ${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+      - name: frontend dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          if (-not (Test-Path node_modules/.bin/tauri.cmd)) { npm i -D @tauri-apps/cli@^2 }
+      - name: tauri build (variant baked into the shell)
+        working-directory: frontend
+        run: npx tauri build
+      - name: name the bundles by variant
+        shell: pwsh
+        run: |
+          $out = "dist-installers"; New-Item -ItemType Directory -Force $out | Out-Null
+          Get-ChildItem frontend/src-tauri/target/release/bundle -Recurse -Include *.exe,*.msi | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $out ("loom2-${{ matrix.variant }}-" + $_.Name))
+          }
+          Get-ChildItem $out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loom2-${{ matrix.variant }}-installer
+          path: dist-installers/*
+          if-no-files-found: error

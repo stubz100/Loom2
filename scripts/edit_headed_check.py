@@ -14,6 +14,10 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      frames, forwards, backwards and random), in/out + extract range harvest frames with lineage,
                      onion skin, filmstrip and compare views render, the Inputs slot takes a start frame and the
                      preview snaps the size — no page exception. (Nothing is submitted to the engine.)
+  perf               03 §6 budgets in the real window (M7 slice 2): Catalogue first paint cold / warm and scroll fps on the
+                     10k synthetic project (PROJECT=F:/loom2-projects/synthetic-10k, made by make_synthetic_assets.py),
+                     editor fps while six 4K layers with advanced blends re-render every frame, Animate player frame
+                     latency on a 121-frame 1024×576 proxy. Numbers only — the budgets are judged in the journal.
   tour               runs every Edit command (tools, view, layers, masks, selection, transform, brush, files) through
                      the dev command hook with a document open, checks the resulting state, answers the in-app
                      dialogs, and reports any page exception or crash overlay per step
@@ -22,7 +26,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|animate]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|animate|perf]
 """
 from __future__ import annotations
 
@@ -61,11 +65,11 @@ class CDP:
         self.n = 0
         self.events: list[dict] = []
 
-    def call(self, method: str, **params):
+    def call(self, method: str, timeout: float = 120.0, **params):
         self.n += 1
         self.ws.send(json.dumps({"id": self.n, "method": method, "params": params}))
         while True:
-            msg = json.loads(self.ws.recv())
+            msg = json.loads(self.ws.recv(timeout=timeout))          # a reload mid-call never answers: fail loudly, not forever
             if msg.get("id") == self.n:
                 if "error" in msg:
                     raise RuntimeError(msg["error"])
@@ -94,9 +98,23 @@ class CDP:
             self.eval("document.getElementById('crash')?.remove(); 1")
         return out
 
-    def eval(self, expr: str):
-        r = self.call("Runtime.evaluate", expression=expr, returnByValue=True, awaitPromise=True)
+    def eval(self, expr: str, timeout: float = 120.0):
+        r = self.call("Runtime.evaluate", timeout=timeout, expression=expr, returnByValue=True, awaitPromise=True)
         return r.get("result", {}).get("value")
+
+    def wait_for(self, expr: str, timeout: float = 60.0, settle: float = 0.0) -> bool:
+        """Poll a page predicate across navigations: a call lost to a context switch is a short timeout, not a hang."""
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            try:
+                if self.eval(expr, timeout=5.0):
+                    if settle:
+                        time.sleep(settle)
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.3)
+        return False
 
     def shot(self, path: Path) -> Image.Image:
         data = base64.b64decode(self.call("Page.captureScreenshot", format="png")["data"])
@@ -385,6 +403,132 @@ def make_coded_clip(project: Path, *, frames: int, fps: int, size: tuple[int, in
     return rec.id
 
 
+def make_4k_document(port: int) -> str:
+    """Six 3840×2160 raster layers (noise + gradients, three with advanced blends) through the documents API."""
+    import numpy as np
+
+    d = api("POST", "/documents", {"w": 3840, "h": 2160, "name": "perf 6×4K"})
+    did = d["id"]
+    layers = []
+    rng = np.random.default_rng(3)
+    blends = ["normal", "multiply", "screen", "overlay", "soft-light", "normal"]
+    for i in range(6):
+        lid = f"lyr_perf{i}"
+        layers.append({"id": lid, "kind": "raster", "name": f"4K layer {i}", "x": 0, "y": 0, "w": 3840, "h": 2160, "visible": True, "locked": False, "opacity": 0.9 if i else 1.0,
+                       "fill": 1.0, "blend": blends[i], "clip": False, "mask": None, "passthrough": True, "children": None, "type": None, "params": None})
+    d["layers"] = layers
+    api("PUT", f"/documents/{did}", d)
+    yy, xx = np.mgrid[0:2160, 0:3840].astype(np.float32)
+    for i in range(6):
+        rgba = np.empty((2160, 3840, 4), dtype=np.uint8)
+        rgba[..., 0] = ((xx / 3840) * 255 + rng.integers(0, 40, (2160, 3840))).clip(0, 255)
+        rgba[..., 1] = ((yy / 2160) * 255 * (i + 1) / 6).clip(0, 255)
+        rgba[..., 2] = rng.integers(0, 255, (2160, 3840))
+        rgba[..., 3] = 255 if i == 0 else 160
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/documents/{did}/layers/lyr_perf{i}/pixels?w=3840&h=2160", data=rgba.tobytes(), method="PUT",
+                                     headers={"X-Loom-Token": TOKEN, "Content-Type": "application/octet-stream"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    api("POST", f"/documents/{did}/save")
+    return did
+
+
+def perf_check(cdp: CDP, doc_id: str, clip_id: str, base_url: str) -> list[str]:
+    fails: list[str] = []
+
+    def report(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "OVER ") + text)
+        if not ok:
+            fails.append(text)
+
+    def first_paint(url: str) -> tuple[float, int]:
+        """Navigate, then poll the new document until the first Catalogue tile exists; performance.now() in that document is
+        the time since its navigation started (± the 50 ms poll)."""
+        cdp.call("Page.navigate", url=url)
+        t0 = time.time()
+        while time.time() - t0 < 30:
+            try:
+                v = cdp.eval("(() => { const n = document.querySelectorAll('.tile').length; return JSON.stringify([performance.now(), n]) })()", timeout=5.0)
+                if v:
+                    now, n = json.loads(v)
+                    if n > 0:
+                        return float(now), int(n)
+            except Exception:
+                pass
+            time.sleep(0.05)
+        return float("inf"), 0
+
+    cat_url = f"{base_url}&suite=catalogue"
+    tp, n = first_paint(cat_url)
+    counts = api("GET", "/assets/counts")
+    total = counts.get("all") if isinstance(counts, dict) else None
+    raf = json.loads(cdp.eval("(() => new Promise((res) => { let f = 0; const t0 = performance.now(); const step = (t) => { f++; if (t - t0 < 1000) requestAnimationFrame(step); else res(JSON.stringify({fps: f / ((t - t0) / 1000), visible: document.visibilityState})) }; requestAnimationFrame(step) }))()"))
+    print(f"     window animation-frame rate {raf['fps']:.0f} Hz ({raf['visible']}) · project holds {total} assets")
+    print(f"     app boot → first Catalogue tile: {tp:.0f} ms ({n} tiles) — page load, handshake and project info included")
+    switch_js = """(() => new Promise((res) => { const S = window.__loom2Session; S.getState().setSuite('models'); setTimeout(() => { const t0 = performance.now(); S.getState().setSuite('catalogue');
+        const tick = () => { const n = document.querySelectorAll('.tile').length; if (n > 0 || performance.now() - t0 > 20000) res(JSON.stringify([performance.now() - t0, n])); else requestAnimationFrame(tick) }; tick() }, 600) }))()"""
+    sw = json.loads(cdp.eval(switch_js, timeout=40))
+    report(sw[0] < 1000, f"Catalogue first paint on a warm index (switch back into the suite): {sw[0]:.0f} ms to {sw[1]} tiles (budget < 1000 ms)")
+    time.sleep(1.0)
+    scroll = cdp.eval("""(() => new Promise((res) => { const el = document.querySelector('.cat-grid') || document.querySelector('.stage'); let frames = 0, long = 0, last = performance.now(); const t0 = last;
+        const step = (t) => { if (t - last > 1000 / %s * 1.5) long++; last = t; frames++; el.scrollTop += 36; if (t - t0 < 3000) requestAnimationFrame(step); else res(JSON.stringify({fps: frames / ((t - t0) / 1000), long, scrolled: el.scrollTop})) }; requestAnimationFrame(step) }))()""" % max(1.0, raf["fps"]))
+    sc = json.loads(scroll)
+    hz = max(1.0, raf["fps"])
+    report(sc["fps"] >= hz * 0.9 and sc["long"] <= 6, f"Catalogue scroll for 3 s: {sc['fps']:.0f} fps at a {hz:.0f} Hz display, {sc['long']} frames over {1000 / hz * 1.5:.0f} ms, scrolled {sc['scrolled']:.0f} px (budget: every display frame)")
+    errs = cdp.page_errors()
+    if errs:
+        report(False, "page errors during the Catalogue pass: " + "; ".join(errs))
+
+    # editor: six 4K layers re-rendered every animation frame (zoom nudged each frame forces a full composite)
+    cdp.call("Page.navigate", url=f"{base_url}&suite=edit&doc={doc_id}")
+    if not cdp.wait_for("!!(window.__loom2Editor && window.__loom2Editor.getState().doc && window.__loom2App)", timeout=120, settle=2.0):
+        report(False, "editor did not open the 6×4K document within 120 s")
+        return fails
+    layers = cdp.eval("window.__loom2Editor.getState().doc.layers.length")
+    renderer = cdp.eval("document.querySelector('.badge-renderer')?.textContent?.trim()")
+    # the display runs at whatever it runs at (29 Hz on the author's 4K panel), so the budget is time per composite: CPU submit +
+    # GPU completion (queue.onSubmittedWorkDone on WebGPU; gl.finish on WebGL2) for a full re-render of the stack
+    comp_js = """(() => new Promise(async (res) => { const app = window.__loom2App; const ed = window.__loom2Editor.getState(); const z0 = ed.zoom; const times = [];
+        const gpu = app.renderer.gpu && app.renderer.gpu.device; const gl = app.renderer.gl;
+        for (let i = 0; i < 40; i++) { window.__loom2Editor.getState().setView({ zoom: z0 * (i % 2 ? 1.004 : 1.0) }); await new Promise((r) => requestAnimationFrame(r));
+          const t0 = performance.now(); app.render(); if (gpu) await gpu.queue.onSubmittedWorkDone(); else if (gl) gl.finish(); times.push(performance.now() - t0) }
+        window.__loom2Editor.getState().setView({ zoom: z0 }); times.sort((a, b) => a - b); res(JSON.stringify({p50: times[20], p95: times[38], max: times[39], n: times.length})) }))()"""
+    comp = json.loads(cdp.eval(comp_js, timeout=120))
+    report(layers == 6 and comp["p95"] <= 16.7, f"Editor composite of {layers} × 4K layers (multiply / screen / overlay / soft-light) on {renderer}: p50 {comp['p50']:.1f} ms · p95 {comp['p95']:.1f} ms · max {comp['max']:.1f} ms per full re-render (budget 16.7 ms = 60 fps)")
+    cdp.eval("window.__loom2Editor.getState().setTool('brush'); 1")
+    stroke_js = """(() => new Promise((res) => { const host = document.querySelector('.edit-canvas'); const r = host.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const ev = (type, x, y) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true }));
+        const lags = []; ev('pointerdown', cx - 200, cy); let i = 0;
+        const step = () => { const t0 = performance.now(); ev('pointermove', cx - 200 + i * 8, cy + Math.sin(i / 5) * 40); requestAnimationFrame((t) => { lags.push(t - t0); if (++i < 50) step(); else { ev('pointerup', cx + 200, cy); lags.sort((a, b) => a - b); res(JSON.stringify({p50: lags[25], p95: lags[47], max: lags[49]})) } }) }; step() }))()"""
+    br = json.loads(cdp.eval(stroke_js))
+    report(br["p95"] <= 1000 / max(1.0, raf["fps"]) * 1.15, f"Brush on the 4K document: pointer move → next presented frame p50 {br['p50']:.1f} ms · p95 {br['p95']:.1f} ms · max {br['max']:.1f} ms (budget ≤ 1 display frame = {1000 / max(1.0, raf['fps']):.1f} ms at {raf['fps']:.0f} Hz)")
+    cdp.eval("window.__loom2Editor.getState().undo(); 1")
+    errs = cdp.page_errors()
+    if errs:
+        report(False, "page errors during the editor pass: " + "; ".join(errs))
+
+    # Animate: frame latency on the 121-frame 1024×576 proxy, sequential and random
+    cdp.call("Page.navigate", url=f"{base_url}&suite=animate&clip={clip_id}")
+    if not cdp.wait_for("!!(window.__loom2Animate && document.querySelector('.anim-canvas'))", timeout=60, settle=2.0):
+        report(False, "Animate did not open the clip within 60 s")
+        return fails
+    READ = ("(() => { const c = document.querySelector('.anim-canvas'); if (!c) return -2; const ctx = c.getContext('2d'); let v = 0;"
+            " for (let b = 0; b < 7; b++) { const px = ctx.getImageData(16 + b * 16 + 7, 23, 1, 1).data; v = (v << 1) | (px[0] > 127 ? 1 : 0) } return v })()")
+    lat_js = """(() => new Promise(async (res) => { const read = () => %s; const A = window.__loom2Animate.getState(); const lat = (frames) => new Promise(async (ok) => { const out = [];
+        for (const n of frames) { const t0 = performance.now(); A.setFrame(n); await new Promise((r2) => { const poll = () => { if (read() === n || performance.now() - t0 > 2000) r2(); else requestAnimationFrame(poll) }; poll() }); out.push(performance.now() - t0) }
+        out.sort((a, b) => a - b); ok({p50: out[Math.floor(out.length / 2)], p95: out[Math.floor(out.length * 0.95)], n: out.length}) });
+        try { const seq = await lat(Array.from({length: 60}, (_, i) => i + 1)); const rnd = await lat([97, 3, 55, 120, 20, 88, 41, 7, 66, 110, 33, 72]); res(JSON.stringify({seq, rnd})) } catch (e) { res(JSON.stringify({error: String(e)})) } }))()""" % READ
+    lat = json.loads(cdp.eval(lat_js, timeout=200))
+    if "error" in lat:
+        report(False, f"Animate latency measurement failed: {lat['error']}")
+        return fails
+    report(lat["seq"]["p95"] <= 41.7 and lat["rnd"]["p95"] <= 80, f"Animate player frame latency (1024×576, GOP 6): sequential p50 {lat['seq']['p50']:.0f} / p95 {lat['seq']['p95']:.0f} ms · random p50 {lat['rnd']['p50']:.0f} / p95 {lat['rnd']['p95']:.0f} ms (budget: a 24 fps frame = 41.7 ms)")
+    errs = cdp.page_errors()
+    if errs:
+        report(False, "page errors during the Animate pass: " + "; ".join(errs))
+    return fails
+
+
 def animate_check(cdp: CDP, clip_id: str, asset_id: str, clip_b: str | None = None) -> list[str]:
     fails: list[str] = []
     A, C = "window.__loom2Animate.getState()", "window.__loom2Commands"
@@ -521,17 +665,28 @@ def main() -> int:
                 api("GET", "/health"); break
             except Exception:
                 time.sleep(0.3)
-        api("POST", "/project", {"path": str(tmp / "proj"), "name": "Headed", "size_cap_gb": 10})
+        project_path = os.environ.get("PROJECT") if mode == "perf" else None
+        if project_path:
+            api("POST", "/project/open", {"path": project_path})
+            proj_dir = Path(project_path)
+        else:
+            api("POST", "/project", {"path": str(tmp / "proj"), "name": "Headed", "size_cap_gb": 10})
+            proj_dir = tmp / "proj"
         asset = api("POST", "/assets/import", {"paths": [str(ROOT / "bench/inpaint/source.png")]})["items"][0]
         if mode == "animate":
             clip_id = make_coded_clip(tmp / "proj", frames=24, fps=16, size=(320, 192), asset_id=asset["id"])
             clip_b = make_coded_clip(tmp / "proj", frames=48, fps=16, size=(320, 192), asset_id=asset["id"])      # the compare partner (twice the frames)
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=animate&clip={clip_id}{extra}"
+        elif mode == "perf":
+            perf_doc = make_4k_document(PORT)
+            perf_clip = make_coded_clip(proj_dir, frames=121, fps=24, size=(1024, 576), asset_id=asset["id"])
+            url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=catalogue{extra}"
         else:
             doc = api("POST", "/documents", {"from_asset": asset["id"]})
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={doc['id']}{extra}"
         edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
-                                 "--window-size=1600,1000", "--window-position=40,40", "--new-window", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                 "--window-size=1600,1000", "--window-position=40,40", "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                                 "--disable-backgrounding-occluded-windows", "--disable-features=CalculateNativeWinOcclusion", "--new-window", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ws_url = None
         t0 = time.time()
         while time.time() - t0 < 30 and not ws_url:
@@ -545,16 +700,27 @@ def main() -> int:
             print("no page target"); return 1
         cdp = CDP(ws_url)
         cdp.call("Page.enable"); cdp.call("Runtime.enable"); cdp.call("Log.enable")
+        cdp.wait_for("document.readyState === 'complete' && !!document.querySelector('.frame')", timeout=60, settle=3.0)   # a fresh Vite server may re-optimise deps and reload once
+        cdp.call("Page.reload")                                     # start from a warm, settled page
+        cdp.wait_for("document.readyState === 'complete' && !!document.querySelector('.frame')", timeout=60, settle=1.0)
         (tmp / "dl").mkdir()
         cdp.call("Browser.setDownloadBehavior", behavior="allow", downloadPath=str(tmp / "dl"))
         # wait for the renderer badge (the editor booted) plus a moment for the first frame
         t0 = time.time()
         badge = None
         while time.time() - t0 < 30 and not badge:
-            badge = cdp.eval("document.querySelector('.anim-canvas') ? 'player' : null" if mode == "animate" else "document.querySelector('.badge-renderer')?.textContent?.trim() || null")
+            badge = cdp.eval("document.querySelector('.anim-canvas') ? 'player' : null" if mode == "animate" else "document.querySelector('.tile, .cat-grid') ? 'catalogue' : null" if mode == "perf" else "document.querySelector('.badge-renderer')?.textContent?.trim() || null")
             if badge in (None, "…"):
                 badge = None; time.sleep(0.5)
         time.sleep(1.5)
+        if mode == "perf":
+            failures += perf_check(cdp, perf_doc, perf_clip, f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}")
+            try:
+                cdp.call("Browser.close")
+            except Exception:
+                pass
+            print(f"\nperf: {'all budgets met' if not failures else f'{len(failures)} over budget'}")
+            return 1 if failures else 0
         if mode == "animate":
             failures += animate_check(cdp, clip_id, asset["id"], clip_b)
             try:

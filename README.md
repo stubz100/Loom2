@@ -34,6 +34,7 @@ scripts/         engine-setup/start/stop · fetch_weights · prune_weights · ma
 ## Quickstart (Windows 11, ROCm 10.0, Python 3.13 via uv, Node 22, Rust 1.90)
 
 ```powershell
+scripts/setup.ps1              # both venvs, frontend, engine checkout + ROCm torch, FaceSim weights (-SkipEngine without the GPU)
 git clone --recurse-submodules https://github.com/stubz100/Loom2
 .\scripts\engine-setup.ps1                                  # engine venv + torch 2.13.0+rocm10.0.0 + ComfyUI deps + nodes
 uv sync --project orchestrator --extra dev                  # orchestrator venv

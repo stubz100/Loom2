@@ -275,6 +275,12 @@ ordered.
 5. **Docs refresh** (00–14 + journal) and the author's end-to-end click-through of the four suites against the acceptance
    checklists (07 §5, 08 §10, 09 §10, 10 §14, 11 §11); the post-MVP backlog ordered in 13.
 
+**Status 2026-10-07** (journal 01:10): slice 1 **done** (89 offline tests; rig 11/11 — engine dies with the orchestrator in 0.1 s,
+relaunch paused + re-queued, the re-queued clip finishes; engine crash detected in 6 s, fresh engine in 6 s); slice 2 **done**
+(every 03 §6 budget met; editor composite of 6 × 4K with advanced blends p95 7.1 ms; the author's panel runs at 29 Hz so frame
+rates are display-bound); slice 3 **reviewed** (v0.39.0 safe by the contract gate; the bump is a dedicated step with a rig smoke);
+slice 4 **done** (setup.ps1, ci.yml, variant baked into the shell). Slice 5 and the bump step remain.
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

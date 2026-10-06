@@ -114,7 +114,7 @@ only in Loupe); thumbnail generation by a CPU worker (pyvips) within 2 s of asse
 counts computed server-side.
 
 ## 9. Acceptance checklist
-- [~] 10k synthetic assets scroll smoothly in all group modes; keyboard navigation follows visual rows —
+- [x] 10k synthetic assets scroll smoothly in all group modes; keyboard navigation follows visual rows — 2026-10-07 `edit_headed_check.py perf`: every display frame over 3 s of scrolling on 10 009 assets, 0 long frames; first paint 14 ms on the warm index (grouping modes were checked by eye in M2) —
   2026-10-05: virtualised rows render in every mode (`scripts/make_synthetic_assets.py`, queries ≤ 60 ms);
   FPS to be confirmed interactively on the rig.
 - [x] Batch triage round-trip: states, ratings and tags persist across restart (SQLite), not in session state —

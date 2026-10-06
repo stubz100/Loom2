@@ -186,7 +186,9 @@ after React StrictMode's first unmount, which silently swallowed every later fra
 and strokes applied but never drawn). `scripts/edit_headed_check.py` guards it in a visible Edge window (headless Chromium
 cannot present WebGPU, so the headless screenshots say nothing about the stage).
 
-60 fps compositing 6 × 4K layers with 3 advanced blend modes; brush ≤ 1 frame visible lag at 2K preview; 10 ×
+60 fps compositing 6 × 4K layers with 3 advanced blend modes — **measured in-app 2026-10-07** (`edit_headed_check.py perf`): a full
+re-render of 6 × 4K with multiply / screen / overlay / soft-light takes p50 5.8 ms · p95 7.1 ms on WebGPU (CPU submit + GPU
+done), i.e. 60 fps with 2× headroom; brush ≤ 1 frame visible lag at 2K preview; 10 ×
 8K layers < 3 GB GPU memory with tile eviction; inpaint round-trip (upload region + mask, engine, paste-back,
 new layer) ≤ engine time + 1.5 s for a 1024² region; ORA save of a 4K 8-layer document < 3 s.
 

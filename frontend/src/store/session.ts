@@ -278,3 +278,5 @@ export type { Asset }
 /** In-app confirm (resolves false when cancelled) and text prompt (null when cancelled) — the only dialogs besides OS file pickers. */
 export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)
 export const askText = (o: AskOptions): Promise<string | null> => useSession.getState().askText(o)
+
+if (import.meta.env.DEV) (window as unknown as { __loom2Session?: typeof useSession }).__loom2Session = useSession      // dev: the headed check switches suites

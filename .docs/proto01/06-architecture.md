@@ -266,4 +266,8 @@ Edit-suite engine (05): PixiJS v8 WebGPU with WebGL2 fallback, 2048² tiles, wor
 (`variants` field), the model pickers, the fetch catalogue and the licence-confirmation toggles; `open` hides
 every non-Apache/MIT entry and defaults Generate to Klein 4B. Both variants share one codebase and one engine
 checkout; CI builds two installers (`loom2-full-<ver>.exe`, `loom2-open-<ver>.exe`). The variant is recorded in
-every job manifest.
+every job manifest. **Implemented 2026-10-06 (M7 slice 4):** the shell bakes `LOOM2_VARIANT` in at compile time
+(`option_env!`) and hands it to the orchestrator; `.github/workflows/ci.yml` runs the offline suite and the frontend build for
+both variants on every push / PR and builds the two installers on pushes to main and tags (`loom2-full-*`, `loom2-open-*`);
+the runners have no GPU, so the `open` smoke test is the offline suite under `LOOM2_VARIANT=open`. `scripts/setup.ps1`
+recreates both venvs, the frontend, the engine checkout and the FaceSim weights on a machine.

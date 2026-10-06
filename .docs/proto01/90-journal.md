@@ -1465,3 +1465,44 @@ read the clock)*
   size cap). `/queue.recovery` carries the notes, the frame shows them as error banners. 89 offline tests. The rig half
   (`scripts/m7_durability.py`: `taskkill /F` the orchestrator while a clip samples, relaunch; kill ComfyUI mid-clip) runs
   tonight — results in the next entry.
+
+## 2026-10-07 01:10 — M7 slices 1–4: durability on the rig 11/11, performance pass, pin review (v0.39.0 safe), setup + CI
+
+- **Durability, rig half** — `scripts/m7_durability.py` (its own orchestrator on 8767 with a copy of the dev state, the
+  acceptance project, real engine):
+  - *power loss*: `taskkill /F` on the orchestrator while a Wan clip sampled → the ComfyUI process **died with it in 0.1 s**
+    (Job Object); relaunch → **queue paused, the job re-queued** (`resumed_unclean`, retry 1), no recovery notes (records
+    intact); unpause → the re-queued job **finished in 250 s** and its clip is complete (81 f, proxy 1.6 MiB).
+  - *engine crash*: ComfyUI killed mid-sampling → the job **failed in 6 s** ("engine process died (ConnectError)"), the
+    orchestrator kept answering, the queue stayed unpaused (7 done · 1 failed), and the next submission **started a fresh
+    engine in 6 s** (new pid). 11/11 checks. With the offline half (89 tests) 03 §6's durability line holds.
+- **Performance pass** — `scripts/edit_headed_check.py perf` on the regenerated 10k synthetic project (the old synthetic
+  assets had gone to the trash in today's Empty-trash work; `make_synthetic_assets.py` rebuilt 10 000 in 224 s):
+
+  | measure (03 §6) | result | budget |
+  | --- | --- | --- |
+  | Catalogue first paint on a warm index (switch back into the suite) | **14 ms** to the first tiles, 10 009 assets | < 1 s |
+  | app boot → first Catalogue tile (page load, handshake, project info) | 2.3 s | — (information) |
+  | Catalogue scroll, 3 s | **every display frame**, 0 long frames, 3 312 px | smooth |
+  | editor composite, 6 × 4K layers with multiply / screen / overlay / soft-light, full re-render (CPU submit + GPU done) | **p50 5.8 ms · p95 7.1 ms · max 7.6 ms** on WebGPU | ≤ 16.7 ms (60 fps) |
+  | brush on the 4K document, pointer move → next presented frame | p50 33.0 · p95 33.4 ms | ≤ 1 display frame |
+  | Animate player frame latency, 1024×576 GOP-6 proxy, sequential / random | p50 33 / 34 ms | ≤ 41.7 ms (24 fps) |
+
+  **Finding:** the author's 4K panel runs at **29–31 Hz** (`Win32_VideoController` 3840×2160 @ 29 Hz) — `requestAnimationFrame`
+  cannot exceed ≈ 30 fps on this desktop, so every frame-rate number above is display-bound, not app-bound; the GPU budget is
+  therefore measured as time per composite (a 60 Hz mode would show the same 7 ms). Worth a look at the display settings
+  (DisplayPort / HDMI 2.x allow 60 Hz at 4K). The `perf` mode launches Edge without background / occlusion throttling and
+  prints the window's own frame rate first.
+- **Pin review** — `scripts/pin_review.py` against **ComfyUI v0.39.0** (released 2026-10-05; CPU engine from a scratch worktree
+  with our custom nodes): **0 of the 68 node classes loom2 uses are missing or changed**, all 17 recipe variants compile
+  (t2i dev / turbo / Klein / Klein base + refs, refine, five inpaint modes, upscale ± tiled refine, both segmenters, Wan draft /
+  motion FLF, LTX with beats). **Verdict: safe to bump by the contract gate.** The bump itself is a dedicated step (D15):
+  submodule → v0.39.0, `engine-setup.ps1` for its requirements, fixture recapture, a rig smoke (one Klein t2i, one Wan
+  draft), rollback = submodule reset; scheduled with rig time rather than tonight. torch 2.13.0+rocm10.0.0 stays.
+- **Setup + CI** — `scripts/setup.ps1` (both venvs, frontend, engine checkout + ROCm torch, FaceSim weights; `-SkipEngine`
+  for a machine without the GPU); `.github/workflows/ci.yml`: offline suite + `tsc -b` + Vite build for `full` and `open` on
+  every push / PR, Tauri installers for both variants on main / tags (`loom2-full-*`, `loom2-open-*`); the shell now bakes
+  `LOOM2_VARIANT` in at compile time and hands it to the orchestrator (D26). Not yet run on GitHub (first push of the
+  workflow is this commit).
+- **Left in M7:** the pin bump step above; slice 5 — docs refresh (00–14) and the author's end-to-end click-through against
+  07 §5 / 08 §10 / 09 §10 / 10 §14 / 11 §11; the post-MVP backlog ordered in 13; H3 remains post-MVP.

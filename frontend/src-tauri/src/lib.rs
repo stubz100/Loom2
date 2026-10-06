@@ -79,7 +79,10 @@ fn spawn_backend(backend: Shared) {
     let port: u16 = pick_port();
     let (exe, args, cwd) = orchestrator_command(port);
     let mut cmd = Command::new(&exe);
-    cmd.args(&args).current_dir(&cwd).env("PYTHONIOENCODING", "utf-8").env("PYTHONUNBUFFERED", "1").stdout(Stdio::piped()).stderr(Stdio::piped());
+    // D26: the build variant is baked into the shell at compile time (LOOM2_VARIANT=full|open when building) and handed to the
+    // orchestrator, which filters the roster and the pickers by it; a dev build without the variable is `full`
+    let variant = option_env!("LOOM2_VARIANT").unwrap_or("full");
+    cmd.args(&args).current_dir(&cwd).env("PYTHONIOENCODING", "utf-8").env("PYTHONUNBUFFERED", "1").env("LOOM2_VARIANT", variant).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

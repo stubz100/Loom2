@@ -58,6 +58,7 @@ class T2I(BaseModel):
     # ComfyUI configuration surfaced in M3+ (2026-10-06 audit): None = the model preset's value
     weight_dtype: str | None = None               # UNETLoader.weight_dtype (fp8_e4m3fn_fast is the speed candidate on gfx1201)
     te_device: str | None = None                  # CLIPLoader.device: "cpu" saves VRAM, costs ≈ 170 s per new prompt (E0)
+    te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
     base_shift: float | None = Field(None, ge=0.0, le=100.0)   # ModelSamplingFlux: both None = the model's own shift (FLUX.2 2.02)
     max_shift: float | None = Field(None, ge=0.0, le=100.0)
     tiled_vae: bool = False                       # VAEDecodeTiled instead of VAEDecode (Full tier headroom, D13 "tiled VAE")
@@ -84,6 +85,7 @@ class I2I(BaseModel):
     margin_pct: int = Field(25, ge=0, le=200)     # selection source: context ring
     feather: int = Field(8, ge=0, le=256)         # selection source: paste-back feather
     te_device: str | None = None                  # CLIPLoader.device: "cpu" keeps the 8 GB encoder out of VRAM (2026-10-07 DynamicVRAM measurements)
+    te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
 
 
 class Inpaint(BaseModel):
@@ -108,6 +110,7 @@ class Inpaint(BaseModel):
     image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id
     mask_blob: str | None = None
     te_device: str | None = None                  # CLIPLoader.device (see I2I)
+    te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
 
 
 class Upscale(BaseModel):
@@ -130,6 +133,7 @@ class Upscale(BaseModel):
     steps: int | None = Field(None, ge=1, le=100)
     prompt_text: str = ""
     te_device: str | None = None                  # CLIPLoader.device for the refine's encoder (see I2I)
+    te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
 
 
 class Segment(BaseModel):

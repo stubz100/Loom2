@@ -15,7 +15,7 @@ from pathlib import Path
 
 CLASSES = [
     # loaders
-    "UNETLoader", "UnetLoaderGGUF", "CLIPLoader", "DualCLIPLoader", "VAELoader", "LoraLoaderModelOnly", "LoraLoader", "LoadImage", "LoadImageMask",
+    "UNETLoader", "UnetLoaderGGUF", "CLIPLoader", "CLIPLoaderGGUF", "DualCLIPLoader", "VAELoader", "LoraLoaderModelOnly", "LoraLoader", "LoadImage", "LoadImageMask",
     # FLUX.2 / Klein
     "CLIPTextEncode", "FluxGuidance", "ConditioningZeroOut", "EmptyFlux2LatentImage", "KSampler", "KSamplerAdvanced", "VAEDecode", "VAEEncode",
     "SaveImage", "PreviewImage", "ReferenceLatent", "InpaintModelConditioning", "DifferentialDiffusion", "ImageCompositeMasked", "EmptyImage",

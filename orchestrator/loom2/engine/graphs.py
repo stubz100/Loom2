@@ -44,6 +44,48 @@ PRESETS: dict[str, ModelPreset] = {
     "klein-9b-kv": ModelPreset(te_id="qwen3-8b-fp8mixed", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 9B KV"),
 }
 
+# Text encoders a preset may swap in (2026-10-07 encoder experiment): llama.cpp quantizations of Qwen3-8B for the Klein 9B family.
+# Keyed by the preset's te_id; /capabilities publishes the map and a recipe names its choice in `te_id`.
+TE_ALTERNATES: dict[str, list[str]] = {"qwen3-8b-fp8mixed": ["qwen3-8b-q4km", "qwen3-8b-q4ks", "qwen3-8b-q3km"]}
+
+
+def resolve_te_id(preset: ModelPreset, te_id: str | None) -> str:
+    """The preset's encoder, or a listed alternate — anything else (the 4B encoder on a 9B model, say) fails here as a
+    CompileError, not minutes later as a shape error inside the engine."""
+    if te_id is None or te_id == preset.te_id:
+        return preset.te_id
+    if te_id not in TE_ALTERNATES.get(preset.te_id, []):
+        raise CompileError(f"text encoder {te_id!r} does not pair with this model (it takes {preset.te_id} or {TE_ALTERNATES.get(preset.te_id, [])})")
+    return te_id
+
+
+def recipe_te_id(recipe: T2I | I2I | Inpaint | Upscale, variant: str = "full") -> str | None:
+    """The encoder a FLUX.2-family recipe will load (None for recipes without one); raises CompileError on a bad override."""
+    if isinstance(recipe, Inpaint):
+        mid = inpaint_model_id(recipe, variant)
+    elif isinstance(recipe, Upscale):
+        if not recipe.refine:
+            return None
+        mid = recipe.refine_model_id
+    elif isinstance(recipe, (T2I, I2I)):
+        mid = recipe.model_id
+    else:
+        return None
+    preset = PRESETS.get(mid)
+    return None if preset is None else resolve_te_id(preset, recipe.te_id)
+
+
+def _te_loader(te_name: str, te_device: str | None) -> dict[str, Any]:
+    """Core CLIPLoader for safetensors; ComfyUI-GGUF's CLIPLoaderGGUF for a .gguf (no device input — it loads on the default device)."""
+    if te_device is not None and te_device not in TE_DEVICES:
+        raise CompileError(f"unknown text-encoder device {te_device!r}")
+    if te_name.lower().endswith(".gguf"):
+        if te_device not in (None, "default"):
+            raise CompileError("a GGUF text encoder loads on the default device (CLIPLoaderGGUF has no device input)")
+        return {"class_type": "CLIPLoaderGGUF", "inputs": {"clip_name": te_name, "type": "flux2"}}
+    return {"class_type": "CLIPLoader", "inputs": {"clip_name": te_name, "type": "flux2", "device": te_device or "default"}}
+
+
 # VRAM estimates (GB) for the queue's admission check (06 §3d `Engine.estimate`); measured peaks from the spikes
 VRAM_ESTIMATE_GB: dict[str, float] = {
     "flux2-dev-fp8mixed": 14.0, "klein-4b": 8.5, "klein-base-4b": 9.2, "klein-9b": 15.0, "klein-base-9b": 15.0, "klein-9b-kv": 15.0,
@@ -336,7 +378,7 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
     if w * h > 4_200_000 or w < 64 or h < 64:
         raise CompileError(f"size {w}×{h} outside the 64 px – 4 MP range")
     text, mode = serialize_prompt(recipe, preset)
-    return {"model_id": recipe.model_id, "te_id": preset.te_id, "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
+    return {"model_id": recipe.model_id, "te_id": resolve_te_id(preset, recipe.te_id), "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
             "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "turbo_strength": float(recipe.turbo_strength) if turbo else None,
             "distilled": preset.distilled, "negative_used": bool(recipe.negative) and not preset.distilled,
             "weight_dtype": weight_dtype, "te_device": te_device, "base_shift": base_shift, "max_shift": max_shift,
@@ -351,7 +393,7 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
         raise CompileError(f"no T2I preset for model '{recipe.model_id}'")
     ep = effective_params(recipe)
     _, unet = roster.require(recipe.model_id)
-    _, te = roster.require(preset.te_id)
+    _, te = roster.require(ep["te_id"])
     _, vae = roster.require(preset.vae_id)
     text = ep["serialized_prompt"]
     if not text.strip():
@@ -360,7 +402,7 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
 
     g: dict[str, Any] = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": ep["weight_dtype"]}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": ep["te_device"]}},
+        "2": _te_loader(te, ep["te_device"]),
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
         "5": {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}},
         "8": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}},
@@ -428,15 +470,17 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
 
 
 # ---- M5 edit recipes (10 §4, D7; graphs ported from engine/spikes/e8_inpaint.py) ------------------------------
-def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: ModelPreset, te_device: str | None = None) -> list:
-    """UNET / text encoder / VAE loaders for a FLUX.2-family model; returns the model link (Turbo LoRA for dev)."""
+def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: ModelPreset, te_device: str | None = None,
+                   te_id: str | None = None) -> list:
+    """UNET / text encoder / VAE loaders for a FLUX.2-family model; returns the model link (Turbo LoRA for dev). `te_id` swaps
+    in a listed alternate encoder (TE_ALTERNATES); a .gguf goes through CLIPLoaderGGUF."""
     if te_device is not None and te_device not in TE_DEVICES:
         raise CompileError(f"unknown text-encoder device {te_device!r}")
     _, unet = roster.require(model_id)
-    _, te = roster.require(preset.te_id)
+    _, te = roster.require(resolve_te_id(preset, te_id))
     _, vae = roster.require(preset.vae_id)
     g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": preset.weight_dtype}}
-    g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": te_device or "default"}}
+    g["2"] = _te_loader(te, te_device)
     g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
     if preset.turbo_lora:
         _, lora = roster.require(preset.turbo_lora)
@@ -452,7 +496,7 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
     if preset is None:
         raise CompileError(f"no preset for inpaint model '{model_id}'")
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, model_id, preset, recipe.te_device)
+    model_link = _flux2_loaders(g, roster, model_id, preset, recipe.te_device, recipe.te_id)
     dev = model_id == "flux2-dev-fp8mixed"
     prompt = recipe.prompt_text.strip()
     g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
@@ -508,7 +552,7 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     if preset.distilled:
         raise CompileError("refine needs Klein base or FLUX.2 dev: distilled Klein cannot partial-denoise (04 §4)")
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, recipe.model_id, preset, recipe.te_device)
+    model_link = _flux2_loaders(g, roster, recipe.model_id, preset, recipe.te_device, recipe.te_id)
     dev = recipe.model_id == "flux2-dev-fp8mixed"
     steps = int(recipe.steps or (8 if dev else preset.steps))
     strength = max(0.05, min(1.0, float(recipe.strength)))
@@ -552,7 +596,7 @@ def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: 
         preset = PRESETS.get(recipe.refine_model_id)
         if preset is None or preset.distilled:
             raise CompileError("tiled refine needs Klein base or FLUX.2 dev (distilled Klein cannot partial-denoise)")
-        model_link = _flux2_loaders(g, roster, recipe.refine_model_id, preset, recipe.te_device)
+        model_link = _flux2_loaders(g, roster, recipe.refine_model_id, preset, recipe.te_device, recipe.te_id)
         dev = recipe.refine_model_id == "flux2-dev-fp8mixed"
         steps = int(recipe.steps or (8 if dev else preset.steps))
         prompt = recipe.prompt_text.strip()
@@ -671,9 +715,14 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
     if isinstance(recipe, I2V):
         return list(I2V_WEIGHTS.get(recipe.model_id, [recipe.model_id]))
 
+    te_over = getattr(recipe, "te_id", None)
+
     def preset_ids(mid: str, turbo: bool) -> list[str]:
         p = PRESETS.get(mid)
-        return [mid] if p is None else [mid, p.te_id, p.vae_id, *([p.turbo_lora] if turbo and p.turbo_lora else [])]
+        if p is None:
+            return [mid]
+        te = te_over if te_over in TE_ALTERNATES.get(p.te_id, []) else p.te_id
+        return [mid, te, p.vae_id, *([p.turbo_lora] if turbo and p.turbo_lora else [])]
 
     ids: list[str] = []
     if isinstance(recipe, T2I):

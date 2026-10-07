@@ -21,7 +21,7 @@ from .config import AppState
 from .engine.client import EngineError, EngineEvent
 from .clips import ClipStore, compute_identity
 from .tools import facesim
-from .engine.graphs import I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb, recipe_weights
+from .engine.graphs import CompileError, I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb, recipe_te_id, recipe_weights
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
@@ -302,11 +302,16 @@ class JobQueue:
         """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started.
         C3 (D26): under the `open` variant every weight the recipe would load must carry the `open` tag — the UI hides them, the
         queue is the gate."""
-        for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])]]:
+        for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])], *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
         if isinstance(recipe, T2I) and recipe.model_id not in PRESETS:
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
+        if getattr(recipe, "te_id", None):
+            try:
+                recipe_te_id(recipe, self.app.settings.variant)          # the encoder must pair with the model (TE_ALTERNATES)
+            except CompileError as e:
+                raise ValueError(str(e))
         if isinstance(recipe, I2V):
             if recipe.model_id not in I2V_WEIGHTS:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")

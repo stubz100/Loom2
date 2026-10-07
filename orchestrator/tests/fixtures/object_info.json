@@ -2,7 +2,7 @@
  "system": {
   "os": "win32",
   "ram_total": 137055920128,
-  "ram_free": 116706238464,
+  "ram_free": 121325375488,
   "comfyui_version": "0.39.0",
   "required_frontend_version": "1.53.10",
   "installed_templates_version": "0.11.76",
@@ -66,6 +66,7 @@
   "BasicGuider",
   "CFGGuider",
   "CLIPLoader",
+  "CLIPLoaderGGUF",
   "CLIPTextEncode",
   "CheckpointLoaderSimple",
   "ConditioningZeroOut",
@@ -318,6 +319,89 @@
    "description": "Recipes:\nsd: clip-l\nstable cascade: clip-g\nsd3: t5 xxl / clip-g / clip-l\nstable audio: t5 base\nmochi: t5 xxl\ncogvideox: t5 xxl (226-token padding)\ncosmos: old t5 xxl\nlumina2: gemma 2 2B\nwan: umt5 xxl\nhidream: llama-3.1 (Recommend) or t5\nomnigen2: qwen vl 2.5 3B\njoyimage: qwen3-vl 8B\nlens: gpt-oss-20b\npixeldit: gemma 2 2B elm\nminimax: MiniMax H3 Qwen3-VL or Music3 Qwen/RVQ",
    "python_module": "nodes",
    "category": "model/loaders",
+   "output_node": false,
+   "has_intermediate_output": false,
+   "search_aliases": []
+  },
+  "CLIPLoaderGGUF": {
+   "input": {
+    "required": {
+     "clip_name": [
+      [
+       "Qwen3-8B-Q3_K_M.gguf",
+       "Qwen3-8B-Q4_K_M.gguf",
+       "Qwen3-8B-Q4_K_S.gguf",
+       "clip_l.safetensors",
+       "flux2_nsfw\\qwen3-4b-abl-q4_0.gguf",
+       "gemma_3_12B_it_fp8_scaled.safetensors",
+       "ltx-2.3_text_projection_bf16.safetensors",
+       "mistral_3_small_flux2_bf16.safetensors",
+       "mistral_3_small_flux2_fp8.safetensors",
+       "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+       "qwen_2.5_vl_fp16.safetensors",
+       "qwen_3_4b.safetensors",
+       "qwen_3_8b_fp8mixed.safetensors",
+       "t5\\t5xxl_fp8_e4m3fn_scaled.safetensors",
+       "t5xxl_fp16.safetensors",
+       "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+      ]
+     ],
+     "type": [
+      [
+       "stable_diffusion",
+       "stable_cascade",
+       "sd3",
+       "stable_audio",
+       "mochi",
+       "ltxv",
+       "pixart",
+       "cosmos",
+       "lumina2",
+       "wan",
+       "hidream",
+       "chroma",
+       "ace",
+       "omnigen2",
+       "qwen_image",
+       "hunyuan_image",
+       "flux2",
+       "ovis",
+       "longcat_image",
+       "cogvideox",
+       "lens",
+       "pixeldit",
+       "ideogram4",
+       "boogu",
+       "krea2",
+       "joyimage",
+       "mage",
+       "minimax",
+       "yue2"
+      ]
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "clip_name",
+     "type"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "CLIP"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "CLIP"
+   ],
+   "name": "CLIPLoaderGGUF",
+   "display_name": "CLIPLoader (GGUF)",
+   "description": "",
+   "python_module": "custom_nodes.ComfyUI-GGUF",
+   "category": "bootleg",
    "output_node": false,
    "has_intermediate_output": false,
    "search_aliases": []
@@ -631,7 +715,9 @@
        "fish-market_s20261004.png",
        "image.png",
        "loom2ref-ast_15fc1552.png",
+       "loom2ref-i2v-ast_1e712581.png",
        "loom2ref-i2v-ast_1f720e11.png",
+       "loom2ref-i2v-ast_20eae071.png",
        "loom2ref-i2v-ast_33248a5b.png",
        "loom2ref-i2v-ast_38351b31.png",
        "loom2ref-i2v-ast_49b3a269.png",
@@ -703,7 +789,9 @@
        "fish-market_s20261004.png",
        "image.png",
        "loom2ref-ast_15fc1552.png",
+       "loom2ref-i2v-ast_1e712581.png",
        "loom2ref-i2v-ast_1f720e11.png",
+       "loom2ref-i2v-ast_20eae071.png",
        "loom2ref-i2v-ast_33248a5b.png",
        "loom2ref-i2v-ast_38351b31.png",
        "loom2ref-i2v-ast_49b3a269.png",

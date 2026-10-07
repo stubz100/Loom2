@@ -1733,3 +1733,43 @@ read the clock)*
   (`scripts/make_object_info_fixture.py` recapture when the graphs use them). Alternative with no graph change: an engine profile
   per warm group (`--disable-dynamic-vram` restart for Klein-only sessions; 250 s cold) — cheaper to build, costs a restart on every
   dev ↔ Klein switch and leaves dev streaming. Recorded in 13's backlog (item 10) with the numbers; no decision taken here.
+
+## 2026-10-07 12:58 — Quantized Qwen3-8B encoder for Klein 9B: the VRAM clash gone (cold tiled refine 279 s vs 1157 s), three GGUF sizes measured
+
+- **Question (10:36 follow-up):** can a quantized encoder keep the Klein 9B pair resident? There is no encoder-only Klein GGUF
+  anywhere (unsloth's Klein repos carry the transformer only, city96 has no Qwen3 encoder); the plain llama.cpp quantizations of
+  Qwen3-8B (`unsloth/Qwen3-8B-GGUF`) load through ComfyUI-GGUF's `CLIPLoaderGGUF` — the pinned commit lists `qwen3` in its
+  `TXT_ARCH_LIST`, core's `flux2` type detects Qwen3-8B by shape and builds `klein_te(model_type="qwen3_8b")`, the token embedding
+  is dequantized to fp16 at load (+1.2 GB). The 4B family needs the 4B GGUF (hidden size), so the alternates are per preset.
+- **Wired:** roster `qwen3-8b-q4km` / `qwen3-8b-q4ks` / `qwen3-8b-q3km` (`text_encoders`, apache-2.0; fetched with the app's own
+  roster tool through `/models/fetch`, ledgered with sha256 — 5.03 / 4.80 / 4.12 GB, 13 min for the three); recipe `te_id` on T2I /
+  I2I / Inpaint / Upscale → `graphs.resolve_te_id` (the preset's encoder or a `TE_ALTERNATES` entry, anything else a CompileError —
+  the 4B encoder on a 9B model would otherwise surface as a mat1/mat2 shape error inside the engine); `_te_loader` emits
+  `CLIPLoaderGGUF {clip_name, type: flux2}` for a `.gguf` (the node has no `device` input, so `te_device: cpu` + GGUF is a
+  CompileError); `recipe_weights`, the open gate, `/recipes/preview` and `effective_params` see the override; `_validate_models`
+  rejects a bad one with a 422 at submission; `/capabilities.te_alternates` publishes the map (and `types.ts` carries it). Fixture
+  recaptured with `CLIPLoaderGGUF` (69 classes; `make_object_info_fixture.py`); `tests/test_te_gguf.py` → **104 offline tests**.
+- **Measured** — default flags, each encoder on a stopped engine (scratch `te_experiment.py`: tiled refine cold → warm → two Klein
+  9B T2I renders at 1280×720, seed 7; the tiled job is the 09:37 one: 1200×544 → 6 tiles of 1024 / 128, Klein 9B base, 0.25):
+
+  | encoder | file / resident | tiled **cold** wall | KSampler per tile | tiled warm wall | text encode | encoder load |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | fp8mixed (09:37 runs) | 8.07 GB / 8.26 GB staged | **1156.7 s** | 184 s (9.2 s/step) | 262.2 s | — | 0.3 s |
+  | Q4_K_M | 5.03 / 6.83 GB | **279.1 s** | 36.8 s (1.84 s/step) | 263.6 s | 1.0 s | 5.5 s |
+  | Q4_K_S | 4.80 / 6.61 GB | **280.5 s** | 36.9 s | 265.2 s | 1.0 s | 5.5 s |
+  | Q3_K_M | 4.12 / 6.05 GB | **281.9 s** | 36.9 s | 266.1 s | 1.1 s | 6.0 s |
+
+  The GGUF encoder takes the classic load path even with DynamicVRAM on (engine log: `loaded completely; 13292 MB usable,
+  6829 MB loaded, full load: True`), is reloaded per job (≈ 5 s, from RAM) and the transformer samples at the resident
+  1.85 s/step from the first tile: cold now equals warm, the 4.4× first-job penalty is gone, and the three quantizations are
+  indistinguishable in time. Klein 9B T2I (distilled, 1280×720, two prompts back to back): with a GGUF 17.5 s then 10.1 s wall
+  (KSampler 5.6 / 4.5 s, every run); with fp8 26.1 s then **54.1 s** (KSampler 5.7 s, then 47.1 s = 11.8 s/step with 2.9 GB free)
+  — the fp8 pair's residency is erratic job to job, the GGUF pair's is not.
+- **Quality, same seed, by eye:** Q4_K_M and Q4_K_S are near-identical to fp8 — composition, props, the "HARBOUR MARKET" sign,
+  the crossed arms, the lamp key light; fp8 misses "hood down" exactly as the GGUFs do, so that is the model, not the encoder.
+  Q3_K_M drifts a little (the cabin woman's face drops into profile instead of the three-quarter view; a second clock appears).
+  PNGs live in the session scratchpad only.
+- **Not decided here:** making Q4_K_M the three 9B presets' default encoder (and retiring the 8.7 GB fp8 file), and an encoder
+  picker in the AI / Generate panels. Q4_K_M is the recommendation — the same speed as Q3_K_M, the closest to fp8. dev is
+  untouched (its 34 GB transformer streams regardless), so the two-phase conditioning cache stays the dev fix (13, item 10).
+  Settings and engine flags unchanged; dev orchestrator stopped afterwards.

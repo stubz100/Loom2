@@ -102,6 +102,11 @@ together. Decisions that bind them are in brackets.
     `--disable-dynamic-vram` makes it 250 s cold but quadruples dev Turbo — journal 2026-10-07 09:37): a per-session engine
     profile, or — preferred after the 10:36 measurements — **two-phase prompts with a conditioning cache** (core `SaveConditioning`
     / `ConditioningLoader`, `/free` between the phases; text encoder on the CPU measured 310 s per prompt, so not that).
+    **Klein 9B side settled by the quantized encoder (journal 2026-10-07 12:50):** unsloth's Qwen3-8B GGUF (Q4_K_M / Q4_K_S /
+    Q3_K_M, roster `qwen3-8b-q4km|q4ks|q3km`, recipe `te_id`, `CLIPLoaderGGUF`) loads 6.0–6.8 GB resident and the cold tiled
+    refine drops from 1157 s to 279 s with the warm run unchanged; all three quantizations time the same and their renders match
+    fp8 by eye. Open: make a GGUF the 9B presets' default encoder (and retire the 8.7 GB fp8 file) and give the AI / Generate
+    panels an encoder picker; dev's 34 GB transformer still streams, so the two-phase cache stays the fix there.
 
 ## Volatile facts to re-check at each milestone start
 See 04 §8 (ROCm nightlies, INT8 convrot fix, FLUX.2 fill releases, Qwen-Image-2.1 licence, sd.cpp fixes,

@@ -24,7 +24,8 @@ from .tools import facesim
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
 from .documents import DocumentStore, StaleStack
-from .engine.graphs import CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, VRAM_ESTIMATE_GB, WAN_PRESETS, effective_params, estimate_i2v_seconds, i2v_params
+from .engine.graphs import (CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, TE_ALTERNATES, VRAM_ESTIMATE_GB, WAN_PRESETS, effective_params,
+                            estimate_i2v_seconds, i2v_params)
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, _tmp_for
@@ -254,7 +255,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         return {"recipes": ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"], "i2v": i2v_caps, "models": models,
                 "facesim": {"available": facesim.available(svc.app.settings.models_root), "dir": str(facesim.weights_dir(svc.app.settings.models_root))}, "variant": svc.app.settings.variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
                 "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
-                "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES,
+                "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES, "te_alternates": TE_ALTERNATES,
                 "advanced": {"model_shift": {"flux2-dev-fp8mixed": 2.02, "klein": 2.02}, "shift_node_defaults": {"base": 0.5, "max": 1.15}, "tile_size_default": 512,
                              "flux2_schedule": FLUX2_SCHEDULE},
                 "tiers": {"thumb": {"flux2": [896, 512], "klein": [896, 512]}, "draft": {"flux2": [960, 544], "klein": [1280, 720]}, "full": {"flux2": [1920, 1088], "klein": [1920, 1088]}}}
@@ -285,7 +286,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             raise HTTPException(422, str(e))
         missing = []
         preset = PRESETS[recipe.model_id]
-        for mid in [recipe.model_id, preset.te_id, preset.vae_id, *([preset.turbo_lora] if ep["turbo"] and preset.turbo_lora else []), *[l.model_id for l in recipe.loras]]:
+        for mid in [recipe.model_id, ep["te_id"], preset.vae_id, *([preset.turbo_lora] if ep["turbo"] and preset.turbo_lora else []), *[l.model_id for l in recipe.loras]]:
             try:
                 r = svc.roster.resolve(mid)
             except KeyError as e:

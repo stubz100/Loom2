@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -29,7 +30,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("LOOM2_READY " + json.dumps(line) + "\n")
         sys.stdout.flush()
 
-    app = create_app(Path(a.state) if a.state else None, Path(a.project) if a.project else None, ready_cb=ready)
+    app = create_app(Path(a.state) if a.state else None, Path(a.project) if a.project else None, ready_cb=ready,
+                     variant=os.environ.get("LOOM2_VARIANT"))       # C3: the shell's build variant (D26) is not a setting
     svc = app.state.services
     host = a.host or svc.app.settings.api_host
     port = a.port or svc.app.settings.api_port

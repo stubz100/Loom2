@@ -33,6 +33,10 @@ from .fsio import StateError, _tmp_for, new_id, utc_now
 from .workspace import Workspace
 
 DOC_SCHEMA_VERSION = 1
+
+
+class StaleStack(StateError):
+    """C1: a stack PUT based on an older revision than the server's (the API answers 409; the editor merges and retries)."""
 NodeKind = Literal["raster", "group", "adjustment", "filter"]
 ADJ_TYPES = ["levels", "curves", "hue_saturation", "color_balance", "brightness_contrast", "exposure", "black_white", "invert"]
 FILTER_TYPES = ["gaussian_blur", "sharpen", "noise", "high_pass"]
@@ -103,6 +107,7 @@ class Document(BaseModel):
     source_asset_id: str | None = None
     created_at: str = Field(default_factory=utc_now)
     saved_at: str | None = None
+    revision: int = 0                   # C1: bumped by every stack replace and by every layer the queue inserts
     layers: list[Node] = Field(default_factory=list)   # top first (ORA order)
     has_selection: bool = False
     meta: dict = Field(default_factory=dict)
@@ -343,16 +348,23 @@ class DocumentStore:
         return False
 
     def update_stack(self, doc_id: str, data: dict) -> OpenDocument:
-        """Replace the stack (layer tree + document fields) keeping pixels of layers that still exist."""
+        """Replace the stack (layer tree + document fields) keeping pixels of layers that still exist.
+        C1: the client names the `revision` its stack is based on; a stack older than the server's (an AI job inserted layers
+        meanwhile) is refused with `StaleStack` so the editor merges first — a plain replace would delete those layers and
+        their pixels. A body without `revision` (legacy caller) is accepted as before."""
         od = self.get(doc_id)
-        new = Document.model_validate({**od.doc.model_dump(), **data, "id": doc_id})
-        _validate_modes(new)
-        ids = {n.id for n in new.walk()}
-        od.pixels = {k: v for k, v in od.pixels.items() if k in ids}
-        od.masks = {k: v for k, v in od.masks.items() if k in ids}
-        for n in new.walk():
-            if isinstance(n, RasterLayer) and n.id in od.pixels:
-                n.h, n.w = od.pixels[n.id].shape[:2]
-        od.doc = new
-        od.dirty = True
+        with od._save_lock:                                   # C17: never swap od.doc under a running save()
+            base = data.get("revision")
+            if base is not None and int(base) != od.doc.revision:
+                raise StaleStack(f"the stack is based on revision {base}; the document is at revision {od.doc.revision} — merge the newer layers first")
+            new = Document.model_validate({**od.doc.model_dump(), **data, "id": doc_id, "revision": od.doc.revision + 1})
+            _validate_modes(new)
+            ids = {n.id for n in new.walk()}
+            od.pixels = {k: v for k, v in od.pixels.items() if k in ids}
+            od.masks = {k: v for k, v in od.masks.items() if k in ids}
+            for n in new.walk():
+                if isinstance(n, RasterLayer) and n.id in od.pixels:
+                    n.h, n.w = od.pixels[n.id].shape[:2]
+            od.doc = new
+            od.dirty = True
         return od

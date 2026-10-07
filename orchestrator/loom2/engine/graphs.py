@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Segment, Upscale
+from ..recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Segment, Upscale, inpaint_model_id
 from ..edit_ai import plan_tiles
 from ..roster import ROSTER_BY_ID, Roster
 from .contract import check_graph, resolve_names
@@ -443,16 +443,9 @@ def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: Mod
     return ["1", 0]
 
 
-def inpaint_model_id(recipe: Inpaint) -> str:
-    if recipe.mode == "fill_hero":
-        return "flux2-dev-fp8mixed"
-    if recipe.mode in ("fill_match", "remove"):
-        return recipe.model_id if recipe.model_id.startswith("klein") and "base" not in recipe.model_id else "klein-9b"
-    return recipe.model_id
-
-
-def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, image_name: str, mask_name: str, w: int, h: int) -> Compiled:
-    model_id = inpaint_model_id(recipe)
+def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, image_name: str, mask_name: str, w: int, h: int,
+                  variant: str = "full") -> Compiled:
+    model_id = inpaint_model_id(recipe, variant)
     preset = PRESETS.get(model_id)
     if preset is None:
         raise CompileError(f"no preset for inpaint model '{model_id}'")
@@ -620,8 +613,11 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
                 raise CompileError("SAM 3 box mode needs a box")
             x0, y0, x1, y1 = (int(v) for v in box)
             # CreateBoundingBoxes parses a JSON list of {x, y, width, height} in the pixel grid given by width/height (nodes_bounding_boxes.py)
-            g["3"] = {"class_type": "CreateBoundingBoxes", "inputs": {"bboxes": json.dumps([{"x": x0, "y": y0, "width": max(1, x1 - x0), "height": max(1, y1 - y0)}]), "width": int(w), "height": int(h), "editor_state": []}}   # the canvas widget's own state: empty, so the JSON boxes win
-            inputs["bboxes"] = ["3", 0]
+            g["3"] = {"class_type": "CreateBoundingBoxes", "inputs": {"bboxes": json.dumps([{"x": x0, "y": y0, "width": max(1, x1 - x0), "height": max(1, y1 - y0)}]), "width": int(w), "height": int(h), "editor_state": {}}}
+            # C32: `editor_state` is the canvas widget's own state and must be *empty* so the JSON `bboxes` win — but not an empty
+            # list: ComfyUI's API validator reads every list value as a link ("Bad linked input, must be a length-2 list"); `{}` is
+            # falsy for the node (`editor_state or []`) and passes validation (seen on the rig 2026-10-07)
+            inputs["bboxes"] = ["3", 1]            # C32: output 0 is the preview IMAGE; 1 is the BOUNDING_BOX (C9's type check caught it)
         g["4"] = {"class_type": "SAM3_Detect", "inputs": inputs}
         mask = ["4", 0]
         summary = {"model_id": "sam3", "mode": recipe.mode, "threshold": recipe.threshold, "points": len(points or []), "box": box}
@@ -631,13 +627,13 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
 
 
 def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, object_info: dict, seed: int, out_prefix: str,
-                   ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None) -> Compiled:
+                   ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
         c = build_t2i(recipe, roster, seed, out_prefix, ref_files)
     elif isinstance(recipe, Inpaint):
         i = inputs or {}
-        c = build_inpaint(recipe, roster, seed, out_prefix, i["image"], i["mask"], int(i["w"]), int(i["h"]))
+        c = build_inpaint(recipe, roster, seed, out_prefix, i["image"], i["mask"], int(i["w"]), int(i["h"]), variant)
     elif isinstance(recipe, I2I):
         i = inputs or {}
         c = build_i2i(recipe, roster, seed, out_prefix, i["image"], int(i["w"]), int(i["h"]))
@@ -660,10 +656,39 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
     return c
 
 
-def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V) -> float:
+def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> float:
     if isinstance(recipe, Upscale) and recipe.refine:
         return VRAM_ESTIMATE_GB.get(recipe.refine_model_id, 12.0)
+    if isinstance(recipe, Inpaint):
+        return VRAM_ESTIMATE_GB.get(inpaint_model_id(recipe, variant), 12.0)      # C10: Fill Hero runs dev, whatever the panel named
     return VRAM_ESTIMATE_GB.get(recipe.model_id, 12.0)
+
+
+def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> list[str]:
+    """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
+    if isinstance(recipe, I2V):
+        return list(I2V_WEIGHTS.get(recipe.model_id, [recipe.model_id]))
+
+    def preset_ids(mid: str, turbo: bool) -> list[str]:
+        p = PRESETS.get(mid)
+        return [mid] if p is None else [mid, p.te_id, p.vae_id, *([p.turbo_lora] if turbo and p.turbo_lora else [])]
+
+    ids: list[str] = []
+    if isinstance(recipe, T2I):
+        ids += preset_ids(recipe.model_id, bool(recipe.turbo))
+    elif isinstance(recipe, Inpaint):
+        mid = inpaint_model_id(recipe, variant)
+        ids += preset_ids(mid, mid == "flux2-dev-fp8mixed")                 # _flux2_loaders chains the Turbo LoRA on dev
+    elif isinstance(recipe, I2I):
+        ids += preset_ids(recipe.model_id, recipe.model_id == "flux2-dev-fp8mixed")
+    elif isinstance(recipe, Upscale):
+        ids.append(recipe.model_id)
+        if recipe.refine:
+            ids += preset_ids(recipe.refine_model_id, recipe.refine_model_id == "flux2-dev-fp8mixed")
+    else:
+        ids.append(recipe.model_id)
+    ids += [l.model_id for l in getattr(recipe, "loras", [])]
+    return list(dict.fromkeys(ids))
 
 
 def estimate_seconds(recipe: T2I, history: list[dict] | None = None) -> dict[str, Any]:

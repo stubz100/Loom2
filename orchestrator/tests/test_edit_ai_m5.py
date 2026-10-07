@@ -146,7 +146,7 @@ def test_documents_selection_and_ai_endpoints(tmp_path: Path):
     from loom2.api import create_app
     from loom2.config import AppState
     state = tmp_path / "state"
-    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": [], "variant": "full"})
     app = create_app(state)
     client = TestClient(app)
     H = {"X-Loom-Token": app.state.services.app.token}

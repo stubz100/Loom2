@@ -39,8 +39,22 @@ fn repo_root() -> PathBuf {
     if let Ok(p) = std::env::var("LOOM2_REPO") {
         return PathBuf::from(p);
     }
-    // <repo>/frontend/src-tauri at build time (dev builds on the author's machine); release builds set LOOM2_REPO
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()).unwrap_or_default()
+    // <repo>/frontend/src-tauri at build time: right for dev builds on the machine that compiled the shell
+    let built = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()).unwrap_or_default();
+    if built.join("orchestrator").is_dir() {
+        return built;
+    }
+    // C22: a release built elsewhere (CI) — look for a checkout prepared by scripts/setup.ps1 above the executable
+    if let Ok(exe) = std::env::current_exe() {
+        let mut dir = exe.parent().map(|p| p.to_path_buf());
+        while let Some(d) = dir {
+            if d.join("orchestrator").join(".venv").is_dir() {
+                return d;
+            }
+            dir = d.parent().map(|p| p.to_path_buf());
+        }
+    }
+    built
 }
 
 fn orchestrator_command(port: u16) -> (String, Vec<String>, PathBuf) {
@@ -91,7 +105,9 @@ fn spawn_backend(backend: Shared) {
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            backend.info.lock().unwrap().error = Some(format!("could not start the orchestrator `{exe}`: {e}"));
+            backend.info.lock().unwrap().error = Some(format!(
+                "could not start the orchestrator `{exe}`: {e} — set LOOM2_REPO to a checkout prepared by scripts/setup.ps1 (or LOOM2_ORCH_CMD to the command)"
+            ));
             return;
         }
     };
@@ -225,7 +241,9 @@ fn request_exit(app: AppHandle, backend: State<'_, Shared>) {
 fn reveal_path(path: String) -> Result<(), String> {
     #[cfg(windows)]
     {
-        Command::new("explorer").arg(format!("/select,{}", path.replace('/', "\\"))).spawn().map_err(|e| e.to_string())?;
+        use std::os::windows::process::CommandExt;
+        // C26: explorer wants `/select,"<path>"` verbatim; Rust's own quoting of an argument with spaces breaks it
+        Command::new("explorer").raw_arg(format!("/select,\"{}\"", path.replace('/', "\\"))).spawn().map_err(|e| e.to_string())?;
         Ok(())
     }
     #[cfg(not(windows))]

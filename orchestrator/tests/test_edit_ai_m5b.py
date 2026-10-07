@@ -76,7 +76,7 @@ def test_segment_graphs_compile_against_the_engine(tmp_path: Path, object_info):
     c = graphs.compile_recipe(Segment(document_id="d", model_id="sam3", mode="box"), roster, object_info, 0, "loom2/s", inputs=inputs | {"box": [10, 20, 110, 220]})
     assert not c.problems, c.problems
     bb = json.loads(c.graph["3"]["inputs"]["bboxes"])
-    assert bb == [{"x": 10, "y": 20, "width": 100, "height": 200}] and c.graph["3"]["inputs"]["width"] == 1024 and c.graph["4"]["inputs"]["bboxes"] == ["3", 0]
+    assert bb == [{"x": 10, "y": 20, "width": 100, "height": 200}] and c.graph["3"]["inputs"]["width"] == 1024 and c.graph["4"]["inputs"]["bboxes"] == ["3", 1]   # C32: output 1 is the BOUNDING_BOX
     with pytest.raises(graphs.CompileError):
         graphs.compile_recipe(Segment(document_id="d", model_id="sam3", mode="text", text=""), roster, object_info, 0, "loom2/s", inputs=inputs)
     with pytest.raises(graphs.CompileError):
@@ -108,7 +108,7 @@ def test_tiled_refine_upscale_graph(tmp_path: Path, object_info):
 # ---- API: selection round trip, segment accepted ---------------------------------------------------------------------
 def test_selection_endpoints_and_segment_submission(tmp_path: Path):
     state = tmp_path / "state"
-    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": [], "variant": "full"})
     with TestClient(create_app(state)) as client:
         H = {"X-Loom-Token": client.app.state.services.app.token}
         client.post("/project", json={"path": str(tmp_path / "proj"), "name": "P", "size_cap_gb": 10}, headers=H)

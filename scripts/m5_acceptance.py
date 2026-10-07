@@ -215,9 +215,9 @@ def main() -> int:
             if lids and done[0]["result"].get("region"):
                 layer = layer_png(base, did, lids[0]); reg = done[0]["result"]["region"]
                 full = Image.new("RGBA", (DW, DH), (0, 0, 0, 0)); full.paste(layer, (reg["x"], reg["y"]))
-                a = np.asarray(full)[..., 3]
-                inside = float(a[matte > 200].mean() / 255) if (matte > 200).any() else 1.0
-                outside = float(a[matte < 30].mean() / 255) if (matte < 30).any() else 0.0
+                alpha = np.asarray(full)[..., 3]                 # not `a`: that is the argparse namespace (the summary reads a.keep)
+                inside = float(alpha[matte > 200].mean() / 255) if (matte > 200).any() else 1.0
+                outside = float(alpha[matte < 30].mean() / 255) if (matte < 30).any() else 0.0
                 check("03: subject preserved (layer alpha ≈ 0 on the matte), background repainted", inside < 0.08 and outside > 0.85, f"alpha on subject {inside:.3f} · on background {outside:.3f}")
     else:
         print("  [skip] AI select · subject: birefnet not fetched (Models → fetch)")
@@ -229,6 +229,12 @@ def main() -> int:
         run("AI select · SAM 3 point (face) added to the selection", {"kind": "segment", "model_id": "sam3", "mode": "points", "points": [{"x": cx, "y": cy, "label": 1}], "op": "add", "seeds": [0]}, layers_expected=False)
         sel = get_selection()
         check("SAM 3 point: the face is selected", sel is not None and box_mean(sel, face_box) > 0.5, f"face {box_mean(sel, face_box):.2f}" if sel is not None else "no selection")
+        # C32 (2026-10-07): box mode wired the preview IMAGE instead of the BOUNDING_BOX output; the engine must accept the graph
+        call(base, "PUT", f"/documents/{did}/selection", b"")
+        run("AI select · SAM 3 box (the cloak box)", {"kind": "segment", "model_id": "sam3", "mode": "box", "box": box_subject, "seeds": [0]}, layers_expected=False)
+        sel = get_selection()
+        check("SAM 3 box: the boxed figure is selected, the crates are not", sel is not None and box_mean(sel, box_subject) > 0.35 and box_mean(sel, box_crates) < 0.15,
+              f"cloak box {box_mean(sel, box_subject):.2f} · crates box {box_mean(sel, box_crates):.2f}" if sel is not None else "no selection")
     else:
         print("  [skip] AI select · SAM 3: sam3.pt not found (mounted sam3/ folder)")
     if models.get("realesrgan-x2", {}).get("health") in ("present", "verified") and models.get("klein-base-9b", {}).get("health") in ("present", "verified"):

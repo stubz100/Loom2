@@ -48,7 +48,8 @@ class Rig:
         self.fake = FakeComfy(object_info, self.state / "engine_out", **fake_kw)
         port = self.fake.start()
         self.app = AppState(self.state)
-        self.app.update_settings({"engine": {"port": port, "health_timeout_s": 5, "stall_timeout_s": 2}, "models_root": str(tmp / "models"), "mounted_model_trees": []})
+        self.app.update_settings({"engine": {"port": port, "health_timeout_s": 5, "stall_timeout_s": 2}, "models_root": str(tmp / "models"), "mounted_model_trees": [],
+                                  "variant": "full"})          # the fake tree holds full-only weights (dev, Klein 9B); C3 gates them under `open`
         self.roster = _tree(tmp / "models")
         self.ws = Workspace.create(tmp / "proj", name="P", size_cap_gb=10)
         self.catalogue = Catalogue(self.ws)
@@ -79,9 +80,9 @@ class Rig:
 async def test_supervisor_start_failure_raises_and_releases_lock(tmp_path: Path, monkeypatch):
     app = AppState(tmp_path / "state")
     app.update_settings({"engine": {"python": sys.executable, "main": "-c", "port": 1, "health_timeout_s": 0.5}})   # argv runs `python -c --listen …` → exits
-    monkeypatch.setattr(sup, "wait_for_engine", lambda client, timeout_s=0.5, poll_s=1.0: asyncio.sleep(0.05, result=False))
+    monkeypatch.setattr(sup, "wait_for_engine", lambda client, timeout_s=0.5, poll_s=1.0, **kw: asyncio.sleep(0.05, result=False))
     s = EngineSupervisor(app)
-    with pytest.raises(RuntimeError, match="did not answer"):
+    with pytest.raises(RuntimeError, match="did not answer|exited with code"):
         await asyncio.wait_for(s.start(), timeout=10.0)       # before B1 this hung forever on the supervisor's own lock
     assert await asyncio.wait_for(s.stop(), timeout=10.0) and s.proc is None and s._log_fh is None
     await s.client.aclose()

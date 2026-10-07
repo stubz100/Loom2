@@ -14,7 +14,7 @@ def _client(tmp_path: Path) -> tuple[TestClient, str]:
     state = tmp_path / "state"
     app_state = AppState(state)
     app_state.update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1},
-                               "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+                               "models_root": str(tmp_path / "models"), "mounted_model_trees": [], "variant": "full"})
     app = create_app(state)
     client = TestClient(app)
     return client, app.state.services.app.token

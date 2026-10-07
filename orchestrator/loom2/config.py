@@ -67,12 +67,16 @@ class AppRecord(BaseModel):
 class AppState:
     """`<state>/app.json` plus the per-launch token. Settings changes are written atomically."""
 
-    def __init__(self, state_dir: Path | None = None) -> None:
+    def __init__(self, state_dir: Path | None = None, variant: str | None = None) -> None:
         self.state_dir = Path(state_dir or default_state_dir())
         self.state_dir.mkdir(parents=True, exist_ok=True)
         (self.state_dir / "logs").mkdir(exist_ok=True)
         self.app_json = self.state_dir / "app.json"
         self.record = AppRecord.model_validate(read_json_or(self.app_json, AppRecord().model_dump()))
+        # C3 (D26): the build variant comes from the shell (LOOM2_VARIANT) and wins over whatever an earlier launch persisted
+        self.variant_override: str | None = variant if variant in ("full", "open") else None
+        if self.variant_override:
+            self.record.settings.variant = self.variant_override  # type: ignore[assignment]
         self.token = os.environ.get("LOOM2_TOKEN") or secrets.token_urlsafe(24)
         self.session_id = new_id("ses")
 
@@ -100,6 +104,8 @@ class AppState:
             else:
                 merged[k] = v
         self.record.settings = Settings.model_validate(merged)
+        if self.variant_override:
+            self.record.settings.variant = self.variant_override  # type: ignore[assignment]
         self.save()
         return self.record.settings
 

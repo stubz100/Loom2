@@ -84,7 +84,7 @@ function InputsTab() {
 function ModelTab() {
   const p = useAnimate((s) => s.panel)
   const caps = useSession((s) => s.capabilities?.i2v)
-  const models: [string, I2vModelCaps | undefined][] = Object.keys(MODEL_RULES).map((id) => [id, caps?.models[id]])
+  const models: [string, I2vModelCaps | undefined][] = Object.keys(MODEL_RULES).filter((id) => !caps || caps.models[id]).map((id) => [id, caps?.models[id]])   // C3: the open build lists Wan only
   const cur = caps?.models[p.model_id]
   const h3 = useSession((s) => !!s.settings?.h3_licence_confirmed)
   const presetLabel = (k: string) => cur?.presets[k] ?? k
@@ -208,7 +208,9 @@ function ClipsTab() {
 
 function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
+  const caps = useSession((s) => s.capabilities?.i2v)
   useEffect(() => { if (project?.open) an().refreshPreview() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (caps && !caps.models[an().panel.model_id]) an().setModel('wan22-i2v-high-fp8') }, [caps])   // C3: a persisted LTX panel under `open`
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'model') return <ModelTab />
   if (tab === 'length') return <LengthTab />

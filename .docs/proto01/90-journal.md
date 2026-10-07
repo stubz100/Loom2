@@ -1533,3 +1533,149 @@ read the clock)*
   Edit 16-bit / clone / text / pen, Q15, frame and engine items).
 - **M7 status:** slices 1–4 done, 3's bump done, 5's docs done. **What closes M7 is the author's click-through (15)** — its
   journal entry is the exit line of 12 §8; everything it leans on has an automated twin that passed tonight.
+
+## 2026-10-07 07:44 — Final-milestone code review at eb44d38: bug register (C1–C32)
+
+- Full read of `orchestrator/loom2` (api, queue, engine, media, tools), `frontend/src` (frame, store, all five suites, shell
+  adapter), `src-tauri`, the scripts, CI and the offline tests, against 06/07/10/11. Baseline: 89 offline tests pass, `tsc -b`
+  clean, `oxlint` warnings only, `cargo check` clean. C2, C3 (the persistence half), C4 (via the ComfyUI source) and C5 were
+  reproduced with probe scripts before being recorded; C6's 500 was verified against Starlette; the rest are confirmed at the
+  cited lines unless marked *plausible*. Status column is updated in place as fixes land (fixes get their own entries below).
+
+  **Backend (orchestrator)**
+
+  | Id | Sev | Where | Defect | Status |
+  | --- | --- | --- | --- | --- |
+  | C1 | high | `documents.py` `update_stack`; `api.py` `PUT /documents/{id}`; `editorStore.ts` `save()` | the client PUTs its whole stack and the server drops the pixels of every layer that stack does not list; an AI group inserted server-side (`queue._add_result_layer`) between the job's save and the client's merge is deleted when an autosave (every 120 s) or Ctrl+S lands first — the editor's merge then 404s on the layer and toasts "AI layer added" with nothing added; the engine output is already cleaned up. Window recurs per candidate of a batch | **fixed 08:03** |
+  | C2 | high | `engine/supervisor.py` `wait_for_engine`; `queue.py` `_run_one` | the health poll runs to the timeout although the process already exited; a launch failure fails only that job and the loop takes the next → every queued job fails in turn (reproduced: engine script that exits at once, 3 jobs, all failed, queue not paused; 120 s each with the default timeout) | **fixed 08:03** |
+  | C3 | high | `config.py` `Settings.variant` / `AppState`; `queue.py` `_validate_models`; `api.py` `/capabilities`, `PUT /settings`; `engine/graphs.py` `inpaint_model_id`; `generateStore.ts` `DEFAULT_PANEL`; `EditSuite.tsx` `AiTab` | D26 is not enforced: `LOOM2_VARIANT` only seeds the default and the persisted `app.json` value wins afterwards (reproduced: `open` shell → `full` runtime); `/jobs` accepts full-only model ids under `open`; the i2v capabilities are not filtered (LTX-2.3 offered); Fill Hero / Fill-Match / Remove force dev or Klein 9B (flux-nc) with no open fallback; Generate and the AI panel default to dev / Klein 9B / Klein 9B base / SAM 3; `PUT /settings` can change the variant | **fixed 08:03** |
+  | C4 | high | `queue.py` `_finish_document_job` (Upscale, `as_layer`) | ComfyUI's LoadImage/SaveImage are RGB; the result is converted to RGBA with alpha 255 → the "1× detail layer" is opaque over the layer's whole box (an AI candidate's context ring and the area outside its mask become a hard-edged rectangle). Refine on the active layer carries `alpha_mask`; upscale does not | **fixed 08:03** |
+  | C5 | medium | `catalogue.py` `make_thumbs`; `queue.py` + `api.py` `/thumbs`; `Tile.tsx` | one fixed temp name per size; the queue's thumbnail pass and `GET /thumbs` (requested by the grid as soon as `asset.created` arrives, status still pending) write the same file → one side raises, writes `thumb_status: failed` into the manifest and the index (reproduced 8/8 with two threads); the tile shows "no thumbnail" although the files exist | **fixed 08:03** |
+  | C6 | medium | `catalogue.py` `_delete_files`; `clips.py`; `api.py` `GET /clips/{id}/proxy.mp4` | purging a clip proxy deletes proxy.mp4 + proxy.json only; `clips/<id>/master` and clip.json stay (`ClipStore.delete` has no caller); `/clips` still lists it and the proxy GET raises in `FileResponse` (500) | **fixed 08:03** |
+  | C7 | medium | `queue.py` `_run_one`; `api.py` `put_settings` | `roster.scan()` (rglob over the mounted ComfyUI tree) runs synchronously on the event loop before every job and on every settings save | **fixed 08:03** |
+  | C8 | medium | `queue.py` `stop()` / `_run_one` | a clean shutdown cancels `_run_one` anywhere; after `clips.create` / `_add_result_layer` but before `status=done` the job is re-queued and renders again on relaunch → duplicate clip or candidate | **fixed 08:03** |
+  | C9 | low | `engine/contract.py` `check_graph` | a link is checked for output index only, never output type vs input type (06 §3b promises type matching) | **fixed 08:03** |
+  | C10 | low | `engine/graphs.py` `estimate_vram_gb`; `recipes.py` `warm_group` | use `recipe.model_id`, not the model `inpaint_model_id` actually forces (Fill Hero admitted at the Klein estimate) | **fixed 08:03** |
+  | C11 | low | `catalogue.py` `rebuild` | lineage edges are recreated with `kind=suite`; `frame-extract` becomes `animate` after a rebuild (the manifest never stores the kind) | **fixed 08:03** |
+  | C12 | low | `catalogue.py` `ingest_file` | imported videos get no `w/h/frames/fps` | **fixed 08:03** |
+  | C13 | low | `api.py` `documents_thumbnail` | `KeyError` → 500 on a foreign ORA without `mergedimage.png` | **fixed 08:03** |
+  | C14 | low | `api.py` `/engine/free`, `/engine/stop`, `/engine/restart` | no guard against a running job | **fixed 08:03** |
+  | C15 | low | `queue.py` `_follow` | completion detected through the history poll discards the engine's `status.messages`; the job reads "engine reported an error" | **fixed 08:03** |
+  | C16 | low | `queue.py` `submit` | over-budget jobs are created `failed` but never `record_job`ed | **fixed 08:03** |
+  | C17 | low | `documents.py` `save` / `update_stack` | `save()` reads `od.doc` several times on a worker thread while `update_stack` (another thread) can swap it → a rare inconsistent ORA | **fixed 08:03** |
+  | C18 | low | `engine/client.py` `events`; `engine/supervisor.py` `start` | the event pump reconnects every second forever while the engine is stopped; one `engine-*.log` per start, never pruned | open |
+  | C19 | low | `workspace.py` `create` | refuses when free space < size cap, so the default 100 GB cap fails on a disk with less than that free | open |
+  | C32 | high | `engine/graphs.py` `build_segment` (SAM 3 box) | `SAM3_Detect.bboxes` was wired to `CreateBoundingBoxes` output 0 (the preview IMAGE); the BOUNDING_BOX is output 1 — found by C9's new type check; box mode was not among the M5 acceptance's prompts | **fixed 08:03** |
+
+  **Frontend and shell**
+
+  | Id | Sev | Where | Defect | Status |
+  | --- | --- | --- | --- | --- |
+  | C20 | high | `editorStore.ts` `mergeServerLayers` | adopts the server stack when an AI result lands: layers added / reordered / renamed during the job (minutes for hero jobs) vanish from the stack (canvases wait in `pixels` for gc); `docDirty` not set; Undo also removes the AI group | **fixed 08:03** |
+  | C21 | medium | `EditorCanvas.tsx` scene sync | every revision `removeChildren()`s the layer and overlay containers and recreates the ants / prompt / guide / transform / frame `Graphics` and the background rect without `destroy()` → GPU geometry per stroke. *Plausible*, not measured | **fixed 08:03** |
+  | C22 | medium | `src-tauri/src/lib.rs` `repo_root`; `ci.yml`; README | release builds bake `CARGO_MANIFEST_DIR` (the CI runner's path); the installer bundles neither venv nor engine; `LOOM2_REPO` / `LOOM2_ORCH_CMD` are documented only in the journal | **fixed 08:03** |
+  | C23 | low | `generateStore.ts` `loadSnippets`; `GenerateSuite.tsx` `PresetsTab` | field presets load only when the Presets tab mounts; the preset menus lack the user's presets until then | **fixed 08:03** |
+  | C24 | low | `AnimateSuite.tsx` `Filmstrip` | up to 40 full-size master PNGs as thumbnails | open |
+  | C25 | low | `animateStore.ts` `MODEL_RULES` | duplicates the server's `I2V_RULES` | open |
+  | C26 | low | `src-tauri/src/lib.rs` `reveal_path` | `explorer /select,<path>` through Rust's argument quoting likely breaks on paths with spaces. *Plausible* | **fixed 08:03** |
+  | C27 | low | `ProjectDialog.tsx` | hard-coded `F:/loom2-projects/` | **fixed 08:03** |
+  | C28 | low | `compose.py` `render_nodes` vs `EditorCanvas.tsx` `build` | a group with a *disabled* mask is isolated in Python and pass-through on the GPU; `clip` on groups differs too (visible only with non-normal child blends) | open |
+  | C29 | low | `store/session.ts` previews | blob URLs of finished jobs are never revoked | **fixed 08:03** |
+  | C30 | low | `EditorCanvas.tsx` `pick` | the eyedropper reads premultiplied pixels (darker over semi-transparent areas) | open |
+  | C31 | low | `editorStore.ts` `openDocument` | no in-flight guard; two concurrent opens leak the loser's textures | **fixed 08:03** |
+
+- **Test gaps:** nothing covers variant enforcement at `/jobs`, the upscale layer's alpha, purging a video asset, concurrent
+  `make_thumbs`, an engine that fails to launch with several jobs queued, a stale stack PUT, or link types in the contract check.
+- **Solid:** the durable queue with atomic writes and quarantine; the B1–B24 fixes present and tested; blob sha verification;
+  the W3C blend shaders match `compose.py` formula for formula; the command registry; on-demand rendering; the fake-engine harness.
+  Fix order: C1 + C20 together (stack revision on the server, merge instead of replace in the editor), C2, C3, C4, then C5–C8,
+  then the low items that are one-liners (C9–C16), then C21/C22.
+
+## 2026-10-07 08:03 — Review fixes C1–C17, C20–C23, C26, C27, C29, C31 landed; C9's type check found C32
+
+- **C1 + C20 (the editor and the queue writing the same document).** `Document` gained `revision` (documents.py): every stack
+  replace bumps it, and so does every layer the queue inserts (`_add_result_layer`). `PUT /documents/{id}` with a stack based on an
+  older revision is refused with **409** (`StaleStack`); a body without `revision` is accepted as before (legacy callers). The
+  editor's `save()` catches the 409, runs `resync()` and saves the merged stack; `mergeServerLayers` now **merges** the server's new
+  group or layers into the *local* stack (later candidates join the group already there) instead of adopting the server stack, so
+  layers added, moved or renamed while a job ran survive. Outpaint sends `shift {left, top}` in `document.changed`; the editor shifts
+  its own raster layers, unlinked masks and the selection by it (inferred from a common layer on the resync path). `update_stack`
+  runs under the document's save lock (C17). Test: `test_c1_stale_stack_put_is_refused_and_server_added_layers_survive`.
+- **C2.** `wait_for_engine` takes `alive=` (the supervisor passes `proc.poll() is None`) and returns as soon as the process is gone;
+  the error names the exit code. `JobQueue._run_one` catches the launch failure before anything else: the job goes back to
+  **queued**, the queue **pauses**, `queue.state` and `job.updated` are broadcast — the "Engine down" banner carries the reason and
+  Restart, the "Queue paused" banner Resume. Test: `test_c2_engine_launch_failure_requeues_the_job_and_pauses` (an engine that
+  exits with code 3; two jobs; paused within seconds, both still queued, none failed).
+- **C3 (D26 enforced).** `AppState(state_dir, variant)` / `create_app(..., variant)`: `main.py` hands `LOOM2_VARIANT` over and the
+  value overrides whatever `app.json` holds, on load and after every settings update; `PUT /settings` drops `variant`. The queue's
+  `_validate_models` walks `graphs.recipe_weights(recipe, variant)` (transformer, text encoder, VAE, Turbo LoRA, upscaler, segmenter,
+  the full i2v set) and refuses any id without the `open` tag with a 422 that names the licence. `inpaint_model_id` moved to
+  `recipes.py` with a `variant` argument (Fill-Match / Remove fall back to Klein 4B under `open`; Fill Hero is refused);
+  `estimate_vram_gb` / `warm_group` use it (C10). `/capabilities.i2v` is filtered (LTX-2.3 is full only). Frontend: the AI panel maps
+  its choices onto the open models (Klein 4B, Klein 4B base; no Fill Hero, no dev hero, no SAM 3), Generate falls back from a model
+  the build does not list to Klein 4B, Animate lists only the models the capabilities carry. Tests that rely on full-only weights
+  pin `"variant": "full"` in their settings (CI's `open` matrix still runs the dedicated open tests). Tests:
+  `test_c3_shell_variant_wins_over_the_persisted_one_and_settings_cannot_change_it`,
+  `test_c3_open_variant_rejects_full_only_weights_and_filters_capabilities`.
+- **C4.** Upscale keeps `alpha_mask` (the active layer's alpha, or the composite's) and the detail layer is assembled with
+  `edit_ai.assemble_layer`, like refine. Test: `test_c4_upscale_detail_layer_keeps_the_source_alpha` (left half transparent stays
+  transparent, the engine's colour lands where the layer is visible).
+- **C5.** A probe showed the unique temp name alone is not enough: two `replace()`s onto one destination still lose with
+  `PermissionError` on Windows (4 of 20 runs). `make_thumbs` now takes a **per-asset lock**; the second maker finds the files and the
+  `done` record and returns it. Test: `test_c5_concurrent_thumbnail_makers_both_succeed` (12 of 12 done, no temp files left).
+- **C6.** `_delete_files` removes `clips/<id>/` when the purged asset is the proxy inside it; `GET /clips/{id}/proxy.mp4` answers
+  404 when the file is gone. Test: `test_c6_purging_a_clip_proxy_removes_the_whole_clip`.
+- **C7** `roster.scan()` in a thread (queue and settings). **C8** `job.resumable = False` once the engine has finished (persisted);
+  `stop()` waits up to 30 s for the finalisation of such a job with the queue held, and a job that is still finalising when the
+  wait ends is marked failed ("interrupted while its outputs were being written") instead of re-queued; `load()` already treated a
+  non-resumable running job that way. **C9** `check_graph` compares the linked output's type with the input's (both plain strings,
+  `*` excluded). **C11** `AssetRecord.lineage_kind` is stored and used by `rebuild`. **C12** imported videos are probed with PyAV.
+  **C13** 404 instead of a KeyError. **C14** `/engine/stop|restart|free` answer 409 while a job runs. **C15** the history fallback
+  keeps the engine's `execution_error` message and traceback, and recognises an interrupt. **C16** refused jobs are `record_job`ed.
+- **C32 (new, found by C9).** The SAM 3 **box** graph wired `SAM3_Detect.bboxes` to `CreateBoundingBoxes` output **0** — the preview
+  IMAGE; the BOUNDING_BOX is output **1**. The fixture confirms the outputs (`preview, bboxes, elements`); ComfyUI's own validation
+  would have rejected the prompt at run time (box mode was not among the M5 acceptance's exercised prompts). Fixed, and the m5b test
+  that asserted the wrong index corrected.
+- **Frontend.** C21: the scene rebuild destroys the layer sprites, mask wrappers, pass contents and the background rect, keeps the
+  labelled overlay Graphics (cleared and redrawn in place, re-ordered above the sprites) and reuses two ColorMatrix filters —
+  `Graphics.destroy()` is what frees the GPU context, so this was a real leak per revision. C23: field presets load with the Generate
+  panel. C27: the new-project path defaults next to the last project. C29: a finished job's preview blob URL is revoked. C31:
+  `openDocument` is sequenced; a superseded load frees what it fetched.
+- **Shell.** C22: `repo_root()` falls back from `LOOM2_REPO` to the built path only if it holds `orchestrator/`, else to the nearest
+  ancestor of the executable holding `orchestrator/.venv`; the spawn error names the fix; README documents the installer's
+  dependence on a checkout. C26: `explorer /select,"<path>"` through `raw_arg`.
+- **Not done:** C18 (event pump reconnect loop while the engine is stopped; engine logs unpruned), C19 (free-space < cap refusal at
+  project creation — a design question), C24 (filmstrip full PNGs), C25 (`MODEL_RULES` duplication), C28 (group pass-through
+  parity on a disabled mask / clip), C30 (eyedropper premultiplied).
+- **Verification:** offline suite **97 passed** (89 + 8 new in `tests/test_review_c.py`), `tsc -b` clean, `oxlint` warnings only
+  (unchanged set), `cargo check` clean. Not yet re-run on the rig: the M5 acceptance (SAM 3 box mode after C32), an `open` launch
+  through the shell, and the M7 durability script (C8 changes the shutdown path).
+
+## 2026-10-07 08:41 — Rig re-check of the review fixes: M5 acceptance, SAM 3 box (C32 second half), M7 durability 11/11, `open` launch
+
+- **M5 acceptance** (`scripts/m5_acceptance.py --port 8766`, dev orchestrator on the repo's `.loom2_state`, fresh project
+  `F:/loom2-projects/acceptance-20261007-0815`): **23/25** — every generative check passed with the new code (fill 86.4 / 39.4 s,
+  fill_match 19.7 s, remove 19.9 s, cloak 40 s ×2, face 47 s, outpaint 31 s → 1200×544, refine 45 s, upscale 4.1 s with the
+  Catalogue asset, BiRefNet 2.6 s face 0.96 / crates 0.00, background swap alpha on subject 0.027 / background 0.996, SAM 3 text
+  32.5 s, SAM 3 point 3.2 s, tiled refine 2400×1088 over 6 tiles, 21 nodes saved). The two failures were the **SAM 3 box** case
+  the script gained this morning (the acceptance had never exercised box mode): after C32's output-index fix the engine refused
+  the prompt for a second reason — `CreateBoundingBoxes.editor_state: []` is read by ComfyUI's API validator as a *link*
+  ("Bad linked input, must be a length-2 list"). Any list value is a link to `validate_inputs`; the canvas state must be empty
+  for the JSON `bboxes` to win (`editor_state or []`), so the graph now sends `{}`. Re-run on the rig after an orchestrator
+  restart: **box mode works** — job 25.4 s, cloak box 0.68, crates 0.00, canvas 0.17. C32's row updated.
+  Side notes: the script's end-of-run crash (`a.keep` on a numpy array; the background-swap block shadowed the argparse namespace,
+  also seen at M5 close) is fixed by renaming. **Tiled refine took 892 s against 439 s at M5 close** for the same graph and
+  tile count — not touched by this review; to be measured in isolation (ComfyUI v0.39.0 bump? resident weights after the SAM 3 /
+  BiRefNet jobs with `--reserve-vram`?) before it is called a regression.
+- **M7 durability, rig half** (`scripts/m7_durability.py --project F:/loom2-projects/m6-acceptance`): **11/11**. Power loss
+  mid-clip: the engine died with the orchestrator in 0.1 s, the relaunch came up paused with the job re-queued (retry 1, no recovery
+  notes), the re-queued clip finished in 248.4 s with 81 frames and a 1.6 MiB proxy. Engine crash mid-clip: the job failed with an
+  engine error in 9 s, the orchestrator kept answering, the next job started a fresh engine in 6 s. C8's shutdown change (non-
+  resumable finalisation) did not alter either path.
+- **`open` launch through the entry point** (`LOOM2_VARIANT=open python -m loom2.main` on a state dir whose `app.json` persisted
+  `full`): `/health` and `/settings` say `open`, `/capabilities` lists `klein-4b` and `klein-base-4b` only and Wan alone under i2v,
+  `PUT /settings {variant: full}` answers `open`, `POST /jobs` refuses dev (422, "flux-nc … not part of the open variant (D26)")
+  and LTX-2.3 ("ltx-2.x community") and accepts Klein 4B, and the persisted `app.json` now reads `open`. The shell itself
+  (`LOOM2_VARIANT` baked by `option_env!`, handed over as the environment variable) was not driven; it passes exactly what this
+  test set.
+- Offline suite 97 passed, `tsc -b` clean, `oxlint` unchanged, `cargo check` clean. Committed as the review-fix commit.

@@ -17,7 +17,7 @@ export interface Node {
 }
 export interface DocumentStack {
   schema_version: number; id: string; name: string; w: number; h: number; background: string; source_asset_id: string | null
-  created_at: string; saved_at: string | null; layers: Node[]; has_selection: boolean; meta: Record<string, unknown>
+  created_at: string; saved_at: string | null; revision: number; layers: Node[]; has_selection: boolean; meta: Record<string, unknown>
 }
 export interface DocSummary { id: string; name: string; w: number; h: number; saved_at: string | null; source_asset_id: string | null; layers: number; path: string; open: boolean }
 export type Tool = 'move' | 'marquee' | 'lasso' | 'wand' | 'ai' | 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'crop' | 'hand' | 'zoom'
@@ -62,8 +62,8 @@ export interface EditorState {
   aiBatch: string | null                      // batch id of the last AI run (its candidates form the strip)
   candidates: { group: string; ids: string[] } | null
   runAi: (recipe: Record<string, unknown>, stage?: boolean) => Promise<void>
-  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null; selection?: boolean }) => void
-  mergeServerLayers: (added: string[], group?: string) => Promise<void>
+  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null; selection?: boolean; shift?: { left: number; top: number } | null }) => void
+  mergeServerLayers: (added: string[], group?: string, shift?: { left: number; top: number }) => Promise<void>
   pickCandidate: (keepId: string | null) => void
   // AI Select (10 §4, A tool): the prompt collected on the canvas, and the selection the segment job writes on the server
   aiPrompt: { points: { x: number; y: number; label: 1 | 0 }[]; box: [number, number, number, number] | null }
@@ -166,6 +166,7 @@ const maskEditExtras = (tool: Tool): { tool?: Tool } => {
   if (!maskHintShown) { maskHintShown = true; useSession.getState().toast('Editing the mask: paint white to show the layer, black to hide it — B brush · E eraser · G fill. Click the layer thumbnail to edit its pixels again.', 'info') }
   return PAINTS_MASK.includes(tool) ? {} : { tool: 'brush' }
 }
+let openSeq = 0                                                   // C31: the latest openDocument() wins; a superseded load frees what it fetched
 const download = (blob: Blob, name: string) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }
 const maskOffset = (n: Node) => ({ x: (n.mask?.linked ? (n.x ?? 0) : 0) + (n.mask?.x ?? 0), y: (n.mask?.linked ? (n.y ?? 0) : 0) + (n.mask?.y ?? 0) })
 
@@ -287,7 +288,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!doc || d.id !== doc.id) return
           if (d.selection) { void get().loadSelectionFromServer(); return }
-          if (d.added?.length) void get().mergeServerLayers(d.added, d.group)
+          if (d.added?.length) void get().mergeServerLayers(d.added, d.group, d.shift ?? undefined)
         },
         setAiPrompt: (p) => set({ aiPrompt: { ...get().aiPrompt, ...p }, revision: get().revision + 1 }),
         loadSelectionFromServer: async () => {
@@ -305,13 +306,11 @@ export const useEditor = create<EditorState>()(
             useSession.getState().toast('AI Select: selection updated', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
         },
-        mergeServerLayers: async (added, group) => {
+        mergeServerLayers: async (added, group, shift) => {
           const doc = get().doc
           if (!doc) return
           try {
             const server = await api.get<DocumentStack>(`/documents/${doc.id}`)
-            const before = clone(doc)
-            const grown = server.w !== doc.w || server.h !== doc.h
             const pixels = get().pixels, masks = get().masks
             await Promise.all(added.map(async (lid) => {
               const lp = await fetchRaw(doc.id, lid, 'image')
@@ -319,12 +318,36 @@ export const useEditor = create<EditorState>()(
               const n = findNode(server, lid)
               if (n?.mask) { const m = await fetchRaw(doc.id, lid, 'mask'); if (m) masks.set(lid, m) }
             }))
-            let selection = get().selection
-            if (grown && selection) { const sel = new LayerPixels(server.w, server.h, true); sel.ctx.drawImage(selection.canvas, 0, 0); sel.refresh(); selection.destroy(); selection = sel }
-            // the server stack is the truth after an AI job (positions shift on outpaint); local pixels stay
+            const cur = get().doc
+            if (!cur || cur.id !== doc.id) return
+            const before = clone(cur)
+            // C20: merge the server's additions into the *local* stack instead of adopting the server's — layers added, moved or
+            // renamed while the job ran survive. When outpaint grew the canvas, shift local layers like the server shifted its own.
+            const next = clone(cur)
+            const grown = server.w !== cur.w || server.h !== cur.h
+            let dx = shift?.left ?? 0, dy = shift?.top ?? 0
+            if (grown && !shift) {                                           // resync path: infer the shift from a layer both sides have
+              const pair: { s: Node; l: Node }[] = []
+              walk(server.layers, (s) => { const l = findNode(cur, s.id); if (s.kind === 'raster' && l?.kind === 'raster') { pair.push({ s, l }); return true } })
+              if (pair[0]) { dx = (pair[0].s.x ?? 0) - (pair[0].l.x ?? 0); dy = (pair[0].s.y ?? 0) - (pair[0].l.y ?? 0) }
+            }
+            if (grown) {
+              next.w = server.w; next.h = server.h
+              if (dx || dy) walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy; if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } } })
+            }
             const gnode = group ? findNode(server, group) : null
+            if (gnode) {
+              const local = findNode(next, gnode.id)
+              if (local?.children) {                                           // later candidates join the group that is already here
+                const have = new Set(local.children.map((c) => c.id))
+                gnode.children?.forEach((c, i) => { if (!have.has(c.id)) local.children!.splice(Math.min(i, local.children!.length), 0, clone(c)) })
+              } else next.layers.unshift(clone(gnode))
+            } else for (const lid of [...added].reverse()) { const n = findNode(server, lid); if (n && !findNode(next, lid)) next.layers.unshift(clone(n)) }
+            next.revision = server.revision; next.saved_at = server.saved_at
+            let selection = get().selection
+            if (grown && selection) { const sel = new LayerPixels(server.w, server.h, true); sel.ctx.drawImage(selection.canvas, dx, dy); sel.refresh(); selection.destroy(); selection = sel }
             const ids = gnode?.children?.map((c) => c.id) ?? added
-            set({ doc: { ...server, saved_at: server.saved_at }, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
+            set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
             get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now() })
             if (grown) get().requestFit()
             useSession.getState().toast(ids.length > 1 ? `Candidate ${ids.indexOf(added[0]) + 1} of ${ids.length} arrived — pick with 1–4 or the strip` : 'AI layer added', 'success')
@@ -401,6 +424,7 @@ export const useEditor = create<EditorState>()(
         // ---- documents -----------------------------------------------------------------------------
         openDocument: async (id) => {
           get().closeDocument()
+          const seq = ++openSeq
           set({ loading: true, error: null })
           try {
             const doc = await api.get<DocumentStack>(`/documents/${id}`)
@@ -411,6 +435,7 @@ export const useEditor = create<EditorState>()(
               ...rasters.map(async (n) => { const lp = await fetchRaw(id, n.id, 'image'); if (lp) pixels.set(n.id, lp) }),
               ...masked.map(async (n) => { const m = await fetchRaw(id, n.id, 'mask'); if (m) masks.set(n.id, m) }),
             ])
+            if (seq !== openSeq) { pixels.forEach((p) => p.destroy()); masks.forEach((p) => p.destroy()); return }   // C31: another document was opened meanwhile
             const first = rasters[0]?.id ?? null
             // an AI candidate group left unpicked (several children, one visible) resumes its strip
             const top = doc.layers[0]
@@ -418,8 +443,8 @@ export const useEditor = create<EditorState>()(
               ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
             set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1 })
             get().requestFit()
-          } catch (e) { set({ error: (e as ApiError).detail ?? (e as Error).message }) }
-          finally { set({ loading: false }) }
+          } catch (e) { if (seq === openSeq) set({ error: (e as ApiError).detail ?? (e as Error).message }) }
+          finally { if (seq === openSeq) set({ loading: false }) }
         },
         openFromAsset: async (assetId) => {
           const s = useSession.getState()
@@ -475,9 +500,20 @@ export const useEditor = create<EditorState>()(
           // layer and rides the next save; a failure below puts the document flag back
           set({ saving: true, docDirty: false })
           try {
+            type Reply = DocumentStack & { missing_pixels?: string[]; missing_masks?: string[] }
+            let stack = doc
+            let server: Reply
+            try { server = await api.put<Reply>(`/documents/${doc.id}`, stack) }
+            catch (e) {
+              if (!(e instanceof ApiError) || e.status !== 409) throw e
+              await get().resync()                                 // C1: an AI result landed since this stack's revision — merge it, then save the merged stack
+              const merged = get().doc
+              if (!merged || merged.id !== doc.id) return false
+              stack = merged
+              server = await api.put<Reply>(`/documents/${doc.id}`, stack)
+            }
             const rasters = new Set<string>(), masked = new Set<string>()
-            walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.add(n.id); if (n.mask) masked.add(n.id) })
-            const server = await api.put<DocumentStack & { missing_pixels?: string[]; missing_masks?: string[] }>(`/documents/${doc.id}`, doc)
+            walk(stack.layers, (n) => { if (n.kind === 'raster') rasters.add(n.id); if (n.mask) masked.add(n.id) })
             const upload = async (map: Map<string, LayerPixels>, kind: 'image' | 'mask', inStack: Set<string>, missing: string[] | undefined) => {
               const need = new Set(missing ?? [])
               for (const [lid, lp] of map) {
@@ -491,7 +527,7 @@ export const useEditor = create<EditorState>()(
             await upload(masks, 'mask', masked, server.missing_masks)
             const saved = await api.post<DocumentStack>(`/documents/${doc.id}/save`)
             const cur = get().doc
-            if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at } })
+            if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at, revision: saved.revision } })
             useSession.getState().toast('Saved', 'success')
             return true
           } catch (e) {
@@ -509,7 +545,11 @@ export const useEditor = create<EditorState>()(
             const local = new Set<string>(); walk(doc.layers, (n) => { local.add(n.id) })
             const added: string[] = []
             walk(server.layers, (n) => { if (n.kind === 'raster' && !local.has(n.id)) added.push(n.id) })
-            if (!added.length) return
+            if (!added.length) {                                   // nothing new: just take the server's revision so the next save is accepted
+              const cur = get().doc
+              if (cur && cur.id === doc.id && cur.revision !== server.revision) set({ doc: { ...cur, revision: server.revision } })
+              return
+            }
             const group = server.layers.find((t) => t.kind === 'group' && t.children?.some((c) => added.includes(c.id)))?.id
             await get().mergeServerLayers(added, group)
           } catch { /* the next event or save reconciles */ }

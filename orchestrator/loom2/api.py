@@ -23,7 +23,7 @@ from .clips import ClipStore, compute_identity
 from .tools import facesim
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
-from .documents import DocumentStore
+from .documents import DocumentStore, StaleStack
 from .engine.graphs import CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, VRAM_ESTIMATE_GB, WAN_PRESETS, effective_params, estimate_i2v_seconds, i2v_params
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
@@ -41,8 +41,8 @@ DEV_ORIGINS = ["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localh
 
 
 class Services:
-    def __init__(self, state_dir: Path | None = None) -> None:
-        self.app = AppState(state_dir)
+    def __init__(self, state_dir: Path | None = None, variant: str | None = None) -> None:
+        self.app = AppState(state_dir, variant)
         self.hub = EventHub()
         self.roster = Roster(self.app.models_root, [Path(p) for p in self.app.settings.mounted_model_trees], self.app.settings.variant)
         self.engine = EngineSupervisor(self.app, on_state=lambda s: self.hub.broadcast("engine.state", s))
@@ -173,8 +173,8 @@ class ExportRequest(BaseModel):
     format: str = "png"
 
 
-def create_app(state_dir: Path | None = None, project: Path | None = None, ready_cb=None) -> FastAPI:
-    svc = Services(state_dir)
+def create_app(state_dir: Path | None = None, project: Path | None = None, ready_cb=None, variant: str | None = None) -> FastAPI:
+    svc = Services(state_dir, variant)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -204,6 +204,10 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             if request.headers.get("X-Loom-Token") != svc.app.token:
                 return JSONResponse({"detail": "missing or wrong X-Loom-Token"}, status_code=401)
         return await call_next(request)
+
+    @app.exception_handler(StaleStack)
+    async def _stale_stack(_: Request, e: StaleStack):          # C1: the editor merges the newer server layers and saves again
+        return JSONResponse({"detail": str(e)}, status_code=409)
 
     @app.exception_handler(StateError)
     async def _state_error(_: Request, e: StateError):
@@ -236,6 +240,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         i2v_models = {}
         for mid, needs in I2V_WEIGHTS.items():
             e = ROSTER_BY_ID[mid]
+            if svc.app.settings.variant == "open" and "open" not in e.variants:        # C3: LTX-2.3 is community-licensed, full only
+                continue
             rule = I2V_RULES[e.family]
             healths = {x: svc.roster.resolve(x).health for x in needs}
             missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
@@ -296,10 +302,10 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     @app.put("/settings")
     async def put_settings(patch: dict):
         try:
-            s = svc.app.update_settings(patch)
+            s = svc.app.update_settings({k: v for k, v in patch.items() if k != "variant"})   # C3: the variant is the build's, never a setting
         except ValidationError as e:
             raise HTTPException(422, e.errors()[0].get("msg", "invalid settings") if e.errors() else "invalid settings")
-        svc.roster = Roster(svc.app.models_root, [Path(p) for p in s.mounted_model_trees], s.variant).scan()
+        svc.roster = await asyncio.to_thread(Roster(svc.app.models_root, [Path(p) for p in s.mounted_model_trees], s.variant).scan)   # C7: off the loop
         if svc.queue:                                   # B7: the live queue compiles against the new roster at once
             svc.queue.roster = svc.roster
         svc.engine.reconfigure()
@@ -704,7 +710,11 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         if not p.is_file():
             raise HTTPException(404, "no document")
         with zipfile.ZipFile(p) as z:
-            data = z.read("Thumbnails/thumbnail.png") if "Thumbnails/thumbnail.png" in z.namelist() else z.read("mergedimage.png")
+            names = set(z.namelist())
+            src = next((n for n in ("Thumbnails/thumbnail.png", "mergedimage.png") if n in names), None)
+            if src is None:
+                raise HTTPException(404, "the document has no thumbnail")      # C13: a foreign ORA without a merged image
+            data = z.read(src)
         return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     @app.get("/documents/{doc_id}/selection")
@@ -785,7 +795,10 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         rec = ClipStore(ws).get(clip_id)
         if not rec or not rec.proxy_path:
             raise HTTPException(404, "proxy not ready")
-        return FileResponse(ws.path / rec.proxy_path, media_type="video/mp4", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+        p = ws.path / rec.proxy_path
+        if not p.is_file():
+            raise HTTPException(404, "proxy file is gone")           # C6: FileResponse on a missing file is a 500
+        return FileResponse(p, media_type="video/mp4", headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.get("/clips/{clip_id}/frames/{name}")
     async def clip_frame(clip_id: str, name: str):
@@ -962,16 +975,25 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         except RuntimeError as e:
             raise HTTPException(503, str(e))
 
+    def _engine_idle() -> None:
+        """C14: stop / restart / free while a job renders would fail that job — the user cancels it first."""
+        running = svc.queue.state()["running"] if svc.queue else None
+        if running:
+            raise HTTPException(409, f"job {running} is running — cancel it first")
+
     @app.post("/engine/stop")
     async def engine_stop():
+        _engine_idle()
         return await svc.engine.stop()
 
     @app.post("/engine/restart")
     async def engine_restart():
+        _engine_idle()
         return await svc.engine.restart()
 
     @app.post("/engine/free")
     async def engine_free():
+        _engine_idle()
         await svc.engine.client.free()
         return {"freed": True}
 

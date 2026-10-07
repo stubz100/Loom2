@@ -91,6 +91,10 @@ def check_graph(object_info: dict, graph: dict) -> list[str]:
                 outs = (src_info or {}).get("output", [])
                 if src_info and out_idx >= len(outs):
                     problems.append(f"{nid} ({cls}): '{key}' links to output {out_idx} of {src['class_type']} which has {len(outs)}")
+                elif src_info:
+                    want, have = spec[0], outs[out_idx]                           # C9: the output's type must be the input's
+                    if isinstance(want, str) and isinstance(have, str) and "*" not in (want, have) and want != have:
+                        problems.append(f"{nid} ({cls}): '{key}' takes {want}, but {src['class_type']} output {out_idx} is {have}")
                 continue
             kind = spec[0]
             options = _enum(spec)

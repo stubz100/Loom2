@@ -146,9 +146,11 @@ class EngineSupervisor:
             self.jobs_since_start = 0
             self.last_error = None
             self._emit()
-            ok = await wait_for_engine(self.client, timeout_s=e.health_timeout_s)
+            ok = await wait_for_engine(self.client, timeout_s=e.health_timeout_s, alive=lambda: self.proc is not None and self.proc.poll() is None)
             if not ok:
-                self.last_error = f"engine did not answer within {e.health_timeout_s:.0f} s (see {self.log_path})"
+                rc = self.proc.poll() if self.proc is not None else None
+                self.last_error = (f"engine exited with code {rc} before answering (see {self.log_path})" if rc is not None      # C2
+                                   else f"engine did not answer within {e.health_timeout_s:.0f} s (see {self.log_path})")
                 await self._stop_locked()        # B1: never re-enter the lock we hold (asyncio.Lock is not reentrant)
                 raise RuntimeError(self.last_error)
             self.version = (await self.client.system_stats()).get("system")

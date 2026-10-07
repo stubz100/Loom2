@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import logging
+import shutil
 import sqlite3
 import threading
 import time
@@ -20,7 +21,7 @@ from typing import Any, Literal
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .fsio import StateError, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
+from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
 ASSET_SCHEMA_VERSION = 1
@@ -49,6 +50,7 @@ class AssetRecord(BaseModel):
     session_id: str | None = None
     root_id: str | None = None                  # lineage root (self when the asset has no parents)
     parents: list[str] = Field(default_factory=list)
+    lineage_kind: str | None = None             # C11: the edge kind towards the parents (frame-extract, …); None = the suite
     suite: str = "generate"
     model_id: str | None = None
     format: str | None = None
@@ -189,6 +191,7 @@ class Catalogue:
         self.thumb_sizes = thumb_sizes or [256, 512, 1024]
         self.session_id = session_id
         self._lock = threading.RLock()
+        self._thumb_locks: dict[str, threading.Lock] = {}     # C5: one thumbnail maker per asset at a time
         self._closed = False
         self.recovery: list[str] = []
         self._connect()
@@ -259,7 +262,6 @@ class Catalogue:
         file that already lives inside the project where it is (M6 clip proxies stay in `clips/<id>/`)."""
         src = Path(src)
         asset_id = fields.pop("id", None) or new_id("ast")
-        lineage_kind = fields.pop("lineage_kind", None)              # e.g. "frame-extract"; default = the suite
         ext = src.suffix.lower().lstrip(".") or "bin"
         if in_place:
             dest = src
@@ -280,6 +282,16 @@ class Catalogue:
                     rec.w, rec.h = im.size
             except Exception:
                 pass
+        if kind == "video" and (rec.w is None or rec.frames is None):           # C12: imported clips get their size, length and fps
+            try:
+                import av
+                with av.open(str(dest)) as c:
+                    s = c.streams.video[0]
+                    rec.w, rec.h = rec.w or s.codec_context.width, rec.h or s.codec_context.height
+                    rec.frames = rec.frames or (s.frames or None)
+                    rec.fps = rec.fps or (float(s.average_rate) if s.average_rate else None)
+            except Exception:  # noqa: BLE001 — a probe failure never blocks an import
+                pass
         if rec.parents:
             parent = self.get(rec.parents[0])
             rec.root_id = (parent.root_id or parent.id) if parent else rec.parents[0]
@@ -288,11 +300,23 @@ class Catalogue:
         atomic_write_json(self.manifest_path(rec), rec.model_dump())
         self._index(rec)
         for parent in rec.parents:
-            self.add_lineage(parent, rec.id, rec.job_id or "", kind=lineage_kind or rec.suite)
+            self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.lineage_kind or rec.suite)
         return rec
 
     def make_thumbs(self, rec: AssetRecord, source: Path | None = None) -> AssetRecord:
-        """Thumbnails from the asset file, or from `source` (a clip's first master frame stands in for its mp4)."""
+        """Thumbnails from the asset file, or from `source` (a clip's first master frame stands in for its mp4).
+        C5: the queue's pass and `GET /thumbs` can ask for the same fresh asset at once — one maker per asset at a time, and the
+        second one only confirms what the first produced."""
+        with self._lock:
+            lock = self._thumb_locks.setdefault(rec.id, threading.Lock())
+        with lock:
+            if all(self.ws.thumb_path(rec.id, s).is_file() for s in self.thumb_sizes) and rec.thumb_status == "pending":
+                latest = self.get(rec.id)                                  # another maker just finished: take its record
+                if latest is not None and latest.thumb_status == "done":
+                    return latest
+            return self._make_thumbs(rec, source)
+
+    def _make_thumbs(self, rec: AssetRecord, source: Path | None = None) -> AssetRecord:
         src = source or self.abs_path(rec)
         if source is None and rec.kind == "video":
             cid = (rec.params or {}).get("clip_id")
@@ -308,7 +332,7 @@ class Catalogue:
                     t.thumbnail((size, size), Image.LANCZOS)
                     out = self.ws.thumb_path(rec.id, size)
                     out.parent.mkdir(parents=True, exist_ok=True)
-                    tmp = out.with_suffix(".tmp.webp")
+                    tmp = _tmp_for(out)                       # C5: unique per writer — the queue and GET /thumbs race on a fresh asset
                     t.save(tmp, "WEBP", quality=82, method=4)
                     tmp.replace(out)
             rec.thumb_status = "done"
@@ -582,6 +606,9 @@ class Catalogue:
         return True
 
     def _delete_files(self, rec: AssetRecord) -> None:
+        cid = str((rec.params or {}).get("clip_id") or "") if rec.kind == "video" else ""
+        if cid and Path(rec.path).parts[:2] == ("clips", cid):             # C6: the proxy lives in the clip → the whole clip goes
+            shutil.rmtree(self.ws.clips_dir / cid, ignore_errors=True)
         for p in (self.abs_path(rec), self.manifest_path(rec)):
             p.unlink(missing_ok=True)
         tdir = self.ws.thumb_path(rec.id, 1).parent
@@ -689,7 +716,7 @@ class Catalogue:
                 continue
             self._index(rec)
             for parent in rec.parents:
-                self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.suite)
+                self.add_lineage(parent, rec.id, rec.job_id or "", kind=rec.lineage_kind or rec.suite)   # C11
             n += 1
         return n
 

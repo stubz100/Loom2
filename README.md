@@ -46,5 +46,11 @@ engine\.venv\Scripts\python.exe scripts\fetch_weights.py    # weights into F:\lo
 Tests: `orchestrator\.venv\Scripts\python.exe -m pytest` (offline, against a captured `/object_info` fixture) and
 `orchestrator\.venv\Scripts\python.exe scripts\m1_acceptance.py` (rig: real generation, kill/resume/cancel).
 
+**Installers (CI).** The `loom2-full-*` / `loom2-open-*` bundles contain the shell only — no orchestrator venv, no engine.
+On a machine other than the one that built them, prepare a checkout with `scripts/setup.ps1`; the shell finds it through
+`LOOM2_REPO` when set, else the path it was built from, else the nearest ancestor of its own executable that holds
+`orchestrator/.venv` (so installing the shell inside the checkout tree needs no variable). `LOOM2_ORCH_CMD` replaces the
+whole orchestrator command.
+
 Weights are never in git. Model roots are mounted through `engine/extra_model_paths.yaml` (ComfyUI layout);
 the roster lives in `orchestrator/loom2/roster.py` (D1), fp8 first (D30).

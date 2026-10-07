@@ -119,7 +119,7 @@ async def test_engine_death_mid_job_fails_the_job_and_frees_the_queue(tmp_path: 
 def test_disk_guard_refuses_new_jobs_with_a_clear_422(tmp_path: Path, monkeypatch):
     state = tmp_path / "state"
     app_state = AppState(state)
-    app_state.update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    app_state.update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": [], "variant": "full"})
     app = create_app(state)
     client = TestClient(app)
     H = {"X-Loom-Token": app.state.services.app.token}

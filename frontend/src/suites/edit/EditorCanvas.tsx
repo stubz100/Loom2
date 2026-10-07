@@ -53,6 +53,8 @@ function outlineSegments(sel: LayerPixels): number[] {
 }
 
 type Pt = { x: number; y: number }
+/** Overlay Graphics that live across scene rebuilds (cleared and redrawn in place); everything else in the overlay is rebuilt. */
+const OVERLAY_GRAPHICS = ['frame', 'ants', 'aiprompt', 'gguide', 'xform', 'preview']
 
 export function EditorCanvas() {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -64,6 +66,7 @@ export function EditorCanvas() {
   const passesRef = useRef<{ rt: RenderTexture; content: Container; transform: Matrix; dirty: boolean }[]>([])
   const renderPending = useRef(0)
   const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
+  const negRef = useRef<ColorMatrixFilter[] | null>(null)              // C21: the two overlay filters are made once, not per rebuild
   const phaseRef = useRef(0)
   /** Render every dirty pass (inner passes were pushed first, so nesting resolves bottom-up). */
   const renderPasses = () => {
@@ -255,8 +258,9 @@ export function EditorCanvas() {
       ro?.disconnect()
       cancelPendingRender()                                              // and clear the flag: a stale id blocked every later request (2026-10-06)
       useEditor.getState().setExtractor(null)
-      for (const p of passesRef.current) p.rt.destroy(true)
+      for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }
       passesRef.current = []
+      negRef.current?.forEach((f) => f.destroy()); negRef.current = null
       appRef.current?.destroy(true, { children: true }); appRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -268,14 +272,14 @@ export function EditorCanvas() {
     const st = useEditor.getState()
     const checker = world.getChildByLabel('checker') as TilingSprite | null
     if (checker) { checker.width = doc.w; checker.height = doc.h; checker.visible = doc.background === 'transparent' }
-    layers.removeChildren()
+    for (const c of layers.removeChildren()) c.destroy({ children: true })   // C21: sprites, mask wrappers and the background rect go; the LayerPixels textures stay
     spritesRef.current.clear()
     if (doc.background !== 'transparent') {
       const g = new Graphics().rect(0, 0, doc.w, doc.h).fill(doc.background)
       layers.addChild(g)
     }
     const activeNode = findNode(doc, st.activeId)
-    for (const p of passesRef.current) p.rt.destroy(true)
+    for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }   // C21: pass content containers too
     passesRef.current = []
     let lastBlend = ''                                                   // alternate names so equal modes never batch
     const pickBlend = (mode: string, clip: boolean) => { const a = blendName(mode, clip, false); const name = a === lastBlend ? blendName(mode, clip, true) : a; lastBlend = name; return name }
@@ -348,12 +352,16 @@ export function EditorCanvas() {
     build(doc.layers, layers)
     // selection / quick-mask / mask-editing overlays
     const ov = overlayRef.current!
-    ov.removeChildren()
+    for (const child of [...ov.children]) {                                  // C21: keep the labelled Graphics, destroy the sprites
+      if (child.label && OVERLAY_GRAPHICS.includes(child.label)) continue
+      ov.removeChild(child); child.destroy()
+    }
+    const neg = negRef.current ?? (negRef.current = [negativeAdd(), negativeAdd()])
     const sel = st.selection
     if (sel && overlay && quickMask) {
       // quick mask: additive red where NOT selected
       const s = new Sprite(sel.texture)
-      s.blendMode = 'add'; s.filters = [negativeAdd()]; s.tint = 0xff2020; s.alpha = 0.5
+      s.blendMode = 'add'; s.filters = [neg[0]]; s.tint = 0xff2020; s.alpha = 0.5
       ov.addChild(s)
     }
     if (editingMask && activeNode?.mask && overlay) {
@@ -361,10 +369,11 @@ export function EditorCanvas() {
       if (m) {
         const s = new Sprite(m.texture)
         s.position.set((activeNode.mask.linked ? (activeNode.x ?? 0) : 0) + activeNode.mask.x, (activeNode.mask.linked ? (activeNode.y ?? 0) : 0) + activeNode.mask.y)
-        s.blendMode = 'add'; s.filters = [negativeAdd()]; s.tint = 0xff2020; s.alpha = 0.45
+        s.blendMode = 'add'; s.filters = [neg[1]]; s.tint = 0xff2020; s.alpha = 0.45
         ov.addChild(s)
       }
     }
+    for (const label of OVERLAY_GRAPHICS.slice(1)) { const g = ov.getChildByLabel(label); if (g) ov.addChild(g) }   // the kept Graphics draw above the sprites, in their old order
     // marching ants: recomputed only when the selection changed (every selection edit bumps the revision)
     if (sel) { if (antsRef.current.rev !== revision) antsRef.current = { rev: revision, segs: outlineSegments(sel) } } else antsRef.current = { rev: -1, segs: [] }
     drawAnts()

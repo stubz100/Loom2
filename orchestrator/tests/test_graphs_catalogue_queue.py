@@ -109,6 +109,7 @@ class _FakeEngine:
 async def _queue(tmp_path: Path) -> tuple[JobQueue, Workspace]:
     ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
     app = AppState(tmp_path / "state")
+    app.update_settings({"variant": "full"})                       # dev recipes below; C3 gates them under `open`
     q = JobQueue(ws, app, _FakeEngine(), Roster(tmp_path / "none"), Catalogue(ws), EventHub())
     return q, ws
 

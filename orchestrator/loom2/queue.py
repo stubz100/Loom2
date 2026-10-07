@@ -21,7 +21,7 @@ from .config import AppState
 from .engine.client import EngineError, EngineEvent
 from .clips import ClipStore, compute_identity
 from .tools import facesim
-from .engine.graphs import I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb
+from .engine.graphs import I2V_WEIGHTS, PRESETS, compile_recipe, estimate_seconds, estimate_vram_gb, recipe_weights
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
@@ -160,6 +160,12 @@ class JobQueue:
 
     async def stop(self) -> None:
         running = self.jobs.get(self._running_id or "")      # B2: read before the cancelled task's `finally` clears it
+        if running is not None and running.status == "running" and not running.resumable:
+            was_paused, self.paused = self.paused, True        # C8: the engine is done; the move-in / paste-back / proxy encode is
+            t0 = time.time()                                   # seconds of local work — let it finish rather than render twice
+            while running.status == "running" and time.time() - t0 < 30.0:
+                await asyncio.sleep(0.05)
+            self.paused = was_paused
         if self._task:
             self._task.cancel()
             try:
@@ -171,15 +177,19 @@ class JobQueue:
             self._ws_task.cancel()
             self._ws_task = None
         if running and running.status == "running":
-            submitted = running.prompt_id is not None
-            running.status = "queued"           # a clean shutdown re-queues the interrupted job explicitly
-            running.progress, running.prompt_id, running.progress_text = 0.0, None, ""
-            running.log_tail.append("re-queued by a clean shutdown")
-            if submitted:                       # the engine is still rendering it: stop that work now
-                try:
-                    await asyncio.wait_for(self.engine.client.interrupt(), 5.0)
-                except Exception:
-                    pass
+            if not running.resumable:                        # C8: outputs may be half written — never render this one again
+                running.status, running.error, running.finished_at = "failed", "interrupted while its outputs were being written", utc_now()
+                self.catalogue.record_job(running.model_dump())
+            else:
+                submitted = running.prompt_id is not None
+                running.status = "queued"           # a clean shutdown re-queues the interrupted job explicitly
+                running.progress, running.prompt_id, running.progress_text = 0.0, None, ""
+                running.log_tail.append("re-queued by a clean shutdown")
+                if submitted:                       # the engine is still rendering it: stop that work now
+                    try:
+                        await asyncio.wait_for(self.engine.client.interrupt(), 5.0)
+                    except Exception:
+                        pass
             self.hub.broadcast("job.updated", running.model_dump())
         self.persist(clean_shutdown=True)
 
@@ -194,9 +204,11 @@ class JobQueue:
         for seed in seeds:
             seed = int(seed) if int(seed) > 0 else int(time.time_ns() % (2**32))
             rec = JobRecord(kind=recipe.kind, recipe=recipe.model_dump(), seed=seed, batch_id=batch_id, status="staged" if stage else "queued",
-                            vram_estimate_gb=estimate_vram_gb(recipe), warm_group=warm_group(recipe), variant=self.app.settings.variant)
+                            vram_estimate_gb=estimate_vram_gb(recipe, self.app.settings.variant), warm_group=warm_group(recipe, self.app.settings.variant),
+                            variant=self.app.settings.variant)
             if rec.vram_estimate_gb > self.app.settings.vram_budget_gb:
                 rec.status, rec.error, rec.finished_at = "failed", f"VRAM estimate {rec.vram_estimate_gb} GB exceeds the budget {self.app.settings.vram_budget_gb} GB", utc_now()
+                self.catalogue.record_job(rec.model_dump())                 # C16: a refused job is still a job in the index
             self.jobs[rec.id] = rec
             out.append(rec)
             self.hub.broadcast("job.created", rec.model_dump())
@@ -244,7 +256,7 @@ class JobQueue:
 
     def estimate(self, recipe: T2I) -> dict:
         est = estimate_seconds(recipe, self.timing_history())
-        vram = estimate_vram_gb(recipe)
+        vram = estimate_vram_gb(recipe, self.app.settings.variant)
         budget = self.app.settings.vram_budget_gb
         est.update({"vram_gb": vram, "vram_budget_gb": budget, "vram_fit": "ok" if vram <= budget * 0.85 else "tight" if vram <= budget else "over"})
         return est
@@ -286,9 +298,10 @@ class JobQueue:
         return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
                 "resumed_unclean": self.resumed_unclean, "recovery": list(self.recovery) + list(getattr(self.catalogue, "recovery", []) or [])}
 
-    @staticmethod
-    def _validate_models(recipe: Any) -> None:
-        """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started."""
+    def _validate_models(self, recipe: Any) -> None:
+        """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started.
+        C3 (D26): under the `open` variant every weight the recipe would load must carry the `open` tag — the UI hides them, the
+        queue is the gate."""
         for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])]]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
@@ -299,6 +312,12 @@ class JobQueue:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
             if recipe.beats and ROSTER_BY_ID[recipe.model_id].family != "ltx23":
                 raise ValueError("keyframe beats need LTX-2.3; Wan takes a start and an end frame")
+        variant = self.app.settings.variant
+        if variant == "open":
+            for mid in recipe_weights(recipe, variant):
+                entry = ROSTER_BY_ID.get(mid)
+                if entry is not None and "open" not in entry.variants:
+                    raise ValueError(f"{mid!r} ({entry.license}) is not part of the open variant (D26)")
 
     def _disk_guard(self) -> None:
         """03 §6 / 06 §4: refuse new work before the engine starts when the work disk is nearly full or the project is over
@@ -410,6 +429,17 @@ class JobQueue:
         except OSError as e:  # noqa: BLE001
             log.debug("cleanup after %s: %s", job.id, e)
 
+    def _engine_unavailable(self, job: JobRecord, why: str) -> None:
+        """C2: the engine failed to launch — that is the engine's problem, not this job's. The job goes back to queued, the queue
+        pauses and the banners say why, instead of every queued job failing in turn, a health timeout each."""
+        log.error("job %s: %s — pausing the queue", job.id, why)
+        job.status, job.started_at, job.progress, job.progress_text = "queued", None, 0.0, ""
+        job.log_tail.append(why)
+        self.paused = True
+        self.persist()
+        self.hub.broadcast("job.updated", job.model_dump())
+        self.hub.broadcast("queue.state", self.state())
+
     async def _run_one(self, job: JobRecord) -> None:
         self._running_id = job.id
         self._t0 = time.time()
@@ -424,13 +454,17 @@ class JobQueue:
             return
         self.hub.broadcast("job.updated", job.model_dump())
         try:
-            await self.engine.ensure_running()
+            try:
+                await self.engine.ensure_running()
+            except (RuntimeError, OSError) as e:                # C2: launch failure → hold the queue, keep the job
+                self._engine_unavailable(job, f"engine could not start: {e}")
+                return
             await self._ensure_ws()
             if self._cancelled(job):
                 return
             object_info = await self._object_info_fresh()
             recipe = parse_recipe(job.recipe)
-            self.roster.scan()
+            await asyncio.to_thread(self.roster.scan)                  # C7: the mounted trees can be large
             ref_files: dict[str, str] = {}
             for ref in getattr(recipe, "refs", []) or []:
                 key = ref.asset_id or ref.blob or ""
@@ -467,7 +501,8 @@ class JobQueue:
                 self._object_info, self._object_info_at = object_info, time.time()
                 if self._cancelled(job):
                     return
-            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs)
+            compiled = compile_recipe(recipe, self.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs,
+                                      variant=self.app.settings.variant)
             if compiled.problems:
                 self._fail(job, "contract: " + "; ".join(compiled.problems)[:1500])
                 return
@@ -493,6 +528,8 @@ class JobQueue:
             if not ok:
                 self._fail(job, job.error or "engine reported an error")
                 return
+            job.resumable = False                            # C8: the engine's work is done; what follows must never run twice
+            self.persist()
             hist = await self.engine.client.history(job.prompt_id)
             files = self._outputs_from_history(hist)
             if not files:
@@ -636,9 +673,11 @@ class JobQueue:
                         raise ValueError("upscale of the active layer needs a raster layer with pixels")
                     plan = layer_plan(node.x, node.y, int(px.shape[1]), int(px.shape[0]), max_size=0)
                     Image.fromarray(px, "RGBA").save(tmp / "image.png")
+                    out["alpha_mask"] = np.ascontiguousarray(px[..., 3])         # C4: the engine returns RGB; the layer keeps its alpha
                 else:
                     plan = whole_plan(od.doc.w, od.doc.h, max_size=0)
                     Image.fromarray(comp, "RGBA").save(tmp / "image.png")
+                    out["alpha_mask"] = np.ascontiguousarray(comp[..., 3])
             out["plan"] = plan
             out["image_path"] = tmp / "image.png"
             return out
@@ -689,12 +728,13 @@ class JobQueue:
             job.result["asset_ids"] = [rec.id]
             if recipe.as_layer:
                 factor = max(1, round(arr.shape[1] / max(1, plan.w)))
-                rgba = np.asarray(Image.fromarray(arr).resize((plan.w, plan.h), Image.Resampling.LANCZOS))
+                rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), 0)     # C4: back to 1× with the source's alpha
                 await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, f"upscale ×{factor} at 1×")
             return
         if isinstance(recipe, Inpaint) and recipe.mode == "outpaint":
             p = plan.pad or {}
             left, top = int(p.get("left", 0)), int(p.get("top", 0))
+            job.result["shift"] = {"left": left, "top": top}          # C20: the editor shifts its own layers the same way
             for n in od.doc.walk():
                 if isinstance(n, RasterLayer):
                     n.x += left; n.y += top
@@ -729,10 +769,12 @@ class JobQueue:
         group.children.append(layer)
         od.set_pixels(lid, np.ascontiguousarray(rgba))
         od.dirty = True
+        od.doc.revision += 1                                 # C1: a client stack based on the previous revision is now stale
         await asyncio.to_thread(od.save)
         job.result.setdefault("layers", []).append(lid)
         job.result["group"] = gid
-        self.hub.broadcast("document.changed", {"id": od.doc.id, "job_id": job.id, "batch_id": job.batch_id, "added": [lid], "group": gid, "w": od.doc.w, "h": od.doc.h, "candidate": n})
+        self.hub.broadcast("document.changed", {"id": od.doc.id, "job_id": job.id, "batch_id": job.batch_id, "added": [lid], "group": gid, "w": od.doc.w, "h": od.doc.h, "candidate": n,
+                                                 "shift": job.result.get("shift"), "revision": od.doc.revision})
 
     # ---- M6 video jobs (11 §10): frames in through /upload/image, a clip out -------------------------
     async def _prepare_i2v_inputs(self, job: JobRecord, recipe: I2V) -> dict[str, Any]:
@@ -889,7 +931,16 @@ class JobQueue:
                         return False
                     continue                                # wedged but alive: the stall timer decides
                 if hist and hist.get("status", {}).get("completed"):
-                    return hist["status"].get("status_str") == "success"
+                    if hist["status"].get("status_str") == "success":
+                        return True
+                    msgs = [m for m in hist["status"].get("messages", []) if isinstance(m, list) and len(m) == 2]   # C15: keep the engine's words
+                    err = next((m[1] for m in msgs if m[0] == "execution_error" and isinstance(m[1], dict)), None)
+                    if any(m[0] == "execution_interrupted" for m in msgs):
+                        job.error = "interrupted"
+                    elif err:
+                        job.error = f"{err.get('node_type')}: {err.get('exception_message')}"
+                        job.log_tail += (err.get("traceback") or [])[-8:]
+                    return False
                 if not await self._engine_alive():
                     job.error = "engine process died"
                     return False

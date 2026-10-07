@@ -223,6 +223,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     case 'job.updated': {
       const job = d as unknown as Job
       set({ jobs: { ...s.jobs, [job.id]: job } })
+      if (f.type === 'job.updated' && ['done', 'failed', 'cancelled'].includes(job.status) && s.previews[job.id]) {   // C29: the preview's blob URL dies with the job
+        URL.revokeObjectURL(s.previews[job.id]); const previews = { ...s.previews }; delete previews[job.id]; set({ previews })
+      }
       if (f.type === 'job.updated' && (job.status === 'done' || job.status === 'failed')) {
         s.toast(job.status === 'done' ? `Job ${job.id.slice(4)} done in ${job.wall_s} s` : `Job ${job.id.slice(4)} failed: ${job.error}`, job.status === 'done' ? 'success' : 'error')
         void api.get<QueueState>('/queue').then((queue) => set({ queue })).catch(() => undefined)
@@ -262,7 +265,7 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipReady(d as { clip_id: string; asset_id?: string }))
       break
     case 'document.changed':
-      void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(d as { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string }))
+      void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(d as { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; shift?: { left: number; top: number } | null }))
       break
     default: break
   }

@@ -9,7 +9,7 @@ import struct
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 import httpx
 import websockets
@@ -121,11 +121,15 @@ class ComfyClient:
         yield EngineEvent(type="ws_closed", data={})
 
 
-async def wait_for_engine(client: ComfyClient, timeout_s: float = 120.0, poll_s: float = 1.0) -> bool:
+async def wait_for_engine(client: ComfyClient, timeout_s: float = 120.0, poll_s: float = 1.0, alive: Callable[[], bool] | None = None) -> bool:
+    """Poll until the engine answers; `alive` (the supervisor's `proc.poll() is None`) ends the wait as soon as the process is
+    gone instead of sitting out the whole timeout (C2)."""
     loop = asyncio.get_running_loop()
     t0 = loop.time()
     while loop.time() - t0 < timeout_s:
         if await client.is_up():
             return True
+        if alive is not None and not alive():
+            return False
         await asyncio.sleep(poll_s)
     return False

@@ -342,8 +342,11 @@ function PresetsTab() {
 
 function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
+  const caps = useSession((s) => s.capabilities)
   const refresh = useGenerate((g) => g.refreshPreview)
-  useEffect(() => { if (project?.open) void refresh() }, [project?.path, refresh])
+  useEffect(() => { if (project?.open) { void refresh(); void useGenerate.getState().loadSnippets() } }, [project?.path, refresh])   // C23: the ✦ menus need the field presets
+  // C3 (D26): a persisted model this build does not offer (dev under `open`) falls back to Klein 4B, else the first model listed
+  useEffect(() => { const g = useGenerate.getState(); if (caps && !caps.models[g.panel.model_id]) { const next = caps.models['klein-4b'] ? 'klein-4b' : Object.keys(caps.models)[0]; if (next) g.set({ model_id: next, turbo: false }) } }, [caps])
   if (!project?.open) return <span style={{ color: 'var(--fg3)' }}>Open or create a project.</span>
   if (tab === 'model') return <ModelTab />
   if (tab === 'size') return <SizeTab />

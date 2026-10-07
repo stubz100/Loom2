@@ -81,7 +81,7 @@ def test_estimate_seconds():
 
 def test_preview_stage_release_presets(tmp_path: Path):
     state = tmp_path / "state"
-    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(_tree(tmp_path).models_root), "mounted_model_trees": []})
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(_tree(tmp_path).models_root), "mounted_model_trees": [], "variant": "full"})
     app = create_app(state)
     client = TestClient(app)
     H = {"X-Loom-Token": app.state.services.app.token}

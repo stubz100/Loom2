@@ -6,7 +6,7 @@ import { useSession } from '../store/session'
 
 export function ProjectDialog({ mode }: { mode: 'new' | 'open' }) {
   const s = useSession()
-  const [path, setPath] = useState(mode === 'open' ? (s.recents[0] ?? '') : 'F:/loom2-projects/')
+  const [path, setPath] = useState(mode === 'open' ? (s.recents[0] ?? '') : (s.recents[0] ? s.recents[0].replace(/[\\/][^\\/]+$/, '/') : ''))   // C27: next to the last project
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)

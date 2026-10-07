@@ -214,16 +214,17 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
   const aiPrompt = useEditor((s) => s.aiPrompt)
   const doc = useEditor((s) => s.doc)
   const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
-  const sam = p.selModel === 'sam3'
+  const open = useSession((s) => s.capabilities?.variant === 'open')          // C3 (D26): SAM 3 is full only
+  const sam = p.selModel === 'sam3' && !open
   const pos = aiPrompt.points.filter((q) => q.label === 1).length, neg = aiPrompt.points.length - pos
-  const reason = !doc ? 'no document' : health(p.selModel) === 'missing' ? `weights missing: fetch ${p.selModel} in Models`
+  const reason = !doc ? 'no document' : health(sam ? 'sam3' : 'birefnet') === 'missing' ? `weights missing: fetch ${sam ? 'sam3' : 'birefnet'} in Models`
     : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
     : sam && p.selMode === 'box' && !aiPrompt.box ? 'drag a box on the canvas' : null
-  const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: p.selModel, mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
+  const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: sam ? 'sam3' : 'birefnet', mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
     threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, seeds: [0] }, stage)
   return (
     <div className="tool-opts">
-      <label>model</label><div className="segmented"><button className={!sam ? 'active' : ''} onClick={() => setP({ selModel: 'birefnet', selMode: 'subject' })}>Subject · BiRefNet</button><button className={sam ? 'active' : ''} onClick={() => setP({ selModel: 'sam3', selMode: p.selMode === 'subject' ? 'text' : p.selMode })}>SAM 3</button></div>
+      <label>model</label><div className="segmented"><button className={!sam ? 'active' : ''} onClick={() => setP({ selModel: 'birefnet', selMode: 'subject' })}>Subject · BiRefNet</button>{!open && <button className={sam ? 'active' : ''} onClick={() => setP({ selModel: 'sam3', selMode: p.selMode === 'subject' ? 'text' : p.selMode })}>SAM 3</button>}</div>
       {sam && <>
         <label>prompt</label><div className="segmented">{(['text', 'points', 'box'] as const).map((m) => <button key={m} className={p.selMode === m ? 'active' : ''} onClick={() => setP({ selMode: m })}>{m}</button>)}</div>
         {p.selMode === 'text' && <><label>text</label><input type="text" value={p.selText} placeholder='"the woman in the green cloak"' onChange={(e) => setP({ selText: e.target.value })} /></>}
@@ -253,7 +254,13 @@ function AiTab() {
   const running = useMemo(() => Object.values(jobs).filter((j) => (j.recipe as { document_id?: string }).document_id === doc?.id && ['running', 'queued', 'staged'].includes(j.status)), [jobs, doc?.id])
   const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
   const seeds = () => { const n = Math.max(1, Math.min(4, p.candidates)); return Array.from({ length: n }, (_, i) => (p.seedMode === 'random' ? Math.floor(Math.random() * 2 ** 31) : p.seed + i)) }
-  const hero = p.op === 'inpaint' ? p.mode === 'fill_hero' : p.op === 'outpaint' ? p.outpaintHero : p.op === 'refine' ? p.refineModel === 'flux2-dev-fp8mixed' : false
+  // C3 (D26): the open build has no dev, no Klein 9B and no SAM 3 — the panel's choices map onto the open models
+  const open = useSession((s) => s.capabilities?.variant === 'open')
+  const mode = open && p.mode === 'fill_hero' ? 'fill' : p.mode
+  const refineModel = open ? 'klein-base-4b' : p.refineModel
+  const tiledModel = open ? 'klein-base-4b' : p.tiledModel
+  const kleinId = open ? 'klein-4b' : 'klein-9b'
+  const hero = !open && (p.op === 'inpaint' ? p.mode === 'fill_hero' : p.op === 'outpaint' ? p.outpaintHero : p.op === 'refine' ? p.refineModel === 'flux2-dev-fp8mixed' : false)
   const revision = useEditor((s) => s.revision)
   // the engine image the orchestrator will build (edit_ai.plan_region): shown so a big region is a conscious choice
   const engineSize = useMemo(() => {
@@ -274,11 +281,11 @@ function AiTab() {
     : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
   const run = (stage = false) => {
     const base = { seeds: seeds(), prompt_text: p.prompt }
-    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode: p.mode, model_id: 'klein-9b', margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, prompt_mode: p.promptMode, ...base }, stage)
-    else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: p.outpaintHero ? 'flux2-dev-fp8mixed' : 'klein-9b', outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
-    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: p.refineModel, source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, ...base }, stage)
+    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, prompt_mode: p.promptMode, ...base }, stage)
+    else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: hero ? 'flux2-dev-fp8mixed' : kleinId, outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
+    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: refineModel, source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, ...base }, stage)
     else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
-      refine: p.refineTiled, refine_model_id: p.tiledModel, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
+      refine: p.refineTiled, refine_model_id: tiledModel, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
   }
   const ops: [AiOp, string][] = [['select', 'Select'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
   return (
@@ -287,8 +294,8 @@ function AiTab() {
       {p.op === 'select' && <SelectControls />}
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
-          <label>mode</label><select value={p.mode} onChange={(e) => { const mode = e.target.value as AiPanelState['mode']; setP({ mode, candidates: mode === 'fill_hero' ? 2 : 4 }) }}>
-            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option><option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option><option value="remove">Remove — background-only prompt</option>
+          <label>mode</label><select value={mode} onChange={(e) => { const m = e.target.value as AiPanelState['mode']; setP({ mode: m, candidates: m === 'fill_hero' ? 2 : 4 }) }}>
+            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option>{!open && <option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option>}<option value="remove">Remove — background-only prompt</option>
           </select>
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
           {p.mode !== 'fill_match' && p.mode !== 'remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
@@ -300,11 +307,11 @@ function AiTab() {
         {p.op === 'outpaint' && <>
           <label>grow</label><div className="pad-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <label key={k}>{k}<input type="number" min={0} max={2048} step={16} value={p.pad[k]} onChange={(e) => setP({ pad: { ...p.pad, [k]: Math.max(0, Number(e.target.value)) } })} /></label>)}</div>
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="what continues beyond the edge" onChange={(e) => setP({ prompt: e.target.value })} />
-          <label>model</label><div className="segmented"><button className={!p.outpaintHero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>Klein + LanPaint</button><button className={p.outpaintHero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>dev (hero)</button></div>
+          <label>model</label><div className="segmented"><button className={!hero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>Klein + LanPaint</button>{!open && <button className={hero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>dev (hero)</button>}</div>
           <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />
         </>}
         {p.op === 'refine' && <>
-          <label>model</label><select value={p.refineModel} onChange={(e) => setP({ refineModel: e.target.value, candidates: e.target.value === 'flux2-dev-fp8mixed' ? 2 : 4 })}><option value="klein-base-9b">Klein 9B base (CFG, negatives)</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo</option></select>
+          <label>model</label><select value={refineModel} onChange={(e) => setP({ refineModel: e.target.value, candidates: e.target.value === 'flux2-dev-fp8mixed' ? 2 : 4 })}>{open ? <option value="klein-base-4b">Klein 4B base (CFG, negatives)</option> : <><option value="klein-base-9b">Klein 9B base (CFG, negatives)</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo</option></>}</select>
           <label>on</label><div className="segmented">{(['visible', 'active', 'selection'] as const).map((s) => <button key={s} className={p.refineSource === s ? 'active' : ''} onClick={() => setP({ refineSource: s })}>{s}</button>)}</div>
           <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ strength: v })} />
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
@@ -316,7 +323,7 @@ function AiTab() {
           <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
           <label>refine</label><label className="chk"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> tiled refine after the upscale (10 §4: re-sample every tile at low strength)</label>
           {p.refineTiled && <>
-            <label>model</label><select value={p.tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}><option value="klein-base-9b">Klein 9B base</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo (slow)</option></select>
+            <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{open ? <option value="klein-base-4b">Klein 4B base</option> : <><option value="klein-base-9b">Klein 9B base</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo (slow)</option></>}</select>
             <Slider label="strength" value={p.tiledStrength} min={0.05} max={0.6} step={0.01} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ tiledStrength: v })} />
             <Slider label="tile" value={p.tile} min={512} max={2048} step={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ tile: v })} />
             <Slider label="overlap" value={p.overlap} min={0} max={256} step={16} fmt={(v) => `${v} px`} onChange={(v) => setP({ overlap: v })} />

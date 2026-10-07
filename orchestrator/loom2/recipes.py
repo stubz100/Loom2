@@ -192,10 +192,22 @@ def parse_recipe(data: dict) -> AnyRecipe:
     return RecipeEnvelope.model_validate({"recipe": data}).recipe
 
 
-def warm_group(recipe: AnyRecipe) -> str:
-    """Scheduling hint: jobs sharing a warm group run back to back so the engine keeps the weights resident."""
-    if isinstance(recipe, Inpaint) and recipe.mode == "fill_hero":
+def inpaint_model_id(recipe: Inpaint, variant: str = "full") -> str:
+    """The transformer an inpaint mode actually runs (10 §4): Fill Hero is dev; Fill-Match and Remove need a distilled Klein
+    (ICM), falling back to Klein 9B — or to Klein 4B under the `open` variant (C3, D26)."""
+    if recipe.mode == "fill_hero":
         return "flux2-dev-fp8mixed"
+    if recipe.mode in ("fill_match", "remove"):
+        if recipe.model_id.startswith("klein") and "base" not in recipe.model_id:
+            return recipe.model_id
+        return "klein-4b" if variant == "open" else "klein-9b"
+    return recipe.model_id
+
+
+def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
+    """Scheduling hint: jobs sharing a warm group run back to back so the engine keeps the weights resident."""
+    if isinstance(recipe, Inpaint):
+        return inpaint_model_id(recipe, variant)   # C10: the model that runs, not the one the panel named
     if isinstance(recipe, Upscale) and recipe.refine:
         return recipe.refine_model_id            # the big model decides the swap, not the 70 MB upscaler
     return recipe.model_id

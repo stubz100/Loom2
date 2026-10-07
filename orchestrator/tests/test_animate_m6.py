@@ -152,7 +152,7 @@ def test_i2v_submission_validates_model_and_beats(tmp_path: Path, object_info):
 def test_clip_api_serves_proxy_frames_and_extracts_with_lineage(tmp_path: Path):
     state = tmp_path / "state"
     app_state = AppState(state)
-    app_state.update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": []})
+    app_state.update_settings({"engine": {"python": str(tmp_path / "missing-python.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"), "mounted_model_trees": [], "variant": "full"})
     app = create_app(state)
     client = TestClient(app)
     token = app.state.services.app.token

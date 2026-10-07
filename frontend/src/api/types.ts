@@ -55,9 +55,10 @@ export interface Settings {
   reopen_last_project?: boolean; h3_licence_confirmed?: boolean
 }
 
+export interface TeOption { id: string; label: string; name: string; health: Health; approx_gb: number | null; gguf: boolean; default: boolean }   // D31
 export interface Capabilities {
   recipes: string[]; i2v?: I2vCaps; facesim?: { available: boolean; dir: string }; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
-  models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[] }>
+  models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[]; te_id?: string; te_options?: TeOption[] }>
   tiers: Record<string, Record<string, [number, number]>>
   weight_dtypes: string[]; te_devices: string[]; te_alternates?: Record<string, string[]>
   advanced: { model_shift: Record<string, number>; shift_node_defaults: { base: number; max: number }; tile_size_default: number; flux2_schedule: string }

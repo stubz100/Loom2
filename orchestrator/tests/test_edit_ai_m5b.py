@@ -22,7 +22,7 @@ from loom2.roster import Roster
 def _tree(tmp_path: Path) -> Roster:
     root = tmp_path / "models"
     for rel in ("diffusion_models/flux2_dev_fp8mixed.safetensors", "text_encoders/mistral_3_small_flux2_fp8.safetensors", "vae/flux2-vae.safetensors",
-                "loras/Flux2TurboComfyv2.safetensors", "diffusion_models/flux-2-klein-base-9b.safetensors", "text_encoders/qwen_3_8b_fp8mixed.safetensors",
+                "loras/Flux2TurboComfyv2.safetensors", "diffusion_models/flux-2-klein-base-9b.safetensors", "text_encoders/qwen_3_8b_fp8mixed.safetensors", "text_encoders/Qwen3-8B-Q4_K_M.gguf",
                 "upscale_models/RealESRGAN_x2.pth", "background_removal/BiRefNet-general.safetensors", "sam3/sam3.pt"):
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)

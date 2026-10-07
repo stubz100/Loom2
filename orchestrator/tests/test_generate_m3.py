@@ -19,7 +19,7 @@ TREE = {"scene": "a rainy alley", "subjects": [{"description": "a woman in a gre
 def _tree(tmp_path: Path) -> Roster:
     root = tmp_path / "models"
     for rel in ("diffusion_models/flux2_dev_fp8mixed.safetensors", "diffusion_models/flux-2-klein-9b.safetensors", "diffusion_models/flux-2-klein-base-9b.safetensors",
-                "text_encoders/mistral_3_small_flux2_fp8.safetensors", "text_encoders/qwen_3_8b_fp8mixed.safetensors", "vae/flux2-vae.safetensors", "loras/Flux2TurboComfyv2.safetensors"):
+                "text_encoders/mistral_3_small_flux2_fp8.safetensors", "text_encoders/qwen_3_8b_fp8mixed.safetensors", "text_encoders/Qwen3-8B-Q4_K_M.gguf", "vae/flux2-vae.safetensors", "loras/Flux2TurboComfyv2.safetensors"):
         p = root / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(b"x")
     return Roster(root).scan()
 

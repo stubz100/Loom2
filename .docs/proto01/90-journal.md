@@ -1773,3 +1773,29 @@ read the clock)*
   picker in the AI / Generate panels. Q4_K_M is the recommendation — the same speed as Q3_K_M, the closest to fp8. dev is
   untouched (its 34 GB transformer streams regardless), so the two-phase conditioning cache stays the dev fix (13, item 10).
   Settings and engine flags unchanged; dev orchestrator stopped afterwards.
+
+## 2026-10-07 16:01 — D31: the Klein 9B presets default to the Q4_K_M GGUF encoder, fp8 stays as the alternate, encoder picker in both panels
+
+- **Decision (user, after the 12:58 measurements):** Q4_K_M becomes the text encoder of `klein-9b`, `klein-base-9b` and `klein-9b-kv`;
+  the Comfy-Org fp8 repack stays on disk as the alternate a recipe may name; Q4_K_S and Q3_K_M go (same speed, nothing to choose
+  between them). Recorded as D31 in 13; the backlog paragraph in item 10, 04's model table, 09's Advanced row and 10's AI table updated.
+- **Weights:** `scripts/prune_weights.py Qwen3-8B-Q4_K_S.gguf Qwen3-8B-Q3_K_M.gguf` — 8.31 GiB freed, both ledger rows dropped; the
+  roster entries carry `retired="D31 …"` (D30 convention: re-fetchable, skipped by the panels).
+- **Code:** `PRESETS[…9B].te_id = "qwen3-8b-q4km"`, `TE_ALTERNATES = {"qwen3-8b-q4km": ["qwen3-8b-fp8mixed"]}`, `TE_LABELS`,
+  `te_options(preset)` (the preset's encoder first). `/capabilities.models[id]` gained `te_id` and `te_options`
+  (`{id, label, name, health, approx_gb, gguf, default}`) so a panel needs nothing else to draw the picker. **Generate · Advanced**:
+  the "text encoder" row is now the encoder select (rendered only where a model has more than one option — the 4B family and dev
+  have none) next to the device select, which is a disabled "GPU" while a GGUF is the effective encoder (`CLIPLoaderGGUF` has no
+  `device` input); an effect clears a persisted `te_id` that no longer pairs with the chosen model and a persisted `cpu` under a GGUF,
+  so the preview never shows a stale 422. **Edit AI panel**: `EncoderPick` under Inpaint's mode, Outpaint's model, Refine's model and
+  the tiled-refine model (`aiPanelStore.teId`, one choice for the panel, sent only where it pairs — a dev outpaint ignores it).
+  Tests follow the decision (`test_te_gguf.py`: roster + presets, default graph = `CLIPLoaderGGUF` and `te_id: fp8` = `CLIPLoader`,
+  retired / mismatched / `cpu`-under-GGUF errors, weight list + 422 + capabilities) and the 9B test trees carry the GGUF file →
+  **104 offline**; `tsc -b` clean; oxlint +1 (`only-export-components` for `EncoderPick`, the warning every component in that file has).
+- **Rig (dev orchestrator on 8766, cold engine, `scratch d31_check.py`):** default Klein 9B T2I → `gguf qtypes: Q6_K (37), F32 (145),
+  Q4_K (217)` in the engine log, 29.9 s wall; `te_id: qwen3-8b-fp8mixed` → `Flux2TEModel_ … 8262MB Staged`, 36.9 s; fp8 +
+  `te_device: cpu` → 345.6 s (the CPU encode measured at 10:36, now only reachable through the alternate); `te_id: qwen3-8b-q3km`
+  → **422** "does not pair with this model (it takes qwen3-8b-q4km or ['qwen3-8b-fp8mixed'])"; Edit Refine on `klein-base-9b` through
+  `/documents/{id}/ai` → GGUF, 34.5 s. Headed Edge (CDP, the `edit_headed_check.py` helper) screenshots of both pickers: Generate ·
+  Advanced with the default and with fp8 chosen (device select re-enabled, hint flips), Edit AI Inpaint / Refine / Upscale + tiled
+  refine; no page errors beyond the pre-existing LoRA-slots key warning. Dev orchestrator and engine stopped afterwards.

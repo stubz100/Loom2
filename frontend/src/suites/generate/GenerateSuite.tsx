@@ -212,6 +212,14 @@ function ModelTab() {
   const models = useSession((s) => s.models)
   const pv = g.preview
   const cap = caps?.models[p.model_id]
+  // D31: the encoder weights behind the prompt — a picker only where the model has an alternate (Klein 9B: Q4_K_M GGUF default, fp8)
+  const teOpts = cap?.te_options ?? []
+  const teEff = teOpts.find((o) => (p.te_id ? o.id === p.te_id : o.default))
+  const teGguf = !!teEff?.gguf
+  useEffect(() => {
+    if (p.te_id && cap && !teOpts.some((o) => o.id === p.te_id)) g.set({ te_id: null })        // a persisted choice from another model
+    else if (teGguf && p.te_device) g.set({ te_device: null })                                  // CLIPLoaderGGUF has no device input
+  }, [p.te_id, p.te_device, cap, teGguf]) // eslint-disable-line react-hooks/exhaustive-deps
   const order = ['flux2-dev-fp8mixed', 'klein-9b', 'klein-base-9b', 'klein-9b-kv', 'klein-4b', 'klein-base-4b']
   const shiftCustom = p.base_shift !== null || p.max_shift !== null
   const modelShift = caps?.advanced?.model_shift[p.model_id.startsWith('klein') ? 'klein' : p.model_id] ?? 2.02
@@ -255,7 +263,7 @@ function ModelTab() {
           {p.seed_mode !== 'random' && <input type="number" value={p.seed} onChange={(e) => g.set({ seed: Number(e.target.value) })} style={{ width: 130, marginLeft: 6 }} />}
           {p.seed_mode !== 'random' && <button className="quiet" title="Random seed" onClick={() => g.set({ seed: Math.floor(Math.random() * 2 ** 31) })}>🎲</button>}</div>
       </div>
-      <details className="advanced" open={shiftCustom || !!p.weight_dtype || !!p.te_device || p.tiled_vae}>
+      <details className="advanced" open={shiftCustom || !!p.weight_dtype || !!p.te_device || !!p.te_id || p.tiled_vae}>
         <summary>Advanced · ComfyUI model and decode settings</summary>
         <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr' }}>
           <label>shift</label>
@@ -268,7 +276,9 @@ function ModelTab() {
           <div><select value={p.weight_dtype ?? ''} onChange={(e) => g.set({ weight_dtype: e.target.value || null })}><option value="">preset ({pv?.weight_dtype ?? 'default'})</option>{caps?.weight_dtypes.map((x) => <option key={x}>{x}</option>)}</select>
             <span className="disabled-why"> UNETLoader: fp8_e4m3fn_fast uses the fp8 matmul path — a speed candidate to measure on gfx1201</span></div>
           <label>text encoder</label>
-          <div><select value={p.te_device ?? ''} onChange={(e) => g.set({ te_device: e.target.value || null })}><option value="">preset (GPU)</option>{caps?.te_devices.map((x) => <option key={x} value={x}>{x === 'cpu' ? 'cpu · saves VRAM, ≈ 170 s per new prompt (E0)' : x}</option>)}</select></div>
+          <div>{teOpts.length > 1 && <select value={p.te_id ?? ''} title="Which weights encode the prompt (D31)" onChange={(e) => g.set({ te_id: e.target.value || null })}>{teOpts.map((o) => <option key={o.id} value={o.default ? '' : o.id}>{o.default ? `preset · ${o.label}` : o.label}{o.health === 'missing' ? ' (not fetched)' : ''}</option>)}</select>}
+            {teOpts.length > 1 && ' '}<select value={p.te_device ?? ''} disabled={teGguf} title={teGguf ? 'a GGUF encoder loads on the GPU (CLIPLoaderGGUF has no device input)' : 'where the encoder runs'} onChange={(e) => g.set({ te_device: e.target.value || null })}><option value="">{teGguf ? 'GPU' : 'preset (GPU)'}</option>{!teGguf && caps?.te_devices.filter((x) => x !== 'default').map((x) => <option key={x} value={x}>{x === 'cpu' ? 'cpu · saves VRAM, ≈ 170 s per new prompt (E0)' : x}</option>)}</select>
+            {teOpts.length > 1 && <span className="hint" style={{ gridColumn: 'auto' }}>{teGguf ? 'Q4_K_M stays resident beside the 9B transformer — a cold tiled refine takes 279 s instead of 1157 s (2026-10-07)' : 'the fp8 encoder makes the 9B transformer stream on a cold engine'}</span>}</div>
           <label>decode</label>
           <div><label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={p.tiled_vae} onChange={(e) => g.set({ tiled_vae: e.target.checked })} /> tiled VAE decode</label>
             {p.tiled_vae && <span className="disabled-why"> · tile <input type="number" step={32} min={64} max={4096} value={p.tile_size} onChange={(e) => g.set({ tile_size: Number(e.target.value) })} style={{ width: 72 }} /> px</span>}

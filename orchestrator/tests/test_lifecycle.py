@@ -32,7 +32,7 @@ MAGENTA = (255, 0, 255, 255)
 def _tree(root: Path) -> Roster:
     for rel in ("diffusion_models/flux2_dev_fp8mixed.safetensors", "text_encoders/mistral_3_small_flux2_fp8.safetensors", "vae/flux2-vae.safetensors",
                 "loras/Flux2TurboComfyv2.safetensors", "diffusion_models/flux-2-klein-9b.safetensors", "diffusion_models/flux-2-klein-base-9b.safetensors",
-                "text_encoders/qwen_3_8b_fp8mixed.safetensors", "upscale_models/RealESRGAN_x2.pth"):
+                "text_encoders/qwen_3_8b_fp8mixed.safetensors", "text_encoders/Qwen3-8B-Q4_K_M.gguf", "upscale_models/RealESRGAN_x2.pth"):
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"x" * 16)

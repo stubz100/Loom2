@@ -17,7 +17,7 @@ export interface Panel {
   prompt_mode: PromptMode; tree: Tree; json_text: string; text: string; negative: string
   model_id: string; steps: number | null; guidance: number | null; cfg: number | null; sampler: string | null; scheduler: string | null; turbo: boolean
   // ComfyUI configuration surfaced 2026-10-06 (null = the model preset's value; see /capabilities)
-  turbo_strength: number; weight_dtype: string | null; te_device: string | null; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number
+  turbo_strength: number; weight_dtype: string | null; te_device: string | null; te_id: string | null; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number
   seed_mode: SeedMode; seed: number; count: number
   width: number; height: number; tier: 'thumb' | 'draft' | 'full' | 'custom'
   refs: RefSlot[]; ref_max_px: number
@@ -27,7 +27,7 @@ export interface Panel {
 export interface Preview {
   serialized_prompt: string; prompt_mode: string; width: number; height: number; steps: number; guidance: number; cfg: number; sampler: string; scheduler: string
   turbo: boolean; distilled: boolean; negative_used: boolean; word_count: number; token_estimate: number; refs: number; max_refs: number
-  turbo_strength: number | null; weight_dtype: string; te_device: string; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number | null
+  turbo_strength: number | null; weight_dtype: string; te_device: string; te_id: string; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number | null
   missing: { model_id: string; health: string; approx_gb: number | null }[]; estimate: { seconds: number | null; source: string; vram_gb?: number; vram_budget_gb?: number; vram_fit?: 'ok' | 'tight' | 'over' }; count: number
 }
 export interface Preset { name: string; panel: Panel; saved_at: string }
@@ -39,7 +39,7 @@ const EMPTY_TREE: Tree = { scene: '', subjects: [], style: '', color_palette: []
 export const DEFAULT_PANEL: Panel = {
   prompt_mode: 'tree', tree: EMPTY_TREE, json_text: '', text: '', negative: '',
   model_id: 'flux2-dev-fp8mixed', steps: null, guidance: null, cfg: null, sampler: null, scheduler: null, turbo: true,
-  turbo_strength: 1, weight_dtype: null, te_device: null, base_shift: null, max_shift: null, tiled_vae: false, tile_size: 512,
+  turbo_strength: 1, weight_dtype: null, te_device: null, te_id: null, base_shift: null, max_shift: null, tiled_vae: false, tile_size: 512,
   seed_mode: 'random', seed: 1, count: 4, width: 960, height: 544, tier: 'draft', refs: [], ref_max_px: 1024, loras: [],
 }
 
@@ -80,7 +80,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): Record<string, unkn
   return {
     kind: 't2i', model_id: p.model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo,
-    turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
+    turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
   }
 }
@@ -91,7 +91,7 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     text: String(r.prompt_text ?? ''), negative: String(r.negative ?? ''), width: Number(r.width ?? 960), height: Number(r.height ?? 544),
     steps: (r.steps as number | null) ?? null, guidance: (r.guidance as number | null) ?? null, cfg: (r.cfg as number | null) ?? null,
     sampler: (r.sampler as string | null) ?? null, scheduler: (r.scheduler as string | null) ?? null, turbo: Boolean(r.turbo), tier: 'custom',
-    turbo_strength: Number(r.turbo_strength ?? 1), weight_dtype: (r.weight_dtype as string | null) ?? null, te_device: (r.te_device as string | null) ?? null,
+    turbo_strength: Number(r.turbo_strength ?? 1), weight_dtype: (r.weight_dtype as string | null) ?? null, te_device: (r.te_device as string | null) ?? null, te_id: (r.te_id as string | null) ?? null,
     base_shift: (r.base_shift as number | null) ?? null, max_shift: (r.max_shift as number | null) ?? null, tiled_vae: Boolean(r.tiled_vae), tile_size: Number(r.tile_size ?? 512),
     refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string }[]).filter((x) => x.asset_id).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
     ref_max_px: Number(r.ref_max_px ?? 1024), loras: (r.loras as Panel['loras']) ?? [],

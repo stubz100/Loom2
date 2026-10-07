@@ -71,7 +71,7 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
   Turbo LoRA toggle (dev) with its **strength**.
 - **Advanced · ComfyUI model and decode settings** (disclosure, 2026-10-06 audit): **shift** (model default — FLUX.2
   2.02 — or `ModelSamplingFlux` base/max, resolution-dependent), **weight dtype** (`UNETLoader`: default /
-  fp8_e4m3fn / fp8_e4m3fn_fast / fp8_e5m2), **text encoder device** (GPU / cpu, with E0's 170 s warning),
+  fp8_e4m3fn / fp8_e4m3fn_fast / fp8_e5m2), **text encoder** (the preset's weights or a listed alternate — Klein 9B: Q4_K_M GGUF default, fp8 alternate, D31 — and its device: GPU / cpu with E0's 170 s warning; a GGUF encoder is GPU-only),
   **tiled VAE decode** (`VAEDecodeTiled`, tile size) for Full-tier headroom. Everything the UI shows is what runs:
   the preview echoes the effective values (`effective_params`) and the manifest records them. Post-MVP candidates
   that need a measured spike first: `EasyCache` / `LazyCache` step skipping, `PerturbedAttentionGuidance`,

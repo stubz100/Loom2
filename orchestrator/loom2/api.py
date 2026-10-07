@@ -24,8 +24,8 @@ from .tools import facesim
 from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
 from .config import AppState
 from .documents import DocumentStore, StaleStack
-from .engine.graphs import (CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, TE_ALTERNATES, VRAM_ESTIMATE_GB, WAN_PRESETS, effective_params,
-                            estimate_i2v_seconds, i2v_params)
+from .engine.graphs import (CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, TE_ALTERNATES, TE_LABELS, VRAM_ESTIMATE_GB, WAN_PRESETS,
+                            effective_params, estimate_i2v_seconds, i2v_params, te_options)
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, _tmp_for
@@ -236,7 +236,12 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             models[mid] = {"family": e.family, "label": preset.label, "health": r.health, "steps": preset.steps, "guidance": preset.guidance, "cfg": preset.cfg,
                            "distilled": preset.distilled, "turbo": preset.turbo_lora is not None, "turbo_steps": preset.turbo_steps, "json_prompt": preset.json_prompt,
                            "max_refs": preset.max_refs, "sampler": preset.sampler, "scheduler": preset.scheduler, "vram_gb": VRAM_ESTIMATE_GB.get(mid),
-                           "wired": mid == "flux2-dev-fp8mixed" or e.family == "klein", "license": e.license, "variants": e.variants}
+                           "wired": mid == "flux2-dev-fp8mixed" or e.family == "klein", "license": e.license, "variants": e.variants,
+                           # D31: the encoder that runs by default and the alternates a recipe may name in `te_id` (the panels' picker)
+                           "te_id": preset.te_id,
+                           "te_options": [{"id": t, "label": TE_LABELS.get(t, ROSTER_BY_ID[t].name), "name": ROSTER_BY_ID[t].name, "health": svc.roster.resolve(t).health,
+                                           "approx_gb": ROSTER_BY_ID[t].approx_gb, "gguf": ROSTER_BY_ID[t].name.lower().endswith(".gguf"), "default": t == preset.te_id}
+                                          for t in te_options(preset)]}
         live = svc.queue.engine_enum if svc.queue else (lambda cls, key: None)      # the running engine's own enums when it has answered
         i2v_models = {}
         for mid, needs in I2V_WEIGHTS.items():

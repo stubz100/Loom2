@@ -28,7 +28,7 @@ def _tree(tmp_path: Path, names: dict[str, list[str]]) -> Path:
 @pytest.fixture
 def dev_roster(tmp_path: Path) -> Roster:
     root = _tree(tmp_path, {"diffusion_models": ["flux2_dev_fp8mixed.safetensors", "flux-2-klein-9b.safetensors"],
-                            "text_encoders": ["mistral_3_small_flux2_fp8.safetensors", "qwen_3_8b_fp8mixed.safetensors"],
+                            "text_encoders": ["mistral_3_small_flux2_fp8.safetensors", "qwen_3_8b_fp8mixed.safetensors", "Qwen3-8B-Q4_K_M.gguf"],
                             "vae": ["flux2-vae.safetensors"], "loras": ["Flux2TurboComfyv2.safetensors"]})
     return Roster(root).scan()
 

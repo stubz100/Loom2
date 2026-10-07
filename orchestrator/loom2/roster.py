@@ -73,16 +73,19 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="klein-9b-kv", name="flux-2-klein-9b-kv.safetensors", folder="diffusion_models", family="klein", role="transformer",
                 repo="Comfy-Org/flux2-klein-9B", file="split_files/diffusion_models/flux-2-klein-9b-kv.safetensors", license="flux-nc", approx_gb=16.9, note="multi-ref KV cache; unbenchmarked"),
     RosterEntry(id="qwen3-8b-fp8mixed", name="qwen_3_8b_fp8mixed.safetensors", folder="text_encoders", family="klein", role="text_encoder",
-                repo="Comfy-Org/flux2-klein-9B", file="split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", license="apache-2.0", approx_gb=8.1),
-    # 2026-10-07 encoder experiment: llama.cpp quantizations of the same Qwen3-8B, loaded through ComfyUI-GGUF's CLIPLoaderGGUF. The fp8
-    # encoder (8.3 GB resident) and the fp8-cast 9B transformer (8.7 GB) do not fit 16 GB together, so DynamicVRAM streams the sampler
-    # (journal 09:37); a 4-bit encoder leaves the pair resident. 9B family only — the 4B models have a different hidden size.
+                repo="Comfy-Org/flux2-klein-9B", file="split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", license="apache-2.0", approx_gb=8.1,
+                note="alternate 9B encoder since D31 (2026-10-07): with it the 9B transformer streams on a cold engine (tiled refine 1157 s vs 279 s)"),
+    # Klein 9B text encoder (D31, 2026-10-07): the fp8 encoder (8.3 GB resident) and the fp8-cast 9B transformer (8.7 GB) do not fit 16 GB
+    # together, so DynamicVRAM streams the sampler; unsloth's llama.cpp quantization of the same Qwen3-8B, loaded through ComfyUI-GGUF's
+    # CLIPLoaderGGUF, keeps the pair resident. Q4_K_M is the default; Q4_K_S / Q3_K_M measured identical in speed and were deleted (D30).
+    # 9B family only — the 4B models have a different hidden size.
     RosterEntry(id="qwen3-8b-q4km", name="Qwen3-8B-Q4_K_M.gguf", folder="text_encoders", family="klein", role="text_encoder",
-                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q4_K_M.gguf", license="apache-2.0", approx_gb=5.03, note="Klein 9B encoder, 4-bit K_M (CLIPLoaderGGUF)"),
+                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q4_K_M.gguf", license="apache-2.0", approx_gb=5.03,
+                note="default Klein 9B encoder (D31): 6.8 GB resident, cold tiled refine 279 s instead of 1157 s; renders match fp8 by eye"),
     RosterEntry(id="qwen3-8b-q4ks", name="Qwen3-8B-Q4_K_S.gguf", folder="text_encoders", family="klein", role="text_encoder",
-                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q4_K_S.gguf", license="apache-2.0", approx_gb=4.80, note="Klein 9B encoder, 4-bit K_S (CLIPLoaderGGUF)"),
+                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q4_K_S.gguf", license="apache-2.0", approx_gb=4.80, retired="D31 2026-10-07: same speed as Q4_K_M, no reason to keep both"),
     RosterEntry(id="qwen3-8b-q3km", name="Qwen3-8B-Q3_K_M.gguf", folder="text_encoders", family="klein", role="text_encoder",
-                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q3_K_M.gguf", license="apache-2.0", approx_gb=4.12, note="Klein 9B encoder, 3-bit K_M (CLIPLoaderGGUF)"),
+                repo="unsloth/Qwen3-8B-GGUF", file="Qwen3-8B-Q3_K_M.gguf", license="apache-2.0", approx_gb=4.12, retired="D31 2026-10-07: same speed as Q4_K_M, a little looser on pose"),
     # ---- Wan 2.2 I2V-A14B (primary i2v, D8) ----
     RosterEntry(id="wan22-i2v-high-q5", name="Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf", folder="diffusion_models", family="wan22", role="transformer",
                 repo="QuantStack/Wan2.2-I2V-A14B-GGUF", file="HighNoise/Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf", license="apache-2.0", variants=["full", "open"], approx_gb=10.1, retired="E4c 2026-10-05: fp8 scaled experts are 1.8× faster at sampling (D30)"),

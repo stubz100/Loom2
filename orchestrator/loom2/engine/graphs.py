@@ -39,14 +39,21 @@ PRESETS: dict[str, ModelPreset] = {
     "flux2-dev-fp8mixed": ModelPreset(te_id="mistral3-small-flux2-fp8", steps=20, guidance=4.0, turbo_lora="flux2-turbo-lora", max_refs=10, label="FLUX.2 dev · JSON"),
     "klein-4b": ModelPreset(te_id="qwen3-4b", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 4B"),
     "klein-base-4b": ModelPreset(te_id="qwen3-4b", steps=20, guidance=1.0, cfg=3.5, weight_dtype="fp8_e4m3fn", json_prompt=False, label="Klein 4B base"),
-    "klein-9b": ModelPreset(te_id="qwen3-8b-fp8mixed", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 9B"),
-    "klein-base-9b": ModelPreset(te_id="qwen3-8b-fp8mixed", steps=20, guidance=1.0, cfg=3.5, weight_dtype="fp8_e4m3fn", json_prompt=False, label="Klein 9B base"),
-    "klein-9b-kv": ModelPreset(te_id="qwen3-8b-fp8mixed", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 9B KV"),
+    "klein-9b": ModelPreset(te_id="qwen3-8b-q4km", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 9B"),
+    "klein-base-9b": ModelPreset(te_id="qwen3-8b-q4km", steps=20, guidance=1.0, cfg=3.5, weight_dtype="fp8_e4m3fn", json_prompt=False, label="Klein 9B base"),
+    "klein-9b-kv": ModelPreset(te_id="qwen3-8b-q4km", steps=4, guidance=1.0, weight_dtype="fp8_e4m3fn", distilled=True, json_prompt=False, label="Klein 9B KV"),
 }
 
-# Text encoders a preset may swap in (2026-10-07 encoder experiment): llama.cpp quantizations of Qwen3-8B for the Klein 9B family.
-# Keyed by the preset's te_id; /capabilities publishes the map and a recipe names its choice in `te_id`.
-TE_ALTERNATES: dict[str, list[str]] = {"qwen3-8b-fp8mixed": ["qwen3-8b-q4km", "qwen3-8b-q4ks", "qwen3-8b-q3km"]}
+# Text encoders a preset may swap in, keyed by the preset's te_id (D31, 2026-10-07): the Klein 9B family defaults to unsloth's Q4_K_M
+# GGUF of Qwen3-8B — it stays resident beside the fp8 9B transformer, so a cold tiled refine takes 279 s instead of 1157 s — and keeps
+# the Comfy-Org fp8 repack as the alternate. /capabilities publishes the options per model; a recipe names its choice in `te_id`.
+TE_ALTERNATES: dict[str, list[str]] = {"qwen3-8b-q4km": ["qwen3-8b-fp8mixed"]}
+TE_LABELS: dict[str, str] = {"qwen3-8b-q4km": "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed": "Qwen3-8B fp8 · 8.7 GB"}   # the panels' hints carry the why
+
+
+def te_options(preset: ModelPreset) -> list[str]:
+    """The preset's encoder first, then its alternates — the order the panels list them in."""
+    return [preset.te_id, *TE_ALTERNATES.get(preset.te_id, [])]
 
 
 def resolve_te_id(preset: ModelPreset, te_id: str | None) -> str:

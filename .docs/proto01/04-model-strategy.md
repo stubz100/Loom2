@@ -80,7 +80,7 @@ MiniMax H3 ≈ 13–14 min (third-party 9070 XT measurement).
 | --- | --- | --- | --- | --- | --- |
 | **Klein 4B** (distilled) | 4B | Qwen3-4B (layers 9/18/27) | **Apache-2.0**, ungated | exactly 4 / 1.0 | fp8 ≈ 4 GB + TE 4–8 GB → ~8.4 GB peak |
 | Klein 4B **base** | 4B | Qwen3-4B | Apache-2.0 | ~50 / real CFG (negatives work) | ~9.2 GB peak; fine-tunable |
-| **Klein 9B** (distilled) | 9B | Qwen3-8B | FLUX NC, gated | 4 / 1.0 | fp8 ≈ 9–10 GB, TE `qwen_3_8b_fp8mixed` 8.7 GB → ~15 GB peak with TE unload; **2026-10-07: the fp8 pair makes DynamicVRAM stream the transformer on a cold engine (tiled refine 1157 s) — a GGUF encoder (unsloth Qwen3-8B Q4_K_M 5.0 GB file / 6.8 GB resident, `CLIPLoaderGGUF`, recipe `te_id`) brings it to 279 s, journal 12:50** |
+| **Klein 9B** (distilled) | 9B | Qwen3-8B — **Q4_K_M GGUF default, fp8 alternate (D31)** | FLUX NC, gated | 4 / 1.0 | fp8 ≈ 9–10 GB, TE `qwen_3_8b_fp8mixed` 8.7 GB → ~15 GB peak with TE unload; **2026-10-07: the fp8 pair makes DynamicVRAM stream the transformer on a cold engine (tiled refine 1157 s) — a GGUF encoder (unsloth Qwen3-8B Q4_K_M 5.0 GB file / 6.8 GB resident, `CLIPLoaderGGUF`, recipe `te_id`) brings it to 279 s — the 9B default since D31, journal 12:58** |
 | Klein 9B **base** | 9B | Qwen3-8B | NC | 50 / CFG | as above |
 | Klein 9B-**KV** (Mar 2026) | 9B | Qwen3-8B | NC | 4 | KV-cache of reference tokens, up to 2.5× faster multi-ref editing |
 | **dev** | 32B | Mistral-Small-3.2-24B (layers 10/20/30) | NC, gated | 28–50 BFL / 20 Comfy / ~8 with Turbo LoRA; g ≈ 4 | fp8mixed 35.5 GB or GGUF Q4_K_S 19.3 / Q4_K_M 20.1 GB → always streamed/offloaded; Mistral TE Q4_K_M 14.3 GB on CPU |

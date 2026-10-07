@@ -130,6 +130,11 @@ class EngineSupervisor:
             for d in ("engine_out", "engine_tmp", "engine_user"):
                 (self.app.state_dir / d).mkdir(parents=True, exist_ok=True)
             self.log_path = self.app.logs_dir / f"engine-{time.strftime('%Y%m%d-%H%M%S')}.log"
+            for old in sorted(self.app.logs_dir.glob("engine-*.log"))[:-9]:      # C18: keep the last ten engine logs
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
             self._log_fh = self.log_path.open("ab")
             env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}
             try:

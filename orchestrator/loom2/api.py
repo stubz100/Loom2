@@ -801,7 +801,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         return FileResponse(p, media_type="video/mp4", headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.get("/clips/{clip_id}/frames/{name}")
-    async def clip_frame(clip_id: str, name: str):
+    async def clip_frame(clip_id: str, name: str, size: int = 0):
+        """A master frame as PNG; with `size` a cached WebP thumbnail (longer side ≤ size) for the filmstrip (C24)."""
         ws, _, _ = svc.require_project()
         store = ClipStore(ws)
         rec = store.get(clip_id)
@@ -811,6 +812,26 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             raise HTTPException(400, "a frame index is expected, e.g. 37.png")
         if not rec or n < 0 or n >= rec.frames:
             raise HTTPException(404, "frame not found")
+        if size:
+            size = max(32, min(512, int(size)))
+            out = store.dir(clip_id) / "strip" / f"{n:06d}_{size}.webp"
+            if not out.is_file():
+                def make() -> None:
+                    from PIL import Image
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    with Image.open(store.frame_path(clip_id, n)) as im:
+                        im = im.convert("RGB")
+                        im.thumbnail((size, size), Image.LANCZOS)
+                        tmp = _tmp_for(out)
+                        im.save(tmp, "WEBP", quality=80, method=4)
+                        try:
+                            os.replace(tmp, out)
+                        except OSError:                           # two requests for one frame: the other one won (C5's lesson)
+                            tmp.unlink(missing_ok=True)
+                            if not out.is_file():
+                                raise
+                await asyncio.to_thread(make)
+            return FileResponse(out, media_type="image/webp", headers={"Cache-Control": "private, max-age=31536000, immutable"})
         return FileResponse(store.frame_path(clip_id, n), media_type="image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.post("/clips/{clip_id}/identity")

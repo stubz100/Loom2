@@ -35,8 +35,20 @@ export const DEFAULT_PANEL: AnimPanel = {
   tier: 'draft', orientation: 'landscape', width: 832, height: 480, frames: 81, fps: 16, seed_mode: 'random', seed: 1, count: 1, beats: [],
 }
 
+/** C25: the server's rule for a model once the capabilities are loaded (`I2V_RULES` through `/capabilities.i2v`); the table above is
+ * the fallback before that and the source of the short label. */
+export function modelRules(id: string): (typeof MODEL_RULES)[string] {
+  const base = MODEL_RULES[id] ?? MODEL_RULES['wan22-i2v-high-fp8']
+  const caps = useSession.getState().capabilities?.i2v
+  const m = caps?.models[id]
+  if (!caps || !m) return base
+  const fam = m.family
+  return { ...base, fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, draft: caps.tiers.draft?.[fam] ?? base.draft, hd: caps.tiers.hd?.[fam] ?? base.hd,
+    portrait: caps.portrait?.[fam] ?? base.portrait, square: caps.square?.[fam] ?? base.square }
+}
+
 export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: AnimPanel['orientation'], current: [number, number]): [number, number] {
-  const r = MODEL_RULES[model_id] ?? MODEL_RULES['wan22-i2v-high-fp8']
+  const r = modelRules(model_id)
   if (tier === 'custom') return current
   if (orientation === 'portrait') return tier === 'hd' ? [r.hd[1], r.hd[0]] : r.portrait
   if (orientation === 'square') return r.square
@@ -110,8 +122,8 @@ export const useAnimate = create<AnimateState>()(
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); get().refreshPreview() },
       setModel: (model_id) => {
         const p = get().panel
-        const r = MODEL_RULES[model_id]
-        if (!r) return
+        if (!MODEL_RULES[model_id] && !useSession.getState().capabilities?.i2v?.models[model_id]) return
+        const r = modelRules(model_id)
         const [width, height] = sizeFor(model_id, p.tier, p.orientation, [p.width, p.height])
         get().set({ model_id, fps: r.fps, frames: r.frames, width, height, steps: null, cfg: null, shift: null })
       },
@@ -225,7 +237,7 @@ export const useAnimate = create<AnimateState>()(
         const c = get().clip()
         if (!c) return
         const other = c.model_id === 'wan22-i2v-high-fp8' ? 'ltx23-distilled-fp8' : 'wan22-i2v-high-fp8'
-        const r = MODEL_RULES[other]
+        const r = modelRules(other)
         const base = c.params.recipe as Record<string, unknown>
         const recipe = { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0] }
         try { await api.post('/jobs', { recipe, stage: false }); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }

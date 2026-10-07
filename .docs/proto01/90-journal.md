@@ -1563,8 +1563,8 @@ read the clock)*
   | C15 | low | `queue.py` `_follow` | completion detected through the history poll discards the engine's `status.messages`; the job reads "engine reported an error" | **fixed 08:03** |
   | C16 | low | `queue.py` `submit` | over-budget jobs are created `failed` but never `record_job`ed | **fixed 08:03** |
   | C17 | low | `documents.py` `save` / `update_stack` | `save()` reads `od.doc` several times on a worker thread while `update_stack` (another thread) can swap it → a rare inconsistent ORA | **fixed 08:03** |
-  | C18 | low | `engine/client.py` `events`; `engine/supervisor.py` `start` | the event pump reconnects every second forever while the engine is stopped; one `engine-*.log` per start, never pruned | open |
-  | C19 | low | `workspace.py` `create` | refuses when free space < size cap, so the default 100 GB cap fails on a disk with less than that free | open |
+  | C18 | low | `engine/client.py` `events`; `engine/supervisor.py` `start` | the event pump reconnects every second forever while the engine is stopped; one `engine-*.log` per start, never pruned | **fixed 09:37** |
+  | C19 | low | `workspace.py` `create` | refuses when free space < size cap, so the default 100 GB cap fails on a disk with less than that free | **fixed 09:37** |
   | C32 | high | `engine/graphs.py` `build_segment` (SAM 3 box) | `SAM3_Detect.bboxes` was wired to `CreateBoundingBoxes` output 0 (the preview IMAGE); the BOUNDING_BOX is output 1 — found by C9's new type check; box mode was not among the M5 acceptance's prompts | **fixed 08:03** |
 
   **Frontend and shell**
@@ -1575,13 +1575,13 @@ read the clock)*
   | C21 | medium | `EditorCanvas.tsx` scene sync | every revision `removeChildren()`s the layer and overlay containers and recreates the ants / prompt / guide / transform / frame `Graphics` and the background rect without `destroy()` → GPU geometry per stroke. *Plausible*, not measured | **fixed 08:03** |
   | C22 | medium | `src-tauri/src/lib.rs` `repo_root`; `ci.yml`; README | release builds bake `CARGO_MANIFEST_DIR` (the CI runner's path); the installer bundles neither venv nor engine; `LOOM2_REPO` / `LOOM2_ORCH_CMD` are documented only in the journal | **fixed 08:03** |
   | C23 | low | `generateStore.ts` `loadSnippets`; `GenerateSuite.tsx` `PresetsTab` | field presets load only when the Presets tab mounts; the preset menus lack the user's presets until then | **fixed 08:03** |
-  | C24 | low | `AnimateSuite.tsx` `Filmstrip` | up to 40 full-size master PNGs as thumbnails | open |
-  | C25 | low | `animateStore.ts` `MODEL_RULES` | duplicates the server's `I2V_RULES` | open |
+  | C24 | low | `AnimateSuite.tsx` `Filmstrip` | up to 40 full-size master PNGs as thumbnails | **fixed 09:37** |
+  | C25 | low | `animateStore.ts` `MODEL_RULES` | duplicates the server's `I2V_RULES` | **fixed 09:37** |
   | C26 | low | `src-tauri/src/lib.rs` `reveal_path` | `explorer /select,<path>` through Rust's argument quoting likely breaks on paths with spaces. *Plausible* | **fixed 08:03** |
   | C27 | low | `ProjectDialog.tsx` | hard-coded `F:/loom2-projects/` | **fixed 08:03** |
-  | C28 | low | `compose.py` `render_nodes` vs `EditorCanvas.tsx` `build` | a group with a *disabled* mask is isolated in Python and pass-through on the GPU; `clip` on groups differs too (visible only with non-normal child blends) | open |
+  | C28 | low | `compose.py` `render_nodes` vs `EditorCanvas.tsx` `build` | a group with a *disabled* mask is isolated in Python and pass-through on the GPU; `clip` on groups differs too (visible only with non-normal child blends) | **fixed 09:37** |
   | C29 | low | `store/session.ts` previews | blob URLs of finished jobs are never revoked | **fixed 08:03** |
-  | C30 | low | `EditorCanvas.tsx` `pick` | the eyedropper reads premultiplied pixels (darker over semi-transparent areas) | open |
+  | C30 | low | `EditorCanvas.tsx` `pick` | the eyedropper reads premultiplied pixels (darker over semi-transparent areas) | **fixed 09:37** |
   | C31 | low | `editorStore.ts` `openDocument` | no in-flight guard; two concurrent opens leak the loser's textures | **fixed 08:03** |
 
 - **Test gaps:** nothing covers variant enforcement at `/jobs`, the upscale layer's alpha, purging a video asset, concurrent
@@ -1679,3 +1679,31 @@ read the clock)*
   (`LOOM2_VARIANT` baked by `option_env!`, handed over as the environment variable) was not driven; it passes exactly what this
   test set.
 - Offline suite 97 passed, `tsc -b` clean, `oxlint` unchanged, `cargo check` clean. Committed as the review-fix commit.
+
+## 2026-10-07 09:37 — Register closed (C18, C19, C24, C25, C28, C30); the tiled-refine timing is DynamicVRAM's cold start, measured, with the `--disable-dynamic-vram` control
+
+- **Open items landed.** C18: the engine event pump ends when there is no engine to listen to (`_ensure_ws` restarts it with the
+  next job) and `start()` keeps the last ten `engine-*.log` files. C19: project creation refuses only below the 10 GB floor — the
+  size cap is the project's ceiling, the disk guard polices growth; a 100 GB cap on an 80 GB drive now works. C24:
+  `GET /clips/{id}/frames/{n}.png?size=S` serves a cached WebP thumbnail (`clips/<id>/strip/`), the filmstrip asks for 352 px
+  instead of 40 full master PNGs. C25: `animateStore.modelRules(id)` reads fps / frames / step / multiple / tier sizes from
+  `/capabilities.i2v` once loaded; `MODEL_RULES` stays as the fallback and the source of the short labels. C28: `compose.py`'s
+  group pass-through rule now matches the editor's — a *disabled* mask is no mask, `clip` isolates. C30: the eyedropper
+  un-premultiplies what `extract.pixels` hands back. Tests: `test_c19_…`, `test_c24_…`, `test_c28_…` → **100 offline tests**;
+  `tsc -b` clean, `oxlint` unchanged. Every register row is now fixed.
+- **Tiled refine 892 s (acceptance) vs 439 s (M5 close): resolved — not a regression of the review or the pin.** Same job
+  (upscale ×2 + Klein 9B base, 1200×544 → 6 tiles of 1024 / 128, 0.25), fresh engine, run twice back to back on the default flags:
+  **cold 1156.7 s** (KSampler Σ 1102.7 s = 184 s per tile, 9.2 s/step; VAE enc 10.8 / dec 23.7 s; loaders 0.3 s) then **warm 262.2 s**
+  (KSampler Σ 221.8 s = 37 s per tile, 1.85 s/step). The weights load *inside* the samplers under DynamicVRAM (the loader nodes take
+  0.3 s; the log says "prepared for dynamic VRAM loading … 8658 MB staged" for Flux2 and 8262 MB for the Qwen3-8B encoder — more than
+  16 GB together), and the first job streams for its whole length. This is E0's hypothesis (2), "DynamicVRAM residency varying job to
+  job" (journal 2026-10-04), measured: 439 s at M5 close was a partially warm engine. **Control, `--disable-dynamic-vram`
+  (E0's planned check):** the same job cold → **249.7 s** (37 s per tile; the log says "loaded completely; 12234 MB usable, 8658 MB
+  loaded, full load: True"). But the same flag on **FLUX.2 dev Turbo 960×544: 201.0 s cold, 176.9 s warm** (KSampler 164 / 175 s =
+  22 s/step) against ≈ 40 s with streaming (E0) — the classic partial-load path thrashes the 34 GB transformer. **Decision: keep
+  DynamicVRAM on** (the dev path needs it; D21/D29 make dev the hero); the Klein 9B base first-job penalty (≈ 15 min once per engine
+  start, then ≈ 4 min) is a known cost, recorded in 13's backlog as an engine-profile item (restart with `--disable-dynamic-vram`
+  for a Klein-only session, or ComfyUI's `--vram-headroom` / pinned-memory tuning, or a fused-weights load before the first tile).
+  The engine's flags are editable in Settings → Engine already. Settings and engine were restored to the defaults afterwards.
+- Also run today: `scripts/m5_acceptance.py` gained the SAM 3 box case (C32) and lost its end-of-run crash; the `open` launch
+  check and the M7 durability script passed (08:41). Dev orchestrator stopped; nothing left running on 8188 / 8766.

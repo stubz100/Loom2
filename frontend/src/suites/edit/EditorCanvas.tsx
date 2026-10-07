@@ -613,7 +613,9 @@ export function EditorCanvas() {
       renderPasses()
       const px = await app.renderer.extract.pixels({ target: layers, frame: new Rectangle(Math.floor(p.x), Math.floor(p.y), 1, 1) })   // B17: Pixi copies the frame with Rectangle.copyTo
       const d = px.pixels
-      const hex = '#' + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')
+      const a = d[3] || 255                                                  // C30: extract hands back premultiplied RGBA
+      const un = (v: number) => Math.min(255, Math.round((v * 255) / a))
+      const hex = '#' + [un(d[0]), un(d[1]), un(d[2])].map((v) => v.toString(16).padStart(2, '0')).join('')
       useEditor.getState().setBrush({ color: hex })
       useSession.getState().toast(`Picked ${hex}`, 'info')
     }

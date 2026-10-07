@@ -404,7 +404,9 @@ class Renderer:
                 acc = composite(acc, src, mode, self._layer_alpha(node, acc), seed=zlib.crc32(node["id"].encode("utf-8")) & 0xFFFF)
             elif kind == "group":
                 children = node.get("children", [])
-                passthrough = node.get("passthrough", True) and mode in ("normal", "pass-through") and not node.get("mask")
+                m = node.get("mask")
+                passthrough = (node.get("passthrough", True) and mode in ("normal", "pass-through") and not (m and m.get("enabled", True))
+                               and not node.get("clip"))                      # C28: one rule with the editor — a disabled mask is no mask; clip isolates
                 if passthrough and abs(float(node.get("opacity", 1.0)) - 1.0) < 1e-6:
                     acc = self.render_nodes(children, acc)
                 else:

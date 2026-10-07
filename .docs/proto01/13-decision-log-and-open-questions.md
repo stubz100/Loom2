@@ -97,7 +97,10 @@ together. Decisions that bind them are in brackets.
    the instruction editor when a 16 GB path exists (04 §4).
 9. **Frame**: detachable Loupe / Player window (07 §7), sd.cpp Vulkan as the zero-driver fallback engine (06 §3 option D).
 10. **Engine**: deliberate pin bumps per milestone (D15; `scripts/pin_review.py`), LTX-2.5 fp8 when benchmarked on 16 GB
-    (04 §8), Wan-Animate for character animation (04 §5).
+    (04 §8), Wan-Animate for character animation (04 §5); **engine memory profiles** — DynamicVRAM streams a model's first job
+    when the transformer and the text encoder exceed 16 GB together (Klein 9B base tiled refine: 1157 s cold vs 262 s warm;
+    `--disable-dynamic-vram` makes it 250 s cold but quadruples dev Turbo — journal 2026-10-07 09:37): a per-session engine
+    profile, `--vram-headroom` / pinned-memory tuning, or a fused pre-load before the first tile.
 
 ## Volatile facts to re-check at each milestone start
 See 04 §8 (ROCm nightlies, INT8 convrot fix, FLUX.2 fill releases, Qwen-Image-2.1 licence, sd.cpp fixes,

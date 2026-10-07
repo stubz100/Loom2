@@ -4,6 +4,7 @@ thumbnails (C5), purging a clip (C6) and link types in the contract check (C9)."
 from __future__ import annotations
 
 import asyncio
+import io
 import sys
 import threading
 import time
@@ -20,6 +21,7 @@ from loom2.config import AppState
 from loom2.documents import RasterLayer
 from loom2.engine.contract import check_graph
 from loom2.engine.supervisor import EngineSupervisor
+from loom2.fsio import StateError
 from loom2.events import EventHub
 from loom2.queue import JobQueue
 from loom2.workspace import Workspace
@@ -214,3 +216,56 @@ def test_c9_contract_check_reports_link_type_mismatches(object_info: dict):
     problems = check_graph(object_info, g)
     assert any("takes IMAGE" in p and "LATENT" in p for p in problems), problems
     assert any("takes VAE" in p for p in problems), problems
+
+
+# ---- C19: the size cap is a ceiling, not a reservation --------------------------------------------------------------
+def test_c19_project_creation_needs_the_floor_not_the_cap(tmp_path: Path, monkeypatch):
+    from loom2 import workspace as wsmod
+    monkeypatch.setattr(wsmod, "free_space_gb", lambda p: 50.0)
+    ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=100)             # a 100 GB cap on a drive with 50 GB free is fine
+    assert ws.load().size_cap_gb == 100
+    monkeypatch.setattr(wsmod, "free_space_gb", lambda p: 5.0)
+    import pytest
+    with pytest.raises(StateError):
+        Workspace.create(tmp_path / "q", name="Q", size_cap_gb=10)                # below the 10 GB floor: refused
+
+
+# ---- C24: filmstrip thumbnails -------------------------------------------------------------------------------------
+def test_c24_filmstrip_frames_come_as_cached_webp_thumbnails(tmp_path: Path):
+    state = tmp_path / "state"
+    AppState(state).update_settings(_settings(tmp_path))
+    with TestClient(create_app(state)) as client:
+        H = {"X-Loom-Token": client.app.state.services.app.token}
+        client.post("/project", json={"path": str(tmp_path / "proj"), "name": "F", "size_cap_gb": 10}, headers=H)
+        svc = client.app.state.services
+        store = ClipStore(svc.ws)
+        frames = []
+        for i in range(3):
+            p = tmp_path / f"f{i}.png"
+            Image.new("RGB", (64, 48), (i * 80, 20, 200)).save(p)
+            frames.append(p)
+        rec = store.create(frames, model_id="wan22-i2v-high-fp8", prompt="t", seed=1, fps=16, start_asset_id="ast_x")
+        r = client.get(f"/clips/{rec.id}/frames/1.png", params={"size": 32})
+        assert r.status_code == 200 and r.headers["content-type"] == "image/webp"
+        with Image.open(io.BytesIO(r.content)) as im:
+            assert max(im.size) == 32
+        assert (svc.ws.clips_dir / rec.id / "strip" / "000001_32.webp").is_file()           # cached beside the master
+        assert client.get(f"/clips/{rec.id}/frames/1.png").headers["content-type"] == "image/png"   # the full frame is unchanged
+        client.post("/project/close", headers=H)
+
+
+# ---- C28: a disabled group mask does not isolate the group ------------------------------------------------------------
+def test_c28_disabled_group_mask_keeps_the_group_pass_through():
+    from loom2.compose import Renderer
+    from loom2.documents import Document, GroupLayer, Mask, RasterLayer
+    bg = np.full((8, 8, 4), 128, np.uint8)
+    bg[..., 3] = 255
+    red = np.zeros((8, 8, 4), np.uint8)
+    red[..., 0] = 200
+    red[..., 3] = 255
+
+    def render(mask):
+        doc = Document(w=8, h=8, layers=[GroupLayer(id="grp", children=[RasterLayer(id="child", blend="multiply")], mask=mask), RasterLayer(id="bg")])
+        return Renderer(8, 8, {"child": red, "bg": bg}, {"grp": np.full((8, 8), 255, np.uint8)}).flatten_u8([n.model_dump() for n in doc.layers])
+    plain, disabled = render(None), render(Mask(enabled=False))
+    assert np.array_equal(plain, disabled) and plain[0, 0, 0] == round(200 * 128 / 255)       # multiply saw the grey backdrop: pass-through

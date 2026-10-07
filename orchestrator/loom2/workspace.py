@@ -111,8 +111,8 @@ class Workspace:
             if any(dest.iterdir()):
                 raise StateError(f"destination folder is not empty: {dest}")
         free = free_space_gb(dest)
-        if free < size_cap_gb:
-            raise StateError(f"insufficient free space: {free:.1f} GB < size cap {size_cap_gb} GB")
+        if free < MIN_SIZE_CAP_GB:                     # C19: the cap is the project's ceiling, not a reservation — the disk guard polices growth
+            raise StateError(f"insufficient free space: {free:.1f} GB on the destination drive (at least {MIN_SIZE_CAP_GB:g} GB needed)")
         try:
             record = ProjectRecord(name=name, format=ProjectFormat.model_validate(fmt) if fmt else ProjectFormat(),
                                    size_cap_gb=size_cap_gb, variant_created_with=variant)

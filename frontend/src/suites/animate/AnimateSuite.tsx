@@ -11,7 +11,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { askText, useSession } from '../../store/session'
 import { playerMenu } from './animateCommands'
-import { fmtTime, MODEL_RULES, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
+import { fmtTime, MODEL_RULES, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
 import { Player } from './Player'
 import './animate.css'
 
@@ -93,7 +93,7 @@ function ModelTab() {
       <label>model</label>
       <div className="model-grid">
         {models.map(([id, m]) => {
-          const r = MODEL_RULES[id]
+          const r = modelRules(id)
           return <button key={id} className={`model-card${p.model_id === id ? ' active' : ''}`} onClick={() => an().setModel(id)}>
             <b>{r.short === 'Wan' ? 'Wan (faithful)' : 'LTX (fast, beats)'}</b>
             <small>{m?.label ?? id}</small>
@@ -143,7 +143,8 @@ function EstimateLine() {
 
 function LengthTab() {
   const p = useAnimate((s) => s.panel)
-  const r = MODEL_RULES[p.model_id] ?? MODEL_RULES['wan22-i2v-high-fp8']
+  useSession((s) => s.capabilities?.i2v)                                  // re-render when the server's rules arrive (C25)
+  const r = modelRules(p.model_id)
   const num = (k: keyof AnimPanel, lo: number, hi: number) => (e: React.ChangeEvent<HTMLInputElement>) => an().set({ [k]: Math.max(lo, Math.min(hi, Number(e.target.value) || lo)) } as Partial<AnimPanel>)
   return (
     <div className="anim-form">
@@ -306,7 +307,7 @@ function Filmstrip({ clip }: { clip: Clip }) {
   return (
     <div className="filmstrip">
       {idx.map((n) => <button key={n} className={`${Math.abs(n - frame) < k ? 'cur' : ''}${n < a || n > b ? ' out' : ''}`} onClick={() => { an().togglePlay(false); an().setFrame(n) }} title={`frame ${n} · ${fmtTime(n, clip.fps)}`}>
-        <img loading="lazy" src={api.fileUrl(`/clips/${clip.id}/frames/${n}.png`)} alt="" /><span>{n}</span>
+        <img loading="lazy" src={api.fileUrl(`/clips/${clip.id}/frames/${n}.png?size=352`)} alt="" /><span>{n}</span>
       </button>)}
     </div>
   )

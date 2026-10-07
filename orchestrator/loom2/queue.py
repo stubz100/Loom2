@@ -391,6 +391,8 @@ class JobQueue:
                 raise
             except Exception as e:
                 log.debug("engine ws: %s", e)
+            if not await self._engine_alive():                 # C18: nothing to listen to — end the pump; _ensure_ws restarts it with the next job
+                return
             await asyncio.sleep(1.0)
 
     def _fail(self, job: JobRecord, msg: str) -> None:

@@ -100,7 +100,8 @@ together. Decisions that bind them are in brackets.
     (04 §8), Wan-Animate for character animation (04 §5); **engine memory profiles** — DynamicVRAM streams a model's first job
     when the transformer and the text encoder exceed 16 GB together (Klein 9B base tiled refine: 1157 s cold vs 262 s warm;
     `--disable-dynamic-vram` makes it 250 s cold but quadruples dev Turbo — journal 2026-10-07 09:37): a per-session engine
-    profile, `--vram-headroom` / pinned-memory tuning, or a fused pre-load before the first tile.
+    profile, or — preferred after the 10:36 measurements — **two-phase prompts with a conditioning cache** (core `SaveConditioning`
+    / `ConditioningLoader`, `/free` between the phases; text encoder on the CPU measured 310 s per prompt, so not that).
 
 ## Volatile facts to re-check at each milestone start
 See 04 §8 (ROCm nightlies, INT8 convrot fix, FLUX.2 fill releases, Qwen-Image-2.1 licence, sd.cpp fixes,

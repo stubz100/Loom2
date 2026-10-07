@@ -83,6 +83,7 @@ class I2I(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
     margin_pct: int = Field(25, ge=0, le=200)     # selection source: context ring
     feather: int = Field(8, ge=0, le=256)         # selection source: paste-back feather
+    te_device: str | None = None                  # CLIPLoader.device: "cpu" keeps the 8 GB encoder out of VRAM (2026-10-07 DynamicVRAM measurements)
 
 
 class Inpaint(BaseModel):
@@ -106,6 +107,7 @@ class Inpaint(BaseModel):
     outpaint: dict[str, Annotated[int, Field(ge=0, le=4096)]] | None = None   # {left, top, right, bottom} for mode == outpaint
     image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id
     mask_blob: str | None = None
+    te_device: str | None = None                  # CLIPLoader.device (see I2I)
 
 
 class Upscale(BaseModel):
@@ -127,6 +129,7 @@ class Upscale(BaseModel):
     overlap: int = Field(128, ge=0, le=512)
     steps: int | None = Field(None, ge=1, le=100)
     prompt_text: str = ""
+    te_device: str | None = None                  # CLIPLoader.device for the refine's encoder (see I2I)
 
 
 class Segment(BaseModel):

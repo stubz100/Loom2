@@ -428,13 +428,15 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
 
 
 # ---- M5 edit recipes (10 §4, D7; graphs ported from engine/spikes/e8_inpaint.py) ------------------------------
-def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: ModelPreset) -> list:
+def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, preset: ModelPreset, te_device: str | None = None) -> list:
     """UNET / text encoder / VAE loaders for a FLUX.2-family model; returns the model link (Turbo LoRA for dev)."""
+    if te_device is not None and te_device not in TE_DEVICES:
+        raise CompileError(f"unknown text-encoder device {te_device!r}")
     _, unet = roster.require(model_id)
     _, te = roster.require(preset.te_id)
     _, vae = roster.require(preset.vae_id)
     g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": preset.weight_dtype}}
-    g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": "default"}}
+    g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "flux2", "device": te_device or "default"}}
     g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
     if preset.turbo_lora:
         _, lora = roster.require(preset.turbo_lora)
@@ -450,7 +452,7 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
     if preset is None:
         raise CompileError(f"no preset for inpaint model '{model_id}'")
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, model_id, preset)
+    model_link = _flux2_loaders(g, roster, model_id, preset, recipe.te_device)
     dev = model_id == "flux2-dev-fp8mixed"
     prompt = recipe.prompt_text.strip()
     g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
@@ -506,7 +508,7 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     if preset.distilled:
         raise CompileError("refine needs Klein base or FLUX.2 dev: distilled Klein cannot partial-denoise (04 §4)")
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, recipe.model_id, preset)
+    model_link = _flux2_loaders(g, roster, recipe.model_id, preset, recipe.te_device)
     dev = recipe.model_id == "flux2-dev-fp8mixed"
     steps = int(recipe.steps or (8 if dev else preset.steps))
     strength = max(0.05, min(1.0, float(recipe.strength)))
@@ -550,7 +552,7 @@ def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: 
         preset = PRESETS.get(recipe.refine_model_id)
         if preset is None or preset.distilled:
             raise CompileError("tiled refine needs Klein base or FLUX.2 dev (distilled Klein cannot partial-denoise)")
-        model_link = _flux2_loaders(g, roster, recipe.refine_model_id, preset)
+        model_link = _flux2_loaders(g, roster, recipe.refine_model_id, preset, recipe.te_device)
         dev = recipe.refine_model_id == "flux2-dev-fp8mixed"
         steps = int(recipe.steps or (8 if dev else preset.steps))
         prompt = recipe.prompt_text.strip()

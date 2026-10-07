@@ -1707,3 +1707,29 @@ read the clock)*
   The engine's flags are editable in Settings → Engine already. Settings and engine were restored to the defaults afterwards.
 - Also run today: `scripts/m5_acceptance.py` gained the SAM 3 box case (C32) and lost its end-of-run crash; the `open` launch
   check and the M7 durability script passed (08:41). Dev orchestrator stopped; nothing left running on 8188 / 8766.
+
+## 2026-10-07 10:36 — The VRAM clash behind the slow Klein 9B jobs, isolated: text encoder vs transformer under DynamicVRAM
+
+- **Cause, measured.** Every slow case today had the Klein 9B family's Qwen3-8B encoder (8.2 GB staged) and the Klein transformer
+  (8.6 GB) on the card together; `load_models_gpu` asks for ≈ 1.1× the transformer plus the reserve, DynamicVRAM keeps the
+  encoder resident and streams the transformer for the whole job. Same tiled refine (6 tiles, 20 steps): **9.2 s/step** streamed
+  (cold, 1157 s), **1.85 s/step** when the transformer fits (warm 262 s; `--disable-dynamic-vram` 250 s). The acceptance showed
+  the same shape on Klein 9B fills: candidate 1 **86 s**, candidate 2 **39 s**. It is not a first-load effect: in the same engine
+  session a plain refine on Klein 9B base took 45 s minutes before the tiled refine took 892 s.
+- **Control 3: text encoder on the CPU** (`te_device: cpu`, now a field of the I2I / Inpaint / Upscale recipes like T2I's — CLIPLoader
+  `device`): sampling back to **38.7 s per tile** (the transformer loads completely), but the Qwen3-8B fp8 encoder on the CPU
+  takes **310 s** per new prompt → wall 905 s. Not a fix on its own (E0 found the same for Mistral: 170 s).
+- **Design that removes the clash: two-phase prompts with a conditioning cache.** Core v0.39.0 has `SaveConditioning` (writes a
+  safetensors to the output folder, tensor options such as reference latents included) and `ConditioningLoader` (reads it from
+  the `embeddings` folder, which `extra_model_paths.yaml` already mounts). The queue would run phase A — CLIPLoader + CLIPTextEncode
+  (+ FluxGuidance / ReferenceLatent) + SaveConditioning — then `/free` with `unload_models`, move the file into
+  `<models>/embeddings/loom2-cond/<sha of te_id + text + refs>.safetensors`, refresh `/object_info`, and run phase B — UNETLoader + VAE
+  + ConditioningLoader + sampler — with the whole card for the transformer. Expected: Klein 9B jobs at the warm rate from the
+  first candidate (≈ 250 s for this tiled refine, ≈ 40 s per fill), phase A ≈ 30 s once per distinct prompt (the dev run's GPU
+  text encode measured 32.7 s) and **zero** for the other candidates of a batch, re-runs and variations, which share the cached
+  conditioning; dev (34 GB, streamed regardless) should also gain from losing the 17 GB Mistral during sampling — to be measured.
+  Apply it when `transformer + text_encoder > usable VRAM` (roster sizes vs `vram_budget_gb − reserve_vram_gb`), i.e. the Klein 9B
+  family and dev; Klein 4B (7.2 + 7.5 GB, measured fine) stays single-phase. The two nodes are not in the captured fixture yet
+  (`scripts/make_object_info_fixture.py` recapture when the graphs use them). Alternative with no graph change: an engine profile
+  per warm group (`--disable-dynamic-vram` restart for Klein-only sessions; 250 s cold) — cheaper to build, costs a restart on every
+  dev ↔ Klein switch and leaves dev streaming. Recorded in 13's backlog (item 10) with the numbers; no decision taken here.

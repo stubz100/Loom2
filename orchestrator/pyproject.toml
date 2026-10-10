@@ -43,5 +43,6 @@ testpaths = ["tests"]
 timeout = 120
 markers = [
     "rig: needs the GPU engine running on the rig (excluded by default: -m 'not rig')",
+    "corpus: the Photoshop oracle over the pinned psd-tools corpus (D40); skipped when the corpus or psd-tools is absent, fails when selected with -m corpus and absent",
 ]
 addopts = "-m 'not rig'"

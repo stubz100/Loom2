@@ -21,7 +21,8 @@ the engine. The author works mouse-first and is EU-based.
 
 | What | Command |
 | --- | --- |
-| Offline tests (115+, ~40 s) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
+| Offline tests (145+, ~40 s) | `orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q` |
+| Photoshop oracle (D40) | `python scripts/fetch_corpus.py` once, then `… -m pytest orchestrator -m corpus -s` (needs `--extra oracle`); floor in `bench/corpus/psd-tools.floor.json` |
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |
 | Agent-doc path check | `orchestrator/.venv/Scripts/python.exe scripts/agents_check.py` |
@@ -30,7 +31,7 @@ the engine. The author works mouse-first and is EU-based.
 | Whole app | `scripts/dev.ps1` (Vite + shell + orchestrator; the engine starts on the first job) |
 | Browser dev | `scripts/dev.ps1 -Browser` → `http://127.0.0.1:1420/?token=devtoken&port=8766` |
 | Rig acceptance (GPU) | `scripts/m1_acceptance.py`, `m3_`, `m4_`, `m5_`, `m6_acceptance.py`, `m7_durability.py` |
-| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|tour\|cmpdiag\|psd\|animate\|perf` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
+| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|tour\|cmpdiag\|grid\|psd\|animate\|perf` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
 | CSP check of the production build | `scripts/csp_check.py` (headless Edge) |
 
 CI (`.github/workflows/ci.yml`) runs the offline suite and the frontend build for both variants (`full`, `open`) on every push and

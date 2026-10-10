@@ -9,6 +9,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
   cmpdiag            GPU preview vs exact flatten after each feature in isolation (mask, group, every adjustment
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
+  grid               D40 parity grid: seeded noise in every deterministic mode × plain / masked / clipped / isolated group /
+                     pass-through group at 50 %, each GPU preview against the exact flatten (p99 ≤ 1; ≤ 2 for the dividing modes)
   psd                builds a stack with every exported construct (fill, lock, clip, adjustment layers, pass-through and
                      isolated groups, a filter layer), exports a PSD and reads it back with psd-tools (D41; `--extra oracle`)
   animate            writes a 24-frame test clip (frame index burned in as a 7-bit code, E6 style) into the project,
@@ -28,7 +30,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -395,6 +397,10 @@ def cmpdiag(cdp: CDP) -> list[str]:
     run("edit.layer.adjustment.invert"); time.sleep(0.4)
     patch("{ clip: true }", "clip"); compare("D39 clipped invert adjustment")
     patch("{ clip: false, blend: 'multiply' }", "blend"); compare("D39 invert adjustment in multiply")
+    cdp.eval(f"{S}.addLayer('adjustment', {{ type: 'exposure', params: {{ exposure: 0.7, offset: 0.02, gamma: 1.2 }} }}); 1"); time.sleep(0.4)
+    compare("D40 exposure in linear light (0.7 EV, offset 0.02, gamma 1.2)")
+    run("edit.layer.delete"); time.sleep(0.3)
+    cdp.eval(f"{S}.setActive({S}.doc.layers[0].id, false); 1"); time.sleep(0.2)
     patch("{ blend: 'normal' }", "blend")
     run("edit.layer.group"); time.sleep(0.3)
     patch("{ opacity: 0.5 }", "opacity"); compare("D39 pass-through group at 50 % holding an adjustment")
@@ -404,6 +410,69 @@ def cmpdiag(cdp: CDP) -> list[str]:
     paint("0, 0, p.width, p.height", "rgb(140, 200, 60)")
     for mode in ("soft-light", "vivid-light", "hard-mix", "color-burn", "color-dodge"):
         patch(f"{{ blend: '{mode}' }}", "blend"); compare(f"D39 {mode} over the stack")
+    return fails
+
+
+def grid(cdp: CDP) -> list[str]:
+    """D40 parity grid (PhotoCraft's gpu/tests/parity.rs idea): a seeded-noise layer in every deterministic blend mode, over a
+    half-transparent base, × {plain, masked, clipped, inside an isolated group, inside a pass-through group at 50 %}; each
+    GPU preview compared with compose.py's exact flatten. Dissolve is seeded noise on both sides but not the same noise (10 §3)."""
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    rows: list[tuple[str, str, float, float]] = []
+    DIVIDING = {"color-dodge", "vivid-light", "divide"}
+    run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+    modes = [m for m in json.loads(cdp.eval(f"JSON.stringify({S}.blendModes ?? null)") or "null") or [] if m != "dissolve"] or [
+        "normal", "darken", "multiply", "color-burn", "linear-burn", "lighten", "screen", "color-dodge", "linear-dodge", "overlay", "soft-light", "hard-light",
+        "vivid-light", "linear-light", "pin-light", "hard-mix", "difference", "exclusion", "subtract", "divide", "hue", "saturation", "color", "luminosity"]
+
+    def compare() -> tuple[float, float] | None:
+        cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+        t0 = time.time()
+        while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+            time.sleep(0.2)
+        r = json.loads(cdp.eval("JSON.stringify(window.__cmp && window.__cmp.rgb_p99 !== undefined ? [window.__cmp.rgb_p99, window.__cmp.rgb_max] : null)") or "null")
+        return (r[0], r[1]) if r else None
+
+    def js(expr: str) -> None:
+        cdp.eval(f"(() => {{ const s = {S}; {expr}; return 1 }})()"); time.sleep(0.25)
+
+    run("edit.layer.new"); time.sleep(0.3)
+    js("const p = s.pixels.get(s.activeId); p.ctx.fillStyle = 'rgba(200, 60, 40, 0.6)'; p.ctx.fillRect(0, 0, p.width / 2, p.height); p.refresh(); p.dirty = true; s.touch(); s.bump()")
+    base = cdp.eval(f"{S}.activeId")
+    run("edit.layer.new"); time.sleep(0.3)
+    # seeded noise (mulberry32): rgb uniform, alpha 64–255, the same every run
+    js("const p = s.pixels.get(s.activeId); const im = p.ctx.createImageData(p.width, p.height); let a = 20261010; const rnd = () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }; for (let i = 0; i < im.data.length; i += 4) { im.data[i] = rnd() * 256; im.data[i + 1] = rnd() * 256; im.data[i + 2] = rnd() * 256; im.data[i + 3] = 64 + rnd() * 192 } p.ctx.putImageData(im, 0, 0); p.refresh(); p.dirty = true; s.touch(); s.bump()")
+    noise = cdp.eval(f"{S}.activeId")
+
+    def sweep(structure: str) -> None:
+        for mode in modes:
+            js(f"s.updateNode('{noise}', {{ blend: '{mode}' }}, 'blend')")
+            r = compare()
+            p99, mx = r if r else (999.0, 999.0)
+            rows.append((structure, mode, p99, mx))
+            # the division modes amplify the 8-bit rounding of the GPU backdrop (compose.py accumulates in float32): p99 ≤ 2 there
+            ok = r is not None and p99 <= (2 if mode in DIVIDING else 1)
+            if not ok:
+                fails.append(f"{structure} / {mode}")
+            print(("ok   " if ok else "FAIL ") + f"{structure:22} {mode:13} p99 {p99:g} max {mx:g}")
+
+    sweep("plain")
+    js(f"s.setActive('{noise}', false)"); run("edit.mask.add"); time.sleep(0.3)
+    js(f"const m = s.masks.get('{noise}'); m.ctx.fillStyle = '#000'; m.ctx.fillRect(0, 0, m.width, m.height / 3); m.ctx.fillStyle = '#808080'; m.ctx.fillRect(0, m.height / 3, m.width, m.height / 3); m.refresh(); m.dirty = true; s.touch(); s.bump()")
+    sweep("masked")
+    run("edit.mask.remove"); time.sleep(0.3)
+    js(f"s.updateNode('{noise}', {{ clip: true }}, 'clip')")
+    sweep("clipped to the base")
+    js(f"s.updateNode('{noise}', {{ clip: false }}, 'clip')")
+    js(f"s.setActive('{noise}', false)"); run("edit.layer.group"); time.sleep(0.3)
+    group = cdp.eval(f"{S}.activeId")
+    js(f"s.updateNode('{group}', {{ passthrough: false }}, 'group')")
+    sweep("isolated group")
+    js(f"s.updateNode('{group}', {{ passthrough: true, opacity: 0.5 }}, 'group')")
+    sweep("pass-through group 50 %")
+    worst = max(rows, key=lambda r: r[2]) if rows else None
+    print(f"grid: {len(rows)} cases, {len(fails)} over budget (p99 ≤ 1; ≤ 2 for dodge / vivid / divide)" + (f"; worst {worst[0]} / {worst[1]} p99 {worst[2]:g} max {worst[3]:g}" if worst else "") + f" (base {base})")
     return fails
 
 
@@ -900,6 +969,8 @@ def main() -> int:
             failures += tour(cdp, tmp)
         elif mode == "cmpdiag":
             failures += cmpdiag(cdp)
+        elif mode == "grid":
+            failures += grid(cdp)
         elif mode == "psd":
             (tmp / "dl").mkdir(exist_ok=True)
             failures += psd_check(cdp, tmp)

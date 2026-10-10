@@ -4,6 +4,7 @@
 # The engine (ComfyUI submodule + ROCm torch venv) is set up on the target machine by scripts/setup.ps1, never built here.
 # D36: every push checks that all version locations match VERSION; a tag v<VERSION> also publishes a *draft* GitHub release
 # with both installers attached (a human reviews and publishes it).
+# D40: compose.py is checked against Photoshop's own composites in a pinned psd-tools corpus (fetched, hash-verified, cached).
 name: ci
 
 on:
@@ -33,9 +34,18 @@ jobs:
         with:
           enable-cache: true
       - name: orchestrator venv
-        run: uv sync --project orchestrator --extra dev
+        run: uv sync --project orchestrator --extra dev --extra oracle
+      - name: psd-tools corpus cache (D40)
+        uses: actions/cache@v4
+        with:
+          path: bench/corpus/psd-tools
+          key: psd-tools-corpus-${{ hashFiles('bench/corpus/psd-tools.sha256') }}
+      - name: psd-tools corpus (D40) — fetch what is missing, verify every SHA-256
+        run: orchestrator/.venv/Scripts/python.exe scripts/fetch_corpus.py
       - name: offline tests
         run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q --timeout 180
+      - name: Photoshop oracle (D40) — compose.py vs the corpus' merged images, ratcheting floor (fails if it would skip)
+        run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q -s -m corpus
       - name: agent docs (D35) — paths exist, verified-at lines present
         run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
       - name: versions (D36) — every location matches VERSION

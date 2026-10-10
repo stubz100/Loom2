@@ -52,8 +52,16 @@ where cs > ½ and cb ≤ ¼), Vivid Light (the source extremes win), Hard Mix (t
 Dodge (a backdrop within 1e-4 of 0 / 1 counts as exact). A layer followed by `clip` layers forms a **clipping group**: the base is
 rendered alone (pixels × mask), each clipped layer blends onto it as if it were opaque and keeps its alpha, and the unit blends
 into the backdrop with the base's mode and opacity × fill; a hidden base hides its group. Saved documents carry
-`meta.compose_version: 2`. Until 2026-10-10 a clipped layer was multiplied by the alpha of everything below it, so it was not
+`meta.compose_version: 3` (3 = Exposure in linear light through a 2.2 power, D40). Until 2026-10-10 a clipped layer was multiplied by the alpha of everything below it, so it was not
 clipped at all over an opaque background.
+
+**Proof against Photoshop (D40):** `orchestrator/tests/test_compose_oracle_d40.py` flattens a pinned subset of psd-tools' test PSDs
+(83 files, `scripts/fetch_corpus.py`) with compose.py and compares with the merged image Photoshop stored in each, at premultiplied
+max ≤ 2/255; files using features loom2 does not model (vector masks, fill layers, effects, the Hue/Sat-style adjustments whose maths
+differ by design) are out of scope with the reason printed. 2026-10-10: 8 pass of 10 in scope (floor 8); known failures Curves (spline
+vs linear, PC21) and Exposure (max 5/255: Photoshop rounds to 8 bits after each adjustment layer). The pre-D39 compositor passed 6.
+The GPU side is held to compose.py by `edit_headed_check.py grid` (120 cases, p99 ≤ 1; ≤ 2 for Colour Dodge, Vivid Light and Divide,
+which amplify the 8-bit rounding of the GPU backdrop).
 
 Working precision is 8-bit in the compositor and, in M4, in the ORA layers too (Pillow writes no RGBA16; 16-bit
 layers are post-MVP, §15). The canvas composite is **exact** for layers, groups, masks, clip and all 24

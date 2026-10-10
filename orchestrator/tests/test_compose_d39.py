@@ -159,4 +159,4 @@ def test_saved_documents_record_the_compose_version(tmp_path: Path):
     od.pixels["a"] = solid((10, 20, 30, 255))
     od.save()
     with zipfile.ZipFile(tmp_path / "v.ora") as z:
-        assert json.loads(z.read("loom2.json"))["meta"]["compose_version"] == compose.COMPOSE_VERSION == 2
+        assert json.loads(z.read("loom2.json"))["meta"]["compose_version"] == compose.COMPOSE_VERSION == 3

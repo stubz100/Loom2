@@ -229,7 +229,8 @@ function channelMap(type: string, p: Record<string, unknown>): (x: number, ch: n
     case 'levels': { const ib = num(p, 'in_black', 0) / 255, iw = num(p, 'in_white', 255) / 255, g = Math.max(0.01, num(p, 'gamma', 1)), ob = num(p, 'out_black', 0) / 255, ow = num(p, 'out_white', 255) / 255
       return (x) => ob + Math.min(1, Math.max(0, (x - ib) / Math.max(1e-6, iw - ib))) ** (1 / g) * (ow - ob) }
     case 'curves': return (x, ch) => curve(curve(x, p.rgb), p[['r', 'g', 'b'][ch]])
-    case 'exposure': { const ev = num(p, 'exposure', 0), off = num(p, 'offset', 0), g = Math.max(0.01, num(p, 'gamma', 1)); return (x) => Math.min(1, Math.max(0, x * 2 ** ev + off)) ** (1 / g) }
+    // D40: Photoshop's Exposure works in linear light through a pure 2.2 power (compose.py _exposure)
+    case 'exposure': { const ev = num(p, 'exposure', 0), off = num(p, 'offset', 0), g = Math.max(0.01, num(p, 'gamma', 1)); return (x) => Math.min(1, Math.max(0, Math.max(0, x ** 2.2 * 2 ** ev + off) ** (1 / g)) ** (1 / 2.2)) }
     case 'brightness_contrast': { const b = num(p, 'brightness', 0) / 100, c = num(p, 'contrast', 0) / 100; const f = c < 1 ? (1 + c) / Math.max(1e-6, 1 - c) : 1e6; return (x) => Math.min(1, Math.max(0, (x + b - 0.5) * f + 0.5)) }
     case 'invert': return (x) => 1 - x
     default: return (x) => x

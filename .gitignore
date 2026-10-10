@@ -38,3 +38,6 @@ frontend/src-tauri/target/
 frontend/src-tauri/gen/schemas/
 # third-party CLI tools fetched by scripts (rife-ncnn-vulkan for E9), never in git
 engine/tools/
+
+# D40: fetched test corpora (scripts/fetch_corpus.py), never committed
+bench/corpus/*/

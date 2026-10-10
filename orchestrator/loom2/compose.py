@@ -16,8 +16,9 @@ import numpy as np
 Arr = np.ndarray
 
 # D39: 2 = Photoshop clipping / pass-through / adjustment-blend semantics and formulas; 1 (implicit) = the M4 W3C-style rules.
+# D40: 3 = Exposure in linear light (2.2 power), as the Photoshop oracle showed.
 # Stamped into every saved document's meta so a changed render can be explained.
-COMPOSE_VERSION = 2
+COMPOSE_VERSION = 3
 
 # ---------------------------------------------------------------- separable blend functions B(cb, cs) → rgb
 def _hard_light(cb: Arr, cs: Arr) -> Arr:
@@ -254,8 +255,11 @@ def _brightness_contrast(rgb: Arr, p: dict) -> Arr:
 
 
 def _exposure(rgb: Arr, p: dict) -> Arr:
+    """D40: Photoshop's Exposure works in linear light through a pure 2.2 power (found by the psd-tools oracle; PhotoCraft
+    crates/compose/src/adjust.rs fitted the same): encode((decode(v)·2^ev + offset)^(1/gamma))."""
     ev, off, g = p.get("exposure", 0.0), p.get("offset", 0.0), max(0.01, p.get("gamma", 1.0))
-    return np.clip((rgb * (2.0 ** ev) + off), 0, 1) ** (1 / g)
+    lin = np.maximum(np.maximum(rgb, 0) ** 2.2 * (2.0 ** ev) + off, 0) ** (1 / g)
+    return np.clip(lin ** (1 / 2.2), 0, 1)
 
 
 def _bw(rgb: Arr, p: dict) -> Arr:

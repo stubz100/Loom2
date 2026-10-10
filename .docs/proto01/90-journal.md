@@ -2060,3 +2060,29 @@ Inspector → lineage → split → pages.
   build ok. Still a manual check: opening such a PSD in Photoshop or Krita (spec 10 §14).
 - Observed, pre-existing: PixiJS logs "[BindGroup] a 'textureSource' was destroyed while still bound to a shader" on scene rebuilds —
   152 per `tour` before D39, 154 after; not caused by the D39 passes, left for a later clean-up.
+
+## 2026-10-10 14:04 — D40 Photoshop is the compositing oracle; wave PE1 closed
+
+- **Corpus:** 83 psd-tools test PSDs (MIT; blend modes, clipping, groups, pass-through, masks, opacity / fill, Levels / Curves /
+  Exposure / Invert and the other adjustments) pinned at psd-tools `96eb134c` with SHA-256 sums taken from PhotoCraft's manifest
+  (`bench/corpus/psd-tools.sha256`); `scripts/fetch_corpus.py` (stdlib) fetches and verifies them into the gitignored
+  `bench/corpus/psd-tools/` (10 MB).
+- **Oracle:** `orchestrator/tests/psd_oracle.py` turns a PSD (psd-tools) into a loom2 stack — rasters with offsets, groups (pass-through or
+  isolated), opacity, fill, clipping (read from the layer record: psd-tools' `clipping` property reads False on groups), masks
+  (document-sized, default colour outside), Levels (master only), Curves, Exposure, Invert — and records why a file is out of scope
+  (vector masks 46, fill layers 12, Hue/Sat-style adjustments whose maths differ by design 8, group / adjustment fill, effects, per-channel
+  levels, …). compose.py's flatten is compared with Photoshop's merged image at premultiplied max ≤ 2/255; `test_compose_oracle_d40.py`
+  (marker `corpus`: skipped when absent, failing when selected and absent) holds the pass count to `bench/corpus/psd-tools.floor.json`.
+- **Findings:** the pre-D39 compositor passes 6 of 10 in scope (`group-clipping` max 255, `passthrough_opacity` max 86 — the two D39 bugs,
+  now confirmed against Photoshop); **Exposure was wrong** in compose.py and the editor (applied to encoded values; Photoshop works in
+  linear light through a pure 2.2 power, as PhotoCraft had fitted) — fixed on both sides, `COMPOSE_VERSION` 3; `exposure_rgb` max 90 → 5.
+  Result: **8 pass of 10 in scope, floor 8**; known failures Curves (natural cubic spline vs loom2's linear — PC21) and Exposure (max 5,
+  p99 1: Photoshop rounds to 8 bits after each adjustment layer).
+- **GPU parity grid:** `edit_headed_check.py grid` — seeded noise in 24 modes × plain / masked / clipped / isolated group / pass-through
+  group at 50 % over a half-transparent base: 120 cases, 114 at p99 ≤ 1; Colour Dodge, Vivid Light and Divide reach p99 2 (max 31–62)
+  plain and masked — they amplify the 8-bit rounding of the GPU backdrop where compose.py accumulates in float32; budget p99 ≤ 2 for
+  those three. Rendering the editor's passes into rgba16float (PhotoCraft's choice) would close that; noted as a follow-up.
+  `cmpdiag` gains a non-default Exposure case (p99 1): all passed.
+- **CI:** the `oracle` extra is installed, the corpus is cached by its manifest hash and fetched, and a `-m corpus` step runs the oracle
+  (it fails instead of skipping). Offline: **146 passed** (145 + the oracle).
+- **Wave PE1 closed** (D39–D42); 12 §8c updated. Next Edit wave PE2 (selection) when the author chooses, relative to H2.

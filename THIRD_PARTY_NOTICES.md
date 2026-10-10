@@ -16,6 +16,12 @@ listed here; model weights are governed by the licence register in `.docs/proto0
 | --- | --- | --- |
 | `orchestrator/loom2/compose.py` (blend formulas, clipping groups, pass-through mixing, adjustment blend) | `crates/color/src/blend.rs`, `crates/compose/src/psblend.rs`, `crates/compose/src/lib.rs` | D39 |
 | `frontend/src/suites/edit/blendModes.ts` (blend formulas) | `crates/color/src/blend.rs`, `crates/compose/src/psblend.rs` | D39 |
+| `orchestrator/loom2/compose.py` `_exposure`, `frontend/src/suites/edit/adjustFilters.ts` (Exposure in linear light) | `crates/compose/src/adjust.rs` | D40 |
+| `orchestrator/tests/psd_oracle.py` (method: merged-image oracle, 2/255, ratcheting floor) | `crates/io/tests/corpus.rs` | D40 |
+| `frontend/src/suites/edit/psdExport.ts` `fixLevelsBlocks` (the Levels block layout) | `crates/io/src/adjust_map.rs` | D41 |
+
+The psd-tools test files (`bench/corpus/psd-tools/`, fetched, never committed) are MIT, Copyright (c) 2019 Kota Yamaguchi;
+the corpus pins were taken from PhotoCraft's `xtask/psd-tools-corpus.sha256`.
 
 ```
 MIT License

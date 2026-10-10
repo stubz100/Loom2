@@ -313,7 +313,9 @@ when the wave starts.
 | PE5 · Panels | PC22 mouse kit · PC20 layers panel · PC21 properties | headed tour |
 | PE6 · Transform | PC23 transform · S2 → PC24 quick select | headed tour; spike numbers |
 
-**PE1 status 2026-10-10: open** (D39–D42).
+**PE1 status 2026-10-10: closed.** D39 (Photoshop compositing semantics), D42 (rename retry), D41 (PSD export, psd-tools read-back),
+D40 (Photoshop oracle 8/10 in scope, floor 8; GPU parity grid 120 cases) landed. Next Edit wave: PE2 (selection), at the author's choice
+relative to H2.
 
 ## 9. Totals and parallelism
 

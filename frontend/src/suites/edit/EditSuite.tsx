@@ -303,16 +303,20 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
   const sam = p.selModel === 'sam3' && !open
   const pos = aiPrompt.points.filter((q) => q.label === 1).length, neg = aiPrompt.points.length - pos
   const reason = !doc ? 'no document' : health(sam ? 'sam3' : 'birefnet') === 'missing' ? `weights missing: fetch ${sam ? 'sam3' : 'birefnet'} in Models`
-    : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
+    : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select in find' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
     : sam && p.selMode === 'box' && !aiPrompt.box ? 'drag a box on the canvas' : null
   const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: sam ? 'sam3' : 'birefnet', mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
     threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, edge_refine: p.selRefine ? ed().refineParams() : null, seeds: [0] }, stage)
+  // D63: the find field leads — typing selects by prompt (SAM 3 text), clearing it in text mode goes back to the main subject
+  const find = (text: string) => setP(text.trim() ? { selText: text, selModel: 'sam3', selMode: 'text' } : p.selMode === 'text' ? { selText: text, selModel: 'birefnet', selMode: 'subject' } : { selText: text })
   return (
     <div className="tool-opts">
+      {!open && <><label>find</label><input type="text" className="sel-find" value={p.selText} placeholder='what to select, e.g. "the crates" · empty: the main subject'
+        title="SAM 3 finds what you describe · Enter runs Select" onChange={(e) => find(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !reason) { e.preventDefault(); run(false) } }} /></>}
       <label>model</label><div className="segmented"><button className={!sam ? 'active' : ''} onClick={() => setP({ selModel: 'birefnet', selMode: 'subject' })}>Subject · BiRefNet</button>{!open && <button className={sam ? 'active' : ''} onClick={() => setP({ selModel: 'sam3', selMode: p.selMode === 'subject' ? 'text' : p.selMode })}>SAM 3</button>}</div>
       {sam && <>
         <label>prompt</label><div className="segmented">{(['text', 'points', 'box'] as const).map((m) => <button key={m} className={p.selMode === m ? 'active' : ''} onClick={() => setP({ selMode: m })}>{m}</button>)}</div>
-        {p.selMode === 'text' && <><label>text</label><input type="text" value={p.selText} placeholder='"the woman in the green cloak"' onChange={(e) => setP({ selText: e.target.value })} /></>}
         {p.selMode === 'points' && <><label>points</label><div>{pos} include · {neg} exclude <button className="quiet" disabled={!aiPrompt.points.length} onClick={() => ed().setAiPrompt({ points: [] })}>clear</button></div></>}
         {p.selMode === 'box' && <><label>box</label><div>{aiPrompt.box ? `${aiPrompt.box[2] - aiPrompt.box[0]}×${aiPrompt.box[3] - aiPrompt.box[1]} at ${aiPrompt.box[0]},${aiPrompt.box[1]}` : 'none'} <button className="quiet" disabled={!aiPrompt.box} onClick={() => ed().setAiPrompt({ box: null })}>clear</button></div></>}
         <Slider label="threshold" value={p.selThreshold} min={0.05} max={0.95} step={0.05} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ selThreshold: v })} />

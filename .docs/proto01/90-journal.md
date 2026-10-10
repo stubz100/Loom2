@@ -2585,3 +2585,14 @@ Inspector → lineage → split → pages.
   Multiply, Screen, Overlay, Color Burn, Difference, Hue in both orders: the layer's footprint never moved or changed size. Asked the author
   for the case (layer kind, size, mask, group, zoom). The probe was not kept.
 - Build clean; headed `layers` and `kit` pass.
+
+## 2026-10-10 22:33 — D63 AI Select by prompt up front; dev.ps1 start-up
+
+- **D63:** the A tool's options and the AI panel's Select now lead with a **find** field (full variant): typing switches to SAM 3 text
+  mode, clearing it in text mode returns to the BiRefNet main subject, Enter runs Select (the Select ▶ button stays the mouse path). The
+  separate *text* row under SAM 3 went (the find field is that text). Headed mode `kit`: typing → `sam3 / text`, Enter runs one segment
+  recipe with the prompt, clearing → `birefnet / subject`; `aiPanelStore` exposes `__loom2AiPanel` in dev builds for it.
+- **dev.ps1:** the author could not start the app. The orchestrator starts alone (LOOM2_READY with a temp state) and the shell compiles
+  (`cargo check` 3.4 s); port 1420 was held by a Vite this session had started for the headed checks (`TaskStop` ended its `sh` wrapper,
+  not the `node` child) — `tauri dev` runs `npm run dev` with `--strictPort`, so it fails while that lives. Ending it was left to the
+  author.

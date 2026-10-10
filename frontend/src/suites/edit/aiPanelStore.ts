@@ -31,3 +31,4 @@ export const AI_DEFAULT: AiPanelState = {
 }
 
 export const useAiPanel = create<AiPanelState & { set: (p: Partial<AiPanelState>) => void }>()((set) => ({ ...AI_DEFAULT, set: (p) => set(p) }))
+if (import.meta.env.DEV) (globalThis as unknown as { __loom2AiPanel?: unknown }).__loom2AiPanel = useAiPanel   // read by edit_headed_check.py kit (D63)

@@ -1496,6 +1496,28 @@ def main() -> int:
             }})()""")
             bad = json.loads(audit)
             check(not bad, f"every Edit menu entry resolves and separators sit only between groups ({len(bad)} problems){''.join(chr(10) + '       ' + b for b in bad[:12])}")
+            # D63: the A tool's find field — typing selects by prompt (SAM 3 text), Enter runs Select, clearing returns to the main subject
+            AP = "window.__loom2AiPanel.getState()"
+            ai_state = lambda: json.loads(cdp.eval(f"JSON.stringify([{AP}.selModel, {AP}.selMode, {AP}.selText])"))  # noqa: E731
+            cdp.eval(f"{S}.setTool('ai'); window.__aiRuns = []; window.__loom2Editor.setState({{ runAi: (r) => {{ window.__aiRuns.push(r); return Promise.resolve() }} }}); 1"); time.sleep(0.4)
+            fb = cdp.eval("JSON.stringify((() => { const e = document.querySelector('.sel-find'); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())")
+            check(fb != "null", "the A tool's options lead with a find field")
+            if fb != "null":
+                fx, fy = json.loads(fb)
+                press(fx, fy)
+                cdp.call("Input.insertText", text="the crates"); time.sleep(0.3)
+                st1 = ai_state()
+                check(st1 == ["sam3", "text", "the crates"], f"typing in find switches to SAM 3 text ({st1})")
+                cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13); cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+                time.sleep(0.3)
+                runs = json.loads(cdp.eval("JSON.stringify(window.__aiRuns.map((r) => [r.model_id, r.mode, r.text]))"))
+                check(runs == [["sam3", "text", "the crates"]], f"Enter in find runs Select with the prompt ({runs})")
+                cdp.eval("(() => { const e = document.querySelector('.sel-find'); e.select(); return 1 })()")
+                cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Backspace", code="Backspace", windowsVirtualKeyCode=8); cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Backspace", code="Backspace", windowsVirtualKeyCode=8)
+                time.sleep(0.3)
+                st2 = ai_state()
+                check(st2 == ["birefnet", "subject", ""], f"clearing find goes back to the main subject ({st2})")
+            cdp.eval(f"{S}.setTool('brush'); 1")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "layers":

@@ -2086,3 +2086,9 @@ Inspector → lineage → split → pages.
 - **CI:** the `oracle` extra is installed, the corpus is cached by its manifest hash and fetched, and a `-m corpus` step runs the oracle
   (it fails instead of skipping). Offline: **146 passed** (145 + the oracle).
 - **Wave PE1 closed** (D39–D42); 12 §8c updated. Next Edit wave PE2 (selection) when the author chooses, relative to H2.
+
+## 2026-10-10 15:02 — CI green on wave PE1
+
+- GitHub Actions run 38050691055 on `06d7799`: offline tests + frontend for `full` and `open` (including the new psd-tools corpus
+  fetch and the `-m corpus` Photoshop-oracle step) and both installers — all success. Every PE1 commit's CI passed
+  (`85d7286` was superseded by `a4b4cfb` before it finished).

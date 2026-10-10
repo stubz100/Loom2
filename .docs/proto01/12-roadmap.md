@@ -284,6 +284,20 @@ slice 4 **done** (setup.ps1, ci.yml, variant baked into the shell). **2026-10-07
 conflict, variant-aware tests), slice 5's docs refresh done and **15 · click-through** written. **M7 closes on the author's
 click-through entry.**
 
+## 8b. Post-MVP hardening H1–H4 (from `../artcraft/08-delivery-plans.md`)
+
+Four short waves before the Story workspace (13 backlog note 2026-10-10), each proposal a decision (D35–D38 for H1) with its own
+slices, tests and acceptance in the delivery plan.
+
+| Wave | Proposals → decisions | Acceptance (executable) |
+| --- | --- | --- |
+| **H1 · Agent-ready** | P7 → D35 agent docs · P19 → D36 release hygiene · P8 → D37 routes per domain · P3 → D38 generated API types | `scripts/agents_check.py`; version consistency + `/version` keys; route-table snapshot; OpenAPI freshness in CI |
+| H2 · Engine pipeline | P2 plan/finalize/submit · P1 model registry · P4 job origin | graph-hash parity on every pin-review variant; sweep test; rig smoke |
+| H3 · Safety and tests | P9 authenticated reads · P6 frontend test harness | route auth matrix; vitest + Edge smoke in CI |
+| H4 · Responsiveness | P5 keep-alive + lazy suites · P10 idle pre-save | switch-back and AI-click timings in the journal |
+
+**H1 status 2026-10-10:** started; D35 (agent docs) landed.
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can
@@ -295,5 +309,7 @@ calendar is **5–6 months** to the MVP with the rig available throughout.
 - **Mouse-first UI (D32)**: a new action is a registry command with an icon/button or a right-click menu entry
   before it gets a key; no key-only or gesture-only actions ship (07 §3c).
 - Each milestone's first task is re-checking the volatile facts list (04 §8) for its models.
+- **Agent docs (D35):** at each milestone start, re-read the root `CLAUDE.md` and the `AGENTS.md` of every subsystem the milestone
+  touches against the code, fix what drifted and move their `Verified at` line; `scripts/agents_check.py` (CI) only catches dead paths.
 - No milestone closes with "rig owed".
 - Memory and UI budgets are tested, not assumed; measurements replace the extrapolations in 04 §2 as they land.

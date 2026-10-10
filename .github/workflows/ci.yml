@@ -34,6 +34,8 @@ jobs:
         run: uv sync --project orchestrator --extra dev
       - name: offline tests
         run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q --timeout 180
+      - name: agent docs (D35) — paths exist, verified-at lines present
+        run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22

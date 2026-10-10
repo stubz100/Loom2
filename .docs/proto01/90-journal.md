@@ -1887,3 +1887,17 @@ Inspector → lineage → split → pages.
   between panes and onto Places rows inside WebView2 (passed over CDP in Edge on 2026-10-07).
 - **`.docs/proto01_leonardo/`** (written 2026-10-08: Leonardo.Ai as a cloud engine, 79-model catalogue, integration points, slices
   L0–L6, LD1–LD12) committed for reference and marked **shelved** in its README; LD1 is not accepted, nothing enters 13.
+
+## 2026-10-10 09:43 — Wave H1 opened (D35–D38 accepted); D35: agent docs + path check
+
+- **Decisions:** the author accepted wave H1 of `../artcraft/08-delivery-plans.md` — D35 agent docs (P7), D36 release hygiene (P19),
+  D37 routes per domain (P8), D38 generated API types (P3) — entered in 13 with a backlog note (H1–H4 run before the Story workspace); 12
+  gains §8b and a standing rule to re-verify agent docs at each milestone start.
+- **D35 delivered:** root `CLAUDE.md` (where the truth lives, commands, house rules, layout) and `AGENTS.md` in `orchestrator/`
+  (module map, durability and async rules, tests, footguns), `orchestrator/loom2/engine/` (files, rules, add-a-model and pin-bump
+  checklists, footguns — the checklist gets rewritten by P1), `frontend/src/frame/` (suite registry, command registry rule, pointer-drag
+  rule, AskDialog, theme tokens, state) and `frontend/src/suites/edit/` (compositor invariants, renderer selection, checks). Real files,
+  each with a `Verified at` line.
+- **`scripts/agents_check.py`** (CI step after the offline tests): every agent doc has the verified-at line and every backticked repo path
+  exists (submodule paths skipped — CI checks out without them). First run found one ambiguous path (`engine/AGENTS.md` resolved
+  against the repo root) — fixed to the full path; a deliberately broken path fails the check, 5 docs / 0 problems after.

@@ -113,6 +113,7 @@ a { color: var(--accent); }
 .form { display: grid; grid-template-columns: 180px 1fr; gap: 10px 12px; align-items: center; }
 .form label { color: var(--fg2); }
 .form .hint { grid-column: 2; color: var(--fg3); font-size: 12px; margin-top: -6px; }
+.form .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; overflow-wrap: anywhere; }
 .form h4 { grid-column: 1 / -1; margin: 10px 0 0; color: var(--fg2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 
 table.grid { width: 100%; border-collapse: collapse; font-size: 12px; }

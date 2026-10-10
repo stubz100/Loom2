@@ -25,6 +25,7 @@ the engine. The author works mouse-first and is EU-based.
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |
 | Agent-doc path check | `orchestrator/.venv/Scripts/python.exe scripts/agents_check.py` |
+| Versions (D36) | `python scripts/bump_version.py --check` · `… patch\|minor\|major\|X.Y.Z` (rewrites every location from `VERSION`) |
 | Whole app | `scripts/dev.ps1` (Vite + shell + orchestrator; the engine starts on the first job) |
 | Browser dev | `scripts/dev.ps1 -Browser` → `http://127.0.0.1:1420/?token=devtoken&port=8766` |
 | Rig acceptance (GPU) | `scripts/m1_acceptance.py`, `m3_`, `m4_`, `m5_`, `m6_acceptance.py`, `m7_durability.py` |

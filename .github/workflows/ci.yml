@@ -2,6 +2,8 @@
 # installers (`full` and `open`) on pushes to main and on tags. The runners have no GPU: the `open` smoke test is the
 # offline suite run with LOOM2_VARIANT=open (roster filtering, contract checks on the open models — Klein 4B, Wan 2.2).
 # The engine (ComfyUI submodule + ROCm torch venv) is set up on the target machine by scripts/setup.ps1, never built here.
+# D36: every push checks that all version locations match VERSION; a tag v<VERSION> also publishes a *draft* GitHub release
+# with both installers attached (a human reviews and publishes it).
 name: ci
 
 on:
@@ -36,6 +38,8 @@ jobs:
         run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q --timeout 180
       - name: agent docs (D35) — paths exist, verified-at lines present
         run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
+      - name: versions (D36) — every location matches VERSION
+        run: orchestrator/.venv/Scripts/python.exe scripts/bump_version.py --check
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -90,3 +94,26 @@ jobs:
           name: loom2-${{ matrix.variant }}-installer
           path: dist-installers/*
           if-no-files-found: error
+
+  release:
+    name: draft release (tags v*)
+    needs: installers
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches VERSION
+        run: test "v$(tr -d '[:space:]' < VERSION)" = "$GITHUB_REF_NAME"
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: loom2-*-installer
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: loom2 ${{ github.ref_name }}
+          files: installers/*
+          generate_release_notes: true

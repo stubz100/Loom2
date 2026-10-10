@@ -80,3 +80,14 @@ export interface I2vModelCaps {
   presets: Record<string, string>; beats: boolean; flf: boolean; vram_gb: number | null; license: string; approx_gb: number
 }
 export interface I2vCaps { models: Record<string, I2vModelCaps>; tiers: Record<string, Record<string, [number, number]>>; portrait: Record<string, [number, number]>; square: Record<string, [number, number]> }
+
+/** GET /version (D36): app version, checkout commit, shell build, engine pin, node pins, schema versions, paths. */
+export interface VersionInfo {
+  app: string; orchestrator: string; variant: 'full' | 'open'
+  git: { sha: string; dirty: boolean; describe: string | null } | null
+  shell: { version: string; git_sha: string | null; build_time: string | null } | null
+  engine: { pin: string | null; running: Record<string, unknown> | null }
+  nodes: { name: string; repo: string; commit: string; date: string }[]
+  schemas: Record<string, number>
+  paths: { state: string; logs: string; models_root: string }
+}

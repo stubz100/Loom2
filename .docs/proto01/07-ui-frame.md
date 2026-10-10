@@ -130,6 +130,9 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 - **Loading**: skeleton tiles, never spinners over content.
 
 ## 6. Settings (modal, `Ctrl+,`)
+**About (D36, 2026-10-10):** the last section shows the app version and variant, the checkout commit, the shell build (commit and
+time), the pinned / running ComfyUI and custom nodes, schema versions, the state / logs / models folders with Reveal, and **Copy
+diagnostics** (versions, health, engine and queue state as JSON) for bug reports.
 Models root + mounted ComfyUI tree; HF token; VRAM budget; engine flags (attention backend, pinned memory,
 restart-every-N); GPU renderer (auto / WebGL2); **theme** (Dark / Light pastel, 2026-10-07; also in the ☰ menu); density; pen pressure curve (shown only when a pen is detected,
 D19); "Apache-clean only"; **licence confirmations** (MiniMax H3 application filed, D17); project format

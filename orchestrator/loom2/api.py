@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from . import __version__
+from .build_info import version_info
 from .clips import ClipStore, compute_identity
 from .tools import facesim
 from .catalogue import AssetPage, AssetQuery, Catalogue, GroupHeader
@@ -263,7 +264,11 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
 
     @app.get("/version")
     async def version():
-        return {"orchestrator": __version__, "engine": svc.engine.version, "variant": svc.app.settings.variant}
+        """D36: app version, checkout commit, shell build, engine pin and running engine, node pins, schema versions, paths."""
+        info = await asyncio.to_thread(version_info)
+        pin = info.pop("engine_pin")
+        return {**info, "variant": svc.app.settings.variant, "engine": {"pin": pin, "running": svc.engine.version},
+                "paths": {"state": str(svc.app.state_dir), "logs": str(svc.app.logs_dir), "models_root": str(svc.app.models_root)}}
 
     @app.get("/capabilities")
     async def capabilities():

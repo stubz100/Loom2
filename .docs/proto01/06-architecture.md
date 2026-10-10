@@ -271,3 +271,10 @@ every job manifest. **Implemented 2026-10-06 (M7 slice 4):** the shell bakes `LO
 both variants on every push / PR and builds the two installers on pushes to main and tags (`loom2-full-*`, `loom2-open-*`);
 the runners have no GPU, so the `open` smoke test is the offline suite under `LOOM2_VARIANT=open`. `scripts/setup.ps1`
 recreates both venvs, the frontend, the engine checkout and the FaceSim weights on a machine.
+
+**Versions and builds (D36, 2026-10-10):** `VERSION` at the repository root is the one version; `scripts/bump_version.py`
+rewrites the other nine locations (pyproject + uv.lock, `loom2/__init__.py`, package.json + package-lock, tauri.conf.json, Cargo.toml +
+Cargo.lock) and `--check` runs in CI. The shell's `build.rs` bakes the commit and build time and hands them to the orchestrator
+(`LOOM2_SHELL_*`); `GET /version` (`loom2/build_info.py`) reports the app version, the checkout commit the orchestrator runs from, the
+shell build, the pinned and running engine, the custom-node pins, every schema version and the state / logs / models paths. A tag
+`v<VERSION>` makes CI attach both installers to a **draft** GitHub release.

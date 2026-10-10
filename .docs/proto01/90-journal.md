@@ -1901,3 +1901,22 @@ Inspector → lineage → split → pages.
 - **`scripts/agents_check.py`** (CI step after the offline tests): every agent doc has the verified-at line and every backticked repo path
   exists (submodule paths skipped — CI checks out without them). First run found one ambiguous path (`engine/AGENTS.md` resolved
   against the repo root) — fixed to the full path; a deliberately broken path fails the check, 5 docs / 0 problems after.
+
+## 2026-10-10 09:49 — D36: one VERSION, build facts in /version, Settings · About, draft releases on tags
+
+- **Before:** `0.1.0` in pyproject, `loom2/__init__.py`, tauri.conf.json and Cargo.toml, but `0.0.0` in package.json /
+  package-lock.json; `/version` returned three fields nothing read; no installer could be tied to a commit.
+- **`VERSION` + `scripts/bump_version.py`:** ten locations (VERSION, pyproject + its `uv.lock` entry, `__init__`, package.json, package-lock
+  root + `packages[""]`, tauri.conf.json, Cargo.toml + the `app` entry of Cargo.lock), regexes that keep each file's own line endings
+  (the working copies mix LF and CRLF); `--check` in CI; package.json / package-lock moved to 0.1.0 by the script itself.
+- **Build facts:** `build.rs` bakes `LOOM2_GIT_SHA` and `LOOM2_BUILD_EPOCH` (rerun when `.git/HEAD` / refs move), `spawn_backend` hands
+  them over as `LOOM2_SHELL_*` (`cargo check` ok). `loom2/build_info.py`: app version, checkout commit (+ dirty, describe), shell build,
+  engine pin (`git describe` of the submodule), node pins from `engine/nodes.lock`, schema versions — cached; `/version` adds the
+  variant, the running engine and the state / logs / models paths. Live: an orchestrator on 8791 reported checkout `f7c9ff8-dirty` =
+  `git rev-parse`, pin `v0.39.0`, both node pins.
+- **Settings · About** (`frame/About.tsx`): versions, commits, engine, nodes, schemas, folders with Reveal, **Copy diagnostics** (version,
+  health, engine, queue as JSON). Typechecked and built; not yet looked at in a window.
+- **CI:** `release` job on tags `v*`: the tag must equal `v$(VERSION)`, both installer artifacts go into a **draft** GitHub release
+  (`softprops/action-gh-release@v2`, generated notes). Not exercised until the first tag.
+- **Tests:** `test_release_d36.py` (4): repository versions agree; bump on a temp copy rewrites all ten and `--check` catches a drifted
+  Cargo.toml; shell facts from the environment; node pins + `/version` keys → **119 offline**; `npm run build` ok.

@@ -296,7 +296,7 @@ slices, tests and acceptance in the delivery plan.
 | H3 · Safety and tests | P9 authenticated reads · P6 frontend test harness | route auth matrix; vitest + Edge smoke in CI |
 | H4 · Responsiveness | P5 keep-alive + lazy suites · P10 idle pre-save | switch-back and AI-click timings in the journal |
 
-**H1 status 2026-10-10:** started; D35 (agent docs) landed.
+**H1 status 2026-10-10:** started; D35 (agent docs) and D36 (versions, build facts, About, draft releases) landed.
 
 ## 9. Totals and parallelism
 

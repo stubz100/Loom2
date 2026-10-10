@@ -97,6 +97,8 @@ fn spawn_backend(backend: Shared) {
     // orchestrator, which filters the roster and the pickers by it; a dev build without the variable is `full`
     let variant = option_env!("LOOM2_VARIANT").unwrap_or("full");
     cmd.args(&args).current_dir(&cwd).env("PYTHONIOENCODING", "utf-8").env("PYTHONUNBUFFERED", "1").env("LOOM2_VARIANT", variant).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // D36: what this shell was built from (build.rs), reported by the orchestrator's /version and Settings · About
+    cmd.env("LOOM2_SHELL_VERSION", env!("CARGO_PKG_VERSION")).env("LOOM2_SHELL_GIT_SHA", env!("LOOM2_GIT_SHA")).env("LOOM2_SHELL_BUILD_EPOCH", env!("LOOM2_BUILD_EPOCH"));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -351,6 +351,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/groups/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Groups Tree */
+        get: operations["groups_tree_groups_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/where": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Groups Where */
+        get: operations["groups_where_groups_where_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Groups Create */
+        post: operations["groups_create_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Groups Move */
+        post: operations["groups_move_groups_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{gid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Groups Page */
+        get: operations["groups_page_groups__gid__get"];
+        put?: never;
+        post?: never;
+        /** Groups Delete */
+        delete: operations["groups_delete_groups__gid__delete"];
+        options?: never;
+        head?: never;
+        /** Groups Patch */
+        patch: operations["groups_patch_groups__gid__patch"];
+        trace?: never;
+    };
+    "/groups/{gid}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Groups Layout */
+        patch: operations["groups_layout_groups__gid__items_patch"];
+        trace?: never;
+    };
+    "/groups/{gid}/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Groups Make */
+        post: operations["groups_make_groups__gid__group_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{gid}/ungroup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Groups Ungroup */
+        post: operations["groups_ungroup_groups__gid__ungroup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{gid}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Groups Duplicate */
+        post: operations["groups_duplicate_groups__gid__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assets Duplicate */
+        post: operations["assets_duplicate_assets_duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/collections": {
         parameters: {
             query?: never;
@@ -552,7 +724,11 @@ export interface paths {
         };
         /** Documents Get */
         get: operations["documents_get_documents__doc_id__get"];
-        /** Documents Put */
+        /**
+         * Documents Put
+         * @description Replace the stack. The reply lists raster layers / masks the server has no bytes for, so the editor uploads
+         *     them before `/save` even when it does not consider them dirty (B15: delete · save · undo · save).
+         */
         put: operations["documents_put_documents__doc_id__put"];
         post?: never;
         /** Documents Delete */
@@ -672,6 +848,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Documents Selection Get
+         * @description The document's selection as raw grey bytes (the AI Select result lands here, M5 slice 2).
+         */
+        get: operations["documents_selection_get_documents__doc_id__selection_get"];
+        /**
+         * Documents Selection Put
+         * @description The editor's selection as raw grey bytes (w·h); an empty body clears it. The M5 edit jobs read it.
+         */
+        put: operations["documents_selection_put_documents__doc_id__selection_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{doc_id}/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Documents Ai
+         * @description Queue an inpaint / refine / upscale job on this document (10 §13); results come back as layers
+         *     (`document.changed` events with `added`) or, for upscale, as a Catalogue asset too.
+         */
+        post: operations["documents_ai_documents__doc_id__ai_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/close": {
         parameters: {
             query?: never;
@@ -683,6 +904,117 @@ export interface paths {
         put?: never;
         /** Documents Close */
         post: operations["documents_close_documents__doc_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Clips List */
+        get: operations["clips_list_clips_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clip_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Clip Get */
+        get: operations["clip_get_clips__clip_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clip_id}/proxy.mp4": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Clip Proxy */
+        get: operations["clip_proxy_clips__clip_id__proxy_mp4_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clip_id}/frames/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clip Frame
+         * @description A master frame as PNG; with `size` a cached WebP thumbnail (longer side ≤ size) for the filmstrip (C24).
+         */
+        get: operations["clip_frame_clips__clip_id__frames__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clip_id}/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clip Identity
+         * @description FaceSim advisory on demand (11 §6): cosine similarity of the start frame's face across the clip.
+         */
+        post: operations["clip_identity_clips__clip_id__identity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clip_id}/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clip Extract
+         * @description Master frames → Catalogue images with `frame-extract` lineage from the clip's asset (11 §6).
+         */
+        post: operations["clip_extract_clips__clip_id__extract_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1096,6 +1428,8 @@ export interface components {
             root_id?: string | null;
             /** Parents */
             parents?: string[];
+            /** Lineage Kind */
+            lineage_kind?: string | null;
             /**
              * Suite
              * @default generate
@@ -1143,6 +1477,8 @@ export interface components {
             tags?: string[];
             /** Collection Ids */
             collection_ids?: string[];
+            /** Duplicate Of */
+            duplicate_of?: string | null;
             /**
              * Has Document
              * @default false
@@ -1169,6 +1505,11 @@ export interface components {
             changes: {
                 [key: string]: unknown;
             };
+        };
+        /** ClipExtract */
+        ClipExtract: {
+            /** Frames */
+            frames: number[];
         };
         /** CollectionCreate */
         CollectionCreate: {
@@ -1260,6 +1601,20 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** GroupCreate */
+        GroupCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Parent Id
+             * @default album
+             */
+            parent_id: string;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
+        };
         /** GroupHeader */
         GroupHeader: {
             /** Key */
@@ -1278,6 +1633,43 @@ export interface components {
             model_id?: string | null;
             /** Prompt Excerpt */
             prompt_excerpt?: string | null;
+        };
+        /** GroupLayout */
+        GroupLayout: {
+            /** Items */
+            items: {
+                [key: string]: unknown;
+            }[];
+            /** Revision */
+            revision?: number | null;
+        };
+        /** GroupMake */
+        GroupMake: {
+            /** Items */
+            items: components["schemas"]["ItemRef"][];
+            /**
+             * Name
+             * @default Group
+             */
+            name: string;
+        };
+        /** GroupMove */
+        GroupMove: {
+            /** Items */
+            items: components["schemas"]["ItemRef"][];
+            /** To */
+            to?: string | null;
+            /** Positions */
+            positions?: {
+                [key: string]: unknown;
+            }[] | null;
+        };
+        /** GroupPatch */
+        GroupPatch: {
+            /** Name */
+            name?: string | null;
+            /** Cover Id */
+            cover_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1298,6 +1690,16 @@ export interface components {
              * @default import
              */
             suite: string;
+        };
+        /** ItemRef */
+        ItemRef: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "asset" | "group";
+            /** Id */
+            id: string;
         };
         /** JobSubmit */
         JobSubmit: {
@@ -1755,7 +2157,7 @@ export interface operations {
     assets_list_assets_get: {
         parameters: {
             query?: {
-                folder?: "all" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
@@ -1775,6 +2177,7 @@ export interface operations {
                 root_id?: string | null;
                 session_id?: string | null;
                 collection_id?: string | null;
+                group_id?: string | null;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
@@ -1812,7 +2215,7 @@ export interface operations {
     assets_groups_assets_groups_get: {
         parameters: {
             query?: {
-                folder?: "all" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
+                folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
                 kind?: ("image" | "video" | "mask" | "document-render") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
@@ -1832,6 +2235,7 @@ export interface operations {
                 root_id?: string | null;
                 session_id?: string | null;
                 collection_id?: string | null;
+                group_id?: string | null;
                 job_id?: string | null;
                 sort?: "created_desc" | "created_asc" | "rating_desc" | "model" | "size_desc";
                 group?: "none" | "batch" | "lineage" | "session" | "model";
@@ -2048,6 +2452,385 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_tree_groups_tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    groups_where_groups_where_get: {
+        parameters: {
+            query: {
+                ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_create_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_move_groups_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_page_groups__gid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_delete_groups__gid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_patch_groups__gid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_layout_groups__gid__items_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupLayout"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_make_groups__gid__group_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMake"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_ungroup_groups__gid__ungroup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_duplicate_groups__gid__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assets_duplicate_assets_duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdList"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2891,6 +3674,106 @@ export interface operations {
             };
         };
     };
+    documents_selection_get_documents__doc_id__selection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    documents_selection_put_documents__doc_id__selection_put: {
+        parameters: {
+            query?: {
+                w?: number;
+                h?: number;
+            };
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    documents_ai_documents__doc_id__ai_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobSubmit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     documents_close_documents__doc_id__close_post: {
         parameters: {
             query?: never;
@@ -2901,6 +3784,188 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clips_list_clips_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    clip_get_clips__clip_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clip_proxy_clips__clip_id__proxy_mp4_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clip_frame_clips__clip_id__frames__name__get: {
+        parameters: {
+            query?: {
+                size?: number;
+            };
+            header?: never;
+            path: {
+                clip_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clip_identity_clips__clip_id__identity_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clip_extract_clips__clip_id__extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipExtract"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -13,14 +13,14 @@ export function MenuButton({ label, icon: Icon, items, text, size = 16 }: { labe
   )
 }
 
-export function CommandButton({ id, active, text, size = 16, className = '' }: { id: string; active?: boolean; text?: boolean; size?: number; className?: string }) {
+export function CommandButton({ id, active, text, size = 16, className = '', label }: { id: string; active?: boolean; text?: boolean; size?: number; className?: string; label?: string }) {
   const c = command(id)
   if (!c) return null
   markUsed(id)
   const Icon = c.icon
   return (
     <button type="button" className={`cmd-btn${active ? ' active' : ''}${c.danger ? ' danger' : ''} ${className}`} title={titleFor(c)} aria-label={c.label} disabled={!isEnabled(c)} onClick={() => runCommand(id)}>
-      {Icon ? <Icon size={size} /> : null}{(text || !Icon) && <span>{c.label}</span>}
+      {Icon ? <Icon size={size} /> : null}{(text || !Icon) && <span>{label ?? c.label}</span>}
     </button>
   )
 }

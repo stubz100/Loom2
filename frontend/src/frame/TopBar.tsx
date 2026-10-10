@@ -4,6 +4,8 @@ import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
 import { runCommand } from './commands'
+import { THEMES } from './theme'
+import { assetIds, onlyAssets, useDropTarget } from './drag'
 
 export const SUITES: { id: Suite; label: string; key: string }[] = [
   { id: 'catalogue', label: 'Catalogue', key: '1' }, { id: 'generate', label: 'Generate', key: '2' }, { id: 'edit', label: 'Edit', key: '3' },
@@ -18,6 +20,22 @@ function useOutside(onClose: () => void) {
     return () => document.removeEventListener('mousedown', h)
   }, [onClose])
   return ref
+}
+
+/** A suite tab; Edit, Generate and Animate take dropped tiles (frame/drag.ts). */
+function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: boolean; onOpen: () => void }) {
+  const takes = t.id === 'edit' || t.id === 'generate' || t.id === 'animate'
+  const { ref, over } = useDropTarget((p) => takes && onlyAssets(p), (p) => {
+    const ids = assetIds(p)
+    if (t.id === 'edit') void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(ids[0]))
+    else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id)))
+    else if (t.id === 'animate') void import('../suites/animate/animateStore').then((m) => { const a = m.useAnimate.getState(); a.setStart(ids[0], true); if (ids[1]) a.setEnd(ids[1]) })
+  })
+  return (
+    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}`} onClick={onOpen} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
+      {t.label}<kbd>⌃{t.key}</kbd>
+    </button>
+  )
 }
 
 export function TopBar() {
@@ -35,16 +53,7 @@ export function TopBar() {
   return (
     <header className="top" ref={ref}>
       <nav className="tabs" aria-label="suites">
-        {SUITES.map((t) => (
-          <button key={t.id} className={`tab${s.ui.suite === t.id ? ' active' : ''}`} onClick={() => s.setSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}
-            onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets') && (t.id === 'edit' || t.id === 'generate' || t.id === 'animate')) { e.preventDefault(); e.dataTransfer.dropEffect = 'link' } }}
-            onDrop={(e) => { const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (!ids.length) return; e.preventDefault()
-              if (t.id === 'edit') void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(ids[0]))
-              else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id)))
-              else if (t.id === 'animate') void import('../suites/animate/animateStore').then((m) => { const a = m.useAnimate.getState(); a.setStart(ids[0], true); if (ids[1]) a.setEnd(ids[1]) }) }}>
-            {t.label}<kbd>⌃{t.key}</kbd>
-          </button>
-        ))}
+        {SUITES.map((t) => <SuiteTab key={t.id} t={t} active={s.ui.suite === t.id} onOpen={() => s.setSuite(t.id)} />)}
       </nav>
       <div className="spacer" />
       <button className="quiet" onClick={() => setMenu(menu === 'project' ? null : 'project')} title="project">
@@ -74,6 +83,7 @@ export function TopBar() {
           <button onClick={() => { setMenu(null); runCommand('global.palette') }}>Command palette <kbd>⌃K</kbd></button>
           <button onClick={() => { setMenu(null); runCommand('global.focus') }}>{s.ui.focusMode ? 'Leave focus mode' : 'Focus mode'} <kbd>Tab</kbd></button>
           <button onClick={() => { setMenu(null); runCommand('global.dock') }}>{s.ui.dockOpen ? 'Hide dock' : 'Show dock'} <kbd>`</kbd></button>
+          <button onClick={() => { setMenu(null); s.setUi({ theme: s.ui.theme === 'light' ? 'dark' : 'light' }) }}>Theme: {THEMES.find(([t]) => t === s.ui.theme)?.[1] ?? 'Dark'}</button>
           <button onClick={() => { setMenu(null); s.setUi({ density: s.ui.density === 'compact' ? 'comfortable' : 'compact' }) }}>Density: {s.ui.density}</button>
           <div className="sep" />
           <button onClick={() => { setMenu(null); void s.refreshAll() }}>Refresh state</button>

@@ -1,5 +1,5 @@
 /* Edit suite (10) */
-.edit-canvas { position: absolute; inset: 0; overflow: hidden; background: #141414; }
+.edit-canvas { position: absolute; inset: 0; overflow: hidden; background: var(--canvas-bg); }
 .edit-canvas canvas { display: block; }
 .edit-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg3); text-align: center; padding: 24px; }
 .edit-empty h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
@@ -28,7 +28,7 @@
 .nudge button { padding: 0; min-height: 26px; }
 .anchor { display: grid; grid-template-columns: repeat(3, 24px); gap: 2px; }
 .anchor button { padding: 0; min-height: 24px; height: 24px; line-height: 1; }
-.anchor button.active { background: var(--accent); color: #141414; border-color: var(--accent); }
+.anchor button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .swatch-pair { display: flex; gap: 6px; align-items: center; }
 .swatch-pair .sw { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line2); position: relative; cursor: pointer; display: inline-block; }
 .swatch-pair .sw input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
@@ -43,7 +43,7 @@
 .doc-row { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; }
 .doc-row:hover { background: var(--bg2); }
 .doc-row.active { background: var(--bg3); border-color: var(--accent); }
-.doc-row img { width: 56px; height: 36px; object-fit: contain; background: #0b0b0b; border-radius: 3px; }
+.doc-row img { width: 56px; height: 36px; object-fit: contain; background: var(--media-bg); border-radius: 3px; }
 .doc-row .t { display: flex; flex-direction: column; min-width: 0; }
 .doc-row .t b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kind { color: var(--fg3); font-size: 11px; }
@@ -53,7 +53,7 @@
 .layer-row:hover { background: var(--bg2); }
 .layer-row.active { background: var(--bg3); border-color: var(--accent); }
 .layer-row.hidden { opacity: .5; }
-.layer-row .thumb { width: 36px; height: 24px; object-fit: contain; background: #0b0b0b; border-radius: 3px; border: 1px solid var(--line); }
+.layer-row .thumb { width: 36px; height: 24px; object-fit: contain; background: var(--media-bg); border-radius: 3px; border: 1px solid var(--line); }
 .layer-row .kind-box { display: grid; place-items: center; color: var(--fg2); font-size: 11px; }
 .layer-row .mask-thumb { width: 28px; height: 24px; object-fit: contain; }
 .layer-row .mask-thumb.editing { outline: 2px solid var(--accent); }
@@ -79,7 +79,7 @@
 .pad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
 .pad-grid label { display: flex; align-items: center; gap: 6px; color: var(--fg2); font-size: 12px; }
 .pad-grid input { width: 70px; }
-.cand-strip { position: absolute; left: 12px; right: 12px; top: 8px; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #1b1b1bee; border: 1px solid var(--line2); border-radius: var(--radius); z-index: 5; overflow-x: auto; }
+.cand-strip { position: absolute; left: 12px; right: 12px; top: 8px; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: color-mix(in srgb, var(--bg2) 93%, transparent); border: 1px solid var(--line2); border-radius: var(--radius); z-index: 5; overflow-x: auto; }
 .cand-strip .cand { position: relative; padding: 2px; min-height: 0; background: var(--bg2); border: 2px solid var(--line2); }
 .cand-strip .cand.on { border-color: var(--accent); }
 .cand-strip .cand img { display: block; height: 64px; width: auto; border-radius: 3px; }

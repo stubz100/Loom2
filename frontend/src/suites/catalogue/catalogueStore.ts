@@ -6,7 +6,8 @@ import { api } from '../../api/client'
 import type { Asset, EventFrame } from '../../api/types'
 import { useSession } from '../../store/session'
 
-export type Folder = 'all' | 'today' | 'last_session' | 'images' | 'clips' | 'documents' | 'imported' | 'rejected' | 'trash'
+export type Folder = 'all' | 'unprocessed' | 'today' | 'last_session' | 'images' | 'clips' | 'documents' | 'imported' | 'rejected' | 'trash'
+export type DatePreset = 'today' | 'last_session' | '7d' | '30d'
 export type GroupMode = 'none' | 'batch' | 'lineage' | 'session' | 'model'
 export type Sort = 'created_desc' | 'created_asc' | 'rating_desc' | 'model' | 'size_desc'
 
@@ -14,9 +15,10 @@ export interface Query {
   folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render'; suite?: string; model_id?: string
   rating_min: number; tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
   sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string; batch_id?: string; session_id?: string
+  group_id?: string; date_preset?: DatePreset; has_document?: boolean
+  batch_label?: string; root_label?: string                       // chip labels only, never sent
 }
 export interface GroupHeader { key: string; label: string; count: number; first_created: string; last_created: string; cover_id: string; model_id: string | null; prompt_excerpt: string | null }
-export interface Collection { id: string; name: string; kind: 'manual' | 'smart'; filter: Record<string, unknown> | null; created_at: string; updated_at: string; count: number }
 interface Page { items: Asset[]; next_cursor: string | null; total: number | null }
 
 const DEFAULT_QUERY: Query = { folder: 'all', state: 'all', rating_min: 0, tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
@@ -30,6 +32,7 @@ function qs(q: Query, extra: Record<string, string | number | boolean | undefine
   put('aspect', q.aspect); if (q.has_children !== undefined) put('has_children', q.has_children)
   put('search', q.search.trim()); put('sort', q.sort); put('group', q.group); put('collection_id', q.collection_id); put('root_id', q.root_id)
   put('created_from', q.created_from); put('created_to', q.created_to); put('batch_id', q.batch_id); put('session_id', q.session_id)
+  put('group_id', q.group_id); put('date_preset', q.date_preset); if (q.has_document !== undefined) put('has_document', q.has_document)
   for (const [k, v] of Object.entries(extra)) put(k, v)
   return p.toString()
 }
@@ -38,10 +41,13 @@ export interface CatalogueState {
   q: Query
   items: Asset[]; nextCursor: string | null; total: number | null; loading: boolean; error: string | null
   groups: GroupHeader[]; groupItems: Record<string, Asset[]>; expanded: Record<string, boolean>; groupLoading: Record<string, boolean>; groupErrors: Record<string, string>
-  counts: Record<string, number>; collections: Collection[]; tagCloud: { tag: string; count: number }[]
+  counts: Record<string, number>; tagCloud: { tag: string; count: number }[]
   selected: string[]; primary: string | null; anchor: string | null
-  tile: number; fill: boolean
+  tile: number
   loupe: string | null; compare: string[]; compareOpen: boolean
+  lineage: string | null                                         // the asset whose lineage tree the Stage shows (D34)
+  groupSel: string[]                                             // selected cards on a page (D34)
+  pageZoom: number; fitSeq: number                               // a page's zoom; fitSeq++ asks the page to fit its content
   pendingDelete: number | null
   setQuery: (patch: Partial<Query>) => Promise<void>
   load: (opts?: { keepSelection?: boolean }) => Promise<void>
@@ -65,16 +71,14 @@ export interface CatalogueState {
   emptyTrash: () => Promise<number>
   purging: boolean
   setTile: (n: number) => void
-  setFill: (fill: boolean) => void
   openLoupe: (id: string | null) => void
+  openLineage: (id: string | null) => void
+  selectGroups: (ids: string[]) => void
+  setPageZoom: (z: number) => void
+  requestFit: () => void
   setCompareOpen: (open: boolean) => void
   togglePin: (id: string) => void
   clearCompare: () => void
-  createCollection: (name: string, kind?: 'manual' | 'smart', filter?: Record<string, unknown>) => Promise<Collection>
-  renameCollection: (id: string, name: string) => Promise<void>
-  deleteCollection: (id: string) => Promise<void>
-  convertCollection: (id: string) => Promise<void>
-  addToCollection: (id: string, ids: string[]) => Promise<void>
   importPaths: (paths: string[]) => Promise<number>
   applyEvent: (f: EventFrame) => void
 }
@@ -95,10 +99,10 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
   persist(
     (set, get) => ({
       q: DEFAULT_Q, items: [], nextCursor: null, total: null, loading: false, error: null,
-      groups: [], groupItems: {}, expanded: {}, groupLoading: {}, groupErrors: {}, counts: {}, collections: [], tagCloud: [],
-      selected: [], primary: null, anchor: null, tile: 192, fill: false, loupe: null, compare: [], compareOpen: false, pendingDelete: null,
+      groups: [], groupItems: {}, expanded: {}, groupLoading: {}, groupErrors: {}, counts: {}, tagCloud: [],
+      selected: [], primary: null, anchor: null, tile: 192, loupe: null, compare: [], compareOpen: false, lineage: null, groupSel: [], pageZoom: 1, fitSeq: 0, pendingDelete: null,
 
-      setQuery: (patch) => { set({ q: { ...get().q, ...patch } }); return get().load() },
+      setQuery: (patch) => { set({ q: { ...get().q, ...patch }, ...('group_id' in patch || 'folder' in patch ? { groupSel: [], lineage: null, loupe: null } : {}) }); return get().load() },
 
       load: async (opts) => {
         const seq = ++loadSeq
@@ -168,10 +172,8 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       retryGroup: (key) => { const ge = { ...get().groupErrors }; delete ge[key]; set({ groupErrors: ge, error: null }); void get().loadGroup(key) },
 
       refreshMeta: async () => {
-        const [counts, collections, tags] = await Promise.all([
-          api.get<Record<string, number>>('/assets/counts'), api.get<Collection[]>('/collections'), api.get<{ items: { tag: string; count: number }[] }>('/assets/tags'),
-        ])
-        set({ counts, collections, tagCloud: tags.items })
+        const [counts, tags] = await Promise.all([api.get<Record<string, number>>('/assets/counts'), api.get<{ items: { tag: string; count: number }[] }>('/assets/tags')])
+        set({ counts, tagCloud: tags.items })
       },
 
       visibleOrder: () => {
@@ -188,6 +190,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
 
       select: (id, mode) => {
         const s = get()
+        if (s.groupSel.length && mode !== 'toggle') set({ groupSel: [] })
         if (mode === 'single') { set({ selected: [id], primary: id, anchor: id }); return }
         if (mode === 'toggle') {
           const has = s.selected.includes(id)
@@ -202,7 +205,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         set({ selected: order.slice(lo, hi + 1), primary: id })
       },
       selectAll: () => { const order = get().visibleOrder(); set({ selected: order, primary: order[0] ?? null }) },
-      clearSelection: () => set({ selected: [], primary: null }),
+      clearSelection: () => set({ selected: [], primary: null, groupSel: [] }),
 
       setState: async (ids, state) => { await patchMany(ids, { state }, set, get) },
       setRating: async (ids, rating) => { await patchMany(ids, { rating }, set, get) },
@@ -226,24 +229,18 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       },
 
       setTile: (n) => set({ tile: Math.max(96, Math.min(512, Math.round(n))) }),
-      setFill: (fill) => set({ fill }),
-      openLoupe: (id) => set({ loupe: id, ...(id ? { selected: [id], primary: id, anchor: id, compareOpen: false } : {}) }),
-      setCompareOpen: (compareOpen) => set({ compareOpen, ...(compareOpen ? { loupe: null } : {}) }),
+      openLoupe: (id) => set({ loupe: id, ...(id ? { selected: [id], primary: id, anchor: id, compareOpen: false, lineage: null } : {}) }),
+      setCompareOpen: (compareOpen) => set({ compareOpen, ...(compareOpen ? { loupe: null, lineage: null } : {}) }),
+      selectGroups: (ids) => set({ groupSel: ids, ...(ids.length ? { selected: [], primary: null } : {}) }),
+      setPageZoom: (z) => set({ pageZoom: Math.max(0.1, Math.min(4, z)) }),
+      requestFit: () => set({ fitSeq: get().fitSeq + 1 }),
+      openLineage: (id) => set({ lineage: id, ...(id ? { loupe: null, compareOpen: false, selected: [id], primary: id, anchor: id } : {}) }),
       togglePin: (id) => {
         const c = get().compare
         set({ compare: c.includes(id) ? c.filter((x) => x !== id) : [...c, id].slice(-4) })
       },
       clearCompare: () => set({ compare: [], compareOpen: false }),
 
-      createCollection: async (name, kind = 'manual', filter) => {
-        const c = await api.post<Collection>('/collections', { name, kind, filter })
-        await get().refreshMeta()
-        return c
-      },
-      renameCollection: async (id, name) => { await api.patch(`/collections/${id}`, { name }); await get().refreshMeta() },
-      deleteCollection: async (id) => { await api.del(`/collections/${id}`); if (get().q.collection_id === id) get().setQuery({ collection_id: undefined }); await get().refreshMeta() },
-      convertCollection: async (id) => { await api.patch(`/collections/${id}`, { kind: 'manual' }); await get().refreshMeta() },
-      addToCollection: async (id, ids) => { await api.post(`/collections/${id}/assets`, { ids }); await get().refreshMeta(); useSession.getState().toast(`Added ${ids.length} to collection`, 'success') },
       importPaths: async (paths) => {
         const r = await api.post<{ items: Asset[] }>('/assets/import', { paths })
         await get().load(); void get().refreshMeta()
@@ -260,7 +257,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         } else if (f.type === 'asset.deleted') {
           removeLocal([d.id], set, get)
         } else if (f.type === 'asset.created') {
-          if (s.q.folder === 'trash' || s.q.search || s.q.collection_id) return
+          if (s.q.folder === 'trash' || s.q.search || s.q.collection_id || s.q.group_id) return      // new items land in Unprocessed (D34)
           if (s.q.group === 'none') {
             if (s.q.sort === 'created_desc') set({ items: [d as Asset, ...s.items], total: (s.total ?? 0) + 1 })
           } else {
@@ -270,15 +267,20 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         }
       },
     }),
-    { name, partialize: (s) => ({ tile: s.tile, fill: s.fill, q: { sort: s.q.sort, group: s.q.group } }) as never,
-      merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<CatalogueState> & { q?: Partial<Query> }; return { ...current, tile: p.tile ?? current.tile, fill: p.fill ?? current.fill, q: { ...current.q, ...(p.q ?? {}) } } } },
+    { name, partialize: (s) => ({ tile: s.tile, q: { sort: s.q.sort, group: s.q.group } }) as never,
+      merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<CatalogueState> & { q?: Partial<Query> }; return { ...current, tile: p.tile ?? current.tile, q: { ...current.q, ...(p.q ?? {}) } } } },
   ),
   )
 }
 
-export const useCatalogue = createCatalogueStore('loom2.catalogue')
+// D34: a fresh key — the Catalogue has no group-by any more, and opens on Unprocessed
+export const useCatalogue = createCatalogueStore('loom2.catalogue.v2', { folder: 'unprocessed', group: 'none' })
+/** The second pane of a split Stage (D34, proto01_design/01 §6c): its own place, query, selection and zoom. */
+export const useCataloguePane2 = createCatalogueStore('loom2.catalogue.pane2', { folder: 'unprocessed', group: 'none' })
 /** Generate's result grid: the same machinery filtered to this suite, grouped by batch (09 §4). */
 export const useGenerateResults = createCatalogueStore('loom2.generate-results', { suite: 'generate', group: 'batch' })
+/** Every live catalogue store, for events that reload them all. */
+export const allCatalogueStores = () => [useCatalogue, useCataloguePane2, useGenerateResults]
 
 async function patchMany(ids: string[], changes: Record<string, unknown>, set: (p: Partial<CatalogueState>) => void, get: () => CatalogueState) {
   if (!ids.length) return

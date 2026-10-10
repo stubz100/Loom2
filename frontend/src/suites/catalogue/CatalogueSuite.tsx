@@ -1,186 +1,67 @@
-// Catalogue suite (08): Library/Filters/Collections/Import panel, strip with group/state/sort/bulk/zoom, a
-// virtualised grid with keyboard-by-row, loupe and compare on the stage, and an Info/Params/Lineage/Tags inspector.
+// Catalogue suite (08, redesigned by proto01_design/01 · D34): the Places panel (Unprocessed, Library, the Album's groups,
+// Trash), the fixed-slot strip with filter chips, a virtualised grid with keyboard-by-row, loupe and compare on the stage, and
+// the inspector. Generate shows its results with the same Stage and Inspector and, until its own pass, the older Strip below.
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { FolderOpen, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
-import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
+import type { SuiteDef } from '../../frame/suiteRegistry'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { isTauri, pickFiles, pickFolder } from '../../shell/tauri'
-import { askText, useSession } from '../../store/session'
+import { listenFileDrop } from '../../shell/tauri'
+import { useSession } from '../../store/session'
 import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
-import { selectedOrPrimary, type Folder, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
+import { selectedOrPrimary, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
 import { useActiveCatalogue, useCat } from './catalogueContext'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
-import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
+import { CatalogueStrip, EmptyTrashButton } from './CatalogueStrip'
+import { CLEAR_ALL } from './filters'
+import { Places } from './Places'
+import { useAlbum } from './albumStore'
+import { Inspector } from './Inspector'
+import { LineageView } from './LineageView'
+import { PageView } from './PageView'
+import { Panes, withActivePane } from './Panes'
+import { openPlace, paneStore, useSplit } from './split'
 import './catalogue.css'
 
 /** Group headers show the scene of a JSON prompt rather than the raw JSON. */
 const excerptOf = (p: string) => { const m = /^\{\s*"scene"\s*:\s*"([^"]{1,80})/.exec(p); return m ? m[1] : p }
 
-const FOLDERS: [Folder, string][] = [['all', 'All'], ['today', 'Today'], ['last_session', 'Last session'], ['images', 'Images'], ['clips', 'Clips'], ['documents', 'Documents'], ['imported', 'Imported'], ['rejected', 'Rejected'], ['trash', 'Trash']]
 const GROUPS: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
 const SORTS: [Sort, string][] = [['created_desc', 'newest'], ['created_asc', 'oldest'], ['rating_desc', 'rating'], ['model', 'model'], ['size_desc', 'size']]
 
 // ---------------------------------------------------------------- Panel
-/** Two-step confirm (07 §1.5: no native dialogs): the first click arms the button for 4 s, the second purges every trashed asset. */
-function EmptyTrashButton({ compact = false }: { compact?: boolean }) {
-  const c = useCat()
-  const [armed, setArmed] = useState(false)
-  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 4000); return () => clearTimeout(t) }, [armed])
-  markUsed('cat.emptyTrash')
-  const n = c.total ?? 0
-  if (!n && !c.purging) return null
-  const run = () => {
-    if (!armed) { setArmed(true); return }
-    setArmed(false)
-    void c.emptyTrash().then((k) => useSession.getState().toast(`Trash emptied: ${k} asset${k === 1 ? '' : 's'} deleted permanently`, 'success'))
-      .catch((e) => useSession.getState().toast(`Empty trash failed: ${(e as Error).message}`, 'error'))
-  }
-  return (
-    <button className={`danger${armed ? ' armed' : ''}`} disabled={c.purging} onClick={run} style={compact ? undefined : { marginTop: 8 }}
-      title={armed ? 'Click again to delete permanently' : `Delete all ${n} trashed assets permanently (files, manifests, thumbnails)`}>
-      <Trash2 size={13} /> {c.purging ? 'Emptying…' : armed ? `Click again: delete ${n} permanently` : compact ? 'Empty trash' : `Empty trash (${n})`}
-    </button>
-  )
-}
-
-function Panel({ tab }: { tab: string }) {
+function Panel() {
   const c = useCat()
   const s = useSession()
   useEffect(() => {
     if (!s.project?.open) return
     const p = new URLSearchParams(location.search)
-    const g = p.get('group')
-    const tab = p.get('tab')
-    if (tab && ['library', 'filters', 'collections', 'import'].includes(tab)) setRailTab('catalogue', tab)
-    const loaded = g && ['none', 'batch', 'lineage', 'session', 'model'].includes(g) && g !== c.q.group ? c.setQuery({ group: g as GroupMode }) : c.load()
-    void loaded.then(() => {                      // deep links for screenshots and sharing: ?loupe=<id>  ?compare=a,b
-      const l = p.get('loupe'); const cmp = p.get('compare')
-      if (l) c.openLoupe(l)
+    const place = p.get('place')                                  // deep links for screenshots and checks: ?place=unprocessed|library|trash|<group id>
+    const patch = place === 'library' ? { folder: 'all' as const, group_id: undefined } : place === 'trash' ? { folder: 'trash' as const, group_id: undefined }
+      : place === 'unprocessed' ? { folder: 'unprocessed' as const, group_id: undefined } : place ? { folder: 'all' as const, group_id: place } : null
+    const loaded = patch ? c.setQuery(patch) : c.load()
+    const split = p.get('split'), place2 = p.get('place2')               // ?split=stacked|side&place2=unprocessed|library|trash|<group id>
+    if (split === 'stacked' || split === 'side') useSplit.getState().setMode(split)
+    if (place2) openPlace(paneStore(1).getState(), place2 === 'unprocessed' || place2 === 'library' || place2 === 'trash' ? place2 : { group: place2 })
+    void loaded.then(() => {                                       // ?loupe=<id>  ?compare=a,b
+      const l = p.get('loupe'); const cmp = p.get('compare'); const sel = p.get('select'); const lin = p.get('lineage')
+      if (sel) c.select(sel, 'single')                         // ?select=<id> and ?lineage=<id>, for checks
+      if (lin) c.openLineage(lin)
+      else if (l) c.openLoupe(l)
       else if (cmp) { cmp.split(',').filter(Boolean).forEach((id) => c.togglePin(id)); c.setCompareOpen(true) }
-      if (p.get('expand') === 'all') c.expandAll(true)
     })
     void c.refreshMeta()
+    void useAlbum.getState().load()
   }, [s.project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (!s.project?.open) return <span style={{ color: 'var(--fg3)' }}>Open or create a project.</span>
-  if (tab === 'filters') return <Filters />
-  if (tab === 'collections') return <Collections />
-  if (tab === 'import') return <ImportPanel />
-  return (
-    <div className="lib-tree">
-      {FOLDERS.map(([f, label]) => (
-        <button key={f} className={c.q.folder === f && !c.q.collection_id ? 'active' : ''} onClick={() => c.setQuery({ folder: f, collection_id: undefined })}>
-          <span>{label}</span><span className="n">{c.counts[f] ?? ''}</span>
-        </button>
-      ))}
-      {c.q.folder === 'trash' && !c.q.collection_id && <EmptyTrashButton />}
-      <h4>Collections</h4>
-      {c.collections.map((col) => (
-        <button key={col.id} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })} title={col.kind === 'manual' ? 'drop assets here to add them' : 'smart collection'}
-          onDragOver={(e) => { if (col.kind === 'manual') { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)' } }}
-          onDragLeave={(e) => { e.currentTarget.style.borderColor = '' }}
-          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = ''; const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (ids.length && col.kind === 'manual') void c.addToCollection(col.id, ids) }}>
-          <span>{col.kind === 'smart' ? '◈ ' : ''}{col.name}</span><span className="n">{col.count}</span>
-        </button>
-      ))}
-      <button onClick={() => void askText({ title: 'New collection', placeholder: 'collection name' }).then((name) => { if (name) void c.createCollection(name) })}><span>+ new collection</span><span /></button>
-    </div>
-  )
+  return <Places />
 }
 
-export function Filters() {
-  const c = useCat()
-  const caps = useSession((s) => s.capabilities)
-  const q = c.q
-  const models = Object.keys(caps?.models ?? {})
-  const toggleTag = (t: string) => c.setQuery({ tags_any: q.tags_any.includes(t) ? q.tags_any.filter((x) => x !== t) : [...q.tags_any, t] })
-  return (
-    <div className="form" style={{ gridTemplateColumns: '84px 1fr' }}>
-      <label>Search</label><input id="cat-search" type="text" value={q.search} placeholder="prompt, tags, seed…" onChange={(e) => c.setQuery({ search: e.target.value })} />
-      <label>State</label>
-      <div className="segmented">{(['all', 'none', 'keep', 'reject'] as const).map((st) => <button key={st} className={q.state === st ? 'active' : ''} onClick={() => c.setQuery({ state: st })}>{st}</button>)}</div>
-      <label>Suite</label>
-      <select value={q.suite ?? ''} onChange={(e) => c.setQuery({ suite: e.target.value || undefined })}><option value="">any</option>{['generate', 'inpaint', 'refine', 'animate', 'extract', 'import'].map((x) => <option key={x}>{x}</option>)}</select>
-      <label>Model</label>
-      <select value={q.model_id ?? ''} onChange={(e) => c.setQuery({ model_id: e.target.value || undefined })}><option value="">any</option>{models.map((m) => <option key={m}>{m}</option>)}</select>
-      <label>Rating ≥</label>
-      <select value={q.rating_min} onChange={(e) => c.setQuery({ rating_min: Number(e.target.value) })}>{[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n ? '★'.repeat(n) : 'any'}</option>)}</select>
-      <label>Aspect</label>
-      <select value={q.aspect ?? ''} onChange={(e) => c.setQuery({ aspect: (e.target.value || undefined) as never })}><option value="">any</option><option value="landscape">landscape</option><option value="portrait">portrait</option><option value="square">square</option></select>
-      <label>Children</label>
-      <select value={q.has_children === undefined ? '' : String(q.has_children)} onChange={(e) => c.setQuery({ has_children: e.target.value === '' ? undefined : e.target.value === 'true' })}><option value="">any</option><option value="true">has derivations</option><option value="false">none</option></select>
-      <label>Created</label>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input type="date" value={q.created_from?.slice(0, 10) ?? ''} onChange={(e) => c.setQuery({ created_from: e.target.value ? `${e.target.value}T00:00:00` : undefined })} />
-        <input type="date" value={q.created_to?.slice(0, 10) ?? ''} onChange={(e) => c.setQuery({ created_to: e.target.value ? `${e.target.value}T23:59:59` : undefined })} />
-      </div>
-      <label>Tags</label>
-      <div className="chips">{c.tagCloud.slice(0, 24).map((t) => <span key={t.tag} className="chip-f" style={q.tags_any.includes(t.tag) ? { borderColor: 'var(--accent)', color: 'var(--fg)' } : undefined} onClick={() => toggleTag(t.tag)}>{t.tag} <small>{t.count}</small></span>)}{!c.tagCloud.length && <span style={{ color: 'var(--fg3)' }}>no tags yet</span>}</div>
-      <label />
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => c.setQuery({ state: 'all', suite: undefined, model_id: undefined, rating_min: 0, tags_any: [], aspect: undefined, has_children: undefined, search: '', created_from: undefined, created_to: undefined })}>Clear filters</button>
-        <button onClick={() => void askText({ title: 'Save as smart collection', text: 'The current filters are saved as a collection that stays up to date.', placeholder: 'collection name' }).then((name) => { if (name) void c.createCollection(name, 'smart', { folder: q.folder, state: q.state, suite: q.suite, model_id: q.model_id, rating_min: q.rating_min, tags_any: q.tags_any, aspect: q.aspect, has_children: q.has_children, search: q.search || undefined }) })}>Save as smart collection</button>
-      </div>
-    </div>
-  )
-}
-
-function Collections() {
-  const c = useCat()
-  const [confirm, setConfirm] = useState<string | null>(null)
-  return (
-    <div className="lib-tree">
-      {c.collections.map((col) => (
-        <div key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button style={{ flex: 1 }} className={c.q.collection_id === col.id ? 'active' : ''} onClick={() => c.setQuery({ collection_id: col.id, folder: 'all' })}><span>{col.kind === 'smart' ? '◈ ' : ''}{col.name}</span><span className="n">{col.count}</span></button>
-          <button className="quiet" title="rename" onClick={() => void askText({ title: 'Rename collection', initial: col.name }).then((n) => { if (n && n !== col.name) void c.renameCollection(col.id, n) })}>✎</button>
-          {col.kind === 'smart' && <button className="quiet" title="convert to manual (freeze members)" onClick={() => void c.convertCollection(col.id)}>◈→▣</button>}
-          <button className="quiet" title={confirm === col.id ? 'click again to delete' : 'delete'} style={confirm === col.id ? { color: 'var(--error)' } : undefined}
-            onClick={() => { if (confirm === col.id) { void c.deleteCollection(col.id); setConfirm(null) } else { setConfirm(col.id); setTimeout(() => setConfirm((x) => (x === col.id ? null : x)), 2000) } }}>✕</button>
-        </div>
-      ))}
-      {!c.collections.length && <span style={{ color: 'var(--fg3)' }}>No collections. Select assets and use "Add to collection", or save filters as a smart collection.</span>}
-    </div>
-  )
-}
-
-function ImportPanel() {
-  const c = useCat()
-  const toast = useSession((s) => s.toast)
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [over, setOver] = useState(false)
-  const run = async () => {
-    const paths = text.split('\n').map((x) => x.trim()).filter(Boolean)
-    if (!paths.length) return
-    setBusy(true)
-    try { const n = await c.importPaths(paths); toast(`Imported ${n} asset${n === 1 ? '' : 's'}`, 'success'); setText('') }
-    catch (e) { toast(`Import failed: ${(e as Error).message}`, 'error') }
-    finally { setBusy(false) }
-  }
-  return (
-    <div>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} style={{ width: '100%' }} placeholder={'One path per line: files or folders\nF:/refs/alley.png'} />
-      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        {isTauri() && <button onClick={() => void pickFiles('Import images or clips').then((p) => p.length && setText((t) => [t, ...p].filter(Boolean).join('\n')))}><Upload size={14} /> Files…</button>}
-        {isTauri() && <button onClick={() => void pickFolder('Import a folder').then((p) => p && setText((t) => [t, p].filter(Boolean).join('\n')))}><FolderOpen size={14} /> Folder…</button>}
-        <button className="primary" disabled={busy || !text.trim()} onClick={() => void run()}>Import</button>
-      </div>
-      <div className={`drop${over ? ' over' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); const names = [...e.dataTransfer.files].map((f) => (f as File & { path?: string }).path).filter(Boolean) as string[]; if (names.length) setText((t) => [t, ...names].filter(Boolean).join('\n')); else toast('Drop needs the shell for file paths; use Files… instead', 'info') }}>
-        Drop files or folders here
-      </div>
-      <p style={{ color: 'var(--fg3)', fontSize: 12 }}>Imports copy into the project with a sidecar manifest; ComfyUI and A1111 PNG metadata is parsed into Params.</p>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------- Strip
+// ---------------------------------------------------------------- Strip (Generate's results, until its pass: §9)
 export function Strip() {
   const c = useCat()
   const s = useSession()
@@ -205,8 +86,7 @@ export function Strip() {
           <CommandRow ids={['cat.keep', 'cat.reject', 'cat.unstate', 'gap', 'cat.loupe', 'cat.edit', 'cat.reference', 'cat.pin', 'gap', 'cat.selectAll', 'cat.clearSelection']} />
           <input id="strip-tag" type="text" value={tagText} placeholder="tag…" style={{ width: 90, minHeight: 24 }} onChange={(e) => setTagText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && tagText.trim()) { const t = tagText.trim(); void Promise.all(ids.map((id) => { const a = c.byId(id); return a && !a.tags.includes(t) ? c.setTags([id], [...a.tags, t]) : Promise.resolve() })); setTagText('') } }} />
-          <select value="" onChange={(e) => { if (e.target.value) void c.addToCollection(e.target.value, ids) }} title="Add to collection"><option value="">+ collection</option>{c.collections.filter((x) => x.kind === 'manual').map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-          {c.q.folder === 'trash' ? <><CommandRow ids={['cat.restore', 'cat.purge']} /><EmptyTrashButton compact /></> : <CommandButton id="cat.trash" />}
+          {c.q.folder === 'trash' ? <><CommandRow ids={['cat.restore', 'cat.purge']} /><EmptyTrashButton /></> : <CommandButton id="cat.trash" />}
         </>
       )}
       {c.compare.length >= 2 && <button className="quiet" onClick={() => runCommand('cat.compare')} style={{ color: 'var(--accent)' }} title="Open compare (⇧C)">Compare {c.compare.length}</button>}
@@ -214,12 +94,19 @@ export function Strip() {
       <CommandButton id="cat.tileSmaller" />
       <input type="range" min={96} max={512} step={16} value={c.tile} onChange={(e) => c.setTile(Number(e.target.value))} title="tile size ([ / ])" style={{ width: 110 }} />
       <CommandButton id="cat.tileLarger" />
-      <button className="quiet" onClick={() => c.setFill(!c.fill)} title="fit / fill">{c.fill ? 'fill' : 'fit'}</button>
     </>
   )
 }
 
 // ---------------------------------------------------------------- Stage
+function EmptyGrid() {
+  const c = useCat()
+  const filtered = !!c.q.search || Object.entries(CLEAR_ALL).some(([k, v]) => k !== 'search' && JSON.stringify((c.q as unknown as Record<string, unknown>)[k] ?? v) !== JSON.stringify(v))
+  const [title, text] = filtered ? ['Nothing matches these filters', ''] : c.q.folder === 'unprocessed' ? ['Nothing to sort', 'New generations, edits, clips and imports land here. Import files with the Import button or drop them here.']
+    : c.q.folder === 'trash' ? ['Trash is empty', ''] : c.q.group_id ? ['This page is empty', 'Drag photos onto this group in the Places panel, or use "Move to group" on a tile.'] : ['No assets yet', 'Import files, or generate your first image.']
+  return <div className="cat-empty"><div><h2>{title}</h2>{text && <p>{text}</p>}{filtered && <button onClick={() => void c.setQuery(CLEAR_ALL)}>Clear filters</button>}</div></div>
+}
+
 type Row = { kind: 'header'; g: GroupHeader } | { kind: 'tiles'; items: Asset[] } | { kind: 'note'; text: string; key: string }
 
 export function Stage() {
@@ -237,9 +124,20 @@ export function Stage() {
     setWidth(el.clientWidth)
     return () => ro.disconnect()
   }, [c.loupe, compareOpen])
+  const fill = useSession((st) => st.ui.thumbFit === 'fill')
+  const caption = useSession((st) => st.ui.caption)
+  const [fileOver, setFileOver] = useState(false)
+  useEffect(() => listenFileDrop({                                 // OS files dropped on the grid are imported (into Unprocessed)
+    over: (inside) => setFileOver(inside),
+    drop: (paths) => {
+      setFileOver(false)
+      void c.importPaths(paths).then((n) => s.toast(`Imported ${n} item${n === 1 ? '' : 's'} into Unprocessed`, 'success')).catch((e) => s.toast(`Import failed: ${(e as Error).message}`, 'error'))
+    },
+    within: () => scrollRef.current,
+  }), [c]) // eslint-disable-line react-hooks/exhaustive-deps
   const gap = 8
   const cols = Math.max(1, Math.floor((width - 16) / (c.tile + gap)))
-  const cellH = Math.round(c.tile * 0.72) + 22
+  const cellH = Math.round(c.tile * 0.72) + (caption === 'off' ? 0 : 22)
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = []
     const chunk = (items: Asset[]) => { for (let i = 0; i < items.length; i += cols) out.push({ kind: 'tiles', items: items.slice(i, i + cols) }) }
@@ -301,6 +199,8 @@ export function Stage() {
 
   const onTileClick = (e: React.MouseEvent, id: string) => c.select(id, e.ctrlKey || e.metaKey ? 'toggle' : e.shiftKey ? 'range' : 'single')
   if (!s.project?.open) return <div className="placeholder"><div><h2>Catalogue</h2>open or create a project to begin</div></div>
+  if (c.lineage) return <LineageView id={c.lineage} />
+  if (c.q.group_id && !c.loupe && !c.compareOpen) return <PageView gid={c.q.group_id} onOpenGroup={(id) => openPlace(c, { group: id })} />
   const loupeAsset = c.loupe ? c.byId(c.loupe) : undefined
   if (loupeAsset) return <Loupe asset={loupeAsset} />
   if (compareOpen && c.compare.length >= 2) {
@@ -310,7 +210,8 @@ export function Stage() {
   const empty = !c.loading && rows.length === 0
   return (
     <div className="cat-grid" ref={scrollRef} tabIndex={0} onKeyDown={onKey} onContextMenu={(e) => { if ((e.target as HTMLElement).closest('.tile, .cat-header')) return; showMenu(e, gridMenu()) }}>
-      {empty && <div className="cat-empty"><div><h2>{c.counts.all ? 'Nothing matches these filters' : 'No assets yet'}</h2>{c.counts.all ? <button onClick={() => c.setQuery({ state: 'all', search: '', tags_any: [], model_id: undefined, rating_min: 0, aspect: undefined, has_children: undefined, folder: 'all', collection_id: undefined })}>Clear filters</button> : 'Import files from the panel, or generate your first image.'}</div></div>}
+      {empty && <EmptyGrid />}
+      {fileOver && <div className="file-over">Drop to import into Unprocessed</div>}
       <div className="cat-rows" style={{ height: virt.getTotalSize() }}>
         {vitems.map((v) => {
           const r = rows[v.index]
@@ -327,7 +228,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={c.fill} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onContext={onTileContext} dragIds={() => selectedOrPrimary(c)} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragIds={() => selectedOrPrimary(c)} />)}
             </div>
           )
         })}
@@ -336,117 +237,10 @@ export function Stage() {
   )
 }
 
-// ---------------------------------------------------------------- Inspector
-export function Inspector() {
-  const c = useCat()
-  const s = useSession()
-  const [tab, setTab] = useState<'info' | 'params' | 'lineage' | 'tags'>('info')
-  const [remote, setRemote] = useState<Asset | null>(null)
-  const id = c.primary
-  const local = id ? c.byId(id) : undefined
-  useEffect(() => {
-    if (id && !local) void api.get<Asset>(`/assets/${id}`).then(setRemote).catch(() => setRemote(null)); else setRemote(null)
-  }, [id, local])
-  const a = local ?? (remote?.id === id ? remote : null)
-  if (!s.project?.open) return <span style={{ color: 'var(--fg3)' }}>No project.</span>
-  if (!a) return <span style={{ color: 'var(--fg3)' }}>{c.selected.length > 1 ? `${c.selected.length} selected` : 'Select an asset.'}</span>
-  const ids = selectedOrPrimary(c)
-  const bulk = ids.length > 1
-  return (
-    <div>
-      <div className="tabs2">{(['info', 'params', 'lineage', 'tags'] as const).map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
-      {tab === 'info' && (
-        <div>
-          <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" />
-          <dl className="kv">
-            <dt>id</dt><dd className="mono">{a.id}{bulk ? ` (+${ids.length - 1})` : ''}</dd>
-            <dt>kind</dt><dd>{a.kind} · {a.suite}</dd>
-            <dt>size</dt><dd>{a.w}×{a.h}{a.frames ? ` · ${a.frames} f` : ''} · {a.bytes ? `${(a.bytes / 1024).toFixed(0)} KB` : ''}</dd>
-            <dt>created</dt><dd>{new Date(a.created_at).toLocaleString()}</dd>
-            <dt>model</dt><dd>{a.model_id ?? '—'}{a.variant ? ` · ${a.variant}` : ''}</dd>
-            <dt>seed</dt><dd className="mono">{a.seed ?? '—'}</dd>
-            {Object.entries(a.params).filter(([k]) => ['steps', 'guidance', 'cfg', 'turbo', 'width', 'height'].includes(k)).map(([k, v]) => <><dt key={k}>{k}</dt><dd key={k + 'v'}>{String(v)}</dd></>)}
-            {a.timings?.wall_s !== undefined && <><dt>time</dt><dd>{String(a.timings.wall_s)} s</dd></>}
-            {a.trashed_at && <><dt>trashed</dt><dd style={{ color: 'var(--error)' }}>{new Date(a.trashed_at).toLocaleString()}</dd></>}
-          </dl>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-            <div className="segmented">
-              <button className={a.state === 'keep' ? 'active' : ''} onClick={() => void c.setState(ids, 'keep')}>✓ keep</button>
-              <button className={a.state === 'reject' ? 'active' : ''} onClick={() => void c.setState(ids, 'reject')}>✗ reject</button>
-              <button className={a.state === 'none' ? 'active' : ''} onClick={() => void c.setState(ids, 'none')}>○</button>
-            </div>
-            <span className="stars-edit">{[1, 2, 3, 4, 5].map((n) => <button key={n} className={a.rating >= n ? 'on' : ''} onClick={() => void c.setRating(ids, a.rating === n ? 0 : n)}>★</button>)}</span>
-          </div>
-          <div className="chips" style={{ marginTop: 8 }}>{a.tags.map((t) => <span key={t} className="chip-f">{t}<button onClick={() => void c.setTags([a.id], a.tags.filter((x) => x !== t))}>✕</button></span>)}</div>
-          <div className="verbs">
-            {['cat.edit', 'cat.animate', 'cat.reference', 'cat.rerun', 'cat.variations', 'cat.pin', 'cat.loupe', 'cat.reveal', a.trashed_at ? 'cat.restore' : 'cat.trash'].map((id) => <CommandButton key={id} id={id} text className="verb" />)}
-          </div>
-        </div>
-      )}
-      {tab === 'params' && (
-        <div>
-          <h4 style={{ margin: '0 0 6px', color: 'var(--fg3)', fontSize: 11 }}>PROMPT</h4>
-          <pre className="json">{a.prompt_json ? JSON.stringify(a.prompt_json, null, 2) : (a.prompt_text || '—')}</pre>
-          {a.prompt_json && a.prompt_text && <pre className="json" style={{ marginTop: 6 }}>{a.prompt_text}</pre>}
-          <h4 style={{ margin: '10px 0 6px', color: 'var(--fg3)', fontSize: 11 }}>PARAMETERS</h4>
-          <dl className="kv">{Object.entries(a.params).map(([k, v]) => <><dt key={k}>{k}</dt><dd key={k + 'v'} className="mono">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd></>)}
-            {a.compiled_graph_hash && <><dt>graph</dt><dd className="mono">{a.compiled_graph_hash}</dd></>}
-            {a.job_id && <><dt>job</dt><dd className="mono">{a.job_id}</dd></>}
-            {a.session_id && <><dt>session</dt><dd className="mono">{a.session_id}</dd></>}
-          </dl>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-            <button onClick={() => { void navigator.clipboard?.writeText(a.prompt_json ? JSON.stringify(a.prompt_json, null, 2) : a.prompt_text ?? ''); s.toast('Prompt copied', 'success') }}>Copy prompt</button>
-            <button disabled={!a.params?.recipe} onClick={() => void import('../generate/generateStore').then((m) => { m.useGenerate.getState().loadFromAsset(a, false); s.setSuite('generate') })}>Load into Panel</button>
-            <button disabled={!a.params?.recipe} onClick={() => void import('../generate/generateStore').then((m) => m.useGenerate.getState().rerun(a))}>All → Re-run</button>
-          </div>
-        </div>
-      )}
-      {tab === 'lineage' && <LineageTab a={a} />}
-      {tab === 'tags' && <TagsTab a={a} ids={ids} />}
-    </div>
-  )
-}
-
-function LineageTab({ a }: { a: Asset }) {
-  const c = useCat()
-  const [lin, setLin] = useState<{ parents: { from_id: string; kind: string }[]; children: { to_id: string; kind: string }[] } | null>(null)
-  useEffect(() => { void api.get<typeof lin>(`/lineage/${a.id}`).then(setLin).catch(() => setLin(null)) }, [a.id])
-  const go = (id: string) => { c.select(id, 'single') }
-  return (
-    <div className="lin-list">
-      <h4 style={{ margin: '0 0 6px', color: 'var(--fg3)', fontSize: 11 }}>PARENTS</h4>
-      {lin?.parents.map((p) => <button key={p.from_id} onClick={() => go(p.from_id)}><img src={api.thumbUrl(p.from_id, 256)} alt="" /><span className="mono">{p.from_id}</span><span style={{ color: 'var(--fg3)' }}>{p.kind}</span></button>) ?? '…'}
-      {lin && !lin.parents.length && <span style={{ color: 'var(--fg3)' }}>none (root)</span>}
-      <h4 style={{ margin: '10px 0 6px', color: 'var(--fg3)', fontSize: 11 }}>CHILDREN</h4>
-      {lin?.children.map((p) => <button key={p.to_id} onClick={() => go(p.to_id)}><img src={api.thumbUrl(p.to_id, 256)} alt="" /><span className="mono">{p.to_id}</span><span style={{ color: 'var(--fg3)' }}>{p.kind}</span></button>)}
-      {lin && !lin.children.length && <span style={{ color: 'var(--fg3)' }}>none</span>}
-      <div style={{ marginTop: 10 }}><button onClick={() => c.setQuery({ group: 'lineage', root_id: a.root_id ?? a.id, folder: 'all', collection_id: undefined })}>Show as tree</button> {c.q.root_id && <button onClick={() => c.setQuery({ root_id: undefined })}>All roots</button>}</div>
-    </div>
-  )
-}
-
-function TagsTab({ a, ids }: { a: Asset; ids: string[] }) {
-  const c = useCat()
-  const [text, setText] = useState('')
-  const add = (t: string) => {
-    t = t.trim()
-    if (!t) return
-    void Promise.all(ids.map((id) => { const x = c.byId(id) ?? (id === a.id ? a : undefined); return x && !x.tags.includes(t) ? c.setTags([id], [...x.tags, t]) : Promise.resolve() }))
-    setText('')
-  }
-  return (
-    <div>
-      <input id="insp-tag" type="text" list="tag-suggest" value={text} placeholder={ids.length > 1 ? `add tag to ${ids.length} assets` : 'add tag'} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(text) }} style={{ width: '100%' }} />
-      <datalist id="tag-suggest">{c.tagCloud.map((t) => <option key={t.tag} value={t.tag} />)}</datalist>
-      <div className="chips" style={{ marginTop: 8 }}>{a.tags.map((t) => <span key={t} className="chip-f">{t}<button onClick={() => void c.setTags([a.id], a.tags.filter((x) => x !== t))}>✕</button></span>)}</div>
-      <h4 style={{ margin: '12px 0 6px', color: 'var(--fg3)', fontSize: 11 }}>RECENT TAGS</h4>
-      <div className="chips">{c.tagCloud.slice(0, 20).map((t) => <span key={t.tag} className="chip-f" style={{ cursor: 'pointer' }} onClick={() => add(t.tag)}>{t.tag} <small>{t.count}</small></span>)}</div>
-    </div>
-  )
-}
+// ---------------------------------------------------------------- Inspector (Inspector.tsx)
+export { Inspector }
 
 export const CatalogueSuite: SuiteDef = {
-  id: 'catalogue', rail: DEFAULT_RAIL.catalogue,
-  Panel, Strip, Stage, Inspector,
-  primary: { label: 'Import files…', run: () => setRailTab('catalogue', 'import') },
+  id: 'catalogue', rail: DEFAULT_RAIL.catalogue, wideStrip: true,
+  Panel: withActivePane(Panel), Strip: withActivePane(CatalogueStrip), Stage: () => <Panes Stage={Stage} />, Inspector: withActivePane(Inspector),
 }

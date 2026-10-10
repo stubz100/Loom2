@@ -81,7 +81,7 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span>{Math.round(xf.s * 100)}%</span>
         <button className="quiet" onClick={fit}>Fit</button>
         <button className="quiet" onClick={one}>1:1</button>
-        <button className="quiet" onClick={() => c.togglePin(asset.id)}>{pinned ? `Unpin C${pinned}` : 'Pin for compare (C)'}</button>
+        <CommandButton id="cat.pin" text label={pinned ? `Unpin C${pinned}` : undefined} />
         <CommandRow ids={['cat.keep', 'cat.reject', 'cat.edit', 'cat.reference']} />
         <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
       </div>

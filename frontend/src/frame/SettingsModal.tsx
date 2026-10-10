@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
+import { THEMES, type Theme } from './theme'
 
 export function SettingsModal() {
   const s = useSession()
@@ -43,15 +44,25 @@ export function SettingsModal() {
           <label>Reserve VRAM (GB)</label><input type="number" min={0} max={8} step={0.5} value={draft.engine.reserve_vram_gb ?? 1.5} onChange={(e) => setEngine({ reserve_vram_gb: Number(e.target.value) })} />
           <span className="hint">ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas</span>
           <h4>App</h4>
-          <h4>Licences</h4>
-          <label>MiniMax H3</label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
-          <span className="hint">Records the confirmation that unlocks the H3 hero tier in Animate once its graph and weights land (04 §5b). Licence checks are read against EU terms.</span>
+          <label>Theme</label>
+          <select value={s.ui.theme} onChange={(e) => s.setUi({ theme: e.target.value as Theme })}>{THEMES.map(([t, l]) => <option key={t} value={t}>{l}</option>)}</select>
+          <span className="hint">applies at once and is remembered on this machine, like the density</span>
+          <label>Density</label>
+          <select value={s.ui.density} onChange={(e) => s.setUi({ density: e.target.value as 'comfortable' | 'compact' })}><option value="comfortable">comfortable</option><option value="compact">compact</option></select>
+          <h4>Catalogue</h4>
+          <label>Thumbnails</label>
+          <select value={s.ui.thumbFit} onChange={(e) => s.setUi({ thumbFit: e.target.value as 'fit' | 'fill' })}><option value="fit">fit: the whole picture</option><option value="fill">fill: cropped to the tile</option></select>
+          <label>Tile caption</label>
+          <select value={s.ui.caption} onChange={(e) => s.setUi({ caption: e.target.value as 'off' | 'prompt' | 'model' })}><option value="off">off</option><option value="prompt">prompt</option><option value="model">model · seed</option></select>
+          <span className="hint">the tooltip and the Inspector always show model, seed, size and time</span>
+          <h4>Engine output</h4>
           <label>Thumbnail sizes</label><input type="text" value={draft.thumbnail_sizes.join(',')} onChange={(e) => set({ thumbnail_sizes: e.target.value.split(',').map(Number).filter(Boolean) })} />
           <label>Log level</label>
           <select value={draft.log_level} onChange={(e) => set({ log_level: e.target.value })}>{['DEBUG', 'INFO', 'WARNING', 'ERROR'].map((l) => <option key={l}>{l}</option>)}</select>
-          <label>Density</label>
-          <select value={s.ui.density} onChange={(e) => s.setUi({ density: e.target.value as 'comfortable' | 'compact' })}><option value="comfortable">comfortable</option><option value="compact">compact</option></select>
-          <span className="hint">Pen pressure curve appears when a pen is detected (D19). Licence confirmations (D17) and project format defaults arrive with their suites.</span>
+          <span className="hint">Pen pressure curve appears when a pen is detected (D19). Project format defaults arrive with their suites.</span>
+          <h4>Licences</h4>
+          <label>MiniMax H3</label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
+          <span className="hint">Records the confirmation that unlocks the H3 hero tier in Animate once its graph and weights land (04 §5b). Licence checks are read against EU terms.</span>
         </div>
         <div className="foot">
           <button onClick={() => s.openSettings(false)}>Cancel</button>

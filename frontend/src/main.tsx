@@ -1,6 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { applyTheme } from './frame/theme'
+import { useSession } from './store/session'
+
+// Before the first render, so a light-theme start does not flash dark; ?theme=light|dark is a deep link (like ?suite=) for checks
+const deepTheme = new URLSearchParams(location.search).get('theme')
+if (deepTheme === 'light' || deepTheme === 'dark') useSession.getState().setUi({ theme: deepTheme })
+applyTheme(useSession.getState().ui.theme)
 
 // A crash overlay: the WebView2 window has no console the author can see, so uncaught errors render on screen.
 function showCrash(msg: string) {

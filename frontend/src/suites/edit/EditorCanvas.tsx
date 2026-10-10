@@ -7,6 +7,7 @@ import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle,
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useRef } from 'react'
 import { useSession } from '../../store/session'
+import { CANVAS_COLOURS } from '../../frame/theme'
 import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName } from './blendModes'
@@ -15,6 +16,7 @@ import { findNode, useEditor, type Node } from './editorStore'
 import { useAiPanel } from './aiPanelStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
+import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
 
 /** Inverts RGB (keeps alpha) and adds: red where a mask/selection is black, nothing where it is white. */
 function negativeAdd(): ColorMatrixFilter { const f = new ColorMatrixFilter(); f.negative(false); f.blendMode = 'add'; return f }
@@ -22,8 +24,9 @@ function negativeAdd(): ColorMatrixFilter { const f = new ColorMatrixFilter(); f
 function checkerTexture(): Texture {
   const c = document.createElement('canvas'); c.width = c.height = 16
   const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, 16, 16)
-  ctx.fillStyle = '#3a3a3a'; ctx.fillRect(0, 0, 8, 8); ctx.fillRect(8, 8, 8, 8)
+  const { checkerA, checkerB } = CANVAS_COLOURS[useSession.getState().ui.theme]           // transparency checker follows the theme
+  ctx.fillStyle = checkerA; ctx.fillRect(0, 0, 16, 16)
+  ctx.fillStyle = checkerB; ctx.fillRect(0, 0, 8, 8); ctx.fillRect(8, 8, 8, 8)
   return Texture.from(c)
 }
 
@@ -184,12 +187,13 @@ export function EditorCanvas() {
     if (!host) return
     let cancelled = false
     let ro: ResizeObserver | null = null
+    let unsubTheme: (() => void) | null = null
     const devOverride = import.meta.env.DEV ? new URLSearchParams(location.search).get('renderer') : null      // dev deep link: &renderer=webgl|webgpu
     const pref = useEditor.getState().rendererPref
     const want: 'webgpu' | 'webgl' = devOverride === 'webgl' || (devOverride !== 'webgpu' && pref === 'webgl') ? 'webgl' : 'webgpu'
     const boot = async (preference: 'webgpu' | 'webgl') => {
       const a = new Application()
-      await a.init({ preference, background: 0x141414, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false })
+      await a.init({ preference, background: CANVAS_COLOURS[useSession.getState().ui.theme].background, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false })
       return a
     }
     /** D3 fallback probe: draw a white 4×4 sprite and read it back through the path the exact-compare uses. A renderer
@@ -248,6 +252,12 @@ export function EditorCanvas() {
         return c
       })
       ro = new ResizeObserver(() => { app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })
+      unsubTheme = useSession.subscribe((s, p) => {                    // Settings › Theme while a document is open
+        if (s.ui.theme === p.ui.theme) return
+        app.renderer.background.color = CANVAS_COLOURS[s.ui.theme].background
+        const old = checker.texture; checker.texture = checkerTexture(); old.destroy(true)
+        requestRender()
+      })
       ro.observe(host)
       useEditor.getState().bump()                                      // re-run the scene effects now that the renderer exists
       useEditor.getState().requestFit()
@@ -256,6 +266,7 @@ export function EditorCanvas() {
     return () => {
       cancelled = true
       ro?.disconnect()
+      unsubTheme?.()
       cancelPendingRender()                                              // and clear the flag: a stale id blocked every later request (2026-10-06)
       useEditor.getState().setExtractor(null)
       for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }
@@ -730,10 +741,7 @@ export function EditorCanvas() {
       st.pushHistory({ label: 'fill', layerId: t.id, kind: t.kind, tiles: t.lp.endStroke(), at: Date.now() })
       st.touch(); st.bump()
     }
-    const onDragOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('text/loom2-assets')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' } }
-    const onDropAsset = (e: DragEvent) => { const ids = (e.dataTransfer?.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (!ids.length) return; e.preventDefault(); ids.forEach((id) => void useEditor.getState().addLayerFromAsset(id)) }
-    host.addEventListener('dragover', onDragOver)
-    host.addEventListener('drop', onDropAsset)
+    const unregDrop = registerDropTarget(host, { accept: onlyAssets, drop: (p) => assetIds(p).forEach((id) => void useEditor.getState().addLayerFromAsset(id)) })   // tiles become layers
     host.addEventListener('pointerdown', onDown)
     host.addEventListener('pointermove', onMove)
     host.addEventListener('pointerup', onUp)
@@ -743,7 +751,7 @@ export function EditorCanvas() {
     const onContext = (e: MouseEvent) => { e.preventDefault(); if (drag) return; showMenu(e, canvasMenu()) }
     host.addEventListener('contextmenu', onContext)
     return () => {
-      host.removeEventListener('dragover', onDragOver); host.removeEventListener('drop', onDropAsset)
+      unregDrop()
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
       host.removeEventListener('dblclick', onDouble)
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)

@@ -1,11 +1,27 @@
-/* loom2 frame (07 §7): graphite neutrals, one amber accent, 8 px grid, 13 px base / 12 px minimum */
+/* loom2 frame (07 §7): graphite neutrals, one amber accent, 8 px grid, 13 px base / 12 px minimum.
+   Two colour themes (proto01_design/01): dark (default, below) and light pastel ([data-theme="light"]); every colour
+   in the app's CSS reads these properties. The editor canvas mirrors --canvas-bg / --checker-* in theme.ts. */
 :root {
+  color-scheme: dark;
   --bg0: #111; --bg1: #171717; --bg2: #1e1e1e; --bg3: #262626; --bg4: #2e2e2e;
   --line: #333; --line2: #444;
-  --fg: #e6e6e6; --fg2: #a8a8a8; --fg3: #747474;
-  --accent: #f0a63a; --accent-dim: #8a5f1f; --keep: #5cc26a; --reject: #e05a5a; --warn: #f0a63a; --error: #e05a5a; --info: #4f9fe0;
+  --fg: #e6e6e6; --fg2: #a8a8a8; --fg3: #8c8c8c;
+  --accent: #f0a63a; --accent-dim: #8a5f1f; --accent-fg: #141414; --keep: #5cc26a; --reject: #e05a5a; --warn: #f0a63a; --error: #e05a5a; --info: #4f9fe0;
+  --keep-bg: #1f3b25; --info-bg: #2b3a4a; --info-fg: #8fc1ea; --reject-bg: #4a2b2b; --reject-fg: #f0a0a0; --open-bg: #2c3a1f; --open-fg: #b8e08a;
+  --media-bg: #0b0b0b; --deep: #080808; --canvas-bg: #141414; --checker-a: #2a2a2a; --checker-b: #3a3a3a;
+  --overlay: #000a; --overlay-weak: #0008; --shadow: #0008; --shadow-strong: #000c; --scrim: #0009; --ring-gap: #000;
   --rail: 48px; --top: 40px; --strip: 36px; --dock: 32px; --dock-open: 240px;
   --radius: 6px; --font: 13px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; --mono: 12px/1.4 "Cascadia Code", Consolas, monospace;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg0: #f3f0ea; --bg1: #fbfaf7; --bg2: #ffffff; --bg3: #f0ede7; --bg4: #e6e1d8;
+  --line: #e2ddd4; --line2: #d3ccc0;
+  --fg: #2b2a33; --fg2: #5c5a66; --fg3: #6e6b78;
+  --accent: #6a56c9; --accent-dim: #c9bdf3; --accent-fg: #ffffff; --keep: #2f7a3d; --reject: #b03a3a; --warn: #b36b0c; --error: #b03a3a; --info: #2f6fae;
+  --keep-bg: #dcf1e0; --info-bg: #e3eef8; --info-fg: #2c4a66; --reject-bg: #f8dede; --reject-fg: #b03a3a; --open-bg: #e6f1d6; --open-fg: #4a6b1f;
+  --media-bg: #e9e5de; --deep: #ebe7e0; --canvas-bg: #e9e5de; --checker-a: #fbfaf7; --checker-b: #dedad2;
+  --overlay: #ffffffd9; --overlay-weak: #ffffffb3; --shadow: #3c322826; --shadow-strong: #3c322840; --scrim: #2b2a3359; --ring-gap: #fff;
 }
 .density-compact { --top: 34px; --strip: 30px; --dock: 28px; }
 * { box-sizing: border-box; }
@@ -14,7 +30,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { background: var(--bg3); border: 1px solid var(--line2); border-radius: var(--radius); padding: 4px 10px; cursor: pointer; min-height: 28px; }
 button:hover { background: var(--bg4); }
 button:disabled { opacity: .45; cursor: default; }
-button.primary { background: var(--accent); color: #141414; border-color: var(--accent); font-weight: 600; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
 button.primary:hover { filter: brightness(1.08); }
 button.quiet { background: transparent; border-color: transparent; }
 button.quiet:hover { background: var(--bg3); }
@@ -24,7 +40,9 @@ code, .mono { font: var(--mono); }
 a { color: var(--accent); }
 
 /* frame grid (07 §2) */
-.frame { display: grid; height: 100%; grid-template-rows: var(--top) auto 1fr auto; grid-template-columns: var(--rail) auto 1fr auto; grid-template-areas: "top top top top" "banner banner banner banner" "rail panel stage inspector" "dock dock dock dock"; }
+/* a suite with `wideStrip` (Catalogue, D34) puts its strip across panel, stage and inspector; otherwise the strip row is empty */
+.frame { display: grid; height: 100%; grid-template-rows: var(--top) auto auto 1fr auto; grid-template-columns: var(--rail) auto 1fr auto; grid-template-areas: "top top top top" "banner banner banner banner" "rail strip strip strip" "rail panel stage inspector" "dock dock dock dock"; }
+.strip.wide { grid-area: strip; height: auto; min-height: var(--strip); padding: 3px 12px; }
 .frame.focus { grid-template-columns: var(--rail) 0 1fr 0; }
 .top { grid-area: top; display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--bg1); border-bottom: 1px solid var(--line); }
 .top .tabs { display: flex; gap: 2px; }
@@ -35,7 +53,7 @@ a { color: var(--accent); }
 .top .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); color: var(--fg2); font-size: 12px; cursor: pointer; }
 .top .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); }
 .top .chip .dot.ok { background: var(--keep); } .top .chip .dot.busy { background: var(--accent); } .top .chip .dot.down { background: var(--reject); } .top .chip .dot.warn { background: var(--warn); }
-.menu { position: absolute; z-index: 30; top: calc(var(--top) + 2px); background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); min-width: 240px; box-shadow: 0 8px 24px #0008; padding: 4px; }
+.menu { position: absolute; z-index: 30; top: calc(var(--top) + 2px); background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); min-width: 240px; box-shadow: 0 8px 24px var(--shadow); padding: 4px; }
 .menu button { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 6px 10px; border-radius: 4px; }
 .menu button:hover { background: var(--bg3); }
 .menu .sep { height: 1px; background: var(--line); margin: 4px 0; }
@@ -80,14 +98,14 @@ a { color: var(--accent); }
 .job .bar i { display: block; height: 100%; background: var(--accent); }
 .job.failed { border-left: 3px solid var(--error); } .job.done { border-left: 3px solid var(--keep); } .job.cancelled { border-left: 3px solid var(--fg3); }
 .job .err { grid-column: 1 / -1; color: var(--error); font: var(--mono); white-space: pre-wrap; max-height: 60px; overflow: auto; }
-.preview { width: 100%; max-height: 150px; object-fit: contain; background: #000; border-radius: var(--radius); }
+.preview { width: 100%; max-height: 150px; object-fit: contain; background: var(--media-bg); border-radius: var(--radius); }
 
 .toasts { position: fixed; right: 16px; bottom: calc(var(--dock) + 16px); display: flex; flex-direction: column; gap: 8px; z-index: 40; max-width: 420px; }
-.toast { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--bg3); border: 1px solid var(--line2); box-shadow: 0 8px 24px #0008; }
+.toast { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--bg3); border: 1px solid var(--line2); box-shadow: 0 8px 24px var(--shadow); }
 .toast.success { border-left: 4px solid var(--keep); } .toast.error { border-left: 4px solid var(--error); } .toast.info { border-left: 4px solid var(--info); }
 
-.modal-backdrop { position: fixed; inset: 0; background: #0009; display: grid; place-items: center; z-index: 50; }
-.modal { background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; min-width: 520px; max-width: 860px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px #000c; }
+.modal-backdrop { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 50; }
+.modal { background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; min-width: 520px; max-width: 860px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px var(--shadow-strong); }
 .modal .head { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
 .modal .head .spacer { flex: 1; }
 .modal .body { padding: 16px; overflow: auto; }
@@ -103,8 +121,8 @@ table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical
 table.grid tr.selected td { background: var(--bg2); }
 table.grid tr:hover td { background: var(--bg1); }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; background: var(--bg3); color: var(--fg2); }
-.badge.verified { background: #1f3b25; color: var(--keep); } .badge.present { background: #2b3a4a; color: #8fc1ea; } .badge.missing { background: #4a2b2b; color: #f0a0a0; } .badge.retired { color: var(--fg3); }
-.badge.open { background: #2c3a1f; color: #b8e08a; }
+.badge.verified { background: var(--keep-bg); color: var(--keep); } .badge.present { background: var(--info-bg); color: var(--info-fg); } .badge.missing { background: var(--reject-bg); color: var(--reject-fg); } .badge.retired { color: var(--fg3); }
+.badge.open { background: var(--open-bg); color: var(--open-fg); }
 .meter { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; width: 120px; display: inline-block; vertical-align: middle; }
 .meter i { display: block; height: 100%; background: var(--accent); }
 .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 8px; font-size: 12px; }
@@ -118,4 +136,11 @@ kbd { font: var(--mono); background: var(--bg3); border: 1px solid var(--line2);
 .modal.ask .body { display: flex; flex-direction: column; gap: 10px; }
 .modal.ask .ask-text { margin: 0; line-height: 1.45; opacity: 0.9; }
 .modal.ask input[type=text] { width: 100%; }
-.modal .foot button.danger { border-color: var(--error); color: var(--error); }
+button.danger, .modal .foot button.danger { border-color: var(--error); color: var(--error); }
+
+/* pointer drag and drop (frame/drag.ts) */
+body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow-strong); font-size: 12px; color: var(--fg2); opacity: .92; }
+.drag-ghost img { width: 48px; height: 36px; object-fit: cover; border-radius: 3px; background: var(--media-bg); }
+.drag-ghost.can-drop { border-color: var(--accent); color: var(--fg); }
+.drop-over { outline: 2px solid var(--accent) !important; outline-offset: -2px; }

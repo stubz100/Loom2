@@ -18,6 +18,7 @@ export interface SuiteDef {
   Stage: ComponentType
   Inspector: ComponentType
   primary?: { label: string; run: () => void; disabled?: boolean }
+  wideStrip?: boolean                     // the strip spans panel, stage and inspector (Catalogue, D34)
   PrimaryAction?: ComponentType
 }
 

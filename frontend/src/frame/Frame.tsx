@@ -14,9 +14,11 @@ import { Rail } from './Rail'
 import { SettingsModal } from './SettingsModal'
 import { Stage } from './Stage'
 import { Strip } from './Strip'
+import { applyTheme } from './theme'
 import { Toasts } from './Toasts'
 import { TopBar } from './TopBar'
 import { useKeyboardMap } from './useKeyboardMap'
+import { useSuite } from './suiteRegistry'
 import './frame.css'
 
 export function Frame() {
@@ -25,9 +27,11 @@ export function Frame() {
   const settingsOpen = useSession((s) => s.settingsOpen)
   const projectDialog = useSession((s) => s.projectDialog)
   const helpOpen = useSession((s) => s.helpOpen)
+  const wide = !!useSuite().wideStrip
   useKeyboardMap()
   useEffect(() => { void init() }, [init])
   useEffect(() => { document.body.classList.toggle('density-compact', ui.density === 'compact') }, [ui.density])
+  useEffect(() => { applyTheme(ui.theme) }, [ui.theme])
   // dev audit (07 §3c): commands of the current suite that no menu or toolbar has rendered yet
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -61,9 +65,10 @@ export function Frame() {
       <TopBar />
       <Banner />
       <Rail />
+      {wide && <Strip wide />}
       <Panel />
       <div className="center">
-        <Strip />
+        {!wide && <Strip />}
         <Stage />
       </div>
       <Inspector />

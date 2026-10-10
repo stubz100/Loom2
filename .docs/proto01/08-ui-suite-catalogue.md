@@ -4,6 +4,11 @@ Status: **implemented — M2 closed 2026-10-05**, extended through M6 (Empty tra
 keyboard-by-row, loupe + compare, and branching derivations were right; virtualisation, thumbnails, video
 tiles and persistent selection state were missing (02 §4b).
 
+**Redesigned (2026-10-07, D34, implemented the same day):** the current layout and organisation (Places, filter chips, album pages,
+split Stage, one-column Inspector, lineage view) are specified in
+[`../proto01_design/01-catalogue-inventory.md`](../proto01_design/01-catalogue-inventory.md); this document records the MVP layout
+and stays valid for the data model, API, keyboard and performance budgets.
+
 ## 1. Purpose
 Browse, group, judge and route every asset the project produces or imports: generated images, edited
 renders, clips and extracted frames. It is the hub the other suites read from and write to.

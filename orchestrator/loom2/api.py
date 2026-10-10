@@ -9,7 +9,7 @@ import os
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from typing import Annotated
 
@@ -21,7 +21,7 @@ from pydantic import BaseModel, ValidationError
 from . import __version__
 from .clips import ClipStore, compute_identity
 from .tools import facesim
-from .catalogue import AssetPage, AssetQuery, Catalogue, CollectionRecord, GroupHeader
+from .catalogue import AssetPage, AssetQuery, Catalogue, GroupHeader
 from .config import AppState
 from .documents import DocumentStore, StaleStack
 from .engine.graphs import (CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, TE_ALTERNATES, TE_LABELS, VRAM_ESTIMATE_GB, WAN_PRESETS,
@@ -29,6 +29,7 @@ from .engine.graphs import (CompileError, I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRE
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, _tmp_for
+from .groups import ROOT_ID, GroupNotFound, GroupStore, StaleGroup
 from .queue import JobQueue
 from .recipes import FLUX2_SCHEDULE, I2V, SAMPLERS, SCHEDULERS, T2I, TE_DEVICES, WEIGHT_DTYPES, parse_recipe
 from .roster import ROSTER_BY_ID, Roster
@@ -51,6 +52,7 @@ class Services:
         self.catalogue: Catalogue | None = None
         self.queue: JobQueue | None = None
         self.documents: DocumentStore | None = None
+        self.groups: GroupStore | None = None
         self.fetches: dict[str, FetchJob] = {}
 
     # ---- project binding ------------------------------------------------------------------------
@@ -63,11 +65,14 @@ class Services:
             queue = JobQueue(ws, self.app, self.engine, self.roster, catalogue, self.hub)
             documents = DocumentStore(ws)
             queue.documents = documents
+            groups = GroupStore(ws, catalogue)                         # D34: the album pages; migrates collections once
+            if groups.migrated:
+                catalogue.recovery.append(f"{groups.migrated} collection{'s' if groups.migrated != 1 else ''} became groups on the Album page.")
             await queue.start()
         except Exception:
             catalogue.close()
             raise
-        self.ws, self.catalogue, self.queue, self.documents = ws, catalogue, queue, documents
+        self.ws, self.catalogue, self.queue, self.documents, self.groups = ws, catalogue, queue, documents, groups
         self.app.touch_project(ws.path)
         info = ws.info()
         self.hub.broadcast("project.opened", info)
@@ -81,6 +86,7 @@ class Services:
             self.catalogue.close()
             self.catalogue = None
         self.documents = None
+        self.groups = None
         if self.ws:
             self.hub.broadcast("project.closed", {"path": str(self.ws.path)})
             self.ws = None
@@ -89,6 +95,11 @@ class Services:
         if not (self.ws and self.catalogue and self.queue):
             raise HTTPException(409, "no project is open")
         return self.ws, self.catalogue, self.queue
+
+    def require_groups(self) -> GroupStore:
+        self.require_project()
+        assert self.groups is not None
+        return self.groups
 
 
 class ClipExtract(BaseModel):
@@ -140,21 +151,42 @@ class BulkPatch(BaseModel):
     changes: dict[str, Any]
 
 
+class ItemRef(BaseModel):
+    kind: Literal["asset", "group"]
+    id: str
+
+
+class GroupCreate(BaseModel):
+    name: str
+    parent_id: str = ROOT_ID
+    x: float | None = None
+    y: float | None = None
+
+
+class GroupPatch(BaseModel):
+    name: str | None = None
+    cover_id: str | None = None
+
+
+class GroupLayout(BaseModel):
+    items: list[dict]
+    revision: int | None = None
+
+
+class GroupMove(BaseModel):
+    items: list[ItemRef]
+    to: str | None = None                     # a group id, or None = back to Unprocessed (assets only)
+    positions: list[dict] | None = None
+
+
+class GroupMake(BaseModel):
+    items: list[ItemRef]
+    name: str = "Group"
+
+
 class PurgeRequest(BaseModel):
     ids: list[str] | None = None
     older_than_days: int | None = None
-
-
-class CollectionCreate(BaseModel):
-    name: str
-    kind: str = "manual"
-    filter: dict | None = None
-
-
-class CollectionPatch(BaseModel):
-    name: str | None = None
-    kind: str | None = None
-    filter: dict | None = None
 
 
 class DocumentCreate(BaseModel):
@@ -209,6 +241,14 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     @app.exception_handler(StaleStack)
     async def _stale_stack(_: Request, e: StaleStack):          # C1: the editor merges the newer server layers and saves again
         return JSONResponse({"detail": str(e)}, status_code=409)
+
+    @app.exception_handler(StaleGroup)
+    async def _stale_group(_: Request, e: StaleGroup):          # D34: the page reloads the group and redoes the drag
+        return JSONResponse({"detail": str(e)}, status_code=409)
+
+    @app.exception_handler(GroupNotFound)
+    async def _no_group(_: Request, e: GroupNotFound):
+        return JSONResponse({"detail": str(e)}, status_code=404)
 
     @app.exception_handler(StateError)
     async def _state_error(_: Request, e: StateError):
@@ -419,6 +459,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     async def assets_purge(body: PurgeRequest):
         _, cat, _ = svc.require_project()
         gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days)
+        if gone and (changed := svc.require_groups().forget_assets(gone)):
+            svc.hub.broadcast("group.changed", {"ids": sorted(changed)})
         if len(gone) > 50:                                # emptying a 10k trash: one event, the clients reload (not 10k frames)
             svc.hub.broadcast("catalogue.changed", {"purged": len(gone)})
         else:
@@ -429,51 +471,89 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
     @app.get("/lineage/tree/{root_id}")
     async def lineage_tree(root_id: str):
         _, cat, _ = svc.require_project()
-        return cat.lineage_tree(root_id)
+        tree = cat.lineage_tree(root_id)
+        tree["locations"] = svc.require_groups().where([i["id"] for i in tree["items"]])       # where each one lives (D34)
+        return tree
 
-    # ---- collections ----------------------------------------------------------------------------
-    @app.get("/collections", response_model=list[CollectionRecord])
-    async def collections_list():
-        _, cat, _ = svc.require_project()
-        return cat.collections()
+    # ---- groups: album pages (D34, proto01_design/01 §6c, §8) ----------------------------------------
+    def _changed(ids) -> None:
+        svc.hub.broadcast("group.changed", {"ids": sorted(ids)})
 
-    @app.post("/collections", response_model=CollectionRecord)
-    async def collections_create(body: CollectionCreate):
-        _, cat, _ = svc.require_project()
-        rec = cat.collection_create(body.name, body.kind, body.filter)
-        svc.hub.broadcast("collection.changed", {"id": rec.id})
-        return rec
+    @app.get("/groups/tree")
+    async def groups_tree():
+        return svc.require_groups().tree()
 
-    @app.patch("/collections/{cid}", response_model=CollectionRecord)
-    async def collections_patch(cid: str, body: CollectionPatch):
-        _, cat, _ = svc.require_project()
-        rec = cat.collection_update(cid, name=body.name, kind=body.kind, filter_=body.filter)
-        if not rec:
-            raise HTTPException(404, "collection not found")
-        svc.hub.broadcast("collection.changed", {"id": cid})
-        return rec
+    @app.get("/groups/where")
+    async def groups_where(ids: Annotated[list[str], Query()]):
+        return svc.require_groups().where(ids)
 
-    @app.delete("/collections/{cid}")
-    async def collections_delete(cid: str):
-        _, cat, _ = svc.require_project()
-        if not cat.collection_delete(cid):
-            raise HTTPException(404, "collection not found")
-        svc.hub.broadcast("collection.changed", {"id": cid})
-        return {"deleted": cid}
+    @app.post("/groups")
+    async def groups_create(body: GroupCreate):
+        g = svc.require_groups().create(body.name, body.parent_id, body.x, body.y)
+        _changed([g.id, body.parent_id])
+        return g.model_dump()
 
-    @app.post("/collections/{cid}/assets")
-    async def collections_add(cid: str, body: IdList):
-        _, cat, _ = svc.require_project()
-        n = cat.collection_add(cid, body.ids)
-        svc.hub.broadcast("collection.changed", {"id": cid})
-        return {"count": n}
+    @app.post("/groups/move")
+    async def groups_move(body: GroupMove):
+        changed = await asyncio.to_thread(svc.require_groups().move, [(i.kind, i.id) for i in body.items], body.to, body.positions)
+        _changed(changed)
+        return {"changed": sorted(changed)}
 
-    @app.post("/collections/{cid}/assets/remove")
-    async def collections_remove(cid: str, body: IdList):
-        _, cat, _ = svc.require_project()
-        n = cat.collection_remove(cid, body.ids)
-        svc.hub.broadcast("collection.changed", {"id": cid})
-        return {"count": n}
+    @app.get("/groups/{gid}")
+    async def groups_page(gid: str):
+        return await asyncio.to_thread(svc.require_groups().page, gid)
+
+    @app.patch("/groups/{gid}")
+    async def groups_patch(gid: str, body: GroupPatch):
+        g = svc.require_groups().update(gid, body.name, body.cover_id)
+        _changed([gid])
+        return g.model_dump()
+
+    @app.delete("/groups/{gid}")
+    async def groups_delete(gid: str):
+        st = svc.require_groups()
+        parent = st.parent.get(("group", gid), ROOT_ID)
+        freed = st.delete(gid)
+        _changed([gid, parent])
+        return {"deleted": gid, "unprocessed": freed}
+
+    @app.patch("/groups/{gid}/items")
+    async def groups_layout(gid: str, body: GroupLayout):
+        g = svc.require_groups().layout(gid, body.items, body.revision)
+        _changed([gid])
+        return {"revision": g.revision}
+
+    @app.post("/groups/{gid}/group")
+    async def groups_make(gid: str, body: GroupMake):
+        g = await asyncio.to_thread(svc.require_groups().group_items, gid, [(i.kind, i.id) for i in body.items], body.name)
+        _changed([gid, g.id])
+        return g.model_dump()
+
+    @app.post("/groups/{gid}/ungroup")
+    async def groups_ungroup(gid: str):
+        parent = svc.require_groups().ungroup(gid)
+        _changed([gid, parent])
+        return {"parent": parent}
+
+    @app.post("/groups/{gid}/duplicate")
+    async def groups_duplicate(gid: str):
+        st = svc.require_groups()
+        g = await asyncio.to_thread(st.duplicate_group, gid)
+        _changed([g.id, st.parent.get(("group", g.id), ROOT_ID)])
+        for aid in st._asset_ids(g.id):
+            if (rec := svc.catalogue.get(aid)) is not None:
+                svc.hub.broadcast("asset.created", rec.model_dump())
+        return g.model_dump()
+
+    @app.post("/assets/duplicate")
+    async def assets_duplicate(body: IdList):
+        st = svc.require_groups()
+        new = await asyncio.to_thread(st.duplicate_assets, body.ids)
+        for aid in new:
+            if (rec := svc.catalogue.get(aid)) is not None:
+                svc.hub.broadcast("asset.created", rec.model_dump())
+        _changed({st.parent[("asset", a)] for a in new if ("asset", a) in st.parent})
+        return {"ids": new}
 
     @app.get("/assets/{asset_id}")
     async def asset_get(asset_id: str):
@@ -497,6 +577,8 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         _, cat, _ = svc.require_project()
         if not cat.delete(asset_id):
             raise HTTPException(404, "asset not found")
+        if changed := svc.require_groups().forget_assets([asset_id]):
+            _changed(changed)
         svc.hub.broadcast("asset.deleted", {"id": asset_id})
         return {"deleted": asset_id}
 

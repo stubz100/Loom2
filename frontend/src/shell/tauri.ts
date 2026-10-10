@@ -59,3 +59,24 @@ export async function pickFiles(title: string): Promise<string[]> {
   const picked = await open({ multiple: true, title, filters: [{ name: 'Images and clips', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm'] }] })
   return Array.isArray(picked) ? picked : picked ? [picked] : []
 }
+
+/** OS files dropped on the window (Tauri's drag-drop events carry real paths; a browser page gets none). `within` is the element
+ * that accepts them; `over` reports whether a drag hovers it. Returns the cleanup for a React effect. */
+export function listenFileDrop(h: { over: (inside: boolean) => void; drop: (paths: string[]) => void; within: () => HTMLElement | null }): () => void {
+  if (!isTauri()) return () => undefined
+  let unlisten: (() => void) | null = null
+  let dead = false
+  const inside = (pos: { x: number; y: number }) => {
+    const el = h.within()
+    if (!el) return false
+    const r = el.getBoundingClientRect(), x = pos.x / devicePixelRatio, y = pos.y / devicePixelRatio      // physical → CSS pixels
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+  }
+  void import('@tauri-apps/api/webview').then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((e) => {
+    const p = e.payload
+    if (p.type === 'enter' || p.type === 'over') h.over(inside(p.position))
+    else if (p.type === 'drop') { if (p.paths.length && inside(p.position)) h.drop(p.paths); else h.over(false) }
+    else h.over(false)
+  })).then((u) => { if (dead) u(); else unlisten = u })
+  return () => { dead = true; unlisten?.() }
+}

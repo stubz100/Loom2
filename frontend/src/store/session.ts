@@ -4,13 +4,15 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api, ApiError, EventsSocket, setBackend } from '../api/client'
 import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState, HealthInfo, Job, ModelEntry, ProjectInfo, QueueState, Settings, Suite } from '../api/types'
+import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
 
 export interface Toast { id: number; kind: 'info' | 'success' | 'error'; text: string; undo?: () => void; sticky?: boolean }
 export interface Banner { id: string; text: string; action?: { label: string; run: () => void }; kind?: 'info' | 'warn' | 'error' }
 
 interface UiState {
-  suite: Suite; panelOpen: boolean; inspectorOpen: boolean; dockOpen: boolean; focusMode: boolean; density: 'comfortable' | 'compact'
+  suite: Suite; panelOpen: boolean; inspectorOpen: boolean; dockOpen: boolean; focusMode: boolean; density: 'comfortable' | 'compact'; theme: Theme
+  thumbFit: 'fit' | 'fill'; caption: 'off' | 'prompt' | 'model'                  // Settings · Catalogue (D34)
   panelWidth: number; inspectorWidth: number; dismissedBanners: string[]
 }
 
@@ -65,7 +67,7 @@ export const useSession = create<SessionState>()(
     (set, get) => ({
       backend: null, backendError: null, wsStatus: 'closed', health: null, project: null, recents: [], engine: null, queue: null, jobs: {}, previews: {},
       models: [], unlisted: [], fetches: {}, settings: null, capabilities: null, events: [], toasts: [], settingsOpen: false, projectDialog: null, helpOpen: false, ask: null,
-      ui: { suite: 'catalogue', panelOpen: true, inspectorOpen: true, dockOpen: false, focusMode: false, density: 'comfortable', panelWidth: 320, inspectorWidth: 340, dismissedBanners: [] },
+      ui: { suite: 'catalogue', panelOpen: true, inspectorOpen: true, dockOpen: false, focusMode: false, density: 'comfortable', theme: 'dark', thumbFit: 'fit', caption: 'off', panelWidth: 320, inspectorWidth: 340, dismissedBanners: [] },
       selectedModel: null,
 
       init: async () => {
@@ -210,7 +212,9 @@ export const useSession = create<SessionState>()(
         return out.filter((b) => !s.ui.dismissedBanners.includes(b.id) || b.kind === 'error')
       },
     }),
-    { name: 'loom2.ui', partialize: (s) => ({ ui: s.ui }) },
+    { name: 'loom2.ui', partialize: (s) => ({ ui: s.ui }),
+      // field by field: a layout saved before a UI field existed (e.g. theme) keeps that field's default
+      merge: (persisted, current) => ({ ...current, ui: { ...current.ui, ...((persisted as { ui?: Partial<UiState> } | undefined)?.ui ?? {}) } }) },
   ),
 )
 
@@ -253,10 +257,16 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     case 'project.opened': set({ project: d as unknown as ProjectInfo }); break
     case 'project.closed': set({ project: { open: false } }); break
     case 'catalogue.changed':
-      void import('../suites/catalogue/catalogueStore').then((m) => { for (const st of [m.useCatalogue.getState(), m.useGenerateResults.getState()]) { void st.load(); void st.refreshMeta() } })
+      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.load(); void st.refreshMeta() } })
+      break
+    case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
+      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
+      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
+      window.dispatchEvent(new CustomEvent('loom2:group-changed', { detail: d }))
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
-      void import('../suites/catalogue/catalogueStore').then((m) => { m.useCatalogue.getState().applyEvent(f); m.useGenerateResults.getState().applyEvent(f) })
+      void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
+      window.dispatchEvent(new CustomEvent('loom2:asset-event', { detail: f }))           // album pages patch their asset records
       break
     case 'clip.updated':
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(d as { clip_id: string }))

@@ -8,6 +8,8 @@ import { useCatalogue, type CatalogueState } from './catalogueStore'
 export type CatalogueHook = UseBoundStore<StoreApi<CatalogueState>>
 export const CatalogueStoreCtx = createContext<CatalogueHook>(useCatalogue)
 export const activeCatalogue: { current: CatalogueHook } = { current: useCatalogue }
+/** True inside a Catalogue pane: the split decides which pane is active, not which one mounted last. */
+export const InPaneCtx = createContext(false)
 
 export function useCat(): CatalogueState
 export function useCat<T>(selector: (s: CatalogueState) => T): T
@@ -19,5 +21,6 @@ export function useCat<T>(selector?: (s: CatalogueState) => T) {
 /** Mounted by the grid: the commands act on the store instance that is on screen. */
 export function useActiveCatalogue(): void {
   const hook = useContext(CatalogueStoreCtx)
-  useEffect(() => { activeCatalogue.current = hook; return () => { if (activeCatalogue.current === hook) activeCatalogue.current = useCatalogue } }, [hook])
+  const inPane = useContext(InPaneCtx)
+  useEffect(() => { if (inPane) return; activeCatalogue.current = hook; return () => { if (activeCatalogue.current === hook) activeCatalogue.current = useCatalogue } }, [hook, inPane])
 }

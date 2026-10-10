@@ -13,6 +13,7 @@ import { EditorCanvas } from './EditorCanvas'
 import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import './edit.css'
+import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
 const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
   { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' },
@@ -492,8 +493,7 @@ function Stage() {
   const epoch = useEditor((s) => s.rendererEpoch)
   if (!project?.open) return <div className="placeholder"><div><h2>Edit</h2>open or create a project to begin</div></div>
   if (!doc) return (
-    <div className="edit-empty" onDragOver={(e) => { if (e.dataTransfer.types.includes('text/loom2-assets')) e.preventDefault() }}
-      onDrop={(e) => { const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean); if (ids.length) { e.preventDefault(); void ed().openFromAsset(ids[0]) } }}><div>
+    <EmptyDrop><div>
       <h2>Edit</h2>
       {loading ? <p>loading document…</p> : <>
         <p>Select an asset in the Catalogue and press <kbd>E</kbd>, drop a tile here or on the Edit tab, or start empty.</p>
@@ -501,7 +501,7 @@ function Stage() {
         <RecentDocuments />
       </>}
       {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
-    </div></div>
+    </div></EmptyDrop>
   )
   return <><EditorCanvas key={epoch} /><CandidateStrip /></>
 }
@@ -704,6 +704,12 @@ function useEditKeys() {
     ensureEditorAutosave()                                       // B20: survives suite switches (this hook unmounts with the strip)
     return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); unsubDeep() }
   }, [])
+}
+
+/** The empty Edit stage takes a dropped tile and opens it (frame/drag.ts). */
+function EmptyDrop({ children }: { children: React.ReactNode }) {
+  const { ref, over } = useDropTarget(onlyAssets, (p) => void ed().openFromAsset(assetIds(p)[0]))
+  return <div ref={ref} className={`edit-empty${over ? ' drop-over' : ''}`}>{children}</div>
 }
 
 export const EditSuite: SuiteDef = {

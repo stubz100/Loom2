@@ -36,7 +36,7 @@ export interface Asset {
   frames: number | null; created_at: string; job_id: string | null; batch_id: string | null; session_id: string | null; root_id: string | null; parents: string[]; suite: string
   model_id: string | null; seed: number | null; prompt_text: string | null; prompt_json: Record<string, unknown> | null
   params: Record<string, unknown>; timings: Record<string, unknown>; compiled_graph_hash: string | null
-  variant?: string; state: 'none' | 'keep' | 'reject'; rating: number; tags: string[]; collection_ids: string[]; has_document: boolean; trashed_at: string | null
+  variant?: string; state: 'none' | 'keep' | 'reject'; rating: number; tags: string[]; collection_ids: string[]; duplicate_of?: string | null; has_document: boolean; trashed_at: string | null
   thumb_status: 'pending' | 'done' | 'failed'; bytes: number | null; sha256: string | null
 }
 

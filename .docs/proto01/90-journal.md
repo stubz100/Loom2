@@ -1799,3 +1799,83 @@ read the clock)*
   `/documents/{id}/ai` → GGUF, 34.5 s. Headed Edge (CDP, the `edit_headed_check.py` helper) screenshots of both pickers: Generate ·
   Advanced with the default and with fp8 chosen (device select re-enabled, hint flips), Edit AI Inpaint / Refine / Upscale + tiled
   refine; no page errors beyond the pre-existing LoRA-slots key warning. Dev orchestrator and engine stopped afterwards.
+
+## 2026-10-07 19:48 — Dark / Light pastel theme, switchable in Settings and the ☰ menu
+
+- **Why:** the Catalogue redesign mockups (`../proto01_design/01-catalogue-inventory.md`, Claude Design canvas) were drawn in a light
+  pastel variant as well; the author asked for both in the app, switchable in Settings.
+- **Tokens:** `frame.css` `:root` (dark, unchanged values except `--fg3` `#747474 → #8c8c8c` for 4.5:1) and
+  `:root[data-theme="light"]`, plus the tokens the hard-coded CSS colours needed: `--accent-fg` (text on the accent), `--media-bg`
+  (thumbnail wells), `--deep` (loupe / compare / player), `--canvas-bg` + `--checker-a/b`, `--overlay` / `--overlay-weak` (badges over
+  media), `--shadow` / `--shadow-strong` / `--scrim`, `--ring-gap`, and state tints (`--keep-bg`, `--info-bg/-fg`, `--reject-bg/-fg`,
+  `--open-bg/-fg`); `color-scheme` per theme so native controls follow. `frame.css`, `menu.css`, `animate.css`, `catalogue.css`,
+  `edit.css`, `generate.css` now hold no colour literals except the white label drawn over candidate images in Edit.
+- **Switch:** `ui.theme` in the session store (persisted in `loom2.ui`; the persist merge is now field by field so layouts saved before
+  a UI field existed keep its default); `frame/theme.ts` (`THEMES`, `applyTheme`, `CANVAS_COLOURS`); `main.tsx` applies the theme
+  before the first render and takes `?theme=light|dark`; Settings · App gets Theme (the empty App heading now holds Theme, Density,
+  Thumbnail sizes, Log level; Licences below), the ☰ menu a Theme toggle next to Density. The editor's Pixi background and checker
+  follow `CANVAS_COLOURS` at boot and on a switch (store subscription; old checker texture destroyed). Image-content colours (brush
+  defaults, palette swatches, transform / AI-box overlays) stay as they are.
+- **Checks:** `tsc -b` clean, oxlint unchanged (no new warnings), `vite build` ok. Headless Edge screenshots of the production build
+  against a live orchestrator (`scratch theme_shots.py`, the `csp_check.py` harness): Catalogue, loupe, Generate, Animate, Models and
+  Edit in light, Catalogue and Edit in dark, no page errors (the Edit stage's "unsafe-eval" toast appears in both themes — headless has
+  no WebGPU and the WebGL path needs eval under the CSP; not new). Headed Edge `edit_headed_check.py paint` with `EXTRA=&theme=light`:
+  all checks passed on WebGPU, light canvas surround and light checker under the erased mask band. Not exercised in a window: switching
+  the theme while a document is open (the subscription path).
+
+## 2026-10-07 20:26 — D34 implemented: Places, filter chips, album pages, split Stage, one-column Inspector, lineage view
+
+The Catalogue redesign of `../proto01_design/01-catalogue-inventory.md` (slices 1–7 of its §13), in the order backend → frame →
+Inspector → lineage → split → pages.
+- **Groups backend** (`loom2/groups.py`, D34): one atomic JSON record per group in `groups/` (`album.json` the root page), items =
+  assets or groups at free `x, y, w, z`; one placement per item (moving takes it off its old page; a hand-edited double placement keeps
+  the most recent at load), no cycles, orphans back onto the Album; `revision` per group → 409 on a stale layout write. The index
+  caches asset placements (`placements` table, rewritten from the files at every open): `folder=unprocessed` (not placed, not
+  trashed), `group_id=`. Group / ungroup keep layouts; deleting a group frees its assets to Unprocessed (nothing trashed); purge
+  forgets placements. **Duplicate** (`Catalogue.duplicate`): a new asset id, the file and thumbnails copied, `duplicate_of`, no lineage
+  edge. **Migration** at the first open with groups: each collection (manual, or a smart one frozen) becomes a group card on the
+  Album; an asset in several collections stays in the oldest and is duplicated into the others; a recovery note says how many.
+  `date_preset` (today / last_session / 7d / 30d) resolved server-side like B11's today. `/collections*` routes removed (the methods
+  stay for the migration). API: `/groups/tree|where|move`, `/groups/{id}` (+ `/items`, `/group`, `/ungroup`, `/duplicate`),
+  `/assets/duplicate`, `lineage/tree` gains `locations`; WS `group.changed`. `openapi.json` re-exported (it was several milestones
+  stale) and `schema.d.ts` regenerated. Tests: `test_groups_d34.py` (11) → **115 offline**.
+- **Drag and drop by pointer events** (`frame/drag.ts`): Tauri's default OS file-drop handling (kept: it delivers dropped files with
+  paths for imports, `shell/tauri.ts listenFileDrop`) leaves WebView2 without HTML5 drag events inside the page, so the existing drop
+  sites (suite tabs, Generate reference slots, Animate slots and beats, the Edit stage and its empty state) and the new ones (Places
+  rows, panes, pages) all register with one manager; `carry` hands a page's own item drag over when the pointer leaves the page.
+- **Frame:** `SuiteDef.wideStrip` puts the Catalogue strip across panel, stage and inspector; one rail tab (Places); no panel foot.
+- **Catalogue:** Places (Unprocessed, Library, the Album tree with counts / drop targets / menus, Trash with Empty trash); the
+  fixed-slot strip (place or breadcrumb · search + filter chips + "+ Filter" + clear · count · sort · selection chip · compare tray ·
+  Split · Import split button · zoom, page zoom + Fit on a page; loupe / compare / lineage reduce it to Back); filters as chips
+  (`filters.ts`: state incl. unjudged, type, source, model, rating, date presets + range, tags, aspect, derivations, batch via "Show this
+  batch", lineage); group-by retired in the Catalogue (store key `loom2.catalogue.v2`, opens on Unprocessed); Settings · Catalogue
+  (thumbnail fit / fill, tile caption off by default); one-column Inspector (Judge, Tags always there — §10 finding 1 —, Location with
+  breadcrumb / Move to / Back to Unprocessed / Duplicate, Actions + More, Lineage path, Prompt and Details folded, ids only in Details;
+  bulk version with Group these; a card version for a selected group); lineage view (tree layout, edge kinds, each card's location;
+  ⤷ badge, `L`, menus); split Stage (single / stacked / side by side, `split.ts`, two stores, the strip / Places / Inspector / commands
+  follow the active pane, pane headers and menus, Unprocessed / Trash panes take drops); album pages (`PageView.tsx`: free move with
+  live preview, resize handle, marquee, wheel / Ctrl+wheel / middle- or Space-drag, Ctrl+G / Ctrl+Shift+G, Del → Unprocessed with Undo,
+  arrows nudge, Ctrl+Z layout undo, Ctrl+drag duplicates, cards with a cover fan, filters highlight instead of hiding, "Use as cover").
+  New commands: duplicate (Ctrl+D), show this batch, back to Unprocessed, import, show lineage; Empty trash from a menu asks and runs
+  (§10 finding 2); the loupe's pin is the command (finding 6). Deep links `place=`, `split=`, `place2=`, `select=`, `lineage=`.
+- **Checks:** `tsc -b` clean, `vite build` ok, oxlint: no new warnings beyond the patterns the codebase already carries. Headless Edge
+  screenshots (dark and light) of Unprocessed, Library, a group page, Trash, the loupe, the Inspector, the lineage view, stacked and
+  side-by-side splits and the Album page; no console errors. Interaction run over CDP with real pointer and key input against a live
+  orchestrator (`scratch cat_interact.py`): tile → page, move on the page + Ctrl+Z, a page photo carried onto a Places row,
+  click + Ctrl+click + Ctrl+G (dialog) → group and card + tree row, Del → Unprocessed + Undo toast, tile → group row, tile → Trash,
+  Ctrl+drag duplicate, double-click card → its page, breadcrumb back — **17/17**; tile → Generate tab (reference) and → Edit tab
+  (document) pass. Not run: the desktop app itself (OS file drop into the grid, pointer drags in WebView2), Generate's results with
+  the shared Inspector beyond the screenshots.
+
+## 2026-10-10 09:33 — D34 and the theme committed: checks re-run on the tree as committed
+
+- **What goes in:** the 2026-10-07 19:48 theme pass and the 20:26 D34 Catalogue pass, unchanged since then — `loom2/groups.py`,
+  `catalogue.py` / `api.py` (groups, placements, duplicate, `date_preset`, `/collections*` routes removed), `frame/drag.ts`,
+  `frame/theme.ts`, the Catalogue rewrite (`Places`, `Panes`, `split.ts`, `PageView`, `LineageView`, `Inspector`, `CatalogueStrip`,
+  `filters.ts`, `albumStore.ts`), the touched frame / suite files, the re-exported `openapi.json` + `schema.d.ts`, the specs (07, 08, 13
+  D34) and `../proto01_design/01-catalogue-inventory.md`.
+- **Checks today:** `pytest orchestrator -q` **115 passed** in 38 s (104 before D34 + 11 in `test_groups_d34.py`); `npm run build`
+  (`tsc -b` + `vite build`) ok — only the existing chunk-size and ineffective-dynamic-import warnings.
+- **Still not run** (as on 2026-10-07): the desktop app itself — OS file drop into the grid and pointer drags inside WebView2 — and
+  Generate's results view with the shared Inspector beyond screenshots. First thing to check in the next session with the shell.
+- **Kept out of this commit:** `.docs/artcraft/` (committed separately) and `.docs/proto01_leonardo/` (a separate study, not part of D34).

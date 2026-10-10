@@ -46,7 +46,7 @@ and fixes what did not (02 §4b). Engine decisions: 05.
 | **Banner slot** | one sticky, dismissible banner at a time: queue paused, disk warning/hard-stop, weights missing (with Fetch), engine down (with Restart), GPU fallback (WebGL2) | never a modal; carries its action |
 | **Rail** (48 px) | suite-specific icon tabs that switch the Panel's content (e.g. Catalogue: Library · Filters · Collections; Edit: the toolbox) | tooltips show name + key; never carries semantics only |
 | **Panel** | the suite's input side: forms, trees, tool options, filters; the primary action button is pinned at its foot | collapsible to the Rail; resizable 280–480 px |
-| **Strip** | one row over the Stage: view switch, zoom/fit, filters relevant to the Stage, selection count + bulk actions | may wrap to two rows at narrow widths, never more |
+| **Strip** | one row over the Stage: view switch, zoom/fit, filters relevant to the Stage, selection count + bulk actions | may wrap to two rows at narrow widths, never more; a suite with `wideStrip` (the Catalogue, D34) spans panel, stage and inspector |
 | **Stage** | the suite's main surface (virtual grid, PixiJS canvas, video player) | owns pan/zoom gestures: Ctrl+wheel zoom, Space+drag pan, wheel scroll |
 | **Inspector** | details and actions for the current selection: tabs per suite | 300–420 px, collapsible; controls wrap, never overflow |
 | **Dock** | job queue: collapsed one-liner; expanded = Active (progress, preview, ETA, Cancel) · Queued (reorder, pause) · Recent (open result); in Animate it also hosts the timeline | expands to 160–320 px; `` ` `` toggles |
@@ -64,6 +64,11 @@ show progress and the preview JPEG.
 Single click selects; Ctrl adds; Shift ranges by visual order; marquee on empty space; arrows move by measured
 columns; Home/End; `Ctrl+A`; Esc clears. The Inspector always reflects the primary selection and shows "N
 selected" bulk actions when more than one.
+
+**Drag and drop (2026-10-07, D34):** assets and groups are dragged with pointer events through `frame/drag.ts` (`beginDrag`,
+`useDropTarget`, `registerDropTarget`, `carry`), not HTML5 drag and drop: inside Tauri, WebView2 with the OS file-drop handler on (it
+delivers dropped files with their paths, for imports) gives the page no HTML5 drag events. Every drop site (suite tabs, Generate's
+reference slots, Animate's slots, the Edit stage, Places rows, panes, album pages) registers with the manager.
 
 ### 3c. Cross-suite verbs (context menu, Inspector, and keys)
 **Operating rule (D32, 2026-10-05):** every action is reachable with the mouse — an icon/button where the user
@@ -126,7 +131,7 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 
 ## 6. Settings (modal, `Ctrl+,`)
 Models root + mounted ComfyUI tree; HF token; VRAM budget; engine flags (attention backend, pinned memory,
-restart-every-N); GPU renderer (auto / WebGL2); density; pen pressure curve (shown only when a pen is detected,
+restart-every-N); GPU renderer (auto / WebGL2); **theme** (Dark / Light pastel, 2026-10-07; also in the ☰ menu); density; pen pressure curve (shown only when a pen is detected,
 D19); "Apache-clean only"; **licence confirmations** (MiniMax H3 application filed, D17); project format
 defaults (target 16:9 1920×1080 @ 24 fps, default tier Draft, D18); log level.
 
@@ -135,6 +140,14 @@ Graphite neutrals (`#111 → #2a2a2a` surfaces), one accent for primary actions 
 — confirmed, D20), semantic colours for keep (green), reject (red), warning (amber),
 error (red). Typography: UI sans at 13 px base, 12 px minimum, monospace for seeds/ids/JSON. Icons: one
 consistent set (Lucide). Motion: 120 ms ease for panels, none for tiles.
+
+**Themes (2026-10-07):** two palettes on the same tokens in `frame.css` — **Dark** (above, the default) and **Light pastel**
+(warm off-white surfaces `#f3f0ea → #ffffff`, lavender accent `#6a56c9` with white text on it, soft green / rose state fills with dark
+text). Every colour in the app's CSS is a custom property (`--accent-fg`, `--media-bg`, `--deep`, `--overlay`, `--shadow*`, `--scrim`,
+`--keep-bg` / `--info-*` / `--reject-*` / `--open-*` tints, …); the editor canvas takes its background and transparency checker from
+`frame/theme.ts` and follows a switch live. Image content (brush colours, palette swatches, canvas overlays such as the transform box)
+does not change with the theme. Stored with the UI layout (`loom2.ui`), applied before the first render; `?theme=light|dark` is a
+deep link for checks. Small grey text (`--fg3`) is `#8c8c8c` in Dark (was `#747474`, under 4.5:1 on the panels).
 
 ## 8. Open questions
 - Whether the Models suite is a full tab (proposed) or a Settings page.

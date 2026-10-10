@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 AssetKind = Literal["image", "video", "mask", "document-render"]
 AssetState = Literal["none", "keep", "reject"]
 GroupMode = Literal["none", "batch", "lineage", "session", "model"]
-Folder = Literal["all", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"]
+Folder = Literal["all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"]
 Sort = Literal["created_desc", "created_asc", "rating_desc", "model", "size_desc"]
 
 
@@ -65,6 +65,7 @@ class AssetRecord(BaseModel):
     rating: int = 0
     tags: list[str] = Field(default_factory=list)
     collection_ids: list[str] = Field(default_factory=list)
+    duplicate_of: str | None = None             # D34: a copy made with Duplicate (not a lineage edge)
     has_document: bool = False
     thumb_status: Literal["pending", "done", "failed"] = "pending"
     trashed_at: str | None = None
@@ -90,12 +91,14 @@ class AssetQuery(BaseModel):
     min_px: int | None = None
     created_from: str | None = None
     created_to: str | None = None
+    date_preset: Literal["today", "last_session", "7d", "30d"] | None = None    # D34 Date chip, resolved here like B11's today
     search: str | None = None
     seed: int | None = None
     batch_id: str | None = None
     root_id: str | None = None
     session_id: str | None = None
     collection_id: str | None = None
+    group_id: str | None = None                 # D34: the assets placed on that group's page
     job_id: str | None = None
     sort: Sort = "created_desc"
     group: GroupMode = "none"
@@ -151,6 +154,7 @@ CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT, status TEXT, cr
 CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, name TEXT, kind TEXT, filter TEXT, created_at TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS collection_assets (collection_id TEXT, asset_id TEXT, added_at TEXT, PRIMARY KEY (collection_id, asset_id));
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS placements (asset_id TEXT PRIMARY KEY, group_id TEXT);
 """
 _FTS = "CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(id UNINDEXED, text, tokenize='unicode61 remove_diacritics 2')"
 
@@ -397,7 +401,9 @@ class Catalogue:
         where, args = [], []
         trash = q.folder == "trash"
         where.append("trashed_at IS NOT NULL" if trash else "trashed_at IS NULL")
-        if q.folder == "today":
+        if q.folder == "unprocessed":                 # D34: not placed in any group
+            where.append("id NOT IN (SELECT asset_id FROM placements)")
+        elif q.folder == "today":
             # B11: the user's local day, in the UTC ISO form created_at uses (an EU morning's day starts at 22:00 Z the evening before)
             local_midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
             where.append("created_at >= ?"); args.append(local_midnight.astimezone(timezone.utc).isoformat(timespec="seconds"))
@@ -440,6 +446,12 @@ class Catalogue:
             where.append("aspect BETWEEN 0.95 AND 1.05")
         if q.min_px:
             where.append("(w * h) >= ?"); args.append(q.min_px)
+        if q.date_preset in ("today", "7d", "30d"):
+            days = {"today": 0, "7d": 6, "30d": 29}[q.date_preset]
+            start = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days)
+            where.append("created_at >= ?"); args.append(start.astimezone(timezone.utc).isoformat(timespec="seconds"))
+        elif q.date_preset == "last_session":
+            where.append("session_id = ?"); args.append(self.last_session_id() or "")
         if q.created_from:
             where.append("created_at >= ?"); args.append(q.created_from)
         if q.created_to:
@@ -449,6 +461,8 @@ class Catalogue:
         for col, val in (("batch_id", q.batch_id), ("root_id", q.root_id), ("session_id", q.session_id), ("job_id", q.job_id)):
             if val:
                 where.append(f"{col} = ?"); args.append(val)
+        if q.group_id:
+            where.append("id IN (SELECT asset_id FROM placements WHERE group_id = ?)"); args.append(q.group_id)
         if q.collection_id:
             where.append("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)"); args.append(q.collection_id)
         if q.group_by and q.group_by != "none" and q.group_key is not None:
@@ -518,7 +532,7 @@ class Catalogue:
 
     def counts(self) -> dict[str, int]:
         out: dict[str, int] = {}
-        for folder in ("all", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"):
+        for folder in ("all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"):
             where, args = self._where(AssetQuery(folder=folder))  # type: ignore[arg-type]
             with self._lock:
                 out[folder] = self._db.execute(f"SELECT COUNT(*) FROM assets WHERE {where}", args).fetchone()[0]
@@ -620,8 +634,41 @@ class Catalogue:
             self._db.execute("DELETE FROM assets WHERE id=?", (rec.id,))
             self._db.execute("DELETE FROM lineage WHERE from_id=? OR to_id=?", (rec.id, rec.id))
             self._db.execute("DELETE FROM collection_assets WHERE asset_id=?", (rec.id,))
+            self._db.execute("DELETE FROM placements WHERE asset_id=?", (rec.id,))
             if self.fts:
                 self._db.execute("DELETE FROM assets_fts WHERE id=?", (rec.id,))
+            self._db.commit()
+
+    def duplicate(self, asset_id: str) -> AssetRecord | None:
+        """D34: a second, independent item of the same picture — its own id and file (copied), the same prompt, parameters,
+        tags and judgement, `duplicate_of` set; no lineage edge (lineage is about derivations). Thumbnails are copied."""
+        rec = self.get(asset_id)
+        if rec is None or rec.trashed_at is not None or not self.abs_path(rec).is_file():
+            return None
+        src = self.abs_path(rec)
+        nid = new_id("ast")
+        dest = self.ws.asset_path(nid, src.suffix.lower().lstrip(".") or "bin", datetime.now())
+        atomic_copy(src, dest)
+        data = rec.model_dump()
+        data.update(id=nid, path=dest.relative_to(self.ws.path).as_posix(), created_at=utc_now(), parents=[], root_id=nid, lineage_kind=None,
+                    duplicate_of=rec.id, collection_ids=[], has_document=False, session_id=self.session_id)
+        dup = AssetRecord.model_validate(data)
+        thumbs = [(self.ws.thumb_path(rec.id, s), self.ws.thumb_path(nid, s)) for s in self.thumb_sizes]
+        for a, b in thumbs:
+            if a.is_file():
+                atomic_copy(a, b)
+        dup.thumb_status = "done" if all(b.is_file() for _, b in thumbs) else "pending"
+        atomic_write_json(self.manifest_path(dup), dup.model_dump())
+        self._index(dup)
+        return dup
+
+    # ---- placements (D34; the group files are the truth, see groups.py) -----------------------------
+    def set_placements(self, mapping: dict[str, str]) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._db.execute("DELETE FROM placements")
+            self._db.executemany("INSERT INTO placements VALUES (?,?)", list(mapping.items()))
             self._db.commit()
 
     # ---- lineage ----------------------------------------------------------------------------------

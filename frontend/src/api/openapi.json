@@ -376,6 +376,7 @@
       "schema": {
        "enum": [
         "all",
+        "unprocessed",
         "today",
         "last_session",
         "images",
@@ -696,6 +697,22 @@
         }
        ],
        "title": "Collection Id"
+      }
+     },
+     {
+      "name": "group_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Group Id"
       }
      },
      {
@@ -850,6 +867,7 @@
       "schema": {
        "enum": [
         "all",
+        "unprocessed",
         "today",
         "last_session",
         "images",
@@ -1170,6 +1188,22 @@
         }
        ],
        "title": "Collection Id"
+      }
+     },
+     {
+      "name": "group_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Group Id"
       }
      },
      {
@@ -1507,6 +1541,455 @@
       }
      }
     ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/tree": {
+   "get": {
+    "summary": "Groups Tree",
+    "operationId": "groups_tree_groups_tree_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/where": {
+   "get": {
+    "summary": "Groups Where",
+    "operationId": "groups_where_groups_where_get",
+    "parameters": [
+     {
+      "name": "ids",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "title": "Ids"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups": {
+   "post": {
+    "summary": "Groups Create",
+    "operationId": "groups_create_groups_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/move": {
+   "post": {
+    "summary": "Groups Move",
+    "operationId": "groups_move_groups_move_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupMove"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{gid}": {
+   "get": {
+    "summary": "Groups Page",
+    "operationId": "groups_page_groups__gid__get",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "patch": {
+    "summary": "Groups Patch",
+    "operationId": "groups_patch_groups__gid__patch",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupPatch"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "summary": "Groups Delete",
+    "operationId": "groups_delete_groups__gid__delete",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{gid}/items": {
+   "patch": {
+    "summary": "Groups Layout",
+    "operationId": "groups_layout_groups__gid__items_patch",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupLayout"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{gid}/group": {
+   "post": {
+    "summary": "Groups Make",
+    "operationId": "groups_make_groups__gid__group_post",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupMake"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{gid}/ungroup": {
+   "post": {
+    "summary": "Groups Ungroup",
+    "operationId": "groups_ungroup_groups__gid__ungroup_post",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{gid}/duplicate": {
+   "post": {
+    "summary": "Groups Duplicate",
+    "operationId": "groups_duplicate_groups__gid__duplicate_post",
+    "parameters": [
+     {
+      "name": "gid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Gid"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/assets/duplicate": {
+   "post": {
+    "summary": "Assets Duplicate",
+    "operationId": "assets_duplicate_assets_duplicate_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IdList"
+       }
+      }
+     },
+     "required": true
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -2142,6 +2625,7 @@
    },
    "put": {
     "summary": "Documents Put",
+    "description": "Replace the stack. The reply lists raster layers / masks the server has no bytes for, so the editor uploads\nthem before `/save` even when it does not consider them dirty (B15: delete \u00b7 save \u00b7 undo \u00b7 save).",
     "operationId": "documents_put_documents__doc_id__put",
     "parameters": [
      {
@@ -2586,6 +3070,148 @@
     }
    }
   },
+  "/documents/{doc_id}/selection": {
+   "get": {
+    "summary": "Documents Selection Get",
+    "description": "The document's selection as raw grey bytes (the AI Select result lands here, M5 slice 2).",
+    "operationId": "documents_selection_get_documents__doc_id__selection_get",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "summary": "Documents Selection Put",
+    "description": "The editor's selection as raw grey bytes (w\u00b7h); an empty body clears it. The M5 edit jobs read it.",
+    "operationId": "documents_selection_put_documents__doc_id__selection_put",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     },
+     {
+      "name": "w",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "W"
+      }
+     },
+     {
+      "name": "h",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "H"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{doc_id}/ai": {
+   "post": {
+    "summary": "Documents Ai",
+    "description": "Queue an inpaint / refine / upscale job on this document (10 \u00a713); results come back as layers\n(`document.changed` events with `added`) or, for upscale, as a Catalogue asset too.",
+    "operationId": "documents_ai_documents__doc_id__ai_post",
+    "parameters": [
+     {
+      "name": "doc_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Doc Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/JobSubmit"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/documents/{doc_id}/close": {
    "post": {
     "summary": "Documents Close",
@@ -2601,6 +3227,239 @@
       }
      }
     ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips": {
+   "get": {
+    "summary": "Clips List",
+    "operationId": "clips_list_clips_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips/{clip_id}": {
+   "get": {
+    "summary": "Clip Get",
+    "operationId": "clip_get_clips__clip_id__get",
+    "parameters": [
+     {
+      "name": "clip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Clip Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips/{clip_id}/proxy.mp4": {
+   "get": {
+    "summary": "Clip Proxy",
+    "operationId": "clip_proxy_clips__clip_id__proxy_mp4_get",
+    "parameters": [
+     {
+      "name": "clip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Clip Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips/{clip_id}/frames/{name}": {
+   "get": {
+    "summary": "Clip Frame",
+    "description": "A master frame as PNG; with `size` a cached WebP thumbnail (longer side \u2264 size) for the filmstrip (C24).",
+    "operationId": "clip_frame_clips__clip_id__frames__name__get",
+    "parameters": [
+     {
+      "name": "clip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Clip Id"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Name"
+      }
+     },
+     {
+      "name": "size",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Size"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips/{clip_id}/identity": {
+   "post": {
+    "summary": "Clip Identity",
+    "description": "FaceSim advisory on demand (11 \u00a76): cosine similarity of the start frame's face across the clip.",
+    "operationId": "clip_identity_clips__clip_id__identity_post",
+    "parameters": [
+     {
+      "name": "clip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Clip Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/clips/{clip_id}/extract": {
+   "post": {
+    "summary": "Clip Extract",
+    "description": "Master frames \u2192 Catalogue images with `frame-extract` lineage from the clip's asset (11 \u00a76).",
+    "operationId": "clip_extract_clips__clip_id__extract_post",
+    "parameters": [
+     {
+      "name": "clip_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Clip Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ClipExtract"
+       }
+      }
+     }
+    },
     "responses": {
      "200": {
       "description": "Successful Response",
@@ -3445,6 +4304,17 @@
       "type": "array",
       "title": "Parents"
      },
+     "lineage_kind": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lineage Kind"
+     },
      "suite": {
       "type": "string",
       "title": "Suite",
@@ -3561,6 +4431,17 @@
       "type": "array",
       "title": "Collection Ids"
      },
+     "duplicate_of": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duplicate Of"
+     },
      "has_document": {
       "type": "boolean",
       "title": "Has Document",
@@ -3637,6 +4518,22 @@
      "changes"
     ],
     "title": "BulkPatch"
+   },
+   "ClipExtract": {
+    "properties": {
+     "frames": {
+      "items": {
+       "type": "integer"
+      },
+      "type": "array",
+      "title": "Frames"
+     }
+    },
+    "type": "object",
+    "required": [
+     "frames"
+    ],
+    "title": "ClipExtract"
    },
    "CollectionCreate": {
     "properties": {
@@ -3860,6 +4757,46 @@
     "type": "object",
     "title": "FlattenRequest"
    },
+   "GroupCreate": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "parent_id": {
+      "type": "string",
+      "title": "Parent Id",
+      "default": "album"
+     },
+     "x": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "X"
+     },
+     "y": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Y"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "title": "GroupCreate"
+   },
    "GroupHeader": {
     "properties": {
      "key": {
@@ -3920,6 +4857,125 @@
     ],
     "title": "GroupHeader"
    },
+   "GroupLayout": {
+    "properties": {
+     "items": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Items"
+     },
+     "revision": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Revision"
+     }
+    },
+    "type": "object",
+    "required": [
+     "items"
+    ],
+    "title": "GroupLayout"
+   },
+   "GroupMake": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/ItemRef"
+      },
+      "type": "array",
+      "title": "Items"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name",
+      "default": "Group"
+     }
+    },
+    "type": "object",
+    "required": [
+     "items"
+    ],
+    "title": "GroupMake"
+   },
+   "GroupMove": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/ItemRef"
+      },
+      "type": "array",
+      "title": "Items"
+     },
+     "to": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "To"
+     },
+     "positions": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Positions"
+     }
+    },
+    "type": "object",
+    "required": [
+     "items"
+    ],
+    "title": "GroupMove"
+   },
+   "GroupPatch": {
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "cover_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cover Id"
+     }
+    },
+    "type": "object",
+    "title": "GroupPatch"
+   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -3969,6 +5025,28 @@
      "paths"
     ],
     "title": "ImportRequest"
+   },
+   "ItemRef": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "asset",
+       "group"
+      ],
+      "title": "Kind"
+     },
+     "id": {
+      "type": "string",
+      "title": "Id"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind",
+     "id"
+    ],
+    "title": "ItemRef"
    },
    "JobSubmit": {
     "properties": {

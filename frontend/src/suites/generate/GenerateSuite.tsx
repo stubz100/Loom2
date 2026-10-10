@@ -15,6 +15,7 @@ import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from 
 import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPresets'
 import { useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import './generate.css'
+import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
 const ASPECTS: [string, number, number][] = [['16:9', 16, 9], ['1:1', 1, 1], ['3:2', 3, 2], ['2:3', 2, 3], ['9:16', 9, 16], ['21:9', 21, 9]]
 const snap16 = (n: number) => Math.max(64, Math.round(n / 16) * 16)
@@ -80,16 +81,11 @@ function RefSlots() {
   const p = g.panel
   const cap = useSession((s) => s.capabilities?.models[p.model_id])
   const max = cap?.max_refs ?? 4
-  const [over, setOver] = useState(false)
   const slots = Array.from({ length: Math.min(10, Math.max(max, p.refs.length)) }, (_, i) => p.refs[i])
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setOver(false)
-    const ids = (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean)
-    ids.slice(0, max - p.refs.length).forEach((id) => g.addRef(id))
-  }
+  const { ref: dropRef, over } = useDropTarget(onlyAssets, (d) => assetIds(d).slice(0, max - p.refs.length).forEach((id) => g.addRef(id)))
   return (
     <>
-      <div className="ref-slots" onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}>
+      <div ref={dropRef} className="ref-slots">
         {slots.map((r, i) => (
           <div key={i} className={`ref-slot${over ? ' over' : ''}`} title={r ? `reference image ${i + 1}` : `drop a Catalogue tile here, or select one and press R · reference ${i + 1}`}
             onContextMenu={(e) => { if (!r) return; showMenu(e, [

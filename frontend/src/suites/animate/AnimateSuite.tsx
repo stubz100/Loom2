@@ -2,7 +2,7 @@
 // Stage (Mediabunny player · filmstrip · compare, transport, timeline with in/out, S/E, beats and harvested pins, live
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
 import { Bookmark, Boxes, Clock, Film, Image as ImageIcon, Lock, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip, I2vModelCaps } from '../../api/types'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
@@ -14,21 +14,19 @@ import { playerMenu } from './animateCommands'
 import { fmtTime, MODEL_RULES, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
 import { Player } from './Player'
 import './animate.css'
+import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
 const an = () => useAnimate.getState()
 const EMPTY_PINS: { frame: number; asset_id: string }[] = []
-const dropIds = (e: DragEvent) => (e.dataTransfer.getData('text/loom2-assets') || '').split(',').filter(Boolean)
-const accept = (e: DragEvent) => { if (e.dataTransfer.types.includes('text/loom2-assets')) { e.preventDefault(); e.dataTransfer.dropEffect = 'link'; return true } return false }
 
 // ------------------------------------------------------------------ Panel · Inputs (11 §3a)
 function Slot({ which }: { which: 'start' | 'end' }) {
   const id = useAnimate((s) => s.panel[which])
   const asset = useAnimate((s) => (id ? s.assets[id] : undefined))
-  const [over, setOver] = useState(false)
   const set = (v: string | null) => (which === 'start' ? an().setStart(v) : an().setEnd(v))
+  const { ref, over } = useDropTarget(onlyAssets, (p) => { const ids = assetIds(p); set(ids[0]); if (which === 'start' && ids[1] && !an().panel.end) an().setEnd(ids[1]) })
   return (
-    <div className={`slot${over ? ' over' : ''}`} onDragOver={(e) => { if (accept(e)) setOver(true) }} onDragLeave={() => setOver(false)}
-      onDrop={(e) => { const ids = dropIds(e); if (!ids.length) return; e.preventDefault(); setOver(false); set(ids[0]); if (which === 'start' && ids[1] && !an().panel.end) an().setEnd(ids[1]) }}
+    <div ref={ref} className={`slot${over ? ' over' : ''}`}
       title={which === 'start' ? 'Start frame: drop a Catalogue tile, or Shift+A on a tile in the Catalogue' : 'End frame (optional): drop a tile, or Shift+Z in the Catalogue — enables first/last-frame mode'}>
       <span className="tag">{which === 'start' ? 'S' : 'E'}</span>
       {id ? <>
@@ -44,7 +42,7 @@ function InputsTab() {
   const p = useAnimate((s) => s.panel)
   const assets = useAnimate((s) => s.assets)
   const isLtx = p.model_id === 'ltx23-distilled-fp8'
-  const [beatOver, setBeatOver] = useState(false)
+  const { ref: beatRef, over: beatOver } = useDropTarget(onlyAssets, (d) => { const ids = assetIds(d); ids.forEach((id, k) => an().addBeat(id, Math.round(an().panel.frames * (k + 1) / (ids.length + 1)))) })
   return (
     <div className="anim-form">
       <div className="slots full"><Slot which="start" /><span className="slot-swap"><CommandButton id="anim.swap" /></span><Slot which="end" /></div>
@@ -70,8 +68,7 @@ function InputsTab() {
               <button className="quiet" title="Remove beat" aria-label="Remove beat" onClick={() => an().removeBeat(i)}><X size={14} /></button>
             </div>)}
           </div>
-          <div className={`slot${beatOver ? ' over' : ''}`} style={{ aspectRatio: 'auto', minHeight: 40, marginTop: 6 }} onDragOver={(e) => { if (accept(e)) setBeatOver(true) }} onDragLeave={() => setBeatOver(false)}
-            onDrop={(e) => { const ids = dropIds(e); e.preventDefault(); setBeatOver(false); ids.forEach((id, k) => an().addBeat(id, Math.round(p.frames * (k + 1) / (ids.length + 1)))) }}>
+          <div ref={beatRef} className={`slot${beatOver ? ' over' : ''}`} style={{ aspectRatio: 'auto', minHeight: 40, marginTop: 6 }}>
             drop frames here as mid-clip keyframes (strength 0.3–1.0, drag the marker on the timeline)
           </div>
         </div>

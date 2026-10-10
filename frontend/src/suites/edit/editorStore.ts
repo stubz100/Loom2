@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
-import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe } from '../../api/types'
+import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe, RefineEdgeParams } from '../../api/types'
 import { useSession } from '../../store/session'
 import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
 import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
@@ -68,6 +68,8 @@ export interface EditorState {
   lassoKind: 'freehand' | 'polygon'; lassoPoly: { x: number; y: number }[] | null
   wandContiguous: boolean; wandMerged: boolean; wandAA: boolean
   selModifyPx: number
+  /** D45: the user's Refine Edge settings over /capabilities.refine_edge.defaults (empty = the server's defaults, T8). */
+  refineEdge: Partial<RefineEdgeParams>
   zoom: number; pan: { x: number; y: number }; fitRequested: number; overlay: boolean; before: boolean; pixelGrid: boolean; quickMask: boolean
   history: HistoryEntry[]; future: HistoryEntry[]
   renderer: string; cursor: { x: number; y: number } | null
@@ -87,7 +89,7 @@ export interface EditorState {
   // AI Select (10 §4, A tool): the prompt collected on the canvas, and the selection the segment job writes on the server
   aiPrompt: { points: { x: number; y: number; label: 1 | 0 }[]; box: [number, number, number, number] | null }
   setAiPrompt: (p: Partial<EditorState['aiPrompt']>) => void
-  loadSelectionFromServer: () => Promise<void>
+  loadSelectionFromServer: (label?: string) => Promise<void>
   // free transform (10 §4): live numbers for the preview; applied by resampling the layer (and a linked mask)
   transform: Xform | null
   beginTransform: () => void
@@ -153,6 +155,9 @@ export interface EditorState {
   applySelectionShape: (shape: Uint8Array, mode: SelectionMode, label: string, featherPx?: number) => void
   selectLayerAlpha: (id: string) => void
   setLassoPoly: (pts: { x: number; y: number }[] | null) => void
+  setRefineEdge: (p: Partial<RefineEdgeParams> | null) => void
+  refineParams: () => RefineEdgeParams
+  refineSelection: () => Promise<void>
   closeLassoPoly: (mode?: SelectionMode) => void
   deselect: () => void
   modifySelection: (op: SelectionModify, px: number) => void
@@ -248,6 +253,16 @@ export const useEditor = create<EditorState>()(
         for (const [id, lp] of get().pixels) if (!nodes.has(id)) { lp.destroy(); get().pixels.delete(id) }
         for (const [id, lp] of get().masks) if (!maskIds.has(id)) { lp.destroy(); get().masks.delete(id) }
       }
+      /** The editor's selection → the server document (raw grey bytes; an empty body clears it). Jobs and Refine Edge read it there. */
+      const uploadSelection = async () => {
+        const { doc, selection } = get()
+        const b = useSession.getState().backend!
+        if (!doc) return
+        const body = selection ? (selection.toRaw() as BodyInit) : new Uint8Array(0)
+        const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
+          { method: 'PUT', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
+        if (!r0.ok) throw new Error(`selection upload ${r0.status}`)
+      }
       /** D43: the selection canvas an undo / redo restores into — a blank one when there is none (no selection = all zero). */
       const selectionFor = (e: HistoryEntry): LayerPixels | null => {
         const doc = get().doc
@@ -308,23 +323,19 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
-        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4,
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {},
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
         aiBatch: null, candidates: null, aiPrompt: { points: [], box: null },
 
         runAi: async (recipe, stage = false) => {
-          const { doc, selection } = get()
+          const { doc } = get()
           const s = useSession.getState()
           if (!doc) return
           try {
             if (!(await get().save())) return                               // the job reads the saved document
-            const b = s.backend!
-            const body = selection ? (selection.toRaw() as BodyInit) : new Uint8Array(0)
-            const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
-              { method: 'PUT', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
-            if (!r0.ok) throw new Error(`selection upload ${r0.status}`)
+            await uploadSelection()
             const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
             set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null })
@@ -339,7 +350,7 @@ export const useEditor = create<EditorState>()(
           if (d.added?.length) void get().mergeServerLayers(d.added, d.group ?? undefined, d.shift ?? undefined)
         },
         setAiPrompt: (p) => set({ aiPrompt: { ...get().aiPrompt, ...p }, revision: get().revision + 1 }),
-        loadSelectionFromServer: async () => {
+        loadSelectionFromServer: async (label = 'AI select') => {
           const doc = get().doc
           if (!doc) return
           try {
@@ -349,8 +360,8 @@ export const useEditor = create<EditorState>()(
             if (!res.ok) throw new Error(`selection ${res.status}`)
             const w = Number(res.headers.get('x-loom-width')), h = Number(res.headers.get('x-loom-height'))
             const sel = LayerPixels.fromRaw(w, h, new Uint8Array(await res.arrayBuffer()), 1)
-            get().editSelection('AI select', () => { get().selection?.destroy(); set({ selection: sel, quickMask: false }) })
-            useSession.getState().toast('AI Select: selection updated', 'success')
+            get().editSelection(label, () => { get().selection?.destroy(); set({ selection: sel, quickMask: false }) })
+            if (label === 'AI select') useSession.getState().toast('AI Select: selection updated', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
         },
         mergeServerLayers: async (added, group, shift) => {
@@ -935,6 +946,23 @@ export const useEditor = create<EditorState>()(
           get().applySelectionShape(shape, 'replace', `select "${n.name}" transparency`)
         },
         setLassoPoly: (pts) => set({ lassoPoly: pts, revision: get().revision + 1 }),
+        setRefineEdge: (p) => set({ refineEdge: p === null ? {} : { ...get().refineEdge, ...p } }),
+        refineParams: () => {
+          const d = useSession.getState().capabilities?.refine_edge?.defaults
+          return { radius: 10, smart_radius: true, smooth: 0, feather: 0, contrast: 0, shift_edge: 0, ...(d ?? {}), ...get().refineEdge } as RefineEdgeParams
+        },
+        refineSelection: async () => {
+          const { doc, selection } = get()
+          const s = useSession.getState()
+          if (!doc || !selection) { s.toast('Refine Edge needs a selection', 'info'); return }
+          try {
+            if (!(await get().save())) return                               // the guide is the server's exact composite
+            await uploadSelection()
+            const r = await unwrap(http.POST('/documents/{doc_id}/selection/refine', { params: { path: { doc_id: doc.id } }, body: get().refineParams() }))
+            await get().loadSelectionFromServer('refine edge')
+            s.toast(`Edge refined in ${(r.ms / 1000).toFixed(1)} s`, 'success')
+          } catch (e) { s.toast(`Refine Edge failed: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
+        },
         closeLassoPoly: (mode) => {
           const doc = get().doc, pts = get().lassoPoly
           set({ lassoPoly: null })
@@ -980,7 +1008,7 @@ export const useEditor = create<EditorState>()(
       }
     },
     { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets,
-      marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx }) as never },
+      marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx, refineEdge: s.refineEdge }) as never },
   ),
 )
 

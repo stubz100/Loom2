@@ -569,6 +569,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/selection/refine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Documents Selection Refine
+         * @description D45 Refine Edge: refine the document's selection against its exact composite (guided filter in the edge band, then smooth /
+         *     feather / contrast / shift edge); the result replaces the selection. Upload the editor's selection first (PUT …/selection).
+         */
+        post: operations["documents_selection_refine_documents__doc_id__selection_refine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/thumbnail": {
         parameters: {
             query?: never;
@@ -1599,6 +1620,7 @@ export interface components {
             };
             /** Recipes */
             recipes: string[];
+            refine_edge: components["schemas"]["RefineEdgeCaps"];
             /** Samplers */
             samplers: string[];
             /** Schedulers */
@@ -3803,6 +3825,67 @@ export interface components {
              */
             note?: string | null;
         };
+        /**
+         * RefineEdge
+         * @description D45 Refine Edge (Photoshop's Select and Mask units). Defaults = matting.DEFAULTS, published in /capabilities.refine_edge (T8).
+         */
+        RefineEdge: {
+            /**
+             * Contrast
+             * @default 0
+             */
+            contrast?: number;
+            /**
+             * Feather
+             * @default 0
+             */
+            feather?: number;
+            /**
+             * Radius
+             * @default 10
+             */
+            radius?: number;
+            /**
+             * Shift Edge
+             * @default 0
+             */
+            shift_edge?: number;
+            /**
+             * Smart Radius
+             * @default true
+             */
+            smart_radius?: boolean;
+            /**
+             * Smooth
+             * @default 0
+             */
+            smooth?: number;
+        };
+        /**
+         * RefineEdgeCaps
+         * @description D45: Refine Edge defaults (what the worker runs when a field is left out) and slider ranges [min, max, step].
+         */
+        RefineEdgeCaps: {
+            defaults: components["schemas"]["RefineEdge"];
+            /** Ranges */
+            ranges: {
+                [key: string]: number[];
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RefineReply
+         * @description D45: the refined selection is stored on the document; fetch it with GET /documents/{id}/selection.
+         */
+        RefineReply: {
+            /** Coverage */
+            coverage: number;
+            /** Ms */
+            ms: number;
+            /** Selection */
+            selection: number[];
+        };
         /** Released */
         Released: {
             /** Released */
@@ -3830,6 +3913,8 @@ export interface components {
              * @default
              */
             document_id?: string;
+            /** @default null */
+            edge_refine?: components["schemas"]["RefineEdge"] | null;
             /**
              * Expand
              * @default 0
@@ -5624,6 +5709,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SelectionReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    documents_selection_refine_documents__doc_id__selection_refine_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefineEdge"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefineReply"];
                 };
             };
             /** @description Validation Error */

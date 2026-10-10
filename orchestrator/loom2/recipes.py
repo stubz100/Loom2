@@ -136,6 +136,16 @@ class Upscale(BaseModel):
     te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
 
 
+class RefineEdge(BaseModel):
+    """D45 Refine Edge (Photoshop's Select and Mask units). Defaults = matting.DEFAULTS, published in /capabilities.refine_edge (T8)."""
+    radius: float = Field(10.0, ge=0, le=64)          # edge band, px (0 = no image-guided step)
+    smart_radius: bool = True                          # adapt the band to the transition width the image shows
+    smooth: float = Field(0.0, ge=0, le=100)
+    feather: float = Field(0.0, ge=0, le=64)           # px (Gaussian σ = feather / 2)
+    contrast: float = Field(0.0, ge=0, le=100)
+    shift_edge: float = Field(0.0, ge=-100, le=100)    # % of max(radius, 4 px)
+
+
 class Segment(BaseModel):
     """AI Select (10 §4, D7 masks): a mask from the visible composite becomes (part of) the document's selection.
     `subject` = BiRefNet matte through the core background-removal nodes; `text` / `points` / `box` = SAM 3
@@ -152,6 +162,7 @@ class Segment(BaseModel):
     op: Literal["replace", "add", "subtract", "intersect"] = "replace"   # how the mask joins the current selection
     expand: int = Field(0, ge=-256, le=256)       # grow (> 0) or shrink (< 0) the mask, px
     feather: int = Field(0, ge=0, le=256)
+    edge_refine: RefineEdge | None = None         # D45: refine the joined selection against the document composite afterwards
     max_size: int = Field(1024, ge=256, le=2048)  # engine image longer side (both models work at 1024)
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)

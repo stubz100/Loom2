@@ -207,8 +207,33 @@ function SelectionTab() {
       <label>modify</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['expand', 'contract', 'border', 'smooth', 'feather'].map((op) => <CommandButton key={op} id={`edit.sel.${op}`} text label={op} />)}</div>
       <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
       <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.mask.fromSelection', 'edit.mask.load', 'edit.sel.crop'].map((id) => <CommandButton key={id} id={id} text />)}</div>
+      <RefineEdgeControls />
       <span className="hint full">expand / contract grow round by the amount; border makes a band that wide around the edge; smooth removes specks and jaggies; feather softens with Photoshop's radius. Every change, and every selection tool, is one undo step.</span>
     </div>
+  )
+}
+
+/** D45 Refine Edge: settings over /capabilities.refine_edge (ranges and defaults from the server, T8); one undo step per run. */
+function RefineEdgeControls() {
+  const caps = useSession((s) => s.capabilities?.refine_edge)
+  useEditor((s) => s.refineEdge)                                         // re-render when a setting changes
+  const p = ed().refineParams()
+  const range = (k: string, d: [number, number, number]) => (caps?.ranges?.[k] as [number, number, number] | undefined) ?? d
+  const row = (k: 'radius' | 'smooth' | 'feather' | 'contrast' | 'shift_edge', label: string, d: [number, number, number], unit: string) => {
+    const [min, max, step] = range(k, d)
+    return <Slider key={k} label={label} value={p[k] ?? 0} min={min} max={max} step={step} fmt={(v) => `${v}${unit}`} onChange={(v) => ed().setRefineEdge({ [k]: v })} />
+  }
+  return (
+    <>
+      <h4 className="sect full">refine edge</h4>
+      {row('radius', 'radius', [0, 64, 0.5], ' px')}
+      <label /><label className="chk" title="adapt the band to the edge's softness: hard edges stay hard, hair gets a wide band"><input type="checkbox" checked={!!p.smart_radius} onChange={(e) => ed().setRefineEdge({ smart_radius: e.target.checked })} /> smart radius</label>
+      {row('smooth', 'smooth', [0, 100, 1], '')}
+      {row('feather', 'feather', [0, 64, 0.5], ' px')}
+      {row('contrast', 'contrast', [0, 100, 1], ' %')}
+      {row('shift_edge', 'shift edge', [-100, 100, 1], ' %')}
+      <label /><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><CommandButton id="edit.sel.refine" text /><button className="quiet" onClick={() => ed().setRefineEdge(null)} title="the server's defaults">reset</button></div>
+    </>
   )
 }
 
@@ -229,7 +254,7 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
     : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
     : sam && p.selMode === 'box' && !aiPrompt.box ? 'drag a box on the canvas' : null
   const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: sam ? 'sam3' : 'birefnet', mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
-    threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, seeds: [0] }, stage)
+    threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, edge_refine: p.selRefine ? ed().refineParams() : null, seeds: [0] }, stage)
   return (
     <div className="tool-opts">
       <label>model</label><div className="segmented"><button className={!sam ? 'active' : ''} onClick={() => setP({ selModel: 'birefnet', selMode: 'subject' })}>Subject · BiRefNet</button>{!open && <button className={sam ? 'active' : ''} onClick={() => setP({ selModel: 'sam3', selMode: p.selMode === 'subject' ? 'text' : p.selMode })}>SAM 3</button>}</div>
@@ -243,6 +268,7 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
       <label>combine</label><div className="segmented">{(['replace', 'add', 'subtract', 'intersect'] as const).map((m) => <button key={m} className={p.selOp === m ? 'active' : ''} onClick={() => setP({ selOp: m })}>{m}</button>)}</div>
       <Slider label="expand" value={p.selExpand} min={-64} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ selExpand: v })} />
       <Slider label="feather" value={p.selFeather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ selFeather: v })} />
+      <label /><label className="chk" title="soft, image-aware edges after the mask joins the selection — the Selection panel's Refine edge settings (D45)"><input type="checkbox" checked={p.selRefine} onChange={(e) => setP({ selRefine: e.target.checked })} /> refine edge</label>
       <label /><div style={{ display: 'flex', gap: 6 }}><button className="primary" disabled={!!reason} onClick={() => run(false)} title="AI Select">Select ▶</button>{!compact && <button disabled={!!reason} onClick={() => run(true)}>Stage</button>}</div>
       {reason && <span className="hint full">{reason}</span>}
       <span className="hint full">{sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'}</span>

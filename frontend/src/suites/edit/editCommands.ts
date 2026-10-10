@@ -56,6 +56,7 @@ registerCommands([
     id: `edit.sel.${op}`, scope: 'edit' as const, label: `${op[0].toUpperCase()}${op.slice(1)} selection`, placement: ['panel', 'context'] as ['panel', 'context'], when: hasSel,
     hint: 'by the amount set in the Selection panel', run: () => { const st = ed(); st.modifySelection(op, st.selModifyPx) },
   })),
+  { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: hasSel, hint: 'soft, image-aware edges with the Selection panel\'s settings (D45)', run: () => void ed().refineSelection() },
   { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
   { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
   { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
@@ -125,7 +126,7 @@ export function canvasMenu(): MenuItem[] {
   const st = ed()
   const px = st.selModifyPx
   const modify: MenuItem[] = (['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({ cmd: `edit.sel.${op}`, label: `${op[0].toUpperCase()}${op.slice(1)} by ${px} px` }))
-  const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
+  const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.refine' }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
   const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
   const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { label: 'Pixel grid', checked: st.pixelGrid, run: () => st.setView({ pixelGrid: !st.pixelGrid }) }, { label: 'Mask overlay', keys: 'Alt+\\', checked: st.overlay, run: () => st.setView({ overlay: !st.overlay }) }]
   const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.compare' }, { cmd: 'edit.close' }]

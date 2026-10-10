@@ -22,6 +22,7 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `catalogue.py` | `AssetRecord` sidecar manifests + the SQLite index (`catalogue.sqlite`, FTS5), ingest, thumbnails, lineage, trash, rebuild |
 | `groups.py` | D34 album: one JSON per group under `groups/`, one placement per item, revision → 409 |
 | `documents.py` / `compose.py` / `edit_ai.py` | layered documents (ORA), the exact numpy compositor, AI region maths |
+| `maskops.py` / `matting.py` | bounded exact EDT, round expand / contract (D44); Refine Edge — guided filter, smart radius, post steps (D45) |
 | `clips.py` | clip masters (PNG sequence) + GOP-6 proxies |
 | `workspace.py` / `config.py` | project tree, `ProjectFormat`; app state `app.json`, `Settings`, the token |
 | `events.py` | `EventHub`: WebSocket fan-out with seq numbers, 200-frame replay, binary previews |

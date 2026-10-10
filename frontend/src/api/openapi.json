@@ -787,6 +787,9 @@
             "title": "Recipes",
             "type": "array"
           },
+          "refine_edge": {
+            "$ref": "#/components/schemas/RefineEdgeCaps"
+          },
           "samplers": {
             "items": {
               "type": "string"
@@ -867,7 +870,8 @@
           "te_devices",
           "te_alternates",
           "advanced",
-          "tiers"
+          "tiers",
+          "refine_edge"
         ],
         "title": "Capabilities",
         "type": "object"
@@ -6086,6 +6090,105 @@
         "title": "RefImage",
         "type": "object"
       },
+      "RefineEdge": {
+        "description": "D45 Refine Edge (Photoshop's Select and Mask units). Defaults = matting.DEFAULTS, published in /capabilities.refine_edge (T8).",
+        "properties": {
+          "contrast": {
+            "default": 0.0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Contrast",
+            "type": "number"
+          },
+          "feather": {
+            "default": 0.0,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Feather",
+            "type": "number"
+          },
+          "radius": {
+            "default": 10.0,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Radius",
+            "type": "number"
+          },
+          "shift_edge": {
+            "default": 0.0,
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "title": "Shift Edge",
+            "type": "number"
+          },
+          "smart_radius": {
+            "default": true,
+            "title": "Smart Radius",
+            "type": "boolean"
+          },
+          "smooth": {
+            "default": 0.0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Smooth",
+            "type": "number"
+          }
+        },
+        "title": "RefineEdge",
+        "type": "object"
+      },
+      "RefineEdgeCaps": {
+        "additionalProperties": true,
+        "description": "D45: Refine Edge defaults (what the worker runs when a field is left out) and slider ranges [min, max, step].",
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/RefineEdge"
+          },
+          "ranges": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Ranges",
+            "type": "object"
+          }
+        },
+        "required": [
+          "defaults",
+          "ranges"
+        ],
+        "title": "RefineEdgeCaps",
+        "type": "object"
+      },
+      "RefineReply": {
+        "description": "D45: the refined selection is stored on the document; fetch it with GET /documents/{id}/selection.",
+        "properties": {
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "ms": {
+            "title": "Ms",
+            "type": "integer"
+          },
+          "selection": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Selection",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selection",
+          "coverage",
+          "ms"
+        ],
+        "title": "RefineReply",
+        "type": "object"
+      },
       "Released": {
         "properties": {
           "released": {
@@ -6140,6 +6243,17 @@
             "default": "",
             "title": "Document Id",
             "type": "string"
+          },
+          "edge_refine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefineEdge"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "expand": {
             "default": 0,
@@ -9903,6 +10017,59 @@
           }
         },
         "summary": "Documents Selection Put",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{doc_id}/selection/refine": {
+      "post": {
+        "description": "D45 Refine Edge: refine the document's selection against its exact composite (guided filter in the edge band, then smooth /\nfeather / contrast / shift edge); the result replaces the selection. Upload the editor's selection first (PUT …/selection).",
+        "operationId": "documents_selection_refine_documents__doc_id__selection_refine_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefineEdge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefineReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Documents Selection Refine",
         "tags": [
           "documents"
         ]

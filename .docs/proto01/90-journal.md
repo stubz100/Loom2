@@ -2121,3 +2121,29 @@ Inspector → lineage → split → pages.
   by 8 px each undone, marquee feather, fixed ratio 2:1 (384 × 192), polygon closed by its first corner, cancelled with ⊘, closed by a
   double-click, wand global ⊇ contiguous with an anti-aliased edge, wand on all layers, layer transparency (exactly 50 × 40 px), deselect
   and its undo: **all passed**; `tour` and `cmpdiag` all passed; build ok.
+
+## 2026-10-10 15:29 — D45 Refine Edge
+
+- `orchestrator/loom2/matting.py` (port of PhotoCraft `matting.rs`): colour-guided filter (He–Sun–Tang; box means by cumulative sums,
+  closed-form 3×3 inverse, vectorised), **smart radius** (luminance range ÷ max gradient through van Herk running max / min done with
+  block-wise accumulations — constant cost in the radius), edge band from the D44 EDT, then smooth / feather (σ = r / 2) / contrast /
+  shift edge in Photoshop's order; the guided step runs only on 256² tiles that touch the band.
+- `POST /documents/{id}/selection/refine` (body `RefineEdge`, ranges enforced, 400 without a selection) refines the document's selection
+  against its exact composite in a thread and reports coverage and ms; the Segment recipe gains `edge_refine` (AI Select runs it on the
+  joined selection); `/capabilities.refine_edge` publishes the defaults and slider ranges (typed `RefineEdgeCaps`). Route snapshot and
+  OpenAPI contract regenerated.
+- Editor: a **Refine edge** section in the Selection panel (sliders from the server's ranges; the store keeps only the user's overrides
+  over the server's defaults, Reset clears them — T8), `edit.sel.refine` in the panel and the canvas menu, a **refine edge** switch in AI
+  Select; the client saves, uploads the selection (one shared helper with `runAi`), calls the route and reloads the selection as one undo
+  step ("refine edge").
+- What it does and does not do (offline tests and probes): soft image transitions are transferred into the mask (a 12-px blur ramp
+  comes through monotone), a correctly placed hard edge stays nearly hard (234 / 0 at ±2 px), everything outside the band is untouched;
+  it does **not** pull a mask that is a few px off onto the true edge (the binary input makes the local model settle near α ≈ 0.6) and
+  does not pick out 1-px strands with a 10-px window — as in PhotoCraft. Smooth / contrast / shift edge are the levers for those.
+- **Rig (RX 9070 XT, temporary state and project, `scripts/refine_edge_rig.py`):** bench source at 1920×1080, BiRefNet subject 16.0 s
+  cold; the refine route on that matte 743 / 714 / 706 ms (defaults: radius 10, smart radius); BiRefNet with `edge_refine` 2.4 s warm;
+  soft edge pixels 19 173 → 26 754; crops in `engine/spikes/out/pe2/` — differences are subtle at this hair, whose BiRefNet matte is
+  already soft. Target "< 1 s at 1080p" met.
+- **Checks:** `test_matting_d45.py` (6: box mean and running extremes vs brute force, guided filter reproduces a linear guide, soft / hard /
+  untouched, post steps, defaults = worker, route + capabilities + 400 / 422) → **156 offline**; headed `selection` adds refine (0 → 15 841
+  soft px, one history step, undo exact): all passed; build ok.

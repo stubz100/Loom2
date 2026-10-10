@@ -16,6 +16,7 @@ from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .groups import GroupRecord
 from .queue import JobRecord
+from .recipes import RefineEdge
 from .roster import RosterEntry
 from .workspace import ProjectFormat
 
@@ -160,6 +161,12 @@ class AdvancedCaps(Open):
     flux2_schedule: str
 
 
+class RefineEdgeCaps(Open):
+    """D45: Refine Edge defaults (what the worker runs when a field is left out) and slider ranges [min, max, step]."""
+    defaults: RefineEdge
+    ranges: dict[str, list[float]]
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -174,6 +181,7 @@ class Capabilities(Open):
     te_alternates: dict[str, list[str]]
     advanced: AdvancedCaps
     tiers: dict[str, dict[str, tuple[int, int]]]
+    refine_edge: RefineEdgeCaps
 
 
 class MissingWeight(Open):
@@ -420,6 +428,13 @@ class CompareReply(Open):
 
 class SelectionReply(Out):
     selection: list[int] | None = None
+
+
+class RefineReply(Out):
+    """D45: the refined selection is stored on the document; fetch it with GET /documents/{id}/selection."""
+    selection: list[int]
+    coverage: float
+    ms: int
 
 
 class Closed(Out):

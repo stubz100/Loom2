@@ -58,6 +58,7 @@
  "POST /documents/{doc_id}/export",
  "POST /documents/{doc_id}/flatten",
  "POST /documents/{doc_id}/save",
+ "POST /documents/{doc_id}/selection/refine",
  "POST /engine/free",
  "POST /engine/restart",
  "POST /engine/start",

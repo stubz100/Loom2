@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,9 +18,11 @@ from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel
 
+from .. import matting
 from ..compose import srgb_delta
 from ..documents import Document
-from ..schemas import Closed, CompareReply, Deleted, DocList, DocumentPutReply, FlattenedToCatalogue, FlattenedToFile, JobsSubmitted, PixelsPut, SelectionReply
+from ..schemas import Closed, CompareReply, Deleted, DocList, DocumentPutReply, FlattenedToCatalogue, FlattenedToFile, JobsSubmitted, PixelsPut, RefineReply, SelectionReply
+from ..recipes import RefineEdge
 from .deps import Svc
 from .jobs import JobSubmit
 
@@ -217,6 +220,24 @@ async def documents_selection_put(svc: Svc, doc_id: str, request: Request, w: in
     od.doc.has_selection = True
     od.dirty = True
     return {"selection": [w, h]}
+
+
+@router.post("/documents/{doc_id}/selection/refine", response_model=RefineReply)
+async def documents_selection_refine(svc: Svc, doc_id: str, body: RefineEdge):
+    """D45 Refine Edge: refine the document's selection against its exact composite (guided filter in the edge band, then smooth /
+    feather / contrast / shift edge); the result replaces the selection. Upload the editor's selection first (PUT …/selection)."""
+    od = await asyncio.to_thread(svc.require_documents().get, doc_id)
+    if od.selection is None:
+        raise HTTPException(400, "no selection to refine")
+
+    def run() -> tuple[float, int]:
+        t0 = time.perf_counter()
+        od.selection = matting.refine(od.selection, od.flatten(), matting.params_from(body))
+        od.doc.has_selection = True
+        od.dirty = True
+        return float(od.selection.mean() / 255.0), int((time.perf_counter() - t0) * 1000)
+    coverage, ms = await asyncio.to_thread(run)
+    return {"selection": [od.doc.w, od.doc.h], "coverage": round(coverage, 4), "ms": ms}
 
 
 @router.post("/documents/{doc_id}/ai", response_model=JobsSubmitted)

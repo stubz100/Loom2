@@ -61,6 +61,7 @@ export type I2IRecipe = In['I2I']
 export type InpaintRecipe = In['Inpaint']
 export type UpscaleRecipe = In['Upscale']
 export type SegmentRecipe = In['Segment']
+export type RefineEdgeParams = In['RefineEdge']            // D45
 export type I2VRecipe = In['I2V']
 export type DocumentRecipe = InpaintRecipe | I2IRecipe | UpscaleRecipe | SegmentRecipe
 

@@ -108,6 +108,12 @@ transform; feather is a Gaussian with Photoshop's radius, σ = r / 2), select la
 invert (`Ctrl+Shift+I`), select all/none; grow/shrink similar is not built. **Every selection change is one undo step** (D43, also
 deselect and AI Select results). The selection's value is red × alpha of its canvas, so soft and anti-aliased edges survive.
 Measured 2026-10-10 on a 4K selection: expand 16 px 0.30 s, contract 0.27 s, border 0.53 s, smooth 0.10 s, feather 0.2 s at any radius.
+**Refine edge** (D45): radius (edge band), smart radius, smooth, feather, contrast, shift edge — defaults and ranges from
+`/capabilities.refine_edge`, the panel keeps only the user's changes (Reset = the server's defaults). Runs on the server against the
+document's exact composite (`POST /documents/{id}/selection/refine`; guided filter in the edge band, then Photoshop's post steps) and
+lands as one undo step; AI Select can run it on its result (**refine edge** switch). It gives soft transitions where the image is soft
+(blur, fur) and keeps hard edges nearly hard; it does not pull an offset mask onto the true edge or pick out 1-px strands. Rig
+2026-10-10: 0.71–0.74 s on a 1080p BiRefNet matte.
 **Save selection as mask on active layer**, **Load selection from layer mask**, **Quick Mask** (`Q`): paint the
 selection as a red overlay with the brush. The AI selectors (SAM 3, BiRefNet) live in the `A` tool and the AI panel's **Select** operation.
 

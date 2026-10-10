@@ -27,6 +27,7 @@ from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
 from .recipes import T2I, I2I, I2V, Inpaint, Segment, Upscale, parse_recipe, warm_group
 from .documents import DocumentStore, GroupLayer, RasterLayer
+from . import matting
 from .edit_ai import RegionPlan, assemble_layer, combine_selection, crop_inputs, dilate, layer_plan, mask_from_engine, outpaint_inputs, outpaint_plan, plan_region, whole_plan
 import numpy as np
 from PIL import Image
@@ -717,6 +718,8 @@ class JobQueue:
             def apply() -> float:
                 m = mask_from_engine(arr[..., 0], od.doc.w, od.doc.h, recipe.expand, recipe.feather)
                 od.selection = combine_selection(od.selection, m, recipe.op)
+                if recipe.edge_refine is not None:                       # D45: soft, image-aware edges against the visible composite
+                    od.selection = matting.refine(od.selection, od.flatten(), matting.params_from(recipe.edge_refine))
                 od.doc.has_selection = True
                 od.dirty = True
                 od.save()

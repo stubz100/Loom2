@@ -2215,3 +2215,8 @@ Inspector → lineage → split → pages.
   worse than today.
 - **Recommendation:** no-go for PC14 (pre-fill / quick Remove) and PC15 (spot healing on these kernels) at this PhotoCraft commit; the
   build route itself (PyO3 + maturin, abi3, 0.22 MB) is proven if a better kernel appears. Left for the author to decide (13).
+
+## 2026-10-10 17:37 — CI green on wave PE3
+
+- GitHub Actions run 38060336289 on `55542e0` (includes `1de73aa`, whose own run was superseded): offline tests + frontend for `full`
+  and `open` (with the Photoshop-oracle step) and both installers — all success. S1's go / no-go (PC14 / PC15) is still the author's.

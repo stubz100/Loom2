@@ -74,7 +74,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    preview is a `PerspectiveMesh` per moving raster over canvases captured at `beginTransform` (`transformPreview`), and apply
    (`bakeTransform`) resamples each target once from its current pixels — one history step with `swap` / `more` / `selSwap`.
 16. **`smartselect/pcwasm.wasm` is a committed build artifact (D59).** Never edit or rebuild it casually: `scripts/build_pcwasm.py` rebuilds it
-   from `frontend/wasm/pcwasm` against `../photocraft` at the pinned commit and records the SHA-256 that CI checks. WebAssembly needs
+   from `frontend/wasm/pcwasm` against the PhotoCraft checkout beside this repository at the pinned commit and records the SHA-256 that CI checks. WebAssembly needs
    `'wasm-unsafe-eval'` in the Tauri CSP (`csp_check.py` probes the Worker under the production policy).
 
 ## Renderer selection

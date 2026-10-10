@@ -5,7 +5,7 @@
 // marquee, lasso, wand, fill, eyedropper).
 import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useSession } from '../../store/session'
 import { CANVAS_COLOURS } from '../../frame/theme'
 import { showMenu } from '../../frame/ContextMenu'
@@ -60,6 +60,9 @@ function outlineSegments(sel: LayerPixels): number[] {
 }
 
 type Pt = { x: number; y: number }
+/** D55: the pointer event's modifiers OR'ed with the strip's latched ⇧ / Ctrl / Alt (PhotoCraft sticky_mods; canvas tools only). */
+type Mods = { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }
+const mods = (e: Mods): Mods => { const l = useEditor.getState().latched; return { shiftKey: e.shiftKey || l.shift, altKey: e.altKey || l.alt, ctrlKey: e.ctrlKey || l.ctrl, metaKey: e.metaKey } }
 /** D51: where the last stroke ended (document coordinates) and on which target — Shift-click continues from it. */
 let lastPaint: { id: string; at: Pt } | null = null
 /** Overlay Graphics that live across scene rebuilds (cleared and redrawn in place); everything else in the overlay is rebuilt. */
@@ -106,7 +109,14 @@ export function EditorCanvas() {
     renderPending.current = requestAnimationFrame(run)
   }
   const cancelPendingRender = () => { if (renderPending.current) cancelAnimationFrame(renderPending.current); renderPending.current = 0 }
-  const doc = useEditor((s) => s.doc)
+  const docState = useEditor((s) => s.doc)
+  const blendPreview = useEditor((s) => s.blendPreview)
+  // D55: the blend dropdown's hover preview — the scene renders the hovered mode; the document itself is untouched
+  const doc = useMemo(() => {
+    if (!docState || !blendPreview) return docState
+    const patch = (ns: Node[]): Node[] => ns.map((n) => (n.id === blendPreview.id ? { ...n, blend: blendPreview.mode } : n.children ? { ...n, children: patch(n.children) } : n))
+    return { ...docState, layers: patch(docState.layers) }
+  }, [docState, blendPreview])
   const revision = useEditor((s) => s.revision)
   const fitRequested = useEditor((s) => s.fitRequested)
   const zoom = useEditor((s) => s.zoom)
@@ -680,17 +690,18 @@ export function EditorCanvas() {
         else drag = { kind: 'xrotate', start: p, last: p, t0: { ...t }, a0: Math.atan2(p.y - t.cy, p.x - t.cx) }
         return
       }
-      if (tool === 'zoom') { zoomAt(e, e.altKey ? 1 / 1.5 : 1.5); return }
+      const m = mods(e)
+      if (tool === 'zoom') { zoomAt(e, m.altKey ? 1 / 1.5 : 1.5); return }
       if (tool === 'eyedropper') { void pick(p); return }
       if (tool === 'brush' || tool === 'eraser') {
         // D51: Alt-click (or the armed eyedropper chip) picks the colour instead of painting
-        if (e.altKey || st.pickOnce) { if (st.pickOnce) st.setView({ pickOnce: false }); void pick(p); return }
+        if (m.altKey || st.pickOnce) { if (st.pickOnce) st.setView({ pickOnce: false }); void pick(p); return }
         const t = paintTarget()
         if (!t) return
         const erase = tool === 'eraser'
         const stroke = beginStroke(t, erase)
         const local = { x: p.x - t.offset.x, y: p.y - t.offset.y }
-        if (e.shiftKey && lastPaint && lastPaint.id === t.id) {           // D51: Shift-click — a straight line from the last point
+        if (m.shiftKey && lastPaint && lastPaint.id === t.id) {           // D51: Shift-click — a straight line from the last point
           line(stroke, { x: lastPaint.at.x - t.offset.x, y: lastPaint.at.y - t.offset.y }, local)
           endStroke(stroke, t, p)
           return
@@ -713,13 +724,13 @@ export function EditorCanvas() {
         // D44 polygonal lasso: each click adds a corner; clicking the first corner (or a double-click, ✓, Enter) closes it
         const poly = st.lassoPoly
         if (!poly) { st.setLassoPoly([p]); return }
-        if (poly.length >= 3 && Math.hypot(p.x - poly[0].x, p.y - poly[0].y) * st.zoom <= 8) { clearPreview(); st.closeLassoPoly(modeFor(e, st.selectionMode)); return }
+        if (poly.length >= 3 && Math.hypot(p.x - poly[0].x, p.y - poly[0].y) * st.zoom <= 8) { clearPreview(); st.closeLassoPoly(modeFor(m, st.selectionMode)); return }
         st.setLassoPoly([...poly, p]); previewPoly([...poly, p], p)
         return
       }
       if (tool === 'lasso') { drag = { kind: 'lasso', start: p, last: p, pts: [p] }; return }
-      if (tool === 'wand') { void wandAt(p, modeFor(e, st.selectionMode)); return }
-      if (tool === 'ai') { drag = { kind: 'aibox', start: p, last: p, alt: e.altKey }; return }           // click = point, drag = box (decided on up)
+      if (tool === 'wand') { void wandAt(p, modeFor(m, st.selectionMode)); return }
+      if (tool === 'ai') { drag = { kind: 'aibox', start: p, last: p, alt: m.altKey }; return }           // click = point, drag = box (decided on up)
       if (tool === 'fill') { if (st.fillMode === 'solid') { fillAt(p); return } drag = { kind: 'gradient', start: p, last: p }; return }
     }
     const onMove = (e: PointerEvent) => {
@@ -732,7 +743,7 @@ export function EditorCanvas() {
       if (drag.kind === 'xmove') { st.setTransform({ cx: drag.t0!.cx + p.x - drag.start.x, cy: drag.t0!.cy + p.y - drag.start.y }); return }
       if (drag.kind === 'xrotate') {
         let a = drag.t0!.rot + Math.atan2(p.y - drag.t0!.cy, p.x - drag.t0!.cx) - drag.a0!
-        if (e.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12)
+        if (mods(e).shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12)
         st.setTransform({ rot: a }); return
       }
       if (drag.kind === 'xscale') {
@@ -740,7 +751,7 @@ export function EditorCanvas() {
         const u = toLocal(t0, p)
         let sx = drag.hx ? u.x / (drag.hx * t0.w / 2) : t0.sx
         let sy = drag.hy ? u.y / (drag.hy * t0.h / 2) : t0.sy
-        if (e.shiftKey && drag.hx && drag.hy) { const s = (Math.abs(sx) + Math.abs(sy)) / 2; sx = Math.sign(sx) * s; sy = Math.sign(sy) * s }
+        if (mods(e).shiftKey && drag.hx && drag.hy) { const s = (Math.abs(sx) + Math.abs(sy)) / 2; sx = Math.sign(sx) * s; sy = Math.sign(sy) * s }
         st.setTransform({ sx: Math.abs(sx) < 0.01 ? 0.01 * Math.sign(sx || 1) : sx, sy: Math.abs(sy) < 0.01 ? 0.01 * Math.sign(sy || 1) : sy }); return
       }
       if (drag.kind === 'paint' && drag.stroke) {
@@ -795,8 +806,8 @@ export function EditorCanvas() {
         endStroke(drag.stroke, { id: drag.targetId!, kind: drag.targetKind! }, drag.line ? drag.last : drag.smoother?.brush ?? drag.last)
       }
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
-      if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(e, st.selectionMode))
-      if (drag.kind === 'lasso') commitLasso(drag.pts!, modeFor(e, st.selectionMode))
+      if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(mods(e), st.selectionMode))
+      if (drag.kind === 'lasso') commitLasso(drag.pts!, modeFor(mods(e), st.selectionMode))
       if (drag.kind === 'aibox') {
         const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
         if (moved < 4) {                                                   // a click: one SAM 3 point (Alt = exclude)
@@ -813,7 +824,7 @@ export function EditorCanvas() {
     const onDouble = (e: MouseEvent) => {
       const st = useEditor.getState()
       if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform()
-      else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(e, st.selectionMode)) }
+      else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(mods(e), st.selectionMode)) }
     }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
       const st = useEditor.getState()
@@ -825,7 +836,7 @@ export function EditorCanvas() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const st = useEditor.getState()
-      if (e.ctrlKey || e.metaKey || st.tool === 'zoom') zoomAt(e, Math.exp(-e.deltaY * 0.0015))
+      if (mods(e).ctrlKey || e.metaKey || st.tool === 'zoom') zoomAt(e, Math.exp(-e.deltaY * 0.0015))
       else st.setView({ pan: { x: st.pan.x - e.deltaX, y: st.pan.y - e.deltaY } })
     }
     const pick = async (p: Pt) => {

@@ -62,6 +62,7 @@ export interface HistoryEntry {
 }
 export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode' | 'maskView'
+  | 'latched' | 'blendPreview'
   | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx' | 'brushLine' | 'pickOnce'
 
 export interface EditorState {
@@ -70,6 +71,9 @@ export interface EditorState {
   // D54: the inactive colour pair (the image pair while a mask is the target, the mask pair otherwise) and which pair is live;
   // maskView 'gray' shows the active layer's mask alone
   otherColours: { color: string; background: string }; maskPairActive: boolean; maskView: 'off' | 'gray'
+  // D55: latched modifiers (the strip's ⇧ / Ctrl / Alt; canvas tools read them OR'ed with the keyboard, until clicked off) and the
+  // blend mode the dropdown is hovering (the canvas renders it; nothing is recorded)
+  latched: { shift: boolean; ctrl: boolean; alt: boolean }; blendPreview: { id: string; mode: string } | null
   tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: SelectionMode; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
   // D44: selection tool options — marquee feather and style, lasso kind (and the open polygon), wand switches, the modify amount
   marqueeFeather: number; marqueeStyle: 'normal' | 'ratio' | 'size'; marqueeW: number; marqueeH: number
@@ -363,6 +367,7 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         otherColours: { color: '#000000', background: '#ffffff' }, maskPairActive: false, maskView: 'off',
+        latched: { shift: false, ctrl: false, alt: false }, blendPreview: null,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
         marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,

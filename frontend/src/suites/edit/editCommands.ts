@@ -42,6 +42,11 @@ registerCommands([
       if (ed().editingMask && n.mask) { ed().removeMask(n.id); return }                     // D52: Delete follows the target — the mask while it is edited
       ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
       useSession.getState().toast(`Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === 'delete layer') s.undo() }) } },
+  // D55: latched modifiers — the strip's ⇧ / Ctrl / Alt modify every canvas gesture until clicked off
+  ...(['shift', 'ctrl', 'alt'] as const).map((k) => ({
+    id: `edit.latch.${k}`, scope: 'edit' as const, label: `Latch ${k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}`, placement: ['strip'] as ['strip'],
+    hint: 'stays on for every canvas gesture until clicked again', run: () => { const l = ed().latched; ed().setView({ latched: { ...l, [k]: !l[k] } }) },
+  })),
   // masks
   // D54 (PhotoCraft): Reveal All / Hide All / Reveal Selection / Hide Selection; the + box in the layer row picks by selection and Alt
   { id: 'edit.mask.add', scope: 'edit', label: 'Add mask', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask, hint: 'reveal all; Alt-click the + box in the row: hide all', run: () => ed().addMask(ed().activeId!, 'reveal') },
@@ -80,14 +85,14 @@ registerCommands([
   { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['panel', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink (D49)', run: () => ed().inkFromWhite() },
   { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: hasSel, hint: 'soft, image-aware edges with the Selection panel\'s settings (D45)', run: () => void ed().refineSelection() },
   { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
-  { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
-  { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
+  { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
+  { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'strip', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => activeRaster() || (ed().editingMask && !!active()?.mask), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
   // free transform (10 §4)
   { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => activeRaster() && !ed().transform, run: () => ed().beginTransform() },
-  { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
+  { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', alt: ['Ctrl+Enter'], placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },
   { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: activeRaster, run: () => ed().flipLayer('h') },
   { id: 'edit.layer.flipV', scope: 'edit', label: 'Flip vertical', icon: FlipVertical, placement: ['panel', 'context'], when: activeRaster, run: () => ed().flipLayer('v') },
@@ -143,6 +148,9 @@ export function layerMenu(): MenuItem[] {
   ]
 }
 const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]
+/** D55 menu audit (dev builds): the headed `kit` check builds every menu in every tool and state and checks each entry resolves. */
+if (import.meta.env.DEV) setTimeout(() => { (window as unknown as { __loom2EditMenus?: unknown }).__loom2EditMenus = { layerMenu, canvasMenu } })
+
 /** Right-click on the canvas: tool-aware. */
 export function canvasMenu(): MenuItem[] {
   const st = ed()

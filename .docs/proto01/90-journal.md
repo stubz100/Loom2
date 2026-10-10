@@ -2334,3 +2334,25 @@ Inspector → lineage → split → pages.
 
 - Run 38070065962 at 51b40fe: offline tests + frontend build for both variants (full, open) and both installers passed; the draft
   release job is skipped off tags.
+
+## 2026-10-10 19:29 — Wave PE5 opened (D55–D57 recorded); D55 mouse-first kit landed
+
+- **PhotoCraft read first** (subagent report on b37bff98: `workspace_ui.rs::sticky_mods`, `press_menu.rs`, `widgets.rs`
+  `popup_value_field` / `dropdown_wheel_hovered`, `blend_preview.rs`, the layers panel, Properties, `compose/adjust.rs` `curve_lut`).
+  Corrections to the plan: PhotoCraft's adjustment Curves are a **natural cubic spline** (flat outside the end points, clamped; each
+  channel's curve before the master; LUT 4096) — not monotone; D57's row now says so. Its latches stay on until clicked again and only
+  canvas tools read them; it has no Ctrl+Enter for transforms (loom2 adds it as planned).
+- **D55 landed:** strip latches ⇧ / Ctrl / Alt (`mods(e)` ORs them into every canvas gesture: Shift-click line, Alt-click pick, selection
+  add / subtract / intersect, Ctrl-wheel zoom, transform constraints); ✓ / ⊘ in the strip for the open polygon lasso too; Ctrl+Enter
+  applies a transform; every `MenuButton` is a press menu (frame `openPressMenu`); `widgets.tsx` `ValueField` (scrub 0.5 / px, 0.01 for
+  ranges ≤ 10, Shift ÷10; typed values and sums; ↑ ↓ from the nearest whole unit — PhotoCraft snaps to the step grid, which made Shift+↑
+  from 25 % give 40 %, so loom2 snaps to whole units: 55.4 + 1 = 56, 25 + 10 = 35; ▾ press-drag over a 160 px slider; one gesture = one
+  undo step) on opacity, fill, the six brush numbers and mask density / feather; `BlendSelect` (one mode per wheel notch ≈ 100 px of
+  deltaY — a browser notch, not egui's 40 pt; the hovered mode renders through `blendPreview` and is never recorded; a click is one step).
+- **Headed mode `kit`** (mouse events): latched Alt makes a brush click pick (#123456 → #617775, no history), stays on, clicks off;
+  press–drag–release on *Add adjustment ▾* adds Invert in one gesture; click-open-click chooses Levels; a press on the open button
+  closes it; scrubbing opacity 40 px left = −20 % in one step; ▾ drag +73 px = +50 % in one step; *100/4* Enter = 25 %; Shift+↑ = 35 %; a
+  wheel notch steps normal → dissolve in one step; hovering *multiply* previews with the document unchanged; a click chooses in one step;
+  Ctrl+Enter applies; the polygon ✓ shows in the strip; the menu audit over 12 tools and every layer finds 0 problems. masks, paint,
+  brush, cmpdiag, selection, render pass; tour passes (one run missed the PNG download, the rerun had it — a timing flake). 172 offline;
+  build clean; lint +1 (the `openPressMenu` export beside `showMenu`, same Fast Refresh note).

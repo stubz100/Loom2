@@ -10,6 +10,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
+import { BlendSelect, LatchButton, ValueField } from './widgets'
 import { EditorCanvas } from './EditorCanvas'
 import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
@@ -164,12 +165,12 @@ function BrushControls() {
   const set = (p: Partial<typeof b>) => ed().setBrush(p)
   return (
     <>
-      <Slider label="size" value={b.size} min={1} max={1024} num unit="px" onChange={(v) => set({ size: Math.round(v) })} />
-      <Slider label="hardness" value={b.hardness} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ hardness: v })} />
-      <Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ opacity: v })} />
-      <Slider label="flow" value={b.flow} min={0.01} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ flow: v })} />
-      <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ spacing: v })} />
-      <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ smoothing: v })} />
+      <ValueField label="size" value={b.size} min={1} max={1024} unit="px" onChange={(v) => set({ size: Math.max(1, Math.round(v)) })} />
+      <ValueField label="hardness" value={b.hardness} min={0} max={1} scale={100} unit="%" onChange={(v) => set({ hardness: v })} />
+      <ValueField label="opacity" value={b.opacity} min={0} max={1} scale={100} unit="%" onChange={(v) => set({ opacity: v })} />
+      <ValueField label="flow" value={b.flow} min={0.01} max={1} scale={100} unit="%" onChange={(v) => set({ flow: v })} />
+      <ValueField label="spacing" value={b.spacing} min={0.02} max={1} scale={100} unit="%" onChange={(v) => set({ spacing: v })} />
+      <ValueField label="smoothing" value={b.smoothing} min={0} max={1} scale={100} unit="%" onChange={(v) => set({ smoothing: v })} />
       <label /><span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><CommandButton id="edit.brush.line" text active={line} /> <CommandButton id="edit.brush.pick" text active={pickOnce} /></span>
       <span className="hint full">smoothing pulls the brush on a string (it catches up when you pause); Shift-click draws a straight line from the last stroke; Alt-click picks a colour</span>
     </>
@@ -497,12 +498,19 @@ function Strip() {
   const renderer = useEditor((s) => s.renderer)
   const rendererPref = useEditor((s) => s.rendererPref)
   const transforming = useEditor((s) => !!s.transform)
+  const polyOpen = useEditor((s) => !!s.lassoPoly)
+  const latched = useEditor((s) => s.latched)
   const [zt, setZt] = useState<string | null>(null)
   const apply = () => { if (zt !== null) { const v = parseFloat(zt); if (v > 0) ed().zoomTo(v / 100) } setZt(null) }
   return (
     <>
       <span>{doc ? `${doc.name}${dirty ? ' •' : ''} · ${doc.w}×${doc.h}` : 'Edit'}</span>
       {transforming && <><span style={{ color: 'var(--accent)' }}>free transform</span><CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /></>}
+      {polyOpen && <><span style={{ color: 'var(--accent)' }}>polygon</span><CommandRow ids={['edit.sel.polyClose', 'edit.sel.polyCancel']} /></>}
+      <span className="latches" title="Latched modifiers: each stays on for every canvas gesture until clicked again (no keyboard needed)">
+        {(['shift', 'ctrl', 'alt'] as const).map((k) => <LatchButton key={k} on={latched[k]} label={k === 'shift' ? '⇧' : k === 'ctrl' ? 'Ctrl' : 'Alt'}
+          title={`Latch ${k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}: canvas gestures act as if it were held, until clicked again`} onToggle={() => { markUsed(`edit.latch.${k}`); runCommand(`edit.latch.${k}`) }} />)}
+      </span>
       <CommandRow ids={['edit.undo', 'edit.redo', 'gap', 'edit.view.zoomOut']} />
       <input className="edit-strip-zoom" value={zt ?? String(Math.round(zoom * 100))} onChange={(e) => setZt(e.target.value)} onBlur={apply} onKeyDown={(e) => { if (e.key === 'Enter') apply() }} disabled={!doc} /><span style={{ marginLeft: -4 }}>%</span>
       <CommandRow ids={['edit.view.zoomIn', 'edit.view.fit']} />
@@ -591,9 +599,10 @@ function LayersTab() {
         {active.kind === 'raster' && <button className="quiet" onClick={() => { ed().setActive(active.id, false); ed().setView({ maskView: 'off' }) }}>Edit pixels instead</button>}</div>}
       {active && (
         <div className="tool-opts" style={{ marginTop: 10 }}>
-          <label>blend</label><select value={active.blend} onChange={(e) => ed().updateNode(active.id, { blend: e.target.value }, 'blend mode')}>{BLEND_MODES.map((m) => <option key={m}>{m}</option>)}</select>
-          <Slider label="opacity" value={active.opacity} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(active.id, { opacity: v })} onCommit={() => commit('opacity')} />
-          {active.kind === 'raster' && <Slider label="fill" value={active.fill ?? 1} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(active.id, { fill: v })} onCommit={() => commit('fill')} />}
+          <label>blend</label><BlendSelect value={active.blend} options={(active.kind === 'group' ? ['pass-through', ...BLEND_MODES] : BLEND_MODES).map((m) => ({ value: m, label: m.replace('-', ' ') }))}
+            onChoose={(m) => ed().updateNode(active.id, { blend: m }, 'blend mode')} onPreview={(m) => ed().setView({ blendPreview: m ? { id: active.id, mode: m } : null })} />
+          <ValueField label="opacity" value={active.opacity} min={0} max={1} scale={100} unit="%" onStart={start} onChange={(v) => ed().updateNode(active.id, { opacity: v })} onCommit={() => commit('opacity')} />
+          {active.kind === 'raster' && <ValueField label="fill" value={active.fill ?? 1} min={0} max={1} scale={100} unit="%" onStart={start} onChange={(v) => ed().updateNode(active.id, { fill: v })} onCommit={() => commit('fill')} />}
           {active.kind === 'group' && <><label>group</label><div className="segmented"><button className={active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: true }, 'group mode')}>pass-through</button><button className={!active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: false }, 'group mode')}>isolated</button></div></>}
           <label>clip</label><label className="chk"><input type="checkbox" checked={active.clip} onChange={(e) => ed().updateNode(active.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
           {active.mask && <MaskOptions n={active} />}
@@ -628,8 +637,8 @@ function MaskOptions({ n }: { n: Node }) {
         <label className="chk" title="a linked mask moves and transforms with the layer (the chain left of the mask thumbnail)"><input type="checkbox" checked={m.linked} onChange={() => ed().toggleMaskLink(n.id)} /> linked</label>
         {(n.kind === 'raster' ? ['edit.mask.apply', 'edit.mask.load', 'edit.mask.remove'] : ['edit.mask.load', 'edit.mask.remove']).map((id) => <CommandButton key={id} id={id} text />)}
       </div>
-      <Slider label="density" value={m.density ?? 1} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, density: v } })} onCommit={() => commit('mask density')} />
-      <Slider label="feather" value={m.feather ?? 0} min={0} max={250} step={0.5} fmt={(v) => `${v} px`} onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, feather: v } })} onCommit={() => commit('mask feather')} />
+      <ValueField label="density" value={m.density ?? 1} min={0} max={1} scale={100} unit="%" onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, density: v } })} onCommit={() => commit('mask density')} />
+      <ValueField label="feather" value={m.feather ?? 0} min={0} max={250} unit="px" onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, feather: v } })} onCommit={() => commit('mask feather')} />
     </>
   )
 }

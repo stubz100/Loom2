@@ -104,3 +104,26 @@
 
 /* D46: an OS file dragged over the canvas */
 .edit-canvas.file-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+/* D55: popup value field, blend dropdown, latched modifiers */
+.vfield { position: relative; display: inline-flex; align-items: center; height: 24px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg2, transparent); width: 96px; }
+.vfield.disabled { opacity: .5; }
+.vfield-num { flex: 1; min-width: 0; height: 22px; border: 0; background: transparent; padding: 0 2px 0 6px; font: 12px var(--mono, ui-monospace, monospace); text-align: right; cursor: ew-resize; color: inherit; }
+.vfield-num:focus { cursor: text; outline: none; }
+.vfield:focus-within { border-color: var(--accent); }
+.vfield-unit { font-style: normal; color: var(--fg3); font-size: 11px; width: 16px; text-align: left; padding-left: 2px; }
+.vfield-arrow { width: 14px; height: 22px; padding: 0; border: 0; border-left: 1px solid var(--line); background: none; color: var(--fg3); font-size: 9px; cursor: pointer; }
+.vfield-arrow:hover { color: var(--fg); }
+.vfield-pop { position: absolute; right: 0; top: 26px; z-index: 30; height: 22px; padding: 2px 0; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.35); cursor: pointer; }
+.vfield-track { position: relative; margin: 8px 7px; height: 2px; background: var(--line2); }
+.vfield-knob { position: absolute; top: -5px; width: 10px; height: 12px; margin-left: -5px; border-radius: 2px; background: var(--accent); }
+.blend-select { position: relative; }
+.blend-btn { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; text-transform: capitalize; }
+.blend-btn .caret { font-size: 9px; color: var(--fg3); margin-left: 6px; }
+.blend-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; max-height: 320px; overflow-y: auto; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+.blend-opt { padding: 3px 8px; cursor: pointer; text-transform: capitalize; font-size: 12px; }
+.blend-opt:hover { background: var(--hover, rgba(255,255,255,.08)); }
+.blend-opt.current { color: var(--accent); }
+.latches { display: inline-flex; gap: 2px; }
+.latch { min-width: 30px; }
+.latch.active { background: var(--accent); color: #000; }

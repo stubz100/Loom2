@@ -327,6 +327,8 @@ spike S1 ran (journal) and recommends **no-go** for PC14 / PC15 — awaiting the
 density / feather, any node kind, apply / from transparency), D53 (partial texture uploads) landed; headed brush, paint, cmpdiag and
 tour pass. Next Edit waves: PE5 (mouse kit, layers panel, properties) and PE6 (transform, S2), at the author's choice relative to H2.
 
+**PE5 status 2026-10-10: open** (D55 mouse kit, D56 layers panel, D57 properties; in that order).
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

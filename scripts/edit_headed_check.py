@@ -7,6 +7,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      zoom, and a window resize must not break either (the 2026-10-06 render-loop regression)
   paint              B + drag paints a visible stroke on the layer; Add mask, E + drag hides a band of the layer
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
+  kit                D55: latched modifiers, press menus, popup value fields, the blend dropdown (wheel, hover preview), Ctrl+Enter,
+                     the polygon's ✓ / ⊘ in the strip and an audit of every Edit menu in every tool and state
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -36,7 +38,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -1337,6 +1339,147 @@ def main() -> int:
             cdp.ctrl_wheel(cx, cy, 1); time.sleep(1.0)
             zoom2 = cdp.eval(ZOOM_SEL)
             check(zoom2 != zoom1, f"zoom keeps working after the resize: {zoom1} → {zoom2}")
+        elif mode == "kit":
+            # D55 mouse-first kit, by mouse events: latched modifiers, press menus, popup value fields, the blend dropdown, Ctrl+Enter,
+            # and an audit of every Edit menu (each entry resolves to a registered command; separators only between groups)
+            S, C = STORE, "window.__loom2Commands"
+            hist = lambda: cdp.eval(f"{S}.history.length")  # noqa: E731
+
+            def centre(sel: str) -> tuple[float, float] | None:
+                r = cdp.eval(f"JSON.stringify((() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null; e.scrollIntoView({{ block: 'nearest' }}); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }})())")
+                v = json.loads(r) if r else None
+                return (v[0], v[1]) if v else None
+
+            def press(x: float, y: float, to: tuple[float, float] | None = None, steps: int = 8) -> None:
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y)
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", buttons=1, clickCount=1)
+                tx, ty = to or (x, y)
+                for i in range(1, steps + 1):
+                    cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x + (tx - x) * i / steps, y=y + (ty - y) * i / steps, button="left", buttons=1)
+                    time.sleep(0.02)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=tx, y=ty, button="left", buttons=0, clickCount=1)
+                time.sleep(0.4)
+
+            def item_centre(label: str) -> tuple[float, float] | None:
+                r = cdp.eval(f"JSON.stringify((() => {{ const e = [...document.querySelectorAll('.ctx-menu .item')].find((b) => b.textContent.trim().toLowerCase().startsWith({json.dumps(label)})); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }})())")
+                v = json.loads(r) if r else None
+                return (v[0], v[1]) if v else None
+
+            # latched modifiers: Alt latched → a brush click picks the colour under it (Alt-click), until the latch is clicked off
+            cdp.eval(f"{C}.runCommand('edit.tool.brush'); {S}.setBrush({{ color: '#123456' }}); 1"); time.sleep(0.2)
+            alt = centre(".latches .latch:nth-child(3)")
+            press(*alt)
+            check(cdp.eval(f"{S}.latched.alt") is True and bool(cdp.eval("!!document.querySelector('.latches .latch.active')")), "the strip's Alt latch turns on and shows it")
+            h0 = hist()
+            press(cx, cy)
+            check(cdp.eval(f"{S}.brush.color").lower() != "#123456" and hist() == h0, f"with Alt latched a brush click picks the colour instead of painting ({cdp.eval(f'{S}.brush.color')})")
+            press(cx + 30, cy + 30)
+            check(cdp.eval(f"{S}.latched.alt") is True, "the latch stays on after the gesture (until clicked again)")
+            press(*alt)
+            check(cdp.eval(f"{S}.latched.alt") is False, "clicking the latch again releases it")
+            # press menu: press on Add adjustment, drag onto Invert, release
+            n0 = cdp.eval(f"{S}.doc.layers.length")
+            btn = centre('button[aria-label="Add adjustment"]')
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=btn[0], y=btn[1])
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=btn[0], y=btn[1], button="left", buttons=1, clickCount=1)
+            time.sleep(0.3)
+            inv = item_centre("invert")
+            if inv:
+                for i in range(1, 9):
+                    cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=btn[0] + (inv[0] - btn[0]) * i / 8, y=btn[1] + (inv[1] - btn[1]) * i / 8, button="left", buttons=1)
+                    time.sleep(0.02)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=inv[0], y=inv[1], button="left", buttons=0, clickCount=1)
+            else:
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=btn[0], y=btn[1], button="left", buttons=0, clickCount=1)
+            time.sleep(0.5)
+            top = json.loads(cdp.eval(f"JSON.stringify([{S}.doc.layers.length, {S}.doc.layers[0].kind, {S}.doc.layers[0].type, !!document.querySelector('.ctx-menu')])"))
+            check(inv is not None and top[0] == n0 + 1 and top[2] == "invert" and not top[3], f"press–drag–release on Add adjustment ▾ adds Invert in one gesture and closes the menu ({top})")
+            press(*btn)
+            open1 = cdp.eval("!!document.querySelector('.ctx-menu')")
+            lev = item_centre("levels")
+            if lev:
+                press(*lev)
+            check(open1 and cdp.eval(f"{S}.doc.layers[0].type") == "levels" and not cdp.eval("!!document.querySelector('.ctx-menu')"), "a plain click opens the press menu and leaves it open; a click on an entry chooses it")
+            press(*btn); press(*btn)
+            check(not cdp.eval("!!document.querySelector('.ctx-menu')"), "a press on the open menu's button closes it")
+            cdp.eval(f"{C}.runCommand('edit.layer.delete'); {C}.runCommand('edit.layer.delete'); {S}.setActive({S}.doc.layers[0].id); 1"); time.sleep(0.4)
+            # popup value field (Layers tab opacity): scrub, ▾ drag, typed sum, arrows — one history step per gesture
+            OP = '.layers ~ .tool-opts input.vfield-num[aria-label="opacity"]'
+            op = lambda: round(cdp.eval(f"{S}.doc.layers.find((n) => n.id === {S}.activeId).opacity"), 3)  # noqa: E731
+            num = centre(OP)
+            h0, o0 = hist(), op()
+            press(num[0], num[1], (num[0] - 40, num[1]))
+            o1 = op()
+            check(abs(o1 - max(0, o0 - 0.20)) < 0.011 and hist() == h0 + 1, f"scrubbing the opacity number 40 px left lowers it by 20 % in one step ({o0} → {o1}, history +{hist() - h0})")
+            arrow = centre('.layers ~ .tool-opts .vfield-arrow[aria-label="opacity slider"]')
+            h0 = hist()
+            press(arrow[0], arrow[1], (arrow[0] + 73, arrow[1]))
+            o2 = op()
+            check(abs(o2 - min(1, o1 + 0.5)) < 0.011 and hist() == h0 + 1 and not cdp.eval("!!document.querySelector('.vfield-pop')"), f"press-dragging the ▾ moves the value along the pop-up slider in one step and closes it ({o1} → {o2})")
+            press(*arrow)
+            check(bool(cdp.eval("!!document.querySelector('.vfield-pop')")), "a click on the ▾ opens the slider pop-up")
+            press(cx, canvas["y"] + 5)
+            press(*num)
+            cdp.call("Input.insertText", text="")
+            cdp.eval(f"(() => {{ const i = document.querySelector({json.dumps(OP)}); i.focus(); i.select(); return 1 }})()")
+            cdp.call("Input.insertText", text="100/4")
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+            time.sleep(0.3)
+            check(op() == 0.25, f"typing 100/4 and Enter sets 25 % ({op()})")
+            cdp.eval(f"document.querySelector({json.dumps(OP)}).focus(); 1")
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="ArrowUp", code="ArrowUp", windowsVirtualKeyCode=38, modifiers=8)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="ArrowUp", code="ArrowUp", windowsVirtualKeyCode=38, modifiers=8)
+            time.sleep(0.3)
+            check(op() == 0.35, f"Shift+↑ steps by 10 ({op()})")
+            cdp.eval("document.activeElement.blur(); 1")
+            # blend dropdown: the wheel steps, hovering previews (nothing recorded), a click chooses (one step)
+            bb = centre(".layers ~ .tool-opts .blend-btn")
+            blend = lambda: cdp.eval(f"{S}.doc.layers.find((n) => n.id === {S}.activeId).blend")  # noqa: E731
+            h0, b0 = hist(), blend()
+            cdp.call("Input.dispatchMouseEvent", type="mouseWheel", x=bb[0], y=bb[1], deltaX=0, deltaY=120)
+            time.sleep(0.4)
+            b1 = blend()
+            check(b1 != b0 and hist() == h0 + 1, f"a wheel notch over the blend button steps the mode, one history step ({b0} → {b1}, history +{hist() - h0})")
+            press(*bb)
+            mul = cdp.eval("JSON.stringify((() => { const e = [...document.querySelectorAll('.blend-opt')].find((o) => o.textContent === 'multiply'); const r = e.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2] })())")
+            mx, my = json.loads(mul)
+            h0 = hist()
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=mx, y=my); time.sleep(0.4)
+            prev = json.loads(cdp.eval(f"JSON.stringify([{S}.blendPreview && {S}.blendPreview.mode, {S}.doc.layers.find((n) => n.id === {S}.activeId).blend])"))
+            check(prev == ["multiply", b1] and hist() == h0, f"hovering an entry previews it on the canvas without changing the document ({prev})")
+            press(mx, my)
+            check(blend() == "multiply" and hist() == h0 + 1 and cdp.eval(f"{S}.blendPreview") is None, "a click chooses the mode in one step and ends the preview")
+            # Ctrl+Enter applies a free transform; the polygon lasso's ✓ / ⊘ sit in the strip
+            cdp.eval(f"{C}.runCommand('edit.transform'); 1"); time.sleep(0.3)
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13, modifiers=2)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13, modifiers=2)
+            time.sleep(0.5)
+            check(cdp.eval(f"{S}.transform") is None, "Ctrl+Enter applies the free transform")
+            cdp.eval(f"{S}.setTool('lasso'); {S}.setView({{ lassoKind: 'polygon' }}); {S}.setLassoPoly([{{ x: 10, y: 10 }}, {{ x: 60, y: 10 }}]); 1"); time.sleep(0.3)
+            check(bool(cdp.eval("!!document.querySelector('.panel-strip button[aria-label=\"Close polygon\"], button[aria-label=\"Close polygon\"]')")), "an open polygon shows its ✓ / ⊘ in the strip")
+            cdp.eval(f"{S}.setLassoPoly(null); {S}.setView({{ lassoKind: 'free' }}); {S}.setTool('brush'); 1")
+            # menu audit over every tool and state (D55, PhotoCraft context-menu contract rules 3 and 5)
+            audit = cdp.eval(f"""(() => {{
+              const M = window.__loom2EditMenus, R = {C}, s = {S}, bad = [];
+              const walk = (items, path) => {{
+                items.forEach((it, i) => {{
+                  if ('sep' in it && (i === 0 || i === items.length - 1 || 'sep' in items[i - 1])) bad.push(path + ' stray separator at ' + i);
+                  if ('cmd' in it && !R.command(it.cmd)) bad.push(path + ' unknown ' + it.cmd);
+                  if ('items' in it) {{ if (!it.items.length) bad.push(path + ' empty ' + it.label); walk(it.items, path + ' › ' + it.label) }}
+                }})
+              }};
+              const tools = ['move', 'marquee', 'lasso', 'wand', 'brush', 'eraser', 'fill', 'crop', 'zoom', 'hand', 'eyedropper', 'ai'];
+              for (const t of tools) {{ s.setTool && s.setTool(t); walk(M.canvasMenu(), 'canvas[' + t + ']') }}
+              s.setTool && s.setTool('brush');
+              const ids = []; const w = (xs) => xs.forEach((x) => {{ ids.push(x.id); if (x.children) w(x.children) }}); w(s.doc.layers);
+              for (const id of ids) {{ s.setActive(id); walk(M.layerMenu(), 'layer[' + id + ']') }}
+              return JSON.stringify(bad)
+            }})()""")
+            bad = json.loads(audit)
+            check(not bad, f"every Edit menu entry resolves and separators sit only between groups ({len(bad)} problems){''.join(chr(10) + '       ' + b for b in bad[:12])}")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":
             # D54: the author's workflow by mouse, judged on screenshots only (the extractor re-renders every pass and would hide a stale
             # stage) — add a mask, paint it with the brush, erase, swap colours, select the row, view the mask alone, hide all

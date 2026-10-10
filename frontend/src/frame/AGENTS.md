@@ -20,6 +20,9 @@ and Animate).
   `rail`, `dock`). The type makes a keyboard-only command impossible.
 - Render with `CommandButton.tsx` / `CommandRow` and menu items `cmdItem(id)`. Tooltips and menu entries show the key via `titleFor` /
   `keyLabel`; the help overlay (`HelpOverlay.tsx`, `?`) and the palette (`CommandPalette.tsx`, Ctrl+K) read the same registry.
+- `MenuButton` is a **press menu** (D55, PhotoCraft `press_menu.rs`): the press opens it, releasing that press over an entry chooses it,
+  releasing anywhere else leaves it open (a click then chooses); a press on the open menu's button closes it. `openPressMenu` in
+  `ContextMenu.tsx` owns the gesture; plain `showMenu` (right-click menus) is unchanged.
 - Keys are dispatched by `useKeyboardMap.ts` (global) and the suites' key hooks via `handleKeyFor(scope, e)`. Never add a raw `keydown`
   listener for a user action that has no command.
 - The dev build marks rendered commands (`markUsed`) and can list commands with no mouse home (`unusedCommands`); `window.__loom2Commands`

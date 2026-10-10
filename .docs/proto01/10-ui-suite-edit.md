@@ -189,6 +189,16 @@ from transparency 0; schema 3). Add mask: the + box in the row reveals all (or t
 the layer menu lists all four plus From transparency. Mask thumbnail: Alt-click shows the mask alone in grey (painting continues on it),
 Ctrl-click loads it as a selection, Shift-click disables it (red ✕). Headed mode `masks` walks this by mouse and judges screenshots.
 
+**Mouse-first kit (D55, 2026-10-10).** The strip carries latched **⇧ / Ctrl / Alt** buttons: each stays on for every canvas gesture
+until clicked again (PhotoCraft's sticky modifiers; panel clicks keep reading the keyboard), so Shift-click lines, Alt-click picking,
+selection add / subtract / intersect and Ctrl-wheel zoom need no keyboard. Modal operations show ✓ / ⊘ in the strip (free transform,
+now also the open polygon lasso); Ctrl+Enter applies a transform as Enter does. Every ▾ menu button is a **press menu**: press, drag
+onto an entry, release — or click to open and click an entry. Opacity, fill, the brush numbers and mask density / feather are **value
+fields**: drag the number to scrub (Shift fine), type a value or a sum (`100/4`), ↑ ↓ step (Shift ×10), or press-drag the ▾ for a pop-up
+slider; each gesture is one undo step. The blend dropdown steps with the mouse wheel (one history step per notch) and previews the
+hovered mode on the canvas before a click chooses it. Headed mode `kit` checks all of this by mouse and audits every Edit menu in every
+tool and state (each entry resolves to a command; separators only between groups).
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

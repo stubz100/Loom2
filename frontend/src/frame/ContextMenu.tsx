@@ -7,8 +7,21 @@ import { create } from 'zustand'
 import { command, isEnabled, keyLabel, markUsed, type IconType, type MenuItem } from './commands'
 import './menu.css'
 
-interface MenuState { open: { x: number; y: number; items: MenuItem[] } | null; show: (x: number, y: number, items: MenuItem[]) => void; hide: () => void }
-export const useMenu = create<MenuState>()((set) => ({ open: null, show: (x, y, items) => set({ open: { x, y, items } }), hide: () => set({ open: null }) }))
+interface MenuState { open: { x: number; y: number; items: MenuItem[]; opener?: Element | null } | null; show: (x: number, y: number, items: MenuItem[], opener?: Element | null) => void; hide: () => void }
+export const useMenu = create<MenuState>()((set) => ({ open: null, show: (x, y, items, opener) => set({ open: { x, y, items, opener } }), hide: () => set({ open: null }) }))
+
+/** D55 press menus (PhotoCraft press_menu.rs): the press on a menu button opens the menu; releasing that same press over an item
+ * chooses it; releasing anywhere else leaves the menu open (so a plain click opens it and a second click chooses). */
+let pressGesture = false
+export function openPressMenu(e: { button: number; currentTarget: Element; preventDefault: () => void }, items: () => MenuItem[], fromKeyboard = false): void {
+  if (e.button !== 0 && e.button !== 2) return
+  e.preventDefault()
+  const st = useMenu.getState()
+  if (st.open?.opener === e.currentTarget) { st.hide(); return }      // a press on the open menu's button closes it
+  const r = e.currentTarget.getBoundingClientRect()
+  st.show(r.left, r.bottom + 2, items(), e.currentTarget)
+  pressGesture = e.button === 0 && !fromKeyboard
+}
 
 /** Open a context menu at the pointer (or at an element for keyboard-triggered menus). */
 export function showMenu(e: ReactMouseEvent | MouseEvent | { clientX: number; clientY: number }, items: MenuItem[]): void {
@@ -96,10 +109,21 @@ export function ContextMenuHost() {
   useEffect(() => {
     if (!open) return
     const close = () => hide()
-    const onDown = (e: PointerEvent) => { if (!(e.target as HTMLElement)?.closest('.ctx-menu')) hide() }
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement
+      if (t?.closest('.ctx-menu') || (open.opener && open.opener.contains(t))) return     // the opener toggles itself (press menus)
+      hide()
+    }
+    const onUp = (e: PointerEvent) => {
+      if (!pressGesture) return
+      pressGesture = false
+      const item = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.ctx-menu button.item:not(.disabled)') as HTMLButtonElement | null
+      item?.click()                                                       // press–drag–release chooses; elsewhere the menu stays open
+    }
     window.addEventListener('pointerdown', onDown, { capture: true })
+    window.addEventListener('pointerup', onUp, { capture: true })
     window.addEventListener('wheel', close, { passive: true })
-    return () => { window.removeEventListener('pointerdown', onDown, { capture: true }); window.removeEventListener('wheel', close) }
+    return () => { window.removeEventListener('pointerdown', onDown, { capture: true }); window.removeEventListener('pointerup', onUp, { capture: true }); window.removeEventListener('wheel', close) }
   }, [open, hide])
   if (!open) return null
   return <MenuList items={open.items} x={open.x} y={open.y} depth={0} onClose={hide} />

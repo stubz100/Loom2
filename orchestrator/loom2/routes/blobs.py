@@ -9,13 +9,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from ..fsio import _tmp_for
+from ..schemas import BlobPut
 from ..services import Services
 from .deps import Svc
 
 router = APIRouter(tags=["blobs"])
 
 
-@router.put("/blobs/{sha}")
+@router.put("/blobs/{sha}", response_model=BlobPut)
 async def blob_put(svc: Svc, sha: str, request: Request):
     dest = _blob_path(svc, sha)
     dest.parent.mkdir(parents=True, exist_ok=True)

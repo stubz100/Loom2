@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json, utc_now
 
@@ -21,6 +21,7 @@ MIN_SIZE_CAP_GB = 10.0
 
 class ProjectFormat(BaseModel):
     """The target the project finalises to (fixed at creation) and the working tier it defaults to (D18)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     aspect: tuple[int, int] = (16, 9)
     width: int = 1920
     height: int = 1080

@@ -9,8 +9,9 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel
 
-from ..clips import ClipStore, compute_identity
+from ..clips import ClipRecord, ClipStore, compute_identity
 from ..fsio import _tmp_for
+from ..schemas import ClipExtracted, ClipList
 from ..tools import facesim
 from .deps import Svc
 
@@ -22,13 +23,13 @@ class ClipExtract(BaseModel):
     frames: list[int]
 
 
-@router.get("/clips")
+@router.get("/clips", response_model=ClipList)
 async def clips_list(svc: Svc):
     ws, _, _ = svc.require_project()
     return {"items": [c.model_dump() for c in await asyncio.to_thread(ClipStore(ws).list)]}
 
 
-@router.get("/clips/{clip_id}")
+@router.get("/clips/{clip_id}", response_model=ClipRecord)
 async def clip_get(svc: Svc, clip_id: str):
     ws, _, _ = svc.require_project()
     rec = await asyncio.to_thread(ClipStore(ws).get, clip_id)
@@ -70,7 +71,7 @@ async def clip_frame(svc: Svc, clip_id: str, name: str, size: int = 0):
     return FileResponse(store.frame_path(clip_id, n), media_type="image/png", headers=IMMUTABLE)
 
 
-@router.post("/clips/{clip_id}/identity")
+@router.post("/clips/{clip_id}/identity", response_model=ClipRecord)
 async def clip_identity(svc: Svc, clip_id: str):
     """FaceSim advisory on demand (11 §6): cosine similarity of the start frame's face across the clip."""
     ws, cat, _ = svc.require_project()
@@ -88,7 +89,7 @@ async def clip_identity(svc: Svc, clip_id: str):
     return rec.model_dump()
 
 
-@router.post("/clips/{clip_id}/extract")
+@router.post("/clips/{clip_id}/extract", response_model=ClipExtracted)
 async def clip_extract(svc: Svc, clip_id: str, body: ClipExtract):
     """Master frames → Catalogue images with `frame-extract` lineage from the clip's asset (11 §6)."""
     ws, cat, _ = svc.require_project()

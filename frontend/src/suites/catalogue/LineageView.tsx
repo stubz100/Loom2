@@ -3,18 +3,14 @@
 // one lineage are usually spread over several groups). Cards select, open the loupe, drag onto groups and take the tile menu.
 import { GitBranch } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { api } from '../../api/client'
-import type { Asset } from '../../api/types'
+import { api, http, unwrap } from '../../api/client'
+import type { LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { beginDrag } from '../../frame/drag'
-import type { PathStep } from './albumStore'
 import { tileMenu } from './catalogueCommands'
 import { useCat } from './catalogueContext'
 
-interface Tree {
-  root_id: string; items: Asset[]; edges: { from_id: string; to_id: string; kind: string }[]
-  locations: Record<string, { group_id: string; path: PathStep[] } | null>
-}
+type Tree = LineageTree
 const CARD_W = 240, CARD_H = 76, COL = 360, ROW = 112, PAD = 40, BEND = 24
 
 /** "14:02" today, "7 Oct" otherwise: the card is small. */
@@ -47,13 +43,13 @@ export function LineageView({ id }: { id: string }) {
   const [rootId, setRootId] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    void api.get<Asset>(`/assets/${id}`).then((a) => { if (live) setRootId(a.root_id ?? a.id) }).catch((e) => { if (live) setError((e as Error).message) })
+    void unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: id } } })).then((a) => { if (live) setRootId(a.root_id ?? a.id) }).catch((e) => { if (live) setError((e as Error).message) })
     return () => { live = false }
   }, [id])
   useEffect(() => {
     if (!rootId) return
     let live = true
-    void api.get<Tree>(`/lineage/tree/${rootId}`).then((t) => { if (live) setTree(t) }).catch((e) => { if (live) setError((e as Error).message) })
+    void unwrap(http.GET('/lineage/tree/{root_id}', { params: { path: { root_id: rootId } } })).then((t) => { if (live) setTree(t) }).catch((e) => { if (live) setError((e as Error).message) })
     return () => { live = false }
   }, [rootId])
   const lay = useMemo(() => (tree ? layout(tree) : null), [tree])

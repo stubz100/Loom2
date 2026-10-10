@@ -10,7 +10,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from ..groups import ROOT_ID
+from ..groups import ROOT_ID, GroupRecord
+from ..schemas import AlbumNode, ChangedGroups, GroupDeleted, GroupPage, LayoutReply, Location, Ungrouped
 from .deps import Svc
 
 router = APIRouter(tags=["groups"])
@@ -49,43 +50,43 @@ class GroupMake(BaseModel):
     name: str = "Group"
 
 
-@router.get("/groups/tree")
+@router.get("/groups/tree", response_model=AlbumNode)
 async def groups_tree(svc: Svc):
     return await asyncio.to_thread(svc.require_groups().tree)
 
 
-@router.get("/groups/where")
+@router.get("/groups/where", response_model=dict[str, Location | None])
 async def groups_where(svc: Svc, ids: Annotated[list[str], Query()]):
     return await asyncio.to_thread(svc.require_groups().where, ids)
 
 
-@router.post("/groups")
+@router.post("/groups", response_model=GroupRecord)
 async def groups_create(svc: Svc, body: GroupCreate):
     g = await asyncio.to_thread(svc.require_groups().create, body.name, body.parent_id, body.x, body.y)
     svc.group_changed([g.id, body.parent_id])
     return g.model_dump()
 
 
-@router.post("/groups/move")
+@router.post("/groups/move", response_model=ChangedGroups)
 async def groups_move(svc: Svc, body: GroupMove):
     changed = await asyncio.to_thread(svc.require_groups().move, [(i.kind, i.id) for i in body.items], body.to, body.positions)
     svc.group_changed(changed)
     return {"changed": sorted(changed)}
 
 
-@router.get("/groups/{gid}")
+@router.get("/groups/{gid}", response_model=GroupPage)
 async def groups_page(svc: Svc, gid: str):
     return await asyncio.to_thread(svc.require_groups().page, gid)
 
 
-@router.patch("/groups/{gid}")
+@router.patch("/groups/{gid}", response_model=GroupRecord)
 async def groups_patch(svc: Svc, gid: str, body: GroupPatch):
     g = await asyncio.to_thread(svc.require_groups().update, gid, body.name, body.cover_id)
     svc.group_changed([gid])
     return g.model_dump()
 
 
-@router.delete("/groups/{gid}")
+@router.delete("/groups/{gid}", response_model=GroupDeleted)
 async def groups_delete(svc: Svc, gid: str):
     st = svc.require_groups()
     parent = st.parent.get(("group", gid), ROOT_ID)
@@ -94,28 +95,28 @@ async def groups_delete(svc: Svc, gid: str):
     return {"deleted": gid, "unprocessed": freed}
 
 
-@router.patch("/groups/{gid}/items")
+@router.patch("/groups/{gid}/items", response_model=LayoutReply)
 async def groups_layout(svc: Svc, gid: str, body: GroupLayout):
     g = await asyncio.to_thread(svc.require_groups().layout, gid, body.items, body.revision)
     svc.group_changed([gid])
     return {"revision": g.revision}
 
 
-@router.post("/groups/{gid}/group")
+@router.post("/groups/{gid}/group", response_model=GroupRecord)
 async def groups_make(svc: Svc, gid: str, body: GroupMake):
     g = await asyncio.to_thread(svc.require_groups().group_items, gid, [(i.kind, i.id) for i in body.items], body.name)
     svc.group_changed([gid, g.id])
     return g.model_dump()
 
 
-@router.post("/groups/{gid}/ungroup")
+@router.post("/groups/{gid}/ungroup", response_model=Ungrouped)
 async def groups_ungroup(svc: Svc, gid: str):
     parent = await asyncio.to_thread(svc.require_groups().ungroup, gid)
     svc.group_changed([gid, parent])
     return {"parent": parent}
 
 
-@router.post("/groups/{gid}/duplicate")
+@router.post("/groups/{gid}/duplicate", response_model=GroupRecord)
 async def groups_duplicate(svc: Svc, gid: str):
     st = svc.require_groups()
     g = await asyncio.to_thread(st.duplicate_group, gid)

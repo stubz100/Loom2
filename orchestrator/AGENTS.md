@@ -14,6 +14,7 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `services.py` | `Services`: app state, event hub, roster, engine supervisor and the open project's stores; `require_project/groups/documents` |
 | `routes/` | one `APIRouter` per domain (`meta`, `settings`, `projects`, `assets`, `groups`, `documents`, `clips`, `jobs`, `models`, `engine`, `blobs`, `events_ws`); request models live with their routes; `deps.py` gives handlers `svc: Svc` |
 | `capabilities.py` / `build_info.py` | the `/capabilities` document (07 §3d) and the `/version` facts (D36) |
+| `schemas.py` | response models (D38): `Out` (strict, every field present) and `Open` (composite dicts: extra fields pass, defaulted fields optional); the WebSocket event frames (`EVENT_FRAMES`) |
 | `queue.py` | `JobQueue` / `JobRecord`: durable queue, admission (models, disk guard, VRAM), warm-group scheduling, the run loop, engine event following, stall watchdog, document / i2v pre- and post-processing |
 | `engine/` | ComfyUI client, supervisor, recipe → graph builders, contract checks (see `orchestrator/loom2/engine/AGENTS.md`) |
 | `recipes.py` | pydantic recipes `T2I`, `I2I`, `Inpaint`, `Upscale`, `Segment`, `I2V` (discriminated on `kind`), sampler enums, `warm_group` |
@@ -40,6 +41,9 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 4. **Routes:** a new endpoint goes into the domain module under `routes/` (or a new module added to `routes.ROUTERS`). Register literal
    paths before parameterised ones (`/assets/counts` before `/assets/{asset_id}`); `tests/test_routes_d37.py` checks the order and the
    route table against `tests/fixtures/routes_d37.json` — update the snapshot in the same commit when you add or remove a route.
+   **Every JSON route declares `response_model=`** (D38; `tests/test_contract_d38.py` enforces it) — a record model, or a model in
+   `schemas.py`. A record returned in replies sets `json_schema_serialization_defaults_required=True`. After any API change run
+   `scripts/export_openapi.py` and `npm run api:types` (in `frontend/`) and commit `openapi.json` + `schema.d.ts`; CI fails otherwise.
 5. **Token.** Mutating routes require `X-Loom-Token` (`token_gate` in `api.py`); the token is per launch and never persisted.
 6. **Lineage at write time.** Parents, `lineage_kind`, model, seed, prompt, `compiled_graph_hash` and the variant are stamped when an asset
    is ingested; nothing reconstructs them later.

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..roster import ROSTER_BY_ID
+from ..schemas import FetchState, ModelListing, ModelScan, ModelVerify, UnlistedFiles
 from ..tools.fetch import FetchJob, sha256_of
 from .deps import Svc
 
@@ -18,26 +19,26 @@ class FetchRequest(BaseModel):
     model_id: str
 
 
-@router.get("/models")
+@router.get("/models", response_model=ModelListing)
 async def models(svc: Svc, include_retired: bool = False):
     items = await asyncio.to_thread(svc.roster.listing, include_retired)
     return {"items": items, "models_root": str(svc.app.models_root),
             "scanned_at": svc.roster.scanned_at, "fetches": {k: v.state() for k, v in svc.fetches.items()}}
 
 
-@router.post("/models/scan")
+@router.post("/models/scan", response_model=ModelScan)
 async def models_scan(svc: Svc):
     roster = svc.roster
     await asyncio.to_thread(roster.scan)                     # D37: two model roots are walked; never on the event loop
     return {"items": await asyncio.to_thread(roster.listing), "unlisted": await asyncio.to_thread(roster.unlisted_files)}
 
 
-@router.get("/models/unlisted")
+@router.get("/models/unlisted", response_model=UnlistedFiles)
 async def models_unlisted(svc: Svc):
     return {"items": await asyncio.to_thread(svc.roster.unlisted_files)}
 
 
-@router.post("/models/fetch")
+@router.post("/models/fetch", response_model=FetchState)
 async def models_fetch(svc: Svc, body: FetchRequest):
     entry = ROSTER_BY_ID.get(body.model_id)
     if not entry:
@@ -53,7 +54,7 @@ async def models_fetch(svc: Svc, body: FetchRequest):
     return job.state()
 
 
-@router.post("/models/{model_id}/verify")
+@router.post("/models/{model_id}/verify", response_model=ModelVerify)
 async def models_verify(svc: Svc, model_id: str):
     try:
         r = svc.roster.resolve(model_id)

@@ -5,22 +5,22 @@
 // Unprocessed, arrows nudge, Ctrl+Z / Ctrl+Shift+Z undo layout. Filters highlight matches; nothing is hidden or moved.
 import { ArrowDownToLine, ArrowUpToLine, BookOpen, Columns2, Copy, Expand, FolderPlus, Layers, Pencil, Redo, Undo, Ungroup, X } from 'lucide-react'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { api, ApiError } from '../../api/client'
-import type { Asset } from '../../api/types'
+import { api, ApiError, http, unwrap } from '../../api/client'
+import type { Asset, GroupItem, GroupPage, GroupSummary } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { carry, registerDropTarget, type DragItem, type DragPayload } from '../../frame/drag'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { useAlbum, type PathStep } from './albumStore'
+import { useAlbum } from './albumStore'
 import { tileMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { FILTERS } from './filters'
 import { openInOtherPane, openPlace } from './split'
 
 export const CARD_RATIO = 0.8                                       // groups.py CARD_RATIO: a card is drawn in w × 0.8w
-interface Item { kind: 'asset' | 'group'; id: string; x: number; y: number; w: number; z: number }
-interface Summary { id: string; name: string; assets: number; groups: number; total: number; cover_ids: string[]; revision: number }
-interface Page { group: { id: string; name: string; cover_id: string | null; revision: number; items: Item[] }; path: PathStep[]; assets: Record<string, Asset>; groups: Record<string, Summary> }
+type Item = GroupItem
+type Summary = GroupSummary
+type Page = GroupPage
 interface View { x: number; y: number }
 type Pos = { x: number; y: number; w: number; z: number }
 
@@ -45,7 +45,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
 
   // ---- data ------------------------------------------------------------------------------------------
   const load = useCallback(async () => {
-    try { setPage(await api.get<Page>(`/groups/${gid}`)); setError(null) }
+    try { setPage(await unwrap(http.GET('/groups/{gid}', { params: { path: { gid } } }))); setError(null) }
     catch (e) { setError(e instanceof ApiError && e.status === 404 ? 'This group no longer exists.' : (e as Error).message) }
   }, [gid])
   useEffect(() => { setPage(null); undo.current = []; redo.current = []; void load() }, [load])
@@ -119,7 +119,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     const before = page.group.items.filter((i) => next.some((n) => key(n) === key(i))).map((i) => ({ ...i }))
     setPage({ ...page, group: { ...page.group, items: page.group.items.map((i) => next.find((n) => key(n) === key(i)) ?? i) } })
     try {
-      const r = await api.patch<{ revision: number }>(`/groups/${gid}/items`, { revision: page.group.revision, items: next })
+      const r = await unwrap(http.PATCH('/groups/{gid}/items', { params: { path: { gid } }, body: { revision: page.group.revision, items: next } }))
       setPage((p) => (p ? { ...p, group: { ...p.group, revision: r.revision } } : p))
       if (record) { undo.current.push({ before, after: next.map((i) => ({ ...i })) }); redo.current = [] }
     } catch (e) {
@@ -144,7 +144,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     if (sel.length < 1) return
     void askText({ title: 'Group these', text: `${sel.length} item${sel.length === 1 ? '' : 's'} become a group on this page, keeping their layout.`, placeholder: 'group name' }).then((name) => {
       if (!name?.trim()) return
-      void api.post<{ id: string }>(`/groups/${gid}/group`, { items: sel.map(({ kind, id }) => ({ kind, id })), name: name.trim() })
+      void unwrap(http.POST('/groups/{gid}/group', { params: { path: { gid } }, body: { items: sel.map(({ kind, id }) => ({ kind, id })), name: name.trim() } }))
         .then((g) => { setSel([], [g.id]); void useAlbum.getState().load() }).catch((e) => toast(`Group failed: ${(e as Error).message}`, 'error'))
     })
   }
@@ -314,7 +314,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
   const canvasMenu = (e: React.MouseEvent): MenuItem[] => {
     const at = toPage(e.clientX, e.clientY)
     return [
-      { label: 'New group here…', icon: FolderPlus, run: () => void askText({ title: 'New group', placeholder: 'group name' }).then((n) => { if (n?.trim()) void api.post('/groups', { name: n.trim(), parent_id: gid, x: Math.round(at.x), y: Math.round(at.y) }).then(() => useAlbum.getState().load()) }) },
+      { label: 'New group here…', icon: FolderPlus, run: () => void askText({ title: 'New group', placeholder: 'group name' }).then((n) => { if (n?.trim()) void unwrap(http.POST('/groups', { body: { name: n.trim(), parent_id: gid, x: Math.round(at.x), y: Math.round(at.y) } })).then(() => useAlbum.getState().load()) }) },
       { label: 'Select all', keys: 'Ctrl+A', run: () => setSel(items.filter((i) => i.kind === 'asset').map((i) => i.id), items.filter((i) => i.kind === 'group').map((i) => i.id)) },
       { label: 'Fit', icon: Expand, run: fit },
       sep,

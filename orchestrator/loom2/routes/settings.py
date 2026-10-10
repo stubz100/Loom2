@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
+from ..config import Settings
 from ..fsio import atomic_write_json, read_json_or
 from ..roster import Roster
 from .deps import Svc
@@ -14,12 +16,12 @@ from .deps import Svc
 router = APIRouter(tags=["settings"])
 
 
-@router.get("/settings")
+@router.get("/settings", response_model=Settings)
 async def get_settings(svc: Svc):
     return svc.app.settings.model_dump()
 
 
-@router.put("/settings")
+@router.put("/settings", response_model=Settings)
 async def put_settings(svc: Svc, patch: dict):
     try:
         s = svc.app.update_settings({k: v for k, v in patch.items() if k != "variant"})   # C3: the variant is the build's, never a setting
@@ -32,12 +34,12 @@ async def put_settings(svc: Svc, patch: dict):
     return s.model_dump()
 
 
-@router.get("/snippets")
+@router.get("/snippets", response_model=dict[str, Any])
 async def snippets_get(svc: Svc):
     return await asyncio.to_thread(read_json_or, svc.app.state_dir / "snippets.json", {"snippets": []})
 
 
-@router.put("/snippets")
+@router.put("/snippets", response_model=dict[str, Any])
 async def snippets_put(svc: Svc, body: dict):
     await asyncio.to_thread(atomic_write_json, svc.app.state_dir / "snippets.json", body)
     return body

@@ -58,6 +58,10 @@ banners, the ask dialog, persisted `ui` layout) and `applyEvent()`, which routes
 in component state. `frontend/src/api/client.ts` is the only HTTP / WebSocket client; `frontend/src/shell/tauri.ts` is the only module that
 imports `@tauri-apps/*`.
 
+**API calls are typed (D38):** `await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id } } }))` — paths, parameters, bodies
+and replies come from `frontend/src/api/schema.d.ts`, generated from the orchestrator. `frontend/src/api/types.ts` re-exports the reply types
+(never hand-write an API shape). Bytes and URLs stay on `api.putBlob` / `api.thumbUrl` / `api.assetUrl` / `api.fileUrl`.
+
 ## Checks
 
 `npm run build` (tsc + vite) and `npm run lint`. There are no frontend unit tests yet (P6 adds them); interactive checks run through

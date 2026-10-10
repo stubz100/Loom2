@@ -12,14 +12,20 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic.json_schema import models_json_schema
 
 from . import __version__
 from .documents import StaleStack
 from .fsio import StateError
 from .groups import GroupNotFound, StaleGroup
+from .recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale
 from .routes import ROUTERS
+from .schemas import EVENT_FRAMES
 from .services import Services
+
+RECIPES = (T2I, I2I, Inpaint, Upscale, Segment, I2V)
 
 FileResponse.chunk_size = 4 * 2**20   # E2: 64 KiB chunks cap loopback at ~400 MiB/s; 4 MiB gives > 1 GiB/s
 log = logging.getLogger("loom2.api")
@@ -67,7 +73,27 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
         app.add_exception_handler(exc, _status_handler(status))
     for router in ROUTERS:
         app.include_router(router)
+    app.openapi = _openapi_with_contract(app)
     return app
+
+
+def _openapi_with_contract(app: FastAPI):
+    """D38: the OpenAPI document also carries what no route declares — the WebSocket event frames (`EventFrame`) and the recipe
+    models a job body holds (`Recipe`) — so `schema.d.ts` types `applyEvent` and the panels' recipe builders too."""
+    def openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        models = [(m, "serialization") for m in EVENT_FRAMES] + [(m, "validation") for m in RECIPES]
+        _, defs = models_json_schema(models, ref_template="#/components/schemas/{model}")
+        comps = schema.setdefault("components", {}).setdefault("schemas", {})
+        for name, s in defs.get("$defs", {}).items():
+            comps.setdefault(name, s)
+        comps["EventFrame"] = {"oneOf": [{"$ref": f"#/components/schemas/{m.__name__}"} for m in EVENT_FRAMES], "title": "EventFrame"}
+        comps["Recipe"] = {"oneOf": [{"$ref": f"#/components/schemas/{m.__name__}"} for m in RECIPES], "title": "Recipe"}
+        app.openapi_schema = schema
+        return schema
+    return openapi
 
 
 def _status_handler(status: int):

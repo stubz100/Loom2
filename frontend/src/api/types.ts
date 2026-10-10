@@ -1,93 +1,70 @@
-// Hand-written mirrors of the orchestrator's pydantic records (06 §5). Request bodies come from the generated
-// schema.d.ts; these are the response shapes the endpoints return as plain dicts.
+// The API's types (D38): re-exported from schema.d.ts, which openapi-typescript generates from the orchestrator's OpenAPI
+// document (scripts/export_openapi.py → npm run api:types). Never hand-edit a response shape here — change the pydantic model
+// in orchestrator/loom2 (schemas.py or the record's own module) and regenerate. Only UI-side types live below the line.
+import type { components } from './schema'
 
+/** openapi-fetch hands every reply through its Readable<…> (tuples become arrays); mirroring it keeps these types equal to what
+ *  `unwrap(http.GET(…))` returns, so a reply can be stored wherever its type is expected. */
+type Readable<T> = T extends (infer E)[] ? Readable<E>[] : T extends object ? { [K in keyof T]: Readable<T[K]> } : T
+type S = { [K in keyof components['schemas']]: Readable<components['schemas'][K]> }
+
+export type HealthInfo = S['HealthInfo']
+export type VersionInfo = S['VersionInfo']
+export type Capabilities = S['Capabilities']
+export type TeOption = S['TeOption']                    // D31
+export type I2vCaps = S['I2vCaps']
+export type I2vModelCaps = S['I2vModelCaps']
+export type ProjectFormat = S['ProjectFormat']
+export type ProjectInfo = S['ProjectInfo']
+export type EngineState = S['EngineState']
+export type QueueState = S['QueueState']
+export type Job = S['JobRecord']
+export type Asset = S['AssetRecord']
+export type Clip = S['ClipRecord']
+export type ModelEntry = S['ModelEntry']
+export type FetchState = S['FetchState']
+export type UnlistedFile = S['UnlistedFile']
+export type Settings = S['Settings']
+export type EngineSettings = S['EngineSettings']
+export type EventFrame = S['EventFrame']
+export type Recipe = S['Recipe']
+
+// ---- UI-side types (not API shapes) ---------------------------------------------------------------------------------
 export type Suite = 'catalogue' | 'generate' | 'edit' | 'animate' | 'models'
-export type JobStatus = 'staged' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
-export type Health = 'present' | 'verified' | 'missing' | 'retired'
+export type JobStatus = Job['status']
+export type Health = ModelEntry['health']
 
 export interface Backend { host: string; port: number; token: string }
 
-export interface HealthInfo { ok: boolean; version: string; project_open: boolean; engine_running: boolean; variant: 'full' | 'open'; start_suite?: string | null; session_id?: string }
+// ---- recipe preview (POST /recipes/preview answers per recipe kind) --------------------------------------------------
+export type T2IPreview = S['T2IPreview']
+export type I2VPreview = S['I2VPreview']
+export const isI2VPreview = (p: T2IPreview | I2VPreview): p is I2VPreview => 'frames' in p && 'family' in p
+export const isT2IPreview = (p: T2IPreview | I2VPreview): p is T2IPreview => 'serialized_prompt' in p
+export type GroupHeader = S['GroupHeader']
+export type AssetPage = S['AssetPage']
+export type AlbumNode = S['AlbumNode']
+export type GroupPage = S['GroupPage']
+export type GroupSummary = S['GroupSummary']
+export type GroupItem = S['GroupItem']
+export type PathStep = S['PathStep']
+export type GroupLocation = S['Location']
+export type LineageTree = S['LineageTree']
+export type Document = S['Document']
+export type DocumentPutReply = S['DocumentPutReply']
+export type DocSummary = S['DocSummary']
 
-export interface ProjectFormat { aspect: [number, number]; width: number; height: number; fps: number; default_tier: string }
-export interface ProjectInfo {
-  open: boolean; path?: string; id?: string; name?: string; format?: ProjectFormat; size_cap_gb?: number
-  free_space_gb?: number; created_at?: string; assets?: number; usage_gb?: number; jobs_indexed?: number
-}
+// ---- recipes as the panels build them (request input: fields with defaults are optional) -----------------------------
+type In = components['schemas']
+export type T2IRecipe = In['T2I']
+export type I2IRecipe = In['I2I']
+export type InpaintRecipe = In['Inpaint']
+export type UpscaleRecipe = In['Upscale']
+export type SegmentRecipe = In['Segment']
+export type I2VRecipe = In['I2V']
+export type DocumentRecipe = InpaintRecipe | I2IRecipe | UpscaleRecipe | SegmentRecipe
 
-export interface EngineState {
-  running: boolean; responding?: boolean; pid: number | null; port: number; started_at: number | null; uptime_s: number | null
-  jobs_since_start: number; restarts: number; last_error: string | null; log: string | null
-  version: { comfyui_version?: string; pytorch_version?: string } | null; job_object: boolean
-  vram_free_gb?: number; vram_total_gb?: number
-}
-
-export interface QueueState { paused: boolean; running: string | null; counts: Partial<Record<JobStatus, number>>; last_warm_group: string | null; resumed_unclean?: boolean; recovery?: string[] }
-
-export interface Job {
-  id: string; batch_id: string | null; kind: string; recipe: Record<string, unknown>; seed: number; status: JobStatus
-  progress: number; progress_text: string; vram_estimate_gb: number; warm_group: string; created_at: string
-  started_at: string | null; finished_at: string | null; wall_s: number | null; result: { asset_ids?: string[]; compiled?: Record<string, unknown> }
-  error: string | null; log_tail: string[]; retry_count: number; prompt_id: string | null; node_times: Record<string, number>
-}
-
-export interface Asset {
-  id: string; kind: 'image' | 'video' | 'mask' | 'document-render'; path: string; w: number | null; h: number | null
-  frames: number | null; created_at: string; job_id: string | null; batch_id: string | null; session_id: string | null; root_id: string | null; parents: string[]; suite: string
-  model_id: string | null; seed: number | null; prompt_text: string | null; prompt_json: Record<string, unknown> | null
-  params: Record<string, unknown>; timings: Record<string, unknown>; compiled_graph_hash: string | null
-  variant?: string; state: 'none' | 'keep' | 'reject'; rating: number; tags: string[]; collection_ids: string[]; duplicate_of?: string | null; has_document: boolean; trashed_at: string | null
-  thumb_status: 'pending' | 'done' | 'failed'; bytes: number | null; sha256: string | null
-}
-
-export interface ModelEntry {
-  id: string; name: string; folder: string; family: string; role: string; repo: string | null; file: string | null; license: string
-  variants: string[]; approx_gb: number | null; retired: string | null; note: string | null
-  path: string | null; health: Health; size: number | null; sha256: string | null; source_tree: string | null
-}
-
-export interface FetchState { model_id: string; name: string; status: string; error: string | null; bytes_done: number; bytes_total_est: number; progress: number | null; elapsed_s: number }
-
-export interface EngineSettings { python: string; main: string; extra_model_paths: string; host: string; port: number; flags: string[]; restart_every_jobs: number; health_timeout_s: number; stall_timeout_s: number; reserve_vram_gb: number }
-export interface Settings {
-  schema_version: number; models_root: string; mounted_model_trees: string[]; vram_budget_gb: number; variant: 'full' | 'open'; hf_home: string
-  engine: EngineSettings; api_host: string; api_port: number; thumbnail_sizes: number[]; log_level: string
-  reopen_last_project?: boolean; h3_licence_confirmed?: boolean
-}
-
-export interface TeOption { id: string; label: string; name: string; health: Health; approx_gb: number | null; gguf: boolean; default: boolean }   // D31
-export interface Capabilities {
-  recipes: string[]; i2v?: I2vCaps; facesim?: { available: boolean; dir: string }; variant: string; vram_budget_gb: number; samplers: string[]; schedulers: string[]
-  models: Record<string, { family: string; label: string; health: Health; steps: number; guidance: number; cfg: number; distilled: boolean; turbo: boolean; turbo_steps: number; json_prompt: boolean; max_refs: number; sampler: string; scheduler: string; vram_gb: number | null; wired: boolean; license: string; variants: string[]; te_id?: string; te_options?: TeOption[] }>
-  tiers: Record<string, Record<string, [number, number]>>
-  weight_dtypes: string[]; te_devices: string[]; te_alternates?: Record<string, string[]>
-  advanced: { model_shift: Record<string, number>; shift_node_defaults: { base: number; max: number }; tile_size_default: number; flux2_schedule: string }
-}
-
-export interface EventFrame { seq: number; type: string; t: number; data: Record<string, unknown> }
-
-// ---- M6 Animate (11 §10, 06 §5) ------------------------------------------------------------------------------------
-export interface Clip {
-  schema_version: number; id: string; created_at: string; job_id: string | null; batch_id: string | null; asset_id: string | null
-  model_id: string; preset: string; prompt: string; seed: number; frames: number; fps: number; w: number; h: number
-  start_asset_id: string; end_asset_id: string | null; beats: { frame: number; asset_id: string; strength: number }[]
-  master_dir: string; proxy_path: string | null; proxy_bytes: number; extracted_asset_ids: string[]
-  params: Record<string, unknown>; timings: Record<string, unknown>
-  identity?: { status: string; sampled: number; with_face: number; mean?: number; min?: number; min_frame?: number; per_frame?: { frame: number; sim: number | null; faces: number }[]; scale?: string } | null
-}
-export interface I2vModelCaps {
-  family: string; label: string; health: string; missing: string[]; fps: number; frames: number; frame_step: number; size_mult: number; size: [number, number]
-  presets: Record<string, string>; beats: boolean; flf: boolean; vram_gb: number | null; license: string; approx_gb: number
-}
-export interface I2vCaps { models: Record<string, I2vModelCaps>; tiers: Record<string, Record<string, [number, number]>>; portrait: Record<string, [number, number]>; square: Record<string, [number, number]> }
-
-/** GET /version (D36): app version, checkout commit, shell build, engine pin, node pins, schema versions, paths. */
-export interface VersionInfo {
-  app: string; orchestrator: string; variant: 'full' | 'open'
-  git: { sha: string; dirty: boolean; describe: string | null } | null
-  shell: { version: string; git_sha: string | null; build_time: string | null } | null
-  engine: { pin: string | null; running: Record<string, unknown> | null }
-  nodes: { name: string; repo: string; commit: string; date: string }[]
-  schemas: Record<string, number>
-  paths: { state: string; logs: string; models_root: string }
-}
+// ---- WebSocket event payloads the suites handle ----------------------------------------------------------------------
+export type DocumentChangedData = S['DocumentChanged']
+export type ClipReadyData = S['ClipReady']
+export type ClipUpdatedData = S['ClipUpdated']

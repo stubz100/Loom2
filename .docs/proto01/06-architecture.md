@@ -176,6 +176,11 @@ Project `format.target` is the finalize gate. Nothing in the MVP may hard-code a
 events) with their request models — and reach `services.Services` through `routes/deps.py`. Blocking SQLite and file work runs in
 `asyncio.to_thread`; `JobQueue` stays on the event loop. `tests/test_routes_d37.py` pins the route table and the literal-before-parameter order.
 
+**Contract (D38, 2026-10-10):** every JSON route declares a response model (`loom2/schemas.py` or the record's own model); the OpenAPI
+document also carries the WebSocket frames (`EventFrame`) and the recipe models (`Recipe`). `scripts/export_openapi.py` writes it to
+`frontend/src/api/openapi.json` (machine-independent), `npm run api:types` generates `schema.d.ts`, and the frontend calls the API only
+through the typed `http` client (openapi-fetch). CI and `tests/test_contract_d38.py` fail when either file is stale.
+
 ```
 GET  /health /version /capabilities /settings   PUT /settings
 POST /project  /project/open  /project/close    GET /project /projects

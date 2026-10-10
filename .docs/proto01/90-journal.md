@@ -1944,3 +1944,29 @@ Inspector → lineage → split → pages.
   Planned loop-lag test (50 reads during a 200-file import) not written: too timing-dependent for CI on shared runners.
 - **Rig:** `scripts/m1_acceptance.py` **20/20** in 170 s against the split app (dev T2I 112.7 s cold, kill → resume paused, cancel,
   graceful stop, live contract clean). `orchestrator/AGENTS.md` (module map, async + route rules) and 06 §6 updated.
+
+## 2026-10-10 10:22 — D38: the generated API contract is the frontend's types; H1 closed
+
+- **Backend:** response models on every JSON route (`loom2/schemas.py`: `Out` for strict replies, `Open` for composite dicts — extra
+  fields pass through, defaulted fields optional, sparse routes use `response_model_exclude_unset` so `GET /project` without a project is
+  still `{"open": false}`); reply records (`AssetRecord`, `JobRecord`, `ClipRecord`, `Document`, `GroupRecord`, `Settings`, `RosterEntry`,
+  `ProjectFormat`, …) set `json_schema_serialization_defaults_required`, so their fields are required in the schema; clip `beats` /
+  `identity` stay dicts at runtime with typed JSON schemas (`WithJsonSchema`). `create_app` publishes the WebSocket frames
+  (`EventFrame`, 16 frame types) and the recipe models (`Recipe`) as components. `scripts/export_openapi.py` writes
+  `frontend/src/api/openapi.json` deterministically (env-read defaults pinned, the checkout path → `<repo>`) — the committed file had been
+  stale again (still `/collections*`, no `date_preset`).
+- **Frontend:** `openapi-fetch` 0.17 behind `unwrap(http.VERB(path, {params, body}))` (token by middleware, `ApiError` kept); all **83**
+  JSON call sites migrated (session, Catalogue store / album / Inspector / lineage / pages, Generate, Animate, Edit, About) and the untyped
+  `api.get/post/put/patch/del` removed (bytes and URLs stay on `api.*`); `types.ts` re-exports the generated types through a `Readable`
+  mirror (openapi-fetch turns tuples into arrays); `applyEvent` switches on the typed `EventFrame` union and the suite handlers take the
+  generated payloads; recipe builders return `T2IRecipe` / `I2VRecipe` / `DocumentRecipe`; `npm run api:types` with
+  `--default-non-nullable false` (request fields with defaults stay optional). The editor keeps its flat node model behind one `asStack()`
+  adapter. Only 14 type errors surfaced when the hand mirror was swapped for the generated types — the mirror had been close.
+- **Bug found by the typing:** the Catalogue's "No derivations" chip (`has_children: false`) was never sent (the query builder dropped every
+  `false`), so it showed every asset; the typed `queryOf` sends defined booleans (the backend already handled `false`).
+- **Checks:** `test_contract_d38.py` (3: every JSON route has a reply model; the committed spec equals a fresh export; every JSON GET answers
+  200 on a populated project) → **125 offline**; CI step re-exports, regenerates `schema.d.ts` and fails on a diff; `tsc -b` + `vite build`
+  ok, lint unchanged. Headed Edge: `edit_headed_check.py tour` **all passed** (save, save to Catalogue, PNG/PSD export, compare p99 2/255),
+  `animate` **all passed** (clips, preview, extract with lineage, identity); `csp_check.py` clean on Catalogue, Edit, Generate, model panel,
+  Edit AI (0 CSP hits, 0 JS errors). Not run: the Tauri shell itself.
+- **H1 closed** (D35–D38). 12 §8b status updated; next wave H2 (P2 plan/finalize/submit, P1 model registry, P4 job origin).

@@ -13,6 +13,7 @@ from ..build_info import version_info
 from ..capabilities import capabilities as build_capabilities
 from ..engine.graphs import CompileError, I2V_WEIGHTS, PRESETS, effective_params, estimate_i2v_seconds, i2v_params
 from ..recipes import I2V, T2I, parse_recipe
+from ..schemas import Capabilities, HealthInfo, I2VPreview, ShuttingDown, T2IPreview, VersionInfo
 from .deps import Svc
 
 router = APIRouter(tags=["meta"])
@@ -22,14 +23,14 @@ class RecipeBody(BaseModel):
     recipe: dict[str, Any]
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthInfo)
 async def health(svc: Svc):
     return {"ok": True, "version": __version__, "project_open": svc.ws is not None,
             "engine_running": svc.engine.state()["running"], "variant": svc.app.settings.variant,
             "start_suite": os.environ.get("LOOM2_START_SUITE"), "session_id": svc.app.session_id}   # start_suite: dev affordance
 
 
-@router.get("/version")
+@router.get("/version", response_model=VersionInfo)
 async def version(svc: Svc):
     """D36: app version, checkout commit, shell build, engine pin and running engine, node pins, schema versions, paths."""
     info = await asyncio.to_thread(version_info)
@@ -38,12 +39,12 @@ async def version(svc: Svc):
             "paths": {"state": str(svc.app.state_dir), "logs": str(svc.app.logs_dir), "models_root": str(svc.app.models_root)}}
 
 
-@router.get("/capabilities")
+@router.get("/capabilities", response_model=Capabilities)
 async def capabilities(svc: Svc):
     return build_capabilities(svc)
 
 
-@router.post("/recipes/preview")
+@router.post("/recipes/preview", response_model=T2IPreview | I2VPreview, response_model_exclude_unset=True)
 async def recipe_preview(svc: Svc, body: RecipeBody):
     """09 §3a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights."""
     try:
@@ -80,7 +81,7 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
     return {**ep, "missing": missing, "estimate": est, "count": len(recipe.seeds or [0])}
 
 
-@router.post("/shutdown")
+@router.post("/shutdown", response_model=ShuttingDown)
 async def shutdown(request: Request):
     """Graceful exit for the shell (06 §1): the lifespan teardown stops the queue (clean mark) and the engine."""
     fn = getattr(request.app.state, "request_shutdown", None)

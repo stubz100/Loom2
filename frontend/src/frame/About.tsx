@@ -2,7 +2,7 @@
 // shell was built from, the pinned engine and custom nodes, schema versions — plus the state / logs / models folders and a
 // "Copy diagnostics" button that puts all of it (and the engine and queue state) on the clipboard for a bug report.
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { http, unwrap } from '../api/client'
 import type { VersionInfo } from '../api/types'
 import { isTauri, revealPath } from '../shell/tauri'
 import { useSession } from '../store/session'
@@ -13,7 +13,7 @@ export function About() {
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    api.get<VersionInfo>('/version').then((v) => { if (live) setInfo(v) }).catch((e) => { if (live) setError(String(e)) })
+    unwrap(http.GET('/version')).then((v) => { if (live) setInfo(v) }).catch((e) => { if (live) setError(String(e)) })
     return () => { live = false }
   }, [])
   if (error) return <span className="hint">version unavailable: {error}</span>

@@ -3,8 +3,8 @@
 // open a clip). Clips arrive through `clip.ready` events (06 §7).
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api, ApiError } from '../../api/client'
-import type { Asset, Clip, Job } from '../../api/types'
+import { ApiError, http, unwrap } from '../../api/client'
+import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
@@ -16,10 +16,7 @@ export interface AnimPanel {
   seed_mode: 'random' | 'fixed' | 'increment'; seed: number; count: number
   beats: Beat[]
 }
-export interface AnimPreview {
-  family: string; width: number; height: number; frames: number; fps: number; steps: number; label: string; flf: boolean; beats: number
-  missing: { model_id: string; health: string; approx_gb: number | null }[]; estimate: { seconds: number | null; source: string }; count: number
-}
+export type AnimPreview = I2VPreview                       // D38: the server's i2v preview reply
 export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: string }
 export type AnimView = 'player' | 'filmstrip' | 'compare'
 
@@ -43,8 +40,9 @@ export function modelRules(id: string): (typeof MODEL_RULES)[string] {
   const m = caps?.models[id]
   if (!caps || !m) return base
   const fam = m.family
-  return { ...base, fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, draft: caps.tiers.draft?.[fam] ?? base.draft, hd: caps.tiers.hd?.[fam] ?? base.hd,
-    portrait: caps.portrait?.[fam] ?? base.portrait, square: caps.square?.[fam] ?? base.square }
+  const pair = (v: number[] | undefined, fallback: [number, number]): [number, number] => (v && v.length === 2 ? [v[0], v[1]] : fallback)
+  return { ...base, fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, draft: pair(caps.tiers.draft?.[fam], base.draft), hd: pair(caps.tiers.hd?.[fam], base.hd),
+    portrait: pair(caps.portrait?.[fam], base.portrait), square: pair(caps.square?.[fam], base.square) }
 }
 
 export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: AnimPanel['orientation'], current: [number, number]): [number, number] {
@@ -56,7 +54,8 @@ export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: 
 }
 
 /** The I2V recipe (11 §10) the server compiles; seeds follow the seed mode (0 = the server picks one). */
-export function recipeFor(p: AnimPanel, seeds?: number[]): Record<string, unknown> {
+/** The I2V recipe for a panel with a start frame (callers check `start` first: Animate asks for one, the preview uses a placeholder). */
+export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I2VRecipe {
   const s = seeds ?? (p.seed_mode === 'random' ? Array.from({ length: p.count }, () => 0) : p.seed_mode === 'fixed' ? Array.from({ length: p.count }, () => p.seed) : Array.from({ length: p.count }, (_, i) => p.seed + i))
   return {
     kind: 'i2v', model_id: p.model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative ? p.negative : null,
@@ -84,8 +83,8 @@ interface AnimateState {
   refreshPreview: () => void
   loadClips: () => Promise<void>
   select: (id: string | null) => void
-  onClipReady: (d: { clip_id: string; asset_id?: string }) => void
-  onClipUpdated: (d: { clip_id: string; identity?: Clip['identity'] }) => void
+  onClipReady: (d: ClipReadyData) => void
+  onClipUpdated: (d: ClipUpdatedData) => void
   measureIdentity: () => Promise<void>
   loadAsset: (id: string) => Promise<Asset | undefined>
   clip: () => Clip | undefined
@@ -158,15 +157,15 @@ export const useAnimate = create<AnimateState>()(
           const p = get().panel
           const seq = ++previewSeq
           const body = recipeFor({ ...p, start: p.start ?? 'ast_pending' })
-          void api.post<AnimPreview>('/recipes/preview', { recipe: body })
-            .then((pv) => { if (seq === previewSeq) set({ preview: pv, previewError: null }) })
+          void unwrap(http.POST('/recipes/preview', { body: { recipe: body } }))
+            .then((pv) => { if (seq === previewSeq) set({ preview: isI2VPreview(pv) ? pv : null, previewError: null }) })
             .catch((e: ApiError) => { if (seq === previewSeq) set({ preview: null, previewError: e.detail ?? String(e) }) })
         }, 250)
       },
 
       loadClips: async () => {
         try {
-          const r = await api.get<{ items: Clip[] }>('/clips')
+          const r = await unwrap(http.GET('/clips'))
           const clips = r.items
           const cur = get().current && clips.some((c) => c.id === get().current) ? get().current : clips[0]?.id ?? null
           set({ clips, current: cur })
@@ -188,7 +187,7 @@ export const useAnimate = create<AnimateState>()(
         }
       },
       onClipReady: (d) => {
-        void api.get<{ items: Clip[] }>('/clips').then((r) => {
+        void unwrap(http.GET('/clips')).then((r) => {
           set({ clips: r.items })
           get().select(d.clip_id)
           useSession.getState().toast('Clip ready — playing in Animate', 'success')
@@ -199,13 +198,13 @@ export const useAnimate = create<AnimateState>()(
         const c = get().clip()
         if (!c) return
         set({ busy: 'measuring identity' })
-        try { const r = await api.post<Clip>(`/clips/${c.id}/identity`); set({ clips: get().clips.map((x) => x.id === r.id ? r : x) }) }
+        try { const r = await unwrap(http.POST('/clips/{clip_id}/identity', { params: { path: { clip_id: c.id } } })); set({ clips: get().clips.map((x) => x.id === r.id ? r : x) }) }
         catch (e) { useSession.getState().toast(`FaceSim failed: ${(e as ApiError).detail ?? e}`, 'error') } finally { set({ busy: null }) }
       },
       loadAsset: async (id) => {
         const have = get().assets[id]
         if (have) return have
-        try { const a = await api.get<Asset>(`/assets/${id}`); set({ assets: { ...get().assets, [id]: a } }); return a } catch { return undefined }
+        try { const a = await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: id } } })); set({ assets: { ...get().assets, [id]: a } }); return a } catch { return undefined }
       },
       clip: () => get().clips.find((c) => c.id === get().current),
 
@@ -215,7 +214,7 @@ export const useAnimate = create<AnimateState>()(
         if (!p.start) { s.toast('Set a start frame first (drop a Catalogue tile on the slot, or Shift+A in the Catalogue)', 'info'); return }
         if (get().preview?.missing.length) { s.toast(`Weights missing: ${get().preview!.missing.map((m) => m.model_id).join(', ')} — fetch them in Models`, 'error'); return }
         try {
-          const r = await api.post<{ jobs: Job[] }>('/jobs', { recipe: recipeFor(p), stage })
+          const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage } }))
           const n = r.jobs.length
           s.toast(stage ? `${n} clip${n > 1 ? 's' : ''} staged` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`, 'success')
           if (p.seed_mode === 'increment') get().set({ seed: p.seed + n })
@@ -225,13 +224,13 @@ export const useAnimate = create<AnimateState>()(
         const c = get().clip()
         if (!c) return
         const recipe = { ...(c.params.recipe as Record<string, unknown>), seeds: Array.from({ length: Math.max(1, get().panel.count) }, () => 0) }
-        try { await api.post('/jobs', { recipe, stage: false }); useSession.getState().toast('Variations queued (new seeds)', 'success') } catch (e) { useSession.getState().toast(`Variations failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast('Variations queued (new seeds)', 'success') } catch (e) { useSession.getState().toast(`Variations failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
       rerun: async () => {
         const c = get().clip()
         if (!c) return
         const recipe = { ...(c.params.recipe as Record<string, unknown>), seeds: [c.seed] }
-        try { await api.post('/jobs', { recipe, stage: false }); useSession.getState().toast(`Re-running seed ${c.seed}`, 'success') } catch (e) { useSession.getState().toast(`Re-run failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast(`Re-running seed ${c.seed}`, 'success') } catch (e) { useSession.getState().toast(`Re-run failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
       tryOther: async () => {
         const c = get().clip()
@@ -240,7 +239,7 @@ export const useAnimate = create<AnimateState>()(
         const r = modelRules(other)
         const base = c.params.recipe as Record<string, unknown>
         const recipe = { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0] }
-        try { await api.post('/jobs', { recipe, stage: false }); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
       setView: (view) => set({ view, playing: view === 'filmstrip' ? false : get().playing }),
@@ -260,7 +259,7 @@ export const useAnimate = create<AnimateState>()(
         if (!c) return []
         set({ busy: 'extracting' })
         try {
-          const r = await api.post<{ items: Asset[]; clip: Clip }>(`/clips/${c.id}/extract`, { frames })
+          const r = await unwrap(http.POST('/clips/{clip_id}/extract', { params: { path: { clip_id: c.id } }, body: { frames } }))
           set({ clips: get().clips.map((x) => x.id === c.id ? r.clip : x), assets: { ...get().assets, ...Object.fromEntries(r.items.map((a) => [a.id, a])) } })
           const pins = [...(get().pins[c.id] ?? []), ...r.items.map((a) => ({ frame: Number((a.params as { frame_index?: number }).frame_index ?? -1), asset_id: a.id }))]
           set({ pins: { ...get().pins, [c.id]: pins } })
@@ -286,7 +285,7 @@ export const useAnimate = create<AnimateState>()(
       setState: async (state) => {
         const c = get().clip()
         if (!c?.asset_id) return
-        try { const a = await api.patch<Asset>(`/assets/${c.asset_id}`, { state }); set({ assets: { ...get().assets, [a.id]: a } }) } catch (e) { useSession.getState().toast(`Could not mark the clip: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { const a = await unwrap(http.PATCH('/assets/{asset_id}', { params: { path: { asset_id: c.asset_id } }, body: { state } })); set({ assets: { ...get().assets, [a.id]: a } }) } catch (e) { useSession.getState().toast(`Could not mark the clip: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
       savePreset: (name) => set({ presets: [...get().presets.filter((p) => p.name !== name), { name, panel: { ...get().panel, start: null, end: null, beats: [] }, saved_at: new Date().toISOString() }], lastPreset: name }),

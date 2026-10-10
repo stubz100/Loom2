@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .catalogue import AssetQuery, Catalogue
 from .fsio import StateError, atomic_write_json, new_id, read_json, utc_now
@@ -42,6 +42,7 @@ class GroupNotFound(StateError):
 
 
 class GroupItem(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     kind: ItemKind
     id: str
     x: float = 0
@@ -51,6 +52,7 @@ class GroupItem(BaseModel):
 
 
 class GroupRecord(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = GROUP_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("grp"))
     name: str

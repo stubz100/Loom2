@@ -2,8 +2,8 @@
 // presets), the live preview from /recipes/preview, and the verbs other suites call (reference, re-run, variations).
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api, ApiError } from '../../api/client'
-import type { Asset, Job } from '../../api/types'
+import { ApiError, http, unwrap } from '../../api/client'
+import { isT2IPreview, type Asset, type Job, type T2IPreview, type T2IRecipe } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string }
@@ -24,12 +24,7 @@ export interface Panel {
   loras: { model_id: string; strength: number }[]
 }
 
-export interface Preview {
-  serialized_prompt: string; prompt_mode: string; width: number; height: number; steps: number; guidance: number; cfg: number; sampler: string; scheduler: string
-  turbo: boolean; distilled: boolean; negative_used: boolean; word_count: number; token_estimate: number; refs: number; max_refs: number
-  turbo_strength: number | null; weight_dtype: string; te_device: string; te_id: string; base_shift: number | null; max_shift: number | null; tiled_vae: boolean; tile_size: number | null
-  missing: { model_id: string; health: string; approx_gb: number | null }[]; estimate: { seconds: number | null; source: string; vram_gb?: number; vram_budget_gb?: number; vram_fit?: 'ok' | 'tight' | 'over' }; count: number
-}
+export type Preview = T2IPreview                          // D38: the server's t2i preview reply
 export interface Preset { name: string; panel: Panel; saved_at: string }
 export interface Snippet { name: string; field: string; text: string }
 
@@ -72,7 +67,7 @@ export function treeFromJson(j: Record<string, unknown>): Tree {
   return t
 }
 
-export function recipeFromPanel(p: Panel, seeds?: number[]): Record<string, unknown> {
+export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
   let prompt_json: Record<string, unknown> | undefined
   if (p.prompt_mode === 'tree') prompt_json = cleanTree(p.tree)
   else if (p.prompt_mode === 'json') { try { prompt_json = JSON.parse(p.json_text || '{}') } catch { prompt_json = undefined } }
@@ -156,8 +151,8 @@ export const useGenerate = create<GenerateState>()(
         const seq = ++previewSeq
         set({ previewing: true })
         try {
-          const pv = await api.post<Preview>('/recipes/preview', { recipe: recipeFromPanel(get().panel) })
-          if (seq === previewSeq) set({ preview: pv, previewError: null })
+          const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: recipeFromPanel(get().panel) } }))
+          if (seq === previewSeq) set({ preview: isT2IPreview(pv) ? pv : null, previewError: null })
         } catch (e) {
           if (seq === previewSeq) set({ previewError: (e as ApiError).detail ?? String(e) })
         } finally { if (seq === previewSeq) set({ previewing: false }) }
@@ -166,7 +161,7 @@ export const useGenerate = create<GenerateState>()(
       generate: async (stage = false) => {
         const s = useSession.getState()
         try {
-          const jobs = await api.post<{ jobs: Job[] }>('/jobs', { recipe: recipeFromPanel(get().panel), stage })
+          const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage } }))
           const batch = jobs.jobs[0]?.batch_id ?? jobs.jobs[0]?.id ?? null
           set({ lastBatch: batch, show: 'batch' })
           s.toast(stage ? `Staged ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`, 'success')
@@ -207,19 +202,19 @@ export const useGenerate = create<GenerateState>()(
       togglePinned: (id) => set({ pinned: get().pinned.includes(id) ? get().pinned.filter((x) => x !== id) : [...get().pinned, id].slice(-6) }),
 
       loadPresets: async () => {
-        try { const r = await api.get<{ presets: Preset[]; last: string | null }>('/project/presets'); set({ presets: r.presets ?? [], lastPreset: r.last ?? null }) } catch { set({ presets: [], lastPreset: null }) }
+        try { const r = await unwrap(http.GET('/project/presets')) as { presets?: Preset[]; last?: string | null }; set({ presets: r.presets ?? [], lastPreset: r.last ?? null }) } catch { set({ presets: [], lastPreset: null }) }
       },
       savePreset: async (name) => {
         const presets = [...get().presets.filter((p) => p.name !== name), { name, panel: get().panel, saved_at: new Date().toISOString() }]
-        await api.put('/project/presets', { presets, last: name })
+        await unwrap(http.PUT('/project/presets', { body: { presets, last: name } }))
         set({ presets, lastPreset: name })
         useSession.getState().toast(`Preset "${name}" saved`, 'success')
       },
       applyPreset: (name) => { const p = get().presets.find((x) => x.name === name); if (p) { get().set({ ...p.panel }); set({ lastPreset: name }) } },
-      deletePreset: async (name) => { const presets = get().presets.filter((p) => p.name !== name); await api.put('/project/presets', { presets, last: get().lastPreset === name ? null : get().lastPreset }); set({ presets }) },
-      loadSnippets: async () => { try { set({ snippets: (await api.get<{ snippets: Snippet[] }>('/snippets')).snippets ?? [] }) } catch { set({ snippets: [] }) } },
-      saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => !(x.name === sn.name && x.field === sn.field)), sn]; await api.put('/snippets', { snippets }); set({ snippets }) },
-      deleteSnippet: async (name) => { const snippets = get().snippets.filter((x) => x.name !== name); await api.put('/snippets', { snippets }); set({ snippets }) },
+      deletePreset: async (name) => { const presets = get().presets.filter((p) => p.name !== name); await unwrap(http.PUT('/project/presets', { body: { presets, last: get().lastPreset === name ? null : get().lastPreset } })); set({ presets }) },
+      loadSnippets: async () => { try { set({ snippets: ((await unwrap(http.GET('/snippets'))) as { snippets?: Snippet[] }).snippets ?? [] }) } catch { set({ snippets: [] }) } },
+      saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => !(x.name === sn.name && x.field === sn.field)), sn]; await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
+      deleteSnippet: async (name) => { const snippets = get().snippets.filter((x) => x.name !== name); await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
     }),
     { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show }) as never,
       // a panel persisted before a field existed gets that field's default (new engine options, 2026-10-06)

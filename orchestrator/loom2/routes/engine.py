@@ -3,18 +3,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from ..schemas import EngineState, Freed
 from ..services import Services
 from .deps import Svc
 
 router = APIRouter(tags=["engine"])
 
 
-@router.get("/engine")
+@router.get("/engine", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_get(svc: Svc):
     return await svc.engine.health()
 
 
-@router.post("/engine/start")
+@router.post("/engine/start", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_start(svc: Svc):
     try:
         return await svc.engine.start()
@@ -22,19 +23,19 @@ async def engine_start(svc: Svc):
         raise HTTPException(503, str(e))
 
 
-@router.post("/engine/stop")
+@router.post("/engine/stop", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_stop(svc: Svc):
     _engine_idle(svc)
     return await svc.engine.stop()
 
 
-@router.post("/engine/restart")
+@router.post("/engine/restart", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_restart(svc: Svc):
     _engine_idle(svc)
     return await svc.engine.restart()
 
 
-@router.post("/engine/free")
+@router.post("/engine/free", response_model=Freed)
 async def engine_free(svc: Svc):
     _engine_idle(svc)
     await svc.engine.client.free()

@@ -12,7 +12,8 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..catalogue import AssetPage, AssetQuery, Catalogue, GroupHeader
+from ..catalogue import AssetPage, AssetQuery, AssetRecord, Catalogue, GroupHeader
+from ..schemas import AssetList, Deleted, IdsReply, Lineage, LineageTree, Purged, RebuildReply, Restored, TagList, Trashed
 from ..tools.pngmeta import parse_image_metadata
 from .deps import Svc
 
@@ -59,19 +60,19 @@ async def assets_groups(svc: Svc, q: Annotated[AssetQuery, Query()]):
     return await asyncio.to_thread(cat.groups, q)
 
 
-@router.get("/assets/counts")
+@router.get("/assets/counts", response_model=dict[str, int])
 async def assets_counts(svc: Svc):
     _, cat, _ = svc.require_project()
     return await asyncio.to_thread(cat.counts)
 
 
-@router.get("/assets/tags")
+@router.get("/assets/tags", response_model=TagList)
 async def assets_tags(svc: Svc):
     _, cat, _ = svc.require_project()
     return {"items": await asyncio.to_thread(cat.tags)}
 
 
-@router.patch("/assets/bulk")
+@router.patch("/assets/bulk", response_model=AssetList)
 async def assets_bulk(svc: Svc, body: BulkPatch):
     _, cat, _ = svc.require_project()
     recs = await asyncio.to_thread(cat.patch_many, body.ids, body.changes)
@@ -80,7 +81,7 @@ async def assets_bulk(svc: Svc, body: BulkPatch):
     return {"items": [r.model_dump() for r in recs]}
 
 
-@router.post("/assets/trash")
+@router.post("/assets/trash", response_model=Trashed)
 async def assets_trash(svc: Svc, body: IdList):
     _, cat, _ = svc.require_project()
     recs = await asyncio.to_thread(cat.trash, body.ids)
@@ -89,7 +90,7 @@ async def assets_trash(svc: Svc, body: IdList):
     return {"trashed": [r.id for r in recs]}
 
 
-@router.post("/assets/restore")
+@router.post("/assets/restore", response_model=Restored)
 async def assets_restore(svc: Svc, body: IdList):
     _, cat, _ = svc.require_project()
     recs = await asyncio.to_thread(cat.restore, body.ids)
@@ -98,7 +99,7 @@ async def assets_restore(svc: Svc, body: IdList):
     return {"restored": [r.id for r in recs]}
 
 
-@router.post("/assets/purge")
+@router.post("/assets/purge", response_model=Purged)
 async def assets_purge(svc: Svc, body: PurgeRequest):
     _, cat, _ = svc.require_project()
     gone = await asyncio.to_thread(cat.purge, body.ids, body.older_than_days)
@@ -112,7 +113,7 @@ async def assets_purge(svc: Svc, body: PurgeRequest):
     return {"purged": len(gone), "ids": gone if len(gone) <= 50 else []}
 
 
-@router.post("/assets/import")
+@router.post("/assets/import", response_model=AssetList)
 async def assets_import(svc: Svc, body: ImportRequest):
     _, cat, _ = svc.require_project()
     files = await asyncio.to_thread(_import_files, body.paths)
@@ -124,7 +125,7 @@ async def assets_import(svc: Svc, body: ImportRequest):
     return {"items": out}
 
 
-@router.post("/assets/duplicate")
+@router.post("/assets/duplicate", response_model=IdsReply)
 async def assets_duplicate(svc: Svc, body: IdList):
     st = svc.require_groups()
     new = await asyncio.to_thread(st.duplicate_assets, body.ids)
@@ -135,7 +136,7 @@ async def assets_duplicate(svc: Svc, body: IdList):
     return {"ids": new}
 
 
-@router.get("/assets/{asset_id}")
+@router.get("/assets/{asset_id}", response_model=AssetRecord)
 async def asset_get(svc: Svc, asset_id: str):
     _, cat, _ = svc.require_project()
     rec = await asyncio.to_thread(cat.get, asset_id)
@@ -144,7 +145,7 @@ async def asset_get(svc: Svc, asset_id: str):
     return rec.model_dump()
 
 
-@router.patch("/assets/{asset_id}")
+@router.patch("/assets/{asset_id}", response_model=AssetRecord)
 async def asset_patch(svc: Svc, asset_id: str, body: AssetPatch):
     _, cat, _ = svc.require_project()
     rec = await asyncio.to_thread(cat.patch, asset_id, body.model_dump(exclude_none=True))
@@ -154,7 +155,7 @@ async def asset_patch(svc: Svc, asset_id: str, body: AssetPatch):
     return rec.model_dump()
 
 
-@router.delete("/assets/{asset_id}")
+@router.delete("/assets/{asset_id}", response_model=Deleted)
 async def asset_delete(svc: Svc, asset_id: str):
     _, cat, _ = svc.require_project()
     if not await asyncio.to_thread(cat.delete, asset_id):
@@ -188,7 +189,7 @@ async def thumb(svc: Svc, asset_id: str, size: int):
     return FileResponse(p, media_type="image/webp", headers=IMMUTABLE)
 
 
-@router.get("/lineage/tree/{root_id}")
+@router.get("/lineage/tree/{root_id}", response_model=LineageTree)
 async def lineage_tree(svc: Svc, root_id: str):
     _, cat, _ = svc.require_project()
     groups = svc.require_groups()
@@ -200,13 +201,13 @@ async def lineage_tree(svc: Svc, root_id: str):
     return await asyncio.to_thread(build)
 
 
-@router.get("/lineage/{asset_id}")
+@router.get("/lineage/{asset_id}", response_model=Lineage)
 async def lineage(svc: Svc, asset_id: str):
     _, cat, _ = svc.require_project()
     return await asyncio.to_thread(cat.lineage, asset_id)
 
 
-@router.post("/catalogue/rebuild")
+@router.post("/catalogue/rebuild", response_model=RebuildReply)
 async def catalogue_rebuild(svc: Svc):
     _, cat, _ = svc.require_project()
     n = await asyncio.to_thread(cat.rebuild)

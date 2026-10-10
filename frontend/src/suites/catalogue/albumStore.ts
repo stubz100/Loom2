@@ -2,16 +2,15 @@
 // (free arrangement) are loaded by the Stage; this store keeps the tree, which nodes are expanded, and calls the API.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api } from '../../api/client'
+import { http, unwrap } from '../../api/client'
+import type { AlbumNode as ApiAlbumNode, PathStep as ApiPathStep } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export const ALBUM_ID = 'album'
 
-export interface AlbumNode {
-  id: string; name: string; assets: number; groups: number; total: number; cover_ids: string[]; revision: number; children: AlbumNode[]
-}
+export type AlbumNode = ApiAlbumNode
 export interface ItemRef { kind: 'asset' | 'group'; id: string }
-export interface PathStep { id: string; name: string }
+export type PathStep = ApiPathStep
 
 interface AlbumState {
   tree: AlbumNode | null
@@ -34,7 +33,7 @@ const err = (what: string) => (e: unknown) => { useSession.getState().toast(`${w
 
 export const useAlbum = create<AlbumState>()(persist((set, get) => ({
   tree: null, expanded: {},
-  load: async () => { try { set({ tree: await api.get<AlbumNode>('/groups/tree') }) } catch { /* no project yet */ } },
+  load: async () => { try { set({ tree: await unwrap(http.GET('/groups/tree')) }) } catch { /* no project yet */ } },
   toggle: (id, open) => set({ expanded: { ...get().expanded, [id]: open ?? !get().expanded[id] } }),
   find: (id) => {
     const walk = (n: AlbumNode | null): AlbumNode | null => { if (!n) return null; if (n.id === id) return n; for (const c of n.children) { const f = walk(c); if (f) return f } return null }
@@ -51,18 +50,18 @@ export const useAlbum = create<AlbumState>()(persist((set, get) => ({
     return (t && walk(t, [])) ?? []
   },
   create: async (name, parentId = ALBUM_ID) => {
-    const g = await api.post<{ id: string }>('/groups', { name, parent_id: parentId }).catch(err('New group'))
+    const g = await unwrap(http.POST('/groups', { body: { name, parent_id: parentId } })).catch(err('New group'))
     get().toggle(parentId, true)
     await get().load()
     return g.id
   },
-  rename: async (id, name) => { await api.patch(`/groups/${id}`, { name }).catch(err('Rename')); await get().load() },
-  setCover: async (id, assetId) => { await api.patch(`/groups/${id}`, { cover_id: assetId }).catch(err('Set cover')); await get().load() },
-  remove: async (id) => { const r = await api.del<{ unprocessed: string[] }>(`/groups/${id}`).catch(err('Delete group')); await get().load(); return r.unprocessed.length },
-  ungroup: async (id) => { await api.post(`/groups/${id}/ungroup`, {}).catch(err('Ungroup')); await get().load() },
-  duplicate: async (id) => { await api.post(`/groups/${id}/duplicate`, {}).catch(err('Duplicate')); await get().load() },
-  move: async (items, to, positions) => { await api.post('/groups/move', { items, to, positions }).catch(err('Move')); await get().load() },
-  duplicateAssets: async (ids) => (await api.post<{ ids: string[] }>('/assets/duplicate', { ids }).catch(err('Duplicate'))).ids,
+  rename: async (id, name) => { await unwrap(http.PATCH('/groups/{gid}', { params: { path: { gid: id } }, body: { name } })).catch(err('Rename')); await get().load() },
+  setCover: async (id, assetId) => { await unwrap(http.PATCH('/groups/{gid}', { params: { path: { gid: id } }, body: { cover_id: assetId } })).catch(err('Set cover')); await get().load() },
+  remove: async (id) => { const r = await unwrap(http.DELETE('/groups/{gid}', { params: { path: { gid: id } } })).catch(err('Delete group')); await get().load(); return r.unprocessed.length },
+  ungroup: async (id) => { await unwrap(http.POST('/groups/{gid}/ungroup', { params: { path: { gid: id } } })).catch(err('Ungroup')); await get().load() },
+  duplicate: async (id) => { await unwrap(http.POST('/groups/{gid}/duplicate', { params: { path: { gid: id } } })).catch(err('Duplicate')); await get().load() },
+  move: async (items, to, positions) => { await unwrap(http.POST('/groups/move', { body: { items, to, positions } })).catch(err('Move')); await get().load() },
+  duplicateAssets: async (ids) => (await unwrap(http.POST('/assets/duplicate', { body: { ids } })).catch(err('Duplicate'))).ids,
 }), { name: 'loom2.album', partialize: (s) => ({ expanded: s.expanded }) as never }))
 
 /** Every group as a flat list with its depth, for "Move to group ▸" menus. */

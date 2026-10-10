@@ -1,4 +1,9 @@
 // REST + WebSocket client for the orchestrator (06 §2/§6). Bytes are fetched by URL (loopback HTTP), never base64.
+// D38: JSON calls go through `http`, an openapi-fetch client typed by schema.d.ts (generated from the orchestrator's OpenAPI
+// document): paths, path/query parameters, bodies and replies are all checked. `unwrap` turns its result into the reply or
+// an ApiError, as the old untyped helpers did.
+import createClient, { type Client } from 'openapi-fetch'
+import type { paths } from './schema'
 import type { Backend, EventFrame } from './types'
 
 export class ApiError extends Error {
@@ -8,9 +13,30 @@ export class ApiError extends Error {
 }
 
 let backend: Backend | null = null
-export const setBackend = (b: Backend) => { backend = b }
 export const getBackend = () => backend
 export const baseUrl = () => backend ? `http://${backend.host}:${backend.port}` : ''
+
+/** The typed client for the discovered backend (a live binding: replaced by setBackend). */
+export let http: Client<paths> = createClient<paths>()
+export const setBackend = (b: Backend) => {
+  backend = b
+  http = createClient<paths>({ baseUrl: baseUrl() })
+  http.use({ onRequest: ({ request }) => { request.headers.set('X-Loom-Token', b.token); return request } })
+}
+
+/** The reply of an openapi-fetch call, or an ApiError carrying the server's `detail`. */
+export async function unwrap<R extends { data?: unknown; error?: unknown; response: Response }>(call: Promise<R>): Promise<Exclude<R['data'], undefined>> {
+  if (!backend) throw new ApiError(0, 'backend not discovered yet')
+  const { data, error, response } = await call
+  if (!response.ok) {
+    const d = (error as { detail?: unknown } | undefined)?.detail
+    throw new ApiError(response.status, typeof d === 'string' ? d : d !== undefined ? JSON.stringify(d) : JSON.stringify(error ?? response.statusText))
+  }
+  return data as Exclude<R['data'], undefined>
+}
+
+/** Query parameters of GET /assets and /assets/groups (AssetQuery). */
+export type AssetQueryParams = NonNullable<paths['/assets']['get']['parameters']['query']>
 
 async function call<T>(method: string, path: string, body?: unknown, raw?: BodyInit): Promise<T> {
   if (!backend) throw new ApiError(0, 'backend not discovered yet')
@@ -27,12 +53,8 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: BodyI
   return res.json() as Promise<T>
 }
 
+/** Byte transfers and URLs (D4: pixels never go through JSON). JSON calls use `unwrap(http.GET(…))` and friends (D38). */
 export const api = {
-  get: <T>(path: string) => call<T>('GET', path),
-  post: <T>(path: string, body?: unknown) => call<T>('POST', path, body),
-  put: <T>(path: string, body?: unknown) => call<T>('PUT', path, body),
-  patch: <T>(path: string, body?: unknown) => call<T>('PATCH', path, body),
-  del: <T>(path: string) => call<T>('DELETE', path),
   putBlob: async (sha256: string, bytes: ArrayBuffer | Blob) => call<{ sha256: string; bytes: number }>('PUT', `/blobs/${sha256}`, undefined, bytes),
   fileUrl: (path: string) => baseUrl() + path,
   thumbUrl: (assetId: string, size: 256 | 512 | 1024 = 256) => `${baseUrl()}/thumbs/${assetId}/${size}`,
@@ -67,8 +89,8 @@ export class EventsSocket {
     ws.onopen = () => { this.backoff = 500; this.onStatus('open') }
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
-        let f: EventFrame
-        try { f = JSON.parse(ev.data) as EventFrame } catch { return }           // one bad frame must not take the app down
+        let f: EventFrame | { type: 'pong' }
+        try { f = JSON.parse(ev.data) as EventFrame | { type: 'pong' } } catch { return }   // one bad frame must not take the app down
         if (f.type !== 'pong') this.onEvent(f)
         return
       }

@@ -18,6 +18,8 @@ from PIL import Image
 from pydantic import BaseModel
 
 from ..compose import srgb_delta
+from ..documents import Document
+from ..schemas import Closed, CompareReply, Deleted, DocList, DocumentPutReply, FlattenedToCatalogue, FlattenedToFile, JobsSubmitted, PixelsPut, SelectionReply
 from .deps import Svc
 from .jobs import JobSubmit
 
@@ -42,12 +44,12 @@ class ExportRequest(BaseModel):
     format: str = "png"
 
 
-@router.get("/documents")
+@router.get("/documents", response_model=DocList)
 async def documents_list(svc: Svc):
     return {"items": await asyncio.to_thread(svc.require_documents().list)}
 
 
-@router.post("/documents")
+@router.post("/documents", response_model=Document)
 async def documents_create(svc: Svc, body: DocumentCreate):
     docs = svc.require_documents()
     _, cat, _ = svc.require_project()
@@ -68,13 +70,13 @@ async def documents_create(svc: Svc, body: DocumentCreate):
     return od.doc.model_dump()
 
 
-@router.get("/documents/{doc_id}")
+@router.get("/documents/{doc_id}", response_model=Document)
 async def documents_get(svc: Svc, doc_id: str):
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
     return od.doc.model_dump()
 
 
-@router.put("/documents/{doc_id}")
+@router.put("/documents/{doc_id}", response_model=DocumentPutReply)
 async def documents_put(svc: Svc, doc_id: str, body: dict):
     """Replace the stack. The reply lists raster layers / masks the server has no bytes for, so the editor uploads
     them before `/save` even when it does not consider them dirty (B15: delete · save · undo · save)."""
@@ -96,7 +98,7 @@ async def layer_pixels_get(svc: Svc, doc_id: str, lid: str, kind: str = "image",
     return Response(content=png, media_type="image/png", headers=NO_STORE)
 
 
-@router.put("/documents/{doc_id}/layers/{lid}/pixels")
+@router.put("/documents/{doc_id}/layers/{lid}/pixels", response_model=PixelsPut)
 async def layer_pixels_put(svc: Svc, doc_id: str, lid: str, request: Request, w: int, h: int, kind: str = "image"):
     """Raw uint8 body: RGBA (w·h·4 bytes) for images, grey (w·h) for masks; the fast path from the compositor (E2)."""
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
@@ -112,7 +114,7 @@ async def layer_pixels_put(svc: Svc, doc_id: str, lid: str, request: Request, w:
     return {"layer": lid, "kind": "image", "w": node.w, "h": node.h}
 
 
-@router.post("/documents/{doc_id}/save")
+@router.post("/documents/{doc_id}/save", response_model=Document)
 async def documents_save(svc: Svc, doc_id: str):
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
     await asyncio.to_thread(od.save)
@@ -120,7 +122,7 @@ async def documents_save(svc: Svc, doc_id: str):
     return od.doc.model_dump()
 
 
-@router.post("/documents/{doc_id}/flatten")
+@router.post("/documents/{doc_id}/flatten", response_model=FlattenedToCatalogue | FlattenedToFile)
 async def documents_flatten(svc: Svc, doc_id: str, body: FlattenRequest):
     _, cat, _ = svc.require_project()
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
@@ -153,7 +155,7 @@ async def documents_export(svc: Svc, doc_id: str, body: ExportRequest):
     return Response(content=png, media_type="image/png", headers={"Content-Disposition": f'attachment; filename="{od.doc.name}.png"'})
 
 
-@router.post("/documents/{doc_id}/compare")
+@router.post("/documents/{doc_id}/compare", response_model=CompareReply)
 async def documents_compare(svc: Svc, doc_id: str, request: Request, w: int, h: int):
     """Raw straight-alpha RGBA of the editor's GPU composite (w·h·4 bytes) → per-channel delta against the exact
     flatten (10 §14 item 1). Both images are kept under temp/compare for inspection; the result lands in doc.meta."""
@@ -198,7 +200,7 @@ async def documents_selection_get(svc: Svc, doc_id: str):
                     headers={"X-Loom-Width": str(sel.shape[1]), "X-Loom-Height": str(sel.shape[0]), "X-Loom-Channels": "1", **NO_STORE})
 
 
-@router.put("/documents/{doc_id}/selection")
+@router.put("/documents/{doc_id}/selection", response_model=SelectionReply)
 async def documents_selection_put(svc: Svc, doc_id: str, request: Request, w: int = 0, h: int = 0):
     """The editor's selection as raw grey bytes (w·h); an empty body clears it. The M5 edit jobs read it."""
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
@@ -217,7 +219,7 @@ async def documents_selection_put(svc: Svc, doc_id: str, request: Request, w: in
     return {"selection": [w, h]}
 
 
-@router.post("/documents/{doc_id}/ai")
+@router.post("/documents/{doc_id}/ai", response_model=JobsSubmitted)
 async def documents_ai(svc: Svc, doc_id: str, body: JobSubmit):
     """Queue an inpaint / refine / upscale job on this document (10 §13); results come back as layers
     (`document.changed` events with `added`) or, for upscale, as a Catalogue asset too."""
@@ -234,13 +236,13 @@ async def documents_ai(svc: Svc, doc_id: str, body: JobSubmit):
     return {"jobs": [j.model_dump() for j in jobs]}
 
 
-@router.post("/documents/{doc_id}/close")
+@router.post("/documents/{doc_id}/close", response_model=Closed)
 async def documents_close(svc: Svc, doc_id: str):
     svc.require_documents().close(doc_id)
     return {"closed": doc_id}
 
 
-@router.delete("/documents/{doc_id}")
+@router.delete("/documents/{doc_id}", response_model=Deleted)
 async def documents_delete(svc: Svc, doc_id: str):
     if not svc.require_documents().delete(doc_id):
         raise HTTPException(404, "no document")

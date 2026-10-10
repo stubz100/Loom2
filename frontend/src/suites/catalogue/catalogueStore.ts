@@ -2,8 +2,8 @@
 // Project data stays on the orchestrator; this store caches pages and applies live events.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api } from '../../api/client'
-import type { Asset, EventFrame } from '../../api/types'
+import { http, unwrap, type AssetQueryParams } from '../../api/client'
+import type { Asset, EventFrame, GroupHeader as ApiGroupHeader } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export type Folder = 'all' | 'unprocessed' | 'today' | 'last_session' | 'images' | 'clips' | 'documents' | 'imported' | 'rejected' | 'trash'
@@ -18,23 +18,22 @@ export interface Query {
   group_id?: string; date_preset?: DatePreset; has_document?: boolean
   batch_label?: string; root_label?: string                       // chip labels only, never sent
 }
-export interface GroupHeader { key: string; label: string; count: number; first_created: string; last_created: string; cover_id: string; model_id: string | null; prompt_excerpt: string | null }
-interface Page { items: Asset[]; next_cursor: string | null; total: number | null }
+export type GroupHeader = ApiGroupHeader
 
 const DEFAULT_QUERY: Query = { folder: 'all', state: 'all', rating_min: 0, tags_any: [], search: '', sort: 'created_desc', group: 'batch' }
 
-function qs(q: Query, extra: Record<string, string | number | boolean | undefined> = {}): string {
-  const p = new URLSearchParams()
-  const put = (k: string, v: unknown) => { if (v !== undefined && v !== null && v !== '' && v !== false) p.append(k, String(v)) }
-  put('folder', q.folder); put('state', q.state); put('kind', q.kind); put('suite', q.suite); put('model_id', q.model_id)
-  if (q.rating_min > 0) put('rating_min', q.rating_min)
-  q.tags_any.forEach((t) => p.append('tags_any', t))
-  put('aspect', q.aspect); if (q.has_children !== undefined) put('has_children', q.has_children)
-  put('search', q.search.trim()); put('sort', q.sort); put('group', q.group); put('collection_id', q.collection_id); put('root_id', q.root_id)
-  put('created_from', q.created_from); put('created_to', q.created_to); put('batch_id', q.batch_id); put('session_id', q.session_id)
-  put('group_id', q.group_id); put('date_preset', q.date_preset); if (q.has_document !== undefined) put('has_document', q.has_document)
-  for (const [k, v] of Object.entries(extra)) put(k, v)
-  return p.toString()
+/** The store's query as GET /assets parameters: empty strings and unset fields are left out; booleans are sent when set, `false`
+ *  included (D38 fix: "No derivations" sent nothing before, so its chip showed every asset). */
+function queryOf(q: Query, extra: Partial<AssetQueryParams> = {}): AssetQueryParams {
+  const out: AssetQueryParams = { folder: q.folder, state: q.state, sort: q.sort, group: q.group }
+  const text = (v: string | undefined) => (v ? v : undefined)
+  Object.assign(out, {
+    kind: q.kind, suite: text(q.suite), model_id: text(q.model_id), rating_min: q.rating_min > 0 ? q.rating_min : undefined,
+    tags_any: q.tags_any.length ? q.tags_any : undefined, aspect: q.aspect, has_children: q.has_children, has_document: q.has_document,
+    search: text(q.search.trim()), collection_id: text(q.collection_id), root_id: text(q.root_id), created_from: text(q.created_from), created_to: text(q.created_to),
+    batch_id: text(q.batch_id), session_id: text(q.session_id), group_id: text(q.group_id), date_preset: q.date_preset,
+  }, extra)
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as AssetQueryParams
 }
 
 export interface CatalogueState {
@@ -110,11 +109,11 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         set({ loading: true, error: null, ...(opts?.keepSelection ? {} : { selected: [], primary: null, anchor: null }) })   // B22
         try {
           if (q.group === 'none') {
-            const page = await api.get<Page>(`/assets?${qs(q, { limit: 200 })}`)
+            const page = await unwrap(http.GET('/assets', { params: { query: queryOf(q, { limit: 200 }) } }))
             if (seq !== loadSeq) return
             set({ items: page.items, nextCursor: page.next_cursor, total: page.total, groups: [], groupItems: {} })
           } else {
-            const groups = await api.get<GroupHeader[]>(`/assets/groups?${qs(q)}`)
+            const groups = await unwrap(http.GET('/assets/groups', { params: { query: queryOf(q) } }))
             if (seq !== loadSeq) return
             const expanded = { ...get().expanded }
             groups.slice(0, 6).forEach((g) => { if (expanded[g.key] === undefined) expanded[g.key] = true })
@@ -134,7 +133,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         if (!nextCursor || loading || q.group !== 'none') return
         set({ loading: true })
         try {
-          const page = await api.get<Page>(`/assets?${qs(q, { limit: 200, cursor: nextCursor })}`)
+          const page = await unwrap(http.GET('/assets', { params: { query: queryOf(q, { limit: 200, cursor: nextCursor }) } }))
           set({ items: [...get().items, ...page.items], nextCursor: page.next_cursor })
         } finally { set({ loading: false }) }
       },
@@ -146,7 +145,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
         const seq = loadSeq
         try {
           // at most MAX_INFLIGHT group fetches at a time: "expand all" on 10k assets must not open thousands of connections
-          const page = await limited(() => api.get<Page>(`/assets?${qs({ ...q, group: 'none' }, { group_by: q.group, group_key: key, limit: 1000 })}`))
+          const page = await limited(() => unwrap(http.GET('/assets', { params: { query: queryOf({ ...q, group: 'none' }, { group_by: q.group, group_key: key, limit: 1000 }) } })))
           if (seq !== loadSeq) return                               // the query changed meanwhile
           set({ groupItems: { ...get().groupItems, [key]: page.items } })
         } catch (e) {
@@ -172,7 +171,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       retryGroup: (key) => { const ge = { ...get().groupErrors }; delete ge[key]; set({ groupErrors: ge, error: null }); void get().loadGroup(key) },
 
       refreshMeta: async () => {
-        const [counts, tags] = await Promise.all([api.get<Record<string, number>>('/assets/counts'), api.get<{ items: { tag: string; count: number }[] }>('/assets/tags')])
+        const [counts, tags] = await Promise.all([unwrap(http.GET('/assets/counts')), unwrap(http.GET('/assets/tags'))])
         set({ counts, tagCloud: tags.items })
       },
 
@@ -211,18 +210,18 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       setRating: async (ids, rating) => { await patchMany(ids, { rating }, set, get) },
       setTags: async (ids, tags) => { await patchMany(ids, { tags }, set, get); void get().refreshMeta() },
       trash: async (ids) => {
-        await api.post('/assets/trash', { ids })
+        await unwrap(http.POST('/assets/trash', { body: { ids } }))
         removeLocal(ids, set, get)
         void get().refreshMeta()
         useSession.getState().toast(`Moved ${ids.length} to Trash`, 'info', () => void get().restore(ids))
       },
-      restore: async (ids) => { await api.post('/assets/restore', { ids }); await get().load(); void get().refreshMeta() },
-      purge: async (ids) => { await api.post('/assets/purge', { ids }); removeLocal(ids, set, get); void get().refreshMeta() },
+      restore: async (ids) => { await unwrap(http.POST('/assets/restore', { body: { ids } })); await get().load(); void get().refreshMeta() },
+      purge: async (ids) => { await unwrap(http.POST('/assets/purge', { body: { ids } })); removeLocal(ids, set, get); void get().refreshMeta() },
       purging: false,
       emptyTrash: async () => {
         set({ purging: true })
         try {
-          const r = await api.post<{ purged: number }>('/assets/purge', { ids: null })   // every trashed asset, files and index rows
+          const r = await unwrap(http.POST('/assets/purge', { body: { ids: null } }))   // every trashed asset, files and index rows
           await get().load(); void get().refreshMeta()
           return r.purged
         } finally { set({ purging: false }) }
@@ -242,7 +241,7 @@ export function createCatalogueStore(name: string, defaults: Partial<Query> = {}
       clearCompare: () => set({ compare: [], compareOpen: false }),
 
       importPaths: async (paths) => {
-        const r = await api.post<{ items: Asset[] }>('/assets/import', { paths })
+        const r = await unwrap(http.POST('/assets/import', { body: { paths } }))
         await get().load(); void get().refreshMeta()
         return r.items.length
       },
@@ -284,7 +283,7 @@ export const allCatalogueStores = () => [useCatalogue, useCataloguePane2, useGen
 
 async function patchMany(ids: string[], changes: Record<string, unknown>, set: (p: Partial<CatalogueState>) => void, get: () => CatalogueState) {
   if (!ids.length) return
-  const r = await api.patch<{ items: Asset[] }>('/assets/bulk', { ids, changes })
+  const r = await unwrap(http.PATCH('/assets/bulk', { body: { ids, changes } }))
   const by = Object.fromEntries(r.items.map((a) => [a.id, a]))
   const s = get()
   const upd = (a: Asset) => by[a.id] ?? a

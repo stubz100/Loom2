@@ -9,7 +9,7 @@ import secrets
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
 
@@ -26,6 +26,7 @@ def default_state_dir() -> Path:
 
 
 class EngineSettings(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     python: str = str(REPO_ROOT / "engine" / ".venv" / "Scripts" / "python.exe")
     main: str = str(REPO_ROOT / "engine" / "comfyui" / "main.py")
     extra_model_paths: str = str(REPO_ROOT / "engine" / "extra_model_paths.yaml")
@@ -41,6 +42,7 @@ class EngineSettings(BaseModel):
 
 
 class Settings(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = APP_SCHEMA_VERSION
     models_root: str = os.environ.get("LOOM2_MODELS", "F:/loom2-models")
     mounted_model_trees: list[str] = Field(default_factory=lambda: ["D:/comfyui/ComfyUI/models"])

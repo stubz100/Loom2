@@ -5,8 +5,8 @@ import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api } from '../../api/client'
-import type { Asset } from '../../api/types'
+import { api, http, unwrap } from '../../api/client'
+import type { Asset, LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { runCommand, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -92,7 +92,7 @@ function useLocations(ids: string[]): Record<string, { group_id: string; path: P
   useEffect(() => {
     if (!ids.length) { setLoc(null); return }
     let live = true
-    void api.get<Record<string, { group_id: string; path: PathStep[] } | null>>(`/groups/where?${ids.slice(0, 200).map((i) => `ids=${encodeURIComponent(i)}`).join('&')}`)
+    void unwrap(http.GET('/groups/where', { params: { query: { ids: ids.slice(0, 200) } } }))
       .then((r) => { if (live) setLoc(r) }).catch(() => { if (live) setLoc(null) })
     return () => { live = false }
   }, [key, tree]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -110,7 +110,6 @@ function Crumbs({ path }: { path: PathStep[] }) {
 }
 
 // ---------------------------------------------------------------- lineage path
-interface LineageTree { root_id: string; items: Asset[]; edges: { from_id: string; to_id: string; kind: string }[] }
 
 function LineagePath({ a }: { a: Asset }) {
   const c = useCat()
@@ -118,7 +117,7 @@ function LineagePath({ a }: { a: Asset }) {
   const root = a.root_id ?? a.id
   useEffect(() => {
     let live = true
-    void api.get<LineageTree>(`/lineage/tree/${root}`).then((t) => { if (live) setTree(t) }).catch(() => { if (live) setTree(null) })
+    void unwrap(http.GET('/lineage/tree/{root_id}', { params: { path: { root_id: root } } })).then((t) => { if (live) setTree(t) }).catch(() => { if (live) setTree(null) })
     return () => { live = false }
   }, [root, a.id])
   const { chain, children, size } = useMemo(() => {
@@ -248,7 +247,7 @@ function Many({ recs }: { recs: Asset[] }) {
   const same = <T,>(f: (r: Asset) => T) => recs.every((r) => f(r) === f(recs[0])) ? f(recs[0]) : undefined
   const proxy = { ...recs[0], state: same((r) => r.state) ?? 'mixed', rating: same((r) => r.rating) ?? 0 } as unknown as Asset
   const groupThese = () => void askText({ title: 'Group these', text: `${ids.length} items become a group on this page, keeping their layout.`, placeholder: 'group name' })
-    .then((n) => { if (n?.trim() && onePage) void api.post(`/groups/${onePage}/group`, { items: ids.map((id) => ({ kind: 'asset', id })), name: n.trim() }).then(() => useAlbum.getState().load()) })
+    .then((n) => { if (n?.trim() && onePage) void unwrap(http.POST('/groups/{gid}/group', { params: { path: { gid: onePage } }, body: { items: ids.map((id) => ({ kind: 'asset' as const, id })), name: n.trim() } })).then(() => useAlbum.getState().load()) })
   return (
     <div className="insp">
       <div className="stack">{recs.slice(0, 3).reverse().map((r, i) => <img key={r.id} src={api.thumbUrl(r.id, 256)} alt="" style={{ transform: `translate(${(2 - i) * 16}px, ${(2 - i) * 10}px)` }} />)}</div>
@@ -314,7 +313,7 @@ export function Inspector() {
   const id = c.primary
   const local = id ? c.byId(id) : undefined
   useEffect(() => {
-    if (id && !local) void api.get<Asset>(`/assets/${id}`).then(setRemote).catch(() => setRemote(null)); else setRemote(null)
+    if (id && !local) void unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: id } } })).then(setRemote).catch(() => setRemote(null)); else setRemote(null)
   }, [id, local])
   if (!s.project?.open) return <span className="muted">No project.</span>
   if (c.groupSel.length === 1 && !c.selected.length) return <Card gid={c.groupSel[0]} />

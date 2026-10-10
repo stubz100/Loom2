@@ -6,16 +6,26 @@ frames into the Catalogue as images with `frame-extract` lineage.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 from .fsio import atomic_move, atomic_write_json, new_id, read_json_or, utc_now
 from .workspace import Workspace
 
+# D38: beats and the FaceSim result stay plain dicts at runtime (stored as written); their JSON schemas type them for the frontend.
+BEATS_SCHEMA = {"type": "array", "items": {"type": "object", "title": "ClipBeat", "required": ["frame", "asset_id", "strength"],
+                                           "properties": {"frame": {"type": "integer"}, "asset_id": {"type": "string"}, "strength": {"type": "number"}}}}
+IDENTITY_SCHEMA = {"anyOf": [{"type": "object", "title": "ClipIdentity", "required": ["status"], "additionalProperties": True, "properties": {
+    "status": {"type": "string"}, "sampled": {"type": "integer"}, "with_face": {"type": "integer"}, "reference_faces": {"type": "integer"},
+    "mean": {"type": "number"}, "min": {"type": "number"}, "min_frame": {"type": "integer"}, "model": {"type": "string"}, "scale": {"type": "string"},
+    "per_frame": {"type": "array", "items": {"type": "object", "required": ["frame", "sim", "faces"], "properties": {
+        "frame": {"type": "integer"}, "sim": {"anyOf": [{"type": "number"}, {"type": "null"}]}, "faces": {"type": "integer"}}}}}}, {"type": "null"}]}
+
 
 class ClipRecord(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = 1
     id: str
     created_at: str = Field(default_factory=utc_now)
@@ -32,14 +42,14 @@ class ClipRecord(BaseModel):
     h: int
     start_asset_id: str
     end_asset_id: str | None = None
-    beats: list[dict[str, Any]] = Field(default_factory=list)
+    beats: Annotated[list[dict[str, Any]], WithJsonSchema(BEATS_SCHEMA)] = Field(default_factory=list)
     master_dir: str                               # project-relative
     proxy_path: str | None = None                 # project-relative, set once encoded
     proxy_bytes: int = 0
     extracted_asset_ids: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
     timings: dict[str, Any] = Field(default_factory=dict)
-    identity: dict[str, Any] | None = None       # FaceSim advisory (tools/facesim.py), filled after the proxy
+    identity: Annotated[dict[str, Any] | None, WithJsonSchema(IDENTITY_SCHEMA)] = None       # FaceSim advisory (tools/facesim.py), filled after the proxy
 
 
 class ClipStore:

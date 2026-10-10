@@ -2,7 +2,8 @@
 // and persistence against /documents. Pixels live in LayerPixels (canvas + texture); the store holds references.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { api, ApiError } from '../../api/client'
+import { ApiError, http, unwrap } from '../../api/client'
+import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe } from '../../api/types'
 import { useSession } from '../../store/session'
 import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
 import { isIdentity, resample, type Xform } from './transform'
@@ -19,7 +20,11 @@ export interface DocumentStack {
   schema_version: number; id: string; name: string; w: number; h: number; background: string; source_asset_id: string | null
   created_at: string; saved_at: string | null; revision: number; layers: Node[]; has_selection: boolean; meta: Record<string, unknown>
 }
-export interface DocSummary { id: string; name: string; w: number; h: number; saved_at: string | null; source_asset_id: string | null; layers: number; path: string; open: boolean }
+export type DocSummary = ApiDocSummary
+/** The editor works on a flat node model (every field optional, one `kind` tag) rather than the server's discriminated layer union;
+ *  this is the one place a server document becomes that model (D38: the API side of the boundary is typed). */
+const asStack = (d: ApiDocument): DocumentStack => d as unknown as DocumentStack
+const asBody = (s: DocumentStack): { [key: string]: unknown } => s as unknown as { [key: string]: unknown }
 export type Tool = 'move' | 'marquee' | 'lasso' | 'wand' | 'ai' | 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'crop' | 'hand' | 'zoom'
 export const TOOL_KEYS: Record<string, Tool> = { v: 'move', m: 'marquee', l: 'lasso', w: 'wand', a: 'ai', b: 'brush', e: 'eraser', g: 'fill', i: 'eyedropper', c: 'crop', h: 'hand', z: 'zoom' }
 export const BLEND_MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-burn', 'linear-burn', 'lighten', 'screen', 'color-dodge', 'linear-dodge', 'overlay', 'soft-light', 'hard-light',
@@ -61,8 +66,8 @@ export interface EditorState {
   // AI (10 §4, M5): jobs run on the saved server document; results arrive as layers via document.changed
   aiBatch: string | null                      // batch id of the last AI run (its candidates form the strip)
   candidates: { group: string; ids: string[] } | null
-  runAi: (recipe: Record<string, unknown>, stage?: boolean) => Promise<void>
-  onDocumentChanged: (d: { id: string; added?: string[]; group?: string; w?: number; h?: number; job_id?: string; batch_id?: string | null; selection?: boolean; shift?: { left: number; top: number } | null }) => void
+  runAi: (recipe: DocumentRecipe, stage?: boolean) => Promise<void>
+  onDocumentChanged: (d: DocumentChangedData) => void
   mergeServerLayers: (added: string[], group?: string, shift?: { left: number; top: number }) => Promise<void>
   pickCandidate: (keepId: string | null) => void
   // AI Select (10 §4, A tool): the prompt collected on the canvas, and the selection the segment job writes on the server
@@ -277,7 +282,7 @@ export const useEditor = create<EditorState>()(
             const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
               { method: 'PUT', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
             if (!r0.ok) throw new Error(`selection upload ${r0.status}`)
-            const r = await api.post<{ jobs: { id: string; batch_id: string | null }[] }>(`/documents/${doc.id}/ai`, { recipe, stage })
+            const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
             set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null })
             s.toast(stage ? `Staged ${jobs.length} AI job${jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
@@ -288,7 +293,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!doc || d.id !== doc.id) return
           if (d.selection) { void get().loadSelectionFromServer(); return }
-          if (d.added?.length) void get().mergeServerLayers(d.added, d.group, d.shift ?? undefined)
+          if (d.added?.length) void get().mergeServerLayers(d.added, d.group ?? undefined, d.shift ?? undefined)
         },
         setAiPrompt: (p) => set({ aiPrompt: { ...get().aiPrompt, ...p }, revision: get().revision + 1 }),
         loadSelectionFromServer: async () => {
@@ -310,7 +315,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!doc) return
           try {
-            const server = await api.get<DocumentStack>(`/documents/${doc.id}`)
+            const server = asStack(await unwrap(http.GET('/documents/{doc_id}', { params: { path: { doc_id: doc.id } } })))
             const pixels = get().pixels, masks = get().masks
             await Promise.all(added.map(async (lid) => {
               const lp = await fetchRaw(doc.id, lid, 'image')
@@ -427,7 +432,7 @@ export const useEditor = create<EditorState>()(
           const seq = ++openSeq
           set({ loading: true, error: null })
           try {
-            const doc = await api.get<DocumentStack>(`/documents/${id}`)
+            const doc = asStack(await unwrap(http.GET('/documents/{doc_id}', { params: { path: { doc_id: id } } })))
             const pixels = new Map<string, LayerPixels>(); const masks = new Map<string, LayerPixels>()
             const rasters: Node[] = []; const masked: Node[] = []
             walk(doc.layers, (n) => { if (n.kind === 'raster') rasters.push(n); if (n.mask) masked.push(n) })   // masks sit on any node kind
@@ -449,8 +454,8 @@ export const useEditor = create<EditorState>()(
         openFromAsset: async (assetId) => {
           const s = useSession.getState()
           try {
-            const existing = (await api.get<{ items: DocSummary[] }>('/documents')).items.find((d) => d.source_asset_id === assetId)
-            const doc = existing ?? await api.post<DocumentStack>('/documents', { from_asset: assetId })
+            const existing = (await unwrap(http.GET('/documents'))).items.find((d) => d.source_asset_id === assetId)
+            const doc = existing ?? asStack(await unwrap(http.POST('/documents', { body: { from_asset: assetId } })))
             s.setSuite('edit')
             await get().openDocument(doc.id)
             s.toast(existing ? 'Opened the asset\'s document' : 'Document created from the asset', 'success')
@@ -475,7 +480,7 @@ export const useEditor = create<EditorState>()(
         },
         newDocument: async (w, h, name) => {
           try {
-            const doc = await api.post<DocumentStack>('/documents', { w, h, name: name ?? 'Untitled', background: 'transparent' })
+            const doc = asStack(await unwrap(http.POST('/documents', { body: { w, h, name: name ?? 'Untitled', background: 'transparent' } })))
             await get().openDocument(doc.id)
             get().addLayer('raster', { name: 'Layer 1' })
             set({ history: [], future: [] })
@@ -486,10 +491,10 @@ export const useEditor = create<EditorState>()(
           get().pixels.forEach((p) => p.destroy()); get().masks.forEach((p) => p.destroy()); get().selection?.destroy()
           set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, transform: null })
         },
-        listDocuments: async () => (await api.get<{ items: DocSummary[] }>('/documents')).items,
+        listDocuments: async () => (await unwrap(http.GET('/documents'))).items,
         deleteDocument: async (id) => {
           if (get().doc?.id === id) get().closeDocument()
-          await api.del(`/documents/${id}`)
+          await unwrap(http.DELETE('/documents/{doc_id}', { params: { path: { doc_id: id } } }))
           useSession.getState().toast('Document deleted', 'info')
         },
 
@@ -500,17 +505,21 @@ export const useEditor = create<EditorState>()(
           // layer and rides the next save; a failure below puts the document flag back
           set({ saving: true, docDirty: false })
           try {
-            type Reply = DocumentStack & { missing_pixels?: string[]; missing_masks?: string[] }
+            type Reply = DocumentStack & { missing_pixels: string[]; missing_masks: string[] }
+            const put = async (s: DocumentStack): Promise<Reply> => {
+              const r = await unwrap(http.PUT('/documents/{doc_id}', { params: { path: { doc_id: doc.id } }, body: asBody(s) }))
+              return { ...asStack(r), missing_pixels: r.missing_pixels, missing_masks: r.missing_masks }
+            }
             let stack = doc
             let server: Reply
-            try { server = await api.put<Reply>(`/documents/${doc.id}`, stack) }
+            try { server = await put(stack) }
             catch (e) {
               if (!(e instanceof ApiError) || e.status !== 409) throw e
               await get().resync()                                 // C1: an AI result landed since this stack's revision — merge it, then save the merged stack
               const merged = get().doc
               if (!merged || merged.id !== doc.id) return false
               stack = merged
-              server = await api.put<Reply>(`/documents/${doc.id}`, stack)
+              server = await put(stack)
             }
             const rasters = new Set<string>(), masked = new Set<string>()
             walk(stack.layers, (n) => { if (n.kind === 'raster') rasters.add(n.id); if (n.mask) masked.add(n.id) })
@@ -525,7 +534,7 @@ export const useEditor = create<EditorState>()(
             }
             await upload(pixels, 'image', rasters, server.missing_pixels)
             await upload(masks, 'mask', masked, server.missing_masks)
-            const saved = await api.post<DocumentStack>(`/documents/${doc.id}/save`)
+            const saved = asStack(await unwrap(http.POST('/documents/{doc_id}/save', { params: { path: { doc_id: doc.id } } })))
             const cur = get().doc
             if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at, revision: saved.revision } })
             useSession.getState().toast('Saved', 'success')
@@ -541,7 +550,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!doc) return
           try {
-            const server = await api.get<DocumentStack>(`/documents/${doc.id}`)
+            const server = asStack(await unwrap(http.GET('/documents/{doc_id}', { params: { path: { doc_id: doc.id } } })))
             const local = new Set<string>(); walk(doc.layers, (n) => { local.add(n.id) })
             const added: string[] = []
             walk(server.layers, (n) => { if (n.kind === 'raster' && !local.has(n.id)) added.push(n.id) })
@@ -559,8 +568,8 @@ export const useEditor = create<EditorState>()(
           if (!doc) return
           if (!(await get().save())) return                          // the flatten runs on the saved document
           try {
-            const r = await api.post<{ asset: { id: string } }>(`/documents/${doc.id}/flatten`, { to_catalogue: true })
-            useSession.getState().toast(`Saved to Catalogue as ${r.asset.id}`, 'success')
+            const r = await unwrap(http.POST('/documents/{doc_id}/flatten', { params: { path: { doc_id: doc.id } }, body: { to_catalogue: true } }))
+            useSession.getState().toast('asset' in r ? `Saved to Catalogue as ${r.asset.id}` : 'Flattened', 'success')
           } catch (e) { useSession.getState().toast(`Save to Catalogue failed: ${(e as ApiError).detail ?? e}`, 'error') }
         },
         exportPng: async () => {

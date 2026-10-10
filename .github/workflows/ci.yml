@@ -50,6 +50,11 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: API contract (D38) — openapi.json and schema.d.ts match the app
+        shell: bash
+        run: |
+          orchestrator/.venv/Scripts/python.exe scripts/export_openapi.py --check
+          cd frontend && npm run api:types && git diff --exit-code -- src/api/schema.d.ts
 
   installers:
     name: installer (${{ matrix.variant }})

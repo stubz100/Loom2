@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .catalogue import Catalogue
 from .config import AppState
@@ -49,6 +49,7 @@ TERMINAL = {"done", "failed", "cancelled"}
 
 
 class JobRecord(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = QUEUE_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("job"))
     batch_id: str | None = None

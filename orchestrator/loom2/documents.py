@@ -26,7 +26,7 @@ ET.register_namespace("loom2", "loom2")
 
 import numpy as np
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .compose import BLEND_MODES, Renderer
 from .fsio import StateError, _tmp_for, new_id, utc_now
@@ -47,6 +47,7 @@ SVG_TO_MODE = {v: k for k, v in SVG_OPS.items()}
 
 
 class Mask(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     enabled: bool = True
     linked: bool = True
     x: int = 0
@@ -54,6 +55,7 @@ class Mask(BaseModel):
 
 
 class NodeBase(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     id: str = Field(default_factory=lambda: new_id("lyr"))
     name: str = "Layer"
     opacity: float = 1.0
@@ -98,6 +100,7 @@ GroupLayer.model_rebuild()
 
 
 class Document(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = DOC_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("doc"))
     name: str = "Untitled"

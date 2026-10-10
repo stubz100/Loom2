@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Folder = Literal["diffusion_models", "text_encoders", "vae", "loras", "clip_vision", "upscale_models",
                  "controlnet", "checkpoints", "sam3", "background_removal", "embeddings"]
@@ -19,6 +19,7 @@ Health = Literal["present", "verified", "missing", "retired"]
 
 
 class RosterEntry(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     id: str
     name: str                                  # basename as ComfyUI lists it inside `folder`
     folder: Folder

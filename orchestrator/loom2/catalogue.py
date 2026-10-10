@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
@@ -36,6 +36,7 @@ Sort = Literal["created_desc", "created_asc", "rating_desc", "model", "size_desc
 
 
 class AssetRecord(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = ASSET_SCHEMA_VERSION
     id: str = Field(default_factory=lambda: new_id("ast"))
     kind: AssetKind = "image"
@@ -109,6 +110,7 @@ class AssetQuery(BaseModel):
 
 
 class GroupHeader(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     key: str
     label: str
     count: int
@@ -120,6 +122,7 @@ class GroupHeader(BaseModel):
 
 
 class AssetPage(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     items: list[AssetRecord]
     next_cursor: str | None = None
     total: int | None = None

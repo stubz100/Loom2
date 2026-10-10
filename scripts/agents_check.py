@@ -61,7 +61,9 @@ def tracked_paths() -> set[str]:
 
 
 def ignored(path: str) -> bool:
-    return subprocess.run(["git", "check-ignore", "-q", path], cwd=REPO).returncode == 0
+    """Gitignored, as a file or as a directory: `.venv/`-style patterns match a path git cannot see only when it is asked as a
+    directory (`engine/.venv` is missing in CI's checkout, so `git check-ignore engine/.venv` alone says no there)."""
+    return any(subprocess.run(["git", "check-ignore", "-q", p], cwd=REPO).returncode == 0 for p in (path, path + "/"))
 
 
 def resolve(token: str, doc_dir: Path) -> Path | None:

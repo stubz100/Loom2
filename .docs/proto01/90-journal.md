@@ -1981,3 +1981,9 @@ Inspector → lineage → split → pages.
 - **full leg:** `scripts/agents_check.py` tested existence on disk; `orchestrator/loom2/engine/AGENTS.md` names `engine/.venv`, which exists
   here but is gitignored, so CI's checkout lacks it. The check now passes a path only when git tracks it (file or directory of tracked
   files) and skips gitignored local paths — same verdict on this machine and in CI; a broken path still fails.
+
+## 2026-10-10 10:28 — CI: agents_check still red at e942fb9 — a `.venv/` pattern only matches a path git can see as a directory
+
+- CI at `e942fb9`: the `open` leg's offline tests now pass; both legs still failed at the agent-doc step. Cause: `git check-ignore
+  engine/.venv` answers "not ignored" when the directory does not exist (CI), because `.gitignore`'s `.venv/` matches directories only;
+  `engine/.venv/` matches. `ignored()` now asks both spellings. Simulated CI by moving `engine/.venv` aside: 0 problems; restored.

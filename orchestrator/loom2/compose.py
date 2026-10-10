@@ -167,6 +167,46 @@ def _mix_premultiplied(a: Arr, b: Arr, k: Arr | float) -> Arr:
     return out
 
 
+def _boxes_for_gauss(sigma: float) -> list[int]:
+    """Box radii whose three passes approximate a Gaussian of standard deviation sigma (Kovesi) — selectionOps.ts boxesForGauss."""
+    n = 3
+    w_ideal = math.sqrt((12 * sigma * sigma) / n + 1)
+    wl = math.floor(w_ideal)
+    if wl % 2 == 0:
+        wl -= 1
+    wu = wl + 2
+    m = round((12 * sigma * sigma - n * wl * wl - 4 * n * wl - 3 * n) / (-4 * wl - 4))
+    return [max(0, int(math.floor(((wl if i < m else wu) - 1) / 2 + 0.5))) for i in range(n)]
+
+
+def _box_blur(src: Arr, r: int) -> Arr:
+    """Running box blur of radius r, edge-clamped, horizontal then vertical — selectionOps.ts boxBlur."""
+    if r < 1:
+        return src
+    h, w = src.shape
+    n = 2 * r + 1
+    xs = np.clip(np.arange(-r, w + r + 1), 0, w - 1)
+    c = np.concatenate([np.zeros((h, 1)), np.cumsum(src[:, xs], axis=1)], axis=1)
+    tmp = (c[:, n:n + w] - c[:, 0:w]) / n
+    ys = np.clip(np.arange(-r, h + r + 1), 0, h - 1)
+    c = np.concatenate([np.zeros((1, w)), np.cumsum(tmp[ys, :], axis=0)], axis=0)
+    return (c[n:n + h, :] - c[0:h, :]) / n
+
+
+def derived_mask(arr: Arr, density: float = 1.0, feather: float = 0.0) -> Arr:
+    """D52: a layer mask as it renders — feathered (Gaussian σ = feather px as three box passes, rounded to 8 bits, exactly as the
+    editor derives it) and with density (1 − density·(1 − v)). uint8 in, uint8 out."""
+    out = arr
+    if feather > 0:
+        f = arr.astype(np.float64)
+        for r in _boxes_for_gauss(feather):
+            f = _box_blur(f, r)
+        out = np.floor(f + 0.5).clip(0, 255).astype(np.uint8)
+    if density < 1:
+        out = np.floor(255 - density * (255 - out.astype(np.float64)) + 0.5).clip(0, 255).astype(np.uint8)
+    return out
+
+
 # ---------------------------------------------------------------- adjustments f(rgb) → rgb
 def _levels(rgb: Arr, p: dict) -> Arr:
     ib, iw, g = p.get("in_black", 0) / 255, p.get("in_white", 255) / 255, max(0.01, p.get("gamma", 1.0))
@@ -434,6 +474,7 @@ class Renderer:
         arr = self.masks.get(node["id"])
         if arr is None:
             return None
+        arr = derived_mask(arr, float(m.get("density", 1.0)), float(m.get("feather", 0.0)))
         # a linked mask follows the layer: its offset is relative to the layer's own (x, y)
         base_x, base_y = (int(node.get("x", 0)), int(node.get("y", 0))) if m.get("linked", True) else (0, 0)
         full = place(self.h, self.w, np.repeat(to_float(arr)[..., None], 4, axis=-1), base_x + int(m.get("x", 0)), base_y + int(m.get("y", 0)))

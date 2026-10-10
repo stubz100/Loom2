@@ -1,6 +1,6 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, ClipboardPaste, Copy, Scissors, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, ClipboardPaste, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
@@ -38,7 +38,9 @@ registerCommands([
   { id: 'edit.layer.visibility', scope: 'edit', label: 'Hide / show layer', icon: Eye, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') } },
   { id: 'edit.layer.solo', scope: 'edit', label: 'Solo layer (show only this)', icon: EyeOff, placement: ['context'], when: () => !!active(), hint: 'Alt-click the eye', run: () => ed().solo(ed().activeId!) },
   { id: 'edit.layer.lock', scope: 'edit', label: 'Lock / unlock layer', icon: Lock, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { locked: !n.locked }) } },
-  { id: 'edit.layer.delete', scope: 'edit', label: 'Delete layer', icon: Trash, danger: true, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (!n) return; ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
+  { id: 'edit.layer.delete', scope: 'edit', label: 'Delete layer', icon: Trash, danger: true, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (!n) return
+      if (ed().editingMask && n.mask) { ed().removeMask(n.id); return }                     // D52: Delete follows the target — the mask while it is edited
+      ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
       useSession.getState().toast(`Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === 'delete layer') s.undo() }) } },
   // masks
   { id: 'edit.mask.add', scope: 'edit', label: 'Add mask', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask, run: () => ed().addMask(ed().activeId!, false) },
@@ -46,6 +48,9 @@ registerCommands([
   { id: 'edit.mask.remove', scope: 'edit', label: 'Remove mask', placement: ['toolbar', 'context'], when: () => !!active()?.mask, run: () => ed().removeMask(ed().activeId!) },
   { id: 'edit.mask.toggle', scope: 'edit', label: 'Enable / disable mask', placement: ['context'], when: () => !!active()?.mask, hint: 'Shift-click the mask thumbnail', run: () => { const n = active(); if (n?.mask) ed().updateNode(n.id, { mask: { ...n.mask, enabled: !n.mask.enabled } }, 'toggle mask') } },
   { id: 'edit.mask.edit', scope: 'edit', label: 'Edit mask / edit pixels', placement: ['context'], when: () => !!active()?.mask, hint: 'click the mask thumbnail', run: () => { const st = ed(); st.setActive(st.activeId, !st.editingMask) } },
+  { id: 'edit.mask.link', scope: 'edit', label: 'Link / unlink mask', icon: Link, placement: ['context'], when: () => !!active()?.mask, hint: 'click the chain left of the mask thumbnail', run: () => ed().toggleMaskLink(ed().activeId!) },
+  { id: 'edit.mask.apply', scope: 'edit', label: 'Apply mask', placement: ['panel', 'context'], when: () => active()?.kind === 'raster' && !!active()?.mask, run: () => ed().applyMask(ed().activeId!) },
+  { id: 'edit.mask.fromTransparency', scope: 'edit', label: 'Mask from transparency', placement: ['context'], when: () => active()?.kind === 'raster' && !active()?.mask, run: () => ed().maskFromTransparency(ed().activeId!) },
   { id: 'edit.mask.load', scope: 'edit', label: 'Load mask as selection', placement: ['panel', 'context'], when: () => !!active()?.mask, run: () => ed().loadSelectionFromMask() },
   // selection
   { id: 'edit.sel.all', scope: 'edit', label: 'Select all', icon: SquareCheck, keys: 'Ctrl+A', placement: ['panel', 'context'], when: hasDoc, run: () => ed().selectAll() },
@@ -115,8 +120,8 @@ const visLabel = () => (active()?.visible ? 'Hide layer' : 'Show layer')
 const maskItems = (): MenuItem[] => {
   const n = active()
   if (!n) return []
-  if (!n.mask) return [{ cmd: 'edit.mask.add' }, { cmd: 'edit.mask.fromSelection' }]
-  return [{ cmd: 'edit.mask.edit', label: ed().editingMask ? 'Edit pixels' : 'Edit mask' }, { cmd: 'edit.mask.toggle', label: n.mask.enabled ? 'Disable mask' : 'Enable mask' }, { cmd: 'edit.mask.load' }, { cmd: 'edit.mask.remove' }]
+  if (!n.mask) return [{ cmd: 'edit.mask.add' }, { cmd: 'edit.mask.fromSelection' }, { cmd: 'edit.mask.fromTransparency' }]
+  return [{ cmd: 'edit.mask.edit', label: ed().editingMask ? 'Edit pixels' : 'Edit mask' }, { cmd: 'edit.mask.toggle', label: n.mask.enabled ? 'Disable mask' : 'Enable mask' }, { cmd: 'edit.mask.link', label: n.mask.linked ? 'Unlink mask' : 'Link mask' }, { cmd: 'edit.mask.load' }, { cmd: 'edit.mask.apply' }, { cmd: 'edit.mask.remove' }]
 }
 
 /** Right-click on a layer row (the caller makes it active first). */
@@ -130,7 +135,7 @@ export function layerMenu(): MenuItem[] {
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,
-    { cmd: 'edit.layer.delete' },
+    { cmd: 'edit.layer.delete', label: ed().editingMask && n.mask ? 'Delete layer mask' : undefined },
   ]
 }
 const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]

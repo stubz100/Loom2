@@ -71,12 +71,24 @@ def _check_layer(layer) -> None:
             raise OutOfScope(f"blend-if on {layer.name!r}")
 
 
+def _mask_params(layer) -> dict:
+    """D52: the user mask's density (0–255 → 0–1) and feather (px, taken as the Gaussian σ — every corpus file that sets it also has a
+    vector mask, so Photoshop's exact feather kernel is not measured here)."""
+    pr = layer.mask.parameters
+    if pr is None:
+        return {}
+    out: dict = {}
+    if pr.user_mask_density is not None:
+        out["density"] = pr.user_mask_density / 255
+    if pr.user_mask_feather:
+        out["feather"] = float(pr.user_mask_feather)
+    return out
+
+
 def _mask(layer, w: int, h: int) -> np.ndarray | None:
     m = layer.mask
     if m is None:
         return None
-    if m.parameters is not None:
-        raise OutOfScope(f"mask density / feather on {layer.name!r}")
     out = np.full((h, w), int(m.background_color), dtype=np.uint8)
     im = m.topil()
     if im is not None:
@@ -146,7 +158,7 @@ def to_stack(psd) -> Stack:
             m = _mask(layer, w, h)
             if m is not None:
                 st.masks[lid] = m
-                node["mask"] = {"enabled": not layer.mask.disabled, "linked": False, "x": 0, "y": 0}
+                node["mask"] = {"enabled": not layer.mask.disabled, "linked": False, "x": 0, "y": 0, **_mask_params(layer)}
             kind = layer.kind
             if kind == "group":
                 if layer.fill_opacity != 255:

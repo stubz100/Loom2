@@ -248,6 +248,14 @@ def tour(cdp: CDP, tmp: Path) -> list[str]:
     step("load mask as selection", run("edit.mask.load"), f"!!{S}.selection", True)
     step("remove mask", run("edit.mask.remove"), f"{ACTIVE}.mask", None)
     step("mask from selection", run("edit.mask.fromSelection"), f"!!{ACTIVE}.mask", True)
+    step("D52 a raster's mask is linked", "1", f"{ACTIVE}.mask.linked", True)
+    step("unlink mask (chain)", run("edit.mask.link"), f"{ACTIVE}.mask.linked", False)
+    step("link mask", run("edit.mask.link"), f"{ACTIVE}.mask.linked", True)
+    step("mask density / feather in the Layers tab", "1", "document.querySelectorAll('.layer-row .mask-link').length > 0 && [...document.querySelectorAll('.tool-opts label')].some((l) => l.textContent === 'feather')", True)
+    step("apply mask", run("edit.mask.apply"), f"{ACTIVE}.mask", None)
+    step("mask from transparency", run("edit.mask.fromTransparency"), f"JSON.stringify([!!{ACTIVE}.mask, {ACTIVE}.mask && {ACTIVE}.mask.linked])", "[true,true]")
+    step("Delete while editing the mask removes the mask", f"{S}.setActive({S}.activeId, true); " + run("edit.layer.delete"), f"JSON.stringify([!!{ACTIVE}, {ACTIVE} && {ACTIVE}.mask])", "[true,null]")
+    step("undo brings the mask back", run("edit.undo"), f"!!{ACTIVE}.mask", True)
     step("deselect", run("edit.sel.none"), f"{S}.selection", None)
     print("--- selection")
     step("select all", run("edit.sel.all"), f"!!{S}.selection", True)
@@ -358,12 +366,42 @@ def cmpdiag(cdp: CDP) -> list[str]:
         print(("ok   " if ok else "FAIL ") + f"{label}: [mean, p99, max] = {r}" + "".join("\n       " + e for e in errs))
         if not ok:
             fails.append(label)
+        try:
+            worst = json.loads(r)[2]
+        except Exception:
+            worst = 0
+        if worst > 4:                                                  # keep the pair and name the worst pixel
+            dirs = sorted(Path(tempfile.gettempdir()).glob("loom2-headed-*/proj/_temp/compare"), key=lambda q: q.stat().st_mtime)
+            pair = sorted(dirs[-1].glob("*.png")) if dirs else []
+            if len(pair) == 2:
+                import numpy as np
+                ex, gp = (np.asarray(Image.open(q).convert("RGBA")).astype(int) for q in pair)
+                diff = np.abs(ex[..., :3] - gp[..., :3]).max(axis=-1)
+                y, x = np.unravel_index(int(diff.argmax()), diff.shape)
+                print(f"       worst at ({x}, {y}): exact {ex[y, x].tolist()} · gpu {gp[y, x].tolist()} · {(diff > 4).sum()} px over 4")
+                slug = "".join(ch if ch.isalnum() else "-" for ch in label)[:40]
+                for q in pair:
+                    (OUT / f"cmpdiag-{slug}-{q.name.rsplit('-', 1)[1]}").write_bytes(q.read_bytes())
 
     compare("base layer only")
     run("edit.mask.add"); time.sleep(0.3); compare("white mask on the base layer")
     cdp.eval(f"(() => {{ const s = {S}; const m = s.masks.get(s.activeId); m.ctx.fillStyle = '#000'; m.ctx.fillRect(0, 0, m.width / 2, m.height); m.refresh(); m.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.4)
     compare("mask black on the left half")
+    # D52: density and feather derived exactly like compose.py; a raster's mask is layer-sized and linked
+    upd = lambda js, label: (cdp.eval(f"{S}.updateNode({S}.activeId, {js}, '{label}'); 1"), time.sleep(0.4))  # noqa: E731
+    mask = lambda extra: "{ mask: { ..." + S + ".doc.layers.find((n) => n.id === " + S + ".activeId).mask, " + extra + " } }"  # noqa: E731
+    upd(mask("density: 0.6"), "density"); compare("D52 mask density 60 %")
+    upd(mask("density: 1, feather: 6.5"), "feather"); compare("D52 mask feather 6.5 px")
+    upd(mask("density: 0.4, feather: 2"), "both"); compare("D52 mask density 40 % + feather 2 px")
+    upd("{ x: 40, y: 24 }", "move"); compare("D52 linked mask moves with the layer")
+    run("edit.mask.link"); time.sleep(0.3); upd("{ x: 0, y: 0 }", "move"); compare("D52 unlinked mask stays put")
+    run("edit.mask.link"); time.sleep(0.3)
     run("edit.mask.remove"); time.sleep(0.3); compare("mask removed")
+    run("edit.layer.adjustment.invert"); time.sleep(0.4); run("edit.mask.add"); time.sleep(0.3)
+    cdp.eval(f"(() => {{ const s = {S}; const m = s.masks.get(s.activeId); m.ctx.fillStyle = '#000'; m.ctx.fillRect(0, 0, m.width / 2, m.height); m.refresh(); m.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.4)
+    upd(mask("feather: 4, density: 0.8"), "feather"); compare("D52 invert adjustment with a feathered 80 % mask")
+    run("edit.layer.delete"); time.sleep(0.3)
+    cdp.eval(f"{S}.setActive({S}.doc.layers[0].id, false); 1"); time.sleep(0.2)
     run("edit.layer.group"); time.sleep(0.3); compare("base inside a pass-through group")
     cdp.eval(f"{S}.updateNode({S}.activeId, {{ passthrough: false }}, 'group mode'); 1"); time.sleep(0.3); compare("… isolated group")
     cdp.eval(f"{S}.updateNode({S}.activeId, {{ opacity: 0.5 }}, 'opacity'); 1"); time.sleep(0.3); compare("… isolated group at 50 %")
@@ -587,6 +625,19 @@ def brush_check(cdp: CDP) -> list[str]:
         time.sleep(0.3)
     cmp_ = json.loads(cdp.eval("JSON.stringify(window.__cmp && [window.__cmp.rgb_p99, window.__cmp.rgb_max])") or "null")
     check(cmp_ is not None and cmp_[0] <= 1, f"after partial uploads the GPU composite equals the exact flatten (p99, max = {cmp_})")
+    # D52: an adjustment layer's mask is paintable, and a feathered mask is re-derived while it is painted
+    run("edit.layer.adjustment.invert"); time.sleep(0.4); run("edit.mask.add"); time.sleep(0.3)
+    cdp.eval(f"{S}.updateNode({S}.activeId, {{ mask: {{ ...{S}.doc.layers.find((n) => n.id === {S}.activeId).mask, feather: 3 }} }}, 'feather'); 1"); time.sleep(0.4)
+    run("edit.tool.eraser"); brush(opacity=1, size=40, hardness=1, smoothing=0)
+    stroke([(W * 0.6, H * 0.2), (W * 0.9, H * 0.2)])
+    mv = cdp.eval(f"{S}.masks.get({S}.activeId).ctx.getImageData({int(W * 0.75)}, {int(H * 0.2)}, 1, 1).data[0]")
+    check(cdp.eval(f"{S}.editingMask") is True and mv == 0, f"the eraser paints the invert adjustment's mask black ({mv})")
+    cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+    t0 = time.time()
+    while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+        time.sleep(0.3)
+    cmp_ = json.loads(cdp.eval("JSON.stringify(window.__cmp && [window.__cmp.rgb_p99, window.__cmp.rgb_max])") or "null")
+    check(cmp_ is not None and cmp_[0] <= 1 and cmp_[1] <= 2, f"a feathered mask painted on an adjustment layer (re-derived around the stroke only): GPU = exact flatten (p99, max = {cmp_})")
     errs = cdp.page_errors()
     check(not errs, "no page errors" + ("".join("\n       " + x for x in errs)))
     return fails

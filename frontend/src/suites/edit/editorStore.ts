@@ -7,10 +7,11 @@ import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChan
 import { useSession } from '../../store/session'
 import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
 import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
+import { derivedMask } from './maskDerived'
 import { isIdentity, resample, type Xform } from './transform'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
-export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number }
+export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number }   // D52: density 0–1, feather σ px
 export interface Node {
   kind: NodeKind; id: string; name: string; opacity: number; blend: string; visible: boolean; locked: boolean; clip: boolean; mask: MaskRef | null
   x?: number; y?: number; w?: number; h?: number; fill?: number; recipe?: Record<string, unknown> | null; lineage_asset_id?: string | null
@@ -142,6 +143,9 @@ export interface EditorState {
   solo: (id: string) => void
   addMask: (id: string, fromSelection?: boolean) => void
   removeMask: (id: string) => void
+  toggleMaskLink: (id: string) => void
+  applyMask: (id: string) => void
+  maskFromTransparency: (id: string) => void
   resizeCanvas: (w: number, h: number, ax?: number, ay?: number) => void
   cropToSelection: () => void
   clearSelected: () => void
@@ -342,7 +346,7 @@ export const useEditor = create<EditorState>()(
         const before = clone(doc)
         const next = clone(doc)
         next.w = w; next.h = h
-        walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy; if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } } })
+        walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy } if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } })   // unlinked masks on every kind (as queue.py shifts them)
         const sel = get().selection
         let selection: LayerPixels | null = null
         if (sel) { selection = new LayerPixels(w, h, true); selection.ctx.drawImage(sel.canvas, dx, dy); selection.refresh(); sel.destroy() }
@@ -420,7 +424,7 @@ export const useEditor = create<EditorState>()(
             }
             if (grown) {
               next.w = server.w; next.h = server.h
-              if (dx || dy) walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy; if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } } })
+              if (dx || dy) walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy } if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } })   // unlinked masks on every kind (as queue.py shifts them)
             }
             const gnode = group ? findNode(server, group) : null
             if (gnode) {
@@ -786,7 +790,7 @@ export const useEditor = create<EditorState>()(
             tc.drawImage(a.canvas, 0, 0)
             tc.globalCompositeOperation = 'destination-in'
             const off = maskOffset(top)
-            tc.drawImage(selectionAlphaCanvas(m), off.x - (top.x ?? 0), off.y - (top.y ?? 0))
+            tc.drawImage(selectionAlphaCanvas(derivedMask(m, top.mask!)), off.x - (top.x ?? 0), off.y - (top.y ?? 0))   // D52: as it renders
             b.ctx.drawImage(tmp, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
           } else b.ctx.drawImage(a.canvas, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
           b.ctx.restore()
@@ -824,16 +828,20 @@ export const useEditor = create<EditorState>()(
           const n = findNode(doc, id)
           if (!doc || !n || n.mask) return
           const before = clone(doc)
-          const lp = new LayerPixels(doc.w, doc.h, true)
+          // D52: a raster layer's mask is layer-sized and linked (it moves and transforms with the layer, Photoshop's default);
+          // groups, adjustments and filters get a document-sized mask, unlinked at the document origin
+          const px = n.kind === 'raster' ? get().pixels.get(id) : undefined
+          const w = px?.width ?? doc.w, h = px?.height ?? doc.h
+          const ox = px ? (n.x ?? 0) : 0, oy = px ? (n.y ?? 0) : 0
+          const lp = new LayerPixels(w, h, true)
           const sel = get().selection
           // B16: the selection canvas is transparent where nothing is selected, so its *alpha* (white = selected) goes over black
-          lp.ctx.fillStyle = fromSelection && sel ? '#000000' : '#ffffff'; lp.ctx.fillRect(0, 0, doc.w, doc.h)
-          if (fromSelection && sel) lp.ctx.drawImage(selectionAlphaCanvas(sel), 0, 0)
+          lp.ctx.fillStyle = fromSelection && sel ? '#000000' : '#ffffff'; lp.ctx.fillRect(0, 0, w, h)
+          if (fromSelection && sel) lp.ctx.drawImage(selectionAlphaCanvas(sel), -ox, -oy)
           lp.refresh(); lp.dirty = true
           get().masks.set(id, lp)
           const next = clone(doc)
-          // the mask covers the document and is unlinked at the document origin, so layer x/y need no compensation
-          walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: false, x: 0, y: 0 }; return true } })
+          walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: !!px, x: 0, y: 0, density: 1, feather: 0 }; return true } })
           commit(next, before, fromSelection && sel ? 'mask from selection' : 'add mask', id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) })
         },
         removeMask: (id) => {
@@ -843,6 +851,62 @@ export const useEditor = create<EditorState>()(
           const next = clone(doc)                                   // B18: the mask canvas stays for undo (gc drops it later)
           walk(next.layers, (m) => { if (m.id === id) { m.mask = null; return true } })
           commit(next, before, 'remove mask', id, { editingMask: false })
+        },
+        toggleMaskLink: (id) => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          if (!doc || !n?.mask) return
+          const before = clone(doc)
+          const next = clone(doc)
+          // D52: the mask stays where it is on the canvas; its offset converts between layer-relative (linked) and document coordinates
+          walk(next.layers, (m) => {
+            if (m.id !== id || !m.mask) return false
+            const lx = m.x ?? 0, ly = m.y ?? 0
+            m.mask = m.mask.linked ? { ...m.mask, linked: false, x: m.mask.x + lx, y: m.mask.y + ly } : { ...m.mask, linked: true, x: m.mask.x - lx, y: m.mask.y - ly }
+            return true
+          })
+          commit(next, before, n.mask.linked ? 'unlink mask' : 'link mask', id)
+        },
+        applyMask: (id) => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          const lp = n?.kind === 'raster' ? get().pixels.get(id) : undefined
+          const m = n?.mask ? get().masks.get(id) : undefined
+          if (!doc || !n?.mask || !lp || !m) { useSession.getState().toast('Apply mask needs a raster layer with a mask', 'info'); return }
+          if (n.locked) { useSession.getState().toast('Layer is locked', 'info'); return }
+          const before = clone(doc)
+          const tiles = lp.snapshotAll()
+          // D52: the layer's alpha × the mask as it renders (density, feather); outside the mask's extent nothing shows, as in compose.py
+          const a = document.createElement('canvas'); a.width = lp.width; a.height = lp.height
+          const off = maskOffset(n)
+          a.getContext('2d')!.drawImage(selectionAlphaCanvas(derivedMask(m, n.mask)), off.x - (n.x ?? 0), off.y - (n.y ?? 0))
+          lp.ctx.save(); lp.ctx.globalCompositeOperation = 'destination-in'; lp.ctx.drawImage(a, 0, 0); lp.ctx.restore()
+          lp.refresh(); lp.dirty = true
+          const next = clone(doc)
+          walk(next.layers, (x) => { if (x.id === id) { x.mask = null; return true } })
+          set({ doc: next, editingMask: false, docDirty: true, revision: get().revision + 1 })
+          get().pushHistory({ label: 'apply mask', layerId: id, kind: 'image', tiles, stack: before, at: Date.now() })
+        },
+        maskFromTransparency: (id) => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          const lp = n?.kind === 'raster' ? get().pixels.get(id) : undefined
+          if (!doc || !n || !lp || n.mask) { useSession.getState().toast('Mask from transparency needs a raster layer without a mask', 'info'); return }
+          if (n.locked) { useSession.getState().toast('Layer is locked', 'info'); return }
+          const before = clone(doc)
+          const tiles = lp.snapshotAll()
+          // D52 (Photoshop Layer › Layer Mask › From Transparency): the alpha becomes a linked layer-sized mask, the layer turns opaque
+          const img = lp.ctx.getImageData(0, 0, lp.width, lp.height)
+          const mask = new LayerPixels(lp.width, lp.height, true)
+          const mi = mask.ctx.createImageData(lp.width, lp.height)
+          for (let j = 0; j < img.data.length; j += 4) { const a = img.data[j + 3]; mi.data[j] = mi.data[j + 1] = mi.data[j + 2] = a; mi.data[j + 3] = 255; img.data[j + 3] = 255 }
+          mask.ctx.putImageData(mi, 0, 0); mask.refresh(); mask.dirty = true
+          lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
+          get().masks.set(id, mask)
+          const next = clone(doc)
+          walk(next.layers, (x) => { if (x.id === id) { x.mask = { enabled: true, linked: true, x: 0, y: 0, density: 1, feather: 0 }; return true } })
+          set({ doc: next, docDirty: true, revision: get().revision + 1 })
+          get().pushHistory({ label: 'mask from transparency', layerId: id, kind: 'image', tiles, stack: before, at: Date.now() })
         },
         resizeCanvas: (w, h, ax = 0.5, ay = 0.5) => {
           const doc = get().doc
@@ -862,7 +926,7 @@ export const useEditor = create<EditorState>()(
         clearSelected: () => {
           const { doc, activeId, selection, editingMask } = get()
           const n = findNode(doc, activeId)
-          if (!doc || !n || n.kind !== 'raster' || n.locked) return
+          if (!doc || !n || n.locked || (n.kind !== 'raster' && !(editingMask && n.mask))) return
           const lp = editingMask ? get().masks.get(n.id) : get().pixels.get(n.id)
           if (!lp) return
           const off = editingMask ? maskOffset(n) : { x: n.x ?? 0, y: n.y ?? 0 }

@@ -323,7 +323,9 @@ relative to H2.
 **PE3 status 2026-10-10:** D47 (seamless paste-back, result masks), D48 (match colour, on Refine), D49 (Colour to Alpha) landed;
 spike S1 ran (journal) and recommends **no-go** for PC14 / PC15 — awaiting the author's decision (a D-number either way).
 
-**PE4 status 2026-10-10: open** (D50–D53).
+**PE4 status 2026-10-10: closed.** D50 (brush model), D51 (smoothing and painting modifiers), D52 (masks: linked layer-sized,
+density / feather, any node kind, apply / from transparency), D53 (partial texture uploads) landed; headed brush, paint, cmpdiag and
+tour pass. Next Edit waves: PE5 (mouse kit, layers panel, properties) and PE6 (transform, S2), at the author's choice relative to H2.
 
 ## 9. Totals and parallelism
 

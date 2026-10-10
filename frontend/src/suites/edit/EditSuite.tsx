@@ -1,6 +1,6 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
 // Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
-import { Brush, Eye, EyeOff, Files, Lasso, Lock, LockOpen, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Brush, Eye, EyeOff, Files, Lasso, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Unlink2 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '../../api/client'
@@ -565,8 +565,9 @@ function LayersTab() {
         onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id, false); showMenu(e, layerMenu()) }}>
         <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
         <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
-        {n.kind === 'raster' ? <img className="thumb" src={thumbs.get(n.id)} alt="" title="Ctrl-click: select layer transparency" onClick={(e) => { if (e.ctrlKey || e.metaKey) { e.stopPropagation(); ed().selectLayerAlpha(n.id) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
+        {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title="Ctrl-click: select layer transparency" onClick={(e) => { if (e.ctrlKey || e.metaKey) { e.stopPropagation(); ed().selectLayerAlpha(n.id) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
         <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : n.type}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${n.blend}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
+        {n.mask && <button className={`mask-link${n.mask.linked ? ' on' : ''}`} title={n.mask.linked ? 'linked: the mask moves and transforms with the layer · click to unlink' : 'unlinked: the mask stays put · click to link'} onClick={(e) => { e.stopPropagation(); ed().toggleMaskLink(n.id) }}>{n.mask.linked ? <Link2 size={11} /> : <Unlink2 size={11} />}</button>}
         {n.mask
           ? <img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}${n.mask.enabled ? '' : ' off'}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click to edit · Shift-click to disable" onClick={(e) => { e.stopPropagation(); if (e.shiftKey) ed().updateNode(n.id, { mask: { ...n.mask!, enabled: !n.mask!.enabled } }, 'toggle mask'); else ed().setActive(n.id, true) }} />
           : <span className="mask-box" title={hasSel ? 'add a mask from the selection' : 'add a mask'} onClick={(e) => { e.stopPropagation(); ed().addMask(n.id, hasSel) }}>+◐</span>}
@@ -577,7 +578,7 @@ function LayersTab() {
   return (
     <div>
       <div className="layers">{rows(doc.layers, 0)}</div>
-      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}”: paint white to show the layer, black to hide it — B brush · E eraser · G fill. <button className="quiet" onClick={() => ed().setActive(active.id, false)}>Edit pixels instead</button></div>}
+      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}”: paint white to show the layer, black to hide it — B brush · E eraser · G fill; density and feather below. <button className="quiet" onClick={() => ed().setActive(active.id, false)}>Edit pixels instead</button></div>}
       {active && (
         <div className="tool-opts" style={{ marginTop: 10 }}>
           <label>blend</label><select value={active.blend} onChange={(e) => ed().updateNode(active.id, { blend: e.target.value }, 'blend mode')}>{BLEND_MODES.map((m) => <option key={m}>{m}</option>)}</select>
@@ -585,6 +586,7 @@ function LayersTab() {
           {active.kind === 'raster' && <Slider label="fill" value={active.fill ?? 1} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(active.id, { fill: v })} onCommit={() => commit('fill')} />}
           {active.kind === 'group' && <><label>group</label><div className="segmented"><button className={active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: true }, 'group mode')}>pass-through</button><button className={!active.passthrough ? 'active' : ''} onClick={() => ed().updateNode(active.id, { passthrough: false }, 'group mode')}>isolated</button></div></>}
           <label>clip</label><label className="chk"><input type="checkbox" checked={active.clip} onChange={(e) => ed().updateNode(active.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
+          {active.mask && <MaskOptions n={active} />}
         </div>
       )}
       <div className="layer-actions">
@@ -595,6 +597,30 @@ function LayersTab() {
         <MenuButton label="More" items={layerMenu} />
       </div>
     </div>
+  )
+}
+
+const pushStackEntry = (label: string, layerId: string, stack: DocumentStack) => ed().pushHistory({ label, layerId, kind: 'image', tiles: [], stack, at: Date.now() })
+
+/** D52: the active layer's mask — enable, link, density, feather; Apply / Load / Remove (Layers tab and Properties, any node kind). */
+function MaskOptions({ n }: { n: Node }) {
+  const doc = useEditor((s) => s.doc)!
+  const before = useRef<DocumentStack | null>(null)
+  const m = n.mask
+  if (!m) return null
+  const start = () => { before.current = snapshot(doc) }
+  const commit = (label: string) => { if (before.current) { pushStackEntry(label, n.id, before.current); before.current = null } }
+  return (
+    <>
+      <label>mask</label>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <label className="chk" title="Shift-click the mask thumbnail"><input type="checkbox" checked={m.enabled} onChange={() => ed().updateNode(n.id, { mask: { ...m, enabled: !m.enabled } }, m.enabled ? 'disable mask' : 'enable mask')} /> on</label>
+        <label className="chk" title="a linked mask moves and transforms with the layer (the chain left of the mask thumbnail)"><input type="checkbox" checked={m.linked} onChange={() => ed().toggleMaskLink(n.id)} /> linked</label>
+        {(n.kind === 'raster' ? ['edit.mask.apply', 'edit.mask.load', 'edit.mask.remove'] : ['edit.mask.load', 'edit.mask.remove']).map((id) => <CommandButton key={id} id={id} text />)}
+      </div>
+      <Slider label="density" value={m.density ?? 1} min={0} max={1} step={0.01} fmt={pct} onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, density: v } })} onCommit={() => commit('mask density')} />
+      <Slider label="feather" value={m.feather ?? 0} min={0} max={250} step={0.5} fmt={(v) => `${v} px`} onStart={start} onChange={(v) => ed().updateNode(n.id, { mask: { ...m, feather: v } })} onCommit={() => commit('mask feather')} />
+    </>
   )
 }
 
@@ -618,10 +644,10 @@ function PropertiesTab() {
           <button className="quiet" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2))}>copy JSON</button>
         </div>
         <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre></> : <span className="muted">— AI layers carry their recipe (seed, region, model)</span>}</dd>
-      {n.mask && <><dt>mask</dt><dd>{n.mask.enabled ? 'enabled' : 'disabled'} · {n.mask.linked ? 'linked' : 'unlinked'} · offset {n.mask.x}, {n.mask.y}</dd></>}
+      {n.mask && <><dt>mask</dt><dd><div className="tool-opts"><MaskOptions n={n} /></div><span className="hint">offset {n.mask.x}, {n.mask.y} ({n.mask.linked ? 'from the layer' : 'in the document'})</span></dd></>}
     </dl>
   )
-  if (n.kind === 'group') return <dl className="kv"><dt>group</dt><dd>{n.children?.length ?? 0} children · {n.passthrough ? 'pass-through' : 'isolated'}</dd></dl>
+  if (n.kind === 'group') return <><dl className="kv"><dt>group</dt><dd>{n.children?.length ?? 0} children · {n.passthrough ? 'pass-through' : 'isolated'}</dd></dl>{n.mask && <div className="tool-opts"><MaskOptions n={n} /></div>}</>
   const params = n.params ?? {}
   const setParam = (k: string, v: unknown) => ed().updateNode(n.id, { params: { ...params, [k]: v } })
   return (
@@ -635,6 +661,7 @@ function PropertiesTab() {
           return <Fragment key={k}><label>{k}</label><input type="text" defaultValue={JSON.stringify(v)} onFocus={start} onBlur={(e) => { try { setParam(k, JSON.parse(e.target.value)); commit(`${n.type} ${k}`) } catch { useSession.getState().toast(`${k}: not valid JSON`, 'error') } }} /></Fragment>
         })}
         {!Object.keys(params).length && <span className="hint full">no parameters</span>}
+        {n.mask && <MaskOptions n={n} />}
       </div>
       <p className="hint">Previewed on the canvas with the compositor's own formulas (blur exact up to radius 4, strided above); rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).</p>
     </div>

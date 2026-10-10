@@ -12,7 +12,8 @@ import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
-import { findNode, useEditor, type Node } from './editorStore'
+import { findNode, useEditor, type MaskRef, type Node } from './editorStore'
+import { derivedMask, maskParamsActive } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
 import { PathWalker, Smoother, Stroke } from './brushEngine'
@@ -72,6 +73,7 @@ export function EditorCanvas() {
   const overlayRef = useRef<Container | null>(null)
   const spritesRef = useRef<Map<string, Sprite | Container>>(new Map())
   const passesRef = useRef<{ rt: RenderTexture; content: Container; transform: Matrix; dirty: boolean }[]>([])
+  const derivedRef = useRef<{ raw: LayerPixels; ref: MaskRef; sprite: Sprite }[]>([])   // D52: mask sprites showing a derived mask
   const renderPending = useRef(0)
   const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
   const negRef = useRef<ColorMatrixFilter[] | null>(null)              // C21: the two overlay filters are made once, not per rebuild
@@ -88,6 +90,8 @@ export function EditorCanvas() {
     }
   }
   const markPassesDirty = () => { for (const p of passesRef.current) p.dirty = true }
+  /** D52: re-derive the feathered / density masks whose raw pixels changed (a stroke on the mask) before the passes render. */
+  const refreshDerived = () => { for (const d of derivedRef.current) { const t = derivedMask(d.raw, d.ref).texture; if (d.sprite.texture !== t) d.sprite.texture = t } }
   /** On-demand rendering (10 §11): one frame on the next animation frame, nothing while idle. A request made before the
    * renderer exists is dropped (init renders once itself), so a cancelled frame can never leave the flag set. */
   const requestRender = () => {
@@ -96,7 +100,7 @@ export function EditorCanvas() {
     const run = () => {
       renderPending.current = 0
       const t0 = performance.now()
-      renderPasses(); appRef.current?.render()
+      refreshDerived(); renderPasses(); appRef.current?.render()
       ;(window as unknown as { __loom2RenderMs?: number }).__loom2RenderMs = performance.now() - t0    // read by edit_headed_check.py perf
     }
     renderPending.current = requestAnimationFrame(run)
@@ -276,7 +280,7 @@ export function EditorCanvas() {
         if (!d || !layersRef.current) return null
         // extract.canvas() may hand back a WebGPU/bitmap canvas (no 2D context); redraw it into a plain 2D canvas,
         // which also leaves the browser to convert premultiplied → straight alpha
-        markPassesDirty(); renderPasses()
+        refreshDerived(); markPassesDirty(); renderPasses()
         const src = app.renderer.extract.canvas({ target: layersRef.current, frame: new Rectangle(0, 0, d.w, d.h), resolution: 1 }) as HTMLCanvasElement
         const c = document.createElement('canvas'); c.width = d.w; c.height = d.h
         c.getContext('2d')!.drawImage(src, 0, 0)
@@ -324,6 +328,7 @@ export function EditorCanvas() {
     const activeNode = findNode(doc, st.activeId)
     for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }   // C21: pass content containers too
     passesRef.current = []
+    derivedRef.current = []
     let lastBlend = ''                                                   // alternate names so equal modes never batch
     const pickBlend = (mode: string) => { const a = blendName(mode, false); const name = a === lastBlend ? blendName(mode, true) : a; lastBlend = name; return name }
     const setBlend = (obj: Container, name: string) => { (obj as unknown as { blendMode: string }).blendMode = name }
@@ -337,11 +342,18 @@ export function EditorCanvas() {
       sp.position.set(tx, ty)
       return sp
     }
+    /** D52: the sprite showing a node's mask as it renders — derived when density < 1 or feather > 0, re-derived per frame when painted. */
+    const maskSprite = (n: Node, m: LayerPixels): Sprite => {
+      const ref = n.mask!
+      const sp = new Sprite(derivedMask(m, ref).texture)
+      if (maskParamsActive(ref)) derivedRef.current.push({ raw: m, ref, sprite: sp })
+      return sp
+    }
     /** Wrap `obj` (in document coordinates) with the node's mask into a pass; returns the sprite to blend. */
     const withMask = (n: Node, obj: Container, w: number, h: number, tx: number, ty: number): Container => {
       const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
       if (!m || !n.mask) return obj
-      const ms = new Sprite(m.texture)
+      const ms = maskSprite(n, m)
       ms.position.set((n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y)
       const content = new Container()
       content.addChild(ms, obj)
@@ -429,7 +441,7 @@ export function EditorCanvas() {
         // a document-sized white sprite (or the layer's mask) carries the layer alpha; the per-layer filter registered as
         // a blend mode rewrites the backdrop in the layer's own blend mode (adjustFilters.ts)
         const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
-        const sp = m ? new Sprite(m.texture) : new Sprite(Texture.WHITE)
+        const sp = m ? maskSprite(n, m) : new Sprite(Texture.WHITE)
         if (m && n.mask) sp.position.set(n.mask.x, n.mask.y)
         else { sp.width = doc.w; sp.height = doc.h }
         sp.alpha = n.opacity * (n.fill ?? 1)
@@ -576,8 +588,10 @@ export function EditorCanvas() {
       if (!doc) return null
       if (st.quickMask) return { lp: st.ensureSelection(), kind: 'mask', offset: { x: 0, y: 0 }, id: 'selection' }
       const n = findNode(doc, st.activeId)
-      if (!n || n.kind !== 'raster' || n.locked) { useSession.getState().toast(n?.locked ? 'Layer is locked' : 'Select a raster layer to paint on', 'info'); return null }
+      if (!n || n.locked) { useSession.getState().toast(n?.locked ? 'Layer is locked' : 'Select a raster layer to paint on', 'info'); return null }
       if (st.editingMask && n.mask) { const m = st.masks.get(n.id); return m ? { lp: m, kind: 'mask', offset: { x: (n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, y: (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y }, id: n.id } : null }
+      // D52: masks are paintable on every node kind (groups, adjustments, filters); pixels only on rasters
+      if (n.kind !== 'raster') { useSession.getState().toast(n.mask ? 'Click the mask thumbnail to paint this layer\'s mask' : 'Select a raster layer to paint on, or add a mask to paint', 'info'); return null }
       const lp = st.pixels.get(n.id)
       return lp ? { lp, kind: 'image', offset: { x: n.x ?? 0, y: n.y ?? 0 }, id: n.id } : null
     }

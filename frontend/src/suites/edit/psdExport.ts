@@ -89,7 +89,8 @@ export function buildPsd(doc: DocumentStack, pixels: Map<string, LayerPixels>, m
         const m = masks.get(n.id)
         if (m) {
           const left = (n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, top = (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y
-          base.mask = { canvas: m.canvas, left, top, right: left + m.width, bottom: top + m.height, disabled: !n.mask.enabled, positionRelativeToLayer: false }
+          base.mask = { canvas: m.canvas, left, top, right: left + m.width, bottom: top + m.height, disabled: !n.mask.enabled, positionRelativeToLayer: false,
+            ...((n.mask.density ?? 1) < 1 ? { userMaskDensity: n.mask.density } : {}), ...((n.mask.feather ?? 0) > 0 ? { userMaskFeather: n.mask.feather } : {}) }   // D52
         }
       }
       if (n.kind === 'raster') {

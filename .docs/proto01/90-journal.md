@@ -2257,3 +2257,40 @@ Inspector → lineage → split → pages.
   31 Hz display), handler CPU 0.2 / 0.3 ms and render CPU 0.3 / 0.4 ms with partial / full uploads — the whole-texture upload is queued
   GPU / driver work that CPU timings do not see. Each move now sends ≈ 14 KB instead of 33 MB; the gain should show on a faster display or
   larger documents. `perf` reports the render CPU time now and takes `FULL_UPLOAD=1`.
+
+## 2026-10-10 18:24 — D52 masks like Photoshop's; wave PE4 closed
+
+- **Model (orchestrator):** `Mask` gains `density` (0–1, default 1) and `feather` (Gaussian σ px, 0–250, default 0); `DOC_SCHEMA_VERSION`
+  1 → 2 — version-1 documents load with the defaults and `save()` now stamps the current version. `compose.derived_mask` feathers with
+  three box passes (Kovesi radii, edge-clamped running sums — a port of `selectionOps.gaussian`), rounds to 8 bits, then applies
+  density `1 − d·(1 − v)` with the same rounding; `_mask_for` uses it, so flatten, Save and the queue's crops all see the mask as it
+  renders. `test_masks_d52.py` (6): defaults are a no-op, density rounding, feather within 1 level of a literal float32 transcription of
+  the TS blur (< 1 % of pixels differ), a symmetric monotone edge, the renderer applies both, a version-1 file loads and saves as 2.
+- **Oracle:** `psd_oracle.py` now maps the user mask's density (/255) and feather (px as σ) instead of ruling them out — but every corpus
+  file that sets either (clipping-mask2, layer_mask_data, mask-density-layermask, mask_parameters, passthrough_vector_mask) also has a
+  vector mask, which stays out of scope. **Photoshop's feather kernel is therefore not measured**; σ = feather px is the assumption
+  (Photoshop's Gaussian Blur radius behaves as σ). A Photoshop-made file with a feathered pixel mask would settle it.
+- **Editor:** `maskDerived.ts` derives the mask texture when density < 1 or feather > 0, cached per mask canvas by a new
+  `LayerPixels.version`; the render loop re-derives before the passes. Painting a feathered mask re-derives **only around the stroke**:
+  `LayerPixels.takeDamage()` hands over the union of `refreshRect`s, the output region is that rect plus the blur's reach (3σ + 3 px
+  bounds the three radii) and the crop another reach beyond — the first version wrote only the damaged rect and the headed brush check
+  caught it (max 94 at p99 0; the check now also bounds max ≤ 2). Full derive cost for reference (Node): 27 ms at 1080p, 140–150 ms at
+  4K for σ 2–40.
+- **Behaviour:** a raster's new mask is layer-sized and **linked** (adjustments, filters, groups keep document-sized, unlinked masks); a
+  chain button in the layer row and the *linked* box link / unlink without moving the mask (offset converted); masks on every node kind
+  are paintable (brush, eraser, fill, gradient, clear); mask controls (on, linked, density, feather, Apply / Load / Remove) under the
+  blend controls in the Layers tab and in Properties for every kind; **Apply mask** (alpha × the derived mask, mask removed, one undo
+  step) and **Mask from transparency** (alpha → linked mask, layer opaque); the pixel thumbnail gets the accent frame when it is the
+  paint target and the layer has a mask; **Delete** while editing a mask removes the mask; merge down bakes the derived mask; PSD export
+  writes `userMaskDensity` / `userMaskFeather`. Fixed on the way: canvas size / crop and the outpaint resync shifted unlinked masks on
+  rasters only — groups' and adjustments' masks drifted (queue.py already shifted every kind).
+- **Headed (Edge, WebGPU):** cmpdiag new cases all p99 ≤ 1 — density 60 % (max 1), feather 6.5 px (max 127 at 3 601 pixels whose alpha
+  is 1/255 on both sides: the colour of an almost transparent pixel does not survive an 8-bit premultiplied texture; the mask agrees),
+  density 40 % + feather 2 (max 1), linked mask follows a move, unlinked stays put, feathered 80 % mask on an Invert adjustment (max 1);
+  cmpdiag now keeps any pair with max > 4 and prints the worst pixel. Brush: the eraser paints an Invert layer's mask black and the
+  composite equals the exact flatten after the stroke (p99 0, max 1). Tour: link / unlink, the Layers-tab controls, Apply, From
+  transparency, Delete-removes-the-mask and its undo pass; the two known failures (PSD export, compare) are the author's dev server's
+  stale optimize-dep hash (504), as before. Paint, selection, render pass.
+- 171 offline tests; frontend build and lint clean (one more per-component Fast Refresh note); API contract regenerated.
+- **PE4 closed** (D50–D53). Remaining Edit work: PE5 (PC22 mouse kit, PC20 layers panel, PC21 properties incl. the Curves spline and
+  a Levels histogram), PE6 (PC23 transform, S2 → PC24), PC25 / PC26 with H3; the S1 go / no-go is the author's.

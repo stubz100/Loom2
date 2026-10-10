@@ -32,7 +32,7 @@ from .compose import BLEND_MODES, COMPOSE_VERSION, Renderer
 from .fsio import StateError, _tmp_for, new_id, replace, utc_now
 from .workspace import Workspace
 
-DOC_SCHEMA_VERSION = 1
+DOC_SCHEMA_VERSION = 2          # 2 (D52): masks carry density and feather (version-1 documents load with the defaults)
 
 
 class StaleStack(StateError):
@@ -52,6 +52,8 @@ class Mask(BaseModel):
     linked: bool = True
     x: int = 0
     y: int = 0
+    density: float = Field(1.0, ge=0.0, le=1.0)    # D52: 1 − density·(1 − v) — at 0 the mask hides nothing
+    feather: float = Field(0.0, ge=0.0, le=250.0)   # D52: Gaussian σ in px (three box passes, the editor's own blur)
 
 
 class NodeBase(BaseModel):
@@ -195,6 +197,7 @@ class OpenDocument:
         with self._save_lock:
             _validate_modes(self.doc)
             self.doc.saved_at = utc_now()
+            self.doc.schema_version = DOC_SCHEMA_VERSION      # D52: an older document is rewritten in the current format
             self.doc.has_selection = self.selection is not None
             merged = self.flatten()
             self.doc.meta["compose_version"] = COMPOSE_VERSION   # D39: the rules mergedimage.png was rendered with

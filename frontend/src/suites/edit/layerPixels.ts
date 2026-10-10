@@ -5,6 +5,7 @@ import { Texture } from 'pixi.js'
 export const TILE = 256
 
 export interface TileSnapshot { x: number; y: number; data: ImageData }
+export type Rect = { x0: number; y0: number; x1: number; y1: number }
 
 /** D53: the renderer's sub-region upload, registered by EditorCanvas (returns false when it could not upload — then the whole texture
  * goes up). `window.__loom2FullUpload = true` forces whole-texture uploads, for A/B measurements. */
@@ -17,6 +18,8 @@ export class LayerPixels {
   readonly ctx: CanvasRenderingContext2D
   readonly texture: Texture
   dirty = false                 // changed since the last upload to the orchestrator
+  version = 0                   // D52: bumped by every GPU upload — derived (feathered / density) masks recompute when it moves
+  private damage: Rect | 'all' | null = 'all'   // D52: what changed since the derived-mask cache last looked
   private strokeTiles = new Map<string, TileSnapshot>()
 
   width: number
@@ -49,18 +52,27 @@ export class LayerPixels {
   }
 
   /** Re-upload the canvas to the GPU (whole texture; tiles later if measured as the bottleneck). */
-  refresh(): void { this.texture.source.update() }
+  refresh(): void { this.version++; this.damage = 'all'; this.texture.source.update() }
 
   /** Raw bytes for `PUT …/pixels`: RGBA, or one value per pixel for masks and the selection — red × alpha / 255, so white drawn
    * with partial alpha (anti-aliased tool edges) and opaque grey (masks, feathered selections) both read right (D43). */
   toRaw(): Uint8Array {
+    if (this.grey) return this.greyValues(0, 0, this.width, this.height)
     const img = this.ctx.getImageData(0, 0, this.width, this.height)
-    if (!this.grey) return new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.byteLength)
-    const out = new Uint8Array(this.width * this.height)
-    const d = img.data
+    return new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.byteLength)
+  }
+
+  /** One value per pixel of a region, red × alpha / 255 (the mask / selection value, D43). */
+  greyValues(x: number, y: number, w: number, h: number): Uint8Array {
+    const d = this.ctx.getImageData(x, y, w, h).data
+    const out = new Uint8Array(w * h)
     for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = d[j + 3] === 255 ? d[j] : Math.round((d[j] * d[j + 3]) / 255)
     return out
   }
+
+  /** D52: the region changed since the last call (layer pixels, x1 / y1 exclusive), 'all', or null — for the one cache that derives
+   * from this canvas (maskDerived.ts). */
+  takeDamage(): Rect | 'all' | null { const d = this.damage; this.damage = null; return d }
 
   // ---- undo: snapshot the tiles a stroke is about to touch, once per stroke ----------------------
   beginStroke(): void { this.strokeTiles.clear() }
@@ -97,6 +109,9 @@ export class LayerPixels {
 
   /** D53: upload only a changed region (layer pixels, x1 / y1 exclusive) to the GPU texture; the whole texture when the renderer cannot. */
   refreshRect(x0: number, y0: number, x1: number, y1: number): void {
+    this.version++
+    const d = this.damage
+    if (d !== 'all') this.damage = d ? { x0: Math.min(d.x0, x0), y0: Math.min(d.y0, y0), x1: Math.max(d.x1, x1), y1: Math.max(d.y1, y1) } : { x0, y0, x1, y1 }
     const full = (globalThis as { __loom2FullUpload?: boolean }).__loom2FullUpload
     if (!full && partialUpload) {
       const ax = Math.max(0, Math.floor(x0)), ay = Math.max(0, Math.floor(y0)), bx = Math.min(this.width, Math.ceil(x1)), by = Math.min(this.height, Math.ceil(y1))

@@ -36,7 +36,7 @@ Dock: Running inpaint (klein-9b) 2/4 ████░░ · Recent
 | Element | Properties |
 | --- | --- |
 | Document | name, width, height, background (transparent/colour), colour space sRGB (MVP), source asset link |
-| Raster layer | pixels (tiled), bounds/offset, opacity, fill, blend mode, visible, locked (pixels / position / all), clipping (Photoshop clipping group with the nearest unclipped layer below, D39), **mask** (optional, soft 8-bit, linked/unlinked, enabled) |
+| Raster layer | pixels (tiled), bounds/offset, opacity, fill, blend mode, visible, locked (pixels / position / all), clipping (Photoshop clipping group with the nearest unclipped layer below, D39), **mask** (optional, soft 8-bit, linked/unlinked, enabled, density, feather — D52) |
 | Group | children, opacity, blend (pass-through default; below 100 % or masked, a pass-through group is mixed against the backdrop by opacity × mask, D39), mask |
 | Adjustment layer (non-destructive) | Levels · Curves · Hue/Saturation · Colour Balance · Brightness/Contrast · Exposure · Black & White · Invert; mask; blend/opacity (the result blends back in the layer's own mode, D39) |
 | Filter layer (non-destructive) | Gaussian blur · Sharpen (unsharp) · Noise · High-pass; mask |
@@ -168,6 +168,16 @@ editing frame, a hint under the layer list says "paint white to show, black to h
 button, and when the current tool cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper) the **Brush** is selected,
 so the first click paints the mask instead of dragging the layer. A one-time toast explains the same. **Delete layer**
 deletes at once (undoable; the toast offers Undo) — no confirmation dialog anywhere in the suite (07 §1).
+
+**Masks like Photoshop's (D52, 2026-10-10).** A raster layer's new mask is layer-sized and **linked** (it moves and transforms with the
+layer); groups, adjustment and filter layers get a document-sized mask, and those masks are paintable too (brush, eraser, fill,
+gradient, clear). A chain button between the name and the mask thumbnail links / unlinks without moving the mask on the canvas. The
+active layer's mask shows **on / linked**, **density** (0–100 %: 1 − d·(1 − v)) and **feather** (Gaussian σ, 0–250 px) under the
+blend controls in the Layers tab and in Properties, non-destructively — compose.py derives the same mask (three box passes, the editor's
+blur, rounded alike) and PSD export writes both as the user mask's parameters. **Apply mask** bakes the mask as it renders into the
+layer's alpha; **Mask from transparency** turns the alpha into a linked mask and the layer opaque. The thumbnail being painted carries
+the accent frame; **Delete** while a mask is being edited removes the mask, not the layer. Documents are schema 2 (version-1 files load
+with density 1 and feather 0).
 
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the

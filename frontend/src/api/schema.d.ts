@@ -1981,7 +1981,7 @@ export interface components {
             saved_at: string | null;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Source Asset Id */
@@ -2144,7 +2144,7 @@ export interface components {
             saved_at: string | null;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Source Asset Id */
@@ -3391,10 +3391,20 @@ export interface components {
         /** Mask */
         Mask: {
             /**
+             * Density
+             * @default 1
+             */
+            density: number;
+            /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+            /**
+             * Feather
+             * @default 0
+             */
+            feather: number;
             /**
              * Linked
              * @default true

@@ -2329,3 +2329,8 @@ Inspector → lineage → split → pages.
   updated to D54 (the brush hides on a mask) and pass; cmpdiag (incl. an unlinked mask moved off its layer — the 255 default padding),
   tour (now with a fresh dev server: PSD export and compare pass too), selection pass. Offline 172 (default-value test added); build,
   lint unchanged; API contract regenerated.
+
+## 2026-10-10 19:08 — CI green on D54
+
+- Run 38070065962 at 51b40fe: offline tests + frontend build for both variants (full, open) and both installers passed; the draft
+  release job is skipped off tags.

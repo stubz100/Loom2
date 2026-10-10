@@ -19,6 +19,8 @@ listed here; model weights are governed by the licence register in `.docs/proto0
 | `orchestrator/loom2/compose.py` `_exposure`, `frontend/src/suites/edit/adjustFilters.ts` (Exposure in linear light) | `crates/compose/src/adjust.rs` | D40 |
 | `orchestrator/tests/psd_oracle.py` (method: merged-image oracle, 2/255, ratcheting floor) | `crates/io/tests/corpus.rs` | D40 |
 | `frontend/src/suites/edit/psdExport.ts` `fixLevelsBlocks` (the Levels block layout) | `crates/io/src/adjust_map.rs` | D41 |
+| `frontend/src/suites/edit/selectionOps.ts` (EDT, expand / contract / border / smooth / feather, wand rules in `EditorCanvas.tsx`) | `crates/algo/src/selection.rs`, `selection/distance.rs`, `selection_blur.rs` | D44 |
+| `orchestrator/loom2/maskops.py` (bounded EDT, expand / contract) | `crates/algo/src/selection.rs`, `selection/distance.rs` | D44 |
 
 The psd-tools test files (`bench/corpus/psd-tools/`, fetched, never committed) are MIT, Copyright (c) 2019 Kota Yamaguchi;
 the corpus pins were taken from PhotoCraft's `xtask/psd-tools-corpus.sha256`.

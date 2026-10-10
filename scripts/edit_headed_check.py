@@ -11,6 +11,7 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
   grid               D40 parity grid: seeded noise in every deterministic mode × plain / masked / clipped / isolated group /
                      pass-through group at 50 %, each GPU preview against the exact flatten (p99 ≤ 1; ≤ 2 for the dividing modes)
+  selection          PE2: selection maths in the page, then every selection tool / command by mouse, undone and redone
   psd                builds a stack with every exported construct (fill, lock, clip, adjustment layers, pass-through and
                      isolated groups, a filter layer), exports a PSD and reads it back with psd-tools (D41; `--extra oracle`)
   animate            writes a 24-frame test clip (frame index burned in as a 7-bit code, E6 style) into the project,
@@ -30,7 +31,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -473,6 +474,162 @@ def grid(cdp: CDP) -> list[str]:
     sweep("pass-through group 50 %")
     worst = max(rows, key=lambda r: r[2]) if rows else None
     print(f"grid: {len(rows)} cases, {len(fails)} over budget (p99 ≤ 1; ≤ 2 for dodge / vivid / divide)" + (f"; worst {worst[0]} / {worst[1]} p99 {worst[2]:g} max {worst[3]:g}" if worst else "") + f" (base {base})")
+    return fails
+
+
+def selection_check(cdp: CDP) -> list[str]:
+    """PE2 (D43 / D44): selection maths in the page (distance transform vs brute force, modify, combine), then every selection tool
+    and command driven by mouse events, each undone and redone."""
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+
+    def check(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "FAIL ") + text)
+        if not ok:
+            fails.append(text)
+
+    # ---- maths, imported straight from the Vite dev server ----
+    maths = cdp.eval("""(async () => {
+      const m = await import('/src/suites/edit/selectionOps.ts')
+      const out = []
+      let seed = 7; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+      let worst = 0
+      for (let t = 0; t < 5; t++) {
+        const w = 47, h = 31, inside = new Uint8Array(w * h)
+        for (let i = 0; i < inside.length; i++) inside[i] = rnd() < 0.04 ? 1 : 0
+        inside[0] = 1
+        const d = m.edt(inside, w, h)
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          let best = 1e9
+          for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) if (inside[yy * w + xx]) best = Math.min(best, Math.hypot(x - xx, y - yy))
+          worst = Math.max(worst, Math.abs(best - d[y * w + x]))
+        }
+      }
+      out.push(worst)
+      const w = 41, v = new Uint8Array(w * w); v[20 * w + 20] = 255
+      const e = m.expand(v, w, w, 10)
+      let discOk = true
+      for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) { const r = Math.hypot(x - 20, y - 20); if (r <= 10 && e[y * w + x] !== 255) discOk = false; if (r >= 11 && e[y * w + x] !== 0) discOk = false }
+      out.push(discOk, e[20 * w + 31] === 0 && e[31 * w + 31] === 0)
+      const a = new Uint8Array([0, 100, 255, 255]), b = new Uint8Array([255, 255, 0, 128])
+      out.push(Array.from(m.combine(a, b, 'add')).join(), Array.from(m.combine(a, b, 'subtract')).join(), Array.from(m.combine(a, b, 'intersect')).join(), Array.from(m.combine(null, b, 'intersect')).join())
+      const sq = new Uint8Array(30 * 30); for (let y = 10; y < 20; y++) for (let x = 10; x < 20; x++) sq[y * 30 + x] = 255
+      const c = m.contract(sq, 30, 30, 2), f = m.feather(sq, 30, 30, 6)
+      out.push(c[15 * 30 + 12] === 255 && c[15 * 30 + 10] === 0, f[15 * 30 + 10] > 0 && f[15 * 30 + 10] < 255 && f[15 * 30 + 15] > 200)
+      return JSON.stringify(out)
+    })()""")
+    r = json.loads(maths) if maths else [None] * 8
+    check(r[0] is not None and r[0] < 1e-4, f"EDT equals brute force (worst error {r[0]})")
+    check(r[1] is True and r[2] is True, "expanding a point gives a round disc with an anti-aliased rim")
+    check(r[3:7] == ["255,255,255,255", "0,0,255,127", "0,100,0,128", "0,0,0,0"], f"combine add / subtract / intersect / intersect-with-nothing {r[3:7]}")
+    check(r[7] is True, "contract and feather")
+
+    # ---- tools by mouse ----
+    geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y, w: s.doc.w, h: s.doc.h }} }})())"))
+
+    def scr(fx: float, fy: float) -> tuple[float, float]:
+        return geo["x"] + geo["px"] + fx * geo["w"] * geo["zoom"], geo["y"] + geo["py"] + fy * geo["h"] * geo["zoom"]
+
+    def sel() -> list | None:
+        return json.loads(cdp.eval(f"JSON.stringify((() => {{ const s = {S}; if (!s.selection) return null; const d = s.selection.toRaw(); let n = 0, soft = 0, h = 7; for (let i = 0; i < d.length; i++) {{ if (d[i] > 127) n++; if (d[i] > 0 && d[i] < 255) soft++; h = (h * 31 + d[i]) | 0 }} return [n, soft, h] }})())"))
+
+    def click(fx: float, fy: float, count: int = 1, modifiers: int = 0) -> None:
+        x, y = scr(fx, fy)
+        cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y)
+        for c in range(1, count + 1):
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", buttons=1, clickCount=c, modifiers=modifiers)
+            cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", buttons=0, clickCount=c, modifiers=modifiers)
+        time.sleep(0.35)
+
+    def drag(a: tuple[float, float], b: tuple[float, float], modifiers: int = 0) -> None:
+        (x0, y0), (x1, y1) = scr(*a), scr(*b)
+        cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0, y=y0)
+        cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=x0, y=y0, button="left", buttons=1, clickCount=1, modifiers=modifiers)
+        for i in range(1, 9):
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0 + (x1 - x0) * i / 8, y=y0 + (y1 - y0) * i / 8, button="left", buttons=1, modifiers=modifiers)
+        cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=x1, y=y1, button="left", buttons=0, clickCount=1, modifiers=modifiers)
+        time.sleep(0.5)
+
+    cdp.eval(f"{S}.setView({{ selectionMode: 'replace', marqueeFeather: 0, marqueeStyle: 'normal', lassoKind: 'freehand', wandContiguous: true, wandMerged: false, wandAA: true }}); 1")
+    run("edit.tool.marquee"); time.sleep(0.2)
+    h0 = cdp.eval(f"{S}.history.length")
+    drag((0.2, 0.2), (0.6, 0.6))
+    a = sel()
+    check(a is not None and a[0] > 1000, f"marquee selects ({a and a[0]} px)")
+    run("edit.undo"); time.sleep(0.3)
+    check(sel() is None, "undo of the first marquee leaves no selection")
+    run("edit.redo"); time.sleep(0.3)
+    check(sel() == a, "redo restores it exactly")
+    drag((0.4, 0.4), (0.8, 0.8), modifiers=1 | 8)                         # Shift+Alt: intersect
+    b = sel()
+    check(b is not None and 0 < b[0] < a[0] * 0.5, f"Shift+Alt drag intersects ({b and b[0]} of {a[0]} px)")
+    run("edit.undo"); time.sleep(0.3)
+    check(sel() == a, "undo of the intersect restores the marquee")
+    run("edit.sel.invert"); time.sleep(0.3)
+    inv = sel()
+    check(inv is not None and inv[0] > geo["w"] * geo["h"] - a[0] - 50, "invert")
+    run("edit.undo"); time.sleep(0.3)
+    check(sel() == a, "undo of invert")
+    cdp.eval(f"{S}.setView({{ selModifyPx: 8 }}); 1")
+    for op, cmp in (("expand", lambda n: n > a[0]), ("contract", lambda n: n < a[0]), ("border", lambda n: 0 < n < a[0]), ("smooth", lambda n: abs(n - a[0]) < a[0] * 0.05), ("feather", lambda n: True)):
+        run(f"edit.sel.{op}"); time.sleep(0.4)
+        m = sel()
+        soft = op == "feather" and m is not None and m[1] > 100
+        check(m is not None and cmp(m[0]) and (soft or op != "feather"), f"{op} by 8 px ({m and m[0]} px, {m and m[1]} soft)")
+        run("edit.undo"); time.sleep(0.3)
+        check(sel() == a, f"undo of {op}")
+    cdp.eval(f"{S}.setView({{ marqueeFeather: 12 }}); 1")
+    drag((0.1, 0.1), (0.3, 0.3))
+    f = sel()
+    check(f is not None and f[1] > 200, f"marquee feather 12 px gives a soft edge ({f and f[1]} soft px)")
+    cdp.eval(f"{S}.setView({{ marqueeFeather: 0, marqueeStyle: 'ratio', marqueeW: 2, marqueeH: 1 }}); 1")
+    drag((0.1, 0.1), (0.5, 0.15))
+    rr = json.loads(cdp.eval(f"JSON.stringify((() => {{ const d = {S}.selection.toRaw(), w = {S}.doc.w; let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1; for (let i = 0; i < d.length; i++) if (d[i] > 127) {{ const x = i % w, y = (i - x) / w; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }} return [x1 - x0 + 1, y1 - y0 + 1] }})())"))
+    check(abs(rr[0] / max(1, rr[1]) - 2) < 0.05, f"fixed ratio 2:1 ({rr[0]} × {rr[1]})")
+    cdp.eval(f"{S}.setView({{ marqueeStyle: 'normal' }}); 1")
+    # polygonal lasso: three corners, then close by clicking the first; then a cancelled one
+    run("edit.tool.lasso"); cdp.eval(f"{S}.setView({{ lassoKind: 'polygon' }}); 1"); time.sleep(0.2)
+    before_poly = sel()
+    for pt in ((0.2, 0.2), (0.7, 0.25), (0.5, 0.7)):
+        click(*pt)
+    check(cdp.eval(f"({S}.lassoPoly || []).length") == 3, "polygon collects three corners")
+    click(0.2, 0.2)
+    p = sel()
+    check(cdp.eval(f"{S}.lassoPoly") is None and p is not None and p != before_poly and p[0] > 1000, f"clicking the first corner closes the polygon ({p and p[0]} px)")
+    click(0.1, 0.8); click(0.3, 0.85)
+    run("edit.sel.polyCancel"); time.sleep(0.2)
+    check(cdp.eval(f"{S}.lassoPoly") is None and sel() == p, "⊘ cancels an open polygon and leaves the selection alone")
+    click(0.1, 0.8); click(0.3, 0.85); click(0.2, 0.95, count=2)
+    check(cdp.eval(f"{S}.lassoPoly") is None and sel() != p, "a double-click closes the polygon")
+    cdp.eval(f"{S}.setView({{ lassoKind: 'freehand' }}); 1")
+    # wand on the bench image, contiguous vs global, and on all layers
+    run("edit.tool.wand"); cdp.eval(f"{S}.setView({{ tolerance: 24 }}); {S}.setActive({S}.doc.layers[{S}.doc.layers.length - 1].id, false); 1"); time.sleep(0.2)
+    click(0.5, 0.5)
+    w1 = sel()
+    cdp.eval(f"{S}.setView({{ wandContiguous: false }}); 1")
+    click(0.5, 0.5)
+    w2 = sel()
+    check(w1 is not None and w2 is not None and w2[0] >= w1[0], f"wand: global ({w2 and w2[0]} px) ⊇ contiguous ({w1 and w1[0]} px)")
+    check(w1 is not None and w1[1] > 0, f"wand anti-aliases its edge ({w1 and w1[1]} soft px)")
+    cdp.eval(f"{S}.setView({{ wandContiguous: true, wandMerged: true }}); 1")
+    click(0.5, 0.5)
+    check(sel() is not None, "wand samples all layers")
+    cdp.eval(f"{S}.setView({{ wandMerged: false }}); 1")
+    # layer transparency
+    run("edit.layer.new"); time.sleep(0.3)
+    cdp.eval(f"(() => {{ const s = {S}; const p = s.pixels.get(s.activeId); p.ctx.fillStyle = '#fff'; p.ctx.fillRect(10, 10, 50, 40); p.refresh(); p.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.3)
+    run("edit.sel.fromLayer"); time.sleep(0.3)
+    lt = sel()
+    check(lt is not None and lt[0] == 2000, f"select layer transparency ({lt and lt[0]} px, expect 50 × 40)")
+    labels = cdp.eval(f"JSON.stringify({S}.history.slice({h0}).map((e) => e.label))")
+    print(f"     history since the start: {labels}")
+    run("edit.sel.none"); time.sleep(0.2)
+    check(sel() is None, "deselect")
+    run("edit.undo"); time.sleep(0.3)
+    check(sel() == lt, "undo of deselect brings the selection back")
+    errs = cdp.page_errors()
+    check(not errs, "no page errors" + ("".join("\n       " + e for e in errs)))
     return fails
 
 
@@ -969,6 +1126,8 @@ def main() -> int:
             failures += tour(cdp, tmp)
         elif mode == "cmpdiag":
             failures += cmpdiag(cdp)
+        elif mode == "selection":
+            failures += selection_check(cdp)
         elif mode == "grid":
             failures += grid(cdp)
         elif mode == "psd":

@@ -6,6 +6,7 @@ import { ApiError, http, unwrap } from '../../api/client'
 import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe } from '../../api/types'
 import { useSession } from '../../store/session'
 import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
+import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
 import { isIdentity, resample, type Xform } from './transform'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
@@ -47,13 +48,26 @@ export const FILTER_DEFAULTS: Record<string, Record<string, unknown>> = {
 export interface CompareResult { mean: number; p99: number; max: number; rgb_mean: number; rgb_p99: number; rgb_max: number; w: number; h: number; at: string }
 export interface BrushOptions { size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; color: string; background: string }
 export interface BrushPreset { name: string; size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; builtin?: boolean }
-export interface HistoryEntry { label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null } }
+export interface HistoryEntry {
+  label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null }
+  /** D43: a selection edit — whether a selection existed before and after it (undo / redo restore its presence too). */
+  sel?: { had: boolean; has: boolean }
+  /** D43: consecutive entries with the same key within a couple of seconds merge into one history row (one gesture). */
+  coalesce?: string
+}
+export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode'
+  | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx'
 
 export interface EditorState {
   doc: DocumentStack | null; docDirty: boolean; loading: boolean; saving: boolean; error: string | null
   activeId: string | null; editingMask: boolean
-  tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: 'replace' | 'add' | 'subtract'; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
+  tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: SelectionMode; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
+  // D44: selection tool options — marquee feather and style, lasso kind (and the open polygon), wand switches, the modify amount
+  marqueeFeather: number; marqueeStyle: 'normal' | 'ratio' | 'size'; marqueeW: number; marqueeH: number
+  lassoKind: 'freehand' | 'polygon'; lassoPoly: { x: number; y: number }[] | null
+  wandContiguous: boolean; wandMerged: boolean; wandAA: boolean
+  selModifyPx: number
   zoom: number; pan: { x: number; y: number }; fitRequested: number; overlay: boolean; before: boolean; pixelGrid: boolean; quickMask: boolean
   history: HistoryEntry[]; future: HistoryEntry[]
   renderer: string; cursor: { x: number; y: number } | null
@@ -111,7 +125,7 @@ export interface EditorState {
   setExtractor: (f: EditorState['extractor']) => void
   // stack
   setActive: (id: string | null, mask?: boolean) => void
-  updateNode: (id: string, patch: Partial<Node>, label?: string) => void
+  updateNode: (id: string, patch: Partial<Node>, label?: string, coalesce?: string) => void
   addLayer: (kind?: NodeKind, extra?: Partial<Node>) => Node | null
   deleteNode: (id: string) => void
   duplicateNode: (id: string) => void
@@ -133,6 +147,15 @@ export interface EditorState {
   // selection
   ensureSelection: () => LayerPixels
   clearSelection: () => void
+  /** D43: run a selection change as one undoable step (tiles that changed, and whether a selection exists before / after). */
+  editSelection: (label: string, fn: () => void, coalesce?: string) => void
+  /** D44: combine a document-sized shape (values 0–255) into the selection by mode, feathered first when asked; one undo step. */
+  applySelectionShape: (shape: Uint8Array, mode: SelectionMode, label: string, featherPx?: number) => void
+  selectLayerAlpha: (id: string) => void
+  setLassoPoly: (pts: { x: number; y: number }[] | null) => void
+  closeLassoPoly: (mode?: SelectionMode) => void
+  deselect: () => void
+  modifySelection: (op: SelectionModify, px: number) => void
   selectAll: () => void
   invertSelection: () => void
   featherSelection: (px: number) => void
@@ -225,10 +248,23 @@ export const useEditor = create<EditorState>()(
         for (const [id, lp] of get().pixels) if (!nodes.has(id)) { lp.destroy(); get().pixels.delete(id) }
         for (const [id, lp] of get().masks) if (!maskIds.has(id)) { lp.destroy(); get().masks.delete(id) }
       }
+      /** D43: the selection canvas an undo / redo restores into — a blank one when there is none (no selection = all zero). */
+      const selectionFor = (e: HistoryEntry): LayerPixels | null => {
+        const doc = get().doc
+        if (get().selection || !e.sel || !doc) return get().selection
+        const sel = new LayerPixels(doc.w, doc.h, true)
+        set({ selection: sel })
+        return sel
+      }
+      const setSelectionPresence = (present: boolean) => {
+        if (present || !get().selection) return
+        get().selection!.destroy()
+        set({ selection: null, quickMask: false })
+      }
       /** Replace the stack, mark dirty, and record the previous stack as one undoable step. */
-      const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}) => {
+      const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}, coalesce?: string) => {
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
-        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now() })
+        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce })
       }
       /** Bake `t` into the layer's pixels (and its linked mask); the old canvases ride along in history for undo. */
       const resampleLayer = (t: Xform, label: string) => {
@@ -272,6 +308,7 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
@@ -308,12 +345,11 @@ export const useEditor = create<EditorState>()(
           try {
             const b = useSession.getState().backend!
             const res = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection`, { headers: { 'X-Loom-Token': b.token } })
-            if (res.status === 404) { get().clearSelection(); return }
+            if (res.status === 404) { get().deselect(); return }
             if (!res.ok) throw new Error(`selection ${res.status}`)
             const w = Number(res.headers.get('x-loom-width')), h = Number(res.headers.get('x-loom-height'))
             const sel = LayerPixels.fromRaw(w, h, new Uint8Array(await res.arrayBuffer()), 1)
-            get().selection?.destroy()
-            set({ selection: sel, quickMask: false, revision: get().revision + 1 })
+            get().editSelection('AI select', () => { get().selection?.destroy(); set({ selection: sel, quickMask: false }) })
             useSession.getState().toast('AI Select: selection updated', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
         },
@@ -627,13 +663,13 @@ export const useEditor = create<EditorState>()(
 
         // ---- stack -----------------------------------------------------------------------------------
         setActive: (id, mask = false) => { const editing = mask && !!findNode(get().doc, id)?.mask; set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}) }) },
-        updateNode: (id, patch, label) => {
+        updateNode: (id, patch, label, coalesce) => {
           const doc = get().doc
           if (!doc) return
           const before = clone(doc)
           const next = clone(doc)
           walk(next.layers, (n) => { if (n.id === id) { Object.assign(n, patch); return true } })
-          if (label) commit(next, before, label, id)
+          if (label) commit(next, before, label, id, {}, coalesce)
           else set({ doc: next, docDirty: true, revision: get().revision + 1 })
         },
         addLayer: (kind = 'raster', extra = {}) => {
@@ -776,9 +812,9 @@ export const useEditor = create<EditorState>()(
         cropToSelection: () => {
           const sel = get().selection
           if (!sel) return
-          const d = sel.ctx.getImageData(0, 0, sel.width, sel.height).data
+          const d = selectionValues(sel)
           let x0 = sel.width, y0 = sel.height, x1 = -1, y1 = -1
-          for (let y = 0; y < sel.height; y++) for (let x = 0; x < sel.width; x++) if (d[(y * sel.width + x) * 4] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+          for (let y = 0; y < sel.height; y++) for (let x = 0; x < sel.width; x++) if (d[y * sel.width + x] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
           if (x1 < 0) return
           setCanvas(x1 - x0 + 1, y1 - y0 + 1, -x0, -y0, 'crop')
           get().clearSelection()
@@ -809,6 +845,16 @@ export const useEditor = create<EditorState>()(
         // ---- history ---------------------------------------------------------------------------------
         pushHistory: (e) => {
           const h = get().history, f = get().future
+          const last = h[h.length - 1]
+          if (e.coalesce && last && last.coalesce === e.coalesce && last.layerId === e.layerId && e.at - last.at < 2000 && !e.swap && !last.swap) {
+            // D43: one gesture, one row — the older entry already holds the before-state of its tiles; add the tiles it lacks
+            const have = new Set(last.tiles.map((t) => `${t.x},${t.y}`))
+            const merged: HistoryEntry = { ...last, at: e.at, tiles: [...last.tiles, ...e.tiles.filter((t) => !have.has(`${t.x},${t.y}`))], stack: last.stack ?? e.stack,
+              sel: last.sel && e.sel ? { had: last.sel.had, has: e.sel.has } : last.sel ?? e.sel }
+            set({ history: [...h.slice(0, -1), merged], future: [] })
+            if (f.length) { releaseEntries(f); gcPixels() }
+            return
+          }
           const dropped = [...h.slice(0, Math.max(0, h.length - 199)), ...f]
           set({ history: [...h.slice(-199), e], future: [] })
           if (dropped.length) { releaseEntries(dropped); gcPixels() }      // B19: canvases only history referenced go with it
@@ -819,9 +865,10 @@ export const useEditor = create<EditorState>()(
           const e = h[h.length - 1]
           const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
           if (e.tiles.length) {
-            const target = e.layerId === 'selection' ? get().selection : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
+            const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) redoEntry.tiles = target.restore(e.tiles)
           }
+          if (e.sel) setSelectionPresence(e.sel.had)
           if (e.swap) redoEntry.swap = swapPixels(e.swap)
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
@@ -832,9 +879,10 @@ export const useEditor = create<EditorState>()(
           const e = f[f.length - 1]
           const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
           if (e.tiles.length) {
-            const target = e.layerId === 'selection' ? get().selection : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
+            const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) undoEntry.tiles = target.restore(e.tiles)
           }
+          if (e.sel) setSelectionPresence(e.sel.has)
           if (e.swap) undoEntry.swap = swapPixels(e.swap)
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
@@ -850,39 +898,89 @@ export const useEditor = create<EditorState>()(
           return sel
         },
         clearSelection: () => { get().selection?.destroy(); set({ selection: null, quickMask: false, revision: get().revision + 1 }) },
-        selectAll: () => { const sel = get().ensureSelection(); sel.ctx.fillStyle = '#ffffff'; sel.ctx.fillRect(0, 0, sel.width, sel.height); sel.refresh(); set({ revision: get().revision + 1 }) },
-        invertSelection: () => {
-          const sel = get().ensureSelection()
-          const img = sel.ctx.getImageData(0, 0, sel.width, sel.height)
-          for (let i = 0; i < img.data.length; i += 4) { const v = 255 - img.data[i]; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255 }
-          sel.ctx.putImageData(img, 0, 0); sel.refresh()
+        editSelection: (label, fn, coalesce) => {
+          const doc = get().doc
+          if (!doc) return
+          const prev = get().selection
+          const beforeImg = prev ? prev.ctx.getImageData(0, 0, prev.width, prev.height) : null
+          const before = prev ? selectionValues(prev) : null
+          fn()
+          const cur = get().selection
+          const after = cur ? selectionValues(cur) : null
+          const sameSize = (!prev || (prev.width === doc.w && prev.height === doc.h)) && (!cur || (cur.width === doc.w && cur.height === doc.h))
+          const tiles = sameSize ? changedTiles(doc.w, doc.h, before, after, beforeImg) : []
+          if (sameSize && (tiles.length || !!prev !== !!cur)) get().pushHistory({ label, layerId: 'selection', kind: 'image', tiles, at: Date.now(), sel: { had: !!prev, has: !!cur }, coalesce })
           set({ revision: get().revision + 1 })
         },
-        featherSelection: (px) => {
+        applySelectionShape: (shape, mode, label, featherPx = 0) => {
+          const doc = get().doc
+          if (!doc || shape.length !== doc.w * doc.h) return
+          const s = featherPx > 0 ? feather(shape, doc.w, doc.h, featherPx) : shape
+          get().editSelection(label, () => {
+            const cur = get().selection ? selectionValues(get().selection!) : null
+            writeSelection(get().ensureSelection(), combine(cur, s, mode))
+          })
+        },
+        selectLayerAlpha: (id) => {
+          const doc = get().doc
+          const n = findNode(doc, id)
+          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : null
+          if (!doc || !n || !lp) { useSession.getState().toast('Layer transparency needs a raster layer', 'info'); return }
+          const c = document.createElement('canvas'); c.width = doc.w; c.height = doc.h
+          const cx = c.getContext('2d', { willReadFrequently: true })!
+          cx.drawImage(lp.canvas, n.x ?? 0, n.y ?? 0)
+          const d = cx.getImageData(0, 0, doc.w, doc.h).data
+          const shape = new Uint8Array(doc.w * doc.h)
+          for (let i = 0, j = 3; i < shape.length; i++, j += 4) shape[i] = d[j]
+          get().applySelectionShape(shape, 'replace', `select "${n.name}" transparency`)
+        },
+        setLassoPoly: (pts) => set({ lassoPoly: pts, revision: get().revision + 1 }),
+        closeLassoPoly: (mode) => {
+          const doc = get().doc, pts = get().lassoPoly
+          set({ lassoPoly: null })
+          if (!doc || !pts || pts.length < 3) { set({ revision: get().revision + 1 }); return }
+          const c = document.createElement('canvas'); c.width = doc.w; c.height = doc.h
+          const cx = c.getContext('2d', { willReadFrequently: true })!
+          cx.fillStyle = '#ffffff'; cx.beginPath(); cx.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) cx.lineTo(q.x, q.y); cx.closePath(); cx.fill()
+          const d = cx.getImageData(0, 0, doc.w, doc.h).data
+          const shape = new Uint8Array(doc.w * doc.h)
+          for (let i = 0, j = 3; i < shape.length; i++, j += 4) shape[i] = d[j]
+          get().applySelectionShape(shape, mode ?? get().selectionMode, 'polygonal lasso', get().marqueeFeather)
+        },
+        deselect: () => { if (get().selection) get().editSelection('deselect', () => get().clearSelection()) },
+        selectAll: () => get().editSelection('select all', () => { const sel = get().ensureSelection(); sel.ctx.fillStyle = '#ffffff'; sel.ctx.fillRect(0, 0, sel.width, sel.height); sel.refresh() }),
+        invertSelection: () => get().editSelection('invert selection', () => {
+          const sel = get().ensureSelection()
+          const v = selectionValues(sel)
+          for (let i = 0; i < v.length; i++) v[i] = 255 - v[i]
+          writeSelection(sel, v)
+        }),
+        featherSelection: (px) => get().modifySelection('feather', px),
+        modifySelection: (op, px) => {
           const sel = get().selection
-          if (!sel || px <= 0) return
-          const tmp = document.createElement('canvas'); tmp.width = sel.width; tmp.height = sel.height
-          tmp.getContext('2d')!.drawImage(sel.canvas, 0, 0)
-          const ctx = sel.ctx
-          ctx.save(); ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, sel.width, sel.height)
-          ctx.filter = `blur(${px}px)`; ctx.drawImage(tmp, 0, 0); ctx.restore()
-          sel.refresh()
-          set({ revision: get().revision + 1 })
+          if (!sel || !(px > 0)) return
+          get().editSelection(`${op} selection ${px} px`, () => {
+            const v = selectionValues(sel)
+            const fn = { expand, contract, border, smooth, feather }[op]
+            writeSelection(sel, fn(v, sel.width, sel.height, px))
+          })
         },
         loadSelectionFromMask: () => {
           const n = findNode(get().doc, get().activeId)
           const m = n?.mask ? get().masks.get(n.id) : null
           if (!n || !m) { useSession.getState().toast('The active layer has no mask', 'info'); return }
-          const sel = get().ensureSelection()
-          const off = maskOffset(n)
-          sel.ctx.fillStyle = '#000000'; sel.ctx.fillRect(0, 0, sel.width, sel.height)
-          sel.ctx.drawImage(m.canvas, off.x, off.y)
-          sel.refresh()
-          set({ revision: get().revision + 1 })
+          get().editSelection('load mask as selection', () => {
+            const sel = get().ensureSelection()
+            const off = maskOffset(n)
+            sel.ctx.fillStyle = '#000000'; sel.ctx.fillRect(0, 0, sel.width, sel.height)
+            sel.ctx.drawImage(m.canvas, off.x, off.y)
+            sel.refresh()
+          })
         },
       }
     },
-    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets }) as never },
+    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets,
+      marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx }) as never },
   ),
 )
 

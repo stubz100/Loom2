@@ -15,6 +15,7 @@ import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { useAiPanel } from './aiPanelStore'
 import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
+import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
 
@@ -33,8 +34,8 @@ function checkerTexture(): Texture {
 /** Axis-aligned boundary runs of the selection (value > 127), as [x0, y0, x1, y1, …] in document pixels. */
 function outlineSegments(sel: LayerPixels): number[] {
   const W = sel.width, H = sel.height
-  const d = sel.ctx.getImageData(0, 0, W, H).data
-  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && d[(y * W + x) * 4] > 127
+  const d = selectionValues(sel)
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && d[y * W + x] > 127
   const segs: number[] = []
   for (let y = 0; y <= H; y++) {
     let run = -1
@@ -599,8 +600,16 @@ export function EditorCanvas() {
         return
       }
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
+      if (tool === 'lasso' && st.lassoKind === 'polygon') {
+        // D44 polygonal lasso: each click adds a corner; clicking the first corner (or a double-click, ✓, Enter) closes it
+        const poly = st.lassoPoly
+        if (!poly) { st.setLassoPoly([p]); return }
+        if (poly.length >= 3 && Math.hypot(p.x - poly[0].x, p.y - poly[0].y) * st.zoom <= 8) { clearPreview(); st.closeLassoPoly(modeFor(e, st.selectionMode)); return }
+        st.setLassoPoly([...poly, p]); previewPoly([...poly, p], p)
+        return
+      }
       if (tool === 'lasso') { drag = { kind: 'lasso', start: p, last: p, pts: [p] }; return }
-      if (tool === 'wand') { void wandAt(p, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode); return }
+      if (tool === 'wand') { void wandAt(p, modeFor(e, st.selectionMode)); return }
       if (tool === 'ai') { drag = { kind: 'aibox', start: p, last: p, alt: e.altKey }; return }           // click = point, drag = box (decided on up)
       if (tool === 'fill') { if (st.fillMode === 'solid') { fillAt(p); return } drag = { kind: 'gradient', start: p, last: p }; return }
     }
@@ -608,6 +617,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       const p = toDoc(e)
       st.setCursor({ x: Math.floor(p.x), y: Math.floor(p.y) })
+      if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
       if (drag.kind === 'pan') { st.setView({ pan: { x: drag.startPan!.x + e.clientX - drag.start.x, y: drag.startPan!.y + e.clientY - drag.start.y } }); return }
       if (drag.kind === 'xmove') { st.setTransform({ cx: drag.t0!.cx + p.x - drag.start.x, cy: drag.t0!.cy + p.y - drag.start.y }); return }
@@ -679,8 +689,8 @@ export function EditorCanvas() {
         st.touch(); st.bump()
       }
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
-      if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode)
-      if (drag.kind === 'lasso') commitLasso(drag.pts!, e.shiftKey ? 'add' : e.altKey ? 'subtract' : st.selectionMode)
+      if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(e, st.selectionMode))
+      if (drag.kind === 'lasso') commitLasso(drag.pts!, modeFor(e, st.selectionMode))
       if (drag.kind === 'aibox') {
         const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
         if (moved < 4) {                                                   // a click: one SAM 3 point (Alt = exclude)
@@ -694,7 +704,11 @@ export function EditorCanvas() {
       if (drag.kind === 'gradient') gradientFill(drag.start, drag.last)
       drag = null
     }
-    const onDouble = (e: MouseEvent) => { const st = useEditor.getState(); if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform() }
+    const onDouble = (e: MouseEvent) => {
+      const st = useEditor.getState()
+      if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform()
+      else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(e, st.selectionMode)) }
+    }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
       const st = useEditor.getState()
       const r = host.getBoundingClientRect()
@@ -720,22 +734,37 @@ export function EditorCanvas() {
       useEditor.getState().setBrush({ color: hex })
       useSession.getState().toast(`Picked ${hex}`, 'info')
     }
-    // ---- selections (CPU mask) ----
-    const applySelection = (draw: (ctx: CanvasRenderingContext2D) => void, mode: 'replace' | 'add' | 'subtract') => {
-      const st = useEditor.getState()
-      const sel = st.ensureSelection()
-      const ctx = sel.ctx
-      ctx.save()
-      if (mode === 'replace') { ctx.clearRect(0, 0, sel.width, sel.height) }
-      ctx.globalCompositeOperation = mode === 'subtract' ? 'destination-out' : 'source-over'
-      ctx.fillStyle = '#ffffff'
-      draw(ctx)
-      ctx.restore()
-      sel.refresh(); sel.dirty = true
-      st.bump()
+    // ---- selections (CPU mask, D43 / D44): every tool renders a document-sized shape, combined into the selection by mode ----
+    /** A shape drawn in white on a document-sized canvas, as values (0–255, anti-aliased edges kept). */
+    const shapeFrom = (draw: (ctx: CanvasRenderingContext2D) => void): Uint8Array | null => {
+      const doc = useEditor.getState().doc
+      if (!doc) return null
+      const c = document.createElement('canvas'); c.width = doc.w; c.height = doc.h
+      const cx = c.getContext('2d', { willReadFrequently: true })!
+      cx.fillStyle = '#ffffff'
+      draw(cx)
+      const d = cx.getImageData(0, 0, doc.w, doc.h).data
+      const out = new Uint8Array(doc.w * doc.h)
+      for (let i = 0, j = 3; i < out.length; i++, j += 4) out[i] = d[j]
+      return out
     }
-    const previewMarquee = (a: Pt, b: Pt) => drawPreview((g) => { const st = useEditor.getState(); const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y); if (st.marqueeShape === 'ellipse') g.ellipse(x + w / 2, y + h / 2, w / 2, h / 2); else g.rect(x, y, w, h) })
+    /** The marquee rectangle for a drag from a to b under the options' style (fixed ratio follows the drag width; fixed size
+     * hangs from the pointer). */
+    const marqueeRect = (a: Pt, b: Pt) => {
+      const st = useEditor.getState()
+      if (st.marqueeStyle === 'size') return { x: b.x, y: b.y, w: Math.max(1, st.marqueeW), h: Math.max(1, st.marqueeH) }
+      const w = b.x - a.x
+      let h = b.y - a.y
+      if (st.marqueeStyle === 'ratio') h = (h < 0 ? -1 : 1) * Math.abs(w) * (Math.max(1e-6, st.marqueeH) / Math.max(1e-6, st.marqueeW))
+      return { x: Math.min(a.x, a.x + w), y: Math.min(a.y, a.y + h), w: Math.abs(w), h: Math.abs(h) }
+    }
+    const previewMarquee = (a: Pt, b: Pt) => drawPreview((g) => { const st = useEditor.getState(); const r = marqueeRect(a, b); if (st.marqueeShape === 'ellipse') g.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2); else g.rect(r.x, r.y, r.w, r.h) })
     const previewLasso = (pts: Pt[]) => drawPreview((g) => { g.poly(pts.map((q) => [q.x, q.y]).flat()) })
+    const previewPoly = (pts: Pt[], cursor: Pt) => drawPreview((g) => {
+      const z = useEditor.getState().zoom
+      g.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) g.lineTo(q.x, q.y); g.lineTo(cursor.x, cursor.y)
+      g.circle(pts[0].x, pts[0].y, 5 / z)                                // the corner that closes the polygon
+    })
     const drawPreview = (shape: (g: Graphics) => void) => {
       const ov = overlayRef.current; if (!ov) return
       let g = ov.getChildByLabel('preview') as Graphics | null
@@ -744,49 +773,87 @@ export function EditorCanvas() {
       requestRender()
     }
     const clearPreview = () => { const ov = overlayRef.current; const g = ov?.getChildByLabel('preview'); if (g) g.destroy(); requestRender() }
-    const commitMarquee = (a: Pt, b: Pt, mode: 'replace' | 'add' | 'subtract') => {
+    const commitMarquee = (a: Pt, b: Pt, mode: SelectionMode) => {
       clearPreview()
-      const x = Math.round(Math.min(a.x, b.x)), y = Math.round(Math.min(a.y, b.y)), w = Math.round(Math.abs(b.x - a.x)), h = Math.round(Math.abs(b.y - a.y))
-      if (w < 1 || h < 1) { if (mode === 'replace') useEditor.getState().clearSelection(); return }
-      applySelection((ctx) => { if (useEditor.getState().marqueeShape === 'ellipse') { ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill() } else ctx.fillRect(x, y, w, h) }, mode)
+      const st = useEditor.getState()
+      const r = marqueeRect(a, b)
+      const x = Math.round(r.x), y = Math.round(r.y), w = Math.round(r.w), h = Math.round(r.h)
+      if (st.marqueeStyle !== 'size' && (w < 1 || h < 1)) { if (mode === 'replace') st.deselect(); return }
+      const shape = shapeFrom((ctx) => { if (st.marqueeShape === 'ellipse') { ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill() } else ctx.fillRect(x, y, w, h) })
+      if (shape) st.applySelectionShape(shape, mode, st.marqueeShape === 'ellipse' ? 'elliptical marquee' : 'marquee', st.marqueeFeather)
     }
-    const commitLasso = (pts: Pt[], mode: 'replace' | 'add' | 'subtract') => {
+    const commitLasso = (pts: Pt[], mode: SelectionMode) => {
       clearPreview()
       if (pts.length < 3) return
-      applySelection((ctx) => { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y); ctx.closePath(); ctx.fill() }, mode)
+      const st = useEditor.getState()
+      const shape = shapeFrom((ctx) => { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y); ctx.closePath(); ctx.fill() })
+      if (shape) st.applySelectionShape(shape, mode, 'lasso', st.marqueeFeather)
     }
-    const wandAt = async (p: Pt, mode: 'replace' | 'add' | 'subtract') => {
+    /** D44 magic wand (PhotoCraft crates/algo/src/selection.rs wand rules): per-channel tolerance including alpha — a fully
+     * transparent pixel matches a transparent seed whatever its hidden RGB; contiguous (4-connected flood) or global; on the active
+     * raster layer or the merged composite; anti-aliased by a 3×3 average on the edge pixels only. */
+    const wandAt = async (p: Pt, mode: SelectionMode) => {
       const st = useEditor.getState()
       const doc = st.doc; if (!doc) return
       const n = findNode(doc, st.activeId)
       const lp = n?.kind === 'raster' ? st.pixels.get(n.id) : null
-      if (!lp) { useSession.getState().toast('Magic wand samples the active raster layer', 'info'); return }
-      const x0 = Math.floor(p.x - (n!.x ?? 0)), y0 = Math.floor(p.y - (n!.y ?? 0))
-      if (x0 < 0 || y0 < 0 || x0 >= lp.width || y0 >= lp.height) return
-      const img = lp.ctx.getImageData(0, 0, lp.width, lp.height).data
-      const tol = st.tolerance
-      const W = lp.width, H = lp.height
-      const idx = (x: number, y: number) => (y * W + x) * 4
-      const r0 = img[idx(x0, y0)], g0 = img[idx(x0, y0) + 1], b0 = img[idx(x0, y0) + 2], a0 = img[idx(x0, y0) + 3]
-      const out = new Uint8Array(W * H)
-      const stack = [y0 * W + x0]
-      const seen = new Uint8Array(W * H)
-      while (stack.length) {
-        const i = stack.pop()!
-        if (seen[i]) continue
-        seen[i] = 1
-        const j = i * 4
-        if (Math.abs(img[j] - r0) > tol || Math.abs(img[j + 1] - g0) > tol || Math.abs(img[j + 2] - b0) > tol || Math.abs(img[j + 3] - a0) > tol) continue
-        out[i] = 255
-        const x = i % W, y = (i - x) / W
-        if (x > 0) stack.push(i - 1); if (x < W - 1) stack.push(i + 1); if (y > 0) stack.push(i - W); if (y < H - 1) stack.push(i + W)
+      let img: Uint8ClampedArray, W: number, H: number, ox = 0, oy = 0
+      if (st.wandMerged || !lp) {
+        const c = st.extractor?.()
+        if (!c) { useSession.getState().toast('The composite is not available yet', 'info'); return }
+        W = c.width; H = c.height; img = c.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, W, H).data
+      } else {
+        W = lp.width; H = lp.height; ox = n!.x ?? 0; oy = n!.y ?? 0; img = lp.ctx.getImageData(0, 0, W, H).data
       }
-      const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H
-      const tctx = tmp.getContext('2d')!
-      const id = tctx.createImageData(W, H)
-      for (let i = 0, j = 0; i < out.length; i++, j += 4) { id.data[j] = id.data[j + 1] = id.data[j + 2] = 255; id.data[j + 3] = out[i] }
-      tctx.putImageData(id, 0, 0)
-      applySelection((ctx) => ctx.drawImage(tmp, n!.x ?? 0, n!.y ?? 0), mode)
+      const x0 = Math.floor(p.x - ox), y0 = Math.floor(p.y - oy)
+      if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= H) return
+      const tol = st.tolerance
+      const s0 = (y0 * W + x0) * 4
+      const r0 = img[s0], g0 = img[s0 + 1], b0 = img[s0 + 2], a0 = img[s0 + 3]
+      const match = (j: number) => {
+        const a = img[j + 3]
+        if (a0 === 0 || a === 0) return Math.abs(a - a0) <= tol         // a transparent pixel's RGB is meaningless
+        return Math.abs(img[j] - r0) <= tol && Math.abs(img[j + 1] - g0) <= tol && Math.abs(img[j + 2] - b0) <= tol && Math.abs(a - a0) <= tol
+      }
+      const out = new Uint8Array(W * H)
+      let bx0 = x0, by0 = y0, bx1 = x0, by1 = y0
+      const mark = (i: number) => { out[i] = 255; const x = i % W, y = (i - x) / W; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y }
+      if (st.wandContiguous) {
+        const stack = [y0 * W + x0]
+        const seen = new Uint8Array(W * H)
+        while (stack.length) {
+          const i = stack.pop()!
+          if (seen[i]) continue
+          seen[i] = 1
+          if (!match(i * 4)) continue
+          mark(i)
+          const x = i % W
+          if (x > 0) stack.push(i - 1); if (x < W - 1) stack.push(i + 1); if (i >= W) stack.push(i - W); if (i < W * (H - 1)) stack.push(i + W)
+        }
+      } else {
+        for (let i = 0; i < W * H; i++) if (match(i * 4)) mark(i)
+      }
+      let vals = out
+      if (st.wandAA) {
+        vals = out.slice()
+        for (let y = Math.max(0, by0 - 1); y <= Math.min(H - 1, by1 + 1); y++) for (let x = Math.max(0, bx0 - 1); x <= Math.min(W - 1, bx1 + 1); x++) {
+          const i = y * W + x
+          const v = out[i]
+          const edge = (x > 0 && out[i - 1] !== v) || (x < W - 1 && out[i + 1] !== v) || (y > 0 && out[i - W] !== v) || (y < H - 1 && out[i + W] !== v)
+          if (!edge) continue
+          let sum = 0, cnt = 0
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H) { sum += out[yy * W + xx]; cnt++ } }
+          vals[i] = Math.round(sum / cnt)
+        }
+      }
+      // place the result (layer pixels at the layer offset) into a document-sized shape
+      const shape = new Uint8Array(doc.w * doc.h)
+      for (let y = 0; y < H; y++) {
+        const dy = y + oy
+        if (dy < 0 || dy >= doc.h) continue
+        for (let x = 0; x < W; x++) { const dx = x + ox; if (dx >= 0 && dx < doc.w) shape[dy * doc.w + dx] = vals[y * W + x] }
+      }
+      st.applySelectionShape(shape, mode, 'magic wand')
     }
     /** G tool in linear / radial mode: foreground → background colour from a to b (mask: white → black), inside the selection. */
     const gradientFill = (a: Pt, b: Pt) => {
@@ -832,6 +899,11 @@ export function EditorCanvas() {
       st.touch(); st.bump()
     }
     const unregDrop = registerDropTarget(host, { accept: onlyAssets, drop: (p) => assetIds(p).forEach((id) => void useEditor.getState().addLayerFromAsset(id)) })   // tiles become layers
+    // an open polygon ends when it is closed or cancelled elsewhere (✓ / ⊘, Enter / Esc) or when the tool changes
+    const unsubPoly = useEditor.subscribe((s, prev) => {
+      if (prev.lassoPoly && !s.lassoPoly) clearPreview()
+      if (s.lassoPoly && s.tool !== 'lasso') s.setLassoPoly(null)
+    })
     host.addEventListener('pointerdown', onDown)
     host.addEventListener('pointermove', onMove)
     host.addEventListener('pointerup', onUp)
@@ -843,7 +915,7 @@ export function EditorCanvas() {
     return () => {
       unregDrop()
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
-      host.removeEventListener('dblclick', onDouble)
+      host.removeEventListener('dblclick', onDouble); unsubPoly()
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey)
     }

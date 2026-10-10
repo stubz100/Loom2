@@ -2092,3 +2092,32 @@ Inspector → lineage → split → pages.
 - GitHub Actions run 38050691055 on `06d7799`: offline tests + frontend for `full` and `open` (including the new psd-tools corpus
   fetch and the `-m corpus` Photoshop-oracle step) and both installers — all success. Every PE1 commit's CI passed
   (`85d7286` was superseded by `a4b4cfb` before it finished).
+
+## 2026-10-10 15:19 — Wave PE2 opened (D43–D46); D43 selection history and D44 selection toolkit landed
+
+- Recorded D43 (selection edits are history), D44 (manual selection toolkit), D45 (Refine Edge), D46 (clipboard) in 13; 12 §8c PE2 open.
+- **D43:** `editSelection(label, fn, coalesce)` diffs the selection's values before / after per 256² tile and stores only the changed
+  tiles plus whether a selection existed before / after, so undo / redo also restore "no selection" (deselect, the first marquee); every
+  selection tool and command, AI Select results and deselect (`Ctrl+D`, Esc) go through it. `pushHistory` merges consecutive entries with
+  the same `coalesce` key within 2 s (a run of nudges is one step; sliders already were).
+- **Found while doing it:** the selection had two encodings — tools drew white with partial alpha on a transparent canvas, feather /
+  invert wrote opaque grey — and `toRaw`, the ants and crop read the red channel only, so every anti-aliased or feathered tool edge
+  counted as fully selected and a subtracted partial edge stayed at full value. The value is now red × alpha / 255 everywhere
+  (`selectionValues`, `toRaw`, `selectionAlphaCanvas`); masks are opaque, so unaffected.
+- **D44 (frontend, `selectionOps.ts`):** exact EDT (Felzenszwalb–Huttenlocher) → expand / contract / border (round, fractional rim),
+  smooth (box + re-threshold), feather (Gaussian σ = r / 2, three box passes) driven by one amount in the Selection panel and a Modify ▸
+  submenu on the canvas; every tool renders a document-sized shape combined by mode (replace / add / subtract / **intersect**, Shift+Alt);
+  marquee feather and fixed ratio / fixed size; **polygonal lasso** (first corner, double-click, ✓ or Enter closes; ⊘ / Esc cancels; the
+  options and the canvas menu show both while a polygon is open); the wand compares alpha too and matches transparent pixels regardless of
+  hidden RGB, can run globally or on all layers (the GPU composite), and anti-aliases its edge pixels; **select layer transparency**
+  (layer menu, Selection panel, Ctrl-click a thumbnail). 4K timings in Edge: expand 16 px 297 ms, contract 265, border 530, smooth 100,
+  feather 202 (and 218 at 100 px), combine 16 — kept on the main thread.
+- **D44 (orchestrator, `maskops.py`):** a bounded exact EDT (row scans + a band of row offsets, on the mask's bbox) behind
+  `edit_ai.dilate` / `erode`. PIL's `MaxFilter` grew **squares** and was slow: 64 px took 16.8 s on a 1080p mask and **66.7 s at 4K**
+  (AI Select's "expand 64"); the EDT takes 110 ms / 487 ms (8 px: 24 ms vs 411 ms at 1080p).
+- **Checks:** `test_maskops_d44.py` (4: EDT vs brute force, a point grows into a disc, contract / expand complement, no-ops) → **150
+  offline**. New headed mode `edit_headed_check.py selection`: in-page EDT vs brute force (worst 2e-7), disc, combine, contract / feather;
+  then by mouse — marquee, undo to no selection, redo exact, Shift+Alt intersect, invert, expand / contract / border / smooth / feather
+  by 8 px each undone, marquee feather, fixed ratio 2:1 (384 × 192), polygon closed by its first corner, cancelled with ⊘, closed by a
+  double-click, wand global ⊇ contiguous with an anti-aliased edge, wand on all layers, layer transparency (exactly 50 × 40 px), deselect
+  and its undo: **all passed**; `tour` and `cmpdiag` all passed; build ok.

@@ -2,7 +2,6 @@
 // canvas and layer right-click menus, the keys and the help overlay.
 import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
-import { setRailTab } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 
@@ -50,9 +49,16 @@ registerCommands([
   { id: 'edit.mask.load', scope: 'edit', label: 'Load mask as selection', placement: ['panel', 'context'], when: () => !!active()?.mask, run: () => ed().loadSelectionFromMask() },
   // selection
   { id: 'edit.sel.all', scope: 'edit', label: 'Select all', icon: SquareCheck, keys: 'Ctrl+A', placement: ['panel', 'context'], when: hasDoc, run: () => ed().selectAll() },
-  { id: 'edit.sel.none', scope: 'edit', label: 'Deselect', icon: SquareX, keys: 'Ctrl+D', placement: ['panel', 'context'], when: hasSel, run: () => ed().clearSelection() },
+  { id: 'edit.sel.none', scope: 'edit', label: 'Deselect', icon: SquareX, keys: 'Ctrl+D', placement: ['panel', 'context'], when: hasSel, run: () => ed().deselect() },
   { id: 'edit.sel.invert', scope: 'edit', label: 'Invert selection', keys: 'Ctrl+Shift+I', placement: ['panel', 'context'], when: hasDoc, run: () => ed().invertSelection() },
-  { id: 'edit.sel.feather', scope: 'edit', label: 'Feather…', placement: ['panel', 'context'], when: hasSel, run: () => { setRailTab('edit', 'selection'); useSession.getState().setUi({ panelOpen: true }) } },
+  // D44: modify by the Selection panel's amount (px); every one is a single undo step
+  ...(['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({
+    id: `edit.sel.${op}`, scope: 'edit' as const, label: `${op[0].toUpperCase()}${op.slice(1)} selection`, placement: ['panel', 'context'] as ['panel', 'context'], when: hasSel,
+    hint: 'by the amount set in the Selection panel', run: () => { const st = ed(); st.modifySelection(op, st.selModifyPx) },
+  })),
+  { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
+  { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
+  { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: activeRaster, run: () => ed().clearSelected() },
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
@@ -107,6 +113,7 @@ export function layerMenu(): MenuItem[] {
     { cmd: 'edit.layer.rename' }, sep,
     { cmd: 'edit.layer.visibility', label: visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: lockLabel() }, sep,
     { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
+    { cmd: 'edit.sel.fromLayer' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,
     { cmd: 'edit.layer.delete' },
@@ -116,13 +123,16 @@ const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edi
 /** Right-click on the canvas: tool-aware. */
 export function canvasMenu(): MenuItem[] {
   const st = ed()
-  const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { cmd: 'edit.sel.feather' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
+  const px = st.selModifyPx
+  const modify: MenuItem[] = (['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({ cmd: `edit.sel.${op}`, label: `${op[0].toUpperCase()}${op.slice(1)} by ${px} px` }))
+  const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
   const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
   const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { label: 'Pixel grid', checked: st.pixelGrid, run: () => st.setView({ pixelGrid: !st.pixelGrid }) }, { label: 'Mask overlay', keys: 'Alt+\\', checked: st.overlay, run: () => st.setView({ overlay: !st.overlay }) }]
   const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.compare' }, { cmd: 'edit.close' }]
   const tools: MenuItem[] = TOOLS.map(([tool, label, , icon]) => ({ label, icon, checked: st.tool === tool, run: setTool(tool) }))
   return [
     ...(st.transform ? [{ heading: 'free transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
+    ...(st.lassoPoly ? [{ heading: 'polygonal lasso' }, { cmd: 'edit.sel.polyClose' }, { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),
     { label: 'Layer', icon: Copy, items: layer }, { label: 'View', icon: Maximize, items: view }, { label: 'Tool', icon: MousePointer2, items: tools }, { label: 'Document', icon: Save, items: files },

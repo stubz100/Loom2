@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit).
 
 ## Files
 
@@ -12,6 +12,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `layerPixels.ts` | `LayerPixels`: a 2D canvas per raster layer or mask (the CPU truth), its Pixi texture, 256² tile snapshots for undo, raw RGBA transfer |
 | `blendModes.ts` | 24 blend modes (W3C formula, Photoshop's Soft / Vivid Light, Hard Mix, Burn / Dodge edges) as `BlendModeFilter` subclasses (GLSL + WGSL) with alternate `-b` names; `w3c-opaque` for clip-run bases; `BLEND_GL` / `BLEND_WGSL` (`w3_blendBy`) for the adjustment filters |
 | `adjustFilters.ts` | adjustment and filter layers previewed as per-layer filters |
+| `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
 | `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
 | `psdExport.ts` | PSD export via ag-psd (lazy-loaded): adjustment layers, fill, clip, locks, pass-through (D41); `fixLevelsBlocks` repairs ag-psd's Levels block in place; checked by `edit_headed_check.py psd` with psd-tools |
@@ -40,6 +41,9 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    (`setMask({channel: 'alpha'})`) in a third, and the unit blends with the base's mode and opacity × fill. A pass-through group below
    100 % or masked renders a copy of its target's earlier content (`prefixOf`) into a pass, its children over that, and draws the
    result at opacity × mask. Moving or transforming a layer must `markPassesDirty()`: it may sit inside a pass.
+9. **Selection changes go through `editSelection` (D43).** It diffs the selection before / after by tile and records presence, so undo
+   restores "no selection" too. Tools build a document-sized shape and call `applySelectionShape(shape, mode, label, feather)`; read
+   values with `selectionValues()` / `toRaw()` (red × alpha), never the red channel alone.
 
 ## Renderer selection
 
@@ -50,6 +54,6 @@ the WebGPU renderer actually draws, and swaps to WebGL2 when it does not (D3 ame
 ## Checking changes
 
 - Headless Edge **cannot present WebGPU**: use `scripts/edit_headed_check.py` (visible Edge over CDP, Vite on 1420) — modes `render`, `paint`,
-  `tour`, `cmpdiag`, `grid` (D40: every mode × plain / masked / clipped / isolated / pass-through 50 %), `psd`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
+  `tour`, `cmpdiag`, `grid` (D40: every mode × plain / masked / clipped / isolated / pass-through 50 %), `selection` (PE2), `psd`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
 - Rig acceptance for the AI verbs: `scripts/m5_acceptance.py`.
 - `npm run build` must stay clean; `window.__loom2Editor` / `__loom2App` are exposed in dev builds for the checks.

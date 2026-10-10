@@ -307,7 +307,7 @@ when the wave starts.
 | Wave | Proposals → decisions | Acceptance (executable) |
 | --- | --- | --- |
 | **PE1 · Fidelity** | PC3 + PC1 + PC2 → D39 Photoshop compositing · PC4 → D40 Photoshop oracle · PC5 → D41 PSD export · PC6 → D42 rename retry | compose unit tests; `cmpdiag` grid p99 ≤ 1; corpus floor; psd-tools read-back; fsio failure injection |
-| PE2 · Selection | PC7 selection undo · PC8 manual toolkit · PC9 refine edge · PC10 clipboard | headed tour by mouse; EDT vs brute force |
+| **PE2 · Selection** | PC7 → D43 selection history · PC8 → D44 manual toolkit · PC9 → D45 refine edge · PC10 → D46 clipboard | headed tour by mouse; EDT vs brute force |
 | PE3 · AI blend-in | PC11 seamless paste-back · PC12 match colour · PC13 colour to alpha · S1 → PC14, PC15 | bench inpaint sheets on the rig |
 | PE4 · Paint and masks | PC16 brush model · PC17 smoothing · PC18 masks · PC19 partial uploads | headed paint + perf |
 | PE5 · Panels | PC22 mouse kit · PC20 layers panel · PC21 properties | headed tour |
@@ -316,6 +316,8 @@ when the wave starts.
 **PE1 status 2026-10-10: closed.** D39 (Photoshop compositing semantics), D42 (rename retry), D41 (PSD export, psd-tools read-back),
 D40 (Photoshop oracle 8/10 in scope, floor 8; GPU parity grid 120 cases) landed. Next Edit wave: PE2 (selection), at the author's choice
 relative to H2.
+
+**PE2 status 2026-10-10: open** (D43–D46).
 
 ## 9. Totals and parallelism
 

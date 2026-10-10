@@ -2,6 +2,7 @@
 // Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
 import { Brush, Eye, EyeOff, Files, Lasso, Lock, LockOpen, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '../../api/client'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
@@ -92,6 +93,7 @@ function ToolOptions() {
   const b = useEditor((s) => s.brush)
   const marqueeShape = useEditor((s) => s.marqueeShape)
   const mode = useEditor((s) => s.selectionMode)
+  const sv = useEditor(useShallow((s) => ({ marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, lassoOpen: !!s.lassoPoly, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA })))
   const tolerance = useEditor((s) => s.tolerance)
   const fillMode = useEditor((s) => s.fillMode)
   const doc = useEditor((s) => s.doc)
@@ -101,8 +103,9 @@ function ToolOptions() {
   const [cv, setCv] = useState({ w: 0, h: 0, ax: 0.5, ay: 0.5 })
   useEffect(() => { if (doc) setCv((c) => ({ ...c, w: doc.w, h: doc.h })) }, [doc?.w, doc?.h]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (p: Partial<typeof b>) => ed().setBrush(p)
-  const nudge = (dx: number, dy: number) => { const n = findNode(doc, activeId); if (n?.kind === 'raster') ed().updateNode(n.id, { x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }, 'nudge') }
-  const modeSeg = <div className="segmented">{(['replace', 'add', 'subtract'] as const).map((m) => <button key={m} className={mode === m ? 'active' : ''} onClick={() => ed().setView({ selectionMode: m })}>{m}</button>)}</div>
+  const nudge = (dx: number, dy: number) => { const n = findNode(doc, activeId); if (n?.kind === 'raster') ed().updateNode(n.id, { x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }, 'nudge', `nudge:${n.id}`) }   // D43: a run of nudges is one step
+  const modeSeg = <div className="segmented">{(['replace', 'add', 'subtract', 'intersect'] as const).map((m) => <button key={m} className={mode === m ? 'active' : ''} title={{ replace: 'new selection', add: 'add (Shift)', subtract: 'subtract (Alt)', intersect: 'intersect (Shift+Alt)' }[m]} onClick={() => ed().setView({ selectionMode: m })}>{m}</button>)}</div>
+  const featherField = <><label>feather</label><span className="num"><input type="number" min={0} max={250} value={sv.marqueeFeather} onChange={(e) => ed().setView({ marqueeFeather: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 64 }} /><i>px</i></span></>
   return (
     <div>
       <Toolbox />
@@ -115,9 +118,17 @@ function ToolOptions() {
           <span className="hint full">[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected (D19)</span>
         </div>
       )}
-      {tool === 'marquee' && <div className="tool-opts"><label>shape</label><div className="segmented">{(['rect', 'ellipse'] as const).map((m) => <button key={m} className={marqueeShape === m ? 'active' : ''} onClick={() => ed().setView({ marqueeShape: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}<span className="hint full">Shift adds, Alt subtracts while dragging</span></div>}
-      {tool === 'lasso' && <div className="tool-opts"><label>mode</label>{modeSeg}<span className="hint full">freehand; Shift adds, Alt subtracts</span></div>}
-      {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} /><span className="hint full">contiguous on the active raster layer</span></div>}
+      {tool === 'marquee' && <div className="tool-opts"><label>shape</label><div className="segmented">{(['rect', 'ellipse'] as const).map((m) => <button key={m} className={marqueeShape === m ? 'active' : ''} onClick={() => ed().setView({ marqueeShape: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
+        <label>style</label><div className="segmented">{(['normal', 'ratio', 'size'] as const).map((m) => <button key={m} className={sv.marqueeStyle === m ? 'active' : ''} title={{ normal: 'drag any rectangle', ratio: 'fixed ratio W : H', size: 'fixed size W × H px, hanging from the pointer' }[m]} onClick={() => ed().setView({ marqueeStyle: m })}>{m === 'ratio' ? 'fixed ratio' : m === 'size' ? 'fixed size' : m}</button>)}</div>
+        {sv.marqueeStyle !== 'normal' && <><label>{sv.marqueeStyle === 'ratio' ? 'W : H' : 'W × H'}</label><span className="num"><input type="number" min={1} value={sv.marqueeW} onChange={(e) => ed().setView({ marqueeW: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 64 }} /> {sv.marqueeStyle === 'ratio' ? ':' : '×'} <input type="number" min={1} value={sv.marqueeH} onChange={(e) => ed().setView({ marqueeH: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 64 }} /></span></>}
+        <span className="hint full">Shift adds, Alt subtracts, Shift+Alt intersects while dragging</span></div>}
+      {tool === 'lasso' && <div className="tool-opts"><label>kind</label><div className="segmented">{(['freehand', 'polygon'] as const).map((m) => <button key={m} className={sv.lassoKind === m ? 'active' : ''} onClick={() => ed().setView({ lassoKind: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
+        {sv.lassoOpen && <><label>polygon</label><span><CommandButton id="edit.sel.polyClose" text /> <CommandButton id="edit.sel.polyCancel" text /></span></>}
+        <span className="hint full">{sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects</span></div>}
+      {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} />
+        <label>sample</label><div className="segmented"><button className={!sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: false })}>active layer</button><button className={sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: true })}>all layers</button></div>
+        <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
+        <span className="hint full">tolerance per channel including alpha; transparent pixels match each other whatever their hidden colour</span></div>}
       {tool === 'fill' && <div className="tool-opts"><label>mode</label><div className="segmented">{(['solid', 'linear', 'radial'] as const).map((m) => <button key={m} className={fillMode === m ? 'active' : ''} onClick={() => ed().setView({ fillMode: m })}>{m}</button>)}</div><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} fmt={pct} onChange={(v) => set({ opacity: v })} /><span className="hint full">{fillMode === 'solid' ? 'click fills the selection, or the whole layer (mask: white) when nothing is selected' : `drag from the foreground colour to the background colour (${fillMode}); limited to the selection when there is one; on a mask: white → black`}</span></div>}
       {tool === 'move' && (
         <div className="tool-opts">
@@ -187,20 +198,16 @@ function BrushesTab() {
 }
 
 function SelectionTab() {
-  const hasSel = useEditor((s) => !!s.selection)
   const quickMask = useEditor((s) => s.quickMask)
-  const activeId = useEditor((s) => s.activeId)
-  const doc = useEditor((s) => s.doc)
-  const [feather, setFeather] = useState(4)
-  const n = findNode(doc, activeId)
-  void n
+  const px = useEditor((s) => s.selModifyPx)
   return (
     <div className="tool-opts">
-      <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.sel.all', 'edit.sel.none', 'edit.sel.invert'].map((id) => <CommandButton key={id} id={id} text />)}</div>
-      <label>feather</label><div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={0} max={200} value={feather} onChange={(e) => setFeather(Number(e.target.value))} style={{ width: 70 }} /> px <button disabled={!hasSel} onClick={() => ed().featherSelection(feather)}>apply</button></div>
+      <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.sel.all', 'edit.sel.none', 'edit.sel.invert', 'edit.sel.fromLayer'].map((id) => <CommandButton key={id} id={id} text />)}</div>
+      <label>amount</label><span className="num"><input type="number" min={1} max={500} value={px} onChange={(e) => ed().setView({ selModifyPx: Math.max(1, Math.min(500, Number(e.target.value) || 1)) })} style={{ width: 70 }} /><i>px</i></span>
+      <label>modify</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['expand', 'contract', 'border', 'smooth', 'feather'].map((op) => <CommandButton key={op} id={`edit.sel.${op}`} text label={op} />)}</div>
       <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
       <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.mask.fromSelection', 'edit.mask.load', 'edit.sel.crop'].map((id) => <CommandButton key={id} id={id} text />)}</div>
-      <span className="hint full">Expand / contract and the AI selectors (SAM, BiRefNet) arrive in M5.</span>
+      <span className="hint full">expand / contract grow round by the amount; border makes a band that wide around the edge; smooth removes specks and jaggies; feather softens with Photoshop's radius. Every change, and every selection tool, is one undo step.</span>
     </div>
   )
 }
@@ -524,7 +531,7 @@ function LayersTab() {
         onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id, false); showMenu(e, layerMenu()) }}>
         <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
         <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
-        {n.kind === 'raster' ? <img className="thumb" src={thumbs.get(n.id)} alt="" /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
+        {n.kind === 'raster' ? <img className="thumb" src={thumbs.get(n.id)} alt="" title="Ctrl-click: select layer transparency" onClick={(e) => { if (e.ctrlKey || e.metaKey) { e.stopPropagation(); ed().selectLayerAlpha(n.id) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
         <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : n.type}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${n.blend}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
         {n.mask
           ? <img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}${n.mask.enabled ? '' : ' off'}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click to edit · Shift-click to disable" onClick={(e) => { e.stopPropagation(); if (e.shiftKey) ed().updateNode(n.id, { mask: { ...n.mask!, enabled: !n.mask!.enabled } }, 'toggle mask'); else ed().setActive(n.id, true) }} />
@@ -666,7 +673,7 @@ function useEditKeys() {
       const st = ed()
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
-      if (k === 'Escape') { if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.clearSelection(); return }
+      if (k === 'Escape') { if (st.lassoPoly) st.setLassoPoly(null); else if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.deselect(); return }
       if (st.candidates && !e.ctrlKey && !e.altKey) {                                                   // 10 §10: 1–4 pick, Enter keeps the visible one
         if (/^[1-4]$/.test(k)) { const id = st.candidates.ids[Number(k) - 1]; if (id) st.pickCandidate(id); return }
         if (k === 'Enter' && !st.transform) { const vis = st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]; st.pickCandidate(vis); return }

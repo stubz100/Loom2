@@ -45,12 +45,14 @@ export class LayerPixels {
   /** Re-upload the canvas to the GPU (whole texture; tiles later if measured as the bottleneck). */
   refresh(): void { this.texture.source.update() }
 
-  /** Raw bytes for `PUT …/pixels`: RGBA, or the red channel for masks. */
+  /** Raw bytes for `PUT …/pixels`: RGBA, or one value per pixel for masks and the selection — red × alpha / 255, so white drawn
+   * with partial alpha (anti-aliased tool edges) and opaque grey (masks, feathered selections) both read right (D43). */
   toRaw(): Uint8Array {
     const img = this.ctx.getImageData(0, 0, this.width, this.height)
     if (!this.grey) return new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.byteLength)
     const out = new Uint8Array(this.width * this.height)
-    for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = img.data[j]
+    const d = img.data
+    for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = d[j + 3] === 255 ? d[j] : Math.round((d[j] * d[j + 3]) / 255)
     return out
   }
 
@@ -118,7 +120,7 @@ export function selectionAlphaCanvas(src: LayerPixels): HTMLCanvasElement {
   const c = document.createElement('canvas'); c.width = src.width; c.height = src.height
   const img = src.ctx.getImageData(0, 0, src.width, src.height)
   const d = img.data
-  for (let i = 0; i < d.length; i += 4) { d[i + 3] = d[i]; d[i] = d[i + 1] = d[i + 2] = 255 }
+  for (let i = 0; i < d.length; i += 4) { d[i + 3] = d[i + 3] === 255 ? d[i] : Math.round((d[i] * d[i + 3]) / 255); d[i] = d[i + 1] = d[i + 2] = 255 }   // value = red × alpha (D43)
   c.getContext('2d')!.putImageData(img, 0, 0)
   return c
 }

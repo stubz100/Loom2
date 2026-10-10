@@ -81,9 +81,9 @@ and dissolve.
 | Key | Tool | Options (Panel) | MVP |
 | --- | --- | --- | --- |
 | `V` | Move / Transform (free transform with handles, `Ctrl+T`) | snap, constrain, interpolation | M4 |
-| `M` | Marquee rectangle / ellipse (flyout) | mode add/subtract/intersect, feather, fixed ratio | M4 |
-| `L` | Lasso / Polygonal lasso (flyout) | mode, feather, anti-alias | M4 |
-| `W` | Magic wand | tolerance, contiguous, sample all layers | M4 |
+| `M` | Marquee rectangle / ellipse (flyout) | mode replace/add/subtract/intersect (Shift / Alt / Shift+Alt while dragging), feather, style normal / fixed ratio / fixed size (D44) | M4, PE2 |
+| `L` | Lasso: freehand or polygonal (click corners; first corner, double-click, ✓ or Enter closes; ⊘ / Esc cancels) | mode, feather; anti-aliased edges (D44) | M4, PE2 |
+| `W` | Magic wand | tolerance per channel incl. alpha (transparent pixels match each other), contiguous, sample active layer / all layers, anti-alias (D44) | M4, PE2 |
 | `A` | **AI Select** (SAM 3): click / box / text prompt; **Subject** (BiRefNet matte) — click adds an include point, Alt-click an exclude point, drag a box; the mask joins the selection (replace / add / subtract / intersect) with expand and feather | model, SAM prompt mode, threshold, combine, expand, feather | M5 ✓ (2026-10-06) |
 | `B` | Brush (paints on the active layer, or on its mask / the selection in Quick Mask) | size, hardness, opacity, flow, spacing, pressure → size/opacity/flow, smoothing, colour | M4 |
 | `E` | Eraser | as brush | M4 |
@@ -103,7 +103,11 @@ has a **number field** beside it (px for size, % for the rest) so a value can be
 options for `B`/`E`, with `[` `]` / `Shift+[` `]` step buttons. The pen pressure curve arrives with the tablet (D19).
 
 ### Panel · Selection
-Feather, expand/contract (px), smooth, grow/shrink similar, invert (`Ctrl+Shift+I`), select all/none,
+One amount (px) drives **expand / contract / border / smooth / feather** (D44: round, fractional growth through an exact distance
+transform; feather is a Gaussian with Photoshop's radius, σ = r / 2), select layer transparency (also Ctrl-click a layer thumbnail),
+invert (`Ctrl+Shift+I`), select all/none; grow/shrink similar is not built. **Every selection change is one undo step** (D43, also
+deselect and AI Select results). The selection's value is red × alpha of its canvas, so soft and anti-aliased edges survive.
+Measured 2026-10-10 on a 4K selection: expand 16 px 0.30 s, contract 0.27 s, border 0.53 s, smooth 0.10 s, feather 0.2 s at any radius.
 **Save selection as mask on active layer**, **Load selection from layer mask**, **Quick Mask** (`Q`): paint the
 selection as a red overlay with the brush. The AI selectors (SAM 3, BiRefNet) live in the `A` tool and the AI panel's **Select** operation.
 

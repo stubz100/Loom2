@@ -199,6 +199,14 @@ slider; each gesture is one undo step. The blend dropdown steps with the mouse w
 hovered mode on the canvas before a click chooses it. Headed mode `kit` checks all of this by mouse and audits every Edit menu in every
 tool and state (each entry resolves to a command; separators only between groups).
 
+**Layers panel (D56, 2026-10-10).** Click selects a layer, Ctrl-click adds or removes one (the selection never empties), Shift-click
+selects the range from the last clicked; selected rows are tinted, the active one keeps its frame. Group, duplicate, merge (several
+rasters: hidden ones are dropped, the rest merge into the bottom one), delete, hide / show and lock act on the selection, and the
+right-click menu on a selected row says so (*Delete layers*, *Merge layers*…); a right-click outside the selection selects that row
+first. Drag rows to reorder: the line shows above or below a row, a group's middle outlines it (*into*, at its top); the panel scrolls
+near its edges; Alt on release drops copies. Drop rows on the footer's trash (delete), New layer or Duplicate (duplicate) or Group
+(group). Drag down the eye column to show or hide every row passed. Each gesture is one undo step. Headed mode `layers`.
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

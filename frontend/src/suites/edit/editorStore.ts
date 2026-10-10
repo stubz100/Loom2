@@ -74,6 +74,8 @@ export interface EditorState {
   // D55: latched modifiers (the strip's ⇧ / Ctrl / Alt; canvas tools read them OR'ed with the keyboard, until clicked off) and the
   // blend mode the dropdown is hovering (the canvas renders it; nothing is recorded)
   latched: { shift: boolean; ctrl: boolean; alt: boolean }; blendPreview: { id: string; mode: string } | null
+  // D56: the layer selection (it counts only while it holds the active layer) and the Shift-click anchor
+  selectedIds: string[]; anchorId: string | null
   tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: SelectionMode; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
   // D44: selection tool options — marquee feather and style, lasso kind (and the open polygon), wand switches, the modify amount
   marqueeFeather: number; marqueeStyle: 'normal' | 'ratio' | 'size'; marqueeW: number; marqueeH: number
@@ -153,6 +155,18 @@ export interface EditorState {
   groupActive: () => void
   solo: (id: string) => void
   addMask: (id: string, how?: MaskInit) => void
+  /** D56 (PhotoCraft layer_multi_cmds): click replaces, Ctrl-click toggles (never empties), Shift-click selects the range from the anchor. */
+  selectLayer: (id: string, how?: 'replace' | 'toggle' | 'range') => void
+  /** The layers a layer command acts on: the selection when it holds the active layer, else the active layer — top-level only (a
+   * selected layer inside a selected group goes with its group), in panel order (top first). */
+  targetIds: () => string[]
+  deleteNodes: (ids: string[]) => void
+  duplicateNodes: (ids: string[]) => void
+  groupNodes: (ids: string[]) => void
+  mergeNodes: (ids: string[]) => void
+  setPropsFor: (ids: string[], patch: Partial<Node>, label: string) => void
+  /** Reorder: the layers go above / below the target row, or into a group (at its top); `copy` drops duplicates. One history step. */
+  moveNodesTo: (ids: string[], targetId: string, where: 'above' | 'below' | 'into', copy?: boolean) => void
   removeMask: (id: string) => void
   toggleMaskLink: (id: string) => void
   applyMask: (id: string) => void
@@ -198,6 +212,28 @@ export interface EditorState {
 }
 
 const DEFAULT_BRUSH: BrushOptions = { size: 48, hardness: 0.8, opacity: 1, flow: 0.6, spacing: 0.15, smoothing: 0.4, color: '#f0a63a', background: '#111111' }
+
+/** D56 helpers: ids in panel order (top first, a group before its children), each id's parent group, the top-level subset of ids. */
+function walkOrder(doc: DocumentStack): string[] { const out: string[] = []; walk(doc.layers, (n) => { out.push(n.id) }); return out }
+function parentMap(doc: DocumentStack): Map<string, string | null> {
+  const m = new Map<string, string | null>()
+  const rec = (ns: Node[], p: string | null) => ns.forEach((n) => { m.set(n.id, p); if (n.children) rec(n.children, n.id) })
+  rec(doc.layers, null)
+  return m
+}
+function topLevel(doc: DocumentStack, ids: string[]): string[] {
+  const pm = parentMap(doc), set = new Set(ids)
+  return ids.filter((id) => { for (let p = pm.get(id) ?? null; p; p = pm.get(p) ?? null) if (set.has(p)) return false; return true })
+}
+/** A deep copy of a node with fresh ids, its pixels and masks copied too (`named`: "… copy"). */
+function copyNode(n: Node, pixels: Map<string, LayerPixels>, masks: Map<string, LayerPixels>, named: boolean): Node {
+  const c: Node = { ...JSON.parse(JSON.stringify(n)), id: newId(n.kind === 'group' ? 'grp' : 'lyr'), name: named ? `${n.name} copy` : n.name }
+  const dup = (src: LayerPixels | undefined, grey: boolean) => { if (!src) return null; const lp = new LayerPixels(src.width, src.height, grey); lp.ctx.drawImage(src.canvas, 0, 0); lp.refresh(); lp.dirty = true; return lp }
+  if (n.kind === 'raster') { const lp = dup(pixels.get(n.id), false); if (lp) pixels.set(c.id, lp) }
+  if (n.mask) { const m = dup(masks.get(n.id), true); if (m) masks.set(c.id, m) }
+  if (n.children) c.children = n.children.map((k) => copyNode(k, pixels, masks, false))
+  return c
+}
 
 function walk(nodes: Node[], fn: (n: Node, parent: Node[] | null, index: number) => boolean | void, parent: Node[] | null = null): boolean {
   for (let i = 0; i < nodes.length; i++) {
@@ -367,7 +403,7 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         otherColours: { color: '#000000', background: '#ffffff' }, maskPairActive: false, maskView: 'off',
-        latched: { shift: false, ctrl: false, alt: false }, blendPreview: null,
+        latched: { shift: false, ctrl: false, alt: false }, blendPreview: null, selectedIds: [], anchorId: null,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
         marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
@@ -722,7 +758,156 @@ export const useEditor = create<EditorState>()(
         setActive: (id, mask) => {
           const n = findNode(get().doc, id)
           const editing = !!n?.mask && (mask ?? (n.kind === 'adjustment' || n.kind === 'filter' ? true : get().editingMask))
-          set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}) })
+          set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}),
+            ...(id && get().selectedIds.includes(id) ? {} : { selectedIds: id ? [id] : [], anchorId: id }) })
+        },
+        selectLayer: (id, how = 'replace') => {
+          const { doc, activeId } = get()
+          if (!doc || !findNode(doc, id)) return
+          const cur = activeId && get().selectedIds.includes(activeId) ? get().selectedIds : activeId ? [activeId] : []
+          if (how === 'toggle' && cur.includes(id)) {
+            if (cur.length < 2) return                                   // the selection keeps at least the clicked layer
+            const next = cur.filter((x) => x !== id)
+            set({ selectedIds: next, anchorId: id })
+            if (activeId === id) get().setActive(next[next.length - 1])
+            return
+          }
+          if (how === 'toggle') { set({ selectedIds: [...cur, id], anchorId: id }); get().setActive(id); return }
+          if (how === 'range') {
+            const order = walkOrder(doc), a = order.indexOf(get().anchorId ?? activeId ?? id), b = order.indexOf(id)
+            const [i, j] = a < 0 ? [b, b] : [Math.min(a, b), Math.max(a, b)]
+            set({ selectedIds: order.slice(i, j + 1) })
+            get().setActive(id)
+            return
+          }
+          set({ selectedIds: [id], anchorId: id })
+          get().setActive(id)
+        },
+        targetIds: () => {
+          const { doc, activeId, selectedIds } = get()
+          if (!doc || !activeId) return []
+          const sel = selectedIds.filter((x) => findNode(doc, x))
+          const ids = sel.length > 1 && sel.includes(activeId) ? sel : [activeId]
+          const order = walkOrder(doc)
+          return topLevel(doc, ids).sort((p, q) => order.indexOf(p) - order.indexOf(q))
+        },
+        deleteNodes: (ids) => {
+          const doc = get().doc
+          if (!doc || !ids.length) return
+          if (ids.length === 1) { get().deleteNode(ids[0]); return }
+          const before = clone(doc)
+          const next = clone(doc)
+          const order = walkOrder(doc), gone = new Set(ids)
+          const firstAt = Math.min(...ids.map((x) => order.indexOf(x)))
+          for (const id of ids) { const p = findParent(next, id); if (p) p.list.splice(p.index, 1) }
+          const left = walkOrder(next)
+          const nextActive = order.slice(firstAt).find((x) => !gone.has(x) && left.includes(x)) ?? left[0] ?? null
+          commit(next, before, `delete ${ids.length} layers`, ids[0], { activeId: nextActive, editingMask: false, selectedIds: nextActive ? [nextActive] : [], anchorId: nextActive })
+        },
+        duplicateNodes: (ids) => {
+          const doc = get().doc
+          if (!doc || !ids.length) return
+          const before = clone(doc)
+          const next = clone(doc)
+          const copies: string[] = []
+          for (const id of ids) {
+            const p = findParent(next, id)
+            if (!p) continue
+            const c = copyNode(p.list[p.index], get().pixels, get().masks, ids.length === 1)
+            p.list.splice(p.index, 0, c)                               // above its original
+            copies.push(c.id)
+          }
+          const act = copies[ids.indexOf(get().activeId ?? '')] ?? copies[0]
+          commit(next, before, ids.length > 1 ? `duplicate ${ids.length} layers` : 'duplicate layer', act, { activeId: act, selectedIds: copies, anchorId: act, editingMask: false })
+        },
+        groupNodes: (idsIn) => {
+          const doc = get().doc
+          if (!doc || !idsIn.length) return
+          const order = walkOrder(doc)
+          const ids = topLevel(doc, idsIn).sort((p, q) => order.indexOf(p) - order.indexOf(q))
+          const before = clone(doc)
+          const next = clone(doc)
+          const nodes = ids.map((x) => findNode(next, x)).filter(Boolean) as Node[]
+          const group: Node = { kind: 'group', id: newId('grp'), name: 'Group', opacity: 1, blend: 'normal', visible: true, locked: false, clip: false, mask: null, passthrough: true, children: nodes }
+          const top = findParent(next, ids[0])!
+          top.list.splice(top.index, 1, group)                           // the group takes the topmost layer's place
+          // the others leave their old places (the walk skips the new group, which now holds them)
+          const strip = (list: Node[]) => { for (let i = list.length - 1; i >= 0; i--) { const n = list[i]; if (n === group) continue; if (ids.includes(n.id)) list.splice(i, 1); else if (n.children) strip(n.children) } }
+          strip(next.layers)
+          commit(next, before, ids.length > 1 ? `group ${ids.length} layers` : 'group', group.id, { activeId: group.id, selectedIds: [group.id], anchorId: group.id, editingMask: false })
+        },
+        mergeNodes: (ids) => {
+          const doc = get().doc
+          if (!doc || !ids.length) return
+          if (ids.length === 1) { get().mergeDown(ids[0]); return }
+          const nodes = ids.map((x) => findNode(doc, x)).filter(Boolean) as Node[]
+          if (nodes.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge layers merges raster layers only — rasterise or deselect the others', 'info'); return }
+          const shown = nodes.filter((n) => n.visible)                   // hidden layers are discarded (Photoshop, PhotoCraft)
+          if (!shown.length) { useSession.getState().toast('All the selected layers are hidden', 'info'); return }
+          const base = shown[shown.length - 1]                            // the bottom visible layer keeps its place and id
+          const x0 = Math.min(...shown.map((n) => n.x ?? 0)), y0 = Math.min(...shown.map((n) => n.y ?? 0))
+          const x1 = Math.max(...shown.map((n) => (n.x ?? 0) + (n.w ?? 0))), y1 = Math.max(...shown.map((n) => (n.y ?? 0) + (n.h ?? 0)))
+          const out = new LayerPixels(x1 - x0, y1 - y0)
+          for (const n of [...shown].reverse()) {                        // bottom to top, isolated (like merge down: canvas blends)
+            const lp = get().pixels.get(n.id)
+            if (!lp) continue
+            let src: HTMLCanvasElement = lp.canvas
+            const m = n.mask?.enabled ? get().masks.get(n.id) : undefined
+            if (m && n.mask) {
+              const tmp = document.createElement('canvas'); tmp.width = lp.width; tmp.height = lp.height
+              const tc = tmp.getContext('2d')!
+              tc.drawImage(lp.canvas, 0, 0); tc.globalCompositeOperation = 'destination-in'
+              const off = maskOffset(n)
+              tc.drawImage(maskAlphaCanvas(m, n.mask, off.x, off.y, n.x ?? 0, n.y ?? 0, lp.width, lp.height), 0, 0)
+              src = tmp
+            }
+            out.ctx.save()
+            out.ctx.globalAlpha = n.opacity * (n.fill ?? 1)
+            out.ctx.globalCompositeOperation = n === base ? 'source-over' : canvasBlend(n.blend)
+            out.ctx.drawImage(src, (n.x ?? 0) - x0, (n.y ?? 0) - y0)
+            out.ctx.restore()
+          }
+          out.refresh(); out.dirty = true
+          const before = clone(doc)
+          const next = clone(doc)
+          for (const n of nodes) if (n.id !== base.id) { const p = findParent(next, n.id); if (p) p.list.splice(p.index, 1) }
+          walk(next.layers, (n) => { if (n.id === base.id) { Object.assign(n, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, opacity: 1, fill: 1, blend: 'normal', mask: null, clip: false, name: nodes[0].name }); return true } })
+          const old = get().pixels.get(base.id)!, oldMask = base.mask ? get().masks.get(base.id) ?? null : null
+          get().pixels.set(base.id, out)
+          set({ doc: next, activeId: base.id, selectedIds: [base.id], anchorId: base.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
+          get().pushHistory({ label: `merge ${nodes.length} layers`, layerId: base.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: base.id, lp: old, mask: oldMask } })
+        },
+        setPropsFor: (ids, patch, label) => {
+          const doc = get().doc
+          if (!doc || !ids.length) return
+          const before = clone(doc)
+          const next = clone(doc)
+          const set1 = new Set(ids)
+          walk(next.layers, (n) => { if (set1.has(n.id)) Object.assign(n, patch) })
+          commit(next, before, label, ids[0])
+        },
+        moveNodesTo: (ids, targetId, where, copy = false) => {
+          const doc = get().doc
+          if (!doc || !ids.length) return
+          const moving = topLevel(doc, ids)
+          if (moving.includes(targetId) && (!copy || where === 'into')) return     // dropped on itself
+          // the destination (the group for 'into', else the target's parent) and its ancestors must not be among the moved layers
+          const pm = parentMap(doc)
+          for (let p = where === 'into' ? targetId : pm.get(targetId) ?? null; p; p = pm.get(p) ?? null) {
+            if (moving.includes(p)) { useSession.getState().toast('A group cannot go inside itself', 'info'); return }
+          }
+          const before = clone(doc)
+          const next = clone(doc)
+          let nodes = moving.map((x) => findNode(next, x)!).filter(Boolean)
+          if (copy) nodes = nodes.map((n) => copyNode(n, get().pixels, get().masks, false))
+          else for (const id of moving) { const p = findParent(next, id); if (p) p.list.splice(p.index, 1) }
+          const t = findNode(next, targetId), tp = findParent(next, targetId)
+          if (!t || !tp) return
+          if (where === 'into' && t.kind === 'group') t.children = [...nodes, ...(t.children ?? [])]
+          else tp.list.splice(where === 'above' ? tp.index : tp.index + 1, 0, ...nodes)
+          const ids2 = nodes.map((n) => n.id)
+          commit(next, before, copy ? (ids2.length > 1 ? `duplicate ${ids2.length} layers` : 'duplicate layer') : 'reorder layers', ids2[0],
+            copy ? { activeId: ids2[0], selectedIds: ids2, anchorId: ids2[0] } : {})
         },
         updateNode: (id, patch, label, coalesce) => {
           const doc = get().doc
@@ -978,7 +1163,9 @@ export const useEditor = create<EditorState>()(
         pushHistory: (e) => {
           const h = get().history, f = get().future
           const last = h[h.length - 1]
-          if (e.coalesce && last && last.coalesce === e.coalesce && last.layerId === e.layerId && e.at - last.at < 2000 && !e.swap && !last.swap) {
+          // D56: stack-only entries of one gesture merge across layers too (an eye sweep) — the oldest stack is the whole before-state
+          const sameRow = last && (last.layerId === e.layerId || (!e.tiles.length && !last.tiles.length && !!e.stack && !!last.stack))
+          if (e.coalesce && last && last.coalesce === e.coalesce && sameRow && e.at - last.at < 2000 && !e.swap && !last.swap) {
             // D43: one gesture, one row — the older entry already holds the before-state of its tiles; add the tiles it lacks
             const have = new Set(last.tiles.map((t) => `${t.x},${t.y}`))
             const merged: HistoryEntry = { ...last, at: e.at, tiles: [...last.tiles, ...e.tiles.filter((t) => !have.has(`${t.x},${t.y}`))], stack: last.stack ?? e.stack,

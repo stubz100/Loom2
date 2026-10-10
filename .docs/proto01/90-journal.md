@@ -2356,3 +2356,28 @@ Inspector → lineage → split → pages.
   Ctrl+Enter applies; the polygon ✓ shows in the strip; the menu audit over 12 tools and every layer finds 0 problems. masks, paint,
   brush, cmpdiag, selection, render pass; tour passes (one run missed the PNG download, the rerun had it — a timing flake). 172 offline;
   build clean; lint +1 (the `openPressMenu` export beside `showMenu`, same Fast Refresh note).
+
+## 2026-10-10 19:45 — D56 layers panel like PhotoCraft's
+
+- **Store:** `selectedIds` + `anchorId` (the selection counts only while it holds the active layer, PhotoCraft `selected_layers()`);
+  `selectLayer` replace / toggle (never empties) / range along the panel order; `targetIds()` (top-level, panel order); set operations
+  `deleteNodes`, `duplicateNodes` (copies above their originals, deep with pixels and masks, become the selection), `groupNodes` (the
+  group takes the topmost's place), `mergeNodes` (rasters only; hidden ones dropped; bottom→top into a fresh union-sized canvas with each
+  layer's blend, opacity × fill and mask — canvas blends, like merge down; one undo step with the old pixels swapped back), `setPropsFor`,
+  `moveNodesTo` (above / below / into, Alt copies, a group never into itself). History: stack-only entries with one coalesce key now
+  merge across layers (the eye sweep). Commands group / duplicate / merge / delete / visibility / lock act on `targetIds()`; the layer
+  menu pluralises.
+- **Panel:** Ctrl / Shift clicks; row drag (4 px threshold, ghost label, insertion line above / below, outline into a group's middle
+  0.3–0.7, edge auto-scroll min(32, ¼ height) at 80–600 px/s, Alt copies); footer drops (`data-drop` on CommandButton: New layer and
+  Duplicate duplicate, New group and Group group, the trash deletes); eye sweep (the press toggles that row, rows the pointer passes get
+  the same state, one step); right-click inside the selection keeps it. The row grid now auto-flows its columns (D52's chain had made a
+  sixth child).
+- **Found by the headed check:** a row drag after a Shift-click died silently — Shift-click had extended the page's text selection, so the
+  press-drag became a native text drag (pointercancel, no pointerup, leaked listeners). Rows are now `user-select: none`, a press clears
+  any selection, native drag starts are cancelled and pointercancel ends the gesture.
+- **Headed mode `layers`** passes: Ctrl adds, Shift range, Ctrl removes, never empty; Hide on the set in one step; dragging a selected
+  row carries the set below the bottom layer in one step; a single row above another; into a group's middle (at its top) and out again;
+  an Alt copy; an eye sweep over three rows in one step; drop on the trash deletes, on New layer duplicates; right-click on the set →
+  *Show / Lock / Duplicate / Merge / Group / Delete layers*. kit, masks, paint, brush, cmpdiag, tour, selection, render pass. The tour's
+  PNG-export step slept a fixed 2.5 s while the export runs the exact flatten first — it failed twice under load; it now polls up to
+  20 s like the PSD step. 172 offline; build clean; lint unchanged.

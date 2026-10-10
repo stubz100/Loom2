@@ -15,18 +15,18 @@ export function MenuButton({ label, icon: Icon, items, text, size = 16 }: { labe
   )
 }
 
-export function CommandButton({ id, active, text, size = 16, className = '', label }: { id: string; active?: boolean; text?: boolean; size?: number; className?: string; label?: string }) {
+export function CommandButton({ id, active, text, size = 16, className = '', label, drop }: { id: string; active?: boolean; text?: boolean; size?: number; className?: string; label?: string; drop?: string }) {
   const c = command(id)
   if (!c) return null
   markUsed(id)
   const Icon = c.icon
   return (
-    <button type="button" className={`cmd-btn${active ? ' active' : ''}${c.danger ? ' danger' : ''} ${className}`} title={titleFor(c)} aria-label={c.label} disabled={!isEnabled(c)} onClick={() => runCommand(id)}>
+    <button type="button" className={`cmd-btn${active ? ' active' : ''}${c.danger ? ' danger' : ''} ${className}`} title={titleFor(c)} aria-label={c.label} disabled={!isEnabled(c)} data-drop={drop} onClick={() => runCommand(id)}>
       {Icon ? <Icon size={size} /> : null}{(text || !Icon) && <span>{label ?? c.label}</span>}
     </button>
   )
 }
 
-export function CommandRow({ ids, active, className = '' }: { ids: (string | 'gap')[]; active?: string; className?: string }) {
-  return <span className={`cmd-row ${className}`}>{ids.map((id, i) => id === 'gap' ? <span key={i} className="gap" /> : <CommandButton key={id} id={id} active={active === id} />)}</span>
+export function CommandRow({ ids, active, className = '', drops }: { ids: (string | 'gap')[]; active?: string; className?: string; drops?: Record<string, string> }) {
+  return <span className={`cmd-row ${className}`}>{ids.map((id, i) => id === 'gap' ? <span key={i} className="gap" /> : <CommandButton key={id} id={id} active={active === id} drop={drops?.[id]} />)}</span>
 }

@@ -48,8 +48,8 @@
 .doc-row .t b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kind { color: var(--fg3); font-size: 11px; }
 
-.layers { display: flex; flex-direction: column; gap: 2px; }
-.layer-row { display: grid; grid-template-columns: 18px 18px 36px 1fr 28px; gap: 6px; align-items: center; padding: 3px 6px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; font-size: 12px; }
+.layers { display: flex; flex-direction: column; gap: 2px; user-select: none; }   /* D56: rows drag, they do not select text */
+.layer-row { display: grid; grid-template-columns: 18px 18px 36px minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; padding: 3px 6px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; font-size: 12px; }
 .layer-row:hover { background: var(--bg2); }
 .layer-row.active { background: var(--bg3); border-color: var(--accent); }
 .layer-row.hidden { opacity: .5; }
@@ -127,3 +127,13 @@
 .latches { display: inline-flex; gap: 2px; }
 .latch { min-width: 30px; }
 .latch.active { background: var(--accent); color: #000; }
+
+/* D56: layer selection, drag and drop */
+.layer-row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.layer-row.selected.active { background: color-mix(in srgb, var(--accent) 22%, var(--bg3)); }
+.layer-row.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+.layer-row.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
+.layer-row.drop-into { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cmd-btn.drop-target { outline: 2px solid var(--accent); outline-offset: 1px; }
+.layer-ghost { position: fixed; z-index: 60; pointer-events: none; padding: 3px 8px; border-radius: 4px; font-size: 12px; background: var(--bg3); border: 1px solid var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+.layer-ghost.copy::after { content: ' +'; color: var(--accent); }

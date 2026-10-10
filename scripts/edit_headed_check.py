@@ -9,6 +9,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
   kit                D55: latched modifiers, press menus, popup value fields, the blend dropdown (wheel, hover preview), Ctrl+Enter,
                      the polygon's ✓ / ⊘ in the strip and an audit of every Edit menu in every tool and state
+  layers             D56: Ctrl / Shift selection, commands on the set, drag to reorder / into and out of a group / Alt copies,
+                     eye sweep, drops on the footer's trash and New layer, right-click on the set — by mouse, one step per gesture
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -38,7 +40,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -322,7 +324,10 @@ def tour(cdp: CDP, tmp: Path) -> list[str]:
             break
         time.sleep(0.4)
     step(f"save to catalogue (assets {n_assets} → {n_after})", "1") if n_after > n_assets else (fails.append("save to catalogue") or print(f"FAIL save to catalogue (assets {n_assets} → {n_after})"))
-    cdp.eval(run("edit.exportPng")); time.sleep(2.5)
+    cdp.eval(run("edit.exportPng"))
+    t0 = time.time()                                                  # the export runs the exact flatten first — wait for it, not a fixed 2.5 s
+    while time.time() - t0 < 20 and not list((tmp / "dl").glob("*.png")):
+        time.sleep(0.3)
     pngs = list((tmp / "dl").glob("*.png"))
     step("export PNG downloads a file", "1", "1") if pngs else (fails.append("export PNG") or print("FAIL export PNG: no .png downloaded"))
     cdp.eval(run("edit.exportPsd"))
@@ -1478,6 +1483,105 @@ def main() -> int:
             }})()""")
             bad = json.loads(audit)
             check(not bad, f"every Edit menu entry resolves and separators sit only between groups ({len(bad)} problems){''.join(chr(10) + '       ' + b for b in bad[:12])}")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "layers":
+            # D56 layers panel, by mouse events on the rows: Ctrl / Shift selection, commands on the set, drag to reorder / into a group /
+            # copies with Alt, eye sweep, drop on the footer's trash, right-click labels — one history step per gesture
+            S, C = STORE, "window.__loom2Commands"
+            hist = lambda: cdp.eval(f"{S}.history.length")  # noqa: E731
+            order = lambda: json.loads(cdp.eval(f"JSON.stringify((() => {{ const out = []; const w = (xs, d) => xs.forEach((x) => {{ out.push(x.name + (d ? '@' + d : '')); if (x.children) w(x.children, d + 1) }}); w({S}.doc.layers, 0); return out }})())"))  # noqa: E731
+            ids = lambda: json.loads(cdp.eval(f"JSON.stringify((() => {{ const out = {{}}; const w = (xs) => xs.forEach((x) => {{ out[x.name] = x.id; if (x.children) w(x.children) }}); w({S}.doc.layers); return out }})())"))  # noqa: E731
+
+            def row(name: str, f: float = 0.5, x: float = 0.6) -> tuple[float, float]:
+                r = json.loads(cdp.eval(f"JSON.stringify((() => {{ const id = {json.dumps(ids()[name])}; const e = document.querySelector(`.layer-row[data-id='${{id}}']`); e.scrollIntoView({{ block: 'nearest' }}); const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height] }})())"))
+                return r[0] + r[2] * x, r[1] + r[3] * f
+
+            def eye(name: str) -> tuple[float, float]:
+                r = json.loads(cdp.eval(f"JSON.stringify((() => {{ const id = {json.dumps(ids()[name])}; const e = document.querySelector(`.layer-row[data-id='${{id}}'] button.eye`); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }})())"))
+                return r[0], r[1]
+
+            def click(p: tuple[float, float], modifiers: int = 0) -> None:
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=p[0], y=p[1])
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=p[0], y=p[1], button="left", buttons=1, clickCount=1, modifiers=modifiers)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=p[0], y=p[1], button="left", buttons=0, clickCount=1, modifiers=modifiers)
+                time.sleep(0.35)
+
+            def drag(a: tuple[float, float], b: tuple[float, float], modifiers: int = 0) -> None:
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=a[0], y=a[1])
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=a[0], y=a[1], button="left", buttons=1, clickCount=1, modifiers=modifiers)
+                for i in range(1, 13):
+                    cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=a[0] + (b[0] - a[0]) * i / 12, y=a[1] + (b[1] - a[1]) * i / 12, button="left", buttons=1, modifiers=modifiers)
+                    time.sleep(0.03)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=b[0], y=b[1], button="left", buttons=0, clickCount=1, modifiers=modifiers)
+                time.sleep(0.5)
+
+            sel = lambda: sorted(n for n, i in ids().items() if i in json.loads(cdp.eval(f"JSON.stringify({S}.targetIds())")))  # noqa: E731
+            base = order()[0]
+            for k in ("A", "B", "C"):
+                cdp.eval(f"{C}.runCommand('edit.layer.new'); {S}.updateNode({S}.activeId, {{ name: '{k}' }}); 1"); time.sleep(0.25)
+            check(order() == ["C", "B", "A", base], f"three new layers on top ({order()})")
+            click(row("C")); click(row("A"), modifiers=2)
+            check(sel() == ["A", "C"] and cdp.eval("document.querySelectorAll('.layer-row.selected').length") == 2, f"Ctrl-click adds a layer to the selection ({sel()})")
+            click(row("C")); click(row("A"), modifiers=8)
+            check(sel() == ["A", "B", "C"], f"Shift-click selects the range ({sel()})")
+            click(row("B"), modifiers=2)
+            check(sel() == ["A", "C"], f"Ctrl-click on a selected layer removes it ({sel()})")
+            click(row("A"), modifiers=2); click(row("C"), modifiers=2)
+            check(sel() == ["C"] or sel() == ["A"] or len(sel()) == 1, f"the selection never empties ({sel()})")
+            click(row("C")); click(row("A"), modifiers=8)
+            h0 = hist()
+            cdp.eval(f"{C}.runCommand('edit.layer.visibility'); 1"); time.sleep(0.3)
+            vis = json.loads(cdp.eval(f"JSON.stringify({S}.doc.layers.map((n) => n.visible))"))
+            check(vis == [False, False, False, True] and hist() == h0 + 1, f"Hide acts on the whole selection in one step ({vis})")
+            cdp.eval(f"{C}.runCommand('edit.undo'); 1"); time.sleep(0.3)
+            # drag the set below the bottom layer
+            h0 = hist()
+            drag(row("B"), row(base, 0.85))
+            check(order() == [base, "C", "B", "A"] and hist() == h0 + 1, f"dragging a selected row carries the set below the target in one step ({order()})")
+            cdp.eval(f"{C}.runCommand('edit.undo'); 1"); time.sleep(0.3)
+            click(row("A"))
+            drag(row("A"), row("C", 0.15))
+            check(order() == ["A", "C", "B", base], f"a single row dropped on the upper half of another goes above it ({order()})")
+            # a group, then drop a layer into it (the group row's middle) and out again (between rows outside it)
+            click(row("B")); cdp.eval(f"{C}.runCommand('edit.layer.group'); 1"); time.sleep(0.4)
+            g = [n for n in order() if not n.startswith("B") and n not in ("A", "C", base)][0]
+            drag(row("A"), row(g, 0.5))
+            o = order()
+            check(o[:4] == ["C", g, "A@1", "B@1"] or o[:4] == [g, "A@1", "B@1", "C"], f"dropping on a group's middle puts the layer inside it, at its top ({o})")
+            drag(row("A"), row(base, 0.15))
+            check("A" in order() and order().index("A") == len(order()) - 2, f"dropping between rows outside the group takes it out ({order()})")
+            # Alt drop = copies
+            n0 = len(order())
+            drag(row("C"), row(base, 0.85), modifiers=1)
+            check(len(order()) == n0 + 1 and order()[-1] == "C" and order().count("C") == 2, f"Alt on release drops a copy ({order()})")
+            # eye sweep over three rows in one step
+            eyes = json.loads(cdp.eval("JSON.stringify([...document.querySelectorAll('.layer-row[data-id] button.eye')].map((e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }))"))
+            h0 = hist()
+            e0, e2 = eyes[0], eyes[2]
+            drag(e0, (e2[0], e2[1] + 2))
+            vis = json.loads(cdp.eval(f"JSON.stringify((() => {{ const out = []; const w = (xs) => xs.forEach((x) => {{ out.push(x.visible); if (x.children) w(x.children) }}); w({S}.doc.layers); return out }})())"))
+            check(vis[:3] == [False, False, False] and hist() == h0 + 1, f"an eye sweep over three rows hides them in one step ({vis[:4]}, history +{hist() - h0})")
+            cdp.eval(f"{C}.runCommand('edit.undo'); 1"); time.sleep(0.3)
+            # drop on the footer's trash and duplicate buttons
+            trash = json.loads(cdp.eval("JSON.stringify((() => { const r = document.querySelector('button[data-drop=\"delete\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())"))
+            n0, h0 = len(order()), hist()
+            drag(row(base), (trash[0], trash[1]))
+            check(len(order()) == n0 - 1 and base not in order() and hist() == h0 + 1, f"dropping a row on the trash deletes it in one step ({order()})")
+            cdp.eval(f"{C}.runCommand('edit.undo'); 1"); time.sleep(0.3)
+            dup = json.loads(cdp.eval("JSON.stringify((() => { const r = document.querySelector('button[data-drop=\"duplicate\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())"))
+            n0 = len(order())
+            drag(row(base), (dup[0], dup[1]))
+            check(len(order()) == n0 + 1, f"dropping a row on New layer duplicates it ({order()})")
+            # right-click inside a multi-selection keeps it and the menu speaks in plurals
+            click(row("C")); click(row(base), modifiers=2)
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=row("C")[0], y=row("C")[1], button="right", buttons=2, clickCount=1)
+            cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=row("C")[0], y=row("C")[1], button="right", buttons=0, clickCount=1)
+            time.sleep(0.4)
+            labels = json.loads(cdp.eval("JSON.stringify([...document.querySelectorAll('.ctx-menu .item .lbl')].map((e) => e.textContent))"))
+            check("Delete layers" in labels and "Merge layers" in labels and len(sel()) == 2, f"right-click on a row in the selection keeps it; the menu acts on the set ({[l for l in labels if 'layers' in l]})")
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+            time.sleep(0.2)
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":

@@ -29,19 +29,20 @@ registerCommands([
   // layers
   { id: 'edit.layer.new', scope: 'edit', label: 'New layer', icon: Plus, keys: 'Ctrl+Shift+N', placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('raster') } },
   { id: 'edit.layer.newGroup', scope: 'edit', label: 'New empty group', icon: FolderPlus, placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('group') } },
-  { id: 'edit.layer.group', scope: 'edit', label: 'Group the active layer', icon: Group, keys: 'Ctrl+G', placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().groupActive() },
-  { id: 'edit.layer.duplicate', scope: 'edit', label: 'Duplicate layer', icon: Copy, keys: 'Ctrl+J', placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().duplicateNode(ed().activeId!) },
-  { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: activeRaster, run: () => ed().mergeDown(ed().activeId!) },
+  // D56: these act on the layer selection (the active layer alone when nothing else is selected)
+  { id: 'edit.layer.group', scope: 'edit', label: 'Group layers', icon: Group, keys: 'Ctrl+G', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().groupNodes(ed().targetIds()) },
+  { id: 'edit.layer.duplicate', scope: 'edit', label: 'Duplicate layer', icon: Copy, keys: 'Ctrl+J', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().duplicateNodes(ed().targetIds()) },
+  { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },
   { id: 'edit.layer.rename', scope: 'edit', label: 'Rename…', icon: Pencil, placement: ['context'], when: () => !!active(), hint: 'double-click the layer', run: () => { const n = active(); if (!n) return; void askText({ title: 'Layer name', initial: n.name }).then((name) => { if (name && name !== n.name) ed().updateNode(n.id, { name }, 'rename') }) } },
-  { id: 'edit.layer.visibility', scope: 'edit', label: 'Hide / show layer', icon: Eye, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') } },
+  { id: 'edit.layer.visibility', scope: 'edit', label: 'Hide / show layer', icon: Eye, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().setPropsFor(ed().targetIds(), { visible: !n.visible }, n.visible ? 'hide layers' : 'show layers') } },
   { id: 'edit.layer.solo', scope: 'edit', label: 'Solo layer (show only this)', icon: EyeOff, placement: ['context'], when: () => !!active(), hint: 'Alt-click the eye', run: () => ed().solo(ed().activeId!) },
-  { id: 'edit.layer.lock', scope: 'edit', label: 'Lock / unlock layer', icon: Lock, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().updateNode(n.id, { locked: !n.locked }) } },
+  { id: 'edit.layer.lock', scope: 'edit', label: 'Lock / unlock layer', icon: Lock, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (n) ed().setPropsFor(ed().targetIds(), { locked: !n.locked }, n.locked ? 'unlock layers' : 'lock layers') } },
   { id: 'edit.layer.delete', scope: 'edit', label: 'Delete layer', icon: Trash, danger: true, placement: ['toolbar', 'context'], when: () => !!active(), run: () => { const n = active(); if (!n) return
       if (ed().editingMask && n.mask) { ed().removeMask(n.id); return }                     // D52: Delete follows the target — the mask while it is edited
-      ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
-      useSession.getState().toast(`Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === 'delete layer') s.undo() }) } },
+      const ids = ed().targetIds(); ed().deleteNodes(ids); const depth = ed().history.length, label = ed().history[depth - 1]?.label   // undoable, so no confirm
+      useSession.getState().toast(ids.length > 1 ? `Deleted ${ids.length} layers` : `Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === label) s.undo() }) } },
   // D55: latched modifiers — the strip's ⇧ / Ctrl / Alt modify every canvas gesture until clicked off
   ...(['shift', 'ctrl', 'alt'] as const).map((k) => ({
     id: `edit.latch.${k}`, scope: 'edit' as const, label: `Latch ${k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}`, placement: ['strip'] as ['strip'],
@@ -137,14 +138,15 @@ const maskItems = (): MenuItem[] => {
 export function layerMenu(): MenuItem[] {
   const n = active()
   if (!n) return []
+  const many = ed().targetIds().length > 1                          // D56: a row inside the selection acts on the set; labels say so
   return [
     { cmd: 'edit.layer.rename' }, sep,
-    { cmd: 'edit.layer.visibility', label: visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: lockLabel() }, sep,
-    { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
+    { cmd: 'edit.layer.visibility', label: many ? (n.visible ? 'Hide layers' : 'Show layers') : visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: many ? (n.locked ? 'Unlock layers' : 'Lock layers') : lockLabel() }, sep,
+    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,
-    { cmd: 'edit.layer.delete', label: ed().editingMask && n.mask ? 'Delete layer mask' : undefined },
+    { cmd: 'edit.layer.delete', label: ed().editingMask && n.mask ? 'Delete layer mask' : many ? 'Delete layers' : undefined },
   ]
 }
 const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]

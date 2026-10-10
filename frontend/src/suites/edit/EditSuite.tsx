@@ -558,22 +558,114 @@ function Stage() {
 }
 
 // ------------------------------------------------------------------ Inspector
+// ---- D56: layer-panel gestures (PhotoCraft panels.rs layer_drag_and_drop, footer_drop, eye_sweep, layer_drag_edge_scroll) -------
+let suppressRowClick = false
+/** A press on a row that moves 4 px becomes a drag: an insertion line above / below a row, an outline on a group's middle (into) or on a
+ * footer button (delete / duplicate / group); the panel scrolls near its edges; Alt on release drops copies. One history step. */
+function startRowDrag(e: React.PointerEvent<HTMLElement>, id: string) {
+  if (e.button !== 0 || (e.target as HTMLElement).closest('button, img, .mask-box, .mask-wrap, input')) return
+  window.getSelection()?.removeAllRanges()                          // a text selection would turn the press into a native drag (pointercancel)
+  const x0 = e.clientX, y0 = e.clientY
+  let dragging = false, raf = 0, lx = x0, ly = y0
+  let target: { id: string; where: 'above' | 'below' | 'into' } | null = null, footer: string | null = null
+  let ghost: HTMLDivElement | null = null
+  let scroller: HTMLElement | null = e.currentTarget.parentElement
+  while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement
+  const st = ed()
+  const sel = st.targetIds()
+  const ids = sel.length > 1 && sel.includes(id) ? sel : [id]       // a row inside the selection carries the set
+  const clear = () => document.querySelectorAll('.drop-above, .drop-below, .drop-into, .drop-target').forEach((el) => el.classList.remove('drop-above', 'drop-below', 'drop-into', 'drop-target'))
+  const hit = (x: number, y: number) => {
+    clear(); target = null; footer = null
+    const el = document.elementFromPoint(x, y) as HTMLElement | null
+    const btn = el?.closest('[data-drop]') as HTMLElement | null
+    if (btn) { footer = btn.dataset.drop!; btn.classList.add('drop-target'); return }
+    const row = el?.closest('.layer-row[data-id]') as HTMLElement | null
+    if (!row) return
+    const r = row.getBoundingClientRect(), f = (y - r.top) / r.height
+    const where = row.dataset.kind === 'group' && f > 0.3 && f < 0.7 ? 'into' : f < 0.5 ? 'above' : 'below'
+    target = { id: row.dataset.id!, where }
+    row.classList.add(`drop-${where}`)
+  }
+  const edge = () => {                                                // edge auto-scroll: zone min(32, ¼ height), 80–600 px/s
+    if (scroller) {
+      const b = scroller.getBoundingClientRect(), zone = Math.min(32, b.height * 0.25)
+      const dir = ly < b.top + zone ? -Math.min(1, (b.top + zone - ly) / zone) : ly > b.bottom - zone ? Math.min(1, (ly - b.bottom + zone) / zone) : 0
+      if (dir && lx >= b.left && lx <= b.right) { scroller.scrollTop += Math.sign(dir) * (80 + 520 * Math.abs(dir)) / 60; hit(lx, ly) }
+    }
+    raf = requestAnimationFrame(edge)
+  }
+  const move = (ev: PointerEvent) => {
+    lx = ev.clientX; ly = ev.clientY
+    if (!dragging) {
+      if (Math.hypot(lx - x0, ly - y0) < 4) return
+      dragging = true
+      ghost = document.createElement('div'); ghost.className = 'layer-ghost'
+      ghost.textContent = ids.length > 1 ? `${ids.length} layers` : findNode(st.doc, id)?.name ?? ''
+      document.body.appendChild(ghost)
+      raf = requestAnimationFrame(edge)
+    }
+    if (ghost) { ghost.style.left = `${lx + 12}px`; ghost.style.top = `${ly + 8}px`; ghost.classList.toggle('copy', ev.altKey) }
+    hit(lx, ly)
+  }
+  const up = (ev: PointerEvent) => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up)
+    cancelAnimationFrame(raf); ghost?.remove(); clear()
+    if (!dragging || ev.type === 'pointercancel') return
+    suppressRowClick = true; setTimeout(() => { suppressRowClick = false })
+    const s = ed()
+    if (footer === 'delete') s.deleteNodes(ids)
+    else if (footer === 'duplicate') s.duplicateNodes(ids)
+    else if (footer === 'group') s.groupNodes(ids)
+    else if (target) s.moveNodesTo(ids, target.id, target.where, ev.altKey)
+  }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up)
+}
+/** Eye sweep: the press toggles that row's eye; dragging over more rows gives each the same state — one history step for the sweep. */
+function startEyeSweep(e: React.PointerEvent<HTMLElement>, n: Node) {
+  e.stopPropagation()
+  if (e.button !== 0) return
+  if (e.altKey) { ed().solo(n.id); return }
+  const v = !n.visible, key = `eye-sweep:${Date.now()}`, label = v ? 'show layers' : 'hide layers'
+  ed().updateNode(n.id, { visible: v }, label, key)
+  const done = new Set([n.id])
+  let py = e.clientY
+  const move = (ev: PointerEvent) => {
+    const a = Math.min(py, ev.clientY), b = Math.max(py, ev.clientY)   // every row the pointer passed, so a fast sweep skips none
+    py = ev.clientY
+    document.querySelectorAll<HTMLElement>('.layer-row[data-id]').forEach((row) => {
+      const r = row.getBoundingClientRect(), id = row.dataset.id!
+      if (done.has(id) || r.bottom < a || r.top > b) return
+      done.add(id)
+      if (findNode(ed().doc, id)?.visible !== v) ed().updateNode(id, { visible: v }, label, key)
+    })
+  }
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+}
+
 function LayersTab() {
   const doc = useEditor((s) => s.doc)!
   const activeId = useEditor((s) => s.activeId)
+  const selectedIds = useEditor((s) => s.selectedIds)
   const editingMask = useEditor((s) => s.editingMask)
   const revision = useEditor((s) => s.revision)
   const hasSel = useEditor((s) => !!s.selection)
   const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); st.pixels.forEach((lp, id) => m.set(id, lp.thumbnail(64))); st.masks.forEach((lp, id) => m.set('m:' + id, lp.thumbnail(48))); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
   const before = useRef<DocumentStack | null>(null)
   const active = findNode(doc, activeId)
+  const multi = !!activeId && selectedIds.length > 1 && selectedIds.includes(activeId)
   const start = () => { before.current = snapshot(doc) }
   const commit = (label: string) => { if (before.current && active) { ed().pushHistory({ label, layerId: active.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
   const rows = (nodes: Node[], depth: number): ReactNode => nodes.map((n) => (
     <div key={n.id}>
-      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} tabIndex={0} onClick={() => ed().setActive(n.id)}
-        onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id); showMenu(e, layerMenu()) }}>
-        <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+      <div className={`layer-row${n.id === activeId ? ' active' : ''}${multi && selectedIds.includes(n.id) ? ' selected' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} tabIndex={0}
+        data-id={n.id} data-kind={n.kind} title="click: select · Ctrl-click: add / remove · Shift-click: range · drag: reorder, into a group, or onto the trash / new / group button"
+        onPointerDown={(e) => startRowDrag(e, n.id)} onDragStart={(e) => e.preventDefault()}
+        onClick={(e) => { if (suppressRowClick) return; ed().selectLayer(n.id, e.ctrlKey || e.metaKey ? 'toggle' : e.shiftKey ? 'range' : 'replace') }}
+        onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { if (!(multi && selectedIds.includes(n.id))) ed().selectLayer(n.id); showMenu(e, layerMenu()) }}>
+        <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · drag down the eyes to sweep · Alt-click: solo" onPointerDown={(e) => startEyeSweep(e, n)}
+          onClick={(e) => { e.stopPropagation(); if (e.detail === 0) ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
         <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
         {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title={n.mask ? 'click: paint the pixels · Ctrl-click: select layer transparency' : 'Ctrl-click: select layer transparency'} onClick={(e) => { e.stopPropagation(); if (e.ctrlKey || e.metaKey) ed().selectLayerAlpha(n.id); else { ed().setActive(n.id, false); ed().setView({ maskView: 'off' }) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
         <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : n.type}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${n.blend}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
@@ -609,10 +701,11 @@ function LayersTab() {
         </div>
       )}
       <div className="layer-actions">
-        <CommandRow ids={['edit.layer.new', 'edit.layer.newGroup', 'edit.layer.group']} />
+        <CommandRow ids={['edit.layer.new', 'edit.layer.newGroup', 'edit.layer.group']} drops={{ 'edit.layer.new': 'duplicate', 'edit.layer.newGroup': 'group', 'edit.layer.group': 'group' }} />
         <MenuButton label="Add adjustment" icon={SlidersHorizontal} items={adjustmentMenu} />
         <MenuButton label="Add filter" icon={Sparkles} items={filterMenu} />
-        <CommandRow ids={['gap', 'edit.layer.duplicate', 'edit.layer.mergeDown', 'edit.layer.up', 'edit.layer.down', 'gap', active?.mask ? 'edit.mask.remove' : 'edit.mask.add', 'edit.layer.visibility', 'edit.layer.lock', 'gap', 'edit.layer.delete']} />
+        <CommandRow ids={['gap', 'edit.layer.duplicate', 'edit.layer.mergeDown', 'edit.layer.up', 'edit.layer.down', 'gap', active?.mask ? 'edit.mask.remove' : 'edit.mask.add', 'edit.layer.visibility', 'edit.layer.lock', 'gap', 'edit.layer.delete']} drops={{ 'edit.layer.duplicate': 'duplicate', 'edit.layer.delete': 'delete' }} />
+        {multi && <span className="hint">{ed().targetIds().length} layers selected</span>}
         <MenuButton label="More" items={layerMenu} />
       </div>
     </div>

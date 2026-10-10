@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel).
 
 ## Files
 
@@ -62,6 +62,11 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 13. **Canvas gestures read `mods(e)`, not `e.shiftKey` (D55).** `mods` ORs the strip's latched ⇧ / Ctrl / Alt into the event; a new
    canvas modifier gesture must go through it so it stays reachable by mouse. The blend dropdown's hover preview is `blendPreview`
    (rendered, never recorded) — the scene renders `doc` with it applied.
+14. **Layer commands act on `targetIds()` (D56).** The selection counts only while it holds the active layer; `targetIds()` returns it
+   top-level only and in panel order (or just the active layer). Group, duplicate, merge, delete, visibility and lock use it; the panel's
+   drag, eye sweep and footer drops call `moveNodesTo` / `deleteNodes` / `duplicateNodes` / `groupNodes`, one history step per gesture
+   (stack-only entries with one coalesce key merge across layers). Layer rows must not select text (`user-select: none`): a text
+   selection turns a row drag into a native drag and the pointer stream ends in `pointercancel`.
 
 ## Renderer selection
 

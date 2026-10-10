@@ -2507,3 +2507,19 @@ Inspector → lineage → split → pages.
   `csp_check.py` gained an `edit-wasm` page (`&wasmprobe=1`): clean under the production CSP; the negative control without
   `'wasm-unsafe-eval'` reports the Worker's CompileError. Regression: kit, layers, selection, tour, transform, masks, brush, cmpdiag,
   render pass; build clean; lint 99 (two option components).
+
+## 2026-10-10 21:10 — D60 settings audit (PC25)
+
+- `scripts/settings_audit.py`: a static scan. Every recipe field (all pydantic models in recipes.py) must be named — attribute, keyword
+  or string key — by the job code (queue, engine graphs / client / supervisor, edit_ai, matting, poisson, tone, maskops, clips); every
+  Settings / EngineSettings field by some orchestrator module other than config.py (an attribute, or getattr / a key); every top-level
+  `/capabilities` key must say which recipe fields or settings it feeds (then they must exist) or be marked informational. An allow-list
+  carries the reasons: the union's `kind`, RefImage.note (panel only), Inpaint.image_blob / mask_blob (10 §13 compatibility, unused with
+  a document), the record's schema_version, mounted_model_trees (the roster), T2I.tier (a label; width / height carry the size) and
+  h3_licence_confirmed (a UI gate, D17).
+- First run: 5 findings — none a dead setting in the end: `stall_timeout_s` is read through getattr (the scan learnt string keys), two
+  were nested `facesim` keys (the scan now reads the returned dict's own keys only), `T2I.tier` and `h3_licence_confirmed` are allowed
+  with their reasons above. Now **149 fields and parameters, 0 problems, 8 allowed**.
+- `test_settings_audit_d60.py` (2): the tree passes; an injected recipe field nobody reads fails with its name. CI runs the audit next to
+  agents_check. (CI note: run on f21af1f failed agents_check on a backticked `../photocraft`; fixed in d777f39.)
+

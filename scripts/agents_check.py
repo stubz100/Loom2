@@ -4,12 +4,14 @@ backticked repository path in them still exists.
     orchestrator/.venv/Scripts/python.exe scripts/agents_check.py      # exit 1 on any finding (CI runs it)
 
 A backticked token counts as a path when it looks like one (segments joined by "/", no spaces, wildcards or <placeholders>)
-and its first segment exists at the repository root or next to the doc. Paths inside git submodules are skipped: CI checks
-the repository out without them.
+and its first segment exists at the repository root or next to the doc. It passes when git tracks it (a file, or a directory
+holding tracked files), so the check gives the same answer here and in CI. Paths inside git submodules and gitignored local
+paths (`engine/.venv`) are skipped: CI's checkout has neither.
 """
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,9 +42,26 @@ def check(doc: Path) -> list[str]:
         target = resolve(token, doc.parent)
         if target is None:
             continue
-        if not target.exists():
-            problems.append(f"{rel}: `{token}` does not exist")
+        path = target.relative_to(REPO).as_posix().rstrip("/")
+        if path not in tracked_paths() and not ignored(path):
+            problems.append(f"{rel}: `{token}` is not in the repository")
     return problems
+
+
+_TRACKED: set[str] | None = None
+
+
+def tracked_paths() -> set[str]:
+    """Every tracked file and every directory that holds one (`git ls-files`)."""
+    global _TRACKED
+    if _TRACKED is None:
+        files = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True).stdout.splitlines()
+        _TRACKED = set(files) | {"/".join(f.split("/")[:i]) for f in files for i in range(1, f.count("/") + 1)}
+    return _TRACKED
+
+
+def ignored(path: str) -> bool:
+    return subprocess.run(["git", "check-ignore", "-q", path], cwd=REPO).returncode == 0
 
 
 def resolve(token: str, doc_dir: Path) -> Path | None:

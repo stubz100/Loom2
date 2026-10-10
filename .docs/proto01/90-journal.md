@@ -1970,3 +1970,14 @@ Inspector → lineage → split → pages.
   `animate` **all passed** (clips, preview, extract with lineage, identity); `csp_check.py` clean on Catalogue, Edit, Generate, model panel,
   Edit AI (0 CSP hits, 0 JS errors). Not run: the Tauri shell itself.
 - **H1 closed** (D35–D38). 12 §8b status updated; next wave H2 (P2 plan/finalize/submit, P1 model registry, P4 job origin).
+
+## 2026-10-10 10:25 — CI red since 2026-10-07: open-variant test pinned; agent-doc check judged by tracked files
+
+- Read through the GitHub API (no `gh` here; job logs need admin rights): every CI run since at least `a202db3` (2026-10-07 08:38)
+  failed in the `open` matrix leg's offline tests, and since D35 the `full` leg also failed at the agent-doc step.
+- **open leg:** `test_lifecycle.py::test_warm_group_affinity_ages_out` submits a FLUX.2 dev job; under `LOOM2_VARIANT=open` the C3 gate
+  rightly refuses dev (full-only). The test is about warm-group scheduling, so it now pins `AppState(..., variant="full")` like `Rig` does.
+  Reproduced and verified locally: `LOOM2_VARIANT=open pytest` 125 passed.
+- **full leg:** `scripts/agents_check.py` tested existence on disk; `orchestrator/loom2/engine/AGENTS.md` names `engine/.venv`, which exists
+  here but is gitignored, so CI's checkout lacks it. The check now passes a path only when git tracks it (file or directory of tracked
+  files) and skips gitignored local paths — same verdict on this machine and in CI; a broken path still fails.

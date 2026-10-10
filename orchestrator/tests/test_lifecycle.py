@@ -249,7 +249,7 @@ def test_warm_group_affinity_ages_out(tmp_path: Path):
     from loom2 import queue as qmod
     from datetime import datetime, timedelta, timezone
     ws = Workspace.create(tmp_path / "p", name="P", size_cap_gb=10)
-    app = AppState(tmp_path / "state")
+    app = AppState(tmp_path / "state", variant="full")       # scheduling, not variants: dev is full-only (C3), and CI also runs LOOM2_VARIANT=open
     q = JobQueue(ws, app, type("E", (), {"started_at": None, "jobs_since_start": 0})(), Roster(tmp_path / "none"), Catalogue(ws), EventHub())
     try:
         q.load()

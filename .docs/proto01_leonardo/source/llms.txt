@@ -1,0 +1,154 @@
+# Leonardo.Ai Documentation
+
+> Documentation for Leonardo.Ai
+
+## Guides: 🏁 Quick start
+- [Quick Start Guide](https://docs.leonardo.ai/docs/getting-started.md): Welcome! This guide helps you get started with the Leonardo.Ai API, from creating an API key to generating your first images.
+
+## Guides: 📝  GUIDes
+- [Music v1](https://docs.leonardo.ai/docs/music-v1.md): This guide shows how to generate music using the Music v1 model via the Leonardo.AI REST API.
+- [Sound Effects v2](https://docs.leonardo.ai/docs/sound-effects-v2.md): This guide shows how to generate sound effects using the Sound Effects v2 model via the Leonardo.AI REST API.
+- [Dialogue v3](https://docs.leonardo.ai/docs/dialogue-v3.md): This guide shows how to generate spoken dialogue using the Dialogue v3 model via the Leonardo.AI REST API.
+- [Seed Audio 1.0](https://docs.leonardo.ai/docs/seed-audio-10.md): This guide shows how to generate speech using the Seed Audio 1.0 model via the Leonardo.AI REST API.
+- [Remove bg](https://docs.leonardo.ai/docs/remove-bg.md): This guide shows how to remove image backgrounds using the Remove bg model via the Leonardo.AI REST API.
+- [Which photos work best for high-quality background removal?](https://docs.leonardo.ai/docs/which-photos-work-best-for-high-quality-background-removal.md)
+- [Migrate from the remove.bg API to Leonardo.Ai](https://docs.leonardo.ai/docs/migrate-from-the-removebg-api-to-leonardoai.md): Background removal is now available through the Leonardo.Ai API. This guide describes the differences between the two APIs and the code changes required to migrate.
+- [FLUX Dev](https://docs.leonardo.ai/docs/flux-dev.md): This guide shows how to generate images using FLUX Dev model via the Leonardo.AI REST API.
+- [FLUX Schnell](https://docs.leonardo.ai/docs/flux-schnell.md): This guide shows how to generate images using FLUX Schnell model via the Leonardo.AI REST API.
+- [FLUX.1 Kontext [pro]](https://docs.leonardo.ai/docs/flux-1-kontext-pro.md): This guide shows how to generate images using FLUX.1 Kontext [pro] model via the Leonardo.AI REST API.
+- [FLUX.1 Kontext Max](https://docs.leonardo.ai/docs/flux1-kontext-max.md): This guide shows how to generate images using the FLUX.1 Kontext Max model via the Leonardo.AI REST API.
+- [FLUX.2 Pro](https://docs.leonardo.ai/docs/flux-2-pro.md): This guide shows how to generate images using FLUX.2 Pro model via the Leonardo.AI REST API.
+- [GPT Image-1.5](https://docs.leonardo.ai/docs/gpt-image-1-5.md): This guide shows how to generate images using GPT Image-1.5 model via the Leonardo.AI REST API.
+- [GPT Image 2](https://docs.leonardo.ai/docs/gpt-image-2.md): This guide shows how to generate images using GPT Image-2.0 model via the Leonardo.AI REST API.
+- [GPT Image 2.5 Flare](https://docs.leonardo.ai/docs/gpt-image-25-flare.md): This guide shows how to generate images using the GPT Image 2.5 Flare model via the Leonardo.AI REST API.
+- [GPT Image 2.5 Sunburst](https://docs.leonardo.ai/docs/gpt-image-25-sunburst.md): This guide shows how to generate images using the GPT Image 2.5 Sunburst model via the Leonardo.AI REST API.
+- [Ideogram 3.0](https://docs.leonardo.ai/docs/ideogram-30.md): This guide shows how to generate images using Ideogram 3.0 model via the Leonardo.AI REST API.
+- [Ideogram 4.5](https://docs.leonardo.ai/docs/ideogram-45.md): This guide shows how to generate images using the Ideogram 4.5 model via the Leonardo.AI REST API.
+- [P-Image-Ideogram](https://docs.leonardo.ai/docs/p-image-ideogram.md): This guide shows how to generate images using P-Image-Ideogram model via the Leonardo.AI REST API.
+- [Krea 2 Turbo](https://docs.leonardo.ai/docs/krea-2-turbo.md): This guide shows how to generate images using the Krea 2 Turbo model via the Leonardo.AI REST API.
+- [Lucid Origin](https://docs.leonardo.ai/docs/lucid-origin.md): This guide shows how to generate images using Lucid Origin model via the Leonardo.AI REST API.
+- [Lucid Realism](https://docs.leonardo.ai/docs/lucid-realism.md): This guide shows how to generate images using Lucid Realism models via the Leonardo.AI REST API.
+- [Nano Banana](https://docs.leonardo.ai/docs/nano-banana.md): This guide shows how to generate images using Nano Banana via the Leonardo.AI REST API.
+- [Nano Banana Pro](https://docs.leonardo.ai/docs/nano-banana-pro.md): This guide shows how to generate images using Nano Banana Pro via the Leonardo.AI REST API.
+- [Nano Banana 2](https://docs.leonardo.ai/docs/nano-banana-2.md): This guide shows how to generate images using Nano Banana 2 via the Leonardo.AI REST API.
+- [Nano Banana 2 Lite](https://docs.leonardo.ai/docs/nano-banana-2-lite.md): This guide shows how to generate images using Nano Banana 2 Lite via the Leonardo.AI REST API.
+- [Phoenix](https://docs.leonardo.ai/docs/phoenix.md): This guide shows how to generate images using Phoenix models via the Leonardo.AI REST API.
+- [Seedream 4.0](https://docs.leonardo.ai/docs/seedream-4-0.md): This guide shows how to generate images using Seedream 4.0 model via the Leonardo.AI REST API.
+- [Seedream 4.5](https://docs.leonardo.ai/docs/seedream-4-5.md): This guide shows how to generate images using Seedream 4.5 models via the Leonardo.AI REST API.
+- [Seedream 5.0 Pro](https://docs.leonardo.ai/docs/seedream-50-pro.md): This guide shows how to generate images using the Seedream 5.0 Pro model via the Leonardo.AI REST API.
+- [Seedream 5.0 Flash](https://docs.leonardo.ai/docs/seedream-50-flash.md): This guide shows how to generate images using the Seedream 5.0 Flash model via the Leonardo.AI REST API.
+- [FLUX 3 Video](https://docs.leonardo.ai/docs/flux-3-video.md): This guide shows how to generate videos using the FLUX 3 Video model via the Leonardo.AI REST API.  #
+- [Grok Imagine 1.5](https://docs.leonardo.ai/docs/grok-imagine-15.md): This guide shows how to generate videos using the Grok Imagine 1.5 model via the Leonardo.AI REST API.
+- [Happy Horse 1.1](https://docs.leonardo.ai/docs/happy-horse-11.md): This guide shows how to generate videos using the Happy Horse 1.1 model via the Leonardo.AI REST API.
+- [Gemini Omni Flash](https://docs.leonardo.ai/docs/gemini-omni-flash.md): This guide shows how to generate videos using the Gemini Omni Flash model via the Leonardo.AI REST API.
+- [Gemini Omni 1.1 Flash](https://docs.leonardo.ai/docs/gemini-omni-11-flash.md): This guide shows how to generate videos using the Gemini Omni 1.1 Flash model via the Leonardo.AI REST API.
+- [Kling 2.1 Pro](https://docs.leonardo.ai/docs/kling-2-1-pro.md): This guide shows how to generate images using Kling 2.1 Pro model via the Leonardo.AI REST API.
+- [Kling 2.5 Turbo](https://docs.leonardo.ai/docs/kling-2-5-turbo.md): This guide shows how to generate images using Kling 2.5 Turbo model via the Leonardo.AI REST API.
+- [Kling 2.6](https://docs.leonardo.ai/docs/kling-26.md): This guide shows how to generate images using Kling 2.6 models via the Leonardo.AI REST API.
+- [Kling 3.0](https://docs.leonardo.ai/docs/kling-30.md): This guide shows how to generate videos using Kling 3.0 models via the Leonardo.AI REST API.
+- [Kling 3.0 Turbo](https://docs.leonardo.ai/docs/kling-30-turbo.md): This guide shows how to generate videos using the Kling 3.0 Turbo model via the Leonardo.AI REST API.
+- [Kling O1](https://docs.leonardo.ai/docs/kling-o1.md): This guide shows how to generate video using Kling O1 model via the Leonardo.AI REST API.
+- [Kling O3](https://docs.leonardo.ai/docs/kling-o3.md): This guide shows how to generate and edit videos using Kling O3 model via the Leonardo.AI REST API.
+- [MiniMax Hailuo 03](https://docs.leonardo.ai/docs/minimax-hailuo-03.md): This guide shows how to generate videos using the MiniMax Hailuo 03 model via the Leonardo.AI REST API.
+- [Motion 2.0](https://docs.leonardo.ai/docs/motion-20.md): This guide shows how to generate videos using the Motion 2.0 model via the Leonardo.AI REST API.
+- [Motion 2.0 Fast](https://docs.leonardo.ai/docs/motion-20-fast.md): This guide shows how to generate videos using the Motion 2.0 Fast model via the Leonardo.AI REST API.
+- [Seedance 1.0 Pro](https://docs.leonardo.ai/docs/seedance-1-0-pro.md): This guide shows how to generate images using Seedance 1.0 Pro and Seedance 1.0 Pro Fast models via the Leonardo.AI REST API.
+- [Seedance 2.0](https://docs.leonardo.ai/docs/seedance-20.md): This guide shows how to generate videos using the Seedance 2.0 model via the Leonardo.AI REST API.
+- [Seedance 2.0 Fast](https://docs.leonardo.ai/docs/seedance-20-fast.md): This guide shows how to generate videos using the Seedance 2.0 Fast model via the Leonardo.AI REST API.
+- [Seedance 2.0 Mini](https://docs.leonardo.ai/docs/seedance-20-mini.md): This guide shows how to generate videos using the Seedance 2.0 Mini model via the Leonardo.AI REST API.
+- [Seedance 2.5](https://docs.leonardo.ai/docs/seedance-25.md): This guide shows how to generate videos using the Seedance 2.5 model via the Leonardo.AI REST API.
+- [Veo 3.1](https://docs.leonardo.ai/docs/veo-31.md): This guide shows how to generate videos using the Veo 3.1, Veo 3.1 Fast, and Veo 3.1 Lite models via the Leonardo.AI REST API.
+- [Wan 2.6](https://docs.leonardo.ai/docs/wan-26.md): This guide shows how to generate videos using the Wan 2.6 model via the Leonardo.AI REST API.
+- [Wan 2.7](https://docs.leonardo.ai/docs/wan-27.md): This guide shows how to generate videos using the Wan 2.7 model via the Leonardo.AI REST API.
+- [Wan 3.0](https://docs.leonardo.ai/docs/wan-30.md)
+- [Rodin V2](https://docs.leonardo.ai/docs/rodin-v2.md): This guide shows how to generate 3D assets using the Rodin V2 model via the Leonardo.AI REST API.
+- [Blueprints Guide](https://docs.leonardo.ai/docs/blueprints-guide.md): Execute Leonardo's Blueprints via the Production API to create faster and effortlessly get great results.
+- [Guide to Get API Code](https://docs.leonardo.ai/docs/get-api-code.md): Explore visually, deploy instantly - turn your generations into production ready code
+- [Guide to the Webhook Callback Feature](https://docs.leonardo.ai/docs/guide-to-the-webhook-callback-feature.md)
+- [Guide to Handling Not Safe for Work Image Generation (NSFW)](https://docs.leonardo.ai/docs/guide-to-handling-not-safe-for-work-image-generation-nsfw.md)
+- [Guide to Concurrency, Queue, and Rate Limit](https://docs.leonardo.ai/docs/guide-to-concurrency-queue-and-rate-limit.md): Understanding Leonardo API's concurrency, queue/pending limits, and rate limits
+- [Pay-As-You-Go (PAYG) Guide](https://docs.leonardo.ai/docs/payg-guide.md): No monthly commitments, transparent dollar based costs, and automatic top-ups to keep you generating
+- [Plan with the Pricing Calculator](https://docs.leonardo.ai/docs/plan-with-the-pricing-calculator.md)
+- [Pro Upscaler Precise](https://docs.leonardo.ai/docs/pro-upscaler-precise.md): This guide shows how to upscale images using the Pro Upscaler Precise model via the Leonardo.AI REST API.
+- [Pro Upscaler Creative](https://docs.leonardo.ai/docs/pro-upscaler-creative.md): This guide shows how to upscale images using the Pro Upscaler Creative model via the Leonardo.AI REST API.
+
+## Guides: ❓Technical Support & questions
+- [General FAQs](https://docs.leonardo.ai/docs/api-faq.md): Answers to frequently asked questions when integrating to Leonardo.Ai via API
+- [Legacy FAQs](https://docs.leonardo.ai/docs/legacy-faq.md): Answers to frequently asked questions when integrating to Leonardo.Ai via API
+- [Pricing & Plans FAQs](https://docs.leonardo.ai/docs/pricing-and-plans-faq.md): Answers to frequently asked questions relating to Pricing & Plans
+- [API Error Messages](https://docs.leonardo.ai/docs/api-error-messages.md): Debug common issues encountered when integrating to Leonardo.Ai via API
+- [Leonardo.Ai Official SDKs](https://docs.leonardo.ai/docs/leonardoai-official-sdks.md)
+- [Need More Support?](https://docs.leonardo.ai/docs/need-more-support.md): Get in touch with our friendly support team for personalised assistance and guidance
+
+## Guides: MCP Server
+- [Connect to Leonardo.Ai with the MCP Server](https://docs.leonardo.ai/docs/connect-to-leonardoai-mcp.md): The Leonardo.Ai Connector allows your AI assistant to seamlessly interact with Leonardo.ai’s image generation capabilities. The connector uses the Model Context Protocol (MCP) to enable your AI…
+
+## Guides: Deprecations
+- [Deprecations & Changes](https://docs.leonardo.ai/docs/deprecations-changes.md)
+
+## API Reference: Rest Endpoints v2
+- [Create Async Generation](https://docs.leonardo.ai/reference/creategeneration.md): Submit a generation job. Returns a generation ID to poll for the finished result.
+- [Create Sync Generation](https://docs.leonardo.ai/reference/createsyncgeneration.md): Run a generation and return the finished result in the same response. Only sync-capable models are accepted. The request may take up to ~27 seconds before the service times out.
+- [Get Available Models](https://docs.leonardo.ai/reference/getmodels.md): Fetch all production API available models with their parameter specifications.
+
+## Recipes
+- [Blueprints: Instant Translate](https://docs.leonardo.ai/recipes/blueprints-instant-translate.md)
+- [Edit with Kling O3 using Video Reference](https://docs.leonardo.ai/recipes/edit-with-kling-o3-using-video-reference.md)
+- [Generate Image Using Lucid Origin](https://docs.leonardo.ai/recipes/generate-image-using-lucid-origin.md)
+- [Generate Images Using Flux](https://docs.leonardo.ai/recipes/generate-images-using-flux.md)
+- [Generate Images Using Ideogram 3.0](https://docs.leonardo.ai/recipes/generate-images-using-ideogram-30.md)
+- [Generate Images Using Image Prompts](https://docs.leonardo.ai/recipes/generate-images-using-image-prompts.md)
+- [Generate Images Using Leonardo Phoenix Model in Quality Mode](https://docs.leonardo.ai/recipes/generate-images-using-leonardo-phoenix-model-in-quality-mode.md)
+- [Generate Images Using Leonardo Phoenix Model in Ultra Mode](https://docs.leonardo.ai/recipes/generate-images-using-leonardo-phoenix-model-in-ultra-mode.md)
+- [Generate Images Using PhotoReal v2](https://docs.leonardo.ai/recipes/generate-images-using-photoreal-v2.md)
+- [Generate Images Using PhotoReal](https://docs.leonardo.ai/recipes/generate-images-using-photoreal.md)
+- [Generate Images with Canvas Inpainting](https://docs.leonardo.ai/recipes/generate-images-with-canvas-inpainting.md)
+- [Generate Images with Elements](https://docs.leonardo.ai/recipes/generate-images-with-elements.md)
+- [Generate with FLUX.2 Pro Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-flux-pro-20-model-using-uploaded-image.md)
+- [Generate with Flux.1-Kontext [pro] Model Using Multi Uploaded Images](https://docs.leonardo.ai/recipes/generate-with-flux1-kontext-pro-model-using-multi-uploaded-image.md)
+- [Generate with Flux.1-Kontext [pro] Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-flux1-kontext-pro-model-using-uploaded-image.md)
+- [Generate with GPT1.5 Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-gpt15-model-using-uploaded-image.md)
+- [Generate with Hailuo 2.3 1080p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-1080p-6s-using-start-frame.md)
+- [Generate with Hailuo 2.3 768p 10s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-768p-10s-using-start-frame.md)
+- [Generate with Hailuo 2.3 768p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-768p-6s-using-start-frame.md)
+- [Generate with Hailuo 2.3 Fast 1080p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-fast-1080p-6s-using-start-frame.md)
+- [Generate with Hailuo 2.3 Fast 768p 10s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-fast-768p-10s-using-start-frame.md)
+- [Generate with Hailuo 2.3 Fast 768p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-fast-768p-6s-using-start-frame.md)
+- [Generate with Hailuo 2.3 Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-hailuo-23-using-text-prompts.md)
+- [Generate with Image Guidance using multiple ControlNets](https://docs.leonardo.ai/recipes/generate-with-image-guidance-using-multiple-controlnets.md)
+- [Generate with Image to Image Guidance using Generated Images](https://docs.leonardo.ai/recipes/generate-with-image-to-image-guidance-using-generated-images.md)
+- [Generate with Image to Image Guidance using Uploaded Images](https://docs.leonardo.ai/recipes/generate-with-image-to-image-guidance-using-uploaded-images.md)
+- [Generate with Kling 2.5 Turbo Standard Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-kling-25-turbo-standard-using-start-frame.md)
+- [Generate with Kling 2.5 Turbo Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-kling-25-turbo-using-start-frame.md)
+- [Generate with Kling 2.5 Turbo Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-kling-25-turbo-using-text-prompts.md)
+- [Generate with Kling 2.6 Using Start Frames](https://docs.leonardo.ai/recipes/generate-with-kling-26-using-start-frames.md)
+- [Generate with Kling 3.0 Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-kling-30-using-text-prompts.md)
+- [Generate with Kling O1 Using Image References](https://docs.leonardo.ai/recipes/generate-with-kling-o1-using-image-references.md)
+- [Generate with Kling O1 Using Start and End Frames](https://docs.leonardo.ai/recipes/generate-with-kling-o1-using-start-and-end-frames.md)
+- [Generate with LTX-2 Fast 1080p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-ltx-2-fast-1080p-6s-using-start-frame.md)
+- [Generate with LTX-2 Fast 1080p 8s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-ltx-2-fast-1080p-8s-using-start-frame.md)
+- [Generate with LTX-2 Pro 1080p 6s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-ltx-2-pro-1080p-6s-using-start-frame.md)
+- [Generate with LTX-2 Pro 1080p 8s Using Start Frame](https://docs.leonardo.ai/recipes/generate-with-ltx-2-pro-1080p-8s-using-start-frame.md)
+- [Generate with Motion 2.0 480p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-motion-20-480p-using-text-prompts.md)
+- [Generate with Motion 2.0 720p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-motion-20-720p-using-text-prompts.md)
+- [Generate with Motion 2.0 Fast 480p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-motion-20-fast-480p-using-text-prompts.md)
+- [Generate with Motion 2.0 Fast 720p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-motion-20-fast-720p-using-text-prompts.md)
+- [Generate with Motion 2.0 Using Generated Images](https://docs.leonardo.ai/recipes/generate-with-motion-20-using-generated-images.md)
+- [Generate with Nano Banana 2 Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-nano-banana-2-model-using-uploaded-image.md)
+- [Generate with Nano Banana Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-nano-banana-model-using-uploaded-image.md)
+- [Generate with Nano Banana Pro Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-nano-banana-pro-model-using-uploaded-image.md)
+- [Generate with SeeDance 1.0 Pro Using Start and End Frames](https://docs.leonardo.ai/recipes/generate-with-seedance-10-pro-using-start-and-end-frames.md)
+- [Generate with SeeDream 4.0 Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-seedream-40-model-using-uploaded-image.md)
+- [Generate with SeeDream 4.5 Model Using Uploaded Image](https://docs.leonardo.ai/recipes/generate-with-seedream-45-model-using-uploaded-image.md)
+- [Generate with Veo3.1 720p 8s Using Start and End Frame](https://docs.leonardo.ai/recipes/generate-with-veo31-1080p-8s-using-start-and-end-frame.md)
+- [Generate with Veo3.1 1080p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-veo31-1080p-using-text-prompts.md)
+- [Generate with Veo3.1 Fast 1080p Using Text Prompts](https://docs.leonardo.ai/recipes/generate-with-veo31-fast-1080p-using-text-prompts.md)
+- [Generate your First Images](https://docs.leonardo.ai/recipes/generate-your-first-images-1.md)
+- [Generating an LCM image and perform Alchemy Upscale](https://docs.leonardo.ai/recipes/generating-an-lcm-image-and-perform-alchemy-upscale.md)
+- [Generating an LCM image and perform instant refine](https://docs.leonardo.ai/recipes/generating-an-lcm-image-and-perform-instant-refine.md)
+- [Generating an LCM image and performing Inpainting](https://docs.leonardo.ai/recipes/generating-an-lcm-image-and-performing-inpainting.md)
+- [Generating an LCM image](https://docs.leonardo.ai/recipes/generating-an-lcm-image.md)
+- [Upload an Image and Print the Image ID](https://docs.leonardo.ai/recipes/uploading-an-image.md)
+- [Use Universal Upscaler in Legacy Mode with Generated Images](https://docs.leonardo.ai/recipes/use-universal-upscaler-in-legacy-mode-with-generated-images.md)
+- [Use Universal Upscaler in Ultra Mode with Uploaded Images](https://docs.leonardo.ai/recipes/use-universal-upscaler-in-ultra-mode-with-uploaded-images.md)
+- [Video Editing with Image Reference using Kling O1 Model](https://docs.leonardo.ai/recipes/video-editing-with-kling-o1-model.md)

@@ -1879,3 +1879,11 @@ Inspector → lineage → split → pages.
 - **Still not run** (as on 2026-10-07): the desktop app itself — OS file drop into the grid and pointer drags inside WebView2 — and
   Generate's results view with the shared Inspector beyond screenshots. First thing to check in the next session with the shell.
 - **Kept out of this commit:** `.docs/artcraft/` (committed separately) and `.docs/proto01_leonardo/` (a separate study, not part of D34).
+
+## 2026-10-10 09:39 — D34 OS drop checked in the desktop app; Leonardo.Ai study committed as shelved
+
+- **Author, in the Tauri shell:** dropping an image file from Explorer onto **Unprocessed** imports it — the OS file-drop path
+  (`shell/tauri.ts listenFileDrop`) works alongside the pointer-event drag manager (D34). Still unchecked in the shell: pointer drags
+  between panes and onto Places rows inside WebView2 (passed over CDP in Edge on 2026-10-07).
+- **`.docs/proto01_leonardo/`** (written 2026-10-08: Leonardo.Ai as a cloud engine, 79-model catalogue, integration points, slices
+  L0–L6, LD1–LD12) committed for reference and marked **shelved** in its README; LD1 is not accepted, nothing enters 13.

@@ -1,0 +1,88 @@
+{
+ "x-generated-notice": "AUTO-GENERATED FILE \u2014 DO NOT EDIT DIRECTLY. Edit openapi-v2.template.json instead, then run: npm run generate:v2-models",
+ "openapi": "3.0.0",
+ "info": {
+  "description": "Leonardo.Ai API OpenAPI specification v2.0",
+  "title": "Rest Endpoints v2",
+  "version": "v2.0.0"
+ },
+ "servers": [
+  {
+   "url": "https://cloud.leonardo.ai/api/rest/v2",
+   "description": "Leonardo.Ai API server v2"
+  }
+ ],
+ "tags": [
+  {
+   "name": "Models"
+  }
+ ],
+ "paths": {
+  "/models": {
+   "get": {
+    "tags": [
+     "Models"
+    ],
+    "summary": "Get Available Models",
+    "description": "Fetch all production API available models with their parameter specifications.",
+    "operationId": "getModels",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "productionApiAvailableModels": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/ProductionApiAvailableModel"
+           }
+          }
+         }
+        }
+       }
+      },
+      "description": "Responses for GET /models"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "ProductionApiAvailableModel": {
+    "title": "Production API Available Model",
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "Model identifier (e.g. \"GPT_IMAGE_1_5\")."
+     },
+     "name": {
+      "type": "string",
+      "description": "Model display name (e.g. \"GPT Image 1.5\")."
+     },
+     "parameters": {
+      "type": "object",
+      "description": "OpenAPI 3.0 schema describing the model's available parameters. Varies per model.",
+      "additionalProperties": true
+     }
+    }
+   }
+  },
+  "securitySchemes": {
+   "bearerAuth": {
+    "type": "http",
+    "bearerFormat": "auth-scheme",
+    "description": "Bearer HTTP authentication. Allowed headers `Authorization: Bearer <api_key>`",
+    "scheme": "bearer"
+   }
+  }
+ },
+ "security": [
+  {
+   "bearerAuth": []
+  }
+ ]
+}

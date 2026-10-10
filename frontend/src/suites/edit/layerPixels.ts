@@ -13,12 +13,17 @@ type PartialUpload = (lp: LayerPixels, x0: number, y0: number, x1: number, y1: n
 let partialUpload: PartialUpload | null = null
 export function setPartialUpload(fn: PartialUpload | null): void { partialUpload = fn }
 
+/** F7: one counter for every LayerPixels — a version names one state of one canvas app-wide, so a new canvas under the same layer id
+ * (fromRaw, a transform's or flip's result, an undo swap) never repeats a version an earlier canvas had (smartselect/source.ts keys
+ * the Worker's image by it). */
+let versionSeq = 0
+
 export class LayerPixels {
   readonly canvas: HTMLCanvasElement
   readonly ctx: CanvasRenderingContext2D
   readonly texture: Texture
   dirty = false                 // changed since the last upload to the orchestrator
-  version = 0                   // D52: bumped by every GPU upload — derived (feathered / density) masks recompute when it moves
+  version = ++versionSeq        // D52: moves on every GPU upload — derived (feathered / density) masks recompute; F7: unique app-wide
   private damage: Rect | 'all' | null = 'all'   // D52: what changed since the derived-mask cache last looked
   private strokeTiles = new Map<string, TileSnapshot>()
 
@@ -52,7 +57,7 @@ export class LayerPixels {
   }
 
   /** Re-upload the canvas to the GPU (whole texture; tiles later if measured as the bottleneck). */
-  refresh(): void { this.version++; this.damage = 'all'; this.texture.source.update() }
+  refresh(): void { this.version = ++versionSeq; this.damage = 'all'; this.texture.source.update() }
 
   /** Raw bytes for `PUT …/pixels`: RGBA, or one value per pixel for masks and the selection — red × alpha / 255, so white drawn
    * with partial alpha (anti-aliased tool edges) and opaque grey (masks, feathered selections) both read right (D43). */
@@ -109,7 +114,7 @@ export class LayerPixels {
 
   /** D53: upload only a changed region (layer pixels, x1 / y1 exclusive) to the GPU texture; the whole texture when the renderer cannot. */
   refreshRect(x0: number, y0: number, x1: number, y1: number): void {
-    this.version++
+    this.version = ++versionSeq
     const d = this.damage
     if (d !== 'all') this.damage = d ? { x0: Math.min(d.x0, x0), y0: Math.min(d.y0, y0), x1: Math.max(d.x1, x1), y1: Math.max(d.y1, y1) } : { x0, y0, x1, y1 }
     const full = (globalThis as { __loom2FullUpload?: boolean }).__loom2FullUpload

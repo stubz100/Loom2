@@ -227,8 +227,8 @@ function PrimaryAction() {
   const eta = pv?.estimate.seconds ? `≈ ${Math.round(pv.estimate.seconds / 60)} min` : ''
   return (
     <div>
-      <button className="primary" disabled={!!reason} onClick={() => runCommand('anim.animate')} title={`Animate (⌃↵) ${eta}`}>Animate {p.count > 1 ? `${p.count} ` : ''}▶ {eta}</button>
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button disabled={!!reason} onClick={() => runCommand('anim.stage')} title="Stage: add to the queue, run later (⌃⇧↵)">Stage</button>{reason && <span className="disabled-why">{reason}</span>}</div>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('anim.animate')} title={`Animate (Ctrl+Enter) ${eta}`}>Animate {p.count > 1 ? `${p.count} ` : ''}▶ {eta}</button>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button disabled={!!reason} onClick={() => runCommand('anim.stage')} title="Stage: add to the queue, run later (Ctrl+Shift+Enter)">Stage</button>{reason && <span className="disabled-why">{reason}</span>}</div>
     </div>
   )
 }

@@ -1460,7 +1460,7 @@ def main() -> int:
             press(*bb)
             bg = cdp.eval("getComputedStyle(document.querySelector('.blend-list')).backgroundColor")
             check(bg not in ("rgba(0, 0, 0, 0)", "transparent"), f"the blend list has an opaque background ({bg})")
-            mul = cdp.eval("JSON.stringify((() => { const e = [...document.querySelectorAll('.blend-opt')].find((o) => o.textContent === 'multiply'); const r = e.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2] })())")
+            mul = cdp.eval("JSON.stringify((() => { const e = [...document.querySelectorAll('.blend-opt')].find((o) => o.textContent === 'Multiply'); const r = e.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2] })())")
             mx, my = json.loads(mul)
             h0 = hist()
             cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=mx, y=my); time.sleep(0.4)
@@ -1496,6 +1496,29 @@ def main() -> int:
             }})()""")
             bad = json.loads(audit)
             check(not bad, f"every Edit menu entry resolves and separators sit only between groups ({len(bad)} problems){''.join(chr(10) + '       ' + b for b in bad[:12])}")
+            # review U1: nothing in the strip is drawn past its right edge (it wraps to a second row instead)
+            over = json.loads(cdp.eval("JSON.stringify((() => { const s = document.querySelector('.center > .strip') || document.querySelector('.strip'); const r = s.getBoundingClientRect(); return [...s.children].filter((c) => c.getBoundingClientRect().right > r.right + 1 || c.scrollWidth > c.clientWidth + 1).map((c) => c.className || c.tagName) })())"))
+            check(not over, f"every strip item fits inside the strip, none squeezed ({over})")
+            # review F11: typing a value is one undo step, applied once (no 7 % flash on the way to 75)
+            ob = cdp.eval("JSON.stringify((() => { const e = document.querySelector('.inspector .vfield-num[aria-label=\"opacity\"]'); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())")
+            if ob != "null":
+                h0 = hist()
+                ox, oy = json.loads(ob)
+                press(ox, oy)
+                cdp.eval("(() => { const e = document.querySelector('.inspector .vfield-num[aria-label=\"opacity\"]'); e.select(); return 1 })()")
+                cdp.call("Input.insertText", text="7"); time.sleep(0.1); cdp.call("Input.insertText", text="5"); time.sleep(0.1)
+                cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13); cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+                time.sleep(0.3)
+                op = cdp.eval(f"(() => {{ const s = {S}; let hit = null; const w = (xs) => xs.forEach((x) => {{ if (x.id === s.activeId) hit = x; if (x.children) w(x.children) }}); w(s.doc.layers); return hit.opacity }})()")
+                check(abs(op - 0.75) < 1e-6 and hist() == h0 + 1, f"typing 75 into opacity sets 75 % in one undo step (opacity {op}, history +{hist() - h0})")
+            else:
+                check(False, "the Inspector shows an opacity field")
+            # review F3: Enter applies an open transform (it was swallowed by the disabled polygon-close command)
+            cdp.eval(f"document.activeElement && document.activeElement.blur(); {C}.runCommand('edit.transform'); 1"); time.sleep(0.4)
+            h0 = hist()
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13); cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+            time.sleep(0.5)
+            check(cdp.eval(f"{S}.transform") is None, "Enter applies the free transform")
             # D63: the A tool's find field — typing selects by prompt (SAM 3 text), Enter runs Select, clearing returns to the main subject
             AP = "window.__loom2AiPanel.getState()"
             ai_state = lambda: json.loads(cdp.eval(f"JSON.stringify([{AP}.selModel, {AP}.selMode, {AP}.selText])"))  # noqa: E731
@@ -1632,6 +1655,13 @@ def main() -> int:
             check(subs and all(ov is not None and ov[0] <= 4.5 for _, ov in overlaps), f"each submenu opens beside its parent menu, not over it (overlap px: {overlaps})")
             cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
             time.sleep(0.2)
+            # review F9: the strip's latched Ctrl works in the Layers panel too — a plain click with Ctrl latched adds the row
+            click(row("C"))
+            cdp.eval(f"{C}.runCommand('edit.latch.ctrl'); 1"); time.sleep(0.2)
+            click(row(base))
+            got = sel()
+            cdp.eval(f"{C}.runCommand('edit.latch.ctrl'); 1"); time.sleep(0.2)
+            check(len(got) == 2, f"with Ctrl latched a click adds the layer to the selection ({got})")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "props":
@@ -2036,7 +2066,7 @@ def main() -> int:
             check(info is not None and info["above"] == base and info["px"][3] > 200 and info["px"][0] < 160 and info["px"][1] > 90, f"a stroke over the blemish heals it on a Spot healing layer right above (healed pixel {info and info['px']})")
             run("edit.undo"); time.sleep(0.4)
             gone = js("const w = (xs, f) => xs.forEach((n) => { f(n); if (n.children) w(n.children, f) }); let heal = null; w(s.doc.layers, (n) => { if (n.recipe && n.recipe.kind === 'spot_heal') heal = n }); return heal ? s.pixels.get(heal.id).ctx.getImageData(302 - (heal.x || 0), 202 - (heal.y || 0), 1, 1).data[3] : -1")
-            check(gone == 0, f"undo takes the healed pixels back ({gone})")
+            check(gone in (0, -1), f"one undo takes the stroke back — the healed pixels, or the Spot healing layer the first stroke made ({gone})")
             # Quick Remove: a GPU-free inpaint mode through the queue
             js("s.editSelection('t', () => { const sel = s.ensureSelection(); sel.ctx.fillStyle = '#fff'; sel.ctx.fillRect(290, 190, 24, 24); sel.refresh() }); return 1"); time.sleep(0.3)
             n0 = js("return s.doc.layers.length")

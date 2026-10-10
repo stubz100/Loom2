@@ -49,13 +49,6 @@
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip-f { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--line2); font-size: 11px; color: var(--fg2); }
 .chip-f button { background: transparent; border: none; padding: 0; min-height: 0; color: var(--fg3); }
-.segmented { display: inline-flex; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; }
-.segmented button { border: none; border-radius: 0; background: transparent; padding: 2px 8px; min-height: 24px; font-size: 12px; color: var(--fg2); }
-.segmented button.active { background: var(--bg4); color: var(--fg); }
-.tabs2 { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px -12px 10px; padding: 0 8px; }
-.tabs2 button { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--fg3); padding: 4px 8px; }
-.tabs2 button.active { color: var(--fg); border-bottom-color: var(--accent); }
-.insp-thumb { width: 100%; max-height: 220px; object-fit: contain; background: var(--media-bg); border-radius: var(--radius); margin-bottom: 10px; }
 .verbs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
 .verbs button { font-size: 12px; padding: 4px 6px; }
 .verbs button kbd { float: right; }

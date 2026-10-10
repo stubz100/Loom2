@@ -56,6 +56,9 @@ export interface BrushPreset { name: string; size: number; hardness: number; opa
 export interface HistoryEntry {
   /** D58: `more` swaps further layers' canvases (a group transform), `selSwap` the selection canvas (it moved with the pixels). */
   more?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null }[]; selSwap?: { lp: LayerPixels | null }
+  /** F1: the mask canvas this step replaced in `masks` (null: there was none) — a new mask must not overwrite the canvas an earlier
+   * Remove / Apply mask keeps for undo (B18); undo / redo swap it back like `swap`. */
+  maskSwap?: { layerId: string; mask: LayerPixels | null }
   label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null }
   /** D43: a selection edit — whether a selection existed before and after it (undo / redo restore its presence too). */
   sel?: { had: boolean; has: boolean }
@@ -222,6 +225,11 @@ const DEFAULT_BRUSH: BrushOptions = { size: 48, hardness: 0.8, opacity: 1, flow:
 
 /** D58: the free transform's preview canvases, per raster (the moving pixels; with a selection, what stays behind). Read by EditorCanvas. */
 export const transformPreview = new Map<string, { moving: HTMLCanvasElement; rest?: HTMLCanvasElement; x: number; y: number; maskBaked: boolean }>()
+/** F10: the selection values captured at beginTransform (the preview's lift) — apply bakes with these, not with a later selection. */
+let transformSel: { nodeId: string; vals: Uint8Array } | null = null
+/** F16: everything a transform holds besides the store's `transform` — dropped wherever the transform ends. */
+const endTransformState = () => { transformPreview.clear(); transformSel = null }
+const TRANSFORM_OPEN = 'Apply or cancel the free transform first (Enter / Esc)'
 /** A premultiplied raster as layer pixels, trimmed to its visible pixels (a warp pads its bounds; transparency adds nothing). */
 function rasterToPixels(r: Raster): { lp: LayerPixels; x: number; y: number } {
   const d = toStraight8(r)
@@ -346,6 +354,18 @@ export const useEditor = create<EditorState>()(
         if (s.mask) { curMask = get().masks.get(s.layerId) ?? null; get().masks.set(s.layerId, s.mask); s.mask.dirty = true }
         return { layerId: s.layerId, lp: cur ?? s.lp, mask: curMask }
       }
+      /** F1: put the entry's mask canvas back (none: the layer's entry leaves the map) and return the one it replaced. */
+      const swapMask = (s: NonNullable<HistoryEntry['maskSwap']>): NonNullable<HistoryEntry['maskSwap']> => {
+        const cur = get().masks.get(s.layerId) ?? null
+        if (s.mask) { get().masks.set(s.layerId, s.mask); s.mask.dirty = true } else get().masks.delete(s.layerId)
+        return { layerId: s.layerId, mask: cur }
+      }
+      /** F5 / D58: put the entry's selection canvas back (null: no selection) and return the one it replaced. */
+      const swapSelection = (s: NonNullable<HistoryEntry['selSwap']>): NonNullable<HistoryEntry['selSwap']> => {
+        const cur = get().selection
+        set({ selection: s.lp, ...(s.lp ? {} : { quickMask: false }) })
+        return { lp: cur }
+      }
       /** Destroy the canvases that only these (dropped) history entries referenced: swapped-out transform sources. */
       const releaseEntries = (entries: HistoryEntry[]) => {
         const live = new Set<LayerPixels>([...get().pixels.values(), ...get().masks.values()])
@@ -356,6 +376,7 @@ export const useEditor = create<EditorState>()(
             if (sw.mask && !live.has(sw.mask)) sw.mask.destroy()
           }
           if (e.selSwap?.lp && !live.has(e.selSwap.lp)) e.selSwap.lp.destroy()
+          if (e.maskSwap?.mask && !live.has(e.maskSwap.mask)) e.maskSwap.mask.destroy()
         }
       }
       /** Drop pixel / mask canvases no stack (current, undo or redo) refers to any more — deleted layers, picked-over candidates, removed masks. */
@@ -390,10 +411,11 @@ export const useEditor = create<EditorState>()(
         set({ selection: null, quickMask: false })
       }
       /** Replace the stack, mark dirty, and record the previous stack as one undoable step. */
-      const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}, coalesce?: string) => {
+      const commit = (next: DocumentStack, before: DocumentStack, label: string, layerId: string, extra: Partial<EditorState> = {}, coalesce?: string, entry: Partial<HistoryEntry> = {}) => {
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
-        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce })
+        get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce, ...entry })
       }
+      const transformOpen = (): boolean => { if (!get().transform) return false; useSession.getState().toast(TRANSFORM_OPEN, 'info'); return true }
       /** D58: bake a transform into its layers once, from their current (original) pixels — the active raster, or every raster of a
        * group with one homography; with `t.selection` only the selected pixels move (lifted, warped, composited back) and the selection
        * moves with them; linked masks follow, flattened onto their default. One history step; the old canvases ride along for undo. */
@@ -404,9 +426,11 @@ export const useEditor = create<EditorState>()(
         if (!doc || !root) return false
         if (!H || !H.inverse()) { useSession.getState().toast('The transform collapses the layer', 'info'); return false }
         const targets: Node[] = []
-        walk([root], (n) => { if (n.kind === 'raster') targets.push(n) })
-        const selLp = t.selection ? get().selection : null
-        const selVals = selLp ? selectionValues(selLp) : null
+        walk([root], (n) => { if (n.kind === 'raster' && !n.locked) targets.push(n) })        // F13: a group's locked children stay put
+        // F10: the selection the preview lifted (captured at beginTransform), not whatever the selection is now
+        const cur = get().selection
+        const selVals = !t.selection ? null : transformSel?.nodeId === t.nodeId ? transformSel.vals : cur ? selectionValues(cur) : null
+        if (selVals && selVals.length !== doc.w * doc.h) { useSession.getState().toast('The selection no longer matches the document', 'info'); return false }
         const k = selVals ? (x: number, y: number) => (x >= 0 && y >= 0 && x < doc.w && y < doc.h ? selVals[y * doc.w + x] / 255 : 0) : undefined
         const before = clone(doc)
         const next = clone(doc)
@@ -434,23 +458,24 @@ export const useEditor = create<EditorState>()(
           walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: nlp.x, y: nlp.y, w: nlp.lp.width, h: nlp.lp.height }, maskPatch); return true } })
           swaps.push({ layerId: n.id, lp, mask: newMask ? oldMask : null })
         }
+        if (!swaps.length) return false
         let selSwap: HistoryEntry['selSwap']
-        if (selLp && selVals) {                                       // the selection travels with the pixels
+        if (selVals) {                                                // the selection travels with the pixels
           const g = warpGray(selVals, doc.w, doc.h, 0, 0, H, 'bilinear', 0)
           const v = new Uint8Array(doc.w * doc.h)
           for (let y = 0; y < doc.h; y++) for (let x = 0; x < doc.w; x++) { const sx = x - g.x, sy = y - g.y; if (sx >= 0 && sy >= 0 && sx < g.w && sy < g.h) v[y * doc.w + x] = g.vals[sy * g.w + sx] }
           const ns = new LayerPixels(doc.w, doc.h, true)
           writeSelection(ns, v)
-          selSwap = { lp: selLp }
+          selSwap = { lp: cur }
           set({ selection: ns })
         }
-        if (!swaps.length) return false
         set({ doc: next, docDirty: true, revision: get().revision + 1 })
         get().pushHistory({ label, layerId: t.nodeId, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: swaps[0], more: swaps.slice(1), selSwap })
         return true
       }
       /** PhotoCraft's rotate / flip presets: exact pixel permutations (nearest, integer offsets about the layer's rounded centre). */
       const preset = (kind: 'flipH' | 'flipV' | 'rot180' | 'rot90cw' | 'rot90ccw') => {
+        if (transformOpen()) return                                   // F10: it would bake under the open transform's preview
         const n = findNode(get().doc, get().activeId)
         const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
         if (!n || !lp || n.locked) return
@@ -462,18 +487,53 @@ export const useEditor = create<EditorState>()(
         bakeTransform({ nodeId: n.id, rect, quad, pivot: { x: cx, y: cy }, interp: 'nearest', mode: 'free', selection: false },
           { flipH: 'flip horizontal', flipV: 'flip vertical', rot180: 'rotate 180°', rot90cw: 'rotate 90°', rot90ccw: 'rotate 270°' }[kind])
       }
-      const setCanvas = (w: number, h: number, dx: number, dy: number, label: string) => {
+      /** F5: the old selection rides in the same history step (`selSwap`), so undo / redo restore one that matches the document size;
+       * `dropSelection` (crop) ends with no selection. */
+      const setCanvas = (w: number, h: number, dx: number, dy: number, label: string, dropSelection = false) => {
         const doc = get().doc
         if (!doc || w < 1 || h < 1) return
+        if (transformOpen()) return
         const before = clone(doc)
         const next = clone(doc)
         next.w = w; next.h = h
         walk(next.layers, (n) => { if (n.kind === 'raster') { n.x = (n.x ?? 0) + dx; n.y = (n.y ?? 0) + dy } if (n.mask && !n.mask.linked) { n.mask.x += dx; n.mask.y += dy } })   // unlinked masks on every kind (as queue.py shifts them)
         const sel = get().selection
         let selection: LayerPixels | null = null
-        if (sel) { selection = new LayerPixels(w, h, true); selection.ctx.drawImage(sel.canvas, dx, dy); selection.refresh(); sel.destroy() }
-        commit(next, before, label, doc.id, { selection })
+        if (sel && !dropSelection) { selection = new LayerPixels(w, h, true); selection.ctx.drawImage(sel.canvas, dx, dy); selection.refresh() }
+        commit(next, before, label, doc.id, { selection, ...(selection ? {} : { quickMask: false }) }, undefined, sel ? { selSwap: { lp: sel } } : {})
         get().requestFit()
+      }
+      /** Clear the selected part (all of it without a selection) of a node's pixels or mask, one history step. Pixels go transparent —
+       * with lock transparency (D50, F15) they take the background colour where they have alpha instead (source-atop: transparent
+       * stays transparent, as Photoshop's Delete does); a mask takes the mask background's grey (D54). */
+      const clearTarget = (n: Node, target: 'image' | 'mask', label: string): boolean => {
+        const { selection, brush, otherColours, maskPairActive } = get()
+        const lp = target === 'mask' ? get().masks.get(n.id) : get().pixels.get(n.id)
+        if (!lp) return false
+        const off = target === 'mask' ? maskOffset(n) : { x: n.x ?? 0, y: n.y ?? 0 }
+        // the target's own colour pair, whichever is live (D54: the brush holds the mask pair while a mask or Quick Mask is the target)
+        const bgHex = (target === 'mask') === maskPairActive ? brush.background : otherColours.background
+        const g = lumaOf(bgHex), fill = target === 'mask' ? `rgb(${g}, ${g}, ${g})` : bgHex
+        const lockAlpha = target === 'image' && !!n.lock_alpha
+        lp.beginStroke(); lp.touch(0, 0, lp.width, lp.height)
+        const ctx = lp.ctx
+        ctx.save()
+        if (target === 'image' && !lockAlpha) {
+          if (selection) { ctx.globalCompositeOperation = 'destination-out'; ctx.drawImage(selectionAlphaCanvas(selection), -off.x, -off.y) }   // alpha = selected amount
+          else ctx.clearRect(0, 0, lp.width, lp.height)
+        } else {
+          ctx.globalCompositeOperation = lockAlpha ? 'source-atop' : 'source-over'
+          if (selection) {
+            const a = selectionAlphaCanvas(selection), tc = a.getContext('2d')!
+            tc.globalCompositeOperation = 'source-in'; tc.fillStyle = fill; tc.fillRect(0, 0, a.width, a.height)
+            ctx.drawImage(a, -off.x, -off.y)
+          } else { ctx.fillStyle = fill; ctx.fillRect(0, 0, lp.width, lp.height) }
+        }
+        ctx.restore()
+        lp.refresh(); lp.dirty = true
+        get().pushHistory({ label, layerId: n.id, kind: target, tiles: lp.endStroke(), at: Date.now() })
+        set({ docDirty: true, revision: get().revision + 1 })
+        return true
       }
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
@@ -513,10 +573,14 @@ export const useEditor = create<EditorState>()(
           try {
             const b = useSession.getState().backend!
             const res = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection`, { headers: { 'X-Loom-Token': b.token } })
-            if (res.status === 404) { get().deselect(); return }
+            if (res.status === 404) { if (get().doc?.id === doc.id) get().deselect(); return }
             if (!res.ok) throw new Error(`selection ${res.status}`)
             const w = Number(res.headers.get('x-loom-width')), h = Number(res.headers.get('x-loom-height'))
-            const sel = LayerPixels.fromRaw(w, h, new Uint8Array(await res.arrayBuffer()), 1)
+            const bytes = new Uint8Array(await res.arrayBuffer())
+            const now = get().doc                                         // F18: another document (or size) since the request
+            if (!now || now.id !== doc.id || now.w !== w || now.h !== h) return
+            if (transformOpen()) return                                   // F10
+            const sel = LayerPixels.fromRaw(w, h, bytes, 1)
             get().editSelection(label, () => { get().selection?.destroy(); set({ selection: sel, quickMask: false }) })
             if (label === 'AI select') useSession.getState().toast('AI Select: selection updated', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
@@ -559,11 +623,14 @@ export const useEditor = create<EditorState>()(
               } else next.layers.unshift(clone(gnode))
             } else for (const lid of [...added].reverse()) { const n = findNode(server, lid); if (n && !findNode(next, lid)) next.layers.unshift(clone(n)) }
             next.revision = server.revision; next.saved_at = server.saved_at
-            let selection = get().selection
-            if (grown && selection) { const sel = new LayerPixels(server.w, server.h, true); sel.ctx.drawImage(selection.canvas, dx, dy); sel.refresh(); selection.destroy(); selection = sel }
+            // F5: a grown canvas resamples the selection inside the same history step (the old one rides in `selSwap` for undo)
+            const old = get().selection
+            let selection = old, selSwap: HistoryEntry['selSwap']
+            if (grown && old) { selection = new LayerPixels(server.w, server.h, true); selection.ctx.drawImage(old.canvas, dx, dy); selection.refresh(); selSwap = { lp: old } }
+            if (grown && get().transform) { endTransformState(); set({ transform: null }); useSession.getState().toast('The canvas grew: the free transform was cancelled', 'info') }   // F10
             const ids = gnode?.children?.map((c) => c.id) ?? added
             set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
-            get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now() })
+            get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now(), selSwap })
             if (grown) get().requestFit()
             useSession.getState().toast(ids.length > 1 ? `Candidate ${ids.indexOf(added[0]) + 1} of ${ids.length} arrived — pick with 1–4 or the strip` : 'AI layer added', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the AI result: ${(e as Error).message}`, 'error') }
@@ -593,13 +660,15 @@ export const useEditor = create<EditorState>()(
           const n = findNode(doc, activeId)
           if (!doc || !n || n.locked || (n.kind !== 'raster' && n.kind !== 'group')) { useSession.getState().toast(n?.locked ? 'Layer is locked' : 'Free transform works on a pixel layer or a group', 'info'); return }
           const rasters: Node[] = []
-          walk([n], (m) => { if (m.kind === 'raster' && get().pixels.has(m.id)) rasters.push(m) })
-          if (!rasters.length) { useSession.getState().toast('The group holds no pixel layers to transform', 'info'); return }
+          let locked = 0
+          walk([n], (m) => { if (m.kind === 'raster' && get().pixels.has(m.id)) { if (m.locked) locked++; else rasters.push(m) } })   // F13: locked children stay put
+          if (!rasters.length) { useSession.getState().toast(locked ? 'The group\'s pixel layers are all locked' : 'The group holds no pixel layers to transform', 'info'); return }
           // the frame: the layer (the group's rasters together), cut to the selection's bounds when only selected pixels move (D58)
           let r = [Infinity, Infinity, -Infinity, -Infinity]
           for (const m of rasters) { const lp = get().pixels.get(m.id)!; r = [Math.min(r[0], m.x ?? 0), Math.min(r[1], m.y ?? 0), Math.max(r[2], (m.x ?? 0) + lp.width), Math.max(r[3], (m.y ?? 0) + lp.height)] }
           const lift = n.kind === 'raster' && !!selection
           let k: ((x: number, y: number) => number) | null = null
+          endTransformState()
           if (lift) {
             const v = selectionValues(selection!)
             let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
@@ -607,7 +676,9 @@ export const useEditor = create<EditorState>()(
             r = [Math.max(r[0], x0), Math.max(r[1], y0), Math.min(r[2], x1 + 1), Math.min(r[3], y1 + 1)]
             if (r[2] <= r[0] || r[3] <= r[1]) { useSession.getState().toast('The selection does not cover this layer', 'info'); return }
             k = (x, y) => (x >= 0 && y >= 0 && x < doc.w && y < doc.h ? v[y * doc.w + x] / 255 : 0)
+            transformSel = { nodeId: n.id, vals: v }                   // F10: apply bakes the selection the preview lifts
           }
+          if (locked) useSession.getState().toast(`${locked} locked layer${locked > 1 ? 's stay' : ' stays'} in place`, 'info')
           // preview canvases (PhotoCraft transform_tex): the moving pixels with a linked mask baked in; with a selection, what stays behind
           transformPreview.clear()
           for (const m of rasters) {
@@ -632,13 +703,13 @@ export const useEditor = create<EditorState>()(
           set({ transform: { nodeId: n.id, rect, quad: rectCorners(rect), pivot: { x: (rect[0] + rect[2]) / 2, y: (rect[1] + rect[3]) / 2 }, interp: 'bicubic', mode: 'free', selection: lift }, tool: 'move' })
         },
         setTransform: (patch) => { const t = get().transform; if (t) set({ transform: { ...t, ...patch } }) },
-        cancelTransform: () => { transformPreview.clear(); set({ transform: null, revision: get().revision + 1 }) },
+        cancelTransform: () => { endTransformState(); set({ transform: null, revision: get().revision + 1 }) },
         applyTransform: () => {
           const t = get().transform
           if (!t || !findNode(get().doc, t.nodeId)) { get().cancelTransform(); return }
           if (isIdentity(t)) { get().cancelTransform(); return }
           const ok = bakeTransform(t, 'free transform')
-          transformPreview.clear()
+          endTransformState()
           set({ transform: null, revision: get().revision + 1 })
           if (!ok) set({ revision: get().revision + 1 })
         },
@@ -684,7 +755,9 @@ export const useEditor = create<EditorState>()(
             const top = doc.layers[0]
             const candidates = top?.kind === 'group' && top.name.startsWith('AI ') && (top.children?.length ?? 0) > 1 && top.children!.filter((c) => c.visible).length <= 1
               ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
-            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1 })
+            endTransformState()
+            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1,
+              lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: first ? [first] : [], anchorId: first, blendPreview: null })   // F17: nothing of the last document's gestures
             get().requestFit()
           } catch (e) { if (seq === openSeq) set({ error: (e as ApiError).detail ?? (e as Error).message }) }
           finally { if (seq === openSeq) set({ loading: false }) }
@@ -727,7 +800,11 @@ export const useEditor = create<EditorState>()(
         closeDocument: () => {
           releaseEntries([...get().history, ...get().future])              // B19: swapped-out transform canvases
           get().pixels.forEach((p) => p.destroy()); get().masks.forEach((p) => p.destroy()); get().selection?.destroy()
-          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, transform: null })
+          endTransformState()                                              // F16
+          // F17: an open polygon, the AI prompt and the layer selection belong to the closed document (the magnetic lasso resets
+          // itself on a document change: smartselect/magnetic.ts subscribes)
+          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, quickMask: false, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, transform: null,
+            lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: [], anchorId: null, blendPreview: null })
         },
         listDocuments: async () => (await unwrap(http.GET('/documents'))).items,
         deleteDocument: async (id) => {
@@ -1165,11 +1242,13 @@ export const useEditor = create<EditorState>()(
             lp.ctx.drawImage(a, -ox, -oy)
           }
           lp.refresh(); lp.dirty = true
+          // F1: a removed / applied mask's canvas may still sit under this id for undo (B18) — it rides in the entry, not overwritten
+          const replaced = get().masks.get(id) ?? null
           get().masks.set(id, lp)
           const next = clone(doc)
           walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: !!px, x: 0, y: 0, density: 1, feather: 0, default: white ? 255 : 0 }; return true } })
           const label = { reveal: 'add mask', hide: 'add mask (hide all)', revealSelection: 'mask from selection', hideSelection: 'mask hiding the selection' }[how]
-          commit(next, before, label, id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) })
+          commit(next, before, label, id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) }, undefined, { maskSwap: { layerId: id, mask: replaced } })
           if (how === 'hideSelection') get().deselect()                // PhotoCraft's Hide Selection drops the selection
         },
         removeMask: (id) => {
@@ -1229,11 +1308,12 @@ export const useEditor = create<EditorState>()(
           for (let j = 0; j < img.data.length; j += 4) { const a = img.data[j + 3]; mi.data[j] = mi.data[j + 1] = mi.data[j + 2] = a; mi.data[j + 3] = 255; img.data[j + 3] = 255 }
           mask.ctx.putImageData(mi, 0, 0); mask.refresh(); mask.dirty = true
           lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
+          const replaced = get().masks.get(id) ?? null                 // F1: kept for undo, as in addMask
           get().masks.set(id, mask)
           const next = clone(doc)
           walk(next.layers, (x) => { if (x.id === id) { x.mask = { enabled: true, linked: true, x: 0, y: 0, density: 1, feather: 0, default: 0 }; return true } })
           set({ doc: next, editingMask: true, docDirty: true, revision: get().revision + 1 })
-          get().pushHistory({ label: 'mask from transparency', layerId: id, kind: 'image', tiles, stack: before, at: Date.now() })
+          get().pushHistory({ label: 'mask from transparency', layerId: id, kind: 'image', tiles, stack: before, at: Date.now(), maskSwap: { layerId: id, mask: replaced } })
         },
         resizeCanvas: (w, h, ax = 0.5, ay = 0.5) => {
           const doc = get().doc
@@ -1247,31 +1327,14 @@ export const useEditor = create<EditorState>()(
           let x0 = sel.width, y0 = sel.height, x1 = -1, y1 = -1
           for (let y = 0; y < sel.height; y++) for (let x = 0; x < sel.width; x++) if (d[y * sel.width + x] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
           if (x1 < 0) return
-          setCanvas(x1 - x0 + 1, y1 - y0 + 1, -x0, -y0, 'crop')
-          get().clearSelection()
+          setCanvas(x1 - x0 + 1, y1 - y0 + 1, -x0, -y0, 'crop', true)   // F5: the selection goes in the same undo step
         },
         clearSelected: () => {
-          const { doc, activeId, selection, editingMask } = get()
+          const { doc, activeId, editingMask } = get()
           const n = findNode(doc, activeId)
           if (!doc || !n || n.locked || (n.kind !== 'raster' && !(editingMask && n.mask))) return
-          const lp = editingMask ? get().masks.get(n.id) : get().pixels.get(n.id)
-          if (!lp) return
-          const off = editingMask ? maskOffset(n) : { x: n.x ?? 0, y: n.y ?? 0 }
-          lp.beginStroke(); lp.touch(0, 0, lp.width, lp.height)
-          const ctx = lp.ctx
-          ctx.save()
-          const g = lumaOf(get().brush.background), bg = `rgb(${g}, ${g}, ${g})`   // D54: a mask clears to the background colour's grey
-          if (selection) {
-            const a = selectionAlphaCanvas(selection)                 // alpha = selected amount
-            if (editingMask) { const tc = a.getContext('2d')!; tc.globalCompositeOperation = 'source-in'; tc.fillStyle = bg; tc.fillRect(0, 0, a.width, a.height); ctx.globalCompositeOperation = 'source-over' }
-            else ctx.globalCompositeOperation = 'destination-out'
-            ctx.drawImage(a, -off.x, -off.y)
-          } else if (editingMask) { ctx.fillStyle = bg; ctx.fillRect(0, 0, lp.width, lp.height) }
-          else ctx.clearRect(0, 0, lp.width, lp.height)
-          ctx.restore()
-          lp.refresh(); lp.dirty = true
-          get().pushHistory({ label: 'clear', layerId: n.id, kind: editingMask ? 'mask' : 'image', tiles: lp.endStroke(), at: Date.now() })
-          set({ docDirty: true, revision: get().revision + 1 })
+          if (transformOpen()) return                                   // F10: the transform bakes from the pixels as they are at apply
+          clearTarget(n, editingMask ? 'mask' : 'image', 'clear')
         },
 
         // ---- history ---------------------------------------------------------------------------------
@@ -1280,7 +1343,7 @@ export const useEditor = create<EditorState>()(
           const last = h[h.length - 1]
           // D56: stack-only entries of one gesture merge across layers too (an eye sweep) — the oldest stack is the whole before-state
           const sameRow = last && (last.layerId === e.layerId || (!e.tiles.length && !last.tiles.length && !!e.stack && !!last.stack))
-          if (e.coalesce && last && last.coalesce === e.coalesce && sameRow && e.at - last.at < 2000 && !e.swap && !last.swap) {
+          if (e.coalesce && last && last.coalesce === e.coalesce && sameRow && e.at - last.at < 2000 && !e.swap && !last.swap && !e.selSwap && !last.selSwap && !e.maskSwap && !last.maskSwap) {
             // D43: one gesture, one row — the older entry already holds the before-state of its tiles; add the tiles it lacks
             const have = new Set(last.tiles.map((t) => `${t.x},${t.y}`))
             const merged: HistoryEntry = { ...last, at: e.at, tiles: [...last.tiles, ...e.tiles.filter((t) => !have.has(`${t.x},${t.y}`))], stack: last.stack ?? e.stack,
@@ -1297,7 +1360,7 @@ export const useEditor = create<EditorState>()(
           const h = get().history
           if (!h.length) return
           const e = h[h.length - 1]
-          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined }
+          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined, maskSwap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) redoEntry.tiles = target.restore(e.tiles)
@@ -1305,15 +1368,17 @@ export const useEditor = create<EditorState>()(
           if (e.sel) setSelectionPresence(e.sel.had)
           if (e.swap) redoEntry.swap = swapPixels(e.swap)
           if (e.more) redoEntry.more = e.more.map(swapPixels)
-          if (e.selSwap) { redoEntry.selSwap = { lp: get().selection }; set({ selection: e.selSwap.lp }) }
+          if (e.maskSwap) redoEntry.maskSwap = swapMask(e.maskSwap)
+          if (e.selSwap) redoEntry.selSwap = swapSelection(e.selSwap)
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          endTransformState()                                             // F16: undo ends an open transform
           set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         redo: () => {
           const f = get().future
           if (!f.length) return
           const e = f[f.length - 1]
-          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined }
+          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined, maskSwap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) undoEntry.tiles = target.restore(e.tiles)
@@ -1321,8 +1386,10 @@ export const useEditor = create<EditorState>()(
           if (e.sel) setSelectionPresence(e.sel.has)
           if (e.swap) undoEntry.swap = swapPixels(e.swap)
           if (e.more) undoEntry.more = e.more.map(swapPixels)
-          if (e.selSwap) { undoEntry.selSwap = { lp: get().selection }; set({ selection: e.selSwap.lp }) }
+          if (e.maskSwap) undoEntry.maskSwap = swapMask(e.maskSwap)
+          if (e.selSwap) undoEntry.selSwap = swapSelection(e.selSwap)
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          endTransformState()
           set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         touch: () => set({ docDirty: true }),
@@ -1339,6 +1406,7 @@ export const useEditor = create<EditorState>()(
         editSelection: (label, fn, coalesce) => {
           const doc = get().doc
           if (!doc) return
+          if (transformOpen()) return                                   // F10: the open transform lifts the selection it began with
           const prev = get().selection
           const beforeImg = prev ? prev.ctx.getImageData(0, 0, prev.width, prev.height) : null
           const before = prev ? selectionValues(prev) : null
@@ -1379,6 +1447,11 @@ export const useEditor = create<EditorState>()(
           const s = useSession.getState()
           if (!doc) return false
           const n = findNode(doc, get().activeId)
+          if (opts.cut) {                                               // F2: refuse before copying — a cut that cannot clear is a copy
+            if (opts.merged || n?.kind !== 'raster') { s.toast('Cut needs a raster layer', 'info'); return false }
+            if (n.locked) { s.toast(`"${n.name}" is locked — unlock it to cut (Copy works)`, 'info'); return false }
+            if (transformOpen()) return false
+          }
           let src: HTMLCanvasElement | null = null, ox = 0, oy = 0
           if (opts.merged) src = get().extractor?.() ?? null
           else if (n?.kind === 'raster') { src = get().pixels.get(n.id)?.canvas ?? null; ox = n.x ?? 0; oy = n.y ?? 0 }
@@ -1404,7 +1477,7 @@ export const useEditor = create<EditorState>()(
             osClipboardSize = blob.size
             try { void navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': blob })]).catch(() => undefined) } catch { /* no async clipboard */ }
           }, 'image/png')
-          if (opts.cut) get().clearSelected()
+          if (opts.cut && n) clearTarget(n, 'image', 'cut')            // F2: the pixels, even while the layer's mask is the target
           s.toast(`${opts.cut ? 'Cut' : 'Copied'} ${out.width}×${out.height} px${opts.merged ? ' (merged)' : ''}`, 'info')
           return true
         },
@@ -1525,8 +1598,10 @@ export const useEditor = create<EditorState>()(
           get().editSelection('load mask as selection', () => {
             const sel = get().ensureSelection()
             const off = maskOffset(n)
-            sel.ctx.fillStyle = '#000000'; sel.ctx.fillRect(0, 0, sel.width, sel.height)
-            sel.ctx.drawImage(m.canvas, off.x, off.y)
+            // F14 / D54: the mask as it renders over the whole document — its pixels at their offset, its default outside the extent
+            // (maskAlphaCanvas: alpha = value, through density and feather as everywhere a mask is baked, D52)
+            sel.ctx.save(); sel.ctx.globalCompositeOperation = 'copy'; sel.ctx.fillStyle = '#000000'; sel.ctx.fillRect(0, 0, sel.width, sel.height); sel.ctx.restore()
+            sel.ctx.drawImage(maskAlphaCanvas(m, n.mask!, off.x, off.y, 0, 0, sel.width, sel.height), 0, 0)
             sel.refresh()
           })
         },

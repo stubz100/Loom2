@@ -131,7 +131,7 @@ export function LevelsEditor({ id, params, set, start, commit }: EditorProps) {
       <div className="tool-opts tone-fields">
         <ValueField label="output black" value={ob} min={0} max={255} onStart={start} onChange={(v) => set({ ...params, out_black: Math.round(v) })} onCommit={() => commit('levels output black')} />
         <ValueField label="output white" value={ow} min={0} max={255} onStart={start} onChange={(v) => set({ ...params, out_white: Math.round(v) })} onCommit={() => commit('levels output white')} />
-        <label /><button type="button" onClick={auto} disabled={!hist} title="black and white points at 0.1 % clipping of the layers below; gamma 1">Auto</button>
+        <label /><button type="button" className="auto-btn" style={{ justifySelf: 'start' }} onClick={auto} disabled={!hist} title="black and white points at 0.1 % clipping of the layers below; gamma 1">Auto</button>
       </div>
     </div>
   )
@@ -232,14 +232,14 @@ export function CurvesEditor({ id, params, set, start, commit }: EditorProps) {
         <line x1={0} y1={S} x2={S} y2={0} stroke="var(--line2)" strokeDasharray="3 3" />
         {ch === 'rgb' && CH.slice(1).filter(([key]) => Array.isArray(params[key])).map(([key, , colour]) => <path key={key} d={curvePath(ptsOf(key), spline)} fill="none" stroke={colour} strokeWidth={1} opacity={0.6} />)}
         <path d={curvePath(pts, spline)} fill="none" stroke={CH.find((c) => c[0] === ch)![2]} strokeWidth={1.6} />
-        {pts.map(([x, y], i) => <rect key={i} x={x * k - 3.5} y={S - y * k - 3.5} width={7} height={7} fill={i === sel ? 'var(--accent)' : 'var(--bg)'} stroke="var(--fg)" strokeWidth={1} />)}
+        {pts.map(([x, y], i) => <rect key={i} x={x * k - 3.5} y={S - y * k - 3.5} width={7} height={7} fill={i === sel ? 'var(--accent)' : 'var(--bg2)'} stroke="var(--fg)" strokeWidth={1} />)}
       </svg>
       <div className="tool-opts tone-fields">
         {sel !== null && pts[sel] ? <>
           <ValueField label="input" value={pts[sel][0]} min={0} max={255} onStart={start} onChange={(v) => write(moveTo(pts, sel, v, pts[sel][1]))} onCommit={() => commit('curves input')} />
           <ValueField label="output" value={pts[sel][1]} min={0} max={255} onStart={start} onChange={(v) => write(moveTo(pts, sel, pts[sel][0], v))} onCommit={() => commit('curves output')} />
         </> : <span className="hint full">Click to add a point · drag it off the graph, Ctrl-click or right-click to remove it · arrows nudge (Shift ×10)</span>}
-        {!spline && <span className="hint full">A curve from before D57 (straight lines between points); editing it makes the layer a spline curve like Photoshop's.</span>}
+        {!spline && <span className="hint full">An older curve with straight lines between its points; editing it turns it into a smooth curve like Photoshop's.</span>}
       </div>
     </div>
   )
@@ -264,7 +264,6 @@ export function ColorBalanceEditor({ params, set, start, commit }: EditorProps) 
           <span>{b}</span><span className="val">{Number(vals[i]) || 0}</span>
         </div>
       ))}
-      <div><button type="button" className="quiet" onClick={() => { start(); set({ ...params, shadows: [0, 0, 0], midtones: [0, 0, 0], highlights: [0, 0, 0] }); setTone('midtones'); commit('colour balance reset') }}>Reset all tones</button></div>
     </div>
   )
 }

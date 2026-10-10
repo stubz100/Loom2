@@ -37,6 +37,13 @@ DOC_SCHEMA_VERSION = 3          # 2 (D52): masks carry density and feather; 3 (D
 
 class StaleStack(StateError):
     """C1: a stack PUT based on an older revision than the server's (the API answers 409; the editor merges and retries)."""
+
+
+class DocumentTooNew(StateError):
+    """R10: a document saved by a newer loom2 (schema_version above DOC_SCHEMA_VERSION) is refused (the API answers 409) — never
+    opened and silently rewritten in the older format on save."""
+
+
 NodeKind = Literal["raster", "group", "adjustment", "filter"]
 ADJ_TYPES = ["levels", "curves", "hue_saturation", "color_balance", "brightness_contrast", "exposure", "black_white", "invert"]
 FILTER_TYPES = ["gaussian_blur", "sharpen", "noise", "high_pass", "color_to_alpha"]
@@ -252,7 +259,12 @@ class OpenDocument:
         with zipfile.ZipFile(path) as z:
             names = set(z.namelist())
             if "loom2.json" in names:
-                doc = Document.model_validate(json.loads(z.read("loom2.json").decode("utf-8")))
+                raw = json.loads(z.read("loom2.json").decode("utf-8"))
+                ver = raw.get("schema_version", 1) if isinstance(raw, dict) else 1
+                if isinstance(ver, int) and ver > DOC_SCHEMA_VERSION:
+                    raise DocumentTooNew(f"{path.name} was saved by a newer loom2 (document format {ver}; this version reads up to "
+                                         f"{DOC_SCHEMA_VERSION}) — update loom2 to open it; the file is left untouched")
+                doc = Document.model_validate(raw)
             else:
                 doc = _doc_from_stack_xml(z.read("stack.xml").decode("utf-8"), path.stem)
             od = cls(doc, path)

@@ -185,7 +185,8 @@ export const useSession = create<SessionState>()(
 
       toast: (text, kind = 'info', undo) => {
         const id = toastSeq++
-        set({ toasts: [...get().toasts, { id, kind, text, undo, sticky: kind === 'error' }] })
+        const kept = get().toasts.filter((t) => t.text !== text || t.undo)          // a repeated message replaces its older copy
+        set({ toasts: [...kept, { id, kind, text, undo, sticky: kind === 'error' }].slice(-3) })   // at most three on screen (review U15)
         if (kind !== 'error') setTimeout(() => get().dismissToast(id), 6000)
       },
       dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),

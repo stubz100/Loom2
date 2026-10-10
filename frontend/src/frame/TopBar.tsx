@@ -33,7 +33,7 @@ function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: b
   })
   return (
     <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}`} onClick={onOpen} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
-      {t.label}<kbd>⌃{t.key}</kbd>
+      {t.label}<kbd>Ctrl+{t.key}</kbd>
     </button>
   )
 }
@@ -78,9 +78,9 @@ export function TopBar() {
       <button className="quiet" onClick={() => setMenu(menu === 'app' ? null : 'app')} title="menu" aria-label="app menu"><Menu size={16} /></button>
       {menu === 'app' && (
         <div className="menu" style={{ right: 8 }}>
-          <button onClick={() => { setMenu(null); s.openSettings(true) }}>Settings… <kbd>⌃,</kbd></button>
+          <button onClick={() => { setMenu(null); s.openSettings(true) }}>Settings… <kbd>Ctrl+,</kbd></button>
           <button onClick={() => { setMenu(null); s.setHelp(true) }}>Commands and keys <kbd>?</kbd></button>
-          <button onClick={() => { setMenu(null); runCommand('global.palette') }}>Command palette <kbd>⌃K</kbd></button>
+          <button onClick={() => { setMenu(null); runCommand('global.palette') }}>Command palette <kbd>Ctrl+K</kbd></button>
           <button onClick={() => { setMenu(null); runCommand('global.focus') }}>{s.ui.focusMode ? 'Leave focus mode' : 'Focus mode'} <kbd>Tab</kbd></button>
           <button onClick={() => { setMenu(null); runCommand('global.dock') }}>{s.ui.dockOpen ? 'Hide dock' : 'Show dock'} <kbd>`</kbd></button>
           <button onClick={() => { setMenu(null); s.setUi({ theme: s.ui.theme === 'light' ? 'dark' : 'light' }) }}>Theme: {THEMES.find(([t]) => t === s.ui.theme)?.[1] ?? 'Dark'}</button>

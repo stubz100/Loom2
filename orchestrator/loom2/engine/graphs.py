@@ -710,6 +710,8 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
 
 
 def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> float:
+    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
+        return 0.0                                                    # R3 (D62): CPU only, the engine is never started
     if isinstance(recipe, Upscale) and recipe.refine:
         return VRAM_ESTIMATE_GB.get(recipe.refine_model_id, 12.0)
     if isinstance(recipe, Inpaint):
@@ -721,6 +723,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
     """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
     if isinstance(recipe, I2V):
         return list(I2V_WEIGHTS.get(recipe.model_id, [recipe.model_id]))
+    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
+        return []                                                     # R3 (D62): no weights at all
 
     te_over = getattr(recipe, "te_id", None)
 

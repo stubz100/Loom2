@@ -332,7 +332,7 @@ function PresetsTab() {
   useEffect(() => { void g.loadPresets(); void g.loadSnippets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6 }}><button className="primary" onClick={() => runCommand('gen.savePreset')}>Save panel preset… <kbd>⌃S</kbd></button></div>
+      <div style={{ display: 'flex', gap: 6 }}><button className="primary" onClick={() => runCommand('gen.savePreset')}>Save panel preset… <kbd>Ctrl+S</kbd></button></div>
       <div className="lib-tree" style={{ marginTop: 8 }}>
         {g.presets.map((pr) => <div key={pr.name} style={{ display: 'flex', gap: 4 }}><button style={{ flex: 1 }} className={g.lastPreset === pr.name ? 'active' : ''} onClick={() => g.applyPreset(pr.name)}><span>{pr.name}</span><span className="n">{pr.panel.model_id}</span></button><button className="quiet" title="Delete preset" onClick={() => void g.deletePreset(pr.name)}>✕</button></div>)}
         {!g.presets.length && <span style={{ color: 'var(--fg3)' }}>No panel presets in this project yet.</span>}
@@ -371,9 +371,9 @@ function PrimaryAction() {
     : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
   return (
     <div>
-      <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (⌃↵)">Generate {g.panel.count} ▶</button>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (Ctrl+Enter)">Generate {g.panel.count} ▶</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Stage: add to the queue, run later (⌃⇧↵)">Stage</button>
+        <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Stage: add to the queue, run later (Ctrl+Shift+Enter)">Stage</button>
         {missing.length > 0 && <button onClick={() => s.setSuite('models')}>Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button>}
       </div>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * g.panel.count)} s · {pv?.width}×{pv?.height} · {pv?.steps} st{pv?.turbo ? ' turbo' : ''}{pv?.scheduler === 'flux2' ? ' · flux2 schedule' : ''}</>}</div>

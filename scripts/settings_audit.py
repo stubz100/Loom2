@@ -1,8 +1,10 @@
 """D60 (PC25, T8 "display == reality"): every Settings field, recipe field and /capabilities parameter must reach the code that runs.
 
 A static scan (no engine, no network): a recipe field counts as read when the job code — the queue, the engine's graph builders, the
-AI edit helpers and the CPU kernels they call — names it as an attribute (`r.steps`), a keyword (`steps=`) or a string key
-(`"steps"`); a Settings field when any orchestrator module but config.py names it as an attribute; a /capabilities key when it is
+AI edit helpers and the CPU kernels they call — reads it from an object of that model: an attribute on a name the job code binds the
+model to (`recipe.steps`, `l.model_id` for a LoRA, `b.frame` for a beat — RECEIVERS) or `getattr(recipe, "steps"`. A bare name (a
+function parameter `steps=`, a dict key `"steps"`) does not count (R7). Fields several recipes share by name (`te_id`) are told apart
+only by their receiver, not by type — a static scan cannot follow isinstance branches. A Settings field when any orchestrator module but config.py names it as an attribute; a /capabilities key when it is
 mapped below to the recipe fields or settings it feeds (then those must be read) or listed as informational. Fields the UI owns, or
 that exist for compatibility, go in ALLOW with the reason. Exit 1 on anything unread and unexplained.
 
@@ -53,6 +55,7 @@ ALLOW: dict[str, str] = {
     "Settings.schema_version": "the record's own version (fsio)",
     "Settings.mounted_model_trees": "read by the roster when it resolves weights",
     "T2I.tier": "the panel's tier label (recorded with the recipe); width / height carry the size the engine runs",
+    "RecipeEnvelope.recipe": "the union's wrapper: recipes.parse_recipe unwraps it before any job code sees the recipe",
     "Settings.h3_licence_confirmed": "a UI gate (D17): Animate offers MiniMax H3 only once the author confirms the licence application",
 }
 
@@ -75,8 +78,22 @@ def _models() -> dict[str, type[BaseModel]]:
     return found
 
 
-def read_in(text: str, field: str) -> bool:
-    return bool(re.search(rf"(\.{field}\b|\b{field}\s*=|[\"']{field}[\"'])", text))
+# R7: the names the job code binds each recipe model to (a field read is an attribute on one of them), and the files it is read in
+RECIPE_VARS = ("recipe", "early")                                   # the top-level recipes (queue._run_one, the graph builders)
+RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
+    "LoraRef": (("l", "ref"), None),                                # `for l in recipe.loras`, graphs._lora_chain `for ref in loras`
+    "RefImage": (("ref", "r"), None),                               # queue: `for ref in recipe.refs`, the parents list `r.asset_id`
+    "Beat": (("b",), None),                                         # `for b in recipe.beats`
+    # D45: matting.params_from copies the fields by name (getattr) into matting.RefineParams; the kernels read them there
+    "RefineEdge": (("params", "self"), ["matting.py"]),
+}
+
+
+def read_in(text: str, field: str, receivers: tuple[str, ...] = RECIPE_VARS) -> bool:
+    """True when `text` reads `field` from one of `receivers`: `recipe.field` or `getattr(recipe, "field"`. A bare name — a function
+    parameter `field=`, a dict key `"field"` — does not count (R7)."""
+    names = "|".join(re.escape(r) for r in receivers)
+    return bool(re.search(rf"(?<![\w.])(?:{names})\.{field}\b|\bgetattr\(\s*(?:{names})\s*,\s*[\"']{field}[\"']", text))
 
 
 def main() -> int:
@@ -93,8 +110,10 @@ def main() -> int:
             if key in ALLOW or f"*.{field}" in ALLOW:
                 continue
             checked += 1
-            if not read_in(job, field):
-                problems.append(f"recipe field {key} is never read by the job code ({', '.join(JOB_CODE)})")
+            receivers, files = RECEIVERS.get(mname, (RECIPE_VARS, None))
+            if not read_in(_sources(files) if files else job, field, receivers):
+                where = ", ".join(files or JOB_CODE)
+                problems.append(f"recipe field {key} is never read from a {mname} object ({' / '.join(r + '.' for r in receivers)}) by the job code ({where})")
             elif verbose:
                 print(f"ok   {key}")
     # settings (the app's and the engine's)

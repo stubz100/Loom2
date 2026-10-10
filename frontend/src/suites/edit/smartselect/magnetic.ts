@@ -26,6 +26,10 @@ class MagneticLasso {
   private busy = false
   private want: Pt | null = null
   private chain: Promise<void> = Promise.resolve()
+  /** F12: bumped by every press / Backspace / close / cancel (and reset) — a pointer move's trace that resolves after one of them was
+   * aimed from a path end that may be gone, so it is dropped. Moves wait while such an operation is pending. */
+  private gen = 0
+  private pendingOps = 0
   onChange: () => void = () => {}
 
   get active() { return this.path.length > 0 }
@@ -35,9 +39,19 @@ class MagneticLasso {
   private spacing() { const f = Math.min(100, Math.max(0, useEditor.getState().magFrequency)); return (8 + (100 - f) * 0.9) / this.zoom() }
   private closeRadius() { return 8 / this.zoom() }
   nearStart(p: Pt) { const r = this.closeRadius(); return this.active && dist(p, this.path[0]) <= r && length(this.path) + length(this.live) > 2 * r }
-  private queue(f: () => Promise<void>) { this.chain = this.chain.then(f, f); return this.chain }
+  private queue(f: () => Promise<void>) {
+    this.gen++; this.pendingOps++
+    const done = () => {
+      this.pendingOps--
+      if (this.pendingOps || this.busy) return
+      const w = this.want; this.want = null
+      if (w && this.active) this.move(w, false)                       // the pointer moved meanwhile: follow it from the new end
+    }
+    this.chain = this.chain.then(f, f).finally(done)
+    return this.chain
+  }
 
-  reset() { this.path = []; this.anchors = []; this.trail = []; this.live = []; this.freehand = false; this.want = null; this.onChange() }
+  reset() { this.gen++; this.path = []; this.anchors = []; this.trail = []; this.live = []; this.freehand = false; this.want = null; this.onChange() }
   cancel() { this.reset(); if (useEditor.getState().lassoPoly) useEditor.getState().setLassoPoly(null) }
   private sync() { useEditor.getState().setLassoPoly(this.path.length ? this.path.map((q) => ({ ...q })) : null) }
 
@@ -71,10 +85,11 @@ class MagneticLasso {
       this.onChange()
       return
     }
-    if (this.busy) { this.want = p; return }                           // latest wins while a trace runs
+    if (this.busy || this.pendingOps) { this.want = p; return }        // latest wins while a trace (or a press, Backspace, close) runs
     this.busy = true
-    void this.follow(p, true).finally(() => {
+    void this.follow(p, true, this.gen).finally(() => {
       this.busy = false
+      if (this.pendingOps) return                                       // the operation's end picks `want` up
       const w = this.want; this.want = null
       if (w && this.active) this.move(w, false)
     })
@@ -122,16 +137,19 @@ class MagneticLasso {
     this.live = []; this.trail = [this.path[this.path.length - 1]]
     this.sync(); this.onChange()
   }
-  /** Trace from the last fastening point to (the edge near) q, guided by the trail; with `fasten`, drop points by distance. */
-  private async follow(q: Pt, fasten: boolean) {
-    if (!this.active) return
+  /** Trace from the last fastening point to (the edge near) q, guided by the trail; with `fasten`, drop points by distance. `gen`
+   * (a pointer move's, F12): drop the result when a press / Backspace / close / cancel came in while it was traced. */
+  private async follow(q: Pt, fasten: boolean, gen?: number) {
+    const stale = () => !this.active || (gen !== undefined && gen !== this.gen)
+    if (stale()) return
     const s = this.settings(), gap = Math.min(8, Math.max(1, s.width / 4))
     if (!this.trail.length || dist(this.trail[this.trail.length - 1], q) >= gap) this.trail.push(q)
     const t = await snap([q.x, q.y], s)
+    if (stale()) return
     const from = this.path[this.path.length - 1]
     let live = pts(await trace([from.x, from.y], t, flat(this.trail), s))
     if (live.length < 2) live = [from, { x: t[0], y: t[1] }]
-    if (!this.active) return
+    if (stale() || from !== this.path[this.path.length - 1]) return
     this.live = live
     if (fasten) {
       const sp = this.spacing()

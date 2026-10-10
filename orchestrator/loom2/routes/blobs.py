@@ -1,6 +1,7 @@
 """Content-addressed uploads (06 §2): `PUT /blobs/{sha256}` streams the body to disk and checks its hash; never buffered whole."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from pathlib import Path
 
@@ -13,27 +14,45 @@ from ..services import Services
 from .deps import Svc
 
 router = APIRouter(tags=["blobs"])
+FLUSH_BYTES = 4 * 2**20                            # R8: the body is written in ≤ 4 MiB slices, each in a worker thread
 
 
 @router.put("/blobs/{sha}", response_model=BlobPut)
 async def blob_put(svc: Svc, sha: str, request: Request):
     dest = _blob_path(svc, sha)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = _tmp_for(dest)                            # B11: unique per writer — two uploads of one blob never share a temp file
     h = hashlib.sha256()
     size = 0
+    pending = bytearray()
+
+    def flush(f, data: bytes) -> None:            # R8: file writes (and fsio.replace's retry sleeps) stay off the event loop
+        f.write(data)
+        h.update(data)
+
+    f = await asyncio.to_thread(_open_tmp, tmp)
     try:
-        with tmp.open("wb") as f:
+        try:
             async for chunk in request.stream():
-                f.write(chunk)
-                h.update(chunk)
+                pending += chunk
                 size += len(chunk)
+                if len(pending) >= FLUSH_BYTES:
+                    await asyncio.to_thread(flush, f, bytes(pending))
+                    pending.clear()
+            if pending:
+                await asyncio.to_thread(flush, f, bytes(pending))
+        finally:
+            await asyncio.to_thread(f.close)
         if h.hexdigest() != sha:
             raise HTTPException(400, "body sha256 does not match the blob id")
-        replace(tmp, dest)
+        await asyncio.to_thread(replace, tmp, dest)
     finally:
-        tmp.unlink(missing_ok=True)
+        await asyncio.to_thread(tmp.unlink, True)
     return {"sha256": sha, "bytes": size}
+
+
+def _open_tmp(tmp: Path):
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    return tmp.open("wb")
 
 
 @router.get("/blobs/{sha}")

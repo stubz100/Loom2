@@ -41,7 +41,7 @@ function resolve(it: MenuItem): Resolved | null {
     const c = command(it.cmd)
     if (!c) return null
     markUsed(c.id)
-    return { kind: 'item', label: it.label ?? c.label, icon: c.icon, keys: c.keys, run: c.run, disabled: !isEnabled(c), danger: c.danger }
+    return { kind: 'item', label: it.label ?? c.label, icon: c.icon, keys: c.keys, run: c.run, disabled: !isEnabled(c), danger: c.danger, checked: it.checked }
   }
   return { kind: 'item', label: it.label, icon: it.icon, keys: it.keys, run: it.run, disabled: !!it.disabled, danger: it.danger, checked: it.checked }
 }

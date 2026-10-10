@@ -2596,3 +2596,54 @@ Inspector → lineage → split → pages.
   (`cargo check` 3.4 s); port 1420 was held by a Vite this session had started for the headed checks (`TaskStop` ended its `sh` wrapper,
   not the `node` child) — `tauri dev` runs `npm run dev` with `--strictPort`, so it fails while that lives. Ending it was left to the
   author.
+
+## 2026-10-10 23:12 — Review of the PhotoCraft range (ceb638d..a380612): registers U1–U29, F1–F18, R1–R10, all fixed
+
+The author asked for another review after the UI report. Three read-only reviewers: the Edit UI against the code and the latest headed
+screenshots (U, 29), the frontend changes (F, 18) and the orchestrator changes (R, 10, each reproduced with a scratch script). Fixes were
+split by file so that no two hands touched the same module.
+
+- **Orchestrator (R):** R1 Quick Remove saved a stale `OpenDocument` — a document deleted mid-job came back, one closed and reopened lost
+  the layer; it now re-fetches after the CPU work and fails cleanly when the document is gone or resized. R2 a mask with default 0 and
+  density < 1 stayed fully hidden outside its extent in the exact compositor while the editor showed it partly visible — the outside value
+  now always goes through the density (matches `maskDerived.outsideValue`; the PSD corpus still passes its floor). R3 Quick Remove is
+  admitted without a model (VRAM 0, no roster or variant gate). R4 it honours cancel. R5 it is marked non-resumable before it writes.
+  R6 `POST /heal` checks Content-Length before reading, caps the area at 2048² and times out at 60 s (504). R7 the settings audit only
+  counts reads through the recipe object (per-model receivers), with a negative test. R8 `blob_put` writes off the event loop
+  (`persist`'s on-loop retry recorded as a footgun in `orchestrator/AGENTS.md`). R9 a missing native extension refuses Quick Remove and
+  the pre-fill at submit (422). R10 a document from a newer loom2 (schema_version > 3) is refused (409) instead of being downgraded on
+  save. `test_review_r.py` (13 tests).
+- **Editor store and canvas (F):** F1 re-adding a mask overwrote the canvas undo still needed (history `maskSwap`). F2 Cut / Layer via
+  cut cleared the mask while the mask was edited, and "cut" a locked layer — now clears the pixels and refuses locked layers. F5 canvas
+  size, crop and an AI result that grows the canvas recorded the selection change in history (undo left a selection of the wrong size).
+  F6 Spot Healing re-checks the document and layer after the request, respects the lock, and the first stroke is one undo step. F7 the
+  quick-select cache key could collide (an app-wide version counter now). F10 a transform bakes the selection captured at begin;
+  selection, flip / rotate, canvas and cut commands are disabled while a transform is open. F12 a generation counter drops stale magnetic
+  traces. F13 locked children stay put in a group transform. F14 Load mask as selection reads the mask as it renders (the outside value,
+  density and feather). F15 Fill, gradient, Clear and Cut keep Lock transparency. F16 transform previews are freed on undo / redo /
+  open / close. F17 opening or closing a document resets the polygon, AI prompts and layer selection. F18 async selection loads check
+  the document after the await.
+- **Panels, keys and widgets (F):** F3 Enter never applied a transform — the key dispatcher stopped at the first matching command even when
+  it was disabled (the polygon close); disabled matches are now skipped. F4 Esc cancels the magnetic lasso. F8 Delete in the Curves graph
+  wiped the adjustment's mask (the global handler ran first). F9 the strip's latches now modify Layers-panel gestures too (D55 said so).
+  F11 typing a value was one undo step per keystroke and applied 7 % on the way to 75 % — one step until Enter / blur, Esc restores.
+- **UI (U):** U16 the canvas showed a stretched frame after Compare (the extractor never scheduled a redraw). U1 / U2 the strip squeezed
+  and cut its items under the Inspector — it wraps now, and the free-transform bar floats over the top of the stage (so the canvas never
+  moves under the pointer). U3 the Selection tab's Refine edge block sat in the wrong grid cells. U4 the last undefined CSS variable
+  (Curves points). U5 Remove mask got an icon; the trash says "Delete layer mask" while a mask is edited; the mask section no longer repeats
+  Remove. U6 one spelling per adjustment / filter type (`labels.ts`: "Hue/Saturation", "Colour balance" …) and per blend mode ("Color Burn"
+  in the row too). U7 the AI button no longer promises Ctrl+Enter. U8 / U18 one tool table (toolbox and the canvas menu's Tool submenu,
+  with accelerators and a check mark; Quick selection shows its icon instead of "()" ). U9 / U11 every number in the Edit panels is the
+  same value field (the old range sliders, marquee feather and W/H, selection amount, canvas size, outpaint grow, new document size), with
+  units and steps. U10 "sample all layers" is a checkbox everywhere. U12 segments and tabs read in sentence case; buttons too. U13 one
+  colour-balance reset, Auto no longer stretched. U14 the mask row lays out on two rows. U15 toasts: at most three, a repeat replaces
+  its older copy, × at the right edge. U17 keys are written Ctrl+ / Shift+ / Alt+ app-wide (no Mac glyphs), texts name the mouse route.
+  U19 transform modes use the menu's check column. U20 quick mask button marks its own command. U21 one separator in the strip title.
+  U22 no decision / spec references in UI text. U23 hard-coded colours → theme variables. U24 nothing below 11 px. U25 brush preset names
+  line up. U26 Close document has an icon, the document list deletes with a trash icon. U27 menus scroll instead of running off short
+  windows. U28 transform and Properties X/Y/W/H have practical ranges (the ▾ slider was useless at ±300000). U29 `.segmented`, `.tabs2`,
+  `.insp-thumb` moved from catalogue.css to frame.css. Not done: pop-ups inside a scrolling panel can still be clipped by it (would need a
+  portal); colour balance keeps its gradient tracks with plain numbers.
+- **Checks:** offline 200 (was 186; incl. the corpus test with `--extra oracle`); settings audit 150 / 0 problems; agents_check clean;
+  build clean; lint 100 warnings, 0 errors (unchanged). Headed: all 16 modes pass (render, paint, kit, layers, props, transform, smartsel, heal, masks, selection, brush, grid, psd, cmpdiag, tour, animate) — psd / tour first failed on Vite's "504 Outdated Optimize Dep" from the long-running dev server (re-optimised by touching vite.config.ts), not on the code. New headed assertions: popups opaque, strip fits, typing is one
+  step, Enter applies a transform, Ctrl latch in the Layers panel, find field; heal's undo check accepts the first stroke removing its layer.

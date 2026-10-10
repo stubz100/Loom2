@@ -8,7 +8,7 @@ export function Toasts() {
     <div className="toasts" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.kind}`}>
-          <span>{t.text}</span>
+          <span className="toast-text">{t.text}</span>
           {t.undo && <button onClick={() => { t.undo?.(); dismiss(t.id) }}>Undo</button>}
           <button className="quiet" onClick={() => dismiss(t.id)} aria-label="dismiss"><X size={14} /></button>
         </div>

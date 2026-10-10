@@ -5,6 +5,7 @@ import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
+import { typeLabel } from './labels'
 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
@@ -12,9 +13,10 @@ const active = (): Node | null => findNode(ed().doc, ed().activeId)
 const activeRaster = () => { const n = active(); return !!n && n.kind === 'raster' }
 const hasSel = () => !!ed().selection
 const setTool = (t: Tool) => () => ed().setTool(t)
-const TOOLS: [Tool, string, string, typeof Hand][] = [
-  ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['heal', 'Spot healing', 'J', Bandage], ['ai', 'AI select (M5)', 'A', Sparkles],
-  ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill', 'G', PaintBucket], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas size', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
+/** The tools: id, label, accelerator, icon — the toolbox (EditSuite) and the canvas menu's Tool submenu both read this. */
+export const TOOLS: [Tool, string, string, typeof Hand][] = [
+  ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['heal', 'Spot healing', 'J', Bandage], ['ai', 'AI select', 'A', Sparkles],
+  ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill / gradient', 'G', PaintBucket], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
 ]
 
 registerCommands([
@@ -25,7 +27,7 @@ registerCommands([
   { id: 'edit.saveToCatalogue', scope: 'edit', label: 'Save to Catalogue', icon: FolderInput, keys: 'Ctrl+Shift+S', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().saveToCatalogue() },
   { id: 'edit.exportPng', scope: 'edit', label: 'Export PNG', icon: FileImage, keys: 'Ctrl+Shift+E', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPng() },
   { id: 'edit.exportPsd', scope: 'edit', label: 'Export PSD', icon: FileDown, placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPsd() },
-  { id: 'edit.close', scope: 'edit', label: 'Close document', placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and press Ctrl+S to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
+  { id: 'edit.close', scope: 'edit', label: 'Close document', icon: X, placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and Save (Ctrl+S) to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
   { id: 'edit.compare', scope: 'edit', label: 'Compare preview with the exact flatten', icon: Scan, placement: ['inspector', 'context'], when: hasDoc, run: () => void ed().compareWithExact() },
   // layers
   { id: 'edit.layer.new', scope: 'edit', label: 'New layer', icon: Plus, keys: 'Ctrl+Shift+N', placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('raster') } },
@@ -57,43 +59,43 @@ registerCommands([
   { id: 'edit.mask.fromSelection', scope: 'edit', label: 'Add mask from selection', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask && hasSel(), hint: 'reveals the selection', run: () => ed().addMask(ed().activeId!, 'revealSelection') },
   { id: 'edit.mask.hideSelection', scope: 'edit', label: 'Add mask hiding the selection', icon: SquareDashed, placement: ['context'], when: () => !!active() && !active()!.mask && hasSel(), hint: 'Alt-click the + box in the row', run: () => ed().addMask(ed().activeId!, 'hideSelection') },
   { id: 'edit.mask.view', scope: 'edit', label: 'Show mask alone', placement: ['context'], when: () => !!active()?.mask, hint: 'Alt-click the mask thumbnail', run: () => { const st = ed(); st.setView({ maskView: st.maskView === 'gray' ? 'off' : 'gray' }) } },
-  { id: 'edit.mask.remove', scope: 'edit', label: 'Remove mask', placement: ['toolbar', 'context'], when: () => !!active()?.mask, run: () => ed().removeMask(ed().activeId!) },
+  { id: 'edit.mask.remove', scope: 'edit', label: 'Remove mask', icon: SquareX, placement: ['toolbar', 'context'], when: () => !!active()?.mask, run: () => ed().removeMask(ed().activeId!) },
   { id: 'edit.mask.toggle', scope: 'edit', label: 'Enable / disable mask', placement: ['context'], when: () => !!active()?.mask, hint: 'Shift-click the mask thumbnail', run: () => { const n = active(); if (n?.mask) ed().updateNode(n.id, { mask: { ...n.mask, enabled: !n.mask.enabled } }, 'toggle mask') } },
   { id: 'edit.mask.edit', scope: 'edit', label: 'Edit mask / edit pixels', placement: ['context'], when: () => !!active()?.mask, hint: 'click the mask thumbnail', run: () => { const st = ed(); st.setActive(st.activeId, !st.editingMask) } },
   { id: 'edit.mask.link', scope: 'edit', label: 'Link / unlink mask', icon: Link, placement: ['context'], when: () => !!active()?.mask, hint: 'click the chain left of the mask thumbnail', run: () => ed().toggleMaskLink(ed().activeId!) },
   { id: 'edit.mask.apply', scope: 'edit', label: 'Apply mask', placement: ['panel', 'context'], when: () => active()?.kind === 'raster' && !!active()?.mask, run: () => ed().applyMask(ed().activeId!) },
   { id: 'edit.mask.fromTransparency', scope: 'edit', label: 'Mask from transparency', placement: ['context'], when: () => active()?.kind === 'raster' && !active()?.mask, run: () => ed().maskFromTransparency(ed().activeId!) },
-  { id: 'edit.mask.load', scope: 'edit', label: 'Load mask as selection', placement: ['panel', 'context'], when: () => !!active()?.mask, run: () => ed().loadSelectionFromMask() },
+  { id: 'edit.mask.load', scope: 'edit', label: 'Load mask as selection', placement: ['panel', 'context'], when: () => !ed().transform && (() => !!active()?.mask)(), run: () => ed().loadSelectionFromMask() },
   // selection
-  { id: 'edit.sel.all', scope: 'edit', label: 'Select all', icon: SquareCheck, keys: 'Ctrl+A', placement: ['panel', 'context'], when: hasDoc, run: () => ed().selectAll() },
-  { id: 'edit.sel.none', scope: 'edit', label: 'Deselect', icon: SquareX, keys: 'Ctrl+D', placement: ['panel', 'context'], when: hasSel, run: () => ed().deselect() },
-  { id: 'edit.sel.invert', scope: 'edit', label: 'Invert selection', keys: 'Ctrl+Shift+I', placement: ['panel', 'context'], when: hasDoc, run: () => ed().invertSelection() },
+  { id: 'edit.sel.all', scope: 'edit', label: 'Select all', icon: SquareCheck, keys: 'Ctrl+A', placement: ['panel', 'context'], when: () => !ed().transform && (hasDoc)(), run: () => ed().selectAll() },
+  { id: 'edit.sel.none', scope: 'edit', label: 'Deselect', icon: SquareX, keys: 'Ctrl+D', placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), run: () => ed().deselect() },
+  { id: 'edit.sel.invert', scope: 'edit', label: 'Invert selection', keys: 'Ctrl+Shift+I', placement: ['panel', 'context'], when: () => !ed().transform && (hasDoc)(), run: () => ed().invertSelection() },
   // D44: modify by the Selection panel's amount (px); every one is a single undo step
   ...(['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({
-    id: `edit.sel.${op}`, scope: 'edit' as const, label: `${op[0].toUpperCase()}${op.slice(1)} selection`, placement: ['panel', 'context'] as ['panel', 'context'], when: hasSel,
+    id: `edit.sel.${op}`, scope: 'edit' as const, label: `${op[0].toUpperCase()}${op.slice(1)} selection`, placement: ['panel', 'context'] as ['panel', 'context'], when: () => !ed().transform && hasSel(),
     hint: 'by the amount set in the Selection panel', run: () => { const st = ed(); st.modifySelection(op, st.selModifyPx) },
   })),
   // D46 clipboard: Ctrl+V reaches the editor as the browser's paste event (it carries images from other apps without a permission prompt)
   { id: 'edit.copy', scope: 'edit', label: 'Copy', icon: Copy, keys: 'Ctrl+C', placement: ['panel', 'context'], when: activeRaster, hint: 'the selected pixels of the active layer (all of it without a selection)', run: () => { ed().copySelection() } },
-  { id: 'edit.cut', scope: 'edit', label: 'Cut', icon: Scissors, keys: 'Ctrl+X', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => { ed().copySelection({ cut: true }) } },
+  { id: 'edit.cut', scope: 'edit', label: 'Cut', icon: Scissors, keys: 'Ctrl+X', placement: ['panel', 'context'], when: () => !ed().transform && (() => activeRaster() && hasSel())(), run: () => { ed().copySelection({ cut: true }) } },
   { id: 'edit.copyMerged', scope: 'edit', label: 'Copy merged', icon: Copy, keys: 'Ctrl+Shift+C', placement: ['panel', 'context'], when: hasDoc, hint: 'the selected part of the visible composite', run: () => { ed().copySelection({ merged: true }) } },
   { id: 'edit.paste', scope: 'edit', label: 'Paste', icon: ClipboardPaste, keys: 'Ctrl+V', placement: ['panel', 'context'], when: hasDoc, hint: 'as a new layer — an image copied in another app, or the last copy', run: () => void ed().pasteClipboard(false) },
   { id: 'edit.pasteInPlace', scope: 'edit', label: 'Paste in place', icon: ClipboardPaste, keys: 'Ctrl+Shift+V', placement: ['panel', 'context'], when: () => hasDoc() && !!ed().clipboard, hint: 'as a new layer where it was copied from', run: () => void ed().pasteClipboard(true) },
-  { id: 'edit.layer.viaCopy', scope: 'edit', label: 'Layer via copy', icon: Copy, keys: 'Ctrl+Alt+J', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => ed().layerVia(false) },
-  { id: 'edit.layer.viaCut', scope: 'edit', label: 'Layer via cut', icon: Scissors, keys: 'Ctrl+Shift+J', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => ed().layerVia(true) },
+  { id: 'edit.layer.viaCopy', scope: 'edit', label: 'Layer via copy', icon: Copy, keys: 'Ctrl+Alt+J', placement: ['panel', 'context'], when: () => !ed().transform && (() => activeRaster() && hasSel())(), run: () => ed().layerVia(false) },
+  { id: 'edit.layer.viaCut', scope: 'edit', label: 'Layer via cut', icon: Scissors, keys: 'Ctrl+Shift+J', placement: ['panel', 'context'], when: () => !ed().transform && (() => activeRaster() && hasSel())(), run: () => ed().layerVia(true) },
   // D51 painting modifiers with a mouse path; D50 lock transparency
   { id: 'edit.brush.line', scope: 'edit', label: 'Straight lines', icon: Minus, placement: ['panel'], when: hasDoc, hint: 'drag draws a straight line (or Shift-click from the last stroke)', run: () => ed().setView({ brushLine: !ed().brushLine }) },
   { id: 'edit.brush.pick', scope: 'edit', label: 'Pick colour', icon: Pipette, placement: ['panel', 'context'], when: hasDoc, hint: 'the next click on the canvas picks the colour (or Alt-click while painting)', run: () => ed().setView({ pickOnce: !ed().pickOnce }) },
   { id: 'edit.layer.lockAlpha', scope: 'edit', label: 'Lock transparency', icon: Lock, placement: ['panel', 'context'], when: activeRaster, hint: 'painting changes the colour but keeps the layer\'s transparency', run: () => { const n = active(); if (n) ed().updateNode(n.id, { lock_alpha: !n.lock_alpha }, n.lock_alpha ? 'unlock transparency' : 'lock transparency') } },
-  { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['panel', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink (D49)', run: () => ed().inkFromWhite() },
-  { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: hasSel, hint: 'soft, image-aware edges with the Selection panel\'s settings (D45)', run: () => void ed().refineSelection() },
-  { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
+  { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['panel', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink', run: () => ed().inkFromWhite() },
+  { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), hint: 'soft, image-aware edges with the Selection panel\'s settings', run: () => void ed().refineSelection() },
+  { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
   { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: () => magnetic.active || (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => magnetic.active ? void magnetic.close() : ed().closeLassoPoly() },
   { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'strip', 'context'], when: () => !!ed().lassoPoly || magnetic.active, run: () => { if (magnetic.active) magnetic.cancel(); else ed().setLassoPoly(null) } },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
-  { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => activeRaster() || (ed().editingMask && !!active()?.mask), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
+  { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !ed().transform && (() => activeRaster() || (ed().editingMask && !!active()?.mask))(), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
   { id: 'edit.sel.magBack', scope: 'edit', label: 'Remove the last point', icon: Undo2, keys: 'Backspace', alt: ['Delete'], placement: ['strip', 'context'], when: () => magnetic.active, hint: 'magnetic lasso', run: () => void magnetic.removeLast() },   // D59
-  { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
+  { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), run: () => ed().cropToSelection() },
   // free transform (10 §4)
   { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
   // D58: Edit › Transform modes — start a box, or switch the open one (PhotoCraft TransformMode)
@@ -104,11 +106,11 @@ registerCommands([
   })),
   { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', alt: ['Ctrl+Enter'], placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },
-  { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: activeRaster, run: () => ed().flipLayer('h') },
-  { id: 'edit.layer.flipV', scope: 'edit', label: 'Flip vertical', icon: FlipVertical, placement: ['panel', 'context'], when: activeRaster, run: () => ed().flipLayer('v') },
-  { id: 'edit.layer.rot90', scope: 'edit', label: 'Rotate 90° clockwise', icon: RotateCw, placement: ['panel', 'context'], when: activeRaster, run: () => ed().rotateLayer(90) },
-  { id: 'edit.layer.rot270', scope: 'edit', label: 'Rotate 90° counter-clockwise', icon: RotateCcw, placement: ['panel', 'context'], when: activeRaster, run: () => ed().rotateLayer(-90) },
-  { id: 'edit.layer.rot180', scope: 'edit', label: 'Rotate 180°', icon: RotateCw, placement: ['context'], when: activeRaster, run: () => ed().rotateLayer(180) },
+  { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('h') },
+  { id: 'edit.layer.flipV', scope: 'edit', label: 'Flip vertical', icon: FlipVertical, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().flipLayer('v') },
+  { id: 'edit.layer.rot90', scope: 'edit', label: 'Rotate 90° clockwise', icon: RotateCw, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().rotateLayer(90) },
+  { id: 'edit.layer.rot270', scope: 'edit', label: 'Rotate 90° counter-clockwise', icon: RotateCcw, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().rotateLayer(-90) },
+  { id: 'edit.layer.rot180', scope: 'edit', label: 'Rotate 180°', icon: RotateCw, placement: ['context'], when: () => !ed().transform && (activeRaster)(), run: () => ed().rotateLayer(180) },
   // view
   { id: 'edit.view.zoomIn', scope: 'edit', label: 'Zoom in', icon: ZoomIn, keys: 'Ctrl++', alt: ['Ctrl+='], placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(ed().zoom * 1.25) },
   { id: 'edit.view.zoomOut', scope: 'edit', label: 'Zoom out', icon: ZoomOut, keys: 'Ctrl+-', placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(ed().zoom / 1.25) },
@@ -129,12 +131,12 @@ registerCommands([
   // tools
   ...TOOLS.map(([tool, label, key, icon]) => ({ id: `edit.tool.${tool}`, scope: 'edit' as const, label: `${label} tool`, icon, keys: key, placement: ['toolbar'] as ['toolbar'], run: setTool(tool) })),
   // layers of a kind, by type
-  ...Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ id: `edit.layer.adjustment.${t}`, scope: 'edit' as const, label: `Add ${t.replace('_', ' ')} adjustment`, icon: SlidersHorizontal, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('adjustment', { type: t }) } })),
-  ...Object.keys(FILTER_DEFAULTS).map((t) => ({ id: `edit.layer.filter.${t}`, scope: 'edit' as const, label: `Add ${t.replace('_', ' ')} filter`, icon: Sparkles, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('filter', { type: t }) } })),
+  ...Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ id: `edit.layer.adjustment.${t}`, scope: 'edit' as const, label: `Add ${typeLabel(t)} adjustment`, icon: SlidersHorizontal, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('adjustment', { type: t }) } })),
+  ...Object.keys(FILTER_DEFAULTS).map((t) => ({ id: `edit.layer.filter.${t}`, scope: 'edit' as const, label: `Add ${typeLabel(t)} filter`, icon: Sparkles, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('filter', { type: t }) } })),
 ])
 
-export const adjustmentMenu = (): MenuItem[] => Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ cmd: `edit.layer.adjustment.${t}`, label: t.replace('_', ' ') }))
-export const filterMenu = (): MenuItem[] => Object.keys(FILTER_DEFAULTS).map((t) => ({ cmd: `edit.layer.filter.${t}`, label: t.replace('_', ' ') }))
+export const adjustmentMenu = (): MenuItem[] => Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ cmd: `edit.layer.adjustment.${t}`, label: typeLabel(t) }))
+export const filterMenu = (): MenuItem[] => Object.keys(FILTER_DEFAULTS).map((t) => ({ cmd: `edit.layer.filter.${t}`, label: typeLabel(t) }))
 const lockLabel = () => (active()?.locked ? 'Unlock layer' : 'Lock layer')
 const visLabel = () => (active()?.visible ? 'Hide layer' : 'Show layer')
 const maskItems = (): MenuItem[] => {
@@ -172,9 +174,9 @@ export function canvasMenu(): MenuItem[] {
   const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
   const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { label: 'Pixel grid', checked: st.pixelGrid, run: () => st.setView({ pixelGrid: !st.pixelGrid }) }, { label: 'Mask overlay', keys: 'Alt+\\', checked: st.overlay, run: () => st.setView({ overlay: !st.overlay }) }]
   const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.compare' }, { cmd: 'edit.close' }]
-  const tools: MenuItem[] = TOOLS.map(([tool, label, , icon]) => ({ label, icon, checked: st.tool === tool, run: setTool(tool) }))
+  const tools: MenuItem[] = TOOLS.map(([tool, label]) => ({ cmd: `edit.tool.${tool}`, label, checked: st.tool === tool }))
   return [
-    ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: (m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1)) + (st.transform!.mode === m ? '  ✓' : '') })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
+    ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1), checked: st.transform!.mode === m })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
     ...(st.lassoPoly || magnetic.active ? [{ heading: magnetic.active ? 'magnetic lasso' : 'polygonal lasso' }, { cmd: 'edit.sel.polyClose', label: magnetic.active ? 'Close the border' : undefined }, ...(magnetic.active ? [{ cmd: 'edit.sel.magBack' }] : []), { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),

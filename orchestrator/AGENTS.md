@@ -77,3 +77,6 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
 - A job's engine outputs land in `<state>/engine_out/loom2/<job_id>`; they are moved into the project or deleted when the job ends, and
   leftovers are reconciled when a project opens.
 - The engine keeps answering HTTP with a dead GPU after a driver TDR; the stall watchdog (`engine.stall_timeout_s`) is what notices.
+- `fsio.replace` retries with `time.sleep` (up to ~0.63 s) while antivirus or the indexer holds the target. `JobQueue.persist()` calls it
+  on the event loop (the queue is loop-only), so a held `queue.json` stalls the loop that long; anything new that writes from an async
+  handler goes through `asyncio.to_thread` (as `blob_put` does since review R8).

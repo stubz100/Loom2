@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic.json_schema import models_json_schema
 
 from . import __version__
-from .documents import StaleStack
+from .documents import DocumentTooNew, StaleStack
 from .fsio import StateError
 from .groups import GroupNotFound, StaleGroup
 from .recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale
@@ -32,6 +32,7 @@ log = logging.getLogger("loom2.api")
 DEV_ORIGINS = ["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
 ERROR_STATUS = {StaleStack: 409,       # C1: the editor merges the newer server layers and saves again
                 StaleGroup: 409,       # D34: the page reloads the group and redoes the drag
+                DocumentTooNew: 409,   # R10: saved by a newer loom2 — refused, never opened and downgraded
                 GroupNotFound: 404,
                 StateError: 400}
 

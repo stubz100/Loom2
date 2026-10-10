@@ -44,12 +44,14 @@ export interface ValueFieldProps {
   label: string
   /** Stored value; `scale` converts it to what the field shows (0.5 × 100 → 50 %). */
   value: number; min: number; max: number; scale?: number; unit?: string
+  /** Stored-value granularity (64 → multiples of 64 from `min`); omitted: free to 1/10000. */
+  step?: number
   onChange: (v: number) => void
   onStart?: () => void; onCommit?: () => void
   disabled?: boolean; title?: string
 }
 
-export function ValueField({ label, value, min, max, scale = 1, unit, onChange, onStart, onCommit, disabled, title }: ValueFieldProps) {
+export function ValueField({ label, value, min, max, scale = 1, unit, step, onChange, onStart, onCommit, disabled, title }: ValueFieldProps) {
   const lo = min * scale, hi = max * scale
   const fine = hi - lo <= 10
   const shown = value * scale
@@ -57,7 +59,11 @@ export function ValueField({ label, value, min, max, scale = 1, unit, onChange, 
   const [text, setText] = useState<string | null>(null)
   const [popup, setPopup] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
-  const set = (display: number) => onChange(clampTo(Math.round(display * 10000) / 10000, lo, hi) / scale)
+  const typing = useRef<number | null>(null)                          // F11: the shown value when typing began — one gesture until Enter / blur
+  const typed = (v: number) => { if (typing.current === null) { typing.current = shown; onStart?.() } set(v) }
+  const endTyping = () => { if (typing.current !== null) { typing.current = null; onCommit?.() } }
+  const snap = (v: number) => (step ? Math.min(max, Math.max(min, min + Math.round((v - min) / step) * step)) : v)
+  const set = (display: number) => onChange(snap(clampTo(Math.round(display * 10000) / 10000, lo, hi) / scale))
   useEffect(() => {                                                  // the slider pop-up closes on a press outside it
     if (!popup) return
     const off = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setPopup(false) }
@@ -86,8 +92,8 @@ export function ValueField({ label, value, min, max, scale = 1, unit, onChange, 
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { const v = parseNum(e.currentTarget.value); if (v !== null) { onStart?.(); set(v); onCommit?.() } setText(null); e.currentTarget.blur(); return }
-    if (e.key === 'Escape') { setText(null); e.currentTarget.blur(); return }
+    if (e.key === 'Enter') { const v = parseNum(e.currentTarget.value); if (v !== null) typed(v); endTyping(); setText(null); e.currentTarget.blur(); return }
+    if (e.key === 'Escape') { if (typing.current !== null) set(typing.current); endTyping(); setText(null); e.currentTarget.blur(); return }
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
     e.preventDefault()
     let step = fine ? 0.01 : 1
@@ -132,8 +138,8 @@ export function ValueField({ label, value, min, max, scale = 1, unit, onChange, 
       <label>{label}</label>
       <div className={`vfield${disabled ? ' disabled' : ''}`} ref={wrap} title={title ?? `${label}: drag the number to scrub (Shift: fine), type a value or a sum, ↑ ↓ step; ▾ drag for a slider`}>
         <input className="vfield-num" value={text ?? fmt(shown)} disabled={disabled} aria-label={label}
-          onPointerDown={onNumDown} onChange={(e) => { setText(e.target.value); const v = Number(e.target.value); if (e.target.value.trim() !== '' && Number.isFinite(v)) { onStart?.(); set(v); onCommit?.() } }}
-          onBlur={(e) => { const v = parseNum(e.target.value); if (text !== null && v !== null && v !== shown) { onStart?.(); set(v); onCommit?.() } setText(null) }} onKeyDown={onKey} />
+          onPointerDown={onNumDown} onChange={(e) => { setText(e.target.value); const v = Number(e.target.value); if (e.target.value.trim() !== '' && Number.isFinite(v)) typed(v) }}
+          onBlur={(e) => { const v = parseNum(e.target.value); if (text !== null && v !== null && v !== shown) typed(v); endTyping(); setText(null) }} onKeyDown={onKey} />
         {unit ? <i className="vfield-unit">{unit}</i> : null}
         <button type="button" className="vfield-arrow" aria-label={`${label} slider`} title={`${label}: press and drag, or click for a slider`} disabled={disabled} onPointerDown={onArrowDown}>▾</button>
         {popup && (

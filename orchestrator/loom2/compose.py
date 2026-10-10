@@ -541,10 +541,11 @@ class Renderer:
         base_x, base_y = (int(node.get("x", 0)), int(node.get("y", 0))) if m.get("linked", True) else (0, 0)
         mx, my = base_x + int(m.get("x", 0)), base_y + int(m.get("y", 0))
         full = place(self.h, self.w, np.repeat(to_float(arr)[..., None], 4, axis=-1), mx, my)[..., 0]
+        # D54: outside its extent a mask reads its default value, through the same density as the pixels inside — R2: also for
+        # default 0 (at density < 1 the outside is partly visible, as the editor's maskDerived.outsideValue shows it)
         default = int(m.get("default", 0))
-        if default:
-            # D54: outside its extent a mask reads its default value, through the same density as the pixels inside
-            outside = derived_mask(np.full((1, 1), default, dtype=np.uint8), float(m.get("density", 1.0)))[0, 0] / 255.0
+        outside = derived_mask(np.full((1, 1), default, dtype=np.uint8), float(m.get("density", 1.0)))[0, 0] / 255.0
+        if outside:
             cover = place(self.h, self.w, np.ones(arr.shape + (4,), dtype=np.float32), mx, my)[..., 0]
             full = full + (1.0 - cover) * np.float32(outside)
         return full

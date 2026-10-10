@@ -89,7 +89,7 @@ export function Strip() {
           {c.q.folder === 'trash' ? <><CommandRow ids={['cat.restore', 'cat.purge']} /><EmptyTrashButton /></> : <CommandButton id="cat.trash" />}
         </>
       )}
-      {c.compare.length >= 2 && <button className="quiet" onClick={() => runCommand('cat.compare')} style={{ color: 'var(--accent)' }} title="Open compare (⇧C)">Compare {c.compare.length}</button>}
+      {c.compare.length >= 2 && <button className="quiet" onClick={() => runCommand('cat.compare')} style={{ color: 'var(--accent)' }} title="Open compare (Shift+C)">Compare {c.compare.length}</button>}
       {c.compare.length > 0 && <CommandButton id="cat.unpinAll" />}
       <CommandButton id="cat.tileSmaller" />
       <input type="range" min={96} max={512} step={16} value={c.tile} onChange={(e) => c.setTile(Number(e.target.value))} title="tile size ([ / ])" style={{ width: 110 }} />

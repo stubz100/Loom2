@@ -304,6 +304,7 @@ export function EditorCanvas() {
         const src = app.renderer.extract.canvas({ target: layersRef.current, frame: new Rectangle(0, 0, d.w, d.h), resolution: 1 }) as HTMLCanvasElement
         const c = document.createElement('canvas'); c.width = d.w; c.height = d.h
         c.getContext('2d')!.drawImage(src, 0, 0)
+        requestRender()                                                  // the extract leaves the screen with a frame at the extract's size
         return c
       })
       ro = new ResizeObserver(() => { app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })
@@ -942,6 +943,8 @@ export function EditorCanvas() {
       try {
         if (!(await ensureDocImage(st.quickSampleAll))) { useSession.getState().toast('The composite is not available yet', 'info'); return }
         const r = await quickSelect(pts.flatMap((q) => [q.x, q.y]), st.quickSize)
+        const now = useEditor.getState().doc                              // F18: the document (or its size) changed while it ran
+        if (!now || now.id !== doc.id || now.w !== doc.w || now.h !== doc.h) return
         if (!r) { useSession.getState().toast('Quick Selection found nothing there', 'info'); return }
         const shape = new Uint8Array(doc.w * doc.h), bw = r.box[2] - r.box[0]
         for (let y = Math.max(0, r.box[1]); y < Math.min(doc.h, r.box[3]); y++) for (let x = Math.max(0, r.box[0]); x < Math.min(doc.w, r.box[2]); x++) shape[y * doc.w + x] = r.mask[(y - r.box[1]) * bw + (x - r.box[0])]
@@ -972,6 +975,7 @@ export function EditorCanvas() {
         if (healNode) target = list[i + 1] ?? null
         else if (isHeal(list[i - 1] ?? null)) healNode = list[i - 1]
       }
+      if (healNode?.locked) { clearPreview(); useSession.getState().toast(`"${healNode.name}" is locked — unlock it to heal onto it`, 'info'); return }   // F6
       // the source pixels: what is visible, or the target layer's own
       const src = document.createElement('canvas'); src.width = w; src.height = h
       const sx = src.getContext('2d', { willReadFrequently: true })!
@@ -998,21 +1002,39 @@ export function EditorCanvas() {
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
         const healed = new Uint8ClampedArray(await res.arrayBuffer())
         for (let i = 0; i < w * h; i++) healed[i * 4 + 3] = Math.round((healed[i * 4 + 3] * cd[i * 4 + 3]) / 255)   // only the stroke shows
-        const s2 = useEditor.getState()
-        if (!healNode) {                                               // a Spot healing layer above the target, made once
-          s2.addLayer('raster', { name: 'Spot healing', recipe: { kind: 'spot_heal' } } as Partial<Node>)
-          healNode = findNode(useEditor.getState().doc, useEditor.getState().activeId)
-        }
-        const lp = healNode ? useEditor.getState().pixels.get(healNode.id) : undefined
-        if (!healNode || !lp) return
-        const ox = x0 - (healNode.x ?? 0), oy = y0 - (healNode.y ?? 0)
+        // F6: the request took a while — the same document, at the same size, and the layers it was aimed at must still be there
+        const s2 = useEditor.getState(), now = s2.doc
+        if (!now || now.id !== doc.id || now.w !== doc.w || now.h !== doc.h) return
+        let heal = healNode ? findNode(now, healNode.id) : null
+        if (healNode && !heal) { useSession.getState().toast('The Spot healing layer is gone — stroke again', 'info'); return }
+        if (heal?.locked) { useSession.getState().toast(`"${heal.name}" is locked — unlock it to heal onto it`, 'info'); return }
         const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
         tmp.getContext('2d')!.putImageData(new ImageData(healed, w, h), 0, 0)
-        lp.beginStroke(); lp.touch(ox, oy, ox + w, oy + h)
-        lp.ctx.drawImage(tmp, ox, oy)
-        lp.refreshRect(ox, oy, ox + w, oy + h); lp.dirty = true
+        if (!heal) {                                                    // a Spot healing layer above the target, made once
+          if (target && !findNode(now, target.id)) { useSession.getState().toast('The layer being healed is gone', 'info'); return }
+          if (target && s2.activeId !== target.id) s2.setActive(target.id, false)
+          const made = s2.addLayer('raster', { name: 'Spot healing', recipe: { kind: 'spot_heal' } } as Partial<Node>)
+          const st3 = useEditor.getState()
+          heal = made ? findNode(st3.doc, made.id) : null
+          const lp = heal ? st3.pixels.get(heal.id) : undefined
+          if (!heal || !lp) return
+          // one undo step for the first stroke too: the layer is born with the healed pixels (undo removes it, redo brings it back
+          // painted — a stack step leaves the canvas in the map), so no tile step follows the "add layer" step; it takes the stroke's name
+          const ox = x0 - (heal.x ?? 0), oy = y0 - (heal.y ?? 0)
+          lp.ctx.drawImage(tmp, ox, oy)
+          lp.refreshRect(ox, oy, ox + w, oy + h); lp.dirty = true
+          const hist = st3.history, last = hist[hist.length - 1]
+          if (last?.layerId === heal.id) useEditor.setState({ history: [...hist.slice(0, -1), { ...last, label: 'spot healing' }] })
+        } else {
+          const lp = s2.pixels.get(heal.id)
+          if (!lp) return
+          const ox = x0 - (heal.x ?? 0), oy = y0 - (heal.y ?? 0)
+          lp.beginStroke(); lp.touch(ox, oy, ox + w, oy + h)
+          lp.ctx.drawImage(tmp, ox, oy)
+          lp.refreshRect(ox, oy, ox + w, oy + h); lp.dirty = true
+          s2.pushHistory({ label: 'spot healing', layerId: heal.id, kind: 'image', tiles: lp.endStroke(), at: Date.now() })
+        }
         const s3 = useEditor.getState()
-        s3.pushHistory({ label: 'spot healing', layerId: healNode.id, kind: 'image', tiles: lp.endStroke(), at: Date.now() })
         s3.touch(); s3.bump()
       } catch (err) { useSession.getState().toast(`Spot Healing failed: ${(err as Error).message}`, 'error') }
       finally { host.style.cursor = ''; clearPreview() }
@@ -1111,6 +1133,8 @@ export function EditorCanvas() {
       }
       st.applySelectionShape(shape, mode, 'magic wand')
     }
+    /** D50: the paint target is a raster layer with lock transparency (masks and Quick Mask have no such lock). */
+    const lockAlpha = (t: { kind: 'image' | 'mask'; id: string }) => t.kind === 'image' && !!findNode(useEditor.getState().doc, t.id)?.lock_alpha
     /** G tool in linear / radial mode: foreground → background colour from a to b (mask: white → black), inside the selection. */
     const gradientFill = (a: Pt, b: Pt) => {
       drawGuide()
@@ -1128,7 +1152,9 @@ export function EditorCanvas() {
       if (st.selection) { tc.globalCompositeOperation = 'destination-in'; tc.drawImage(selectionAlphaCanvas(st.selection), 0, 0) }
       t.lp.beginStroke(); t.lp.touch(0, 0, t.lp.width, t.lp.height)
       const ctx = t.lp.ctx
-      ctx.save(); ctx.globalAlpha = st.brush.opacity; ctx.drawImage(tmp, -t.offset.x, -t.offset.y); ctx.restore()
+      ctx.save(); ctx.globalAlpha = st.brush.opacity
+      if (lockAlpha(t)) ctx.globalCompositeOperation = 'source-atop'      // F15 / D50: transparent pixels stay transparent
+      ctx.drawImage(tmp, -t.offset.x, -t.offset.y); ctx.restore()
       t.lp.refresh(); t.lp.dirty = true
       st.pushHistory({ label: `${st.fillMode} gradient`, layerId: t.id, kind: t.kind, tiles: t.lp.endStroke(), at: Date.now() })
       st.touch(); st.bump(); markPassesDirty(); requestRender()
@@ -1141,6 +1167,7 @@ export function EditorCanvas() {
       const ctx = t.lp.ctx
       ctx.save()
       ctx.globalAlpha = st.brush.opacity
+      if (lockAlpha(t)) ctx.globalCompositeOperation = 'source-atop'      // F15 / D50: transparent pixels stay transparent
       const fv = lumaOf(st.brush.color)
       ctx.fillStyle = t.kind === 'mask' ? `rgb(${fv}, ${fv}, ${fv})` : st.brush.color   // D54: a mask takes the foreground's grey
       if (st.selection) {

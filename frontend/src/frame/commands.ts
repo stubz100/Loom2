@@ -83,12 +83,13 @@ export function matchesCommand(e: KeyboardEvent, c: Command): boolean {
   return !!c.alt?.some((k) => matchChord(e, k))
 }
 
-/** Run the first enabled command of the scope whose shortcut matches; returns true when one ran. */
+/** Run the first enabled command of the scope whose shortcut matches; returns true when one ran. Disabled matches are skipped, so two
+ * commands can share a key with exclusive `when`s (Enter closes a polygon lasso or applies a transform). */
 export function handleKeyFor(scope: Scope, e: KeyboardEvent): boolean {
   for (const c of commandsFor(scope)) {
     if (!c.keys && !c.alt) continue
     if (!matchesCommand(e, c)) continue
-    if (!isEnabled(c)) return false
+    if (!isEnabled(c)) continue
     e.preventDefault()
     c.run()
     return true
@@ -99,13 +100,13 @@ export function handleKeyFor(scope: Scope, e: KeyboardEvent): boolean {
 /** Compact shortcut text for tooltips and menus. */
 export function keyLabel(keys?: string): string {
   if (!keys) return ''
-  return keys.replace('Ctrl+', '⌃').replace('Shift+', '⇧').replace('Alt+', '⌥').replace('Delete', 'Del').replace('Escape', 'Esc').replace('Enter', '↵').replace('ArrowLeft', '←').replace('ArrowRight', '→').replace('ArrowUp', '↑').replace('ArrowDown', '↓')
+  return keys.replace('Delete', 'Del').replace('Escape', 'Esc').replace('ArrowLeft', '←').replace('ArrowRight', '→').replace('ArrowUp', '↑').replace('ArrowDown', '↓')
 }
-export function titleFor(c: Command): string { return c.keys ? `${c.label} (${keyLabel(c.keys)})` : c.label }
+export function titleFor(c: Command, label = c.label): string { return c.keys ? `${label} (${keyLabel(c.keys)})` : label }
 
 // ---- menus --------------------------------------------------------------------------------------------------
 export type MenuItem =
-  | { cmd: string; label?: string }
+  | { cmd: string; label?: string; checked?: boolean }
   | { label: string; icon?: IconType; keys?: string; run: () => void; disabled?: boolean; danger?: boolean; checked?: boolean }
   | { sep: true }
   | { label: string; icon?: IconType; items: MenuItem[] }

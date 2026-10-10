@@ -304,6 +304,12 @@ class JobQueue:
         """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started.
         C3 (D26): under the `open` variant every weight the recipe would load must carry the `open` tag — the UI hides them, the
         queue is the gate."""
+        if isinstance(recipe, Inpaint) and (recipe.mode == "quick_remove" or recipe.prefill) and not native.available():
+            # R9: a missing native extension is refused at submission (HTTP 422), not when the job runs
+            what = "Quick Remove" if recipe.mode == "quick_remove" else "the content-aware pre-fill"
+            raise ValueError(f"{what} needs the native extension (uv sync --project orchestrator --extra native)")
+        if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
+            return                       # R3: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
         for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])], *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
@@ -608,6 +614,7 @@ class JobQueue:
         finally:
             self._running_id = None
             if job.status in TERMINAL:
+                self._cancel_requested.discard(job.id)       # R4: a cancel that lost the race to the end of the job is not kept
                 self._cleanup_job_files(job)
 
     async def _run_quick_remove(self, job: JobRecord, recipe: Inpaint) -> None:
@@ -637,12 +644,27 @@ class JobQueue:
             arr = np.dstack([filled, np.full(filled.shape[:2], 255, np.uint8)])
             return assemble_layer(arr, plan, mask, recipe.feather, crop, recipe.blend), plan
 
+        if self._cancelled(job):
+            return
         t = time.time()
         rgba, plan = await asyncio.wait_for(asyncio.to_thread(work), 300.0)
+        if self._cancelled(job):                     # R4: a cancel that arrived during the fill ends the job; no layer is added
+            return
         job.result["region"] = plan.to_dict()
         job.log_tail.append(f"quick remove: {plan.w}×{plan.h} at {plan.x},{plan.y} in {time.time() - t:.2f} s (CPU)")
-        await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, "quick remove", as_mask=True)
-        job.resumable = False
+        # R1: the document may have been deleted, or closed and reopened, during the fill — paste into the store's current copy
+        # (never save the stale object: that would resurrect a deleted .ora or lose the layer from the fresh copy)
+        try:
+            current = await asyncio.to_thread(self.documents.get, recipe.document_id)
+        except StateError:
+            self._fail(job, "the document was deleted while Quick Remove ran")
+            return
+        if (current.doc.w, current.doc.h) != (od.doc.w, od.doc.h):
+            self._fail(job, "the document's canvas changed size while Quick Remove ran — run it again")
+            return
+        job.resumable = False                        # R5 (C8): from here the work must never run twice — persisted before the layer lands
+        self.persist()
+        await self._add_result_layer(job, current, recipe, rgba, plan.x, plan.y, "quick remove", as_mask=True)
         job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
         job.wall_s = round(time.time() - self._t0, 1)
         self.catalogue.record_job(job.model_dump())

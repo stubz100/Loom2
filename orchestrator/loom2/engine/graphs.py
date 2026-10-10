@@ -533,7 +533,7 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
         g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
         g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}}
         ref_pixels: list = image
-        if recipe.mode == "remove":
+        if recipe.mode == "remove" and not recipe.prefill:          # D62: a content-aware pre-fill is the reference instead of mid grey
             g["15"] = {"class_type": "EmptyImage", "inputs": {"width": w, "height": h, "batch_size": 1, "color": 0x808080}}
             g["16"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["15", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
             ref_pixels = ["16", 0]
@@ -547,7 +547,7 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
         g["12"] = {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}}
         g["13"] = {"class_type": "ImageCompositeMasked", "inputs": {"destination": image, "source": ["12", 0], "x": 0, "y": 0, "resize_source": False, "mask": mask}}
         out = "13"
-        summary |= {"sampler": "icm", "steps": int(preset.steps), "cfg": float(preset.cfg), "hole": recipe.mode == "remove"}
+        summary |= {"sampler": "icm", "steps": int(preset.steps), "cfg": float(preset.cfg), "hole": recipe.mode == "remove", "prefill": bool(recipe.prefill)}
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": [out, 0], "filename_prefix": out_prefix}}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 

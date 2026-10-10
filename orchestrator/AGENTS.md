@@ -28,6 +28,14 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `events.py` | `EventHub`: WebSocket fan-out with seq numbers, 200-frame replay, binary previews |
 | `fsio.py` | `atomic_write_json/bytes/text`, `atomic_copy/move`, `read_json`, `new_id` |
 | `tools/` | `facesim.py` (advisory identity), `fetch.py` (weights), `pngmeta.py` (import metadata) |
+| `native.py`, `heal.py` | D62: the optional PhotoCraft extension (content-aware fill, PatchMatch) and Spot Healing on top of it |
+
+## Native extension (D62)
+
+`loom2/native.py` wraps the optional `loom2_pcalgo` wheel (PhotoCraft's content-aware fill and PatchMatch, committed in `vendor/`, pinned and
+checksummed; `uv sync --extra native`). Everything that uses it — Quick Remove (`Inpaint.mode == "quick_remove"`, run on the CPU in
+`queue._run_quick_remove` without starting the engine), the Remove pre-fill (`Inpaint.prefill`), Spot Healing (`heal.py`, `POST /heal`) —
+must answer cleanly when it is absent; `/capabilities.content_aware.available` tells the UI.
 
 ## Rules
 

@@ -22,7 +22,7 @@ import './edit.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
 const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
-  { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' }, { key: '', tool: 'quick', label: 'Quick selection' },
+  { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' }, { key: '', tool: 'quick', label: 'Quick selection' }, { key: 'J', tool: 'heal', label: 'Spot healing' },
   { key: 'A', tool: 'ai', label: 'AI select' }, { key: 'B', tool: 'brush', label: 'Brush' }, { key: 'E', tool: 'eraser', label: 'Eraser' }, { key: 'G', tool: 'fill', label: 'Fill / gradient' },
   { key: 'I', tool: 'eyedropper', label: 'Eyedropper' }, { key: 'C', tool: 'crop', label: 'Crop / canvas' }, { key: 'H', tool: 'hand', label: 'Hand' }, { key: 'Z', tool: 'zoom', label: 'Zoom' },
 ]
@@ -99,6 +99,19 @@ function QuickOptions() {
     </div>
   )
 }
+/** D62: Spot Healing (PhotoCraft): the brush diameter and what it samples; the healed pixels go on a "Spot healing" layer. */
+function HealOptions() {
+  const size = useEditor((s) => s.healSize)
+  const all = useEditor((s) => s.healSampleAll)
+  const ok = useSession((s) => !!s.capabilities?.content_aware?.available)
+  return (
+    <div className="tool-opts">
+      <ValueField label="size" value={size} min={1} max={1000} unit="px" title="brush diameter — [ and ] change it" onChange={(v) => ed().setView({ healSize: Math.max(1, Math.round(v)) })} />
+      <label /><label className="chk" title="heal what you see (all visible layers); off: only the active layer"><input type="checkbox" checked={all} onChange={(e) => ed().setView({ healSampleAll: e.target.checked })} /> sample all layers</label>
+      <span className="hint full">{ok ? 'paint over a blemish: on release it is rebuilt from its surroundings (PatchMatch, then a Poisson blend) onto a "Spot healing" layer above — non-destructive, one undo step per stroke. CPU, no GPU.' : 'needs the native extension: uv sync --project orchestrator --extra native, then restart the orchestrator'}</span>
+    </div>
+  )
+}
 /** D59: the Magnetic Lasso's detection options (PhotoCraft magnetic_lasso_ui): width, contrast, frequency. */
 function MagneticOptions() {
   const w = useEditor((s) => s.magWidth), c = useEditor((s) => s.magContrast), f = useEditor((s) => s.magFrequency)
@@ -159,6 +172,7 @@ function ToolOptions() {
         {sv.lassoOpen && <><label>{sv.lassoKind === 'magnetic' ? 'border' : 'polygon'}</label><span><CommandButton id="edit.sel.polyClose" text /> {sv.lassoKind === 'magnetic' && <CommandButton id="edit.sel.magBack" text />} <CommandButton id="edit.sel.polyCancel" text /></span></>}
         <span className="hint full">{sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : sv.lassoKind === 'magnetic' ? 'click on an edge, then move along it — the border snaps to the edge and drops points as it goes; click to place a point, Alt-click a straight segment (Alt-drag: freehand), Backspace removes a point; click the first point, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects</span></div>}
       {tool === 'quick' && <QuickOptions />}
+      {tool === 'heal' && <HealOptions />}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} />
         <label>sample</label><div className="segmented"><button className={!sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: false })}>active layer</button><button className={sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: true })}>all layers</button></div>
         <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
@@ -328,7 +342,8 @@ function AiTab() {
   const seeds = () => { const n = Math.max(1, Math.min(4, p.candidates)); return Array.from({ length: n }, (_, i) => (p.seedMode === 'random' ? Math.floor(Math.random() * 2 ** 31) : p.seed + i)) }
   // C3 (D26): the open build has no dev, no Klein 9B and no SAM 3 — the panel's choices map onto the open models
   const open = useSession((s) => s.capabilities?.variant === 'open')
-  const mode = open && p.mode === 'fill_hero' ? 'fill' : p.mode
+  const contentAware = useSession((s) => !!s.capabilities?.content_aware?.available)      // D62: the native extension is installed
+  const mode = (open && p.mode === 'fill_hero') || (!contentAware && p.mode === 'quick_remove') ? 'fill' : p.mode
   const capModels = useSession((s) => s.capabilities?.models)
   const teId = (mid: string) => (p.teId && capModels?.[mid]?.te_options?.some((o) => o.id === p.teId) ? p.teId : undefined)   // D31: only where it pairs
   const refineModel = open ? 'klein-base-4b' : p.refineModel
@@ -355,7 +370,7 @@ function AiTab() {
     : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
   const run = (stage = false) => {
     const base = { seeds: seeds(), prompt_text: p.prompt }
-    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, ...base }, stage)
+    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: mode === 'remove' && p.prefill && contentAware, ...base }, stage)
     else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: hero ? 'flux2-dev-fp8mixed' : kleinId, te_id: teId(hero ? 'flux2-dev-fp8mixed' : kleinId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
     else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base }, stage)
     else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
@@ -369,11 +384,14 @@ function AiTab() {
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
           <label>mode</label><select value={mode} onChange={(e) => { const m = e.target.value as AiPanelState['mode']; setP({ mode: m, candidates: m === 'fill_hero' ? 2 : 4 }) }}>
-            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option>{!open && <option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option>}<option value="remove">Remove — background-only prompt</option>
+            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option>{!open && <option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option>}<option value="remove">Remove — background-only prompt</option>{contentAware && <option value="quick_remove">Quick remove — content-aware fill, CPU, seconds, no GPU</option>}
           </select>
-          <EncoderPick model={kleinId} />
-          <label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
-          {p.mode !== 'fill_match' && p.mode !== 'remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
+          {mode === 'remove' && contentAware && <><label /><label className="chk" title="the hole is content-aware filled (PhotoCraft, CPU) and the model starts from that instead of a grey hole (D62) — try it where Remove leaves an object's ghost"><input type="checkbox" checked={p.prefill} onChange={(e) => setP({ prefill: e.target.checked })} /> pre-fill the hole (content-aware)</label></>}
+          {mode === 'quick_remove' && <span className="hint full">PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones (S1)</span>}
+          {mode !== 'quick_remove' && <EncoderPick model={kleinId} />}
+          {mode !== 'quick_remove' && <><label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
+</>}
+          {p.mode !== 'fill_match' && p.mode !== 'remove' && p.mode !== 'quick_remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
           <Slider label="margin" value={p.margin} min={0} max={100} fmt={(v) => `${v} %`} onChange={(v) => setP({ margin: v })} />
           <Slider label="min size" value={p.minSize} min={512} max={2048} step={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ minSize: v })} />
           <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />

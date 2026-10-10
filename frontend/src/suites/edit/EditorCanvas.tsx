@@ -626,7 +626,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'quick' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'quick' | 'heal' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
       // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
@@ -745,6 +745,7 @@ export function EditorCanvas() {
       }
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
       if (tool === 'quick') { drag = { kind: 'quick', start: p, last: p, pts: [p], alt: m.altKey }; drawTrail([p]); return }   // D59
+      if (tool === 'heal') { drag = { kind: 'heal', start: p, last: p, pts: [p] }; drawTrail([p], st.healSize); return }      // D62
       if (tool === 'lasso' && st.lassoKind === 'magnetic') {               // D59: PhotoCraft's Magnetic Lasso
         let mode = modeFor(m, st.selectionMode)
         if ((mode === 'subtract' || mode === 'intersect') && !st.selection) mode = 'replace'
@@ -771,9 +772,9 @@ export function EditorCanvas() {
       if (st.tool === 'lasso' && st.lassoKind === 'magnetic') { magnetic.move(p, (e.buttons & 1) === 1); return }
       if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
-      if (drag.kind === 'quick') {                                   // D59: every sample that moved more than ¼ px joins the stroke
+      if (drag.kind === 'quick' || drag.kind === 'heal') {           // D59 / D62: every sample that moved more than ¼ px joins the stroke
         const q = drag.pts![drag.pts!.length - 1]
-        if (Math.abs(p.x - q.x) + Math.abs(p.y - q.y) > 0.25) { drag.pts!.push(p); drawTrail(drag.pts!) }
+        if (Math.abs(p.x - q.x) + Math.abs(p.y - q.y) > 0.25) { drag.pts!.push(p); drawTrail(drag.pts!, drag.kind === 'heal' ? st.healSize : undefined) }
         return
       }
       if (drag.kind === 'pan') { st.setView({ pan: { x: drag.startPan!.x + e.clientX - drag.start.x, y: drag.startPan!.y + e.clientY - drag.start.y } }); return }
@@ -848,6 +849,7 @@ export function EditorCanvas() {
       }
       if (drag.kind === 'gradient') gradientFill(drag.start, drag.last)
       if (drag.kind === 'quick') void quickFinish(drag.pts!, !!drag.alt)
+      if (drag.kind === 'heal') void healFinish(drag.pts!)
       drag = null
     }
     const onDouble = (e: MouseEvent) => {
@@ -921,11 +923,11 @@ export function EditorCanvas() {
     }
     const clearPreview = () => { const ov = overlayRef.current; const g = ov?.getChildByLabel('preview'); if (g) g.destroy(); requestRender() }
     /** D59: Quick Selection's footprint trail while the stroke is drawn (PhotoCraft draws the same; the selection comes on release). */
-    const drawTrail = (pts: Pt[]) => {
+    const drawTrail = (pts: Pt[], sizeIn?: number) => {
       const ov = overlayRef.current; if (!ov) return
       let g = ov.getChildByLabel('preview') as Graphics | null
       if (!g) { g = new Graphics(); g.label = 'preview'; ov.addChild(g) }
-      const size = useEditor.getState().quickSize
+      const size = sizeIn ?? useEditor.getState().quickSize
       g.clear()
       if (pts.length === 1) g.circle(pts[0].x, pts[0].y, size / 2).fill({ color: 0xffffff, alpha: 0.16 })
       else { g.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) g.lineTo(q.x, q.y); g.stroke({ color: 0xffffff, alpha: 0.16, width: size, cap: 'round', join: 'round' }) }
@@ -945,6 +947,74 @@ export function EditorCanvas() {
         for (let y = Math.max(0, r.box[1]); y < Math.min(doc.h, r.box[3]); y++) for (let x = Math.max(0, r.box[0]); x < Math.min(doc.w, r.box[2]); x++) shape[y * doc.w + x] = r.mask[(y - r.box[1]) * bw + (x - r.box[0])]
         useEditor.getState().applySelectionShape(shape, alt ? 'subtract' : 'add', 'quick selection')
       } catch (err) { useSession.getState().toast(`Quick Selection failed: ${(err as Error).message}`, 'error') }
+      finally { host.style.cursor = ''; clearPreview() }
+    }
+    /** D62: Spot Healing (PhotoCraft spot_heal_surface): the region around the stroke (the stroke ± max(size, 8) + 8 px) and its
+     * coverage go to POST /heal; the healed pixels, masked by the coverage, land on a "Spot healing" layer above the target. */
+    const healFinish = async (pts: Pt[]) => {
+      const st = useEditor.getState(), doc = st.doc
+      if (!doc) { clearPreview(); return }
+      if (!useSession.getState().capabilities?.content_aware?.available) { clearPreview(); useSession.getState().toast('Spot Healing needs the native extension (uv sync --project orchestrator --extra native)', 'info'); return }
+      const size = st.healSize, r = size / 2, margin = Math.ceil(Math.max(size, 8)) + 8
+      const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y)
+      const x0 = Math.max(0, Math.floor(Math.min(...xs) - r - margin)), y0 = Math.max(0, Math.floor(Math.min(...ys) - r - margin))
+      const x1 = Math.min(doc.w, Math.ceil(Math.max(...xs) + r + margin)), y1 = Math.min(doc.h, Math.ceil(Math.max(...ys) + r + margin))
+      const w = x1 - x0, h = y1 - y0
+      if (w <= 0 || h <= 0) { clearPreview(); return }
+      // the target: the active layer, or — when that is already a Spot healing layer — the layer under it
+      const isHeal = (n: Node | null) => !!n && n.kind === 'raster' && (n.recipe as { kind?: string } | null | undefined)?.kind === 'spot_heal'
+      const active = findNode(doc, st.activeId)
+      let healNode: Node | null = isHeal(active) ? active : null
+      let target: Node | null = active
+      const findParentList = (ns: Node[], id: string): Node[] | null => { for (const n of ns) { if (n.id === id) return ns; if (n.children) { const f = findParentList(n.children, id); if (f) return f } } return null }
+      if (active) {
+        const list = findParentList(doc.layers, active.id)!, i = list.indexOf(active)
+        if (healNode) target = list[i + 1] ?? null
+        else if (isHeal(list[i - 1] ?? null)) healNode = list[i - 1]
+      }
+      // the source pixels: what is visible, or the target layer's own
+      const src = document.createElement('canvas'); src.width = w; src.height = h
+      const sx = src.getContext('2d', { willReadFrequently: true })!
+      if (st.healSampleAll) { const c = st.extractor?.(); if (!c) { clearPreview(); useSession.getState().toast('The composite is not available yet', 'info'); return } sx.drawImage(c, -x0, -y0) }
+      else {
+        const lp = target?.kind === 'raster' ? st.pixels.get(target.id) : undefined
+        if (!lp || !target) { clearPreview(); useSession.getState().toast('Spot Healing on one layer needs a pixel layer (or turn on sample all layers)', 'info'); return }
+        sx.drawImage(lp.canvas, (target.x ?? 0) - x0, (target.y ?? 0) - y0)
+      }
+      const rgba = sx.getImageData(0, 0, w, h).data
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h
+      const cc = cv.getContext('2d', { willReadFrequently: true })!
+      cc.fillStyle = cc.strokeStyle = '#fff'
+      if (pts.length === 1) { cc.beginPath(); cc.arc(pts[0].x - x0, pts[0].y - y0, r, 0, Math.PI * 2); cc.fill() }
+      else { cc.lineWidth = size; cc.lineCap = cc.lineJoin = 'round'; cc.beginPath(); cc.moveTo(pts[0].x - x0, pts[0].y - y0); for (const q of pts.slice(1)) cc.lineTo(q.x - x0, q.y - y0); cc.stroke() }
+      const cd = cc.getImageData(0, 0, w, h).data
+      const body = new Uint8Array(w * h * 5)
+      body.set(rgba, 0)
+      for (let i = 0; i < w * h; i++) body[w * h * 4 + i] = cd[i * 4 + 3]
+      host.style.cursor = 'progress'
+      try {
+        const b = useSession.getState().backend!
+        const res = await fetch(`http://${b.host}:${b.port}/heal?w=${w}&h=${h}&seed=${Math.floor(Math.random() * 2 ** 31)}`, { method: 'POST', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
+        if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+        const healed = new Uint8ClampedArray(await res.arrayBuffer())
+        for (let i = 0; i < w * h; i++) healed[i * 4 + 3] = Math.round((healed[i * 4 + 3] * cd[i * 4 + 3]) / 255)   // only the stroke shows
+        const s2 = useEditor.getState()
+        if (!healNode) {                                               // a Spot healing layer above the target, made once
+          s2.addLayer('raster', { name: 'Spot healing', recipe: { kind: 'spot_heal' } } as Partial<Node>)
+          healNode = findNode(useEditor.getState().doc, useEditor.getState().activeId)
+        }
+        const lp = healNode ? useEditor.getState().pixels.get(healNode.id) : undefined
+        if (!healNode || !lp) return
+        const ox = x0 - (healNode.x ?? 0), oy = y0 - (healNode.y ?? 0)
+        const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
+        tmp.getContext('2d')!.putImageData(new ImageData(healed, w, h), 0, 0)
+        lp.beginStroke(); lp.touch(ox, oy, ox + w, oy + h)
+        lp.ctx.drawImage(tmp, ox, oy)
+        lp.refreshRect(ox, oy, ox + w, oy + h); lp.dirty = true
+        const s3 = useEditor.getState()
+        s3.pushHistory({ label: 'spot healing', layerId: healNode.id, kind: 'image', tiles: lp.endStroke(), at: Date.now() })
+        s3.touch(); s3.bump()
+      } catch (err) { useSession.getState().toast(`Spot Healing failed: ${(err as Error).message}`, 'error') }
       finally { host.style.cursor = ''; clearPreview() }
     }
     /** D59: the Magnetic Lasso's border — fastened path and live segment, its points, and the closing mark near the start. */

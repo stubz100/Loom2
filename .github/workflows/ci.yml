@@ -34,7 +34,7 @@ jobs:
         with:
           enable-cache: true
       - name: orchestrator venv
-        run: uv sync --project orchestrator --extra dev --extra oracle
+        run: uv sync --project orchestrator --extra dev --extra oracle --extra native
       - name: psd-tools corpus cache (D40)
         uses: actions/cache@v4
         with:
@@ -50,6 +50,8 @@ jobs:
         run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
       - name: settings audit (D60) — every Settings field, recipe field and /capabilities parameter reaches the code that runs
         run: orchestrator/.venv/Scripts/python.exe scripts/settings_audit.py
+      - name: content-aware wheel (D62) — the committed extension matches its PhotoCraft pin and checksum
+        run: orchestrator/.venv/Scripts/python.exe scripts/build_pcalgo.py --check
       - name: smart-select WebAssembly (D59) — the committed module matches its PhotoCraft pin and checksum
         run: orchestrator/.venv/Scripts/python.exe scripts/build_pcwasm.py --check
       - name: versions (D36) — every location matches VERSION

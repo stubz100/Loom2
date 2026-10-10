@@ -1,0 +1,8 @@
+{
+  "photocraft": "b37bff987c481d8dddc7c1158ebd4a40bf5b34b9",
+  "repository": "https://github.com/storytold/photocraft",
+  "crate": "orchestrator/native/pcalgo",
+  "wheel": "loom2_pcalgo-0.0.1-cp313-abi3-win_amd64.whl",
+  "sha256": "4b830d850f3830d1e39a04cb2d05b74439b1b874e25f07f01863cfe239f87a6a",
+  "bytes": 222981
+}

@@ -237,6 +237,13 @@ to Photoshop); every stroke adds, Alt subtracts; size by the value field or `[` 
 click the first point, double-click, Enter or ✓ closes, Esc or ⊘ cancels; Shift / Alt / Shift+Alt pick add / subtract / intersect.
 Headed mode `smartsel`.
 
+**Spot Healing and Quick Remove (D62, 2026-10-10; the author's call over S1's no-go).** With the native extension (`--extra native`):
+**Spot healing** (`J`) — paint over a blemish; on release the stroke is rebuilt from its surroundings (PhotoCraft: PatchMatch over the
+stroke + 2 px, a Poisson blend over + 1 px) onto a *Spot healing* layer above the target (made once, then reused), one undo step per
+stroke; *sample all layers* (default) heals what is visible. **Quick remove** in the AI panel's Inpaint modes — content-aware fill on
+the CPU, no model, under a second; good on small or textured areas, it smears large holes. Remove gains *pre-fill the hole* (off by
+default: on bench task 01 the model keeps the pre-fill's smear). Headed mode `heal`; rig `scripts/d62_remove_rig.py`.
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

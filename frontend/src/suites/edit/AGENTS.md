@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform), D59 (Quick Selection, Magnetic Lasso).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform), D59 (Quick Selection, Magnetic Lasso), D62 (Spot Healing, Quick Remove).
 
 ## Files
 

@@ -41,6 +41,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "advanced": ["recipe:T2I.base_shift", "recipe:T2I.max_shift", "recipe:T2I.tile_size"],
     "tiers": ["recipe:T2I.tier"],
     "refine_edge": ["recipe:RefineEdge.radius"],
+    "content_aware": ["recipe:Inpaint.mode", "recipe:Inpaint.prefill"],     # D62: Quick Remove, the Remove pre-fill
 }
 
 # fields that are not read by the job code on purpose — each with its reason

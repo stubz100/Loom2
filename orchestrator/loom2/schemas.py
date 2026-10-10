@@ -167,6 +167,12 @@ class RefineEdgeCaps(Open):
     ranges: dict[str, list[float]]
 
 
+class ContentAwareCaps(Open):
+    """D62: whether the native extension (PhotoCraft's content-aware fill + PatchMatch) is installed, and the modes it enables."""
+    available: bool
+    modes: list[str]
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -182,6 +188,7 @@ class Capabilities(Open):
     advanced: AdvancedCaps
     tiers: dict[str, dict[str, tuple[int, int]]]
     refine_edge: RefineEdgeCaps
+    content_aware: ContentAwareCaps
 
 
 class MissingWeight(Open):

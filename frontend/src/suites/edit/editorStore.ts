@@ -30,8 +30,8 @@ export type DocSummary = ApiDocSummary
  *  this is the one place a server document becomes that model (D38: the API side of the boundary is typed). */
 const asStack = (d: ApiDocument): DocumentStack => d as unknown as DocumentStack
 const asBody = (s: DocumentStack): { [key: string]: unknown } => s as unknown as { [key: string]: unknown }
-export type Tool = 'move' | 'marquee' | 'lasso' | 'wand' | 'quick' | 'ai' | 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'crop' | 'hand' | 'zoom'
-export const TOOL_KEYS: Record<string, Tool> = { v: 'move', m: 'marquee', l: 'lasso', w: 'wand', a: 'ai', b: 'brush', e: 'eraser', g: 'fill', i: 'eyedropper', c: 'crop', h: 'hand', z: 'zoom' }
+export type Tool = 'move' | 'marquee' | 'lasso' | 'wand' | 'quick' | 'heal' | 'ai' | 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'crop' | 'hand' | 'zoom'
+export const TOOL_KEYS: Record<string, Tool> = { v: 'move', m: 'marquee', l: 'lasso', w: 'wand', j: 'heal', a: 'ai', b: 'brush', e: 'eraser', g: 'fill', i: 'eyedropper', c: 'crop', h: 'hand', z: 'zoom' }
 export const BLEND_MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-burn', 'linear-burn', 'lighten', 'screen', 'color-dodge', 'linear-dodge', 'overlay', 'soft-light', 'hard-light',
   'vivid-light', 'linear-light', 'pin-light', 'hard-mix', 'difference', 'exclusion', 'subtract', 'divide', 'hue', 'saturation', 'color', 'luminosity']
 /** Default parameters per adjustment / filter type; names and scales match orchestrator/loom2/compose.py. */
@@ -64,7 +64,7 @@ export interface HistoryEntry {
 }
 export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode' | 'maskView'
-  | 'latched' | 'blendPreview' | 'quickSize' | 'quickSampleAll' | 'magWidth' | 'magContrast' | 'magFrequency'
+  | 'latched' | 'blendPreview' | 'quickSize' | 'quickSampleAll' | 'magWidth' | 'magContrast' | 'magFrequency' | 'healSize' | 'healSampleAll'
   | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx' | 'brushLine' | 'pickOnce'
 
 export interface EditorState {
@@ -84,6 +84,7 @@ export interface EditorState {
   lassoKind: 'freehand' | 'polygon' | 'magnetic'; lassoPoly: { x: number; y: number }[] | null
   // D59: Quick Selection (brush diameter, sample all layers) and Magnetic Lasso (width px, contrast %, frequency) options
   quickSize: number; quickSampleAll: boolean; magWidth: number; magContrast: number; magFrequency: number
+  healSize: number; healSampleAll: boolean          // D62: Spot Healing (brush diameter; heal what is visible, or the active layer)
   wandContiguous: boolean; wandMerged: boolean; wandAA: boolean
   selModifyPx: number
   brushLine: boolean; pickOnce: boolean          // D51: straight-line strokes; the next click picks the colour
@@ -479,7 +480,7 @@ export const useEditor = create<EditorState>()(
         otherColours: { color: '#000000', background: '#ffffff' }, maskPairActive: false, maskView: 'off',
         latched: { shift: false, ctrl: false, alt: false }, blendPreview: null, selectedIds: [], anchorId: null,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
-        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, quickSize: 30, quickSampleAll: false, magWidth: 10, magContrast: 10, magFrequency: 57, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, quickSize: 30, quickSampleAll: false, magWidth: 10, magContrast: 10, magFrequency: 57, healSize: 40, healSampleAll: true, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
@@ -1535,7 +1536,7 @@ export const useEditor = create<EditorState>()(
       // D54: the image pair is stored as `brush`, the mask pair as `maskColours`, whichever is live
       merge: (p, c) => { const q = (p ?? {}) as Partial<EditorState> & { maskColours?: { color: string; background: string } }; return { ...c, ...q, otherColours: q.maskColours ?? c.otherColours } },
       partialize: (s) => ({ tool: s.tool, brush: s.maskPairActive ? { ...s.brush, ...s.otherColours } : s.brush, maskColours: s.maskPairActive ? { color: s.brush.color, background: s.brush.background } : s.otherColours, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets,
-      marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, quickSize: s.quickSize, quickSampleAll: s.quickSampleAll, magWidth: s.magWidth, magContrast: s.magContrast, magFrequency: s.magFrequency, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx, refineEdge: s.refineEdge }) as never },
+      marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, quickSize: s.quickSize, quickSampleAll: s.quickSampleAll, magWidth: s.magWidth, magContrast: s.magContrast, magFrequency: s.magFrequency, healSize: s.healSize, healSampleAll: s.healSampleAll, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx, refineEdge: s.refineEdge }) as never },
   ),
 )
 

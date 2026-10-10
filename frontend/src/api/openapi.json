@@ -767,6 +767,9 @@
           "advanced": {
             "$ref": "#/components/schemas/AdvancedCaps"
           },
+          "content_aware": {
+            "$ref": "#/components/schemas/ContentAwareCaps"
+          },
           "facesim": {
             "$ref": "#/components/schemas/FaceSimCaps"
           },
@@ -871,7 +874,8 @@
           "te_alternates",
           "advanced",
           "tiers",
-          "refine_edge"
+          "refine_edge",
+          "content_aware"
         ],
         "title": "Capabilities",
         "type": "object"
@@ -1505,6 +1509,29 @@
           "at"
         ],
         "title": "CompareReply",
+        "type": "object"
+      },
+      "ContentAwareCaps": {
+        "additionalProperties": true,
+        "description": "D62: whether the native extension (PhotoCraft's content-aware fill + PatchMatch) is installed, and the modes it enables.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "modes"
+        ],
+        "title": "ContentAwareCaps",
         "type": "object"
       },
       "Deleted": {
@@ -4336,7 +4363,8 @@
               "fill_match",
               "fill_hero",
               "remove",
-              "outpaint"
+              "outpaint",
+              "quick_remove"
             ],
             "title": "Mode",
             "type": "string"
@@ -4362,6 +4390,11 @@
             ],
             "default": null,
             "title": "Outpaint"
+          },
+          "prefill": {
+            "default": false,
+            "title": "Prefill",
+            "type": "boolean"
           },
           "prompt_mode": {
             "default": "image_first",
@@ -10740,6 +10773,75 @@
         "summary": "Groups Ungroup",
         "tags": [
           "groups"
+        ]
+      }
+    },
+    "/heal": {
+      "post": {
+        "description": "PhotoCraft's Spot Healing over a region: the body is the region's straight RGBA (w·h·4 bytes) followed by the stroke's coverage\n(w·h bytes, > 0 heals); the reply is the region with the stroke healed (same size, alpha unchanged).",
+        "operationId": "heal_heal_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "w",
+            "required": true,
+            "schema": {
+              "title": "W",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "h",
+            "required": true,
+            "schema": {
+              "title": "H",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seed",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Seed",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {}
+            },
+            "description": "the healed RGBA region (w·h·4 bytes)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heal",
+        "tags": [
+          "retouch"
         ]
       }
     },

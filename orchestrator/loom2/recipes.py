@@ -96,7 +96,7 @@ class Inpaint(BaseModel):
     from the document's selection (uploaded by the editor) unless the mode is outpaint."""
     kind: Literal["inpaint"] = "inpaint"
     model_id: str = "klein-9b"                    # fill / outpaint: klein-9b (or klein-4b); fill_hero forces dev
-    mode: Literal["fill", "fill_match", "fill_hero", "remove", "outpaint"] = "fill"
+    mode: Literal["fill", "fill_match", "fill_hero", "remove", "outpaint", "quick_remove"] = "fill"   # D62: quick_remove = CPU content-aware fill, no engine
     document_id: str = ""
     prompt_text: str = ""
     seeds: list[int] = Field(default_factory=lambda: [0])
@@ -108,6 +108,7 @@ class Inpaint(BaseModel):
     feather: int = Field(8, ge=0, le=256)         # paste-back feather on the result's layer mask (px)
     expand: int = Field(0, ge=0, le=256)          # grow the mask before sampling (px)
     blend: Literal["feather", "seamless"] = "feather"   # D47: seamless = Poisson-clone onto the plate inside the feathered edge
+    prefill: bool = False                         # D62: Remove — the hole pre-filled by content-aware fill (the reference instead of mid grey)
     prompt_mode: Literal["image_first", "prompt_first"] = "image_first"   # LanPaint (E8b: prompt_first λ 8)
     outpaint: dict[str, Annotated[int, Field(ge=0, le=4096)]] | None = None   # {left, top, right, bottom} for mode == outpaint
     image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id
@@ -228,6 +229,8 @@ def inpaint_model_id(recipe: Inpaint, variant: str = "full") -> str:
 def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
     """Scheduling hint: jobs sharing a warm group run back to back so the engine keeps the weights resident."""
     if isinstance(recipe, Inpaint):
+        if recipe.mode == "quick_remove":
+            return "cpu"                             # D62: no weights at all
         return inpaint_model_id(recipe, variant)   # C10: the model that runs, not the one the panel named
     if isinstance(recipe, Upscale) and recipe.refine:
         return recipe.refine_model_id            # the big model decides the swap, not the 70 MB upscaler

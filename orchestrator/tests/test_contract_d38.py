@@ -17,7 +17,7 @@ from test_routes_d37 import flat_routes
 # replies that are bytes or files, not JSON — they have no response model on purpose
 NOT_JSON = {"GET /assets/{asset_id}/file", "GET /thumbs/{asset_id}/{size}", "GET /documents/{doc_id}/layers/{lid}/pixels",
             "GET /documents/{doc_id}/thumbnail", "GET /documents/{doc_id}/selection", "POST /documents/{doc_id}/export",
-            "GET /clips/{clip_id}/proxy.mp4", "GET /clips/{clip_id}/frames/{name}", "GET /blobs/{sha}"}
+            "GET /clips/{clip_id}/proxy.mp4", "GET /clips/{clip_id}/frames/{name}", "GET /blobs/{sha}", "POST /heal"}   # D62: /heal answers raw RGBA
 
 
 def test_every_json_route_declares_its_reply(tmp_path: Path):

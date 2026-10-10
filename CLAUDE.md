@@ -32,8 +32,9 @@ the engine. The author works mouse-first and is EU-based.
 | Whole app | `scripts/dev.ps1` (Vite + shell + orchestrator; the engine starts on the first job) |
 | Browser dev | `scripts/dev.ps1 -Browser` → `http://127.0.0.1:1420/?token=devtoken&port=8766` |
 | Rig acceptance (GPU) | `scripts/m1_acceptance.py`, `m3_`, `m4_`, `m5_`, `m6_acceptance.py`, `m7_durability.py` |
-| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|kit\|layers\|props\|transform\|smartsel\|masks\|tour\|cmpdiag\|grid\|brush\|selection\|psd\|animate\|perf` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
+| Headed editor / player checks | `scripts/edit_headed_check.py render\|paint\|kit\|layers\|props\|transform\|smartsel\|heal\|masks\|tour\|cmpdiag\|grid\|brush\|selection\|psd\|animate\|perf` (visible Edge, needs Vite on 1420; `psd` needs `uv sync --project orchestrator --extra dev --extra oracle`) |
 | CSP check of the production build | `scripts/csp_check.py` (headless Edge; incl. the smart-select Worker's WebAssembly) |
+| Content-aware wheel (D62) | `python scripts/build_pcalgo.py --check` (CI); installed by `uv sync --project orchestrator --extra native`; rebuild only when the PhotoCraft pin moves: `python scripts/build_pcalgo.py` then `uv lock --project orchestrator`. Rig: `scripts/d62_remove_rig.py` |
 | Smart-select WebAssembly (D59) | `python scripts/build_pcwasm.py --check` (CI); rebuild only when the PhotoCraft pin moves: `python scripts/build_pcwasm.py` (needs the PhotoCraft checkout beside this repository at the pin and `rustup target add wasm32-unknown-unknown`) |
 
 CI (`.github/workflows/ci.yml`) runs the offline suite and the frontend build for both variants (`full`, `open`) on every push and

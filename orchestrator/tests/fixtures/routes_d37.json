@@ -68,6 +68,7 @@
  "POST /groups/{gid}/duplicate",
  "POST /groups/{gid}/group",
  "POST /groups/{gid}/ungroup",
+ "POST /heal",
  "POST /jobs",
  "POST /jobs/{job_id}/cancel",
  "POST /jobs/{job_id}/release",

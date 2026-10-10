@@ -8,7 +8,7 @@ from .engine.graphs import I2V_RULES, I2V_WEIGHTS, LTX_STEPS, PRESETS, TE_ALTERN
 from .recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES
 from .roster import ROSTER_BY_ID
 from .services import Services
-from . import matting
+from . import matting, native
 from .tools import facesim
 
 RECIPES = ["t2i", "inpaint", "i2i", "upscale", "segment", "i2v"]
@@ -28,7 +28,8 @@ def capabilities(svc: Services) -> dict:
             "variant": variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
             "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
             "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES, "te_alternates": TE_ALTERNATES,
-            "advanced": ADVANCED, "tiers": IMAGE_TIERS, "refine_edge": matting.capabilities()}
+            "advanced": ADVANCED, "tiers": IMAGE_TIERS, "refine_edge": matting.capabilities(),
+            "content_aware": native.capabilities()}                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
 
 
 def _image_models(svc: Services, variant: str) -> dict:

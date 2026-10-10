@@ -2534,3 +2534,31 @@ Inspector → lineage → split → pages.
   (start caught only `RuntimeError`; restart and free caught nothing). They now answer 503 with the reason (`RuntimeError`, `OSError`,
   `httpx.HTTPError`). Nothing else: **89 operations, 431 requests, 0 failures** in ≈ 10 s. 183 offline.
 
+## 2026-10-10 21:30 — D62 content-aware fill and Spot Healing (S1 go, the author's call); PhotoCraft's proposals all done
+
+- **Packaging:** the S1 crate moved to `orchestrator/native/pcalgo`; `scripts/build_pcalgo.py` refuses unless the PhotoCraft checkout is
+  clean at the pin, builds the abi3 wheel with maturin (`uvx`), copies it to `orchestrator/vendor/` (223 KB) and records the SHA-256 in
+  `pcalgo.pin.json`; `--check` runs in CI. pyproject's optional extra `native` installs it from the vendored path (`tool.uv.sources`);
+  CI, `scripts/setup.ps1` and the README sync with `--extra native`. `loom2/native.py` wraps it and answers "not available" cleanly
+  without it; `/capabilities.content_aware` (typed `ContentAwareCaps`) tells the UI; the settings audit caught the new key until it was
+  mapped (Inpaint.mode, Inpaint.prefill).
+- **Quick Remove:** `Inpaint.mode == "quick_remove"` runs in `queue._run_quick_remove` on the CPU — the engine is never started — at 1×
+  over the selection's region, then the AI modes' paste-back (`assemble_layer`: feathered layer mask, seamless optional, a candidate in
+  its group). **Pre-fill:** `Inpaint.prefill` content-aware fills the hole before upload, and the Remove graph's reference latent is then
+  that image instead of mid grey.
+- **Spot Healing:** `loom2/heal.py` ports PhotoCraft's `spot_heal_surface` — PatchMatch completion over the stroke + 2 px (content-aware
+  fill when completion finds nothing), `poisson.seamless_clone` (smooth 0, the exact membrane) over + 1 px; `POST /heal` is stateless
+  (the region's RGBA + the stroke coverage in, healed RGBA out; route snapshot and contract updated, raw reply listed). The editor's `J`
+  tool sends the region around the stroke (± max(size, 8) + 8 px) from the visible composite (default) or the target layer, masks the
+  reply by the stroke's coverage and draws it on a *Spot healing* layer above the target (created once, then reused) — one undo step per
+  stroke.
+- **Tests:** `test_heal_d62.py` (5): square dilation; content-aware fill removes a magenta blemish and keeps the rest; Spot Healing heals
+  it and leaves everything beyond the + 1 px ring and the alpha untouched; the route round-trips and refuses bad sizes; a Quick Remove job
+  runs to *done* with the engine's python missing and lands a "quick remove" layer with a mask. 186 offline (the D61 entry's "183"
+  should have read 181). Headed mode `heal`: the healed pixel comes back as the stripe colour (90, 122, 58), undo takes it back, Quick
+  Remove lands a masked candidate in 0.8 s; smartsel, tour, kit, selection, props, render pass; build clean; lint 100.
+- **Rig** (`scripts/d62_remove_rig.py`, bench task 01, seed 7, cold engine): Remove 58.9 s — the crates become an AC unit and a wall
+  (re-imagined, not empty); Remove + pre-fill 23.0 s — the model keeps the pre-fill's dark smear (worse, as S1 found with Fill-Match);
+  Quick Remove 0.4 s — the same smear on this 320 × 210 hole. **The pre-fill stays off by default**, as D62 required; Quick Remove's
+  panel hint says it is for small or textured areas. Sheet: `engine/spikes/out/d62/remove-task01-seed7.png`.
+- **PE6 closed;** all PhotoCraft proposals (PC1–PC26) are decided and delivered.

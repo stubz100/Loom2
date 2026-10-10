@@ -847,6 +847,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/heal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Heal
+         * @description PhotoCraft's Spot Healing over a region: the body is the region's straight RGBA (w·h·4 bytes) followed by the stroke's coverage
+         *     (w·h bytes, > 0 heals); the reply is the region with the stroke healed (same size, alpha unchanged).
+         */
+        post: operations["heal_heal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1612,6 +1633,7 @@ export interface components {
         /** Capabilities */
         Capabilities: {
             advanced: components["schemas"]["AdvancedCaps"];
+            content_aware: components["schemas"]["ContentAwareCaps"];
             facesim: components["schemas"]["FaceSimCaps"];
             i2v: components["schemas"]["I2vCaps"];
             /** Models */
@@ -1887,6 +1909,18 @@ export interface components {
             rgb_p99: number;
             /** W */
             w: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ContentAwareCaps
+         * @description D62: whether the native extension (PhotoCraft's content-aware fill + PatchMatch) is installed, and the modes it enables.
+         */
+        ContentAwareCaps: {
+            /** Available */
+            available: boolean;
+            /** Modes */
+            modes: string[];
         } & {
             [key: string]: unknown;
         };
@@ -3107,7 +3141,7 @@ export interface components {
              * @default fill
              * @enum {string}
              */
-            mode?: "fill" | "fill_match" | "fill_hero" | "remove" | "outpaint";
+            mode?: "fill" | "fill_match" | "fill_hero" | "remove" | "outpaint" | "quick_remove";
             /**
              * Model Id
              * @default klein-9b
@@ -3120,6 +3154,11 @@ export interface components {
             outpaint?: {
                 [key: string]: number;
             } | null;
+            /**
+             * Prefill
+             * @default false
+             */
+            prefill?: boolean;
             /**
              * Prompt Mode
              * @default image_first
@@ -6254,6 +6293,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ungrouped"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heal_heal_post: {
+        parameters: {
+            query: {
+                w: number;
+                h: number;
+                seed?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description the healed RGBA region (w·h·4 bytes) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */

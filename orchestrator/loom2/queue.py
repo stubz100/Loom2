@@ -27,7 +27,7 @@ from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
 from .recipes import T2I, I2I, I2V, Inpaint, Segment, Upscale, parse_recipe, warm_group
 from .documents import DocumentStore, GroupLayer, RasterLayer
-from . import matting
+from . import matting, native
 from .edit_ai import RegionPlan, assemble_layer, combine_selection, crop_inputs, dilate, layer_plan, mask_from_engine, outpaint_inputs, outpaint_plan, plan_region, whole_plan
 import numpy as np
 from PIL import Image
@@ -463,6 +463,10 @@ class JobQueue:
             return
         self.hub.broadcast("job.updated", job.model_dump())
         try:
+            early = parse_recipe(job.recipe)
+            if isinstance(early, Inpaint) and early.mode == "quick_remove":    # D62: CPU only — the engine is not started
+                await self._run_quick_remove(job, early)
+                return
             try:
                 await self.engine.ensure_running()
             except (RuntimeError, OSError) as e:                # C2: launch failure → hold the queue, keep the job
@@ -606,6 +610,45 @@ class JobQueue:
             if job.status in TERMINAL:
                 self._cleanup_job_files(job)
 
+    async def _run_quick_remove(self, job: JobRecord, recipe: Inpaint) -> None:
+        """D62 Quick Remove: PhotoCraft's content-aware fill of the selection on the CPU, pasted back like the AI modes (a candidate
+        layer with a feathered layer mask, seamless optional) — seconds, and no GPU."""
+        if not native.available():
+            raise ValueError("Quick Remove needs the native extension (uv sync --project orchestrator --extra native)")
+        if self.documents is None:
+            raise ValueError("documents are not available (no project open)")
+        od = await asyncio.to_thread(self.documents.get, recipe.document_id)
+        exclude = {f"grp_{job.batch_id or job.id}"}
+        job.progress_text = "content-aware fill (CPU)"
+        self.hub.broadcast("job.updated", job.model_dump())
+
+        def work() -> tuple[np.ndarray, RegionPlan]:
+            comp = od.flatten(exclude=exclude)
+            sel = od.selection
+            if sel is None or not sel.any():
+                raise ValueError("Quick Remove needs a selection (the region to remove)")
+            mask = dilate(sel, recipe.expand) if recipe.expand else sel
+            plan = plan_region(mask, od.doc.w, od.doc.h, recipe.margin_pct, 0, max_size=1 << 20, max_pixels=1 << 40)   # 1×: no engine size limits
+            if plan is None:
+                raise ValueError("the selection is empty")
+            crop = np.ascontiguousarray(comp[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w, :3])
+            hole = mask[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w] > 127
+            filled = native.content_aware_fill(crop, hole, seed=job.seed or 1)
+            arr = np.dstack([filled, np.full(filled.shape[:2], 255, np.uint8)])
+            return assemble_layer(arr, plan, mask, recipe.feather, crop, recipe.blend), plan
+
+        t = time.time()
+        rgba, plan = await asyncio.wait_for(asyncio.to_thread(work), 300.0)
+        job.result["region"] = plan.to_dict()
+        job.log_tail.append(f"quick remove: {plan.w}×{plan.h} at {plan.x},{plan.y} in {time.time() - t:.2f} s (CPU)")
+        await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, "quick remove", as_mask=True)
+        job.resumable = False
+        job.status, job.finished_at, job.progress, job.progress_text = "done", utc_now(), 1.0, "done"
+        job.wall_s = round(time.time() - self._t0, 1)
+        self.catalogue.record_job(job.model_dump())
+        self.persist()
+        self.hub.broadcast("job.updated", job.model_dump())
+
     # ---- M5 document jobs (10 §4, D7): region in, layer out ------------------------------------------
     async def _prepare_document_inputs(self, job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment) -> dict[str, Any]:
         """Crop/scale the document's composite (and mask) for the engine, upload them and keep the plan (edit_ai)."""
@@ -636,6 +679,11 @@ class JobQueue:
                     if plan is None:
                         raise ValueError("the selection is empty")
                     img, msk = crop_inputs(comp, mask, plan)
+                    if recipe.mode == "remove" and recipe.prefill:      # D62: the hole content-aware filled before the engine sees it
+                        if not native.available():
+                            raise ValueError("the content-aware pre-fill needs the native extension (uv sync --project orchestrator --extra native)")
+                        img = native.content_aware_fill(img, np.asarray(msk) > 127, seed=job.seed or 1)
+                        job.log_tail.append("hole pre-filled by content-aware fill (CPU)")
                     out["alpha_mask"] = mask
                     out["context"] = np.ascontiguousarray(comp[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w, :3])   # D47 / D48: the plate
                 Image.fromarray(img, "RGB").save(tmp / "image.png")

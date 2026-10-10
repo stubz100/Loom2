@@ -328,6 +328,9 @@ dev = [
     { name = "pytest-timeout" },
     { name = "python-multipart" },
 ]
+native = [
+    { name = "loom2-pcalgo" },
+]
 oracle = [
     { name = "psd-tools" },
 ]
@@ -338,6 +341,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "huggingface-hub", specifier = ">=0.30" },
+    { name = "loom2-pcalgo", marker = "extra == 'native'", path = "vendor/loom2_pcalgo-0.0.1-cp313-abi3-win_amd64.whl" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "onnxruntime", specifier = ">=1.20" },
     { name = "pillow", specifier = ">=10.4" },
@@ -350,7 +354,15 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
     { name = "websockets", specifier = ">=13" },
 ]
-provides-extras = ["dev", "oracle"]
+provides-extras = ["dev", "oracle", "native"]
+
+[[package]]
+name = "loom2-pcalgo"
+version = "0.0.1"
+source = { path = "vendor/loom2_pcalgo-0.0.1-cp313-abi3-win_amd64.whl" }
+wheels = [
+    { filename = "loom2_pcalgo-0.0.1-cp313-abi3-win_amd64.whl", hash = "sha256:4b830d850f3830d1e39a04cb2d05b74439b1b874e25f07f01863cfe239f87a6a" },
+]
 
 [[package]]
 name = "numpy"

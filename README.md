@@ -37,7 +37,7 @@ scripts/         engine-setup/start/stop · fetch_weights · prune_weights · ma
 scripts/setup.ps1              # both venvs, frontend, engine checkout + ROCm torch, FaceSim weights (-SkipEngine without the GPU)
 git clone --recurse-submodules https://github.com/stubz100/Loom2
 .\scripts\engine-setup.ps1                                  # engine venv + torch 2.13.0+rocm10.0.0 + ComfyUI deps + nodes
-uv sync --project orchestrator --extra dev                  # orchestrator venv
+uv sync --project orchestrator --extra dev --extra native                  # orchestrator venv
 cd frontend; npm install; cd ..
 engine\.venv\Scripts\python.exe scripts\fetch_weights.py    # weights into F:\loom2-models (ComfyUI layout, sha256 ledger)
 .\scripts\dev.ps1                                           # Vite + shell + orchestrator (engine starts on the first job)

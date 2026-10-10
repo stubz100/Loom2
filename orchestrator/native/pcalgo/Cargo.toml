@@ -1,0 +1,25 @@
+# D62 (S1 go → PC14, PC15): PhotoCraft's photocraft-algo kernels (content-aware fill, PatchMatch completion) as a Python extension
+# (PyO3 + rust-numpy, abi3 for CPython ≥ 3.13). The orchestrator does not build it: the wheel is committed in orchestrator/vendor/ with
+# its pin and SHA-256 and installed by the `native` extra. Rebuild (only when the pin moves): python scripts/build_pcalgo.py — it checks
+# that the PhotoCraft checkout beside this repository is at the pinned commit (orchestrator/vendor/pcalgo.pin.json).
+[package]
+name = "loom2-pcalgo"
+version = "0.0.1"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "loom2_pcalgo"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.26", features = ["extension-module", "abi3-py313"] }
+numpy = "0.26"
+photocraft-algo = { path = "../../../../photocraft/crates/algo" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[workspace]

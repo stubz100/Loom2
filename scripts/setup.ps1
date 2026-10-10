@@ -26,7 +26,7 @@ Need npm  "comes with Node"
 if (-not $SkipEngine) { Need git "https://git-scm.com (the engine is a git submodule)" }
 
 Write-Host "[setup] 1/4 orchestrator venv (uv, Python 3.13)"
-uv sync --project orchestrator --extra dev
+uv sync --project orchestrator --extra dev --extra native
 & "$repo\orchestrator\.venv\Scripts\python.exe" -c "import loom2, onnxruntime, av; print('       loom2 ok · onnxruntime', onnxruntime.__version__, '· PyAV', av.__version__)"
 
 Write-Host "[setup] 2/4 frontend (npm ci)"

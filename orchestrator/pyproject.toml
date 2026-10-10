@@ -26,6 +26,12 @@ dev = [
 oracle = [
     "psd-tools>=1.10",
 ]
+native = [
+    "loom2-pcalgo",              # D62: PhotoCraft's content-aware fill + PatchMatch (Quick Remove, Spot Healing); the committed abi3 wheel
+]
+
+[tool.uv.sources]
+loom2-pcalgo = { path = "vendor/loom2_pcalgo-0.0.1-cp313-abi3-win_amd64.whl" }
 
 [project.scripts]
 loom2-orchestrator = "loom2.main:main"

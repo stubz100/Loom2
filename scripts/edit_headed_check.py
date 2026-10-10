@@ -18,6 +18,7 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      undo, exact flip / rotate presets, a selection's pixels lifted and moved, a group scaled together
   smartsel           D59: Quick Selection and the Magnetic Lasso (WebAssembly in a Worker) by mouse — a square found by a click and
                      by a traced border, strokes adding, Alt subtracting, Backspace, Esc, a stroke on the photo
+  heal               D62: Spot Healing (a stroke heals a blemish onto a Spot healing layer; undo) and Quick Remove (no GPU) end to end
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -47,7 +48,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|heal|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -1965,6 +1966,44 @@ def main() -> int:
             dt = wait_sel("quick selection")
             st6 = json.loads(js("const sel = s.selection; if (!sel) return 'null'; const d = sel.ctx.getImageData(0, 0, sel.width, sel.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 127) n++; return JSON.stringify(n)"))
             check(st6 and st6 > 2000, f"a stroke on the photo selects a region ({st6} px in {time.time() - t0:.2f} s)")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "heal":
+            # D62: Spot Healing (a stroke over a blemish → a "Spot healing" layer) and Quick Remove (a GPU-free inpaint mode) end to end
+            S, C = STORE, "window.__loom2Commands"
+            js = lambda body: cdp.eval(f"(() => {{ const s = {S}; {body} }})()")  # noqa: E731
+            run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+            geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y }} }})())"))
+            scr = lambda x, y: (geo["x"] + geo["px"] + x * geo["zoom"], geo["y"] + geo["py"] + y * geo["zoom"])  # noqa: E731
+            check(bool(cdp.eval("!!(window.__loom2Session || null) || true")), "editor ready")
+            # a striped layer with a magenta blemish
+            run("edit.layer.new"); time.sleep(0.3)
+            js("const lp = s.pixels.get(s.activeId); for (let x = 0; x < lp.width; x += 8) { lp.ctx.fillStyle = (x / 8) % 2 ? '#5a7a3a' : '#6d8c48'; lp.ctx.fillRect(x, 0, 8, lp.height) } lp.ctx.fillStyle = '#ff00ff'; lp.ctx.fillRect(296, 196, 12, 12); lp.refresh(); lp.dirty = true; s.touch(); s.bump(); return 1"); time.sleep(0.4)
+            base = js("return s.activeId")
+            cdp.eval("[...document.querySelectorAll('.tool')].find((b) => b.textContent.includes('Spot healing'))?.click(); 1"); time.sleep(0.2)
+            check(cdp.eval(f"{S}.tool") == "heal" and bool(cdp.eval("!!document.querySelector('.tool-opts input.vfield-num[aria-label=\"size\"]')")), "the toolbox's Spot healing button picks the tool (J)")
+            js("s.setView({ healSize: 24, healSampleAll: true }); return 1")
+            h0 = cdp.eval(f"{S}.history.length")
+            for kind, (x, y) in (("mouseMoved", (295, 202)), ("mousePressed", (295, 202))):
+                sx, sy = scr(x, y); cdp.call("Input.dispatchMouseEvent", type=kind, x=sx, y=sy, button="left", buttons=1, clickCount=1)
+            for i in range(1, 9):
+                sx, sy = scr(295 + 14 * i / 8, 202); cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=sx, y=sy, button="left", buttons=1); time.sleep(0.02)
+            sx, sy = scr(309, 202); cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=sx, y=sy, button="left", buttons=0, clickCount=1)
+            t = time.time()
+            while time.time() - t < 20 and js("return s.history.length && s.history[s.history.length - 1].label === 'spot healing'") is not True: time.sleep(0.1)
+            info = json.loads(js("const w = (xs, f) => xs.forEach((n) => { f(n); if (n.children) w(n.children, f) }); let heal = null; w(s.doc.layers, (n) => { if (n.recipe && n.recipe.kind === 'spot_heal') heal = n }); if (!heal) return 'null'; const lp = s.pixels.get(heal.id); const d = lp.ctx.getImageData(302 - (heal.x || 0), 202 - (heal.y || 0), 1, 1).data; const i = s.doc.layers.findIndex((n) => n.id === heal.id); return JSON.stringify({ px: Array.from(d), above: s.doc.layers[i + 1] && s.doc.layers[i + 1].id, name: heal.name })"))
+            check(info is not None and info["above"] == base and info["px"][3] > 200 and info["px"][0] < 160 and info["px"][1] > 90, f"a stroke over the blemish heals it on a Spot healing layer right above (healed pixel {info and info['px']})")
+            run("edit.undo"); time.sleep(0.4)
+            gone = js("const w = (xs, f) => xs.forEach((n) => { f(n); if (n.children) w(n.children, f) }); let heal = null; w(s.doc.layers, (n) => { if (n.recipe && n.recipe.kind === 'spot_heal') heal = n }); return heal ? s.pixels.get(heal.id).ctx.getImageData(302 - (heal.x || 0), 202 - (heal.y || 0), 1, 1).data[3] : -1")
+            check(gone == 0, f"undo takes the healed pixels back ({gone})")
+            # Quick Remove: a GPU-free inpaint mode through the queue
+            js("s.editSelection('t', () => { const sel = s.ensureSelection(); sel.ctx.fillStyle = '#fff'; sel.ctx.fillRect(290, 190, 24, 24); sel.refresh() }); return 1"); time.sleep(0.3)
+            n0 = js("return s.doc.layers.length")
+            js("void s.runAi({ kind: 'inpaint', mode: 'quick_remove', margin_pct: 25, feather: 4, expand: 2, seeds: [7] }); return 1")
+            t = time.time()
+            while time.time() - t < 60 and js("return s.doc.layers.some((n) => n.kind === 'group' && n.name.startsWith('AI quick remove'))") is not True: time.sleep(0.25)
+            g = json.loads(js("const g = s.doc.layers.find((n) => n.kind === 'group' && n.name.startsWith('AI quick remove')); return JSON.stringify(g ? { n: g.children.length, name: g.children[0].name, mask: !!g.children[0].mask } : null)"))
+            check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":

@@ -10,7 +10,10 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 
 | Module | Owns |
 | --- | --- |
-| `api.py` | `Services` (the open project's stores), request models, `create_app()` with every route and the `/events` WebSocket (split per domain under D37) |
+| `api.py` | `create_app()`: lifespan, CORS, the token gate, error → status mapping, includes `routes.ROUTERS` (D37) |
+| `services.py` | `Services`: app state, event hub, roster, engine supervisor and the open project's stores; `require_project/groups/documents` |
+| `routes/` | one `APIRouter` per domain (`meta`, `settings`, `projects`, `assets`, `groups`, `documents`, `clips`, `jobs`, `models`, `engine`, `blobs`, `events_ws`); request models live with their routes; `deps.py` gives handlers `svc: Svc` |
+| `capabilities.py` / `build_info.py` | the `/capabilities` document (07 §3d) and the `/version` facts (D36) |
 | `queue.py` | `JobQueue` / `JobRecord`: durable queue, admission (models, disk guard, VRAM), warm-group scheduling, the run loop, engine event following, stall watchdog, document / i2v pre- and post-processing |
 | `engine/` | ComfyUI client, supervisor, recipe → graph builders, contract checks (see `orchestrator/loom2/engine/AGENTS.md`) |
 | `recipes.py` | pydantic recipes `T2I`, `I2I`, `Inpaint`, `Upscale`, `Segment`, `I2V` (discriminated on `kind`), sampler enums, `warm_group` |
@@ -31,13 +34,17 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
    `schema_version`; a corrupt state file is quarantined, not trusted.
 2. **Durability.** After an unclean shutdown the queue loads paused with running jobs re-queued (`retry_count += 1`); non-resumable jobs
    fail. Never mark a job done before its outputs are moved into the project and the manifest is written.
-3. **Async discipline.** FastAPI handlers run on the event loop; SQLite and file work belongs in `await asyncio.to_thread(...)`. The
-   catalogue's single connection is shared behind an `RLock` (`check_same_thread=False`).
-4. **Token.** Mutating routes require `X-Loom-Token` (`token_gate` in `api.py`); the token is per launch and never persisted.
-5. **Lineage at write time.** Parents, `lineage_kind`, model, seed, prompt, `compiled_graph_hash` and the variant are stamped when an asset
+3. **Async discipline (D37).** FastAPI handlers run on the event loop; SQLite and file work belongs in `await asyncio.to_thread(...)`.
+   The catalogue (one connection behind an `RLock`, `check_same_thread=False`) and the group store lock themselves; **`JobQueue` is not
+   thread-safe** — call it on the loop; `DocumentStore` has no lock — only its `get` / `save` / `flatten` and pure encodes go to threads.
+4. **Routes:** a new endpoint goes into the domain module under `routes/` (or a new module added to `routes.ROUTERS`). Register literal
+   paths before parameterised ones (`/assets/counts` before `/assets/{asset_id}`); `tests/test_routes_d37.py` checks the order and the
+   route table against `tests/fixtures/routes_d37.json` — update the snapshot in the same commit when you add or remove a route.
+5. **Token.** Mutating routes require `X-Loom-Token` (`token_gate` in `api.py`); the token is per launch and never persisted.
+6. **Lineage at write time.** Parents, `lineage_kind`, model, seed, prompt, `compiled_graph_hash` and the variant are stamped when an asset
    is ingested; nothing reconstructs them later.
-6. **IDs** are prefixed (`ast_`, `job_`, `doc_`, `clp_`, `grp_`, `bat_`) via `fsio.new_id`.
-7. **Pixels** never travel as base64 or through Tauri IPC: files over loopback HTTP with `Range` / `ETag`
+7. **IDs** are prefixed (`ast_`, `job_`, `doc_`, `clp_`, `grp_`, `bat_`) via `fsio.new_id`.
+8. **Pixels** never travel as base64 or through Tauri IPC: files over loopback HTTP with `Range` / `ETag`
    (`FileResponse.chunk_size` is set to 4 MiB in `api.py`; 64 KiB caps loopback at ~400 MiB/s — E2), raw RGBA for layers.
 
 ## Tests (`orchestrator/tests/`)

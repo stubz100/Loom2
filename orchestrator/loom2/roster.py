@@ -160,15 +160,15 @@ class Roster:
                 for p in folder_dir.rglob("*"):
                     if p.is_file() and p.suffix.lower() in (".safetensors", ".gguf", ".pt", ".pth", ".onnx", ".ckpt"):
                         found.setdefault((folder_dir.name, p.name), (p, root))
-        self._found = found
         ledger_path = self.models_root / "roster.index.json"
-        self._ledger = {}
+        ledger: dict[str, dict] = {}
         if ledger_path.is_file():
             try:
                 for f in json.loads(ledger_path.read_text(encoding="utf-8")).get("files", []):
-                    self._ledger[Path(f["path"]).name] = f
+                    ledger[Path(f["path"]).name] = f
             except (OSError, ValueError):
                 pass
+        self._found, self._ledger = found, ledger      # D37: swapped whole, so a reader on the event loop never sees half a scan
         self.scanned_at = time.time()
         return self
 

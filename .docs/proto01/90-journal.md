@@ -1920,3 +1920,27 @@ Inspector → lineage → split → pages.
   (`softprops/action-gh-release@v2`, generated notes). Not exercised until the first tag.
 - **Tests:** `test_release_d36.py` (4): repository versions agree; bump on a temp copy rewrites all ten and `--check` catches a drifted
   Cargo.toml; shell facts from the environment; node pins + `/version` keys → **119 offline**; `npm run build` ok.
+
+## 2026-10-10 09:59 — D37: orchestrator routes split per domain; blocking work off the event loop; M1 rig 20/20
+
+- **Before:** `api.py` 1,175 lines — `Services`, 16 request models and `create_app()` with 89 HTTP routes + 1 WebSocket as closures;
+  SQLite, file, zip and PNG work on the event loop in about 40 handlers.
+- **After:** `api.py` 77 lines (lifespan, CORS, token gate, error → status table, router includes); `services.py` (`Services` +
+  `require_documents`, `group_changed`); `capabilities.py` (the `/capabilities` document, same shape); `routes/` with `deps.py`
+  (`Svc = Annotated[Services, Depends(get_services)]` on `HTTPConnection`, so the WebSocket route uses it too) and twelve domain routers
+  (meta, settings, projects, assets, groups, documents, clips, jobs, models, engine, blobs, events_ws); request models moved next to their
+  routes; inline imports gone. Blocking work now in `asyncio.to_thread`: project open (workspace, catalogue index, group store), project
+  info counts, presets / snippets, asset get / patch / delete / tags / bulk / trash / restore, lineage, import (directory walk + PNG
+  metadata), all group reads and writes, document list / thumbnail (zip) / PNG encodes / compare, clip list / get / extract / save,
+  roster listing / scan / unlisted. `JobQueue` calls stay on the loop (not thread-safe; P2 revisits). `Roster.scan` now swaps
+  `_found` and `_ledger` together, so a reader never sees a scan with the ledger half filled.
+- **Behaviour kept:** route table identical to the snapshot taken before the move (`tests/fixtures/routes_d37.json`, 90 rows);
+  operationIds unchanged; OpenAPI diff vs the committed export = router tags, the `/version` docstring, and `AssetPatch.collection_ids`
+  dropped (legacy since D34, ignored by the client). The committed `openapi.json` itself is stale (still lists `/collections*`, lacks
+  D34's `date_preset`) — D38 re-exports it from the app.
+- **FastAPI 0.142 note:** included routers stay `_IncludedRouter` wrappers in `app.routes` (walk `original_router.routes`); the tests do.
+- **Tests:** `test_routes_d37.py` (3): route table = snapshot; no literal path shadowed by an earlier parameterised route of the same
+  method (proved by moving `GET /assets/{asset_id}` first — caught); OpenAPI lists every HTTP path → **122 offline**.
+  Planned loop-lag test (50 reads during a 200-file import) not written: too timing-dependent for CI on shared runners.
+- **Rig:** `scripts/m1_acceptance.py` **20/20** in 170 s against the split app (dev T2I 112.7 s cold, kill → resume paused, cancel,
+  graceful stop, live contract clean). `orchestrator/AGENTS.md` (module map, async + route rules) and 06 §6 updated.

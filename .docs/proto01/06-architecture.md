@@ -171,6 +171,11 @@ Project `format.target` is the finalize gate. Nothing in the MVP may hard-code a
 
 ## 6. API surface (sketch; OpenAPI generated → TS client)
 
+**Code layout (D37, 2026-10-10):** `loom2/api.py` assembles the app (lifespan, CORS, token gate, error mapping); the routes live in
+`loom2/routes/` — one `APIRouter` per domain (meta, settings, projects, assets, groups, documents, clips, jobs, models, engine, blobs,
+events) with their request models — and reach `services.Services` through `routes/deps.py`. Blocking SQLite and file work runs in
+`asyncio.to_thread`; `JobQueue` stays on the event loop. `tests/test_routes_d37.py` pins the route table and the literal-before-parameter order.
+
 ```
 GET  /health /version /capabilities /settings   PUT /settings
 POST /project  /project/open  /project/close    GET /project /projects

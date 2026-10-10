@@ -29,7 +29,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
 from .compose import BLEND_MODES, COMPOSE_VERSION, Renderer
-from .fsio import StateError, _tmp_for, new_id, utc_now
+from .fsio import StateError, _tmp_for, new_id, replace, utc_now
 from .workspace import Workspace
 
 DOC_SCHEMA_VERSION = 1
@@ -216,7 +216,7 @@ class OpenDocument:
                     z.writestr("loom2.json", json.dumps(self.doc.model_dump(), indent=1, ensure_ascii=False))
                 with open(tmp, "rb+") as f:
                     os.fsync(f.fileno())
-                os.replace(tmp, self.path)
+                replace(tmp, self.path)                       # D42: retries a briefly locked target
             except BaseException:
                 tmp.unlink(missing_ok=True)
                 raise

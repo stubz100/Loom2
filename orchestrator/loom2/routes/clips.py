@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -10,7 +9,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from ..clips import ClipRecord, ClipStore, compute_identity
-from ..fsio import _tmp_for
+from ..fsio import _tmp_for, replace
 from ..schemas import ClipExtracted, ClipList
 from ..tools import facesim
 from .deps import Svc
@@ -127,7 +126,7 @@ def _strip_thumb(src, out, size: int) -> None:
         tmp = _tmp_for(out)
         im.save(tmp, "WEBP", quality=80, method=4)
         try:
-            os.replace(tmp, out)
+            replace(tmp, out)
         except OSError:                           # two requests for one frame: the other one won (C5's lesson)
             tmp.unlink(missing_ok=True)
             if not out.is_file():

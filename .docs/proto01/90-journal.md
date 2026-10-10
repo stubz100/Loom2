@@ -2029,3 +2029,13 @@ Inspector → lineage → split → pages.
   formulas soft-light 1 / vivid 2 / hard-mix 0 (max 255 at threshold flips) / burn 4 / dodge 1); pass-through 50 % p99 1, max 15 — all
   of it on the one document row the bench image does not cover, where the backdrop is the half-transparent test layer (the documented
   approximation). `tour`, `render`, `paint` all passed; build ok. First port → `THIRD_PARTY_NOTICES.md` (PhotoCraft, MIT).
+
+## 2026-10-10 13:39 — D42 atomic replace retries on Windows
+
+- `fsio.replace` retries `os.replace` on `PermissionError` 7 times from 10 ms, doubling (≤ 0.63 s waiting; PhotoCraft's
+  `format/src/atomic.rs` rule); other errors and the last failure propagate. Every atomic helper uses it, and so do the five places that
+  called `os.replace` directly (document save, blob upload, strip thumbnails, the fetch index). `atomic_move` still falls back to
+  copy-then-unlink for a cross-volume move.
+- `test_fsio_d42.py` (5, failure injection): locked three times then written; locked for good → `PermissionError` after 7 tries with the
+  old record intact and no temp file left; other errors not retried; cross-volume move still copies; an ORA save survives a briefly
+  locked target → **145 offline** (also under `LOOM2_VARIANT=open`).

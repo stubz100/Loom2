@@ -2,8 +2,9 @@
 that refuse partial JSON.
 
 - `new_id("ast")` → `ast_3f9a2c1d` — references use ids, never paths.
-- `atomic_write_*` write temp → fsync → `os.replace`; a crash leaves the old file or the new one, never a
-  truncated one. The temp name is per writer, so two writers of the same file race benignly (last wins whole).
+- `atomic_write_*` write temp → fsync → `replace`; a crash leaves the old file or the new one, never a
+  truncated one. `replace` retries a `PermissionError` with backoff (D42): on Windows antivirus and the search indexer
+  briefly hold files open, and a one-shot `os.replace` then fails a save. The temp name is per writer, so two writers of the same file race benignly (last wins whole).
 - `read_json` raises `StateError` on a missing or corrupt record instead of degrading to an empty one.
 """
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +37,26 @@ def slugify(name: str, fallback: str = "item") -> str:
     return out or fallback
 
 
+# D42: 7 tries from 10 ms, doubling (≤ 0.63 s of waiting) — PhotoCraft's crates/format/src/atomic.rs rule
+REPLACE_TRIES = 7
+REPLACE_FIRST_DELAY_S = 0.01
+
+
+def replace(src: Path | str, dst: Path | str) -> None:
+    """`os.replace` that retries a transient `PermissionError` (a file briefly held open by another process); any other error,
+    or the last failure, propagates."""
+    delay = REPLACE_FIRST_DELAY_S
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+
 def _tmp_for(path: Path) -> Path:
     return path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
 
@@ -48,7 +70,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -71,7 +93,7 @@ def atomic_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, tmp)
         with open(tmp, "rb+") as f:
             os.fsync(f.fileno())
-        os.replace(tmp, dst)
+        replace(tmp, dst)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -82,8 +104,8 @@ def atomic_move(src: Path, dst: Path) -> None:
     src, dst = Path(src), Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        os.replace(src, dst)
-    except OSError:
+        replace(src, dst)
+    except OSError:                                       # another volume (or still locked): copy, then remove
         atomic_copy(src, dst)
         src.unlink()
 

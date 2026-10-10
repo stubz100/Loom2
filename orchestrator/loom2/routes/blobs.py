@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from ..fsio import _tmp_for
+from ..fsio import _tmp_for, replace
 from ..schemas import BlobPut
 from ..services import Services
 from .deps import Svc
@@ -31,7 +30,7 @@ async def blob_put(svc: Svc, sha: str, request: Request):
                 size += len(chunk)
         if h.hexdigest() != sha:
             raise HTTPException(400, "body sha256 does not match the blob id")
-        os.replace(tmp, dest)
+        replace(tmp, dest)
     finally:
         tmp.unlink(missing_ok=True)
     return {"sha256": sha, "bytes": size}

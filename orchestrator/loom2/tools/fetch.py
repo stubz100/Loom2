@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from ..events import EventHub
+from ..fsio import replace
 from ..roster import RosterEntry
 
 
@@ -32,7 +33,7 @@ def _append_ledger(models_root: Path, entry: RosterEntry, dest: Path, digest: st
         license=entry.license, spike="app", fetched=time.strftime("%Y-%m-%d %H:%M:%S"))]
     tmp = index_path.with_suffix(".tmp")
     tmp.write_text(json.dumps(index, indent=1), encoding="utf-8")
-    os.replace(tmp, index_path)
+    replace(tmp, index_path)
 
 
 class FetchJob:

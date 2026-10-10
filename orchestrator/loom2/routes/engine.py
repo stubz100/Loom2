@@ -1,6 +1,7 @@
 """The ComfyUI engine process (06 §3b): health and VRAM, start / stop / restart, free cached models."""
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import EngineState, Freed
@@ -8,6 +9,8 @@ from ..services import Services
 from .deps import Svc
 
 router = APIRouter(tags=["engine"])
+# D61: an engine that cannot start or is not running answers 503 with the reason, never a 500 (found by the route fuzz)
+ENGINE_DOWN = (RuntimeError, OSError, httpx.HTTPError)
 
 
 @router.get("/engine", response_model=EngineState, response_model_exclude_unset=True)
@@ -19,8 +22,8 @@ async def engine_get(svc: Svc):
 async def engine_start(svc: Svc):
     try:
         return await svc.engine.start()
-    except RuntimeError as e:
-        raise HTTPException(503, str(e))
+    except ENGINE_DOWN as e:
+        raise HTTPException(503, f"the engine could not start: {e}")
 
 
 @router.post("/engine/stop", response_model=EngineState, response_model_exclude_unset=True)
@@ -32,13 +35,19 @@ async def engine_stop(svc: Svc):
 @router.post("/engine/restart", response_model=EngineState, response_model_exclude_unset=True)
 async def engine_restart(svc: Svc):
     _engine_idle(svc)
-    return await svc.engine.restart()
+    try:
+        return await svc.engine.restart()
+    except ENGINE_DOWN as e:
+        raise HTTPException(503, f"the engine could not restart: {e}")
 
 
 @router.post("/engine/free", response_model=Freed)
 async def engine_free(svc: Svc):
     _engine_idle(svc)
-    await svc.engine.client.free()
+    try:
+        await svc.engine.client.free()
+    except ENGINE_DOWN as e:
+        raise HTTPException(503, f"the engine is not reachable: {e}")
     return {"freed": True}
 
 

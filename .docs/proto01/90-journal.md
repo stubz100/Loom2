@@ -2523,3 +2523,14 @@ Inspector → lineage → split → pages.
 - `test_settings_audit_d60.py` (2): the tree passes; an injected recipe field nobody reads fails with its name. CI runs the audit next to
   agents_check. (CI note: run on f21af1f failed agents_check on a backticked `../photocraft`; fixed in d777f39.)
 
+## 2026-10-10 21:13 — D61 route fuzz (PC26)
+
+- `orchestrator/tests/test_route_fuzz_d61.py` (PhotoCraft's `panic_hunt` idea): the app as the tests run it (a temporary project with an
+  imported image and a document, the engine's python missing — no GPU), every operation in the OpenAPI document but `/shutdown` (the
+  session enders last): path parameters as the real ids where we have them, then `0`, an encoded `../../etc`, 300 characters and `%00`;
+  query parameters as junk; JSON bodies none / `{}` / a list / not JSON / the schema's properties with the wrong types; uploads as junk or
+  empty bytes. Rule: no 500 (a 503 is an honest "not available") and an answer within 4 s.
+- **Found:** `POST /engine/start`, `/engine/restart` and `/engine/free` answered **500** when the engine cannot start or is not running
+  (start caught only `RuntimeError`; restart and free caught nothing). They now answer 503 with the reason (`RuntimeError`, `OSError`,
+  `httpx.HTTPError`). Nothing else: **89 operations, 431 requests, 0 failures** in ≈ 10 s. 183 offline.
+

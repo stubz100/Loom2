@@ -338,7 +338,7 @@ prefilter, selection lifts, groups). Spike S2 ran (journal): 44 KB gzipped, magn
 wasm build in the frontend) is the author's.
 
 **Author's decisions 2026-10-10:** S2 go → PC24 (D59); PC25 (D60) and PC26 (D61) now rather than with H3; S1 go → PC14 / PC15 (D62),
-over the spike's no-go. Order: PC24, PC25, PC26, then PC14 / PC15. **PC24 landed** (D59: Quick Selection, Magnetic Lasso). **PC25 landed** (D60: settings audit in CI).
+over the spike's no-go. Order: PC24, PC25, PC26, then PC14 / PC15. **PC24 landed** (D59: Quick Selection, Magnetic Lasso). **PC25 landed** (D60: settings audit in CI). **PC26 landed** (D61: route fuzz; three engine routes fixed).
 
 ## 9. Totals and parallelism
 

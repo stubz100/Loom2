@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D41 (PSD export).
 
 ## Files
 
@@ -14,7 +14,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `adjustFilters.ts` | adjustment and filter layers previewed as per-layer filters |
 | `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
-| `psdExport.ts` | PSD export via ag-psd (lazy-loaded) |
+| `psdExport.ts` | PSD export via ag-psd (lazy-loaded): adjustment layers, fill, clip, locks, pass-through (D41); `fixLevelsBlocks` repairs ag-psd's Levels block in place; checked by `edit_headed_check.py psd` with psd-tools |
 | `editCommands.ts` / `EditSuite.tsx` | commands, tool table, panels, the AI tab |
 
 ## Invariants
@@ -50,6 +50,6 @@ the WebGPU renderer actually draws, and swaps to WebGL2 when it does not (D3 ame
 ## Checking changes
 
 - Headless Edge **cannot present WebGPU**: use `scripts/edit_headed_check.py` (visible Edge over CDP, Vite on 1420) — modes `render`, `paint`,
-  `tour`, `cmpdiag`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
+  `tour`, `cmpdiag`, `psd`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
 - Rig acceptance for the AI verbs: `scripts/m5_acceptance.py`.
 - `npm run build` must stay clean; `window.__loom2Editor` / `__loom2App` are exposed in dev builds for the checks.

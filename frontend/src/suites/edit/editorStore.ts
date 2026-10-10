@@ -593,9 +593,13 @@ export const useEditor = create<EditorState>()(
           try {
             const { buildPsd } = await import('./psdExport')
             const merged = extractor?.() ?? undefined
-            const { bytes, skipped } = buildPsd(doc, pixels, masks, merged)
+            const { bytes, skipped, approximate } = buildPsd(doc, pixels, masks, merged)
             download(new Blob([bytes], { type: 'image/vnd.adobe.photoshop' }), `${doc.name}.psd`)
-            useSession.getState().toast(skipped.length ? `PSD written; ${skipped.length} adjustment/filter layer${skipped.length > 1 ? 's' : ''} skipped (${skipped.join(', ')})` : 'PSD written', skipped.length ? 'info' : 'success')
+            const notes = [
+              skipped.length ? `${skipped.length} filter layer${skipped.length > 1 ? 's' : ''} skipped (Photoshop has no filter layers; the merged image includes them): ${skipped.join(', ')}` : '',
+              approximate.length ? `Photoshop renders ${approximate.join(', ')} with its own maths, slightly differently` : '',
+            ].filter(Boolean)
+            useSession.getState().toast(notes.length ? `PSD written. ${notes.join('. ')}` : 'PSD written', notes.length ? 'info' : 'success')
           } catch (e) { useSession.getState().toast(`PSD export failed: ${(e as Error).message}`, 'error') }
         },
 

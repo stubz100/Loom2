@@ -9,6 +9,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
   cmpdiag            GPU preview vs exact flatten after each feature in isolation (mask, group, every adjustment
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
+  psd                builds a stack with every exported construct (fill, lock, clip, adjustment layers, pass-through and
+                     isolated groups, a filter layer), exports a PSD and reads it back with psd-tools (D41; `--extra oracle`)
   animate            writes a 24-frame test clip (frame index burned in as a 7-bit code, E6 style) into the project,
                      opens the Animate suite on it and checks: the player shows frame n when asked for frame n (all
                      frames, forwards, backwards and random), in/out + extract range harvest frames with lineage,
@@ -26,7 +28,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -402,6 +404,79 @@ def cmpdiag(cdp: CDP) -> list[str]:
     paint("0, 0, p.width, p.height", "rgb(140, 200, 60)")
     for mode in ("soft-light", "vivid-light", "hard-mix", "color-burn", "color-dodge"):
         patch(f"{{ blend: '{mode}' }}", "blend"); compare(f"D39 {mode} over the stack")
+    return fails
+
+
+def psd_check(cdp: CDP, tmp: Path) -> list[str]:
+    """D41: build a stack with every exported construct, export a PSD and read it back with psd-tools (the `oracle` extra)."""
+    try:
+        from psd_tools import PSDImage
+        from psd_tools.constants import BlendMode
+    except ImportError:
+        print("FAIL psd-tools missing: uv sync --project orchestrator --extra dev --extra oracle"); return ["psd-tools missing"]
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+
+    def js(expr: str) -> None:
+        cdp.eval(f"(() => {{ const s = {S}; {expr}; return 1 }})()"); time.sleep(0.3)
+
+    def check(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "FAIL ") + text)
+        if not ok:
+            fails.append(text)
+
+    run("edit.layer.new"); time.sleep(0.3)
+    js("const p = s.pixels.get(s.activeId); p.ctx.fillStyle = 'rgb(200, 40, 40)'; p.ctx.fillRect(0, 0, p.width / 2, p.height); p.refresh(); p.dirty = true; s.touch(); s.bump()")
+    js("s.updateNode(s.activeId, { name: 'filled', fill: 0.5, locked: true })")
+    run("edit.layer.new"); time.sleep(0.3)
+    js("const p = s.pixels.get(s.activeId); p.ctx.fillStyle = 'rgb(30, 90, 220)'; p.ctx.fillRect(0, p.height / 4, p.width, p.height / 2); p.refresh(); p.dirty = true; s.touch(); s.bump()")
+    js("s.updateNode(s.activeId, { name: 'clipped', clip: true, blend: 'multiply' })")
+    js("s.addLayer('adjustment', { type: 'levels', name: 'levels', params: { in_black: 10, in_white: 240, gamma: 1.2, out_black: 5, out_white: 250 } })")
+    run("edit.layer.group"); time.sleep(0.3)
+    js("s.updateNode(s.activeId, { name: 'pass group' })")
+    js("s.addLayer('adjustment', { type: 'curves', name: 'curves', blend: 'screen', opacity: 0.5, params: { rgb: [[0, 0], [128, 150], [255, 255]] } })")
+    run("edit.layer.group"); time.sleep(0.3)
+    js("s.updateNode(s.activeId, { name: 'iso group', passthrough: false, blend: 'multiply' })")
+    js("s.addLayer('adjustment', { type: 'hue_saturation', name: 'huesat', params: { hue: 20, saturation: 10, lightness: -5 } })")
+    js("s.addLayer('adjustment', { type: 'exposure', name: 'exposure', params: { exposure: 0.5, offset: 0.01, gamma: 1.1 } })")
+    js("s.addLayer('adjustment', { type: 'invert', name: 'invert', visible: false })")
+    js("s.addLayer('filter', { type: 'gaussian_blur', name: 'blur' })")
+    for f in (tmp / "dl").glob("*.psd"):
+        f.unlink()
+    run("edit.exportPsd")
+    t0 = time.time()
+    while time.time() - t0 < 25 and not list((tmp / "dl").glob("*.psd")):
+        time.sleep(0.5)
+    psds = list((tmp / "dl").glob("*.psd"))
+    check(bool(psds), "export PSD downloads a file")
+    if not psds:
+        return fails
+    time.sleep(0.5)
+    psd = PSDImage.open(psds[0])
+    by = {layer.name: layer for layer in psd.descendants()}
+    check(by.get("filled") is not None and abs(by["filled"].fill_opacity - 127.5) <= 1, f"fill opacity 0.5 → {getattr(by.get('filled'), 'fill_opacity', None)}/255")
+    locks = getattr(by.get("filled"), "locks", None)
+    check(locks is not None and bool(getattr(locks, "composite", False)) and bool(getattr(locks, "position", False)), f"a locked layer is Lock All ({locks})")
+    check(by.get("clipped") is not None and by["clipped"].clipping and by["clipped"].blend_mode == BlendMode.MULTIPLY, "clipped layer: clipping + multiply")
+    lv = by.get("levels")
+    check(lv is not None and lv.kind == "levels", f"levels is an adjustment layer (kind {getattr(lv, 'kind', None)})")
+    if lv is not None and lv.kind == "levels":
+        m = lv.master
+        check((m.input_floor, m.input_ceiling, m.output_floor, m.output_ceiling, round(m.gamma / 100, 2)) == (10, 240, 5, 250, 1.2), f"levels values {m}")
+    cv = by.get("curves")
+    check(cv is not None and cv.kind == "curves" and cv.blend_mode == BlendMode.SCREEN and cv.opacity == 128, f"curves adjustment in screen at 50 % (kind {getattr(cv, 'kind', None)})")
+    check(by.get("pass group") is not None and by["pass group"].blend_mode == BlendMode.PASS_THROUGH, "pass-through group → pass through")
+    check(by.get("iso group") is not None and by["iso group"].blend_mode == BlendMode.MULTIPLY, "isolated group keeps its mode")
+    hs = by.get("huesat")
+    check(hs is not None and hs.kind == "huesaturation", f"hue/saturation adjustment (kind {getattr(hs, 'kind', None)})")
+    ex = by.get("exposure")
+    check(ex is not None and ex.kind == "exposure" and abs(ex.exposure - 0.5) < 1e-3 and abs(ex.gamma - 1.1) < 1e-3, f"exposure values ({getattr(ex, 'exposure', None)}, {getattr(ex, 'gamma', None)})")
+    inv = by.get("invert")
+    check(inv is not None and inv.kind == "invert" and not inv.visible, "hidden invert adjustment")
+    check("blur" not in by, "filter layer skipped (no Photoshop equivalent)")
+    toast = cdp.eval("[...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | ')")
+    check("filter layer" in (toast or "") and "slightly differently" in (toast or ""), f"export toast names the skipped and approximate layers: {toast!r}")
     return fails
 
 
@@ -825,6 +900,9 @@ def main() -> int:
             failures += tour(cdp, tmp)
         elif mode == "cmpdiag":
             failures += cmpdiag(cdp)
+        elif mode == "psd":
+            (tmp / "dl").mkdir(exist_ok=True)
+            failures += psd_check(cdp, tmp)
         else:
             print(f"unknown mode {mode!r}"); return 2
         try:

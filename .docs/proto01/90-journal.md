@@ -2039,3 +2039,24 @@ Inspector → lineage → split → pages.
 - `test_fsio_d42.py` (5, failure injection): locked three times then written; locked for good → `PermissionError` after 7 tries with the
   old record intact and no temp file left; other errors not retried; cross-volume move still copies; an ORA save survives a briefly
   locked target → **145 offline** (also under `LOOM2_VARIANT=open`).
+
+## 2026-10-10 13:50 — D41 PSD export carries the whole stack
+
+- `psdExport.ts`: adjustment layers become Photoshop adjustment layers through ag-psd's `adjustment` records, with their mask, clip,
+  blend, opacity and visibility — Levels (in/out points, gamma as the midtone), Curves (per channel), Exposure and Invert map exactly;
+  Hue/Saturation (master, Photoshop's default colour ranges), Colour Balance, Brightness/Contrast (legacy) and Black & White keep their
+  settings but Photoshop's maths differ, and the export toast names them. Fill opacity is written; a pass-through group is written as
+  `pass through` (compose.py's rule), an isolated one in its mode; the editor's lock (no paint, no move) is written as Lock All instead of
+  transparency lock. Filter layers have no Photoshop equivalent and stay skipped with a clearer warning (the merged image includes them).
+- **ag-psd bug found by the read-back:** its Levels block is a version word plus 63 records with no `Lvls` header after the 29th, so
+  psd-tools rejects it ("Invalid signature"). Patching ag-psd's handler through `ag-psd/dist-es/additionalInfo` does not work under
+  Vite's pre-bundling (a second copy of its CommonJS internals). `fixLevelsBlocks` rewrites each block's tail in place to Photoshop's
+  632-byte layout (29 records, `Lvls`, version 3, count 62, 33 records, 2 bytes padding — what PhotoCraft's `adjust_map.rs` reads);
+  nothing moves, so no enclosing length changes. Worth reporting upstream.
+- psd-tools 1.24 (MIT; now only `attrs` beyond numpy / Pillow) added as the orchestrator's optional `oracle` extra.
+- **Checks:** new headed mode `edit_headed_check.py psd` builds a stack with every exported construct and reads the PSD back with
+  psd-tools — fill 127/255, Lock All, clip + multiply, Levels values (10, 240, 5, 250, γ 1.2), Curves in screen at 50 %, pass-through and
+  isolated groups, Hue/Sat, Exposure values, hidden Invert, filter skipped, toast text: **all passed**; `tour` all passed; 145 offline;
+  build ok. Still a manual check: opening such a PSD in Photoshop or Krita (spec 10 §14).
+- Observed, pre-existing: PixiJS logs "[BindGroup] a 'textureSource' was destroyed while still bound to a shader" on scene rebuilds —
+  152 per `tour` before D39, 154 after; not caused by the D39 passes, left for a later clean-up.

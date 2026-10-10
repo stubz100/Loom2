@@ -23,6 +23,9 @@ dev = [
     "pytest-timeout>=2.3",
     "python-multipart>=0.0.9",   # tests/fake_comfy.py parses /upload/image like ComfyUI does
 ]
+oracle = [
+    "psd-tools>=1.10",
+]
 
 [project.scripts]
 loom2-orchestrator = "loom2.main:main"

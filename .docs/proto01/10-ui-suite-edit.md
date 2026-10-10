@@ -148,7 +148,11 @@ deletes at once (undoable; the toast offers Undo) — no confirmation dialog any
 - **Save to Catalogue** (`Ctrl+Shift+S`): flattens (exact 16-bit path in Python) → new asset with lineage to
   the source and link to the document; thumbnails refresh.
 - **Export** (`Ctrl+Shift+E`): PNG (flattened, metadata embedded), **PSD** (ag-psd: layers, groups, masks, blend
-  modes, opacity; 8-bit; adjustment layers rasterised with a warning), layer PNGs, selection as PNG mask.
+  modes, opacity, fill, clipping, Lock All, pass-through groups; 8-bit; **adjustment layers as Photoshop adjustment layers**
+  (D41: Levels, Curves, Exposure, Invert exact; Hue/Saturation, Colour Balance, Brightness/Contrast, Black & White keep their
+  settings but Photoshop's maths differ — the export toast names them; filter layers have no Photoshop equivalent and are
+  skipped with a warning, the merged image includes them); verified by reading the file back with psd-tools
+  (`edit_headed_check.py psd`)), layer PNGs, selection as PNG mask.
 - **Import** layer from file or Catalogue (drop onto canvas → new layer, placed and transformable).
 
 ## 8. Workflows
@@ -244,4 +248,4 @@ transfers run at loopback speed (52 MB of layers in < 1 s in the M4 acceptance).
 - 16-bit working mode in the compositor (post-MVP; needs `rgba16float` render textures).
 - Colour management (ICC) — MVP is sRGB only.
 - Clone/heal and text tools timing; whether warp/liquify is ever in scope.
-- Whether adjustment layers export to PSD as true adjustment layers (ag-psd supports some) or rasterised.
+- ~~Whether adjustment layers export to PSD as true adjustment layers (ag-psd supports some) or rasterised.~~ True adjustment layers (D41, 2026-10-10).

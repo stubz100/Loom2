@@ -36,9 +36,9 @@ Dock: Running inpaint (klein-9b) 2/4 ████░░ · Recent
 | Element | Properties |
 | --- | --- |
 | Document | name, width, height, background (transparent/colour), colour space sRGB (MVP), source asset link |
-| Raster layer | pixels (tiled), bounds/offset, opacity, fill, blend mode, visible, locked (pixels / position / all), clipping (clip to layer below), **mask** (optional, soft 8-bit, linked/unlinked, enabled) |
-| Group | children, opacity, blend (pass-through default), mask |
-| Adjustment layer (non-destructive) | Levels · Curves · Hue/Saturation · Colour Balance · Brightness/Contrast · Exposure · Black & White · Invert; mask; blend/opacity |
+| Raster layer | pixels (tiled), bounds/offset, opacity, fill, blend mode, visible, locked (pixels / position / all), clipping (Photoshop clipping group with the nearest unclipped layer below, D39), **mask** (optional, soft 8-bit, linked/unlinked, enabled) |
+| Group | children, opacity, blend (pass-through default; below 100 % or masked, a pass-through group is mixed against the backdrop by opacity × mask, D39), mask |
+| Adjustment layer (non-destructive) | Levels · Curves · Hue/Saturation · Colour Balance · Brightness/Contrast · Exposure · Black & White · Invert; mask; blend/opacity (the result blends back in the layer's own mode, D39) |
 | Filter layer (non-destructive) | Gaussian blur · Sharpen (unsharp) · Noise · High-pass; mask |
 | Selection | document-wide soft channel (0–255), marching-ants outline, Quick Mask view |
 | Layer metadata | origin recipe for AI layers (model, prompt, seed, region, denoise), lineage asset id |
@@ -47,9 +47,18 @@ Blend modes (Photoshop set): Normal, Dissolve, Darken, Multiply, Colour Burn, Li
 Colour Dodge, Linear Dodge (Add), Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light,
 Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Colour, Luminosity.
 
+**Compositing semantics (D39, 2026-10-10, from the PhotoCraft study):** the formulas are W3C's except Soft Light (Photoshop's √cb
+where cs > ½ and cb ≤ ¼), Vivid Light (the source extremes win), Hard Mix (the thresholded generic vivid light) and Colour Burn /
+Dodge (a backdrop within 1e-4 of 0 / 1 counts as exact). A layer followed by `clip` layers forms a **clipping group**: the base is
+rendered alone (pixels × mask), each clipped layer blends onto it as if it were opaque and keeps its alpha, and the unit blends
+into the backdrop with the base's mode and opacity × fill; a hidden base hides its group. Saved documents carry
+`meta.compose_version: 2`. Until 2026-10-10 a clipped layer was multiplied by the alpha of everything below it, so it was not
+clipped at all over an opaque background.
+
 Working precision is 8-bit in the compositor and, in M4, in the ORA layers too (Pillow writes no RGBA16; 16-bit
 layers are post-MVP, §15). The canvas composite is **exact** for layers, groups, masks, clip and all 24
-deterministic blend modes: the editor registers its own W3C/Photoshop blend shaders (D31, PixiJS's built-in set
+deterministic blend modes (one known approximation: a pass-through group below 100 % or masked is exact over an opaque backdrop
+and approximate where the backdrop itself is semi-transparent, measured max 15/255 on such pixels): the editor registers its own W3C/Photoshop blend shaders (D31, PixiJS's built-in set
 measured and replaced) and renders masked layers and isolated groups through render-texture passes; measured
 p99 ≤ 1/255 per feature and 3/255 over a 25-layer stack against the Python flatten (`scripts/m4_acceptance.py`,
 Info tab "compare"). Dissolve is seeded noise and only ≈. Adjustment/filter layers are previewed on the canvas

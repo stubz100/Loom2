@@ -299,6 +299,22 @@ slices, tests and acceptance in the delivery plan.
 **H1 status 2026-10-10: closed.** D35 (agent docs), D36 (versions, build facts, About, draft releases), D37 (routes per domain, M1 rig
 20/20) and D38 (typed API contract; headed tour and Animate checks, CSP check clean) landed. Next: H2.
 
+## 8c. Edit fidelity and tools PE1–PE6 (from `../photocraft/06-loom2-edit-comparison.md`)
+
+Six Edit-suite waves from the PhotoCraft study, interleaved with H2–H4 at the author's choice; each wave's proposals become decisions
+when the wave starts.
+
+| Wave | Proposals → decisions | Acceptance (executable) |
+| --- | --- | --- |
+| **PE1 · Fidelity** | PC3 + PC1 + PC2 → D39 Photoshop compositing · PC4 → D40 Photoshop oracle · PC5 → D41 PSD export · PC6 → D42 rename retry | compose unit tests; `cmpdiag` grid p99 ≤ 1; corpus floor; psd-tools read-back; fsio failure injection |
+| PE2 · Selection | PC7 selection undo · PC8 manual toolkit · PC9 refine edge · PC10 clipboard | headed tour by mouse; EDT vs brute force |
+| PE3 · AI blend-in | PC11 seamless paste-back · PC12 match colour · PC13 colour to alpha · S1 → PC14, PC15 | bench inpaint sheets on the rig |
+| PE4 · Paint and masks | PC16 brush model · PC17 smoothing · PC18 masks · PC19 partial uploads | headed paint + perf |
+| PE5 · Panels | PC22 mouse kit · PC20 layers panel · PC21 properties | headed tour |
+| PE6 · Transform | PC23 transform · S2 → PC24 quick select | headed tour; spike numbers |
+
+**PE1 status 2026-10-10: open** (D39–D42).
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

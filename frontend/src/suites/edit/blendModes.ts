@@ -6,8 +6,11 @@
 //   co = cs·αs·(1−αb) + cb·αb·(1−αs) + B·αs·αb ;  αo = αs + αb·(1−αs)
 // The filter emits the source-side term (cs·(1−αb) + B·αb)·αs with alpha αs; Pixi's source-over draw of the
 // filter output onto the backdrop supplies the cb·αb·(1−αs) term, so the result is exact over any backdrop.
-// A "-clip" variant multiplies the layer alpha by the backdrop alpha (clipping to everything below), and an
-// alternate "-b" name exists for every mode so two adjacent layers with the same mode never share a batch.
+// An alternate "-b" name exists for every mode so two adjacent layers with the same mode never share a batch.
+// D39: Soft Light, Vivid Light, Hard Mix and the Burn / Dodge EDGE rule follow Photoshop (ported from PhotoCraft
+// crates/color/src/blend.rs and crates/compose/src/psblend.rs @ b37bff98; Copyright (c) 2026 ArtCraft Team and the PhotoCraft
+// contributors, MIT OR Apache-2.0). Clipping is no longer a shader variant: EditorCanvas renders a clip run as passes
+// (base opaque + clipped layers, then masked by the base's alpha), and "w3c-opaque" draws the base for that.
 import { BlendModeFilter, ExtensionType, extensions } from 'pixi.js'
 
 export const MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-burn', 'linear-burn', 'lighten', 'screen', 'color-dodge', 'linear-dodge', 'overlay', 'soft-light',
@@ -31,12 +34,12 @@ vec3 w3_setSat(vec3 c, float s) {
   return rng > 1e-6 ? (c - mn) * s / max(rng, 1e-6) : vec3(0.0);
 }
 float w3_hardLight1(float cb, float cs) { return cs <= 0.5 ? cb * 2.0 * cs : 1.0 - (1.0 - cb) * (1.0 - (2.0 * cs - 1.0)); }
-float w3_softLight1(float cb, float cs) { float d = cb <= 0.25 ? ((16.0 * cb - 12.0) * cb + 4.0) * cb : sqrt(cb); return cs <= 0.5 ? cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb) : cb + (2.0 * cs - 1.0) * (d - cb); }
-float w3_dodge1(float cb, float cs) { if (cb <= 0.0) return 0.0; return cs >= 1.0 ? 1.0 : min(1.0, cb / max(1e-6, 1.0 - cs)); }
-float w3_burn1(float cb, float cs) { if (cb >= 1.0) return 1.0; return cs <= 0.0 ? 0.0 : 1.0 - min(1.0, (1.0 - cb) / max(1e-6, cs)); }
-float w3_vivid1(float cb, float cs) { return cs <= 0.5 ? w3_burn1(cb, 2.0 * cs) : w3_dodge1(cb, 2.0 * cs - 1.0); }
+float w3_softLight1(float cb, float cs) { return cs <= 0.5 ? 2.0 * cb * cs + cb * cb * (1.0 - 2.0 * cs) : 2.0 * cb * (1.0 - cs) + sqrt(max(cb, 0.0)) * (2.0 * cs - 1.0); }
+float w3_dodge1(float cb, float cs) { if (cb <= 1e-4) return 0.0; return cs >= 1.0 ? 1.0 : min(1.0, cb / max(1e-6, 1.0 - cs)); }
+float w3_burn1(float cb, float cs) { if (cb >= 1.0 - 1e-4) return 1.0; return cs <= 0.0 ? 0.0 : 1.0 - min(1.0, (1.0 - cb) / max(1e-6, cs)); }
+float w3_vivid1(float cb, float cs) { if (cs <= 0.0) return 0.0; if (cs >= 1.0) return 1.0; return cs <= 0.5 ? 1.0 - min(1.0, (1.0 - cb) / max(1e-6, 2.0 * cs)) : min(1.0, cb / max(1e-6, 2.0 * (1.0 - cs))); }
 float w3_pin1(float cb, float cs) { return cs <= 0.5 ? min(cb, 2.0 * cs) : max(cb, 2.0 * cs - 1.0); }
-float w3_hardMix1(float cb, float cs) { return w3_vivid1(cb, cs) < 0.5 ? 0.0 : 1.0; }
+float w3_hardMix1(float cb, float cs) { float g = cs <= 0.5 ? w3_burn1(cb, 2.0 * cs) : w3_dodge1(cb, 2.0 * cs - 1.0); return g >= 0.5 - 1e-6 ? 1.0 : 0.0; }
 vec3 w3_hardLight(vec3 b, vec3 s) { return vec3(w3_hardLight1(b.r, s.r), w3_hardLight1(b.g, s.g), w3_hardLight1(b.b, s.b)); }
 vec3 w3_softLight(vec3 b, vec3 s) { return vec3(w3_softLight1(b.r, s.r), w3_softLight1(b.g, s.g), w3_softLight1(b.b, s.b)); }
 vec3 w3_dodge(vec3 b, vec3 s) { return vec3(w3_dodge1(b.r, s.r), w3_dodge1(b.g, s.g), w3_dodge1(b.b, s.b)); }
@@ -66,12 +69,12 @@ fn w3_setSat(c: vec3<f32>, s: f32) -> vec3<f32> {
   return vec3<f32>(0.0);
 }
 fn w3_hardLight1(cb: f32, cs: f32) -> f32 { return select(1.0 - (1.0 - cb) * (1.0 - (2.0 * cs - 1.0)), cb * 2.0 * cs, cs <= 0.5); }
-fn w3_softLight1(cb: f32, cs: f32) -> f32 { let d = select(sqrt(cb), ((16.0 * cb - 12.0) * cb + 4.0) * cb, cb <= 0.25); return select(cb + (2.0 * cs - 1.0) * (d - cb), cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb), cs <= 0.5); }
-fn w3_dodge1(cb: f32, cs: f32) -> f32 { if (cb <= 0.0) { return 0.0; } if (cs >= 1.0) { return 1.0; } return min(1.0, cb / max(1e-6, 1.0 - cs)); }
-fn w3_burn1(cb: f32, cs: f32) -> f32 { if (cb >= 1.0) { return 1.0; } if (cs <= 0.0) { return 0.0; } return 1.0 - min(1.0, (1.0 - cb) / max(1e-6, cs)); }
-fn w3_vivid1(cb: f32, cs: f32) -> f32 { if (cs <= 0.5) { return w3_burn1(cb, 2.0 * cs); } return w3_dodge1(cb, 2.0 * cs - 1.0); }
+fn w3_softLight1(cb: f32, cs: f32) -> f32 { return select(2.0 * cb * (1.0 - cs) + sqrt(max(cb, 0.0)) * (2.0 * cs - 1.0), 2.0 * cb * cs + cb * cb * (1.0 - 2.0 * cs), cs <= 0.5); }
+fn w3_dodge1(cb: f32, cs: f32) -> f32 { if (cb <= 1e-4) { return 0.0; } if (cs >= 1.0) { return 1.0; } return min(1.0, cb / max(1e-6, 1.0 - cs)); }
+fn w3_burn1(cb: f32, cs: f32) -> f32 { if (cb >= 1.0 - 1e-4) { return 1.0; } if (cs <= 0.0) { return 0.0; } return 1.0 - min(1.0, (1.0 - cb) / max(1e-6, cs)); }
+fn w3_vivid1(cb: f32, cs: f32) -> f32 { if (cs <= 0.0) { return 0.0; } if (cs >= 1.0) { return 1.0; } if (cs <= 0.5) { return 1.0 - min(1.0, (1.0 - cb) / max(1e-6, 2.0 * cs)); } return min(1.0, cb / max(1e-6, 2.0 * (1.0 - cs))); }
 fn w3_pin1(cb: f32, cs: f32) -> f32 { if (cs <= 0.5) { return min(cb, 2.0 * cs); } return max(cb, 2.0 * cs - 1.0); }
-fn w3_hardMix1(cb: f32, cs: f32) -> f32 { if (w3_vivid1(cb, cs) < 0.5) { return 0.0; } return 1.0; }
+fn w3_hardMix1(cb: f32, cs: f32) -> f32 { var g = 0.0; if (cs <= 0.5) { g = w3_burn1(cb, 2.0 * cs); } else { g = w3_dodge1(cb, 2.0 * cs - 1.0); } if (g >= 0.5 - 1e-6) { return 1.0; } return 0.0; }
 fn w3_hardLight(b: vec3<f32>, s: vec3<f32>) -> vec3<f32> { return vec3<f32>(w3_hardLight1(b.r, s.r), w3_hardLight1(b.g, s.g), w3_hardLight1(b.b, s.b)); }
 fn w3_softLight(b: vec3<f32>, s: vec3<f32>) -> vec3<f32> { return vec3<f32>(w3_softLight1(b.r, s.r), w3_softLight1(b.g, s.g), w3_softLight1(b.b, s.b)); }
 fn w3_dodge(b: vec3<f32>, s: vec3<f32>) -> vec3<f32> { return vec3<f32>(w3_dodge1(b.r, s.r), w3_dodge1(b.g, s.g), w3_dodge1(b.b, s.b)); }
@@ -111,10 +114,10 @@ const EXPR: Record<Mode, [string, string]> = {
   luminosity: ['w3_setLum(cb, w3_lum(cs))', 'w3_setLum(cb, w3_lum(cs))'],
 }
 
-function glMain(mode: Mode, clip: boolean): string {
+function glMain(mode: Mode): string {
   return `
     float ab = back.a;
-    float sa = front.a${clip ? ' * back.a' : ''};
+    float sa = front.a;
     ${mode === 'dissolve' ? 'sa = step(w3_hash(vTextureCoord), sa);' : ''}
     vec3 cb = ab > 0.0 ? back.rgb / ab : vec3(0.0);
     vec3 cs = front.a > 0.0 ? front.rgb / front.a : vec3(0.0);
@@ -125,10 +128,10 @@ function glMain(mode: Mode, clip: boolean): string {
   `
 }
 
-function wgslMain(mode: Mode, clip: boolean): string {
+function wgslMain(mode: Mode): string {
   return `
     let ab = back.a;
-    var sa = front.a${clip ? ' * back.a' : ''};
+    var sa = front.a;
     ${mode === 'dissolve' ? 'sa = step(w3_hash(uv), sa);' : ''}
     var cb = vec3<f32>(0.0);
     if (ab > 0.0) { cb = back.rgb / ab; }
@@ -140,24 +143,44 @@ function wgslMain(mode: Mode, clip: boolean): string {
 }
 
 /** The registered PixiJS blend-mode name for a layer; plain 'normal' stays on the native fast path. */
-export function blendName(mode: string, clip: boolean, alt: boolean): string {
+export function blendName(mode: string, alt: boolean): string {
   const m = (MODES as readonly string[]).includes(mode) ? mode : 'normal'
-  if (m === 'normal' && !clip) return 'normal'
-  return `w3c-${m}${clip ? '-clip' : ''}${alt ? '-b' : ''}`
+  if (m === 'normal') return 'normal'
+  return `w3c-${m}${alt ? '-b' : ''}`
 }
+
+/** The base of a clip run, drawn opaque (straight colour, alpha 1 where it has any alpha): the clipped layers above it then
+ * blend "as if the base were opaque" with their ordinary filters, and the run is masked by the base's alpha afterwards. */
+export const OPAQUE_BLEND = 'w3c-opaque'
+
+/** Index of a mode in MODES (the uniform the adjustment filters switch on); unknown modes and 'pass-through' → normal. */
+export function modeIndex(mode: string): number { return Math.max(0, (MODES as readonly string[]).indexOf(mode)) }
+
+/** `B(cb, cs)` by mode index, for shaders that take the mode as a uniform (adjustment and filter layers, D39). */
+export const BLEND_GL = GL_FUNCS + `vec3 w3_blendBy(int m, vec3 cb, vec3 cs) {\n${MODES.map((mode, i) => `  if (m == ${i}) return ${EXPR[mode][0]};`).join('\n')}\n  return cs;\n}\n`
+export const BLEND_WGSL = WGSL_FUNCS + `fn w3_blendBy(m: i32, cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {\n  switch m {\n${MODES.map((mode, i) => `    case ${i}: { return ${EXPR[mode][1]}; }`).join('\n')}\n    default: { return cs; }\n  }\n}\n`
 
 let registered = false
 export function registerBlendModes(): void {
   if (registered) return
   registered = true
-  for (const mode of MODES) for (const clip of [false, true]) for (const alt of [false, true]) {
-    const name = blendName(mode, clip, alt)
+  for (const mode of MODES) for (const alt of [false, true]) {
+    const name = blendName(mode, alt)
     if (name === 'normal') continue
     const F = class extends BlendModeFilter {
       static extension = { name, type: ExtensionType.BlendMode }
-      constructor() { super({ gl: { functions: GL_FUNCS, main: glMain(mode, clip) }, gpu: { functions: WGSL_FUNCS, main: wgslMain(mode, clip) } }) }
+      constructor() { super({ gl: { functions: GL_FUNCS, main: glMain(mode) }, gpu: { functions: WGSL_FUNCS, main: wgslMain(mode) } }) }
     }
     extensions.add(F)
   }
+  extensions.add(class extends BlendModeFilter {
+    static extension = { name: OPAQUE_BLEND, type: ExtensionType.BlendMode }
+    constructor() {
+      super({
+        gl: { functions: '', main: 'finalColor = front.a > 0.0 ? vec4(front.rgb / front.a, 1.0) : vec4(0.0);' },
+        gpu: { functions: '', main: 'out = vec4<f32>(0.0); if (front.a > 0.0) { out = vec4<f32>(front.rgb / front.a, 1.0); }' },
+      })
+    }
+  })
 }
 registerBlendModes()

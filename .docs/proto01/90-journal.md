@@ -2002,3 +2002,30 @@ Inspector → lineage → split → pages.
 - **Proposals PC1–PC26** in waves PE1 (fidelity) – PE6 (transform, smart select), spikes S1 (PyO3 `photocraft-algo`: content-aware
   fill, healing) and S2 (WASM: quick select, magnetic lasso); routes port / idea / crate. The author accepted the study and asked to
   start with PE1.
+
+## 2026-10-10 13:37 — Wave PE1 opened (D39–D42); D39 Photoshop compositing semantics landed
+
+- Recorded D39 (compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D42 (rename retry) in 13 and the PE1–PE6 waves as
+  12 §8c before starting.
+- **compose.py:** Soft Light, Vivid Light, Hard Mix and the Burn / Dodge `EDGE` (1e-4) rule ported from PhotoCraft (`psblend.rs`,
+  `color/blend.rs`); the renderer walks bottom-up in **clip runs** — the base's content (pixels × mask) alone, clipped layers composited
+  atop it (as if opaque, base alpha kept; clipped adjustments blend their result onto it), the unit blended with the base's mode and
+  opacity × fill; a hidden base hides its run; a **pass-through group** below 100 % or masked renders its children into the backdrop and
+  mixes the result against the original by opacity × mask (premultiplied); a pass-through group with a clipping group of its own renders
+  isolated; **adjustment and filter layers blend in their own mode**. `COMPOSE_VERSION = 2` is stamped in `meta.compose_version` on save.
+  Correction to the study: Photoshop's Soft Light equals W3C's except where cs > ½ and cb ≤ ¼ (√cb vs a cubic, up to ≈ 5 levels).
+- **Editor:** the `-clip` shader variants are gone; a clip run is three passes (base content → drawn `w3c-opaque` with the clipped layers
+  over it → masked by the base's alpha with `setMask({channel: 'alpha'})`) blended with the base's mode; a pass-through mix renders a copy
+  of the target's earlier content (`prefixOf`) plus the children into a pass drawn at opacity × mask — exact over an opaque backdrop,
+  approximate where the backdrop is semi-transparent; adjustment / filter shaders take the layer's mode as a uniform (`w3_blendBy`).
+  Moving or transforming a layer now marks passes dirty (it may sit inside a clip run).
+- **Bug found by the headed check:** undo / redo restored a stack snapshot *with its old server revision*, so the next save got a 409 and
+  the resync merged back server layers the snapshot lacked — an undone, already-saved layer could come back. Restores now keep the
+  current `revision` / `saved_at`.
+- **Checks:** `test_compose_d39.py` (15: formulas from PhotoCraft's Photoshop-fitted tests, clip to the base over an opaque background,
+  unit opacity and mode, base alpha kept, hidden base, masked base, clipped adjustment, orphan clip, stacked clips, pass-through 50 % with
+  an adjustment, adjustment in multiply / screen, compose_version) → **140 offline**. Headed Edge (WebGPU): `cmpdiag` all passed — every
+  earlier case unchanged, D39 cases p99 0–1 (clip 0/1/1, multiply 1, unit opacity+mode 1, clipped invert 1, invert in multiply 1;
+  formulas soft-light 1 / vivid 2 / hard-mix 0 (max 255 at threshold flips) / burn 4 / dodge 1); pass-through 50 % p99 1, max 15 — all
+  of it on the one document row the bench image does not cover, where the backdrop is the half-transparent test layer (the documented
+  approximation). `tour`, `render`, `paint` all passed; build ok. First port → `THIRD_PARTY_NOTICES.md` (PhotoCraft, MIT).

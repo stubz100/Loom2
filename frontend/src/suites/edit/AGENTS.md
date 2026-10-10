@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
-Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33.
+Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics).
 
 ## Files
 
@@ -10,7 +10,7 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `EditorCanvas.tsx` | the PixiJS `Application`: WebGPU preferred, WebGL2 fallback, render on demand, render-texture passes, overlays, pointer input, drop target |
 | `editorStore.ts` | document stack, tools, selection, history, persistence against `/documents/*` (stack revision, 409 merge), AI runs and candidates, autosave |
 | `layerPixels.ts` | `LayerPixels`: a 2D canvas per raster layer or mask (the CPU truth), its Pixi texture, 256² tile snapshots for undo, raw RGBA transfer |
-| `blendModes.ts` | 24 W3C / Photoshop blend modes as `BlendModeFilter` subclasses (GLSL + WGSL), `-clip` and alternate `-b` names |
+| `blendModes.ts` | 24 blend modes (W3C formula, Photoshop's Soft / Vivid Light, Hard Mix, Burn / Dodge edges) as `BlendModeFilter` subclasses (GLSL + WGSL) with alternate `-b` names; `w3c-opaque` for clip-run bases; `BLEND_GL` / `BLEND_WGSL` (`w3_blendBy`) for the adjustment filters |
 | `adjustFilters.ts` | adjustment and filter layers previewed as per-layer filters |
 | `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
@@ -25,6 +25,7 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 2. **Never use Pixi's built-in advanced blends, sprite masks or `cacheAsTexture` for layers.** A sprite mask plus an advanced blend gives
    the blend a transparent backdrop; `cacheAsTexture` applies alpha and blend per child. Masked layers and isolated groups render through
    their own RenderTextures; two adjacent layers with the same mode alternate between the `mode` and `mode-b` names so they never batch.
+   A sprite mask is only ever applied inside a pass to a sprite without a blend filter (`withMask`, the clip run's alpha mask).
 3. **Layers are 8-bit in the ORA** (Pillow writes no RGBA16); 16-bit is post-MVP.
 4. **Pixels never cross Tauri IPC.** Layers move as raw RGBA over loopback HTTP (`PUT/GET /documents/{id}/layers/{lid}/pixels?kind=image|mask`,
    `X-Loom-Width/Height/Channels`), the selection as one byte per pixel (`PUT /documents/{id}/selection?w&h`).
@@ -34,6 +35,11 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    `document.changed {added, group}` and land as candidate layers in a per-batch "AI" group (the variant strip: `1–4` / Enter picks).
 7. **Destroy what you create.** Rebuilding the scene destroys sprites and passes but keeps `LayerPixels` textures (they live in the store);
    unmount destroys the app (`app.destroy(true, {children: true})`, review C21).
+8. **Clipping groups are passes, not a shader variant (D39).** `buildClipRun`: the base's content (pixels × mask) renders into a pass,
+   is drawn `w3c-opaque` into a second pass with the clipped layers over it, that pass is masked by the base's alpha
+   (`setMask({channel: 'alpha'})`) in a third, and the unit blends with the base's mode and opacity × fill. A pass-through group below
+   100 % or masked renders a copy of its target's earlier content (`prefixOf`) into a pass, its children over that, and draws the
+   result at opacity × mask. Moving or transforming a layer must `markPassesDirty()`: it may sit inside a pass.
 
 ## Renderer selection
 

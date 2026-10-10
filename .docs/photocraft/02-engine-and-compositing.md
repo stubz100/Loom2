@@ -70,7 +70,8 @@ The generic reference is W3C Compositing Level 1. Photoshop-specific overrides w
 psd-tools `blend-modes/*.psd` files:
 
 - **Soft Light** (`soft_light_ps`): `cs ≤ ½: 2·cb·cs + cb²(1−2cs)`; otherwise `2·cb(1−cs) + √cb·(2cs−1)`. The lower half is
-  algebraically the W3C formula; **the upper half differs** (W3C uses a piecewise `D(cb)` there).
+  algebraically the W3C formula, and so is the upper half wherever `cb > ¼`; **they differ only where `cs > ½` and `cb ≤ ¼`**, where W3C
+  uses a cubic in place of `√cb` (up to about 5 levels; corrected 2026-10-10 while porting it, D39).
 - **Vivid Light** (`vivid_light_ps`): the **source** extremes win. `cs = 0` gives 0 even over white, and `cs = 1` gives 1 even
   over black. The generic Burn/Dodge let the backdrop extremes win.
 - **Hard Mix** (`hard_mix_ps`): 1 where the *generic* vivid light ≥ 0.5 − 1e-6, else 0. For interior values this is `cb + cs ≥ 1`;

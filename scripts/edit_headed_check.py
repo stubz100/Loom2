@@ -370,6 +370,38 @@ def cmpdiag(cdp: CDP) -> list[str]:
     run("edit.layer.rot90"); time.sleep(0.6); compare("rot90")
     run("edit.layer.rot270"); time.sleep(0.6); compare("rot270 (back)")
     run("edit.layer.new"); time.sleep(0.3); compare("empty raster layer above")
+
+    # D39: Photoshop clipping, pass-through mixing, adjustment blend modes and formulas
+    def paint(rect: str, colour: str) -> None:
+        cdp.eval(f"(() => {{ const s = {S}; const p = s.pixels.get(s.activeId); p.ctx.fillStyle = '{colour}'; p.ctx.fillRect({rect}); p.refresh(); p.dirty = true; s.touch(); s.bump(); return 1 }})()")
+        time.sleep(0.3)
+
+    def patch(js: str, label: str) -> None:
+        cdp.eval(f"{S}.updateNode({S}.activeId, {js}, '{label}'); 1"); time.sleep(0.4)
+
+    paint("0, 0, p.width / 2, p.height", "rgba(200, 40, 40, 0.6)")                     # the base: half-transparent red, left half
+    base_id = cdp.eval(f"{S}.activeId")
+    compare("D39 half-transparent base")
+    run("edit.layer.new"); time.sleep(0.3)
+    paint("0, p.height / 4, p.width, p.height / 2", "rgb(30, 90, 220)")               # a blue band across the whole width
+    patch("{ clip: true }", "clip")
+    compare("D39 clipped band (only inside the base)")
+    patch("{ blend: 'multiply' }", "blend"); compare("D39 clipped band in multiply")
+    cdp.eval(f"{S}.updateNode('{base_id}', {{ opacity: 0.5, blend: 'screen' }}, 'base'); 1"); time.sleep(0.4)
+    compare("D39 clip unit takes the base's opacity and mode")
+    cdp.eval(f"{S}.updateNode('{base_id}', {{ opacity: 1, blend: 'normal' }}, 'base'); 1"); time.sleep(0.3)
+    run("edit.layer.adjustment.invert"); time.sleep(0.4)
+    patch("{ clip: true }", "clip"); compare("D39 clipped invert adjustment")
+    patch("{ clip: false, blend: 'multiply' }", "blend"); compare("D39 invert adjustment in multiply")
+    patch("{ blend: 'normal' }", "blend")
+    run("edit.layer.group"); time.sleep(0.3)
+    patch("{ opacity: 0.5 }", "opacity"); compare("D39 pass-through group at 50 % holding an adjustment")
+    patch("{ opacity: 1 }", "opacity")
+    run("edit.undo"); run("edit.undo"); run("edit.undo"); time.sleep(0.4)
+    run("edit.layer.new"); time.sleep(0.3)
+    paint("0, 0, p.width, p.height", "rgb(140, 200, 60)")
+    for mode in ("soft-light", "vivid-light", "hard-mix", "color-burn", "color-dodge"):
+        patch(f"{{ blend: '{mode}' }}", "blend"); compare(f"D39 {mode} over the stack")
     return fails
 
 

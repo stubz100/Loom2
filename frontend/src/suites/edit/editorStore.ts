@@ -191,6 +191,12 @@ async function putRaw(docId: string, lid: string, kind: 'image' | 'mask', lp: La
   if (!res.ok) throw new Error(`upload ${lid}: ${res.status} ${await res.text()}`)
 }
 
+/** A stack snapshot restored by undo / redo keeps the server bookkeeping of the current stack: its old `revision` would make
+ * the next save a 409, and the resync that follows merges back server layers the snapshot lacks — re-adding an undone layer. */
+function keepServerState(stack: DocumentStack, cur: DocumentStack | null): DocumentStack {
+  return cur ? { ...stack, revision: cur.revision, saved_at: cur.saved_at } : stack
+}
+
 export const useEditor = create<EditorState>()(
   persist(
     (set, get) => {
@@ -813,7 +819,7 @@ export const useEditor = create<EditorState>()(
             if (target) redoEntry.tiles = target.restore(e.tiles)
           }
           if (e.swap) redoEntry.swap = swapPixels(e.swap)
-          if (e.stack) set({ doc: e.stack, activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         redo: () => {
@@ -826,7 +832,7 @@ export const useEditor = create<EditorState>()(
             if (target) undoEntry.tiles = target.restore(e.tiles)
           }
           if (e.swap) undoEntry.swap = swapPixels(e.swap)
-          if (e.stack) set({ doc: e.stack, activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
+          if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
         touch: () => set({ docDirty: true }),

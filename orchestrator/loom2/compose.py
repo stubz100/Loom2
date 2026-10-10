@@ -1,7 +1,8 @@
 """Exact layer compositor (10 §3, 05 §3b): the Python reference that renders a document stack on save / export
-and defines what the GPU preview approximates. Float32, straight alpha, W3C compositing formulas with the
-Photoshop blend-mode set, groups (pass-through or isolated), layer masks, clipping, adjustment and filter
-layers. Pixels come in as uint8 RGBA arrays; the result is uint8 RGBA.
+and defines what the GPU preview approximates. Float32, straight alpha, the W3C compositing formula with Photoshop's
+blend-mode set and formulas, and Photoshop's structure (D39): clipping groups (clipped layers atop an isolated base),
+pass-through groups (mixed against the backdrop below 100 % or masked) or isolated, layer masks, adjustment and filter
+layers blended in their own mode. Pixels come in as uint8 RGBA arrays; the result is uint8 RGBA.
 """
 from __future__ import annotations
 
@@ -14,28 +15,41 @@ import numpy as np
 
 Arr = np.ndarray
 
+# D39: 2 = Photoshop clipping / pass-through / adjustment-blend semantics and formulas; 1 (implicit) = the M4 W3C-style rules.
+# Stamped into every saved document's meta so a changed render can be explained.
+COMPOSE_VERSION = 2
+
 # ---------------------------------------------------------------- separable blend functions B(cb, cs) → rgb
 def _hard_light(cb: Arr, cs: Arr) -> Arr:
     return np.where(cs <= 0.5, cb * 2 * cs, 1 - (1 - cb) * (1 - (2 * cs - 1)))
 
 
+# D39: Soft Light, Vivid Light, Hard Mix and the Burn / Dodge edge rule follow Photoshop, not W3C. Ported from PhotoCraft
+# crates/color/src/blend.rs and crates/compose/src/psblend.rs @ b37bff98 (fitted on psd-tools blend-modes/*.psd).
+# Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors. MIT OR Apache-2.0.
+EDGE = 1e-4   # a backdrop within EDGE of 0 / 1 counts as exact: a value that should be 1 can arrive one rounding step below it
+
+
 def _soft_light(cb: Arr, cs: Arr) -> Arr:
-    d = np.where(cb <= 0.25, ((16 * cb - 12) * cb + 4) * cb, np.sqrt(cb))
-    return np.where(cs <= 0.5, cb - (1 - 2 * cs) * cb * (1 - cb), cb + (2 * cs - 1) * (d - cb))
+    # the lower half equals W3C's; the upper half is Photoshop's 2·cb·(1−cs) + √cb·(2cs−1)
+    return np.where(cs <= 0.5, 2 * cb * cs + cb * cb * (1 - 2 * cs), 2 * cb * (1 - cs) + np.sqrt(np.maximum(cb, 0)) * (2 * cs - 1))
 
 
 def _color_dodge(cb: Arr, cs: Arr) -> Arr:
     out = np.where(cs >= 1, 1.0, np.minimum(1.0, cb / np.maximum(1e-6, 1 - cs)))
-    return np.where(cb <= 0, 0.0, out)
+    return np.where(cb <= EDGE, 0.0, out)
 
 
 def _color_burn(cb: Arr, cs: Arr) -> Arr:
     out = np.where(cs <= 0, 0.0, 1 - np.minimum(1.0, (1 - cb) / np.maximum(1e-6, cs)))
-    return np.where(cb >= 1, 1.0, out)
+    return np.where(cb >= 1 - EDGE, 1.0, out)
 
 
 def _vivid_light(cb: Arr, cs: Arr) -> Arr:
-    return np.where(cs <= 0.5, _color_burn(cb, 2 * cs), _color_dodge(cb, 2 * cs - 1))
+    """Photoshop: the source extremes win (cs = 0 → 0 even over white, cs = 1 → 1 even over black)."""
+    burn = 1 - np.minimum(1.0, (1 - cb) / np.maximum(1e-6, 2 * cs))
+    dodge = np.minimum(1.0, cb / np.maximum(1e-6, 2 * (1 - cs)))
+    return np.where(cs <= 0, 0.0, np.where(cs >= 1, 1.0, np.where(cs <= 0.5, burn, dodge)))
 
 
 def _pin_light(cb: Arr, cs: Arr) -> Arr:
@@ -43,7 +57,10 @@ def _pin_light(cb: Arr, cs: Arr) -> Arr:
 
 
 def _hard_mix(cb: Arr, cs: Arr) -> Arr:
-    return np.where(_vivid_light(cb, cs) < 0.5, 0.0, 1.0)
+    """Photoshop: the thresholded *generic* vivid light (backdrop extremes win, with the EDGE rule) — `cb + cs ≥ 1` inside,
+    black source over white → white, white over black → black."""
+    generic = np.where(cs <= 0.5, _color_burn(cb, 2 * cs), _color_dodge(cb, 2 * cs - 1))
+    return np.where(generic >= 0.5 - 1e-6, 1.0, 0.0)
 
 
 SEPARABLE: dict[str, Callable[[Arr, Arr], Arr]] = {
@@ -134,6 +151,18 @@ def composite(dst: Arr, src: Arr, mode: str = "normal", alpha: Arr | float = 1.0
     out = np.empty_like(dst)
     out[..., :3] = np.where(ao > 1e-6, co / np.maximum(ao, 1e-6), 0.0)
     out[..., 3:4] = ao
+    return out
+
+
+def _mix_premultiplied(a: Arr, b: Arr, k: Arr | float) -> Arr:
+    """a·(1−k) + b·k in premultiplied colour, stored straight (PhotoCraft's pass-through mix)."""
+    k_arr = (np.full(a.shape[:2], k, dtype=np.float32) if np.isscalar(k) else k)[..., None]
+    wa = a[..., 3:4] * (1 - k_arr)
+    wb = b[..., 3:4] * k_arr
+    alpha = wa + wb
+    out = np.empty_like(a)
+    out[..., :3] = np.where(alpha > 1e-6, (a[..., :3] * wa + b[..., :3] * wb) / np.maximum(alpha, 1e-6), 0.0)
+    out[..., 3:4] = alpha
     return out
 
 
@@ -379,56 +408,124 @@ class Renderer:
         full = place(self.h, self.w, np.repeat(to_float(arr)[..., None], 4, axis=-1), base_x + int(m.get("x", 0)), base_y + int(m.get("y", 0)))
         return full[..., 0]
 
-    def _layer_alpha(self, node: dict, below: Arr | None) -> Arr | float:
-        a: Arr | float = float(node.get("opacity", 1.0)) * float(node.get("fill", 1.0))
+    def _k(self, node: dict) -> Arr | float:
+        """Opacity × fill × mask: how much of the node reaches what it composites onto."""
+        k: Arr | float = float(node.get("opacity", 1.0)) * float(node.get("fill", 1.0))
+        m = self._mask_for(node)
+        return k * m if m is not None else k
+
+    def _content(self, node: dict) -> Arr | None:
+        """The node's own pixels on transparent with its mask applied (PhotoCraft `render_content`); None for adjustment and
+        filter layers, which have none."""
+        kind = node.get("kind", "raster")
+        if kind == "raster":
+            px = self.pixels.get(node["id"])
+            if px is None:
+                return None
+            out = place(self.h, self.w, to_float(px), int(node.get("x", 0)), int(node.get("y", 0)))
+        elif kind == "group":
+            out = self.render_nodes(node.get("children", []), np.zeros((self.h, self.w, 4), dtype=np.float32))
+        else:
+            return None
         m = self._mask_for(node)
         if m is not None:
-            a = a * m
-        if node.get("clip") and below is not None:
-            a = a * below[..., 3]
-        return a
+            out[..., 3] *= m
+        return out
+
+    def _apply(self, node: dict, buf: Arr) -> Arr | None:
+        """An adjustment or filter layer's function applied to `buf` (None for an unknown type)."""
+        kind = node.get("kind")
+        fn = (ADJUSTMENTS if kind == "adjustment" else FILTERS).get(node.get("type", ""))
+        if fn is None:
+            return None
+        if kind == "adjustment":
+            out = buf.copy()
+            out[..., :3] = np.clip(fn(buf[..., :3], node.get("params", {})), 0, 1)
+            return out
+        return fn(buf, node.get("params", {}))
+
+    def _mix_adjusted(self, node: dict, acc: Arr, adjusted: Arr) -> Arr:
+        """D39: an adjustment (or filter) result blends back in its own mode — rgb += (B(mode, rgb, adjusted) − rgb) × k. An
+        adjustment keeps the backdrop's alpha; a filter (blur can move alpha) mixes alpha linearly."""
+        k = self._k(node)
+        k_arr = (np.full(acc.shape[:2], k, dtype=np.float32) if np.isscalar(k) else k)[..., None]
+        mode = node.get("blend", "normal")
+        mode = "normal" if mode == "pass-through" else mode
+        out = acc.copy()
+        out[..., :3] = acc[..., :3] + (blend(mode, acc[..., :3], adjusted[..., :3]) - acc[..., :3]) * k_arr
+        if node.get("kind") == "adjustment":
+            return np.where(acc[..., 3:4] > 0, out, acc)
+        out[..., 3:4] = acc[..., 3:4] * (1 - k_arr) + adjusted[..., 3:4] * k_arr
+        return out
+
+    def _atop(self, clipped: list[dict], base: Arr) -> Arr:
+        """D39: clipped layers composite atop their base — blended as if the base were opaque, the base's alpha kept."""
+        for c in clipped:
+            kind = c.get("kind", "raster")
+            if kind in ("adjustment", "filter"):
+                adjusted = self._apply(c, base)
+                if adjusted is not None:
+                    mixed = self._mix_adjusted(c, base, adjusted)
+                    base = np.concatenate([mixed[..., :3], base[..., 3:4]], axis=-1)
+                continue
+            src = self._content(c)
+            if src is None:
+                continue
+            opaque = base.copy()
+            opaque[..., 3] = 1.0
+            mode = c.get("blend", "normal")
+            r = composite(opaque, src, "normal" if mode == "pass-through" else mode, float(c.get("opacity", 1.0)) * float(c.get("fill", 1.0)),
+                          seed=zlib.crc32(c["id"].encode("utf-8")) & 0xFFFF)
+            base = np.concatenate([np.where(base[..., 3:4] > 0, r[..., :3], base[..., :3]), base[..., 3:4]], axis=-1)
+        return base
 
     def render_nodes(self, nodes: list[dict], backdrop: Arr) -> Arr:
-        """Nodes are top-first (ORA order); render bottom-up onto the backdrop."""
+        """Nodes are top-first (ORA order); render bottom-up onto the backdrop. A node followed (above) by `clip` nodes forms a
+        clipping group with them (D39); a clipped node with no unclipped node below it renders as an ordinary layer."""
+        order = list(reversed(nodes))
         acc = backdrop
-        for node in reversed(nodes):
-            if not node.get("visible", True):
-                continue
-            kind = node.get("kind", "raster")
-            mode = node.get("blend", "normal")
-            if kind == "raster":
-                px = self.pixels.get(node["id"])
-                if px is None:
-                    continue
-                src = place(self.h, self.w, to_float(px), int(node.get("x", 0)), int(node.get("y", 0)))
-                acc = composite(acc, src, mode, self._layer_alpha(node, acc), seed=zlib.crc32(node["id"].encode("utf-8")) & 0xFFFF)
-            elif kind == "group":
-                children = node.get("children", [])
-                m = node.get("mask")
-                passthrough = (node.get("passthrough", True) and mode in ("normal", "pass-through") and not (m and m.get("enabled", True))
-                               and not node.get("clip"))                      # C28: one rule with the editor — a disabled mask is no mask; clip isolates
-                if passthrough and abs(float(node.get("opacity", 1.0)) - 1.0) < 1e-6:
-                    acc = self.render_nodes(children, acc)
-                else:
-                    inner = self.render_nodes(children, np.zeros_like(acc))
-                    acc = composite(acc, inner, "normal" if mode == "pass-through" else mode, self._layer_alpha(node, acc))
-            elif kind in ("adjustment", "filter"):
-                table = ADJUSTMENTS if kind == "adjustment" else FILTERS
-                fn = table.get(node.get("type", ""))
-                if fn is None:
-                    continue
-                if kind == "adjustment":
-                    adjusted = acc.copy()
-                    adjusted[..., :3] = np.clip(fn(acc[..., :3], node.get("params", {})), 0, 1)
-                else:
-                    adjusted = fn(acc, node.get("params", {}))
-                # the adjusted backdrop replaces the backdrop where the layer's alpha allows
-                a = self._layer_alpha(node, acc)
-                a_arr = (np.full(acc.shape[:2], a, dtype=np.float32) if np.isscalar(a) else a)[..., None]
-                keep = acc[..., 3:4] > 0
-                mixed = acc * (1 - a_arr) + adjusted * a_arr
-                acc = np.where(keep, mixed, acc) if kind == "adjustment" else mixed
+        i = 0
+        while i < len(order):
+            base = order[i]
+            j = i + 1
+            if not base.get("clip"):
+                while j < len(order) and order[j].get("clip"):
+                    j += 1
+            if base.get("visible", True):
+                acc = self._node(base, [c for c in order[i + 1:j] if c.get("visible", True)], acc)
+            i = j
         return acc
+
+    def _node(self, node: dict, clipped: list[dict], acc: Arr) -> Arr:
+        kind = node.get("kind", "raster")
+        mode = node.get("blend", "normal")
+        if kind in ("adjustment", "filter"):
+            adjusted = self._apply(node, acc)
+            if adjusted is None:
+                return acc
+            if clipped:
+                adjusted = self._atop(clipped, adjusted)
+            return self._mix_adjusted(node, acc, adjusted)
+        if kind == "group":
+            m = node.get("mask")
+            masked = bool(m and m.get("enabled", True))
+            # C28 / D39: pass-through when flagged, Normal or Pass Through, not clipped and with no clipping group of its own
+            passthrough = node.get("passthrough", True) and mode in ("normal", "pass-through") and not node.get("clip") and not clipped
+            if passthrough:
+                opacity = float(node.get("opacity", 1.0))
+                if abs(opacity - 1.0) < 1e-6 and not masked:
+                    return self.render_nodes(node.get("children", []), acc)
+                # D39: below 100 % or masked, the children still composite into the backdrop; the result is mixed against the
+                # original backdrop by opacity × mask (premultiplied), so adjustments inside keep reaching the layers below
+                out = self.render_nodes(node.get("children", []), acc.copy())
+                return _mix_premultiplied(acc, out, self._k(node))
+        content = self._content(node)
+        if content is None:
+            return acc
+        if clipped:
+            content = self._atop(clipped, content)
+        k = float(node.get("opacity", 1.0)) * float(node.get("fill", 1.0))
+        return composite(acc, content, "normal" if mode == "pass-through" else mode, k, seed=zlib.crc32(node["id"].encode("utf-8")) & 0xFFFF)
 
     def flatten(self, nodes: list[dict]) -> Arr:
         base = np.zeros((self.h, self.w, 4), dtype=np.float32)

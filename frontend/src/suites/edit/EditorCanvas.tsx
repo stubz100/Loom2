@@ -10,7 +10,7 @@ import { useSession } from '../../store/session'
 import { CANVAS_COLOURS } from '../../frame/theme'
 import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
-import { blendName } from './blendModes'
+import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { useAiPanel } from './aiPanelStore'
@@ -179,6 +179,7 @@ export function EditorCanvas() {
     obj.position.set(t.cx, t.cy)
     obj.scale.set(t.sx, t.sy)
     obj.rotation = t.rot
+    markPassesDirty()                                                      // the layer may sit inside a pass (clip run, mask)
   }
 
   // ---- app lifecycle --------------------------------------------------------------------------
@@ -293,10 +294,11 @@ export function EditorCanvas() {
     for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }   // C21: pass content containers too
     passesRef.current = []
     let lastBlend = ''                                                   // alternate names so equal modes never batch
-    const pickBlend = (mode: string, clip: boolean) => { const a = blendName(mode, clip, false); const name = a === lastBlend ? blendName(mode, clip, true) : a; lastBlend = name; return name }
-    // Anything that must composite as a unit before its own blend/alpha/mask apply (masked layers, isolated groups)
-    // is rendered into its own RenderTexture (a "pass") each frame it is dirty. Pixi's cacheAsTexture and sprite
-    // masks do not give advanced blend filters the right backdrop, measured in the M4 acceptance.
+    const pickBlend = (mode: string) => { const a = blendName(mode, false); const name = a === lastBlend ? blendName(mode, true) : a; lastBlend = name; return name }
+    const setBlend = (obj: Container, name: string) => { (obj as unknown as { blendMode: string }).blendMode = name }
+    // Anything that must composite as a unit before its own blend/alpha/mask apply (masked layers, isolated groups, clip runs,
+    // pass-through mixes) is rendered into its own RenderTexture (a "pass") each frame it is dirty. Pixi's cacheAsTexture and
+    // sprite masks do not give advanced blend filters the right backdrop, measured in the M4 acceptance.
     const makePass = (content: Container, w: number, h: number, tx: number, ty: number): Sprite => {
       const rt = RenderTexture.create({ width: Math.max(1, w), height: Math.max(1, h), resolution: 1, antialias: false })
       passesRef.current.push({ rt, content, transform: new Matrix().translate(-tx, -ty), dirty: true })
@@ -315,52 +317,140 @@ export function EditorCanvas() {
       obj.mask = ms
       return makePass(content, w, h, tx, ty)
     }
-    const build = (nodes: Node[], parent: Container) => {
-      // ORA order is top-first; Pixi draws children in order, so add bottom-up
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i]
-        if (!n.visible) continue
-        if (before && n.id === st.activeId) continue                  // "before": hide the active layer
-        if (n.kind === 'raster') {
-          const lp = st.pixels.get(n.id)
-          if (!lp) continue
-          const sp = new Sprite(lp.texture)
-          sp.position.set(n.x ?? 0, n.y ?? 0)
-          const obj = withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
-          obj.alpha = n.opacity * (n.fill ?? 1)
-          ;(obj as unknown as { blendMode: string }).blendMode = pickBlend(n.blend, n.clip)
-          parent.addChild(obj)
-          spritesRef.current.set(n.id, obj)
-        } else if (n.kind === 'group') {
-          // compose.py: pass-through only when flagged so AND normal blend AND no mask AND opacity 1 (and no clip);
-          // otherwise the group composites in isolation onto transparency first
-          const passthrough = (n.passthrough ?? true) && (n.blend === 'normal' || n.blend === 'pass-through') && !n.mask?.enabled && Math.abs(n.opacity - 1) < 1e-6 && !n.clip
-          const c = new Container()
-          build(n.children ?? [], c)
-          let obj: Container = c
-          if (!passthrough) {
-            obj = withMask(n, makePass(c, doc.w, doc.h, 0, 0), doc.w, doc.h, 0, 0)
-            obj.alpha = n.opacity
-            ;(obj as unknown as { blendMode: string }).blendMode = pickBlend(n.blend === 'pass-through' ? 'normal' : n.blend, n.clip)
-          }
-          parent.addChild(obj)
-          spritesRef.current.set(n.id, obj)
-        } else if (n.kind === 'adjustment' || n.kind === 'filter') {
-          // a document-sized white sprite (or the layer's mask) carries the layer alpha; the per-layer filter
-          // registered as a blend mode rewrites the backdrop (adjustFilters.ts)
-          const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
-          const sp = m ? new Sprite(m.texture) : new Sprite(Texture.WHITE)
-          if (m && n.mask) sp.position.set(n.mask.x, n.mask.y)
-          else { sp.width = doc.w; sp.height = doc.h }
-          sp.alpha = n.opacity * (n.fill ?? 1)
-          ;(sp as unknown as { blendMode: string }).blendMode = ensureAdjustment(n)
-          lastBlend = ''
-          parent.addChild(sp)
-          spritesRef.current.set(n.id, sp)
-        }
+    /** The render target a node draws into: its top-first node list, and what lies under that list (the root's background
+     * colour, or the copy of the backdrop a pass-through mix starts from). */
+    type Target = { nodes: Node[]; underlay: Texture | null; background: string | null }
+    const isolated = (nodes: Node[]): Target => ({ nodes, underlay: null, background: null })
+    let register = true                                                   // false while building a backdrop copy (no sprite lookups)
+    const reg = (id: string, obj: Container) => { if (register) spritesRef.current.set(id, obj) }
+    const hidden = (n: Node) => !n.visible || (before && n.id === st.activeId)   // "before": hide the active layer
+    const contains = (n: Node, g: Node): boolean => n.kind === 'group' && (n.children ?? []).some((c) => c === g || contains(c, g))
+    /** The part of a target's tree drawn before `g` (a pass-through group inside it): the nodes below it, and its ancestors
+     * reduced to their children below it. */
+    const prefixOf = (list: Node[], g: Node): Node[] => {
+      const i = list.findIndex((n) => n === g || contains(n, g))
+      if (i < 0) return list
+      const below = list.slice(i + 1)
+      return list[i] === g ? below : [{ ...list[i], children: prefixOf(list[i].children ?? [], g) }, ...below]
+    }
+    /** A node's own pixels with its mask, unblended at full opacity (the base of a clip run, D39). */
+    const buildContent = (n: Node, parent: Container) => {
+      if (n.kind === 'raster') {
+        const lp = st.pixels.get(n.id)
+        if (!lp) return
+        const sp = new Sprite(lp.texture)
+        sp.position.set(n.x ?? 0, n.y ?? 0)
+        const obj = withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+        parent.addChild(obj); reg(n.id, obj)
+      } else if (n.kind === 'group') {
+        const c = new Container()
+        build(n.children ?? [], c, isolated(n.children ?? []))
+        const obj = withMask(n, makePass(c, doc.w, doc.h, 0, 0), doc.w, doc.h, 0, 0)
+        parent.addChild(obj); reg(n.id, obj)
       }
     }
-    build(doc.layers, layers)
+    const buildNode = (n: Node, parent: Container, target: Target) => {
+      if (n.kind === 'raster') {
+        const lp = st.pixels.get(n.id)
+        if (!lp) return
+        const sp = new Sprite(lp.texture)
+        sp.position.set(n.x ?? 0, n.y ?? 0)
+        const obj = withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+        obj.alpha = n.opacity * (n.fill ?? 1)
+        setBlend(obj, pickBlend(n.blend))
+        parent.addChild(obj); reg(n.id, obj)
+      } else if (n.kind === 'group') {
+        // compose.py: pass-through when flagged, Normal / Pass Through and not clipped (a clip-run base never gets here)
+        const passthrough = (n.passthrough ?? true) && (n.blend === 'normal' || n.blend === 'pass-through') && !n.clip
+        if (passthrough && Math.abs(n.opacity - 1) < 1e-6 && !n.mask?.enabled) {
+          const c = new Container()
+          build(n.children ?? [], c, target)                                 // same target: the children draw onto its backdrop
+          parent.addChild(c); reg(n.id, c)
+        } else if (passthrough) {
+          // D39: below 100 % or masked, the children still composite onto the backdrop and the result is mixed against the
+          // original by opacity × mask. L = a copy of everything drawn so far in this target; M = L + the children; M is drawn
+          // over the target at the group's opacity (exact over an opaque backdrop, where M is opaque too).
+          const lc = new Container()
+          if (target.underlay) lc.addChild(new Sprite(target.underlay))
+          else if (target.background) lc.addChild(new Graphics().rect(0, 0, doc.w, doc.h).fill(target.background))
+          const was = register
+          register = false
+          build(prefixOf(target.nodes, n), lc, target)
+          register = was
+          const copy = makePass(lc, doc.w, doc.h, 0, 0)
+          const mc = new Container()
+          mc.addChild(copy)
+          lastBlend = ''
+          build(n.children ?? [], mc, { nodes: n.children ?? [], underlay: copy.texture, background: null })
+          const obj = withMask(n, makePass(mc, doc.w, doc.h, 0, 0), doc.w, doc.h, 0, 0)
+          obj.alpha = n.opacity
+          lastBlend = ''
+          parent.addChild(obj); reg(n.id, obj)
+        } else {
+          const c = new Container()
+          build(n.children ?? [], c, isolated(n.children ?? []))
+          const obj = withMask(n, makePass(c, doc.w, doc.h, 0, 0), doc.w, doc.h, 0, 0)
+          obj.alpha = n.opacity
+          setBlend(obj, pickBlend(n.blend === 'pass-through' ? 'normal' : n.blend))
+          parent.addChild(obj); reg(n.id, obj)
+        }
+      } else if (n.kind === 'adjustment' || n.kind === 'filter') {
+        // a document-sized white sprite (or the layer's mask) carries the layer alpha; the per-layer filter registered as
+        // a blend mode rewrites the backdrop in the layer's own blend mode (adjustFilters.ts)
+        const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
+        const sp = m ? new Sprite(m.texture) : new Sprite(Texture.WHITE)
+        if (m && n.mask) sp.position.set(n.mask.x, n.mask.y)
+        else { sp.width = doc.w; sp.height = doc.h }
+        sp.alpha = n.opacity * (n.fill ?? 1)
+        setBlend(sp, ensureAdjustment(n))
+        lastBlend = ''
+        parent.addChild(sp); reg(n.id, sp)
+      }
+    }
+    /** D39 clipping group: pass 1 draws the base opaque (straight colour) and the clipped layers over it with their own
+     * blends — "as if the base were opaque"; pass 2 masks that by the base's alpha; the unit then blends with the base's
+     * mode and opacity × fill. */
+    const buildClipRun = (base: Node, clipped: Node[], parent: Container) => {
+      const bc = new Container()
+      buildContent(base, bc)
+      const opaque = makePass(bc, doc.w, doc.h, 0, 0)
+      setBlend(opaque, OPAQUE_BLEND)
+      const rc = new Container()
+      rc.addChild(opaque)
+      lastBlend = OPAQUE_BLEND
+      for (const c of clipped) buildNode(c, rc, isolated([]))
+      const run = makePass(rc, doc.w, doc.h, 0, 0)
+      const shape = new Sprite(opaque.texture)
+      const mc = new Container()
+      mc.addChild(shape, run)
+      run.setMask({ mask: shape, channel: 'alpha' })
+      const unit = makePass(mc, doc.w, doc.h, 0, 0)
+      unit.alpha = base.opacity * (base.fill ?? 1)
+      lastBlend = ''
+      setBlend(unit, pickBlend(base.blend === 'pass-through' ? 'normal' : base.blend))
+      parent.addChild(unit)
+    }
+    /** Nodes are top-first (ORA order); Pixi draws children in order, so build bottom-up. A node followed (above) by
+     * `clip` nodes forms a clipping group with them; a clipped node with no unclipped node below draws as an ordinary one. */
+    const build = (nodes: Node[], parent: Container, target: Target) => {
+      const order = nodes.slice().reverse()
+      for (let i = 0; i < order.length;) {
+        const base = order[i]
+        let j = i + 1
+        if (!base.clip) while (j < order.length && order[j].clip) j++
+        const clipped = order.slice(i + 1, j).filter((c) => !hidden(c))
+        i = j
+        if (hidden(base)) continue
+        if (!clipped.length) buildNode(base, parent, target)
+        else if (base.kind === 'adjustment' || base.kind === 'filter') {
+          // layers clipped to an adjustment: compose.py composites them atop the adjusted backdrop; the preview draws them
+          // over it (the same when the adjustment is at 100 % without a mask over an opaque backdrop)
+          buildNode(base, parent, target)
+          for (const c of clipped) buildNode(c, parent, target)
+        } else buildClipRun(base, clipped, parent)
+      }
+    }
+    build(doc.layers, layers, { nodes: doc.layers, underlay: null, background: doc.background !== 'transparent' ? doc.background : null })
     // selection / quick-mask / mask-editing overlays
     const ov = overlayRef.current!
     for (const child of [...ov.children]) {                                  // C21: keep the labelled Graphics, destroy the sprites
@@ -567,7 +657,7 @@ export function EditorCanvas() {
         if (!n) return
         const nx = Math.round(drag.nodeStart!.x + p.x - drag.start.x), ny = Math.round(drag.nodeStart!.y + p.y - drag.start.y)
         const sp = spritesRef.current.get(n.id) as Sprite | undefined
-        if (sp) { sp.position.set(nx, ny); requestRender() }
+        if (sp) { sp.position.set(nx, ny); markPassesDirty(); requestRender() }   // the layer may sit inside a pass (clip run, mask)
         drag.last = { x: nx, y: ny }
         return
       }

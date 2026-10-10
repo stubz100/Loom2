@@ -1,14 +1,15 @@
 // GPU previews for adjustment and filter layers (10 §3). One Filter per layer instance, registered as a PixiJS
 // blend mode ("adj-<layerId>") so the layer's document-sized sprite (white, or its mask) sets the filter bounds
 // and carries the layer alpha, while the backdrop arrives as uBackTexture. The filter draws with blend 'none' and
-// writes the mixed backdrop with compose.py's rules:
-//   adjustment: rgb = cb·(1−a) + f(cb)·a where αb > 0, alpha unchanged
-//   filter:     straight-alpha mix of rgb and alpha between the backdrop and f(backdrop)
+// writes the mixed backdrop with compose.py's rules (D39: the layer's blend mode applies, uP3.w = its index in MODES):
+//   adjustment: rgb = cb + (B(mode, cb, f(cb)) − cb)·a where αb > 0, alpha unchanged
+//   filter:     the same for rgb, alpha mixed linearly between the backdrop and f(backdrop)
 // Per-channel adjustments (levels, curves, exposure, brightness/contrast, invert) are evaluated on the CPU into a
 // 256-entry LUT with the exact formulas; hue/saturation, colour balance and black & white run the same math in the
 // shader; blur-based filters sample the premultiplied backdrop with compose.py's Gaussian (exact up to a 12-tap
 // radius, strided above); noise hashes (seed, x, y) with the same integer hash + Box-Muller as compose.py, so it is exact too.
 import { BufferImageSource, ExtensionType, extensions, Filter, GlProgram, GpuProgram, Texture } from 'pixi.js'
+import { BLEND_GL, BLEND_WGSL, modeIndex } from './blendModes'
 import type { Node } from './editorStore'
 
 const MAX_TAPS = 12
@@ -35,6 +36,7 @@ uniform sampler2D uLutTexture;
 uniform vec4 uInputPixel;
 uniform vec4 uInputClamp;
 uniform vec4 uP0; uniform vec4 uP1; uniform vec4 uP2; uniform vec4 uP3;
+{BLEND}
 float aj_lum(vec3 c) { return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b; }
 vec3 aj_rgb2hsl(vec3 c) {
   float mx = max(c.r, max(c.g, c.b)); float mn = min(c.r, min(c.g, c.b));
@@ -85,7 +87,8 @@ void main() {
   vec4 back = texture(uBackTexture, vTextureCoord);
   vec4 front = texture(uTexture, vTextureCoord);
   float ab = back.a;
-  float a = front.r * mix(1.0, ab, uP3.w);
+  float a = front.r;
+  int bm = int(uP3.w + 0.5);
   vec3 cb = ab > 0.0 ? back.rgb / ab : vec3(0.0);
   {MAIN}
 }
@@ -108,6 +111,7 @@ fn filterVertexPosition(aPosition:vec2<f32>) -> vec4<f32> {
   return vec4(position, 0.0, 1.0);
 }
 @vertex fn mainVertex(@location(0) aPosition : vec2<f32>) -> VSOutput { return VSOutput(filterVertexPosition(aPosition), aPosition * (gfu.uOutputFrame.zw * gfu.uInputSize.zw)); }
+{BLEND}
 fn aj_fmod(x: f32, y: f32) -> f32 { return x - y * floor(x / y); }
 fn aj_lum(c: vec3<f32>) -> f32 { return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b; }
 fn aj_rgb2hsl(c: vec3<f32>) -> vec3<f32> {
@@ -162,7 +166,8 @@ fn aj_blur(uv: vec2<f32>, sigma: f32, r: i32, stride: i32) -> vec4<f32> {
   let front = textureSampleLevel(uTexture, uSampler, uv, 0.0);
   let uP0 = adjUniforms.uP0; let uP1 = adjUniforms.uP1; let uP2 = adjUniforms.uP2; let uP3 = adjUniforms.uP3;
   let ab = back.a;
-  let a = front.r * mix(1.0, ab, uP3.w);
+  let a = front.r;
+  let bm = i32(uP3.w + 0.5);
   var cb = vec3<f32>(0.0);
   if (ab > 0.0) { cb = back.rgb / ab; }
   var out = vec4<f32>(0.0);
@@ -173,10 +178,10 @@ fn aj_blur(uv: vec2<f32>, sigma: f32, r: i32, stride: i32) -> vec4<f32> {
 
 /** Per type: [GLSL main, WGSL main]. Adjustments end in `adj`; filters end in `fr` (rgb) and `fa` (alpha). */
 function mains(type: string, kind: 'adjustment' | 'filter'): [string, string] {
-  const adjGl = (expr: string) => `vec3 adj = clamp(${expr}, 0.0, 1.0); vec3 mixed = ab > 0.0 ? mix(cb, adj, a) : cb; finalColor = vec4(mixed * ab, ab);`
-  const adjWg = (expr: string) => `let adj = clamp(${expr}, vec3<f32>(0.0), vec3<f32>(1.0)); var mixed = cb; if (ab > 0.0) { mixed = mix(cb, adj, a); } out = vec4<f32>(mixed * ab, ab);`
-  const fltGl = (body: string) => `${body} vec3 mr = mix(cb, fr, a); float ma = mix(ab, fa, a); finalColor = vec4(mr * ma, ma);`
-  const fltWg = (body: string) => `${body} let mr = mix(cb, fr, a); let ma = mix(ab, fa, a); out = vec4<f32>(mr * ma, ma);`
+  const adjGl = (expr: string) => `vec3 adj = clamp(${expr}, 0.0, 1.0); vec3 mixed = ab > 0.0 ? cb + (clamp(w3_blendBy(bm, cb, adj), 0.0, 1.0) - cb) * a : cb; finalColor = vec4(mixed * ab, ab);`
+  const adjWg = (expr: string) => `let adj = clamp(${expr}, vec3<f32>(0.0), vec3<f32>(1.0)); var mixed = cb; if (ab > 0.0) { mixed = cb + (clamp(w3_blendBy(bm, cb, adj), vec3<f32>(0.0), vec3<f32>(1.0)) - cb) * a; } out = vec4<f32>(mixed * ab, ab);`
+  const fltGl = (body: string) => `${body} vec3 mr = cb + (clamp(w3_blendBy(bm, cb, fr), 0.0, 1.0) - cb) * a; float ma = mix(ab, fa, a); finalColor = vec4(mr * ma, ma);`
+  const fltWg = (body: string) => `${body} let mr = cb + (clamp(w3_blendBy(bm, cb, fr), vec3<f32>(0.0), vec3<f32>(1.0)) - cb) * a; let ma = mix(ab, fa, a); out = vec4<f32>(mr * ma, ma);`
   const blurGl = 'vec4 bb = aj_blur(vTextureCoord, uP0.x, int(uP0.y), int(uP0.z)); vec3 bl = bb.a > 1e-6 ? bb.rgb / bb.a : vec3(0.0);'
   const blurWg = 'let bb = aj_blur(uv, uP0.x, i32(uP0.y), i32(uP0.z)); var bl = vec3<f32>(0.0); if (bb.a > 1e-6) { bl = bb.rgb / bb.a; }'
   if (kind === 'adjustment') {
@@ -238,9 +243,9 @@ const STATES = new Map<string, AdjState>()
 class AdjFilter extends Filter {
   constructor(st: AdjState) {
     const [glMain, wgMain] = mains(st.type, st.kind)
-    const wgsl = WGSL.replace('{MAIN}', wgMain)
+    const wgsl = WGSL.replace('{BLEND}', BLEND_WGSL).replace('{MAIN}', wgMain)
     const gpuProgram = GpuProgram.from({ vertex: { source: wgsl, entryPoint: 'mainVertex' }, fragment: { source: wgsl, entryPoint: 'mainFragment' } })
-    const glProgram = GlProgram.from({ vertex: GL_VERT, fragment: GL_FRAG.replace('{MAIN}', glMain) })
+    const glProgram = GlProgram.from({ vertex: GL_VERT, fragment: GL_FRAG.replace('{BLEND}', BLEND_GL).replace('{MAIN}', glMain) })
     super({
       gpuProgram, glProgram, blendRequired: true,
       resources: {
@@ -278,7 +283,7 @@ export function ensureAdjustment(n: Node): string {
   const p = n.params ?? {}
   const [p0, p1, p2, p3] = st.p
   p0.fill(0); p1.fill(0); p2.fill(0); p3.fill(0)
-  p3[3] = n.clip ? 1 : 0
+  p3[3] = modeIndex(n.blend === 'pass-through' ? 'normal' : n.blend)   // D39: the layer's blend mode (clipping is done by EditorCanvas passes)
   if (kind === 'adjustment') {
     if (type === 'hue_saturation') p0.set([num(p, 'hue', 0), num(p, 'saturation', 0), num(p, 'lightness', 0)])
     else if (type === 'color_balance') {

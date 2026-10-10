@@ -28,7 +28,7 @@ import numpy as np
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
-from .compose import BLEND_MODES, Renderer
+from .compose import BLEND_MODES, COMPOSE_VERSION, Renderer
 from .fsio import StateError, _tmp_for, new_id, utc_now
 from .workspace import Workspace
 
@@ -196,6 +196,7 @@ class OpenDocument:
             self.doc.saved_at = utc_now()
             self.doc.has_selection = self.selection is not None
             merged = self.flatten()
+            self.doc.meta["compose_version"] = COMPOSE_VERSION   # D39: the rules mergedimage.png was rendered with
             tmp = _tmp_for(self.path)
             try:
                 with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:

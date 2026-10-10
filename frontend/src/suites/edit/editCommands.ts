@@ -1,9 +1,10 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, ClipboardPaste, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, ClipboardPaste, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
+import { magnetic } from './smartselect/magnetic'
 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
@@ -12,7 +13,7 @@ const activeRaster = () => { const n = active(); return !!n && n.kind === 'raste
 const hasSel = () => !!ed().selection
 const setTool = (t: Tool) => () => ed().setTool(t)
 const TOOLS: [Tool, string, string, typeof Hand][] = [
-  ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['ai', 'AI select (M5)', 'A', Sparkles],
+  ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['ai', 'AI select (M5)', 'A', Sparkles],
   ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill', 'G', PaintBucket], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas size', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
 ]
 
@@ -87,10 +88,11 @@ registerCommands([
   { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['panel', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink (D49)', run: () => ed().inkFromWhite() },
   { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: hasSel, hint: 'soft, image-aware edges with the Selection panel\'s settings (D45)', run: () => void ed().refineSelection() },
   { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
-  { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
-  { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'strip', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
+  { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: () => magnetic.active || (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => magnetic.active ? void magnetic.close() : ed().closeLassoPoly() },
+  { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'strip', 'context'], when: () => !!ed().lassoPoly || magnetic.active, run: () => { if (magnetic.active) magnetic.cancel(); else ed().setLassoPoly(null) } },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => activeRaster() || (ed().editingMask && !!active()?.mask), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
+  { id: 'edit.sel.magBack', scope: 'edit', label: 'Remove the last point', icon: Undo2, keys: 'Backspace', alt: ['Delete'], placement: ['strip', 'context'], when: () => magnetic.active, hint: 'magnetic lasso', run: () => void magnetic.removeLast() },   // D59
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
   // free transform (10 §4)
   { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
@@ -119,8 +121,9 @@ registerCommands([
   // colours and brush
   { id: 'edit.colour.swap', scope: 'edit', label: 'Swap colours', icon: Shuffle, keys: 'X', placement: ['panel'], run: () => { const b = ed().brush; ed().setBrush({ color: b.background, background: b.color }) } },
   { id: 'edit.colour.default', scope: 'edit', label: 'Default colours', icon: RotateCcw, keys: 'D', placement: ['panel'], run: () => ed().setBrush({ color: '#000000', background: '#ffffff' }) },
-  { id: 'edit.brush.larger', scope: 'edit', label: 'Larger brush', icon: Plus, keys: ']', placement: ['panel'], run: () => ed().setBrush({ size: Math.min(1024, Math.round(ed().brush.size * 1.2)) }) },
-  { id: 'edit.brush.smaller', scope: 'edit', label: 'Smaller brush', icon: Minus, keys: '[', placement: ['panel'], run: () => ed().setBrush({ size: Math.max(1, Math.round(ed().brush.size / 1.2)) }) },
+  // ] / [ follow the tool: the brush, Quick Selection's diameter (÷ / × 1.25, PhotoCraft), the Magnetic Lasso's width (± 1)
+  { id: 'edit.brush.larger', scope: 'edit', label: 'Larger brush', icon: Plus, keys: ']', placement: ['panel'], run: () => { const s = ed(); if (s.tool === 'quick') s.setView({ quickSize: Math.min(5000, Math.max(s.quickSize + 1, Math.round(s.quickSize * 1.25))) }); else if (s.tool === 'lasso' && s.lassoKind === 'magnetic') s.setView({ magWidth: Math.min(256, s.magWidth + 1) }); else s.setBrush({ size: Math.min(1024, Math.round(s.brush.size * 1.2)) }) } },
+  { id: 'edit.brush.smaller', scope: 'edit', label: 'Smaller brush', icon: Minus, keys: '[', placement: ['panel'], run: () => { const s = ed(); if (s.tool === 'quick') s.setView({ quickSize: Math.max(1, Math.round(s.quickSize / 1.25)) }); else if (s.tool === 'lasso' && s.lassoKind === 'magnetic') s.setView({ magWidth: Math.max(1, s.magWidth - 1) }); else s.setBrush({ size: Math.max(1, Math.round(s.brush.size / 1.2)) }) } },
   { id: 'edit.brush.harder', scope: 'edit', label: 'Harder brush', icon: Circle, keys: 'Shift+]', alt: ['Shift+}'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.min(1, Math.round((ed().brush.hardness + 0.1) * 100) / 100) }) },
   { id: 'edit.brush.softer', scope: 'edit', label: 'Softer brush', icon: CircleDashed, keys: 'Shift+[', alt: ['Shift+{'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.max(0, Math.round((ed().brush.hardness - 0.1) * 100) / 100) }) },
   // tools
@@ -172,7 +175,7 @@ export function canvasMenu(): MenuItem[] {
   const tools: MenuItem[] = TOOLS.map(([tool, label, , icon]) => ({ label, icon, checked: st.tool === tool, run: setTool(tool) }))
   return [
     ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: (m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1)) + (st.transform!.mode === m ? '  ✓' : '') })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
-    ...(st.lassoPoly ? [{ heading: 'polygonal lasso' }, { cmd: 'edit.sel.polyClose' }, { cmd: 'edit.sel.polyCancel' }, sep] : []),
+    ...(st.lassoPoly || magnetic.active ? [{ heading: magnetic.active ? 'magnetic lasso' : 'polygonal lasso' }, { cmd: 'edit.sel.polyClose', label: magnetic.active ? 'Close the border' : undefined }, ...(magnetic.active ? [{ cmd: 'edit.sel.magBack' }] : []), { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),
     ...(hasSel() ? [{ heading: 'clipboard' }, { cmd: 'edit.layer.viaCopy' }, { cmd: 'edit.layer.viaCut' }, { cmd: 'edit.copy' }, { cmd: 'edit.cut' }, { cmd: 'edit.copyMerged' }, { cmd: 'edit.paste' }, { cmd: 'edit.pasteInPlace' }, sep]

@@ -85,7 +85,8 @@ def main() -> int:
         doc = api("POST", "/documents", {"from_asset": asset["id"]})
         base = f"http://127.0.0.1:{sport}/?token={TOKEN}&port={ORCH_PORT}"
         pages = {"catalogue": base + "&suite=catalogue", "edit": base + f"&suite=edit&doc={doc['id']}", "generate": base + "&suite=generate",
-                 "generate-model": base + "&suite=generate&tab=model", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai"}
+                 "generate-model": base + "&suite=generate&tab=model", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai",
+                 "edit-wasm": base + f"&suite=edit&doc={doc['id']}&wasmprobe=1"}             # D59: the smart-select Worker's WebAssembly
         violations: dict[str, list[str]] = {}
         for name, url in pages.items():
             OUT.mkdir(parents=True, exist_ok=True)
@@ -96,6 +97,8 @@ def main() -> int:
             log = r.stderr + r.stdout
             hits = sorted({m.strip() for m in re.findall(r'"(Refused to [^"]+|[^"]*Content Security Policy[^"]*)"', log)})
             errors = [l for l in log.splitlines() if "CONSOLE" in l and ("Uncaught" in l or "TypeError" in l or "Failed to fetch" in l)]
+            if name == "edit-wasm" and "smart-select worker ready" not in log:
+                hits.append("the smart-select Worker did not report its WebAssembly module ready" + (" — " + next((l[-200:] for l in log.splitlines() if "smart-select" in l), "") if "smart-select" in log else ""))
             violations[name] = hits
             print(f"[{name}] screenshot {shot.stat().st_size if shot.exists() else 0} bytes · CSP hits {len(hits)} · js errors {len(errors)}")
             for h in hits[:8]:

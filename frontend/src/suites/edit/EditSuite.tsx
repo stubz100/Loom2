@@ -13,6 +13,8 @@ import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { BlendSelect, LatchButton, ValueField } from './widgets'
 import { ColorBalanceEditor, CurvesEditor, LevelsEditor, Section } from './propsEditors'
 import { readout, rotateAboutPivot, scaleAboutPivot, type Interp, type TransformMode } from './transform'
+import { magnetic } from './smartselect/magnetic'
+import { probe as probeSmartSelect } from './smartselect/client'
 import { EditorCanvas } from './EditorCanvas'
 import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, FILTER_DEFAULTS, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
@@ -20,7 +22,7 @@ import './edit.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
 const TOOLS: { key: string; tool: Tool; label: string; later?: string }[] = [
-  { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' },
+  { key: 'V', tool: 'move', label: 'Move' }, { key: 'M', tool: 'marquee', label: 'Marquee' }, { key: 'L', tool: 'lasso', label: 'Lasso' }, { key: 'W', tool: 'wand', label: 'Magic wand' }, { key: '', tool: 'quick', label: 'Quick selection' },
   { key: 'A', tool: 'ai', label: 'AI select' }, { key: 'B', tool: 'brush', label: 'Brush' }, { key: 'E', tool: 'eraser', label: 'Eraser' }, { key: 'G', tool: 'fill', label: 'Fill / gradient' },
   { key: 'I', tool: 'eyedropper', label: 'Eyedropper' }, { key: 'C', tool: 'crop', label: 'Crop / canvas' }, { key: 'H', tool: 'hand', label: 'Hand' }, { key: 'Z', tool: 'zoom', label: 'Zoom' },
 ]
@@ -85,6 +87,30 @@ function Swatches() {
 }
 
 // ------------------------------------------------------------------ Panel · Tool options
+/** D59: Quick Selection's options (PhotoCraft retouch_ui): the brush diameter, sample all layers; every stroke adds, Alt subtracts. */
+function QuickOptions() {
+  const size = useEditor((s) => s.quickSize)
+  const all = useEditor((s) => s.quickSampleAll)
+  return (
+    <div className="tool-opts">
+      <ValueField label="size" value={size} min={1} max={5000} unit="px" title="brush diameter — [ and ] change it" onChange={(v) => ed().setView({ quickSize: Math.max(1, Math.round(v)) })} />
+      <label /><label className="chk" title="look at every visible layer instead of the active one"><input type="checkbox" checked={all} onChange={(e) => ed().setView({ quickSampleAll: e.target.checked })} /> sample all layers</label>
+      <span className="hint full">paint over what you want: the selection grows to its edges (computed when you let go); every stroke adds, Alt subtracts. Runs on the CPU in a Worker — no GPU.</span>
+    </div>
+  )
+}
+/** D59: the Magnetic Lasso's detection options (PhotoCraft magnetic_lasso_ui): width, contrast, frequency. */
+function MagneticOptions() {
+  const w = useEditor((s) => s.magWidth), c = useEditor((s) => s.magContrast), f = useEditor((s) => s.magFrequency)
+  return (
+    <>
+      <ValueField label="width" value={w} min={1} max={256} unit="px" title="detection width: the border follows only edges this close to the pointer ([ and ] change it)" onChange={(v) => ed().setView({ magWidth: Math.round(v) })} />
+      <ValueField label="contrast" value={c} min={1} max={100} unit="%" title="steps weaker than this are not edges" onChange={(v) => ed().setView({ magContrast: Math.round(v) })} />
+      <ValueField label="frequency" value={f} min={0} max={100} title="how often points are placed along the border" onChange={(v) => ed().setView({ magFrequency: Math.round(v) })} />
+    </>
+  )
+}
+
 function Toolbox() {
   const tool = useEditor((s) => s.tool)
   return (
@@ -128,9 +154,11 @@ function ToolOptions() {
         <label>style</label><div className="segmented">{(['normal', 'ratio', 'size'] as const).map((m) => <button key={m} className={sv.marqueeStyle === m ? 'active' : ''} title={{ normal: 'drag any rectangle', ratio: 'fixed ratio W : H', size: 'fixed size W × H px, hanging from the pointer' }[m]} onClick={() => ed().setView({ marqueeStyle: m })}>{m === 'ratio' ? 'fixed ratio' : m === 'size' ? 'fixed size' : m}</button>)}</div>
         {sv.marqueeStyle !== 'normal' && <><label>{sv.marqueeStyle === 'ratio' ? 'W : H' : 'W × H'}</label><span className="num"><input type="number" min={1} value={sv.marqueeW} onChange={(e) => ed().setView({ marqueeW: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 64 }} /> {sv.marqueeStyle === 'ratio' ? ':' : '×'} <input type="number" min={1} value={sv.marqueeH} onChange={(e) => ed().setView({ marqueeH: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 64 }} /></span></>}
         <span className="hint full">Shift adds, Alt subtracts, Shift+Alt intersects while dragging</span></div>}
-      {tool === 'lasso' && <div className="tool-opts"><label>kind</label><div className="segmented">{(['freehand', 'polygon'] as const).map((m) => <button key={m} className={sv.lassoKind === m ? 'active' : ''} onClick={() => ed().setView({ lassoKind: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
-        {sv.lassoOpen && <><label>polygon</label><span><CommandButton id="edit.sel.polyClose" text /> <CommandButton id="edit.sel.polyCancel" text /></span></>}
-        <span className="hint full">{sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects</span></div>}
+      {tool === 'lasso' && <div className="tool-opts"><label>kind</label><div className="segmented">{(['freehand', 'polygon', 'magnetic'] as const).map((m) => <button key={m} className={sv.lassoKind === m ? 'active' : ''} onClick={() => ed().setView({ lassoKind: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
+        {sv.lassoKind === 'magnetic' && <MagneticOptions />}
+        {sv.lassoOpen && <><label>{sv.lassoKind === 'magnetic' ? 'border' : 'polygon'}</label><span><CommandButton id="edit.sel.polyClose" text /> {sv.lassoKind === 'magnetic' && <CommandButton id="edit.sel.magBack" text />} <CommandButton id="edit.sel.polyCancel" text /></span></>}
+        <span className="hint full">{sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : sv.lassoKind === 'magnetic' ? 'click on an edge, then move along it — the border snaps to the edge and drops points as it goes; click to place a point, Alt-click a straight segment (Alt-drag: freehand), Backspace removes a point; click the first point, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects</span></div>}
+      {tool === 'quick' && <QuickOptions />}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} onChange={(v) => ed().setView({ tolerance: v })} />
         <label>sample</label><div className="segmented"><button className={!sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: false })}>active layer</button><button className={sv.wandMerged ? 'active' : ''} onClick={() => ed().setView({ wandMerged: true })}>all layers</button></div>
         <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
@@ -930,6 +958,7 @@ function useEditKeys() {
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && k.toLowerCase() === 'v') return             // D46: let the browser's paste event carry the clipboard
+      if (magnetic.active && (k === 'Backspace' || k === 'Delete')) { e.preventDefault(); void magnetic.removeLast(); return }   // D59
       if (st.transform && k.startsWith('Arrow') && !e.ctrlKey && !e.altKey) {                        // D58: arrows nudge the box (Shift 10 px)
         e.preventDefault()
         const d = e.shiftKey ? 10 : 1, dx = k === 'ArrowLeft' ? -d : k === 'ArrowRight' ? d : 0, dy = k === 'ArrowUp' ? -d : k === 'ArrowDown' ? d : 0
@@ -972,6 +1001,7 @@ function useEditKeys() {
           }
           const tab = q.get('tab'); if (tab) setRailTab('edit', tab)                                      // dev: open a panel section
           if (q.get('sel') === 'all') ed().selectAll()                                                   // dev: marching ants
+          if (q.get('wasmprobe')) void probeSmartSelect().then(() => console.info('smart-select worker ready'), (err) => console.error('smart-select worker failed', err))   // D59: csp_check
           if (q.get('sel') === 'half') { const s = ed().ensureSelection(); s.ctx.fillStyle = '#fff'; s.ctx.beginPath(); s.ctx.ellipse(s.width / 2, s.height / 2, s.width / 3, s.height / 3, 0, 0, Math.PI * 2); s.ctx.fill(); s.refresh(); ed().bump() }
           if (q.get('xform')) { ed().beginTransform(); const t = ed().transform; if (t) ed().setTransform({ quad: rotateAboutPivot({ ...t, quad: scaleAboutPivot(t, 0.8, 0.9) }, 14) }) }   // dev: transform box
         })

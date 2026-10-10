@@ -1,0 +1,7 @@
+{
+  "photocraft": "b37bff987c481d8dddc7c1158ebd4a40bf5b34b9",
+  "repository": "https://github.com/storytold/photocraft",
+  "crate": "frontend/wasm/pcwasm",
+  "sha256": "e88df070b434aa6fb7824c338d70e0cdeffde24ca3c38b9adebef0293a062b78",
+  "bytes": 110911
+}

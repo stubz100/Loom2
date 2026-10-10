@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform), D59 (Quick Selection, Magnetic Lasso).
 
 ## Files
 
@@ -17,6 +17,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `widgets.tsx` | D55: `ValueField` (type, scrub, ▾ pop-up slider; one gesture = one `onStart` / `onCommit`), `BlendSelect` (wheel steps, hover previews through `blendPreview`), `LatchButton` |
 | `curves.ts` | D57: PhotoCraft's natural-spline curve LUT (4096 entries, flat ends, clamped) — the same code as `compose.spline_lut`; the shader table and the Curves editor use it |
 | `propsEditors.tsx` | D57: Properties sections, the histogram of the layers below, Levels / Curves / Colour balance editors |
+| `smartselect/` | D59: `pcwasm.wasm` (PhotoCraft's quick select + magnetic lasso, committed with `pcwasm.pin.json`), `worker.ts` (the module in a Worker, C ABI), `client.ts` (requests, image cache by key), `source.ts` (active layer or composite), `magnetic.ts` (the lasso's fastening / closing rules) |
 | `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
 | `transform.ts` | D58: PhotoCraft's free transform — `Homography` (rect → quad, inverse), `warpRaster` (nearest / bilinear / Catmull-Rom on premultiplied pixels, area prefilter below 50 %), `warpGray` (masks, the selection, flattened onto their default), split / composite for selection lifts, `hitTest` / `applyDrag` for the box |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
@@ -72,6 +73,9 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 15. **A transform is a rect, a quad and a pivot (D58).** Never accumulate: drags compute from the quad at the drag's start, the
    preview is a `PerspectiveMesh` per moving raster over canvases captured at `beginTransform` (`transformPreview`), and apply
    (`bakeTransform`) resamples each target once from its current pixels — one history step with `swap` / `more` / `selSwap`.
+16. **`smartselect/pcwasm.wasm` is a committed build artifact (D59).** Never edit or rebuild it casually: `scripts/build_pcwasm.py` rebuilds it
+   from `frontend/wasm/pcwasm` against `../photocraft` at the pinned commit and records the SHA-256 that CI checks. WebAssembly needs
+   `'wasm-unsafe-eval'` in the Tauri CSP (`csp_check.py` probes the Worker under the production policy).
 
 ## Renderer selection
 

@@ -1,0 +1,27 @@
+# D59 (S2 go → PC24): PhotoCraft's Quick Selection and Magnetic Lasso (photocraft-algo segment::quick, magnetic) for
+# wasm32-unknown-unknown with a plain C ABI (no wasm-bindgen), run in the Edit suite's smart-select Worker.
+# The app does not build this: the module is committed at frontend/src/suites/edit/smartselect/pcwasm.wasm with its pin and SHA-256.
+# Rebuild (only when the pin moves): python scripts/build_pcwasm.py — it checks that the PhotoCraft checkout beside this repository
+# is at the pinned commit (smartselect/pcwasm.pin.json), builds, copies and records the checksum; --check verifies the committed file.
+[package]
+name = "loom2-pcwasm"
+version = "0.0.1"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+photocraft-algo = { path = "../../../../photocraft/crates/algo" }
+photocraft-geom = { path = "../../../../photocraft/crates/geom" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = true
+
+[workspace]

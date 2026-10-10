@@ -2477,3 +2477,33 @@ Inspector → lineage → split → pages.
   `scripts/setup` install the wasm32 target and build it (≈ 25 s cold), or (b) commit the 44 KB `.wasm` with its pinned PhotoCraft
   commit, a checksum and the build script, rebuilt only when the pin moves (no Rust needed for the app build). I would take (b).
   **The decision — and its D-number — is the author's**; PC24 waits for it. Licence: MIT OR Apache-2.0 (no EU issue).
+
+## 2026-10-10 21:07 — The author's decisions (D59–D62); D59 Quick Selection and Magnetic Lasso landed
+
+- CI green on the S2 commit (run 38077143470 at 1ff8522: both variants' offline tests and frontend builds, both installers).
+- **Decisions (author):** S2 go → PC24 (D59); PC25 (D60) and PC26 (D61) now; S1 go → PC14 / PC15 (D62) — over the spike's no-go, so the
+  content-aware pre-fill for Remove will be a switch (off unless the rig shows it helps) and Quick Remove its own mode. Order: PC24,
+  PC25, PC26, PC14 / PC15.
+- **PhotoCraft read** (subagent, b37bff98 `retouch_ui.rs`, `magnetic_lasso_ui.rs`, `smartselect_cmds.rs`, `magnetic_cmds.rs`). D59
+  amended before the work: Quick Selection has no live preview in PhotoCraft — the whole stroke goes once, on release, its footprint
+  trail showing meanwhile; every stroke adds (also the first), Alt subtracts, Shift does nothing; the Magnetic Lasso fastens by distance
+  along the traced border, (8 + (100 − frequency) · 0.9) screen px.
+- **Build pipeline:** the spike crate moved to `frontend/wasm/pcwasm` (C ABI: `set_image`, `quick`, `region_*`, `snap`, `trace_guided`,
+  `path_ptr`); `scripts/build_pcwasm.py` refuses unless `../photocraft` is clean at the pin, builds (25 s), copies the module to
+  `frontend/src/suites/edit/smartselect/pcwasm.wasm` (110 911 B; 46 KB gzipped in the Vite build) and records the SHA-256 in
+  `pcwasm.pin.json`; `--check` (no Rust) runs in CI. The app build needs no Rust.
+- **Editor:** `smartselect/worker.ts` (the module in a module Worker), `client.ts` (requests by id; the image sent once per key),
+  `source.ts` (the active layer placed in the document, or the composite with *sample all layers*), `magnetic.ts` (PhotoCraft's rules:
+  first click snapped, live guided traces latest-wins, distance fastening ≤ 64 per move, click fastens, Alt-click straight / Alt-drag
+  freehand, Backspace, close by the first point / double-click / Enter / ✓ traced back to the start (Alt: straight), Esc / ⊘; commits
+  through the polygon lasso's fill as "magnetic lasso"). Quick Selection: a new tool (toolbox, no key), size 30 px default, `[` `]` ×/÷
+  1.25, the footprint trail while drawing, the result combined add / subtract (Alt with nothing selected does nothing — PhotoCraft
+  would clear). Lasso kinds freehand / polygon / magnetic with Width 10, Contrast 10 %, Frequency 57; `[` `]` change the width.
+  Backspace removes a point while a border is open (caught before Clear). The Tauri CSP gains `'wasm-unsafe-eval'`.
+- **Checks:** headed mode `smartsel` passes — a 30 px click selects a 160 px red square on blue exactly (IoU 1.000, 25 600 px); a click
+  in flat blue ≈ the brush disc (1 136 px); the next stroke adds (→ 26 736); Alt subtracts (→ 25 600, the square kept); the magnetic
+  lasso's first click snaps to the edge (300, 154.5); moving 4 px off the edges traces and fastens; Backspace removes a point; clicking
+  the first point closes a border on the square (IoU 1.000); Esc cancels; a stroke on the photo selects 66 492 px in 0.66 s.
+  `csp_check.py` gained an `edit-wasm` page (`&wasmprobe=1`): clean under the production CSP; the negative control without
+  `'wasm-unsafe-eval'` reports the Worker's CompileError. Regression: kit, layers, selection, tour, transform, masks, brush, cmpdiag,
+  render pass; build clean; lint 99 (two option components).

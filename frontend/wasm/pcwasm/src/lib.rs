@@ -136,3 +136,44 @@ pub extern "C" fn trace(x0: f64, y0: f64, x1: f64, y1: f64, width: f64, contrast
 pub extern "C" fn path_ptr() -> *const f64 {
     PATH.with(|p| p.borrow().as_ptr())
 }
+
+/// Where a fastening point near (x, y) goes: the most prominent edge within the detection width, or the point itself. Returns 1 and
+/// leaves the point in path_ptr (x, y), or 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn snap(x: f64, y: f64, width: f64, contrast: f32) -> i32 {
+    DOC.with(|d| {
+        let d = d.borrow();
+        let Some(doc) = d.as_ref() else { return 0 };
+        TRACER.with(|t| {
+            let mut t = t.borrow_mut();
+            let Some(tr) = t.as_mut() else { return 0 };
+            let mut fetch = |r: Rect| fetch_rgba8(doc, r);
+            match tr.snap(&mut fetch, [x, y], Settings::new(width, contrast)) {
+                Some(p) => { PATH.with(|q| *q.borrow_mut() = vec![p[0], p[1]]); 1 }
+                None => 0,
+            }
+        })
+    })
+}
+
+/// A Magnetic Lasso segment following `n` guide points (x, y f64 pairs: the pointer's path since the last fastening point).
+///
+/// # Safety
+/// `guide` points at `2 * n` f64.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn trace_guided(x0: f64, y0: f64, x1: f64, y1: f64, guide: *const f64, n: usize, width: f64, contrast: f32) -> usize {
+    let g: Vec<[f64; 2]> = if n == 0 { Vec::new() } else { unsafe { std::slice::from_raw_parts(guide, 2 * n) }.chunks_exact(2).map(|c| [c[0], c[1]]).collect() };
+    DOC.with(|d| {
+        let d = d.borrow();
+        let Some(doc) = d.as_ref() else { return 0 };
+        TRACER.with(|t| {
+            let mut t = t.borrow_mut();
+            let Some(tr) = t.as_mut() else { return 0 };
+            let mut fetch = |r: Rect| fetch_rgba8(doc, r);
+            let path = tr.trace(&mut fetch, [x0, y0], [x1, y1], &g, Settings::new(width, contrast));
+            let n = path.len();
+            PATH.with(|p| *p.borrow_mut() = path.into_iter().flatten().collect());
+            n
+        })
+    })
+}

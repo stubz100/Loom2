@@ -16,6 +16,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
   transform          D58: homography and warp maths in the page, the box by mouse (proportional corners, Shift free, Ctrl distort,
                      perspective mode, Shift-snapped rotation, Alt pivot, nudge, the W field), apply against the exact flatten and
                      undo, exact flip / rotate presets, a selection's pixels lifted and moved, a group scaled together
+  smartsel           D59: Quick Selection and the Magnetic Lasso (WebAssembly in a Worker) by mouse — a square found by a click and
+                     by a traced border, strokes adding, Alt subtracting, Backspace, Esc, a stroke on the photo
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -45,7 +47,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -1862,6 +1864,107 @@ def main() -> int:
             run("edit.undo"); time.sleep(0.6)
             sizes2 = json.loads(js(f"const g = s.doc.layers.find((x) => x.id === '{g}'); return JSON.stringify(g.children.map((c) => [c.w, c.h]))"))
             check(sizes2 == sizes0, f"undo restores every raster of the group ({sizes2})")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "smartsel":
+            # D59: Quick Selection and the Magnetic Lasso (PhotoCraft's, as WebAssembly in a Worker) by mouse — on a synthetic layer
+            # (a red square on blue: both should find the square) and on the bench photo
+            S, C = STORE, "window.__loom2Commands"
+            js = lambda body: cdp.eval(f"(() => {{ const s = {S}; {body} }})()")  # noqa: E731
+            run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+            geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y }} }})())"))
+            scr = lambda x, y: (geo["x"] + geo["px"] + x * geo["zoom"], geo["y"] + geo["py"] + y * geo["zoom"])  # noqa: E731
+
+            def mouse(kind: str, x: float, y: float, buttons: int = 0, modifiers: int = 0, count: int = 1) -> None:
+                sx, sy = scr(x, y)
+                cdp.call("Input.dispatchMouseEvent", type=kind, x=sx, y=sy, button="left" if kind != "mouseMoved" or buttons else "none", buttons=buttons, clickCount=count, modifiers=modifiers)
+
+            def click(x: float, y: float, modifiers: int = 0) -> None:
+                mouse("mouseMoved", x, y); mouse("mousePressed", x, y, 1, modifiers); mouse("mouseReleased", x, y, 0, modifiers); time.sleep(0.15)
+
+            def stroke(points: list[tuple[float, float]], modifiers: int = 0) -> None:
+                mouse("mouseMoved", *points[0]); mouse("mousePressed", *points[0], 1, modifiers)
+                for a, b in zip(points, points[1:]):
+                    for i in range(1, 6):
+                        mouse("mouseMoved", a[0] + (b[0] - a[0]) * i / 5, a[1] + (b[1] - a[1]) * i / 5, 1, modifiers); time.sleep(0.01)
+                mouse("mouseReleased", *points[-1], 0, modifiers)
+
+            hlen = [cdp.eval(f"{S}.history.length")]
+
+            def wait_sel(label: str) -> float:                       # a new history entry with that label
+                t = time.time()
+                while time.time() - t < 20 and js(f"return s.history.length > {hlen[0]} && s.history[s.history.length - 1].label === '{label}'") is not True:
+                    time.sleep(0.05)
+                hlen[0] = cdp.eval(f"{S}.history.length")
+                return time.time() - t
+
+            sel_stats = lambda: json.loads(js("const sel = s.selection; if (!sel) return JSON.stringify(null); const d = sel.ctx.getImageData(0, 0, sel.width, sel.height).data; let n = 0, inside = 0; for (let y = 0; y < sel.height; y++) for (let x = 0; x < sel.width; x++) { const v = d[(y * sel.width + x) * 4]; if (v > 127) { n++; if (x >= 300 && x < 460 && y >= 150 && y < 310) inside++ } } return JSON.stringify({ n, inside })"))  # noqa: E731
+            # a synthetic layer: a 160 px red square on blue
+            run("edit.layer.new"); time.sleep(0.3)
+            js("const lp = s.pixels.get(s.activeId); lp.ctx.fillStyle = '#1f3fbf'; lp.ctx.fillRect(0, 0, lp.width, lp.height); lp.ctx.fillStyle = '#d42a2a'; lp.ctx.fillRect(300, 150, 160, 160); lp.refresh(); lp.dirty = true; s.touch(); s.bump(); return 1"); time.sleep(0.4)
+            # ---- Quick Selection
+            cdp.eval("[...document.querySelectorAll('.tool')].find((b) => b.textContent.includes('Quick selection'))?.click(); 1"); time.sleep(0.2)
+            hlen[0] = cdp.eval(f"{S}.history.length")
+            check(cdp.eval(f"{S}.tool") == "quick" and bool(cdp.eval("!!document.querySelector('.tool-opts input.vfield-num[aria-label=\"size\"]')")), "the toolbox's Quick selection button picks the tool and shows its options")
+            js("s.setView({ quickSize: 30 }); return 1")
+            click(380, 230)
+            dt = wait_sel("quick selection")
+            st1 = sel_stats()
+            iou = st1["inside"] / (st1["n"] + 160 * 160 - st1["inside"]) if st1 else 0
+            check(st1 is not None and iou > 0.9, f"a click with a 30 px brush selects the 160 px square (IoU {iou:.3f}, {st1}, {dt:.2f} s incl. the Worker's first image)")
+            js("s.deselect(); return 1"); time.sleep(0.2); hlen[0] = cdp.eval(f"{S}.history.length")
+            click(100, 400)
+            wait_sel("quick selection")
+            st2 = sel_stats()
+            check(st2 is not None and 300 < st2["n"] < 6000 and st2["inside"] == 0, f"a click in the flat blue selects about the brush disc ({st2})")
+            n_before = st2["n"]
+            stroke([(380, 230), (420, 260)])
+            wait_sel("quick selection")
+            st3 = sel_stats()
+            check(st3["n"] > n_before + 20000, f"the next stroke adds to the selection ({n_before} → {st3['n']})")
+            stroke([(100, 400), (110, 405)], modifiers=1)
+            wait_sel("quick selection")
+            st4 = sel_stats()
+            check(st4["n"] < st3["n"] - 300 and st4["inside"] >= 160 * 160 * 0.95, f"Alt subtracts ({st3['n']} → {st4['n']}, square kept {st4['inside']})")
+            # ---- Magnetic Lasso around the square, the pointer wandering 4 px off its edges
+            js("s.deselect(); s.setTool('lasso'); s.setView({ lassoKind: 'magnetic', selectionMode: 'replace' }); return 1"); time.sleep(0.3)
+            check(bool(cdp.eval("[...document.querySelectorAll('.tool-opts input.vfield-num')].some((i) => i.getAttribute('aria-label') === 'frequency')")), "the magnetic lasso shows width, contrast and frequency")
+            click(296, 154)
+            time.sleep(0.3)
+            first = json.loads(js("return JSON.stringify(s.lassoPoly && s.lassoPoly[0])"))
+            check(first is not None and abs(first["x"] - 300) <= 2.5 and abs(first["y"] - 154) <= 3, f"the first click snaps to the square's edge ({first})")
+            route = [(296, 154), (380, 146), (464, 146), (464, 230), (464, 314), (380, 314), (296, 314), (296, 230), (296, 170)]
+            for a, b in zip(route, route[1:]):
+                for i in range(1, 11):
+                    mouse("mouseMoved", a[0] + (b[0] - a[0]) * i / 10, a[1] + (b[1] - a[1]) * i / 10); time.sleep(0.04)
+            time.sleep(0.3)
+            anchors = js("return s.lassoPoly ? s.lassoPoly.length : 0")
+            check(anchors >= 8, f"moving along the edges traces the border and fastens points as it goes ({anchors} path points — straight edges simplify to few)")
+            n_pts = anchors
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Backspace", code="Backspace", windowsVirtualKeyCode=8)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Backspace", code="Backspace", windowsVirtualKeyCode=8)
+            time.sleep(0.4)
+            check(js("return s.lassoPoly ? s.lassoPoly.length : 0") < n_pts, "Backspace removes the last fastening point")
+            mouse("mouseMoved", 296, 200); time.sleep(0.3)
+            click(first["x"], first["y"])
+            t = time.time()
+            while time.time() - t < 10 and js("return !s.history.length || s.history[s.history.length - 1].label !== 'magnetic lasso'"): time.sleep(0.05)
+            st5 = sel_stats()
+            iou = st5["inside"] / (st5["n"] + 160 * 160 - st5["inside"]) if st5 else 0
+            check(st5 is not None and iou > 0.93 and cdp.eval(f"{S}.lassoPoly") is None, f"clicking the first point closes a border on the square's edges (IoU {iou:.3f}, {st5})")
+            click(296, 154); time.sleep(0.2)
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+            time.sleep(0.3)
+            check(cdp.eval(f"{S}.lassoPoly") is None, "Esc cancels a border in progress")
+            # ---- on the photo: sample all layers off → the active layer; the bench layer below
+            run("edit.layer.delete"); time.sleep(0.3)
+            js("s.deselect(); s.setTool('quick'); return 1"); time.sleep(0.2); hlen[0] = cdp.eval(f"{S}.history.length")
+            t0 = time.time()
+            stroke([(420, 260), (520, 300), (600, 280)])
+            dt = wait_sel("quick selection")
+            st6 = json.loads(js("const sel = s.selection; if (!sel) return 'null'; const d = sel.ctx.getImageData(0, 0, sel.width, sel.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 127) n++; return JSON.stringify(n)"))
+            check(st6 and st6 > 2000, f"a stroke on the photo selects a region ({st6} px in {time.time() - t0:.2f} s)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":

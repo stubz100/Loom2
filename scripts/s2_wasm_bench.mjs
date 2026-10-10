@@ -1,4 +1,4 @@
-// S2 spike benchmark (PE6): PhotoCraft's Quick Selection and Magnetic Lasso as wasm32 (engine/spikes/pcwasm), run in a worker
+// S2 spike benchmark (PE6): PhotoCraft's Quick Selection and Magnetic Lasso as wasm32 (frontend/wasm/pcwasm, committed as smartselect/pcwasm.wasm), run in a worker
 // thread of Node — the same V8 as Edge / WebView2 — on a raw RGBA image: module size, instantiation, per-stroke latency.
 // Usage: node scripts/s2_wasm_bench.mjs <image.rgba> <w> <h> [wasm path]
 import { readFileSync } from 'node:fs'
@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
 
 if (isMainThread) {
-  const [img, w, h, wasm = 'engine/spikes/pcwasm/target/wasm32-unknown-unknown/release/loom2_pcwasm.wasm'] = process.argv.slice(2)
+  const [img, w, h, wasm = 'frontend/src/suites/edit/smartselect/pcwasm.wasm'] = process.argv.slice(2)
   const bytes = readFileSync(wasm)
   console.log(`module ${bytes.length} B, gzip -9 ${gzipSync(bytes, { level: 9 }).length} B`)
   const wk = new Worker(new URL(import.meta.url), { workerData: { img, w: Number(w), h: Number(h), wasm } })

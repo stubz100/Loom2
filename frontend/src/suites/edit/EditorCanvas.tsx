@@ -17,6 +17,9 @@ import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
 import { PathWalker, Smoother, Stroke } from './brushEngine'
+import { magnetic } from './smartselect/magnetic'
+import { quickSelect } from './smartselect/client'
+import { ensureDocImage } from './smartselect/source'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
@@ -623,7 +626,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'quick' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
       // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
@@ -741,6 +744,13 @@ export function EditorCanvas() {
         return
       }
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
+      if (tool === 'quick') { drag = { kind: 'quick', start: p, last: p, pts: [p], alt: m.altKey }; drawTrail([p]); return }   // D59
+      if (tool === 'lasso' && st.lassoKind === 'magnetic') {               // D59: PhotoCraft's Magnetic Lasso
+        let mode = modeFor(m, st.selectionMode)
+        if ((mode === 'subtract' || mode === 'intersect') && !st.selection) mode = 'replace'
+        void magnetic.press(p, m.altKey, mode)
+        return
+      }
       if (tool === 'lasso' && st.lassoKind === 'polygon') {
         // D44 polygonal lasso: each click adds a corner; clicking the first corner (or a double-click, ✓, Enter) closes it
         const poly = st.lassoPoly
@@ -758,8 +768,14 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       const p = toDoc(e)
       st.setCursor({ x: Math.floor(p.x), y: Math.floor(p.y) })
+      if (st.tool === 'lasso' && st.lassoKind === 'magnetic') { magnetic.move(p, (e.buttons & 1) === 1); return }
       if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
+      if (drag.kind === 'quick') {                                   // D59: every sample that moved more than ¼ px joins the stroke
+        const q = drag.pts![drag.pts!.length - 1]
+        if (Math.abs(p.x - q.x) + Math.abs(p.y - q.y) > 0.25) { drag.pts!.push(p); drawTrail(drag.pts!) }
+        return
+      }
       if (drag.kind === 'pan') { st.setView({ pan: { x: drag.startPan!.x + e.clientX - drag.start.x, y: drag.startPan!.y + e.clientY - drag.start.y } }); return }
       if (drag.kind === 'xform' && st.transform) {                   // every step from the quad at the drag's start: nothing accumulates
         const m = mods(e)
@@ -831,11 +847,13 @@ export function EditorCanvas() {
         }
       }
       if (drag.kind === 'gradient') gradientFill(drag.start, drag.last)
+      if (drag.kind === 'quick') void quickFinish(drag.pts!, !!drag.alt)
       drag = null
     }
     const onDouble = (e: MouseEvent) => {
       const st = useEditor.getState()
       if (st.transform && insideQuad(st.transform.quad, toDoc(e))) st.applyTransform()
+      else if (st.tool === 'lasso' && st.lassoKind === 'magnetic') void magnetic.close(mods(e).altKey)
       else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(mods(e), st.selectionMode)) }
     }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
@@ -902,6 +920,45 @@ export function EditorCanvas() {
       requestRender()
     }
     const clearPreview = () => { const ov = overlayRef.current; const g = ov?.getChildByLabel('preview'); if (g) g.destroy(); requestRender() }
+    /** D59: Quick Selection's footprint trail while the stroke is drawn (PhotoCraft draws the same; the selection comes on release). */
+    const drawTrail = (pts: Pt[]) => {
+      const ov = overlayRef.current; if (!ov) return
+      let g = ov.getChildByLabel('preview') as Graphics | null
+      if (!g) { g = new Graphics(); g.label = 'preview'; ov.addChild(g) }
+      const size = useEditor.getState().quickSize
+      g.clear()
+      if (pts.length === 1) g.circle(pts[0].x, pts[0].y, size / 2).fill({ color: 0xffffff, alpha: 0.16 })
+      else { g.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) g.lineTo(q.x, q.y); g.stroke({ color: 0xffffff, alpha: 0.16, width: size, cap: 'round', join: 'round' }) }
+      requestRender()
+    }
+    /** D59: the whole stroke goes to PhotoCraft's quick_select once, on release; every stroke adds, Alt subtracts. */
+    const quickFinish = async (pts: Pt[], alt: boolean) => {
+      const st = useEditor.getState(), doc = st.doc
+      if (!doc) { clearPreview(); return }
+      if (alt && !st.selection) { clearPreview(); return }
+      host.style.cursor = 'progress'
+      try {
+        if (!(await ensureDocImage(st.quickSampleAll))) { useSession.getState().toast('The composite is not available yet', 'info'); return }
+        const r = await quickSelect(pts.flatMap((q) => [q.x, q.y]), st.quickSize)
+        if (!r) { useSession.getState().toast('Quick Selection found nothing there', 'info'); return }
+        const shape = new Uint8Array(doc.w * doc.h), bw = r.box[2] - r.box[0]
+        for (let y = Math.max(0, r.box[1]); y < Math.min(doc.h, r.box[3]); y++) for (let x = Math.max(0, r.box[0]); x < Math.min(doc.w, r.box[2]); x++) shape[y * doc.w + x] = r.mask[(y - r.box[1]) * bw + (x - r.box[0])]
+        useEditor.getState().applySelectionShape(shape, alt ? 'subtract' : 'add', 'quick selection')
+      } catch (err) { useSession.getState().toast(`Quick Selection failed: ${(err as Error).message}`, 'error') }
+      finally { host.style.cursor = ''; clearPreview() }
+    }
+    /** D59: the Magnetic Lasso's border — fastened path and live segment, its points, and the closing mark near the start. */
+    magnetic.onChange = () => {
+      const st = useEditor.getState(), z = Math.max(1e-3, st.zoom)
+      if (!magnetic.active) { clearPreview(); return }
+      drawPreview((g) => {
+        const all = [...magnetic.path, ...magnetic.live.slice(1)]
+        g.moveTo(all[0].x, all[0].y); for (const q of all.slice(1)) g.lineTo(q.x, q.y)
+        const hs = 2.5 / z
+        for (const i of magnetic.anchors) { const q = magnetic.path[i]; if (q) g.rect(q.x - hs, q.y - hs, hs * 2, hs * 2) }
+        if (magnetic.hover && magnetic.nearStart(magnetic.hover)) g.circle(magnetic.hover.x + 12 / z, magnetic.hover.y + 12 / z, 4 / z)
+      })
+    }
     const commitMarquee = (a: Pt, b: Pt, mode: SelectionMode) => {
       clearPreview()
       const st = useEditor.getState()

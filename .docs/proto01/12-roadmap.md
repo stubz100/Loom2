@@ -337,6 +337,9 @@ prefilter, selection lifts, groups). Spike S2 ran (journal): 44 KB gzipped, magn
 50–120 ms per click and 0.6–1.1 s per long drag (wasm ≈ native) — it recommends **go** for PC24 in a Worker; the go / no-go (a Rust →
 wasm build in the frontend) is the author's.
 
+**Author's decisions 2026-10-10:** S2 go → PC24 (D59); PC25 (D60) and PC26 (D61) now rather than with H3; S1 go → PC14 / PC15 (D62),
+over the spike's no-go. Order: PC24, PC25, PC26, then PC14 / PC15. **PC24 landed** (D59: Quick Selection, Magnetic Lasso).
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

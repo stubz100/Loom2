@@ -229,6 +229,14 @@ original pixels (PhotoCraft's homography and Catmull-Rom warp, with a real downs
 selection only the selected pixels move (the hole stays transparent) and the selection moves with them; linked masks follow.
 Flip and rotate 90 / 180 are exact pixel permutations. Headed mode `transform`.
 
+**Quick Selection and Magnetic Lasso (D59, 2026-10-10).** Two CPU tools, PhotoCraft's algorithms as WebAssembly in a Worker (no GPU,
+44 KB). **Quick selection** (toolbox): paint over a thing — on release the selection grows to its edges (a banded min cut fitted
+to Photoshop); every stroke adds, Alt subtracts; size by the value field or `[` `]`; *sample all layers* looks at the composite.
+**Magnetic lasso** (Lasso › magnetic): click on an edge and move along it — the border snaps to the edge and drops points as it goes
+(Width, Contrast, Frequency); a click places a point, Alt-click a straight segment (Alt-drag freehand), Backspace removes a point;
+click the first point, double-click, Enter or ✓ closes, Esc or ⊘ cancels; Shift / Alt / Shift+Alt pick add / subtract / intersect.
+Headed mode `smartsel`.
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

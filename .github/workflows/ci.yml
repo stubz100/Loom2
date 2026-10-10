@@ -48,6 +48,8 @@ jobs:
         run: orchestrator/.venv/Scripts/python.exe -m pytest orchestrator -q -s -m corpus
       - name: agent docs (D35) — paths exist, verified-at lines present
         run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
+      - name: smart-select WebAssembly (D59) — the committed module matches its PhotoCraft pin and checksum
+        run: orchestrator/.venv/Scripts/python.exe scripts/build_pcwasm.py --check
       - name: versions (D36) — every location matches VERSION
         run: orchestrator/.venv/Scripts/python.exe scripts/bump_version.py --check
       - uses: actions/setup-node@v4

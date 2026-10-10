@@ -2562,3 +2562,9 @@ Inspector → lineage → split → pages.
   Quick Remove 0.4 s — the same smear on this 320 × 210 hole. **The pre-fill stays off by default**, as D62 required; Quick Remove's
   panel hint says it is for small or textured areas. Sheet: `engine/spikes/out/d62/remove-task01-seed7.png`.
 - **PE6 closed;** all PhotoCraft proposals (PC1–PC26) are decided and delivered.
+
+## 2026-10-10 21:37 — CI green on D59–D62
+
+- Run 38080084162 at 3152e54: offline tests + frontend build for both variants (incl. the new steps: settings audit, the content-aware
+  wheel and smart-select WebAssembly pin checks, the vendored wheel installed by `--extra native`) and both installers passed. The runs on
+  f21af1f, d777f39 and 1af077f were cancelled by newer pushes; e76b482 (D59–D61) passed.

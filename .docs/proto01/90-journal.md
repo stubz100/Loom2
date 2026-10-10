@@ -2299,3 +2299,33 @@ Inspector → lineage → split → pages.
 
 - Run 38067539037 at d1faf87: offline tests + frontend build for both variants (full, open) and both installers passed; the draft
   release job is skipped off tags. Wave PE4 (D50–D53) is closed on CI too.
+
+## 2026-10-10 19:01 — D54 mask mechanics from PhotoCraft (the author: "painting on a new mask does nothing")
+
+- **Reproduced first** (new headed mode `masks`, mouse events and screenshots only — the exact-compare extractor re-renders every
+  pass, so it cannot see a stale stage): with D52 a brush stroke in the default colours (foreground black) on a new mask left the mask
+  at 255 — the brush always painted **white** on a mask, whatever the colour, so on a white mask nothing happened; only the eraser hid
+  (it painted black). Clicking the layer row also dropped the mask target, so the next strokes went into the pixels. Remove-then-add
+  came out clean here (a fresh white mask), so the "previous painting appears" part was not reproduced; Pixi's "textureSource
+  destroyed while still bound" warnings (pre-existing, on every scene rebuild) remain the suspect if it recurs.
+- **PhotoCraft read** (b37bff98, subagent report; `doc` LayerMask, `engine` ToolState::MASK_COLORS / target_mask, `brush_cmds`
+  eraser on grey targets, `mask_thumbs_ui`, `masks.rs`): sparse canvas-unbounded grey masks with a default value; an app-wide mask
+  target synced to the active layer; a separate remembered mask colour pair; colours written as Rec.601 luma; the eraser on grey
+  targets paints the background colour; Reveal / Hide All / Selection; Alt-click grey view, Ctrl-click load, Shift-click disable.
+- **Ported (D54):** app-wide target kept across row clicks (adjustment / filter rows target their mask; the store clears it when the
+  layer has no mask); the mask pair swaps in while a mask or Quick Mask is the target (persisted as `maskColours`), shown on the
+  swatches; brush / fill / gradient paint the pair's greys, the eraser the background's grey, Delete clears to the background;
+  `Mask.default` (schema 3) — compose fills outside the extent with the density-adjusted default, the editor pads the mask with a pass
+  when the content reaches past its extent, Apply / merge down bake through `maskAlphaCanvas`, PSD export writes `defaultColor`;
+  Add mask in four flavours (+ box: reveal, Alt: hide; with a selection: reveal / hide the selection); Alt-click grey view (painting
+  continues on it), Ctrl-click load as selection, Shift-click disable with a red ✕. **One deliberate deviation:** the mask pair
+  starts black / white (PhotoCraft and Photoshop start white / black, which repeats the author's "nothing happens") — the brush hides,
+  the eraser reveals, X swaps.
+- **Not ported:** sparse tiled masks (loom2 keeps one canvas per mask with an extent and the default outside), transforming an
+  unlinked mask alone (PE6), the vector masks, the rubylith colour / opacity options.
+- **Checks:** `masks` headed mode all pass (brush on a new mask → mask 2, stage −51.5/255; the eraser over it → 253, stage within
+  0.9/255 of before; X → white; the row keeps the target; the pixel thumbnail brings the image colours back; Alt-click grey view
+  and painting on it 251.7/255; Shift-click ✕; hide-all and the eraser bringing the layer back within 0.9/255). `paint` and `brush`
+  updated to D54 (the brush hides on a mask) and pass; cmpdiag (incl. an unlinked mask moved off its layer — the 255 default padding),
+  tour (now with a fresh dev server: PSD export and compare pass too), selection pass. Offline 172 (default-value test added); build,
+  lint unchanged; API contract regenerated.

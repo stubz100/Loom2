@@ -70,8 +70,10 @@ function Slider({ label, value, min, max, step = 1, fmt, onChange, onStart, onCo
 
 function Swatches() {
   const b = useEditor((s) => s.brush)
+  const forMask = useEditor((s) => s.maskPairActive)
   return (
-    <div className="swatch-pair">
+    <div className={`swatch-pair${forMask ? ' for-mask' : ''}`} title={forMask ? 'the mask colours (D54): painted as grey — black hides, white shows; X swaps' : undefined}>
+      {forMask && <span className="hint">mask</span>}
       <span className="sw" style={{ background: b.color }} title="foreground"><input type="color" value={b.color} onChange={(e) => ed().setBrush({ color: e.target.value })} /></span>
       <span className="sw" style={{ background: b.background }} title="background"><input type="color" value={b.background} onChange={(e) => ed().setBrush({ background: e.target.value })} /></span>
       <CommandButton id="edit.colour.swap" /><CommandButton id="edit.colour.default" />
@@ -561,16 +563,23 @@ function LayersTab() {
   const commit = (label: string) => { if (before.current && active) { ed().pushHistory({ label, layerId: active.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
   const rows = (nodes: Node[], depth: number): ReactNode => nodes.map((n) => (
     <div key={n.id}>
-      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} tabIndex={0} onClick={() => ed().setActive(n.id, false)}
-        onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id, false); showMenu(e, layerMenu()) }}>
+      <div className={`layer-row${n.id === activeId ? ' active' : ''}${n.visible ? '' : ' hidden'}`} style={{ marginLeft: depth * 14 }} tabIndex={0} onClick={() => ed().setActive(n.id)}
+        onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { ed().setActive(n.id); showMenu(e, layerMenu()) }}>
         <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · Alt-click: solo" onClick={(e) => { e.stopPropagation(); if (e.altKey) ed().solo(n.id); else ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
         <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
-        {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title="Ctrl-click: select layer transparency" onClick={(e) => { if (e.ctrlKey || e.metaKey) { e.stopPropagation(); ed().selectLayerAlpha(n.id) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
+        {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title={n.mask ? 'click: paint the pixels · Ctrl-click: select layer transparency' : 'Ctrl-click: select layer transparency'} onClick={(e) => { e.stopPropagation(); if (e.ctrlKey || e.metaKey) ed().selectLayerAlpha(n.id); else { ed().setActive(n.id, false); ed().setView({ maskView: 'off' }) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
         <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : n.type}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${n.blend}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
         {n.mask && <button className={`mask-link${n.mask.linked ? ' on' : ''}`} title={n.mask.linked ? 'linked: the mask moves and transforms with the layer · click to unlink' : 'unlinked: the mask stays put · click to link'} onClick={(e) => { e.stopPropagation(); ed().toggleMaskLink(n.id) }}>{n.mask.linked ? <Link2 size={11} /> : <Unlink2 size={11} />}</button>}
         {n.mask
-          ? <img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}${n.mask.enabled ? '' : ' off'}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click to edit · Shift-click to disable" onClick={(e) => { e.stopPropagation(); if (e.shiftKey) ed().updateNode(n.id, { mask: { ...n.mask!, enabled: !n.mask!.enabled } }, 'toggle mask'); else ed().setActive(n.id, true) }} />
-          : <span className="mask-box" title={hasSel ? 'add a mask from the selection' : 'add a mask'} onClick={(e) => { e.stopPropagation(); ed().addMask(n.id, hasSel) }}>+◐</span>}
+          ? <span className={`mask-wrap${n.mask.enabled ? '' : ' off'}`}><img className={`thumb mask-thumb${editingMask && n.id === activeId ? ' editing' : ''}`} src={thumbs.get('m:' + n.id)} alt="" title="mask · click: paint the mask · Alt-click: show it alone · Ctrl-click: load as selection · Shift-click: disable"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (e.shiftKey) { ed().updateNode(n.id, { mask: { ...n.mask!, enabled: !n.mask!.enabled } }, n.mask!.enabled ? 'disable mask' : 'enable mask'); return }
+                ed().setActive(n.id, true)
+                if (e.ctrlKey || e.metaKey) ed().loadSelectionFromMask()
+                else if (e.altKey) ed().setView({ maskView: ed().maskView === 'gray' ? 'off' : 'gray' })
+              }} /></span>
+          : <span className="mask-box" title={hasSel ? 'add a mask revealing the selection · Alt-click: hiding it' : 'add a mask (reveal all) · Alt-click: hide all'} onClick={(e) => { e.stopPropagation(); ed().setActive(n.id); ed().addMask(n.id, hasSel ? (e.altKey ? 'hideSelection' : 'revealSelection') : (e.altKey ? 'hide' : 'reveal')) }}>+◐</span>}
       </div>
       {n.kind === 'group' && n.children && rows(n.children, depth + 1)}
     </div>
@@ -578,7 +587,8 @@ function LayersTab() {
   return (
     <div>
       <div className="layers">{rows(doc.layers, 0)}</div>
-      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}”: paint white to show the layer, black to hide it — B brush · E eraser · G fill; density and feather below. <button className="quiet" onClick={() => ed().setActive(active.id, false)}>Edit pixels instead</button></div>}
+      {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}” with the mask colours: the brush paints the foreground (black hides, white shows), the eraser the background — X swaps them; G fills, Delete clears to the background. Alt-click the mask thumbnail to see it alone.{' '}
+        {active.kind === 'raster' && <button className="quiet" onClick={() => { ed().setActive(active.id, false); ed().setView({ maskView: 'off' }) }}>Edit pixels instead</button>}</div>}
       {active && (
         <div className="tool-opts" style={{ marginTop: 10 }}>
           <label>blend</label><select value={active.blend} onChange={(e) => ed().updateNode(active.id, { blend: e.target.value }, 'blend mode')}>{BLEND_MODES.map((m) => <option key={m}>{m}</option>)}</select>

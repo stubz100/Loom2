@@ -5,13 +5,15 @@ import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe, RefineEdgeParams } from '../../api/types'
 import { useSession } from '../../store/session'
-import { LayerPixels, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
+import { LayerPixels, lumaOf, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
 import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
-import { derivedMask } from './maskDerived'
+import { maskAlphaCanvas } from './maskDerived'
 import { isIdentity, resample, type Xform } from './transform'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
-export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number }   // D52: density 0–1, feather σ px
+export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number; default?: number }   // D52: density 0–1, feather σ px; D54: the value outside the extent
+/** D54: how a new mask starts (PhotoCraft Reveal All / Hide All / Reveal Selection / Hide Selection). */
+export type MaskInit = 'reveal' | 'hide' | 'revealSelection' | 'hideSelection'
 export interface Node {
   kind: NodeKind; id: string; name: string; opacity: number; blend: string; visible: boolean; locked: boolean; clip: boolean; mask: MaskRef | null
   x?: number; y?: number; w?: number; h?: number; fill?: number; recipe?: Record<string, unknown> | null; lineage_asset_id?: string | null
@@ -59,12 +61,15 @@ export interface HistoryEntry {
   coalesce?: string
 }
 export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
-type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode'
+type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode' | 'maskView'
   | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx' | 'brushLine' | 'pickOnce'
 
 export interface EditorState {
   doc: DocumentStack | null; docDirty: boolean; loading: boolean; saving: boolean; error: string | null
   activeId: string | null; editingMask: boolean
+  // D54: the inactive colour pair (the image pair while a mask is the target, the mask pair otherwise) and which pair is live;
+  // maskView 'gray' shows the active layer's mask alone
+  otherColours: { color: string; background: string }; maskPairActive: boolean; maskView: 'off' | 'gray'
   tool: Tool; brush: BrushOptions; marqueeShape: 'rect' | 'ellipse'; selectionMode: SelectionMode; tolerance: number; fillMode: 'solid' | 'linear' | 'radial'
   // D44: selection tool options — marquee feather and style, lasso kind (and the open polygon), wand switches, the modify amount
   marqueeFeather: number; marqueeStyle: 'normal' | 'ratio' | 'size'; marqueeW: number; marqueeH: number
@@ -132,6 +137,8 @@ export interface EditorState {
   setCursor: (c: { x: number; y: number } | null) => void
   setExtractor: (f: EditorState['extractor']) => void
   // stack
+  /** `mask` true / false targets the mask / the pixels (thumbnail clicks); left out (a row click) keeps the current target when the
+   * layer has a mask — adjustment and filter rows target their mask (D54). */
   setActive: (id: string | null, mask?: boolean) => void
   updateNode: (id: string, patch: Partial<Node>, label?: string, coalesce?: string) => void
   addLayer: (kind?: NodeKind, extra?: Partial<Node>) => Node | null
@@ -141,7 +148,7 @@ export interface EditorState {
   mergeDown: (id: string) => void
   groupActive: () => void
   solo: (id: string) => void
-  addMask: (id: string, fromSelection?: boolean) => void
+  addMask: (id: string, how?: MaskInit) => void
   removeMask: (id: string) => void
   toggleMaskLink: (id: string) => void
   applyMask: (id: string) => void
@@ -215,7 +222,7 @@ const newId = (p: string) => `${p}_${Math.random().toString(16).slice(2, 10)}`
 const PAINTS_MASK: Tool[] = ['brush', 'eraser', 'fill', 'marquee', 'lasso', 'wand', 'ai']
 let maskHintShown = false
 const maskEditExtras = (tool: Tool): { tool?: Tool } => {
-  if (!maskHintShown) { maskHintShown = true; useSession.getState().toast('Editing the mask: paint white to show the layer, black to hide it — B brush · E eraser · G fill. Click the layer thumbnail to edit its pixels again.', 'info') }
+  if (!maskHintShown) { maskHintShown = true; useSession.getState().toast('Editing the mask — the mask colours are live: the brush paints the foreground (black hides, white shows), the eraser the background; X swaps them. Click the layer thumbnail to edit its pixels again.', 'info') }
   return PAINTS_MASK.includes(tool) ? {} : { tool: 'brush' }
 }
 let openSeq = 0                                                   // C31: the latest openDocument() wins; a superseded load frees what it fetched
@@ -355,6 +362,7 @@ export const useEditor = create<EditorState>()(
       }
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
+        otherColours: { color: '#000000', background: '#ffffff' }, maskPairActive: false, maskView: 'off',
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
         marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
@@ -706,7 +714,11 @@ export const useEditor = create<EditorState>()(
         setExtractor: (extractor) => set({ extractor }),
 
         // ---- stack -----------------------------------------------------------------------------------
-        setActive: (id, mask = false) => { const editing = mask && !!findNode(get().doc, id)?.mask; set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}) }) },
+        setActive: (id, mask) => {
+          const n = findNode(get().doc, id)
+          const editing = !!n?.mask && (mask ?? (n.kind === 'adjustment' || n.kind === 'filter' ? true : get().editingMask))
+          set({ activeId: id, editingMask: editing, ...(editing && !get().editingMask ? maskEditExtras(get().tool) : {}) })
+        },
         updateNode: (id, patch, label, coalesce) => {
           const doc = get().doc
           if (!doc) return
@@ -790,7 +802,7 @@ export const useEditor = create<EditorState>()(
             tc.drawImage(a.canvas, 0, 0)
             tc.globalCompositeOperation = 'destination-in'
             const off = maskOffset(top)
-            tc.drawImage(selectionAlphaCanvas(derivedMask(m, top.mask!)), off.x - (top.x ?? 0), off.y - (top.y ?? 0))   // D52: as it renders
+            tc.drawImage(maskAlphaCanvas(m, top.mask!, off.x, off.y, top.x ?? 0, top.y ?? 0, a.width, a.height), 0, 0)   // D52 / D54: as it renders
             b.ctx.drawImage(tmp, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
           } else b.ctx.drawImage(a.canvas, (top.x ?? 0) - (below.x ?? 0), (top.y ?? 0) - (below.y ?? 0))
           b.ctx.restore()
@@ -823,10 +835,12 @@ export const useEditor = create<EditorState>()(
           for (const n of list) n.visible = othersHidden ? true : n.id === id
           commit(next, before, othersHidden ? 'show all' : 'solo', id)
         },
-        addMask: (id, fromSelection = false) => {
+        addMask: (id, how = 'reveal') => {
           const doc = get().doc
           const n = findNode(doc, id)
           if (!doc || !n || n.mask) return
+          const sel = get().selection
+          if ((how === 'revealSelection' || how === 'hideSelection') && !sel) how = how === 'revealSelection' ? 'reveal' : 'hide'
           const before = clone(doc)
           // D52: a raster layer's mask is layer-sized and linked (it moves and transforms with the layer, Photoshop's default);
           // groups, adjustments and filters get a document-sized mask, unlinked at the document origin
@@ -834,15 +848,24 @@ export const useEditor = create<EditorState>()(
           const w = px?.width ?? doc.w, h = px?.height ?? doc.h
           const ox = px ? (n.x ?? 0) : 0, oy = px ? (n.y ?? 0) : 0
           const lp = new LayerPixels(w, h, true)
-          const sel = get().selection
-          // B16: the selection canvas is transparent where nothing is selected, so its *alpha* (white = selected) goes over black
-          lp.ctx.fillStyle = fromSelection && sel ? '#000000' : '#ffffff'; lp.ctx.fillRect(0, 0, w, h)
-          if (fromSelection && sel) lp.ctx.drawImage(selectionAlphaCanvas(sel), -ox, -oy)
+          // D54 (PhotoCraft): reveal all = white with default 255; hide all = black, default 0; reveal selection = the selection over
+          // black, default 0; hide selection = white with the selection black, default 255. B16: the selection canvas is
+          // transparent where nothing is selected, so its *alpha* (white = selected) is drawn
+          const white = how === 'reveal' || how === 'hideSelection'
+          lp.ctx.fillStyle = white ? '#ffffff' : '#000000'; lp.ctx.fillRect(0, 0, w, h)
+          if (sel && how === 'revealSelection') lp.ctx.drawImage(selectionAlphaCanvas(sel), -ox, -oy)
+          if (sel && how === 'hideSelection') {
+            const a = selectionAlphaCanvas(sel), ac = a.getContext('2d')!
+            ac.globalCompositeOperation = 'source-in'; ac.fillStyle = '#000000'; ac.fillRect(0, 0, a.width, a.height)
+            lp.ctx.drawImage(a, -ox, -oy)
+          }
           lp.refresh(); lp.dirty = true
           get().masks.set(id, lp)
           const next = clone(doc)
-          walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: !!px, x: 0, y: 0, density: 1, feather: 0 }; return true } })
-          commit(next, before, fromSelection && sel ? 'mask from selection' : 'add mask', id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) })
+          walk(next.layers, (m) => { if (m.id === id) { m.mask = { enabled: true, linked: !!px, x: 0, y: 0, density: 1, feather: 0, default: white ? 255 : 0 }; return true } })
+          const label = { reveal: 'add mask', hide: 'add mask (hide all)', revealSelection: 'mask from selection', hideSelection: 'mask hiding the selection' }[how]
+          commit(next, before, label, id, { activeId: id, editingMask: true, ...maskEditExtras(get().tool) })
+          if (how === 'hideSelection') get().deselect()                // PhotoCraft's Hide Selection drops the selection
         },
         removeMask: (id) => {
           const doc = get().doc
@@ -877,9 +900,8 @@ export const useEditor = create<EditorState>()(
           const before = clone(doc)
           const tiles = lp.snapshotAll()
           // D52: the layer's alpha × the mask as it renders (density, feather); outside the mask's extent nothing shows, as in compose.py
-          const a = document.createElement('canvas'); a.width = lp.width; a.height = lp.height
           const off = maskOffset(n)
-          a.getContext('2d')!.drawImage(selectionAlphaCanvas(derivedMask(m, n.mask)), off.x - (n.x ?? 0), off.y - (n.y ?? 0))
+          const a = maskAlphaCanvas(m, n.mask, off.x, off.y, n.x ?? 0, n.y ?? 0, lp.width, lp.height)   // D54: the default outside the extent
           lp.ctx.save(); lp.ctx.globalCompositeOperation = 'destination-in'; lp.ctx.drawImage(a, 0, 0); lp.ctx.restore()
           lp.refresh(); lp.dirty = true
           const next = clone(doc)
@@ -904,8 +926,8 @@ export const useEditor = create<EditorState>()(
           lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
           get().masks.set(id, mask)
           const next = clone(doc)
-          walk(next.layers, (x) => { if (x.id === id) { x.mask = { enabled: true, linked: true, x: 0, y: 0, density: 1, feather: 0 }; return true } })
-          set({ doc: next, docDirty: true, revision: get().revision + 1 })
+          walk(next.layers, (x) => { if (x.id === id) { x.mask = { enabled: true, linked: true, x: 0, y: 0, density: 1, feather: 0, default: 0 }; return true } })
+          set({ doc: next, editingMask: true, docDirty: true, revision: get().revision + 1 })
           get().pushHistory({ label: 'mask from transparency', layerId: id, kind: 'image', tiles, stack: before, at: Date.now() })
         },
         resizeCanvas: (w, h, ax = 0.5, ay = 0.5) => {
@@ -933,12 +955,13 @@ export const useEditor = create<EditorState>()(
           lp.beginStroke(); lp.touch(0, 0, lp.width, lp.height)
           const ctx = lp.ctx
           ctx.save()
+          const g = lumaOf(get().brush.background), bg = `rgb(${g}, ${g}, ${g})`   // D54: a mask clears to the background colour's grey
           if (selection) {
             const a = selectionAlphaCanvas(selection)                 // alpha = selected amount
-            if (editingMask) { const tc = a.getContext('2d')!; tc.globalCompositeOperation = 'source-in'; tc.fillStyle = '#000000'; tc.fillRect(0, 0, a.width, a.height); ctx.globalCompositeOperation = 'source-over' }
+            if (editingMask) { const tc = a.getContext('2d')!; tc.globalCompositeOperation = 'source-in'; tc.fillStyle = bg; tc.fillRect(0, 0, a.width, a.height); ctx.globalCompositeOperation = 'source-over' }
             else ctx.globalCompositeOperation = 'destination-out'
             ctx.drawImage(a, -off.x, -off.y)
-          } else if (editingMask) { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, lp.width, lp.height) }
+          } else if (editingMask) { ctx.fillStyle = bg; ctx.fillRect(0, 0, lp.width, lp.height) }
           else ctx.clearRect(0, 0, lp.width, lp.height)
           ctx.restore()
           lp.refresh(); lp.dirty = true
@@ -1198,10 +1221,31 @@ export const useEditor = create<EditorState>()(
         },
       }
     },
-    { name: 'loom2.edit', partialize: (s) => ({ tool: s.tool, brush: s.brush, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets,
+    { name: 'loom2.edit',
+      // D54: the image pair is stored as `brush`, the mask pair as `maskColours`, whichever is live
+      merge: (p, c) => { const q = (p ?? {}) as Partial<EditorState> & { maskColours?: { color: string; background: string } }; return { ...c, ...q, otherColours: q.maskColours ?? c.otherColours } },
+      partialize: (s) => ({ tool: s.tool, brush: s.maskPairActive ? { ...s.brush, ...s.otherColours } : s.brush, maskColours: s.maskPairActive ? { color: s.brush.color, background: s.brush.background } : s.otherColours, overlay: s.overlay, pixelGrid: s.pixelGrid, tolerance: s.tolerance, fillMode: s.fillMode, rendererPref: s.rendererPref, brushPresets: s.brushPresets,
       marqueeFeather: s.marqueeFeather, marqueeStyle: s.marqueeStyle, marqueeW: s.marqueeW, marqueeH: s.marqueeH, lassoKind: s.lassoKind, wandContiguous: s.wandContiguous, wandMerged: s.wandMerged, wandAA: s.wandAA, selModifyPx: s.selModifyPx, refineEdge: s.refineEdge }) as never },
   ),
 )
+
+/** D54 (PhotoCraft sync_mask_targets / ToolState::target_mask): the mask target needs a mask (undo, delete, another layer clear it);
+ * the grey view forces it; and the colour pairs swap whenever the live target changes between pixels and a mask (or Quick Mask). */
+useEditor.subscribe((s) => {
+  const n = findNode(s.doc, s.activeId)
+  const patch: Partial<EditorState> = {}
+  if (s.editingMask && !n?.mask) patch.editingMask = false
+  if (s.maskView !== 'off' && !n?.mask) patch.maskView = 'off'
+  if (s.maskView === 'gray' && n?.mask && !s.editingMask) patch.editingMask = true
+  const editing = patch.editingMask ?? s.editingMask
+  const want = (editing && !!n?.mask) || s.quickMask
+  if (want !== s.maskPairActive) {
+    patch.brush = { ...s.brush, color: s.otherColours.color, background: s.otherColours.background }
+    patch.otherColours = { color: s.brush.color, background: s.brush.background }
+    patch.maskPairActive = want
+  }
+  if (Object.keys(patch).length) useEditor.setState(patch)
+})
 
 /** B20: autosave (10 §7) and the unsaved-changes toast (10 §12) run for the app's lifetime, not only while the Edit strip is mounted. */
 let autosaveStarted = false

@@ -1711,7 +1711,7 @@
             "title": "Saved At"
           },
           "schema_version": {
-            "default": 2,
+            "default": 3,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -2094,7 +2094,7 @@
             "title": "Saved At"
           },
           "schema_version": {
-            "default": 2,
+            "default": 3,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -4982,6 +4982,13 @@
       },
       "Mask": {
         "properties": {
+          "default": {
+            "default": 0,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Default",
+            "type": "integer"
+          },
           "density": {
             "default": 1.0,
             "maximum": 1.0,
@@ -5023,7 +5030,8 @@
           "x",
           "y",
           "density",
-          "feather"
+          "feather",
+          "default"
         ],
         "title": "Mask",
         "type": "object"

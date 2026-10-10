@@ -13,9 +13,9 @@ import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type MaskRef, type Node } from './editorStore'
-import { derivedMask, maskParamsActive } from './maskDerived'
+import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
-import { selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
+import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
 import { PathWalker, Smoother, Stroke } from './brushEngine'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
@@ -115,6 +115,7 @@ export function EditorCanvas() {
   const overlay = useEditor((s) => s.overlay)
   const quickMask = useEditor((s) => s.quickMask)
   const editingMask = useEditor((s) => s.editingMask)
+  const maskView = useEditor((s) => s.maskView)
   const activeId = useEditor((s) => s.activeId)
   const pixelGrid = useEditor((s) => s.pixelGrid)
   const hasSel = useEditor((s) => !!s.selection)
@@ -342,19 +343,27 @@ export function EditorCanvas() {
       sp.position.set(tx, ty)
       return sp
     }
-    /** D52: the sprite showing a node's mask as it renders — derived when density < 1 or feather > 0, re-derived per frame when painted. */
-    const maskSprite = (n: Node, m: LayerPixels): Sprite => {
+    /** D52: the sprite showing a node's mask as it renders over the region (bx, by, bw, bh) — derived when density < 1 or feather > 0,
+     * re-derived per frame when painted. D54: where the region reaches past the mask's extent and its default is not 0, the mask is
+     * first drawn over its default value into a pass of the region's size. */
+    const maskSprite = (n: Node, m: LayerPixels, bx: number, by: number, bw: number, bh: number): Sprite => {
       const ref = n.mask!
       const sp = new Sprite(derivedMask(m, ref).texture)
       if (maskParamsActive(ref)) derivedRef.current.push({ raw: m, ref, sprite: sp })
-      return sp
+      const ox = (ref.linked ? (n.x ?? 0) : 0) + ref.x, oy = (ref.linked ? (n.y ?? 0) : 0) + ref.y
+      sp.position.set(ox, oy)
+      const covers = ox <= bx && oy <= by && ox + m.width >= bx + bw && oy + m.height >= by + bh
+      if (!(ref.default ?? 0) || covers) return sp
+      const v = outsideValue(ref)
+      const c = new Container()
+      c.addChild(new Graphics().rect(bx, by, bw, bh).fill({ r: v, g: v, b: v }), sp)
+      return makePass(c, bw, bh, bx, by)
     }
     /** Wrap `obj` (in document coordinates) with the node's mask into a pass; returns the sprite to blend. */
     const withMask = (n: Node, obj: Container, w: number, h: number, tx: number, ty: number): Container => {
       const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
       if (!m || !n.mask) return obj
-      const ms = maskSprite(n, m)
-      ms.position.set((n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y)
+      const ms = maskSprite(n, m, tx, ty, w, h)
       const content = new Container()
       content.addChild(ms, obj)
       obj.mask = ms
@@ -441,9 +450,8 @@ export function EditorCanvas() {
         // a document-sized white sprite (or the layer's mask) carries the layer alpha; the per-layer filter registered as
         // a blend mode rewrites the backdrop in the layer's own blend mode (adjustFilters.ts)
         const m = n.mask?.enabled ? st.masks.get(n.id) : undefined
-        const sp = m ? maskSprite(n, m) : new Sprite(Texture.WHITE)
-        if (m && n.mask) sp.position.set(n.mask.x, n.mask.y)
-        else { sp.width = doc.w; sp.height = doc.h }
+        const sp = m ? maskSprite(n, m, 0, 0, doc.w, doc.h) : new Sprite(Texture.WHITE)
+        if (!m) { sp.width = doc.w; sp.height = doc.h }
         sp.alpha = n.opacity * (n.fill ?? 1)
         setBlend(sp, ensureAdjustment(n))
         lastBlend = ''
@@ -508,7 +516,17 @@ export function EditorCanvas() {
       s.blendMode = 'add'; s.filters = [neg[0]]; s.tint = 0xff2020; s.alpha = 0.5
       ov.addChild(s)
     }
-    if (editingMask && activeNode?.mask && overlay) {
+    // D54: Alt-click on a mask thumbnail — the mask alone in grey (its default outside the extent); painting continues on it
+    if (maskView === 'gray' && activeNode?.mask) {
+      const m = st.masks.get(activeNode.id)
+      if (m) {
+        const v = activeNode.mask.default ?? 0
+        const g = new Graphics().rect(0, 0, doc.w, doc.h).fill({ r: v, g: v, b: v })
+        const s = new Sprite(m.texture)
+        s.position.set((activeNode.mask.linked ? (activeNode.x ?? 0) : 0) + activeNode.mask.x, (activeNode.mask.linked ? (activeNode.y ?? 0) : 0) + activeNode.mask.y)
+        ov.addChild(g, s)
+      }
+    } else if (editingMask && activeNode?.mask && overlay) {
       const m = st.masks.get(activeNode.id)
       if (m) {
         const s = new Sprite(m.texture)
@@ -525,7 +543,7 @@ export function EditorCanvas() {
     applyTransformPreview()
     drawTransformBox()
     requestRender()
-  }, [doc, revision, before, overlay, quickMask, editingMask, activeId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc, revision, before, overlay, quickMask, editingMask, activeId, maskView]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- view (zoom / pan / fit), document frame and pixel grid -------------------------------------
   useEffect(() => {
@@ -600,11 +618,13 @@ export function EditorCanvas() {
     const beginStroke = (t: NonNullable<ReturnType<typeof paintTarget>>, erase: boolean): Stroke => {
       const st = useEditor.getState()
       const b = st.brush
-      const hex = (t.kind === 'mask' ? '#ffffff' : b.color).replace('#', '')
+      const hex = b.color.replace('#', '')
       const colour: [number, number, number] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0) as [number, number, number]
       const n = findNode(st.doc, st.activeId)
+      // D54 (PhotoCraft): on a mask or in Quick Mask the brush paints the foreground's grey, the eraser the background's
+      const grey = lumaOf(erase ? b.background : b.color)
       return new Stroke({
-        lp: t.lp, kind: t.kind, erase, colour, size: b.size, hardness: b.hardness, opacity: b.opacity, flow: b.flow, spacing: b.spacing,
+        lp: t.lp, kind: t.kind, erase: t.kind === 'image' && erase, colour, grey, size: b.size, hardness: b.hardness, opacity: b.opacity, flow: b.flow, spacing: b.spacing,
         lockAlpha: t.kind === 'image' && !!n?.lock_alpha, offset: t.offset, docW: st.doc!.w,
         selection: st.selection && t.id !== 'selection' ? selectionValues(st.selection) : null,
       })
@@ -951,7 +971,8 @@ export function EditorCanvas() {
       const tmp = document.createElement('canvas'); tmp.width = doc.w; tmp.height = doc.h
       const tc = tmp.getContext('2d')!
       const grad = st.fillMode === 'radial' ? tc.createRadialGradient(a.x, a.y, 0, a.x, a.y, Math.hypot(b.x - a.x, b.y - a.y)) : tc.createLinearGradient(a.x, a.y, b.x, b.y)
-      const [c0, c1] = t.kind === 'mask' ? ['#ffffff', '#000000'] : [st.brush.color, st.brush.background]
+      const grey = (c: string) => { const v = lumaOf(c); return `rgb(${v}, ${v}, ${v})` }
+      const [c0, c1] = t.kind === 'mask' ? [grey(st.brush.color), grey(st.brush.background)] : [st.brush.color, st.brush.background]   // D54
       grad.addColorStop(0, c0); grad.addColorStop(1, c1)
       tc.fillStyle = grad; tc.fillRect(0, 0, doc.w, doc.h)
       if (st.selection) { tc.globalCompositeOperation = 'destination-in'; tc.drawImage(selectionAlphaCanvas(st.selection), 0, 0) }
@@ -970,7 +991,8 @@ export function EditorCanvas() {
       const ctx = t.lp.ctx
       ctx.save()
       ctx.globalAlpha = st.brush.opacity
-      ctx.fillStyle = t.kind === 'mask' ? '#ffffff' : st.brush.color
+      const fv = lumaOf(st.brush.color)
+      ctx.fillStyle = t.kind === 'mask' ? `rgb(${fv}, ${fv}, ${fv})` : st.brush.color   // D54: a mask takes the foreground's grey
       if (st.selection) {
         // fill only inside the selection: a canvas whose alpha is the selection value, filled with the colour
         const tmp = selectionAlphaCanvas(st.selection)

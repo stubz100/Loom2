@@ -32,7 +32,7 @@ from .compose import BLEND_MODES, COMPOSE_VERSION, Renderer
 from .fsio import StateError, _tmp_for, new_id, replace, utc_now
 from .workspace import Workspace
 
-DOC_SCHEMA_VERSION = 2          # 2 (D52): masks carry density and feather (version-1 documents load with the defaults)
+DOC_SCHEMA_VERSION = 3          # 2 (D52): masks carry density and feather; 3 (D54): masks carry their default value (older documents load with the defaults)
 
 
 class StaleStack(StateError):
@@ -54,6 +54,7 @@ class Mask(BaseModel):
     y: int = 0
     density: float = Field(1.0, ge=0.0, le=1.0)    # D52: 1 − density·(1 − v) — at 0 the mask hides nothing
     feather: float = Field(0.0, ge=0.0, le=250.0)   # D52: Gaussian σ in px (three box passes, the editor's own blur)
+    default: int = Field(0, ge=0, le=255)          # D54: the value outside the mask's extent (PSD default colour) — reveal-all 255, else 0
 
 
 class NodeBase(BaseModel):

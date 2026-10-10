@@ -17,8 +17,9 @@ import type { LayerPixels } from './layerPixels'
 export interface StrokeSpec {
   lp: LayerPixels
   kind: 'image' | 'mask'          // a mask (or the quick-mask selection) stores grey values
-  erase: boolean
+  erase: boolean                  // image targets only — on a mask the eraser paints the background colour's grey (D54)
   colour: [number, number, number]
+  grey: number                    // D54: the value a mask stroke paints towards (the luma of the foreground, or of the background for the eraser)
   size: number; hardness: number; opacity: number; flow: number; spacing: number
   lockAlpha: boolean
   offset: { x: number; y: number }      // the target's position in the document
@@ -90,7 +91,7 @@ export class Stroke {
     const d = this.dirty
     if (!d) return
     this.dirty = null
-    const { lp, kind, erase, colour, opacity, lockAlpha, offset, selection, docW } = this.s
+    const { lp, kind, erase, colour, grey, opacity, lockAlpha, offset, selection, docW } = this.s
     const w = d.x1 - d.x0, h = d.y1 - d.y0
     lp.touch(d.x0, d.y0, d.x1 - 1, d.y1 - 1)                           // undo snapshots = the pre-stroke pixels
     const pre = lp.preStroke(d.x0, d.y0, w, h)
@@ -109,9 +110,9 @@ export class Stroke {
         }
         const r = a[j], g = a[j + 1], b = a[j + 2], al = a[j + 3]
         if (k <= 0) { o[j] = r; o[j + 1] = g; o[j + 2] = b; o[j + 3] = al; continue }
-        if (kind === 'mask') {                                           // grey values: towards white (paint) or black (erase)
+        if (kind === 'mask') {                                           // grey values: dst += (grey − dst)·k (PhotoCraft's lerp on GRAY8)
           const v0 = al === 255 ? r : (r * al) / 255
-          const v = v0 + ((erase ? 0 : 255) - v0) * k
+          const v = v0 + (grey - v0) * k
           o[j] = o[j + 1] = o[j + 2] = Math.round(v); o[j + 3] = 255
         } else if (erase) {
           o[j] = r; o[j + 1] = g; o[j + 2] = b; o[j + 3] = Math.round(al * (1 - k))

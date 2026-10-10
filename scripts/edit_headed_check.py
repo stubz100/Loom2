@@ -7,6 +7,9 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      zoom, and a window resize must not break either (the 2026-10-06 render-loop regression)
   paint              B + drag paints a visible stroke on the layer; Add mask, E + drag hides a band of the layer
                      (checker shows); the layer's eye toggles the stage; the Brushes tab is screenshotted
+  masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
+                     brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
+                     colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
   cmpdiag            GPU preview vs exact flatten after each feature in isolation (mask, group, every adjustment
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
   grid               D40 parity grid: seeded noise in every deterministic mode × plain / masked / clipped / isolated group /
@@ -33,7 +36,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -628,10 +631,10 @@ def brush_check(cdp: CDP) -> list[str]:
     # D52: an adjustment layer's mask is paintable, and a feathered mask is re-derived while it is painted
     run("edit.layer.adjustment.invert"); time.sleep(0.4); run("edit.mask.add"); time.sleep(0.3)
     cdp.eval(f"{S}.updateNode({S}.activeId, {{ mask: {{ ...{S}.doc.layers.find((n) => n.id === {S}.activeId).mask, feather: 3 }} }}, 'feather'); 1"); time.sleep(0.4)
-    run("edit.tool.eraser"); brush(opacity=1, size=40, hardness=1, smoothing=0)
+    run("edit.tool.brush"); brush(opacity=1, flow=1, size=40, hardness=1, smoothing=0)
     stroke([(W * 0.6, H * 0.2), (W * 0.9, H * 0.2)])
     mv = cdp.eval(f"{S}.masks.get({S}.activeId).ctx.getImageData({int(W * 0.75)}, {int(H * 0.2)}, 1, 1).data[0]")
-    check(cdp.eval(f"{S}.editingMask") is True and mv == 0, f"the eraser paints the invert adjustment's mask black ({mv})")
+    check(cdp.eval(f"{S}.editingMask") is True and mv == 0, f"the brush paints the invert adjustment's mask with the mask colours' black ({mv})")
     cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
     t0 = time.time()
     while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
@@ -1334,6 +1337,88 @@ def main() -> int:
             cdp.ctrl_wheel(cx, cy, 1); time.sleep(1.0)
             zoom2 = cdp.eval(ZOOM_SEL)
             check(zoom2 != zoom1, f"zoom keeps working after the resize: {zoom1} → {zoom2}")
+        elif mode == "masks":
+            # D54: the author's workflow by mouse, judged on screenshots only (the extractor re-renders every pass and would hide a stale
+            # stage) — add a mask, paint it with the brush, erase, swap colours, select the row, view the mask alone, hide all
+            ACT = f"(() => {{ const s = {STORE}; let hit = null; const w = (xs) => xs.forEach((x) => {{ if (x.id === s.activeId) hit = x; if (x.children) w(x.children) }}); w(s.doc.layers); return hit }})()"
+            X0, X1 = canvas["x"] + canvas["cssW"] * 0.3, canvas["x"] + canvas["cssW"] * 0.7
+
+            def state(label: str, sx: float, sy: float) -> dict:
+                js = f"""(() => {{ const s = {STORE}; const n = {ACT}; const r = document.querySelector('.edit-canvas').getBoundingClientRect();
+                  const dx = Math.round(({sx} - r.left - s.pan.x) / s.zoom), dy = Math.round(({sy} - r.top - s.pan.y) / s.zoom);
+                  const m = s.masks.get(n.id);
+                  const mo = n.mask ? {{ x: (n.mask.linked ? (n.x ?? 0) : 0) + n.mask.x, y: (n.mask.linked ? (n.y ?? 0) : 0) + n.mask.y }} : null;
+                  return JSON.stringify({{ tool: s.tool, colours: [s.brush.color, s.brush.background], maskPair: s.maskPairActive, editingMask: s.editingMask,
+                    view: s.maskView, mask: n.mask, value: m && mo ? m.ctx.getImageData(dx - mo.x, dy - mo.y, 1, 1).data[0] : null, history: s.history.map((h) => h.label).slice(-3) }}) }})()"""
+                st = json.loads(cdp.eval(js))
+                print(f"       {label}: {st}")
+                return st
+
+            def stroke(y: float) -> None:
+                cdp.drag(X0, y, X1, y); time.sleep(0.8)
+
+            def band(y: float) -> tuple:
+                return (canvas["x"] + canvas["cssW"] * 0.35, y - 15, canvas["x"] + canvas["cssW"] * 0.65, y + 15)
+
+            cdp.eval("document.body.focus(); 1")
+            cdp.key("b"); time.sleep(0.2)
+            image_colours = json.loads(cdp.eval(f"JSON.stringify([{STORE}.brush.color, {STORE}.brush.background])"))
+            clicked = cdp.eval("(() => { const b = document.querySelector('.layer-row.active .mask-box') || document.querySelector('.layer-row .mask-box'); if (!b) return false; b.click(); return true })()")
+            time.sleep(0.6)
+            st = state("after + mask", cx, cy)
+            check(bool(clicked) and st["editingMask"] and st["maskPair"] and st["colours"] == ["#000000", "#ffffff"] and st["mask"]["default"] == 255,
+                  "the + box adds a reveal-all mask, targets it and swaps in the mask colours (black / white)")
+            check(bool(cdp.eval("!!document.querySelector('.swatch-pair.for-mask')")), "the swatches say they are the mask colours")
+            s0 = cdp.shot(OUT / f"{mode}{tag}-0.png")
+            stroke(cy)
+            s1 = cdp.shot(OUT / f"{mode}{tag}-1-brush.png")
+            st = state("after a brush stroke", cx, cy)
+            d = region_diff(s0, s1, band(cy))
+            check(st["value"] <= 8 and d > 5, f"the brush (foreground black) hides the layer on a new mask: mask {st['value']}, stage changed by {d:.1f}/255")
+            cdp.key("e"); time.sleep(0.2)
+            stroke(cy)
+            s2 = cdp.shot(OUT / f"{mode}{tag}-2-eraser.png")
+            st = state("after an eraser stroke over it", cx, cy)
+            d = region_diff(s0, s2, band(cy))
+            check(st["value"] >= 247 and d < 2, f"the eraser (background white) reveals it again: mask {st['value']}, stage vs before {d:.1f}/255")
+            cdp.key("b"); time.sleep(0.1); cdp.key("x"); time.sleep(0.2)
+            stroke(cy + 50)
+            st = state("after X and a brush stroke", cx, cy + 50)
+            check(st["value"] == 255 and st["colours"] == ["#ffffff", "#000000"], "X swaps the mask colours — the brush then paints white")
+            cdp.key("x"); time.sleep(0.2)
+            cdp.eval("document.querySelector('.layer-row.active .name')?.click(); 1"); time.sleep(0.4)
+            st = state("after clicking the layer row", cx, cy)
+            check(st["editingMask"] is True, "clicking the layer row keeps the mask the target")
+            cdp.eval("document.querySelector('.layer-row.active img.thumb:not(.mask-thumb)')?.click(); 1"); time.sleep(0.4)
+            st = state("after clicking the pixel thumbnail", cx, cy)
+            check(st["editingMask"] is False and st["maskPair"] is False and st["colours"] == image_colours, f"the pixel thumbnail targets the pixels and brings the image colours back ({st['colours']})")
+            cdp.eval("(() => { const i = document.querySelector('.layer-row.active .mask-thumb'); i.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })); return 1 })()"); time.sleep(0.6)
+            s3 = cdp.shot(OUT / f"{mode}{tag}-3-gray.png")
+            st = state("after Alt-click on the mask thumbnail", cx, cy)
+            check(st["view"] == "gray" and st["editingMask"], "Alt-click on the mask thumbnail shows the mask alone and targets it")
+            stroke(cy - 60)
+            s4 = cdp.shot(OUT / f"{mode}{tag}-4-gray-brush.png")
+            d = region_diff(s3, s4, band(cy - 60))
+            check(d > 20, f"painting while the mask is shown alone paints the mask, visibly: changed by {d:.1f}/255")
+            cdp.eval("(() => { const i = document.querySelector('.layer-row.active .mask-thumb'); i.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })); return 1 })()"); time.sleep(0.5)
+            check(cdp.eval(f"{STORE}.maskView") == "off", "Alt-click again shows the image")
+            cdp.eval("(() => { const i = document.querySelector('.layer-row.active .mask-thumb'); i.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true })); return 1 })()"); time.sleep(0.5)
+            check(cdp.eval(f"{ACT}.mask.enabled") is False and bool(cdp.eval("!!document.querySelector('.layer-row.active .mask-wrap.off')")), "Shift-click disables the mask (red ✕ on the thumbnail)")
+            cdp.eval("window.__loom2Commands.runCommand('edit.mask.remove'); 1"); time.sleep(0.5)
+            s5 = cdp.shot(OUT / f"{mode}{tag}-5-removed.png")
+            d = region_diff(s0, s5, full := (canvas["x"] + canvas["cssW"] * 0.1, canvas["y"] + canvas["cssH"] * 0.1, canvas["x"] + canvas["cssW"] * 0.9, canvas["y"] + canvas["cssH"] * 0.9))
+            check(cdp.eval(f"{ACT}.mask") is None and d < 1 and cdp.eval(f"{STORE}.maskPairActive") is False, f"removing the mask restores the image and the image colours (stage {d:.1f}/255)")
+            cdp.eval("(() => { const b = document.querySelector('.layer-row.active .mask-box'); b.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true })); return 1 })()"); time.sleep(0.6)
+            s6 = cdp.shot(OUT / f"{mode}{tag}-6-hideall.png")
+            st = state("after Alt-click on the + box", cx, cy)
+            check(st["mask"] is not None and st["mask"]["default"] == 0 and st["value"] == 0 and region_diff(s0, s6, band(cy)) > 5, "Alt-click on the + box adds a hide-all mask (the layer disappears)")
+            cdp.key("e"); time.sleep(0.2)
+            stroke(cy)
+            s7 = cdp.shot(OUT / f"{mode}{tag}-7-reveal.png")
+            d = region_diff(s0, s7, band(cy))
+            check(d < 2, f"the eraser (white) brings the layer back through a hide-all mask: stage vs the bare layer {d:.1f}/255")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "paint":
             cdp.eval("document.body.focus(); 1")
             cdp.key("b"); time.sleep(0.2)
@@ -1349,12 +1434,11 @@ def main() -> int:
             added = cdp.eval("(() => { const b = document.querySelector('button[aria-label=\"Add mask\"]'); if (!b) return false; b.click(); return true })()")
             time.sleep(0.5)
             check(bool(added) and bool(cdp.eval(f"{STORE}.editingMask")), "Add mask (Layers toolbar) adds a mask and switches to editing it")
-            cdp.key("e"); time.sleep(0.2)
-            before2 = cdp.shot(OUT / f"{mode}{tag}-mask0.png")
+            before2 = cdp.shot(OUT / f"{mode}{tag}-mask0.png")                # D54: on a mask the brush paints the mask pair's black
             cdp.drag(canvas["x"] + canvas["cssW"] * 0.3, cy + 60, canvas["x"] + canvas["cssW"] * 0.7, cy + 60); time.sleep(0.6)
             after2 = cdp.shot(OUT / f"{mode}{tag}-mask1.png")
             d2 = region_diff(before2, after2, (band[0], cy + 20, band[2], cy + 100))
-            check(d2 > 5, f"eraser on the mask hides the layer there (checker shows): band changed by {d2:.1f}/255")
+            check(d2 > 5, f"the brush (mask colours: black) on the mask hides the layer there (checker shows): band changed by {d2:.1f}/255")
             cdp.eval("document.querySelector('.layer-row button.eye')?.click(); 1"); time.sleep(0.5)
             hidden = cdp.shot(OUT / f"{mode}{tag}-hidden.png")
             d3 = region_diff(after2, hidden, (canvas["x"] + canvas["cssW"] * 0.2, canvas["y"] + canvas["cssH"] * 0.3, canvas["x"] + canvas["cssW"] * 0.8, canvas["y"] + canvas["cssH"] * 0.7))

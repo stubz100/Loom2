@@ -57,10 +57,13 @@
 .layer-row .kind-box { display: grid; place-items: center; color: var(--fg2); font-size: 11px; }
 .layer-row .mask-thumb { width: 28px; height: 24px; object-fit: contain; }
 .layer-row .mask-thumb.editing, .layer-row .thumb.target { outline: 2px solid var(--accent); outline-offset: 1px; }   /* D52: the paint target */
+.layer-row .mask-wrap { position: relative; display: inline-grid; }
+.layer-row .mask-wrap.off .mask-thumb { opacity: .5; }
+.layer-row .mask-wrap.off::after { content: '✕'; position: absolute; inset: 0; display: grid; place-items: center; color: #e5484d; font-size: 18px; font-weight: 700; pointer-events: none; }   /* D54: a disabled mask */
+.swatch-pair.for-mask .hint { font-size: 10px; color: var(--accent); margin-right: 2px; }
 .layer-row .mask-link { width: 16px; height: 24px; padding: 0; border: 0; background: none; color: var(--fg3); display: grid; place-items: center; cursor: pointer; }
 .layer-row .mask-link.on { color: var(--fg2); }
 .layer-row .mask-link:hover { color: var(--fg); }
-.layer-row .mask-thumb.off { opacity: .4; }
 .layer-row .eye, .layer-row .lock { background: transparent; border: none; padding: 0; min-height: 0; color: var(--fg3); width: 18px; height: 18px; display: grid; place-items: center; }
 .layer-row .eye.on, .layer-row .lock.on { color: var(--fg); }
 .layer-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }

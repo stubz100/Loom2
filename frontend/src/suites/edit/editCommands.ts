@@ -43,8 +43,12 @@ registerCommands([
       ed().deleteNode(n.id); const depth = ed().history.length                        // undoable, so no confirm: the toast offers Undo while nothing else happened since
       useSession.getState().toast(`Deleted layer "${n.name}"`, 'info', () => { const s = ed(); if (s.history.length === depth && s.history[depth - 1]?.label === 'delete layer') s.undo() }) } },
   // masks
-  { id: 'edit.mask.add', scope: 'edit', label: 'Add mask', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask, run: () => ed().addMask(ed().activeId!, false) },
-  { id: 'edit.mask.fromSelection', scope: 'edit', label: 'Add mask from selection', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask && hasSel(), run: () => ed().addMask(ed().activeId!, true) },
+  // D54 (PhotoCraft): Reveal All / Hide All / Reveal Selection / Hide Selection; the + box in the layer row picks by selection and Alt
+  { id: 'edit.mask.add', scope: 'edit', label: 'Add mask', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask, hint: 'reveal all; Alt-click the + box in the row: hide all', run: () => ed().addMask(ed().activeId!, 'reveal') },
+  { id: 'edit.mask.hideAll', scope: 'edit', label: 'Add mask (hide all)', icon: SquareDashed, placement: ['context'], when: () => !!active() && !active()!.mask, run: () => ed().addMask(ed().activeId!, 'hide') },
+  { id: 'edit.mask.fromSelection', scope: 'edit', label: 'Add mask from selection', icon: SquareDashed, placement: ['toolbar', 'context'], when: () => !!active() && !active()!.mask && hasSel(), hint: 'reveals the selection', run: () => ed().addMask(ed().activeId!, 'revealSelection') },
+  { id: 'edit.mask.hideSelection', scope: 'edit', label: 'Add mask hiding the selection', icon: SquareDashed, placement: ['context'], when: () => !!active() && !active()!.mask && hasSel(), hint: 'Alt-click the + box in the row', run: () => ed().addMask(ed().activeId!, 'hideSelection') },
+  { id: 'edit.mask.view', scope: 'edit', label: 'Show mask alone', placement: ['context'], when: () => !!active()?.mask, hint: 'Alt-click the mask thumbnail', run: () => { const st = ed(); st.setView({ maskView: st.maskView === 'gray' ? 'off' : 'gray' }) } },
   { id: 'edit.mask.remove', scope: 'edit', label: 'Remove mask', placement: ['toolbar', 'context'], when: () => !!active()?.mask, run: () => ed().removeMask(ed().activeId!) },
   { id: 'edit.mask.toggle', scope: 'edit', label: 'Enable / disable mask', placement: ['context'], when: () => !!active()?.mask, hint: 'Shift-click the mask thumbnail', run: () => { const n = active(); if (n?.mask) ed().updateNode(n.id, { mask: { ...n.mask, enabled: !n.mask.enabled } }, 'toggle mask') } },
   { id: 'edit.mask.edit', scope: 'edit', label: 'Edit mask / edit pixels', placement: ['context'], when: () => !!active()?.mask, hint: 'click the mask thumbnail', run: () => { const st = ed(); st.setActive(st.activeId, !st.editingMask) } },
@@ -79,7 +83,7 @@ registerCommands([
   { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
   { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'context'], when: () => !!ed().lassoPoly, run: () => ed().setLassoPoly(null) },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
-  { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: activeRaster, run: () => ed().clearSelected() },
+  { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => activeRaster() || (ed().editingMask && !!active()?.mask), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
   // free transform (10 §4)
   { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => activeRaster() && !ed().transform, run: () => ed().beginTransform() },
@@ -120,8 +124,8 @@ const visLabel = () => (active()?.visible ? 'Hide layer' : 'Show layer')
 const maskItems = (): MenuItem[] => {
   const n = active()
   if (!n) return []
-  if (!n.mask) return [{ cmd: 'edit.mask.add' }, { cmd: 'edit.mask.fromSelection' }, { cmd: 'edit.mask.fromTransparency' }]
-  return [{ cmd: 'edit.mask.edit', label: ed().editingMask ? 'Edit pixels' : 'Edit mask' }, { cmd: 'edit.mask.toggle', label: n.mask.enabled ? 'Disable mask' : 'Enable mask' }, { cmd: 'edit.mask.link', label: n.mask.linked ? 'Unlink mask' : 'Link mask' }, { cmd: 'edit.mask.load' }, { cmd: 'edit.mask.apply' }, { cmd: 'edit.mask.remove' }]
+  if (!n.mask) return [{ cmd: 'edit.mask.add', label: 'Reveal all' }, { cmd: 'edit.mask.hideAll', label: 'Hide all' }, { cmd: 'edit.mask.fromSelection', label: 'Reveal selection' }, { cmd: 'edit.mask.hideSelection', label: 'Hide selection' }, { cmd: 'edit.mask.fromTransparency' }]
+  return [{ cmd: 'edit.mask.edit', label: ed().editingMask ? 'Edit pixels' : 'Edit mask' }, { cmd: 'edit.mask.view', label: ed().maskView === 'gray' ? 'Show the image' : 'Show mask alone' }, { cmd: 'edit.mask.toggle', label: n.mask.enabled ? 'Disable mask' : 'Enable mask' }, { cmd: 'edit.mask.link', label: n.mask.linked ? 'Unlink mask' : 'Link mask' }, { cmd: 'edit.mask.load' }, { cmd: 'edit.mask.apply' }, { cmd: 'edit.mask.remove' }]
 }
 
 /** Right-click on a layer row (the caller makes it active first). */

@@ -477,8 +477,15 @@ class Renderer:
         arr = derived_mask(arr, float(m.get("density", 1.0)), float(m.get("feather", 0.0)))
         # a linked mask follows the layer: its offset is relative to the layer's own (x, y)
         base_x, base_y = (int(node.get("x", 0)), int(node.get("y", 0))) if m.get("linked", True) else (0, 0)
-        full = place(self.h, self.w, np.repeat(to_float(arr)[..., None], 4, axis=-1), base_x + int(m.get("x", 0)), base_y + int(m.get("y", 0)))
-        return full[..., 0]
+        mx, my = base_x + int(m.get("x", 0)), base_y + int(m.get("y", 0))
+        full = place(self.h, self.w, np.repeat(to_float(arr)[..., None], 4, axis=-1), mx, my)[..., 0]
+        default = int(m.get("default", 0))
+        if default:
+            # D54: outside its extent a mask reads its default value, through the same density as the pixels inside
+            outside = derived_mask(np.full((1, 1), default, dtype=np.uint8), float(m.get("density", 1.0)))[0, 0] / 255.0
+            cover = place(self.h, self.w, np.ones(arr.shape + (4,), dtype=np.float32), mx, my)[..., 0]
+            full = full + (1.0 - cover) * np.float32(outside)
+        return full
 
     def _k(self, node: dict) -> Arr | float:
         """Opacity × fill × mask: how much of the node reaches what it composites onto."""

@@ -179,6 +179,16 @@ layer's alpha; **Mask from transparency** turns the alpha into a linked mask and
 the accent frame; **Delete** while a mask is being edited removes the mask, not the layer. Documents are schema 2 (version-1 files load
 with density 1 and feather 0).
 
+**Mask mechanics from PhotoCraft (D54, 2026-10-10).** The mask target is app-wide: clicking a layer row keeps it when that layer has a
+mask (adjustment and filter rows target their mask), the pixel thumbnail targets the pixels, the mask thumbnail the mask (accent frame
+on the target). While a mask — or Quick Mask — is the target a separate, remembered **mask colour pair** is live (the swatches say
+*mask*; it starts black / white, a deliberate difference from PhotoCraft's and Photoshop's white / black, so the first stroke on a new
+mask hides): the brush paints the foreground's grey (Rec.601 luma), the eraser the background's, fill and gradient use the pair's greys
+and Delete clears to the background. A mask has a **default value** outside its extent (reveal-all 255; hide-all, from selection and
+from transparency 0; schema 3). Add mask: the + box in the row reveals all (or the selection), Alt-click hides all (or the selection);
+the layer menu lists all four plus From transparency. Mask thumbnail: Alt-click shows the mask alone in grey (painting continues on it),
+Ctrl-click loads it as a selection, Shift-click disables it (red ✕). Headed mode `masks` walks this by mouse and judges screenshots.
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

@@ -191,6 +191,12 @@ export function makeDab(size: number, hardness: number, color: string, alpha: nu
   return c
 }
 
+/** D54: a colour as a mask / selection value — Rec.601 luma, as PhotoCraft writes colours into grey surfaces. */
+export function lumaOf(hex: string): number {
+  const [r, g, b] = hexToRgb(hex)
+  return Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+}
+
 export function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
   if (!m) return [0, 0, 0]

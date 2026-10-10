@@ -6,7 +6,7 @@
 import { LayerPixels, type Rect } from './layerPixels'
 import { gaussian } from './selectionOps'
 
-export interface MaskParams { density?: number; feather?: number }
+export interface MaskParams { density?: number; feather?: number; default?: number }
 
 const density = (m: MaskParams) => Math.min(1, Math.max(0, m.density ?? 1))
 const feather = (m: MaskParams) => Math.max(0, m.feather ?? 0)
@@ -43,6 +43,25 @@ export function derivedMask(raw: LayerPixels, m: MaskParams): LayerPixels {
   out.refresh()
   cache.set(raw, { version: raw.version, density: d, feather: f, out })
   return out
+}
+
+/** D54: the value a mask reads outside its extent — its default, through the density (compose.py's rounding). */
+export const outsideValue = (m: MaskParams): number => Math.round(255 - density(m) * (255 - (m.default ?? 0)))
+
+/** D54: a w×h canvas whose alpha is the mask as it renders over the region at document (rx, ry) — the derived mask where it has
+ * pixels, its default elsewhere; `mx`, `my` is the mask's document position. For baking a mask into pixels (Apply, merge down). */
+export function maskAlphaCanvas(raw: LayerPixels, m: MaskParams, mx: number, my: number, rx: number, ry: number, w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h)
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = `rgba(255, 255, 255, ${outsideValue(m) / 255})`; ctx.fillRect(0, 0, w, h)
+  ctx.clearRect(mx - rx, my - ry, raw.width, raw.height)
+  const d = derivedMask(raw, m)
+  const img = d.ctx.getImageData(0, 0, d.width, d.height)
+  for (let i = 0; i < img.data.length; i += 4) { img.data[i + 3] = d.grey && img.data[i + 3] !== 255 ? Math.round((img.data[i] * img.data[i + 3]) / 255) : img.data[i]; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 }
+  const t = document.createElement('canvas'); t.width = d.width; t.height = d.height
+  t.getContext('2d')!.putImageData(img, 0, 0)
+  ctx.drawImage(t, mx - rx, my - ry)
+  return c
 }
 
 /** Re-derive around a changed rect `r`: the derived values change up to the blur's reach beyond it (the output region), and those

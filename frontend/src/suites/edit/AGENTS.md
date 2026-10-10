@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft).
 
 ## Files
 
@@ -52,7 +52,12 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 11. **A mask renders through `derivedMask` (D52).** Anything that shows or bakes a mask (the scene's mask sprites, merge down, Apply mask)
    takes `derivedMask(raw, node.mask)`, never the raw canvas, so density and feather match `compose.derived_mask` (same box radii, same
    rounding). The tools paint the raw mask; `LayerPixels.version` / `takeDamage()` tell the cache what to re-derive, so every write to a
-   mask must end in `refresh()` or `refreshRect()`.
+   mask must end in `refresh()` or `refreshRect()`. Outside its extent a mask reads `mask.default` (D54): `maskSprite` pads with a pass
+   when the content reaches past the extent, `maskAlphaCanvas` does the same for baking.
+12. **Mask target and colours (D54).** `editingMask` is app-wide; a store subscription clears it when the active layer has no mask and
+   swaps `brush.color / background` with `otherColours` whenever the live target changes between pixels and a mask (or Quick Mask) —
+   so tools just read `brush`; mask strokes paint `lumaOf(colour)`, never a fixed white / black. Persisted state keeps the image pair in
+   `brush` and the mask pair in `maskColours`.
 
 ## Renderer selection
 

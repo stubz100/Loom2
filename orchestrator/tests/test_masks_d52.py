@@ -106,5 +106,21 @@ def test_version_1_documents_load_with_the_defaults_and_save_as_current(tmp_path
     od.save()
     with zipfile.ZipFile(tmp_path / "old.ora") as z:
         saved = json.loads(z.read("loom2.json"))
-    assert saved["schema_version"] == DOC_SCHEMA_VERSION == 2
+    assert saved["schema_version"] == DOC_SCHEMA_VERSION == 3
     assert saved["layers"][0]["mask"]["density"] == 1.0
+
+
+def test_d54_outside_its_extent_a_mask_reads_its_default():
+    px = np.zeros((4, 8, 4), dtype=np.uint8)
+    px[...] = (255, 0, 0, 255)
+    small = np.full((2, 2), 255, dtype=np.uint8)                  # a 2×2 white mask at (1, 1)
+    node = RasterLayer(id="a", w=8, h=4, mask=Mask(linked=False, x=1, y=1)).model_dump()
+    out = compose.Renderer(8, 4, {"a": px}, {"a": small}, background="transparent").flatten_u8([node])
+    assert out[1, 1, 3] == 255 and out[0, 0, 3] == 0 and out[3, 7, 3] == 0          # default 0: hidden outside
+    node["mask"]["default"] = 255
+    out = compose.Renderer(8, 4, {"a": px}, {"a": small}, background="transparent").flatten_u8([node])
+    assert out[0, 0, 3] == 255 and out[3, 7, 3] == 255                                # default 255: shown outside
+    node["mask"]["density"] = 0.5
+    small[...] = 0
+    out = compose.Renderer(8, 4, {"a": px}, {"a": small}, background="transparent").flatten_u8([node])
+    assert int(out[1, 1, 3]) in (127, 128) and out[0, 0, 3] == 255                   # density lifts the inside; the 255 default stays 255

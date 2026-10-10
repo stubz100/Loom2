@@ -74,10 +74,10 @@ def _check_layer(layer) -> None:
 def _mask_params(layer) -> dict:
     """D52: the user mask's density (0–255 → 0–1) and feather (px, taken as the Gaussian σ — every corpus file that sets it also has a
     vector mask, so Photoshop's exact feather kernel is not measured here)."""
+    out: dict = {"default": int(layer.mask.background_color)}     # D54 (the oracle's masks are document-sized, so it is moot here)
     pr = layer.mask.parameters
     if pr is None:
-        return {}
-    out: dict = {}
+        return out
     if pr.user_mask_density is not None:
         out["density"] = pr.user_mask_density / 255
     if pr.user_mask_feather:

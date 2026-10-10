@@ -14,7 +14,8 @@ import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { useAiPanel } from './aiPanelStore'
-import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
+import { selectionAlphaCanvas, type LayerPixels } from './layerPixels'
+import { PathWalker, Smoother, Stroke } from './brushEngine'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
@@ -58,6 +59,8 @@ function outlineSegments(sel: LayerPixels): number[] {
 }
 
 type Pt = { x: number; y: number }
+/** D51: where the last stroke ended (document coordinates) and on which target — Shift-click continues from it. */
+let lastPaint: { id: string; at: Pt } | null = null
 /** Overlay Graphics that live across scene rebuilds (cleared and redrawn in place); everything else in the overlay is rebuilt. */
 const OVERLAY_GRAPHICS = ['frame', 'ants', 'aiprompt', 'gguide', 'xform', 'preview']
 
@@ -533,7 +536,9 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; dab?: HTMLCanvasElement; dist?: number; t0?: Xform; hx?: number; hy?: number; a0?: number; alt?: boolean }
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; t0?: Xform; hx?: number; hy?: number; a0?: number; alt?: boolean
+      // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
+      stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
     let spaceHeld = false
     const onKey = (e: KeyboardEvent) => { if (e.code === 'Space') { if ((e.target as HTMLElement)?.closest('input, textarea, select')) return; spaceHeld = e.type === 'keydown'; host.style.cursor = spaceHeld ? 'grab' : '' } }
@@ -551,16 +556,52 @@ export function EditorCanvas() {
       return lp ? { lp, kind: 'image', offset: { x: n.x ?? 0, y: n.y ?? 0 }, id: n.id } : null
     }
 
-    const stamp = (lp: LayerPixels, dab: HTMLCanvasElement, x: number, y: number, erase: boolean, mask: boolean, flow: number) => {
-      const s = dab.width
-      const x0 = Math.floor(x - s / 2), y0 = Math.floor(y - s / 2)
-      lp.touch(x0, y0, x0 + s, y0 + s)
-      const ctx = lp.ctx
-      ctx.save()
-      ctx.globalAlpha = flow
-      ctx.globalCompositeOperation = erase ? (mask ? 'source-over' : 'destination-out') : 'source-over'
-      ctx.drawImage(dab, x0, y0)
-      ctx.restore()
+    /** D50: a new stroke on the paint target, with the brush options, the selection as a clip and the layer's lock transparency. */
+    const beginStroke = (t: NonNullable<ReturnType<typeof paintTarget>>, erase: boolean): Stroke => {
+      const st = useEditor.getState()
+      const b = st.brush
+      const hex = (t.kind === 'mask' ? '#ffffff' : b.color).replace('#', '')
+      const colour: [number, number, number] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0) as [number, number, number]
+      const n = findNode(st.doc, st.activeId)
+      return new Stroke({
+        lp: t.lp, kind: t.kind, erase, colour, size: b.size, hardness: b.hardness, opacity: b.opacity, flow: b.flow, spacing: b.spacing,
+        lockAlpha: t.kind === 'image' && !!n?.lock_alpha, offset: t.offset, docW: st.doc!.w,
+        selection: st.selection && t.id !== 'selection' ? selectionValues(st.selection) : null,
+      })
+    }
+    /** End a stroke: one history entry, the layer marked for upload, and the point Shift-click lines continue from. */
+    const endStroke = (stroke: Stroke, t: { id: string; kind: 'image' | 'mask' }, endAt: Pt) => {
+      const st = useEditor.getState()
+      stroke.flush()
+      const tiles = stroke.s.lp.endStroke()
+      stroke.s.lp.dirty = true
+      st.pushHistory({ label: st.tool === 'eraser' ? 'erase' : st.quickMask ? 'quick mask' : t.kind === 'mask' ? 'paint mask' : 'brush', layerId: t.id, kind: t.kind, tiles, at: Date.now() })
+      lastPaint = { id: t.id, at: endAt }
+      st.touch(); st.bump()
+      markPassesDirty(); requestRender()
+    }
+    /** Dabs along a straight segment (layer coordinates), then flush. */
+    const line = (stroke: Stroke, a: Pt, b: Pt) => {
+      const w = new PathWalker(Math.max(1, stroke.s.size * stroke.s.spacing))
+      stroke.dab(a.x, a.y)
+      w.walk(a, b, (x, y) => stroke.dab(x, y))
+      stroke.flush()
+    }
+    // the catch-up feed (D51): while the pointer rests the brush keeps moving towards it, one step per frame
+    let catchRaf = 0
+    const catchUp = () => {
+      catchRaf = 0
+      if (!drag || drag.kind !== 'paint' || !drag.stroke || !drag.smoother || drag.line) return
+      if (performance.now() - (drag.movedAt ?? 0) > 30) {
+        const prev = drag.brushAt!
+        const pt = drag.smoother.catchUp()
+        if (pt) {
+          drag.walker!.walk({ x: prev.x - drag.offset!.x, y: prev.y - drag.offset!.y }, { x: pt.x - drag.offset!.x, y: pt.y - drag.offset!.y }, (x, y) => drag!.stroke!.dab(x, y))
+          drag.brushAt = { ...pt }
+          drag.stroke.flush(); markPassesDirty(); requestRender()
+        }
+      }
+      catchRaf = requestAnimationFrame(catchUp)
     }
 
     const onDown = (e: PointerEvent) => {
@@ -582,16 +623,23 @@ export function EditorCanvas() {
       if (tool === 'zoom') { zoomAt(e, e.altKey ? 1 / 1.5 : 1.5); return }
       if (tool === 'eyedropper') { void pick(p); return }
       if (tool === 'brush' || tool === 'eraser') {
+        // D51: Alt-click (or the armed eyedropper chip) picks the colour instead of painting
+        if (e.altKey || st.pickOnce) { if (st.pickOnce) st.setView({ pickOnce: false }); void pick(p); return }
         const t = paintTarget()
         if (!t) return
-        const b = st.brush
         const erase = tool === 'eraser'
-        const color = t.kind === 'mask' ? (erase ? '#000000' : '#ffffff') : b.color
-        const dab = makeDab(b.size, b.hardness, color, b.opacity)
-        t.lp.beginStroke()
-        drag = { kind: 'paint', start: p, last: p, target: t.lp, dab, dist: 0 }
-        stamp(t.lp, dab, p.x - t.offset.x, p.y - t.offset.y, erase, t.kind === 'mask', b.flow)
-        t.lp.refresh(); markPassesDirty(); requestRender()
+        const stroke = beginStroke(t, erase)
+        const local = { x: p.x - t.offset.x, y: p.y - t.offset.y }
+        if (e.shiftKey && lastPaint && lastPaint.id === t.id) {           // D51: Shift-click — a straight line from the last point
+          line(stroke, { x: lastPaint.at.x - t.offset.x, y: lastPaint.at.y - t.offset.y }, local)
+          endStroke(stroke, t, p)
+          return
+        }
+        drag = { kind: 'paint', start: p, last: p, target: t.lp, stroke, offset: t.offset, brushAt: p, movedAt: performance.now(), targetId: t.id, targetKind: t.kind,
+          line: st.brushLine, smoother: new Smoother(p, (st.brush.smoothing * 100) / Math.max(1e-3, st.zoom)), walker: new PathWalker(Math.max(1, st.brush.size * st.brush.spacing)) }
+        stroke.dab(local.x, local.y); stroke.flush()
+        markPassesDirty(); requestRender()
+        if (!drag.line && !catchRaf) catchRaf = requestAnimationFrame(catchUp)
         return
       }
       if (tool === 'move') {
@@ -635,30 +683,24 @@ export function EditorCanvas() {
         if (e.shiftKey && drag.hx && drag.hy) { const s = (Math.abs(sx) + Math.abs(sy)) / 2; sx = Math.sign(sx) * s; sy = Math.sign(sy) * s }
         st.setTransform({ sx: Math.abs(sx) < 0.01 ? 0.01 * Math.sign(sx || 1) : sx, sy: Math.abs(sy) < 0.01 ? 0.01 * Math.sign(sy || 1) : sy }); return
       }
-      if (drag.kind === 'paint' && drag.target && drag.dab) {
-        const t = paintTarget(); if (!t) return
-        const b = st.brush
-        const erase = st.tool === 'eraser'
-        const events = (e as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] }).getCoalescedEvents?.() ?? [e]
-        const step = Math.max(1, b.size * b.spacing)
-        for (const ev of events) {
-          const q = toDoc(ev)
-          const sm = b.smoothing
-          const tx = drag.last.x + (q.x - drag.last.x) * (1 - sm * 0.6), ty = drag.last.y + (q.y - drag.last.y) * (1 - sm * 0.6)
-          const dx = tx - drag.last.x, dy = ty - drag.last.y
-          const d = Math.hypot(dx, dy)
-          drag.dist = (drag.dist ?? 0) + d
-          let acc = drag.dist
-          while (acc >= step) {
-            const f = 1 - (acc - step) / Math.max(d, 1e-6)
-            const sx = drag.last.x + dx * f, sy = drag.last.y + dy * f
-            stamp(drag.target, drag.dab, sx - t.offset.x, sy - t.offset.y, erase, t.kind === 'mask', b.flow)
-            acc -= step
+      if (drag.kind === 'paint' && drag.stroke) {
+        const o = drag.offset!
+        drag.movedAt = performance.now()
+        if (drag.line) {                                                 // straight-line mode: redraw start → pointer each move
+          drag.stroke.reset()
+          line(drag.stroke, { x: drag.start.x - o.x, y: drag.start.y - o.y }, { x: p.x - o.x, y: p.y - o.y })
+          drag.last = p
+        } else {
+          const events = (e as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] }).getCoalescedEvents?.() ?? [e]
+          for (const ev of events) {
+            const prev = drag.brushAt!
+            const b = drag.smoother!.push(toDoc(ev))
+            drag.walker!.walk({ x: prev.x - o.x, y: prev.y - o.y }, { x: b.x - o.x, y: b.y - o.y }, (x, y) => drag!.stroke!.dab(x, y))
+            drag.brushAt = { ...b }
           }
-          drag.dist = acc
-          drag.last = { x: tx, y: ty }
+          drag.last = p
+          drag.stroke.flush()
         }
-        drag.target.refresh()
         markPassesDirty()                                            // strokes inside masked layers / isolated groups
         requestRender()
         return
@@ -682,12 +724,15 @@ export function EditorCanvas() {
       if (!drag) return
       host.releasePointerCapture(e.pointerId)
       if (drag.kind === 'pan') host.style.cursor = spaceHeld ? 'grab' : ''
-      if (drag.kind === 'paint' && drag.target) {
-        const tiles = drag.target.endStroke()
-        drag.target.dirty = true
-        const t = paintTarget()
-        if (t) st.pushHistory({ label: st.tool === 'eraser' ? 'erase' : st.quickMask ? 'quick mask' : t.kind === 'mask' ? 'paint mask' : 'brush', layerId: t.id, kind: t.kind, tiles, at: Date.now() })
-        st.touch(); st.bump()
+      if (drag.kind === 'paint' && drag.stroke) {
+        if (catchRaf) { cancelAnimationFrame(catchRaf); catchRaf = 0 }
+        const o = drag.offset!
+        if (!drag.line && drag.smoother) {                                // catch-up on release: finish at the pointer
+          const prev = drag.brushAt!
+          const end = drag.smoother.finish()
+          drag.walker!.walk({ x: prev.x - o.x, y: prev.y - o.y }, { x: end.x - o.x, y: end.y - o.y }, (x, y) => drag!.stroke!.dab(x, y))
+        }
+        endStroke(drag.stroke, { id: drag.targetId!, kind: drag.targetKind! }, drag.line ? drag.last : drag.smoother?.brush ?? drag.last)
       }
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
       if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(e, st.selectionMode))

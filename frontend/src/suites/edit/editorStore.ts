@@ -14,6 +14,7 @@ export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: numb
 export interface Node {
   kind: NodeKind; id: string; name: string; opacity: number; blend: string; visible: boolean; locked: boolean; clip: boolean; mask: MaskRef | null
   x?: number; y?: number; w?: number; h?: number; fill?: number; recipe?: Record<string, unknown> | null; lineage_asset_id?: string | null
+  lock_alpha?: boolean            // D50: painting keeps the layer's transparency
   passthrough?: boolean; children?: Node[]
   type?: string; params?: Record<string, unknown>
 }
@@ -58,7 +59,7 @@ export interface HistoryEntry {
 }
 export type SelectionModify = 'expand' | 'contract' | 'border' | 'smooth' | 'feather'
 type ViewKeys = 'zoom' | 'pan' | 'overlay' | 'before' | 'pixelGrid' | 'quickMask' | 'marqueeShape' | 'selectionMode' | 'tolerance' | 'fillMode'
-  | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx'
+  | 'marqueeFeather' | 'marqueeStyle' | 'marqueeW' | 'marqueeH' | 'lassoKind' | 'wandContiguous' | 'wandMerged' | 'wandAA' | 'selModifyPx' | 'brushLine' | 'pickOnce'
 
 export interface EditorState {
   doc: DocumentStack | null; docDirty: boolean; loading: boolean; saving: boolean; error: string | null
@@ -69,6 +70,7 @@ export interface EditorState {
   lassoKind: 'freehand' | 'polygon'; lassoPoly: { x: number; y: number }[] | null
   wandContiguous: boolean; wandMerged: boolean; wandAA: boolean
   selModifyPx: number
+  brushLine: boolean; pickOnce: boolean          // D51: straight-line strokes; the next click picks the colour
   /** D45: the user's Refine Edge settings over /capabilities.refine_edge.defaults (empty = the server's defaults, T8). */
   refineEdge: Partial<RefineEdgeParams>
   /** D46: the editor's clipboard — the copied pixels and where they came from (document coordinates). */
@@ -350,7 +352,7 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
-        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null,
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null, brushLine: false, pickOnce: false,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,

@@ -2220,3 +2220,26 @@ Inspector → lineage → split → pages.
 
 - GitHub Actions run 38060336289 on `55542e0` (includes `1de73aa`, whose own run was superseded): offline tests + frontend for `full`
   and `open` (with the Photoshop-oracle step) and both installers — all success. S1's go / no-go (PC14 / PC15) is still the author's.
+
+## 2026-10-10 17:51 — Wave PE4 opened (D50–D53); D50 brush model and D51 smoothing / painting modifiers landed
+
+- Recorded D50 (brush model), D51 (smoothing + modifiers), D52 (masks), D53 (partial uploads) in 13; 12 §8c PE4 open.
+- **D50** `brushEngine.ts` (port of PhotoCraft `paint/render.rs`): a per-stroke coverage buffer, c ← c + flow·f·(1 − c), f the tip
+  falloff (hardness core, then (1 − t²)⁴; tips under 3 px radius sampled 4×4); each pointer move recomposites only the touched rect from
+  the **pre-stroke pixels** — the undo tile snapshots the layer keeps anyway (`LayerPixels.preStroke`) — as colour × coverage × opacity
+  × selection, so a stroke never exceeds its opacity. The eraser removes alpha by the same coverage; mask / quick-mask strokes move grey
+  values towards white / black. New: painting is **clipped to the selection** (it was not); a per-layer **lock transparency**
+  (`lock_alpha` on raster layers; PSD: transparency lock).
+- **D51** a pulled-string `Smoother` (string = smoothing × 100 screen px ÷ zoom) with **catch-up** every frame while the pointer rests and a
+  finish at the release point, over a `PathWalker` that carries the dab spacing across segments; **Shift-click** paints a straight line
+  from where the last stroke ended; the **Straight lines** toggle makes a drag paint start → release; **Alt-click** or the one-shot
+  **Pick colour** chip picks the composite colour. All with mouse placements (brush options, canvas menu).
+- **Checks:** new headed mode `edit_headed_check.py brush` (by mouse events): a stroke crossing itself at 50 % → max alpha 128 (the old
+  dabs reached 255); undo; a 2-px diagonal line without gaps (weakest 254); paint stays in the selection; lock transparency (colour
+  changes, alpha 128 kept, empty pixels stay empty); a 50 % eraser crossing itself → 128; Shift-click line; line mode ignores the wiggles;
+  Alt-click and the chip pick; with smoothing 0.9 the stroke reaches the release point — **all passed**. `perf`: brush on the 4K
+  document p50 33.0 ms (one 31 Hz display frame, as at M7), the pointer handler itself 0.2 ms p50 / 0.4 ms p95; `paint`, `cmpdiag`
+  passed; 165 offline; build ok, lint unchanged.
+- **Environment, not code:** `tour` failed twice at PSD export / compare with "504 Outdated Optimize Dep" — the author's own `npm run
+  dev` (started 17:32) holds a stale dependency hash after a Vite of mine, refused on the busy port, re-optimised the shared
+  `node_modules/.vite` cache. Restarting `npm run dev` clears it; the same tour steps passed at `1de73aa`.

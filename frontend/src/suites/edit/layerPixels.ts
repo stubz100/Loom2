@@ -73,6 +73,28 @@ export class LayerPixels {
     }
   }
 
+  /** D50: the pixels of a region as they were before this stroke — from the snapshots of the tiles touched so far (call `touch` for
+   * the region first). */
+  preStroke(x: number, y: number, w: number, h: number): ImageData {
+    const out = new ImageData(Math.max(1, w), Math.max(1, h))
+    for (let ty = Math.floor(y / TILE); ty * TILE < y + h; ty++) for (let tx = Math.floor(x / TILE); tx * TILE < x + w; tx++) {
+      const t = this.strokeTiles.get(`${tx},${ty}`)
+      if (!t) continue
+      const ix0 = Math.max(x, t.x), iy0 = Math.max(y, t.y), ix1 = Math.min(x + w, t.x + t.data.width), iy1 = Math.min(y + h, t.y + t.data.height)
+      for (let yy = iy0; yy < iy1; yy++) {
+        const src = ((yy - t.y) * t.data.width + (ix0 - t.x)) * 4
+        out.data.set(t.data.data.subarray(src, src + (ix1 - ix0) * 4), ((yy - y) * w + (ix0 - x)) * 4)
+      }
+    }
+    return out
+  }
+
+  /** Upload a changed region (layer pixels, x1 / y1 exclusive) to the GPU texture. */
+  refreshRect(x0: number, y0: number, x1: number, y1: number): void {
+    void x0; void y0; void x1; void y1
+    this.refresh()
+  }
+
   /** The snapshots captured during this stroke (the history entry). */
   endStroke(): TileSnapshot[] { const out = [...this.strokeTiles.values()]; this.strokeTiles.clear(); return out }
 

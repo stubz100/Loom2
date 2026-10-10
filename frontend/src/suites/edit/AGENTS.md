@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing).
 
 ## Files
 
@@ -12,6 +12,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `layerPixels.ts` | `LayerPixels`: a 2D canvas per raster layer or mask (the CPU truth), its Pixi texture, 256² tile snapshots for undo, raw RGBA transfer |
 | `blendModes.ts` | 24 blend modes (W3C formula, Photoshop's Soft / Vivid Light, Hard Mix, Burn / Dodge edges) as `BlendModeFilter` subclasses (GLSL + WGSL) with alternate `-b` names; `w3c-opaque` for clip-run bases; `BLEND_GL` / `BLEND_WGSL` (`w3_blendBy`) for the adjustment filters |
 | `adjustFilters.ts` | adjustment and filter layers previewed as per-layer filters |
+| `brushEngine.ts` | D50 / D51: per-stroke coverage buffer recomposited from the undo snapshots (`LayerPixels.preStroke`), tip falloff, `PathWalker`, pulled-string `Smoother` |
 | `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
 | `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
@@ -57,6 +58,6 @@ the WebGPU renderer actually draws, and swaps to WebGL2 when it does not (D3 ame
 ## Checking changes
 
 - Headless Edge **cannot present WebGPU**: use `scripts/edit_headed_check.py` (visible Edge over CDP, Vite on 1420) — modes `render`, `paint`,
-  `tour`, `cmpdiag`, `grid` (D40: every mode × plain / masked / clipped / isolated / pass-through 50 %), `selection` (PE2), `psd`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
+  `tour`, `cmpdiag`, `grid` (D40: every mode × plain / masked / clipped / isolated / pass-through 50 %), `brush` (PE4), `selection` (PE2), `psd`, `animate`, `perf`. `perf` budgets: 6×4K composite p95 ≤ 16.7 ms (measured 7.1 ms, M7).
 - Rig acceptance for the AI verbs: `scripts/m5_acceptance.py`.
 - `npm run build` must stay clean; `window.__loom2Editor` / `__loom2App` are exposed in dev builds for the checks.

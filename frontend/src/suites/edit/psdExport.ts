@@ -84,6 +84,7 @@ export function buildPsd(doc: DocumentStack, pixels: Map<string, LayerPixels>, m
       const n = nodes[i]
       const base: Layer = { name: n.name, opacity: n.opacity, blendMode: PSD_BLEND[n.blend] ?? 'normal', hidden: !n.visible, clipping: n.clip }
       if (n.locked) base.protected = { transparency: true, composite: true, position: true }   // the editor's lock blocks paint and move: Lock All
+      else if (n.lock_alpha) base.protected = { transparency: true }                              // D50
       if (n.mask) {
         const m = masks.get(n.id)
         if (m) {

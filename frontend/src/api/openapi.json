@@ -5905,6 +5905,11 @@
             ],
             "title": "Lineage Asset Id"
           },
+          "lock_alpha": {
+            "default": false,
+            "title": "Lock Alpha",
+            "type": "boolean"
+          },
           "locked": {
             "default": false,
             "title": "Locked",
@@ -5978,6 +5983,7 @@
           "w",
           "h",
           "fill",
+          "lock_alpha",
           "recipe",
           "lineage_asset_id"
         ],

@@ -157,6 +157,8 @@ function ToolOptions() {
 /** The brush itself (10 §4): size in px with a number field, the rest in %; shared by the Tool options and the Brushes tab. */
 function BrushControls() {
   const b = useEditor((s) => s.brush)
+  const line = useEditor((s) => s.brushLine)
+  const pickOnce = useEditor((s) => s.pickOnce)
   const set = (p: Partial<typeof b>) => ed().setBrush(p)
   return (
     <>
@@ -166,6 +168,8 @@ function BrushControls() {
       <Slider label="flow" value={b.flow} min={0.01} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ flow: v })} />
       <Slider label="spacing" value={b.spacing} min={0.02} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ spacing: v })} />
       <Slider label="smoothing" value={b.smoothing} min={0} max={1} step={0.01} num scale={100} unit="%" onChange={(v) => set({ smoothing: v })} />
+      <label /><span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><CommandButton id="edit.brush.line" text active={line} /> <CommandButton id="edit.brush.pick" text active={pickOnce} /></span>
+      <span className="hint full">smoothing pulls the brush on a string (it catches up when you pause); Shift-click draws a straight line from the last stroke; Alt-click picks a colour</span>
     </>
   )
 }

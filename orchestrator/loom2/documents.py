@@ -73,6 +73,7 @@ class RasterLayer(NodeBase):
     w: int = 0
     h: int = 0
     fill: float = 1.0
+    lock_alpha: bool = False              # D50: painting keeps the layer's transparency (editor only; PSD: transparency lock)
     recipe: dict | None = None            # origin recipe for AI layers (10 §3)
     lineage_asset_id: str | None = None
 

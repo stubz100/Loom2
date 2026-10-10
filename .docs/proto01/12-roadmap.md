@@ -309,7 +309,7 @@ when the wave starts.
 | **PE1 · Fidelity** | PC3 + PC1 + PC2 → D39 Photoshop compositing · PC4 → D40 Photoshop oracle · PC5 → D41 PSD export · PC6 → D42 rename retry | compose unit tests; `cmpdiag` grid p99 ≤ 1; corpus floor; psd-tools read-back; fsio failure injection |
 | **PE2 · Selection** | PC7 → D43 selection history · PC8 → D44 manual toolkit · PC9 → D45 refine edge · PC10 → D46 clipboard | headed tour by mouse; EDT vs brute force |
 | **PE3 · AI blend-in** | PC11 → D47 seamless paste-back + result masks · PC12 → D48 match colour · PC13 → D49 colour to alpha · S1 → PC14, PC15 | bench inpaint sheets on the rig |
-| PE4 · Paint and masks | PC16 brush model · PC17 smoothing · PC18 masks · PC19 partial uploads | headed paint + perf |
+| **PE4 · Paint and masks** | PC16 → D50 brush model · PC17 → D51 smoothing + modifiers · PC18 → D52 masks · PC19 → D53 partial uploads | headed paint + perf |
 | PE5 · Panels | PC22 mouse kit · PC20 layers panel · PC21 properties | headed tour |
 | PE6 · Transform | PC23 transform · S2 → PC24 quick select | headed tour; spike numbers |
 
@@ -322,6 +322,8 @@ relative to H2.
 
 **PE3 status 2026-10-10:** D47 (seamless paste-back, result masks), D48 (match colour, on Refine), D49 (Colour to Alpha) landed;
 spike S1 ran (journal) and recommends **no-go** for PC14 / PC15 — awaiting the author's decision (a D-number either way).
+
+**PE4 status 2026-10-10: open** (D50–D53).
 
 ## 9. Totals and parallelism
 

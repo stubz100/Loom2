@@ -11,6 +11,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      and filter type, transform, flips, rotations) — pinpoints a compositor mismatch
   grid               D40 parity grid: seeded noise in every deterministic mode × plain / masked / clipped / isolated group /
                      pass-through group at 50 %, each GPU preview against the exact flatten (p99 ≤ 1; ≤ 2 for the dividing modes)
+  brush              PE4: opacity caps a stroke, thin lines, selection clip, lock transparency, eraser, Shift-click / line mode,
+                     Alt-click / chip colour pick, smoothing catch-up — by mouse events
   selection          PE2: selection maths in the page, then every selection tool / command by mouse, undone and redone
   psd                builds a stack with every exported construct (fill, lock, clip, adjustment layers, pass-through and
                      isolated groups, a filter layer), exports a PSD and reads it back with psd-tools (D41; `--extra oracle`)
@@ -31,7 +33,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -477,6 +479,112 @@ def grid(cdp: CDP) -> list[str]:
     return fails
 
 
+def brush_check(cdp: CDP) -> list[str]:
+    """PE4 (D50 / D51): the brush model and the painting modifiers, by mouse events on a fresh transparent layer."""
+    S, C = STORE, "window.__loom2Commands"
+    fails: list[str] = []
+    run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+
+    def check(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "FAIL ") + text)
+        if not ok:
+            fails.append(text)
+
+    geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y, w: s.doc.w, h: s.doc.h }} }})())"))
+
+    def scr(x: float, y: float) -> tuple[float, float]:                # document pixels → screen
+        return geo["x"] + geo["px"] + x * geo["zoom"], geo["y"] + geo["py"] + y * geo["zoom"]
+
+    def stroke(pts: list[tuple[float, float]], modifiers: int = 0, hold: float = 0.0) -> None:
+        sx, sy = scr(*pts[0])
+        cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=sx, y=sy)
+        cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=sx, y=sy, button="left", buttons=1, clickCount=1, modifiers=modifiers)
+        for a, b in zip(pts, pts[1:]):
+            for i in range(1, 7):
+                x, y = scr(a[0] + (b[0] - a[0]) * i / 6, a[1] + (b[1] - a[1]) * i / 6)
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y, button="left", buttons=1, modifiers=modifiers)
+        if hold:
+            time.sleep(hold)
+        ex, ey = scr(*pts[-1])
+        cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=ex, y=ey, button="left", buttons=0, clickCount=1, modifiers=modifiers)
+        time.sleep(0.4)
+
+    def px(x: int, y: int) -> list[int]:
+        return json.loads(cdp.eval(f"JSON.stringify(Array.from({S}.pixels.get({S}.activeId).ctx.getImageData({x}, {y}, 1, 1).data))"))
+
+    def region_max_alpha(x0: int, y0: int, x1: int, y1: int) -> int:
+        return cdp.eval(f"(() => {{ const d = {S}.pixels.get({S}.activeId).ctx.getImageData({x0}, {y0}, {x1 - x0}, {y1 - y0}).data; let m = 0; for (let i = 3; i < d.length; i += 4) m = Math.max(m, d[i]); return m }})()")
+
+    def brush(**kw) -> None:
+        cdp.eval(f"{S}.setBrush({json.dumps(kw)}); 1")
+
+    W, H = geo["w"], geo["h"]
+    run("edit.tool.brush"); cdp.eval(f"{S}.setView({{ brushLine: false, pickOnce: false }}); 1")
+    run("edit.layer.new"); time.sleep(0.3)
+    brush(size=24, hardness=1, opacity=0.5, flow=1, spacing=0.1, smoothing=0, color="#ff0000")
+    zig = [(W * 0.2, H * 0.3), (W * 0.4, H * 0.3), (W * 0.2, H * 0.32), (W * 0.4, H * 0.31), (W * 0.2, H * 0.3)]
+    stroke(zig)
+    a = region_max_alpha(int(W * 0.18), int(H * 0.25), int(W * 0.42), int(H * 0.37))
+    check(120 <= a <= 129, f"opacity 50 % caps a stroke that crosses itself (max alpha {a}, the old dabs reached 255)")
+    run("edit.undo"); time.sleep(0.3)
+    check(region_max_alpha(int(W * 0.18), int(H * 0.25), int(W * 0.42), int(H * 0.37)) == 0, "undo of the stroke")
+    # a thin diagonal line has no gaps
+    brush(size=2, hardness=1, opacity=1, flow=1, spacing=0.1)
+    stroke([(W * 0.1, H * 0.6), (W * 0.3, H * 0.75)])
+    gaps = cdp.eval(f"(() => {{ const d = {S}.pixels.get({S}.activeId).ctx; let worst = 255; for (let t = 0.05; t <= 0.95; t += 0.01) {{ const x = Math.round({W * 0.1} + {W * 0.2} * t), y = Math.round({H * 0.6} + {H * 0.15} * t); let m = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) m = Math.max(m, d.getImageData(x + dx, y + dy, 1, 1).data[3]); worst = Math.min(worst, m) }} return worst }})()")
+    check(gaps >= 120, f"a 2-px diagonal line has no gaps (weakest point along it: alpha {gaps})")
+    run("edit.undo"); time.sleep(0.3)
+    # selection clip
+    brush(size=30, opacity=1, flow=1, hardness=1)
+    cdp.eval(f"(() => {{ const s = {S}; s.editSelection('test', () => {{ const sel = s.ensureSelection(); sel.ctx.fillStyle = '#fff'; sel.ctx.fillRect(0, 0, {W // 2}, {H}); sel.refresh() }}); return 1 }})()"); time.sleep(0.3)
+    run("edit.tool.brush"); time.sleep(0.2)
+    stroke([(W * 0.3, H * 0.5), (W * 0.7, H * 0.5)])
+    check(px(int(W * 0.35), int(H * 0.5))[3] > 200 and px(int(W * 0.65), int(H * 0.5))[3] == 0, "painting stays inside the selection")
+    run("edit.undo"); run("edit.sel.none"); time.sleep(0.3)
+    # lock transparency: a half-alpha patch keeps its alpha when painted over
+    cdp.eval(f"(() => {{ const s = {S}; const p = s.pixels.get(s.activeId); p.ctx.fillStyle = 'rgba(0, 0, 255, 0.5)'; p.ctx.fillRect(40, 40, 60, 60); p.refresh(); p.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.3)
+    run("edit.layer.lockAlpha"); time.sleep(0.2)
+    brush(color="#00ff00")
+    stroke([(20, 70), (140, 70)])
+    la = px(70, 70), px(120, 70)
+    check(la[0][3] in (127, 128) and la[0][1] > 200 and la[1][3] == 0, f"lock transparency: the colour changes, the alpha does not ({la})")
+    run("edit.layer.lockAlpha"); time.sleep(0.2)
+    # eraser at 50 % over an opaque patch removes half
+    cdp.eval(f"(() => {{ const s = {S}; const p = s.pixels.get(s.activeId); p.ctx.fillStyle = '#ffffff'; p.ctx.fillRect(200, 40, 80, 60); p.refresh(); p.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.3)
+    run("edit.tool.eraser"); brush(opacity=0.5, size=30)
+    stroke([(210, 70), (270, 70), (210, 72), (270, 70)])
+    e = px(240, 70)[3]
+    check(125 <= e <= 130, f"a 50 % eraser stroke leaves alpha ≈ 128 however often it crosses ({e})")
+    # Shift-click: a straight line from the last stroke's end
+    run("edit.tool.brush"); brush(opacity=1, size=6, color="#ffff00")
+    stroke([(300, 150), (300, 151)])
+    stroke([(420, 210)], modifiers=8)
+    mid = px(360, 180)
+    check(mid[3] > 200 and mid[0] > 200 and mid[1] > 200, f"Shift-click draws a straight line from the last point ({mid})")
+    # line mode: a wiggly drag paints the straight segment start → end
+    cdp.eval(f"{S}.setView({{ brushLine: true }}); 1")
+    stroke([(100, 300), (160, 360), (220, 280), (300, 300)])
+    straight, off = px(200, 300), px(160, 360)
+    check(straight[3] > 200 and off[3] == 0, f"line mode paints only the straight segment ({straight[3]}, off-line {off[3]})")
+    cdp.eval(f"{S}.setView({{ brushLine: false }}); 1")
+    # Alt-click picks the colour; the pick chip is one-shot
+    cdp.eval(f"{S}.setBrush({{ color: '#123456' }}); 1")
+    stroke([(70, 70)], modifiers=1)
+    picked = (cdp.eval(f"{S}.brush.color") or "").lower()
+    check(picked != "#123456" and int(picked[3:5], 16) > int(picked[1:3], 16), f"Alt-click picks the composite colour under the pointer — green over the image ({picked})")
+    run("edit.brush.pick"); cdp.eval(f"{S}.setBrush({{ color: '#123456' }}); 1")
+    stroke([(240, 70)])
+    check(cdp.eval(f"{S}.pickOnce") is False and (cdp.eval(f"{S}.brush.color") or "").lower() != "#123456", "the pick chip picks once and disarms")
+    # smoothing: a lagging brush still ends where the pointer was released
+    brush(smoothing=0.9, size=8, opacity=1, color="#ff00ff")
+    stroke([(500, 100), (600, 100)])
+    end = px(598, 100)
+    check(end[3] > 200, f"with heavy smoothing the stroke still reaches the release point ({end})")
+    errs = cdp.page_errors()
+    check(not errs, "no page errors" + ("".join("\n       " + x for x in errs)))
+    return fails
+
+
 def selection_check(cdp: CDP) -> list[str]:
     """PE2 (D43 / D44): selection maths in the page (distance transform vs brute force, modify, combine), then every selection tool
     and command driven by mouse events, each undone and redone."""
@@ -906,9 +1014,9 @@ def perf_check(cdp: CDP, doc_id: str, clip_id: str, base_url: str) -> list[str]:
     stroke_js = """(() => new Promise((res) => { const host = document.querySelector('.edit-canvas'); const r = host.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
         const ev = (type, x, y) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true }));
         const lags = []; ev('pointerdown', cx - 200, cy); let i = 0;
-        const step = () => { const t0 = performance.now(); ev('pointermove', cx - 200 + i * 8, cy + Math.sin(i / 5) * 40); requestAnimationFrame((t) => { lags.push(t - t0); if (++i < 50) step(); else { ev('pointerup', cx + 200, cy); lags.sort((a, b) => a - b); res(JSON.stringify({p50: lags[25], p95: lags[47], max: lags[49]})) } }) }; step() }))()"""
+        const work = []; const step = () => { const t0 = performance.now(); ev('pointermove', cx - 200 + i * 8, cy + Math.sin(i / 5) * 40); work.push(performance.now() - t0); requestAnimationFrame((t) => { lags.push(t - t0); if (++i < 50) step(); else { ev('pointerup', cx + 200, cy); lags.sort((a, b) => a - b); work.sort((a, b) => a - b); res(JSON.stringify({p50: lags[25], p95: lags[47], max: lags[49], work50: work[25], work95: work[47]})) } }) }; step() }))()"""
     br = json.loads(cdp.eval(stroke_js))
-    report(br["p95"] <= 1000 / max(1.0, raf["fps"]) * 1.15, f"Brush on the 4K document: pointer move → next presented frame p50 {br['p50']:.1f} ms · p95 {br['p95']:.1f} ms · max {br['max']:.1f} ms (budget ≤ 1 display frame = {1000 / max(1.0, raf['fps']):.1f} ms at {raf['fps']:.0f} Hz)")
+    report(br["p95"] <= 1000 / max(1.0, raf["fps"]) * 1.15, f"Brush on the 4K document: pointer move → next presented frame p50 {br['p50']:.1f} ms · p95 {br['p95']:.1f} ms · max {br['max']:.1f} ms; handler CPU p50 {br['work50']:.1f} ms · p95 {br['work95']:.1f} ms (budget ≤ 1 display frame = {1000 / max(1.0, raf['fps']):.1f} ms at {raf['fps']:.0f} Hz)")
     cdp.eval("window.__loom2Editor.getState().undo(); 1")
     errs = cdp.page_errors()
     if errs:
@@ -1200,6 +1308,8 @@ def main() -> int:
             failures += tour(cdp, tmp)
         elif mode == "cmpdiag":
             failures += cmpdiag(cdp)
+        elif mode == "brush":
+            failures += brush_check(cdp)
         elif mode == "selection":
             failures += selection_check(cdp)
         elif mode == "grid":

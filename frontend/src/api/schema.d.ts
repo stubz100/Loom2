@@ -3757,6 +3757,11 @@ export interface components {
             /** Lineage Asset Id */
             lineage_asset_id: string | null;
             /**
+             * Lock Alpha
+             * @default false
+             */
+            lock_alpha: boolean;
+            /**
              * Locked
              * @default false
              */

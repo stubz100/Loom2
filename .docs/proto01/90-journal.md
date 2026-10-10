@@ -2199,3 +2199,19 @@ Inspector → lineage → split → pages.
   before, refine match over the whole image, colour to alpha unmix / round trip / thresholds) → **165 offline**; headed `cmpdiag`
   (colour_to_alpha p99 0, max 1), `selection` (ink from white: grey → black at α ½, white → transparent, one step, undone), `tour`: all
   passed; build ok, lint unchanged; API contract regenerated.
+
+## 2026-10-10 16:37 — Spike S1: PhotoCraft content-aware fill through PyO3 — builds and is fast, but fills are blurry; recommend no-go
+
+- `engine/spikes/pcalgo`: a PyO3 0.26 + rust-numpy 0.26 cdylib over `photocraft-algo` (local path to the checkout at `b37bff98`; an
+  adoption would pin the git commit), `content_aware_fill` and `complete_hole` on numpy float32, the GIL released. `uvx maturin build
+  --release` on Windows MSVC / Rust 1.96: abi3 wheel for CPython ≥ 3.13, **0.22 MB**, 42 s cold (all dependencies), 3.5 s warm. The spike
+  loads the .pyd from a temporary folder — the orchestrator venv is untouched.
+- **Cost (CPU):** bench task 01's hole (960×544, 73 515 px) 0.08 s; PatchMatch completion 0.05 s; the same at 1920×1080 (292 060 px)
+  0.27 s; five small holes (3 641 px) 37 ms / 20 ms. Speed is no obstacle.
+- **Quality (`engine/spikes/s1_content_aware.py`, sheets in `engine/spikes/out/s1/`):** on the 320×210 crate hole the fill is a smooth
+  smear (PhotoCraft only refines, not re-synthesises, at levels where the hole is wider than 96 px); on 25–35 px holes on cobblestones,
+  sky and wall it is still a textureless blob; only a thin 7-px line came out clean. Remove today (Klein ICM, grey hole) 37.6 s: the crates
+  go (the model put an AC unit there). Fill-Match with the content-aware fill as its reference 22.2 s: it keeps the blurry pre-fill —
+  worse than today.
+- **Recommendation:** no-go for PC14 (pre-fill / quick Remove) and PC15 (spot healing on these kernels) at this PhotoCraft commit; the
+  build route itself (PyO3 + maturin, abi3, 0.22 MB) is proven if a better kernel appears. Left for the author to decide (13).

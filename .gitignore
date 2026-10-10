@@ -41,3 +41,6 @@ engine/tools/
 
 # D40: fetched test corpora (scripts/fetch_corpus.py), never committed
 bench/corpus/*/
+
+# S1 spike build output
+engine/spikes/pcalgo/target/

@@ -1,0 +1,25 @@
+# S1 spike (PE3): PhotoCraft's photocraft-algo kernels as a Python extension (PyO3 + rust-numpy, abi3 for CPython ≥ 3.13).
+# Spike only — it depends on the local PhotoCraft checkout by path; an adoption would pin the git commit instead:
+#   photocraft-algo = { git = "https://github.com/storytold/photocraft", rev = "b37bff98" }
+# Build:  uvx maturin build --release -m engine/spikes/pcalgo/Cargo.toml   (the wheel lands in engine/spikes/pcalgo/target/wheels/)
+[package]
+name = "loom2-pcalgo"
+version = "0.0.1"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "loom2_pcalgo"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.26", features = ["extension-module", "abi3-py313"] }
+numpy = "0.26"
+photocraft-algo = { path = "../../../../photocraft/crates/algo" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[workspace]

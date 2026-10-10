@@ -320,7 +320,8 @@ relative to H2.
 **PE2 status 2026-10-10: closed.** D43 (selection history), D44 (selection toolkit; orchestrator EDT), D45 (Refine Edge, rig 0.71 s at
 1080p), D46 (clipboard, OS paste and drops) landed. Next Edit wave: PE3 (AI blend-in) at the author's choice relative to H2.
 
-**PE3 status 2026-10-10: open** (D47–D49; S1 to be recorded when it runs).
+**PE3 status 2026-10-10:** D47 (seamless paste-back, result masks), D48 (match colour, on Refine), D49 (Colour to Alpha) landed;
+spike S1 ran (journal) and recommends **no-go** for PC14 / PC15 — awaiting the author's decision (a D-number either way).
 
 ## 9. Totals and parallelism
 

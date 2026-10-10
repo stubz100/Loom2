@@ -637,6 +637,7 @@ class JobQueue:
                         raise ValueError("the selection is empty")
                     img, msk = crop_inputs(comp, mask, plan)
                     out["alpha_mask"] = mask
+                    out["context"] = np.ascontiguousarray(comp[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w, :3])   # D47 / D48: the plate
                 Image.fromarray(img, "RGB").save(tmp / "image.png")
                 Image.fromarray(msk, "L").save(tmp / "mask.png")          # type: ignore[arg-type]
                 out["mask_path"] = tmp / "mask.png"
@@ -660,6 +661,7 @@ class JobQueue:
                     if (plan.ew, plan.eh) != (plan.w, plan.h):
                         img = np.asarray(Image.fromarray(img).resize((plan.ew, plan.eh), Image.Resampling.LANCZOS))
                     out["alpha_mask"] = np.ascontiguousarray(px[..., 3])
+                    out["context"] = np.ascontiguousarray(px[..., :3])                # D48: the layer as it was
                 elif recipe.source == "selection":
                     sel = od.selection
                     if sel is None or not sel.any():
@@ -669,10 +671,12 @@ class JobQueue:
                         raise ValueError("the selection is empty")
                     img, _ = crop_inputs(comp, None, plan)
                     out["alpha_mask"] = sel
+                    out["context"] = np.ascontiguousarray(comp[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w, :3])
                 else:
                     plan = whole_plan(od.doc.w, od.doc.h)
                     img, _ = crop_inputs(comp, None, plan)
                     out["alpha_mask"] = None
+                    out["context"] = np.ascontiguousarray(comp[..., :3])
                 Image.fromarray(img, "RGB").save(tmp / "image.png")
             else:
                 if recipe.source == "active":
@@ -756,15 +760,21 @@ class JobQueue:
             if od.selection is not None:
                 od.selection = np.pad(od.selection, ((top, plan.h - old_h - top), (left, plan.w - old_w - left)))
             rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), recipe.feather)
-            await self._add_result_layer(job, od, recipe, rgba, 0, 0, "outpaint")
+            await self._add_result_layer(job, od, recipe, rgba, 0, 0, "outpaint", as_mask=True)
             return
         feather_px = recipe.feather if isinstance(recipe, Inpaint) or recipe.source == "selection" else 0
-        rgba = assemble_layer(arr, plan, inputs.get("alpha_mask"), feather_px)
+        if isinstance(recipe, Inpaint):
+            rgba = await asyncio.to_thread(assemble_layer, arr, plan, inputs.get("alpha_mask"), feather_px, inputs.get("context"), recipe.blend)
+        else:
+            rgba = await asyncio.to_thread(assemble_layer, arr, plan, inputs.get("alpha_mask"), feather_px, inputs.get("context"), "feather",
+                                           recipe.match_colour, "ring" if recipe.source == "selection" else "all")
         label = recipe.mode.replace("_", " ") if isinstance(recipe, Inpaint) else f"refine {recipe.strength:.2f}"
-        await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, label)
+        # D47: a paste-back's soft edge is a layer mask (repaintable); a refine of a whole layer keeps the layer's own alpha
+        await self._add_result_layer(job, od, recipe, rgba, plan.x, plan.y, label, as_mask=isinstance(recipe, Inpaint) or recipe.source == "selection")
 
-    async def _add_result_layer(self, job: JobRecord, od: Any, recipe: Inpaint | I2I | Upscale, rgba: np.ndarray, x: int, y: int, label: str) -> None:
-        """Candidates of one batch share a group at the top of the stack; only the first is visible (10 §4 variant strip)."""
+    async def _add_result_layer(self, job: JobRecord, od: Any, recipe: Inpaint | I2I | Upscale, rgba: np.ndarray, x: int, y: int, label: str, as_mask: bool = False) -> None:
+        """Candidates of one batch share a group at the top of the stack; only the first is visible (10 §4 variant strip). With
+        `as_mask` (D47) the alpha becomes a linked layer mask over opaque pixels, so the paste-back edge can be repainted."""
         gid = f"grp_{job.batch_id or job.id}"
         group = od.doc.find(gid)
         if not isinstance(group, GroupLayer):
@@ -778,7 +788,14 @@ class JobQueue:
                             recipe={**recipe.model_dump(), "seed": job.seed, "job_id": job.id, "batch_id": job.batch_id, "region": job.result.get("region")},
                             lineage_asset_id=od.doc.source_asset_id)
         group.children.append(layer)
-        od.set_pixels(lid, np.ascontiguousarray(rgba))
+        if as_mask:
+            mask = np.ascontiguousarray(rgba[..., 3])
+            rgba = rgba.copy()
+            rgba[..., 3] = 255
+            od.set_pixels(lid, np.ascontiguousarray(rgba))
+            od.set_mask(lid, mask)
+        else:
+            od.set_pixels(lid, np.ascontiguousarray(rgba))
         od.dirty = True
         od.doc.revision += 1                                 # C1: a client stack based on the previous revision is now stale
         await asyncio.to_thread(od.save)

@@ -2741,6 +2741,11 @@ export interface components {
              */
             margin_pct?: number;
             /**
+             * Match Colour
+             * @default false
+             */
+            match_colour?: boolean;
+            /**
              * Model Id
              * @default klein-base-9b
              */
@@ -3043,6 +3048,12 @@ export interface components {
          *     from the document's selection (uploaded by the editor) unless the mode is outpaint.
          */
         Inpaint: {
+            /**
+             * Blend
+             * @default feather
+             * @enum {string}
+             */
+            blend?: "feather" | "seamless";
             /**
              * Document Id
              * @default

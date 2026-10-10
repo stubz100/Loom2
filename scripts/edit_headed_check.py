@@ -692,6 +692,16 @@ def selection_check(cdp: CDP) -> list[str]:
         time.sleep(0.3)
     lin = cdp.eval(f"{S}.doc.layers.find((l) => l.id === {S}.activeId)?.lineage_asset_id || null")
     check(count() == n1 + 1 and bool(lin), f"a dropped file becomes a layer with lineage ({lin})")
+    # D49 Ink from white: a 50 % grey square on white becomes black ink at alpha ≈ 50 %, the white goes; one undo step
+    run("edit.layer.new"); time.sleep(0.3)
+    cdp.eval(f"(() => {{ const s = {S}; const p = s.pixels.get(s.activeId); p.ctx.fillStyle = '#ffffff'; p.ctx.fillRect(0, 0, p.width, p.height); p.ctx.fillStyle = '#808080'; p.ctx.fillRect(20, 20, 40, 40); p.refresh(); p.dirty = true; s.touch(); s.bump(); return 1 }})()"); time.sleep(0.3)
+    run("edit.layer.inkFromWhite"); time.sleep(0.4)
+    ink = json.loads(cdp.eval(f"JSON.stringify((() => {{ const p = {S}.pixels.get({S}.activeId); return [Array.from(p.ctx.getImageData(30, 30, 1, 1).data), Array.from(p.ctx.getImageData(5, 5, 1, 1).data)] }})())"))
+    check(ink[0][3] in (127, 128) and max(ink[0][:3]) <= 2 and ink[1][3] == 0, f"ink from white: grey → black ink at alpha ½, white → transparent ({ink})")
+    check(cdp.eval(f"{S}.history[{S}.history.length - 1].label") == "ink from white", "ink from white is one history step")
+    run("edit.undo"); time.sleep(0.3)
+    back = json.loads(cdp.eval(f"JSON.stringify(Array.from({S}.pixels.get({S}.activeId).ctx.getImageData(30, 30, 1, 1).data))"))
+    check(back == [128, 128, 128, 255], f"undo restores the paper ({back})")
     errs = cdp.page_errors()
     check(not errs, "no page errors" + ("".join("\n       " + e for e in errs)))
     return fails

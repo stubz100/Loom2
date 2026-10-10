@@ -129,6 +129,16 @@ document when none) and returns **new layers**.
 | **AI Select / Remove background** | **Subject** = BiRefNet matte (core `LoadBackgroundRemovalModel` + `RemoveBackground`, `BiRefNet-general.safetensors`); **SAM 3** text / points / box (core `SAM3_Detect` on the `sam3.pt` checkpoint, its text encoder comes with it) | model, prompt mode, threshold, combine op, expand, feather | the document **selection** (`PUT`/`GET /documents/{id}/selection`); "Save selection as mask" turns it into a layer mask; for a background swap: Select → invert → Inpaint (bench task 03) |
 | **Outpaint** | Fill (Klein + LanPaint) · Fill Hero (dev + LanPaint) | expand canvas by px per side, prompt | canvas grows, new layer fills the margin |
 
+**Paste-back and blend-in (PE3, 2026-10-10).** Inpaint and Outpaint results (and a Refine of the selection) land as opaque pixels with a
+**linked layer mask** holding the feathered selection, so the seam can be repainted with the brush (D47). Inpaint offers **blend:
+feather | seamless** — seamless Poisson-clones the result onto the plate inside the feathered edge, so it keeps the AI texture but meets
+the plate's colour and light (bench task 01: seam energy 1.00 → 0.07); it suits removals and texture continuation, and pulls an intended
+colour change towards the old colour near the edge, so feather stays the default. Refine offers **match colour to the original** (D48):
+the result's Lab statistics mapped onto the original's (ring around a selection, else the whole image / layer) — L* drift +2.3 → 0.0 on
+the bench at strength 0.35. Inpaint has no such switch: its graphs composite the original outside the mask, so there is no drift on the
+context to measure. Filters gain **Colour to Alpha** (colour, transparency / opacity thresholds; inside an isolated group above line art),
+and the layer menu **Ink from white** applies it to the active layer in place (D49).
+
 Every AI layer stores its recipe (visible in Layers → layer info and in History). Re-running an AI layer
 with a new seed is one click.
 

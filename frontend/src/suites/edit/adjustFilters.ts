@@ -72,6 +72,8 @@ vec3 aj_noise3(vec2 px, float seed) {
   float r2 = sqrt(-2.0 * log(aj_u(k3))); float a2 = 6.283185307179586 * aj_u(k4);
   return vec3(r1 * cos(a1), r1 * sin(a1), r2 * cos(a2));
 }
+float aj_c2a1(float p, float c) { if (p > c) return c < 1.0 ? (p - c) / (1.0 - c) : 1.0; if (p < c) return c > 0.0 ? (c - p) / c : 1.0; return 0.0; }
+float aj_c2a(vec3 p, vec3 key, float t, float o) { float a = clamp(max(aj_c2a1(p.r, key.r), max(aj_c2a1(p.g, key.g), aj_c2a1(p.b, key.b))), 0.0, 1.0); return a <= t ? 0.0 : a >= o ? 1.0 : clamp((a - t) / max(o - t, 1e-6), 0.0, 1.0); }
 float aj_lut1(float v, int ch) { vec4 t = texture(uLutTexture, vec2((floor(v * 255.0 + 0.5) + 0.5) / 256.0, 0.5)); return ch == 0 ? t.r : ch == 1 ? t.g : t.b; }
 vec3 aj_lut(vec3 c) { return vec3(aj_lut1(c.r, 0), aj_lut1(c.g, 1), aj_lut1(c.b, 2)); }
 vec4 aj_blur(vec2 uv, float sigma, int r, int stride) {
@@ -148,6 +150,8 @@ fn aj_noise3(px: vec2<f32>, seed: f32) -> vec3<f32> {
   let r2 = sqrt(-2.0 * log(aj_u(k3))); let a2 = 6.283185307179586 * aj_u(k4);
   return vec3<f32>(r1 * cos(a1), r1 * sin(a1), r2 * cos(a2));
 }
+fn aj_c2a1(p: f32, c: f32) -> f32 { if (p > c) { if (c < 1.0) { return (p - c) / (1.0 - c); } return 1.0; } if (p < c) { if (c > 0.0) { return (c - p) / c; } return 1.0; } return 0.0; }
+fn aj_c2a(p: vec3<f32>, key: vec3<f32>, t: f32, o: f32) -> f32 { let a = clamp(max(aj_c2a1(p.r, key.r), max(aj_c2a1(p.g, key.g), aj_c2a1(p.b, key.b))), 0.0, 1.0); if (a <= t) { return 0.0; } if (a >= o) { return 1.0; } return clamp((a - t) / max(o - t, 1e-6), 0.0, 1.0); }
 fn aj_lut1(v: f32, ch: i32) -> f32 { let t = textureSampleLevel(uLutTexture, uLutSampler, vec2<f32>((floor(v * 255.0 + 0.5) + 0.5) / 256.0, 0.5), 0.0); if (ch == 0) { return t.r; } if (ch == 1) { return t.g; } return t.b; }
 fn aj_lut(c: vec3<f32>) -> vec3<f32> { return vec3<f32>(aj_lut1(c.r, 0), aj_lut1(c.g, 1), aj_lut1(c.b, 2)); }
 fn aj_blur(uv: vec2<f32>, sigma: f32, r: i32, stride: i32) -> vec4<f32> {
@@ -209,6 +213,10 @@ function mains(type: string, kind: 'adjustment' | 'filter'): [string, string] {
       fltGl('vec2 px = floor(vTextureCoord * uInputPixel.xy); vec3 n = aj_noise3(px, uP0.w) * uP0.x; if (uP0.y > 0.5) n = vec3(n.x); vec3 fr = clamp(cb + n, 0.0, 1.0); float fa = ab;'),
       fltWg('let px = floor(uv * gfu.uInputPixel.xy); var n = aj_noise3(px, uP0.w) * uP0.x; if (uP0.y > 0.5) { n = vec3<f32>(n.x); } let fr = clamp(cb + n, vec3<f32>(0.0), vec3<f32>(1.0)); let fa = ab;'),
     ]
+    case 'color_to_alpha': return [                                         // D49: compose.py _color_to_alpha
+      fltGl('float ca = aj_c2a(cb, uP0.rgb, uP1.x, uP1.y); vec3 fr = ca >= 1.0 ? cb : ca <= 0.0 ? uP0.rgb : clamp(uP0.rgb + (cb - uP0.rgb) / ca, 0.0, 1.0); float fa = ab * ca;'),
+      fltWg('let ca = aj_c2a(cb, uP0.rgb, uP1.x, uP1.y); var fr = clamp(uP0.rgb + (cb - uP0.rgb) / max(ca, 1e-6), vec3<f32>(0.0), vec3<f32>(1.0)); if (ca >= 1.0) { fr = cb; } if (ca <= 0.0) { fr = uP0.rgb; } let fa = ab * ca;'),
+    ]
     default: return [fltGl('vec3 fr = cb; float fa = ab;'), fltWg('let fr = cb; let fa = ab;')]
   }
 }
@@ -223,6 +231,7 @@ function curve(x: number, points: unknown): number {
   for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return x1 === x0 ? y1 : y0 + (y1 - y0) * (x - x0) / (x1 - x0) }
   return pts[pts.length - 1][1]
 }
+const hexRgb = (h: string): [number, number, number] => { const m = /^#?([0-9a-f]{6})$/i.exec(h.trim()); const v = m ? m[1] : 'ffffff'; return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) / 255) as [number, number, number] }
 const num = (p: Record<string, unknown>, k: string, d: number) => { const v = Number(p[k]); return Number.isFinite(v) ? v : d }
 function channelMap(type: string, p: Record<string, unknown>): (x: number, ch: number) => number {
   switch (type) {
@@ -300,6 +309,7 @@ export function ensureAdjustment(n: Node): string {
     }
   } else {
     if (type === 'noise') p0.set([num(p, 'amount', 10) / 100, p.monochrome === false ? 0 : 1, 0, num(p, 'seed', 0)])
+    else if (type === 'color_to_alpha') { p0.set([...hexRgb(String(p.colour ?? '#ffffff')), 0]); p1.set([num(p, 'transparency_threshold', 0) / 100, num(p, 'opacity_threshold', 100) / 100, 0, 0]) }
     else {
       p0.set(blurParams(num(p, 'radius', type === 'high_pass' ? 3 : type === 'sharpen' ? 1 : 2)))
       if (type === 'sharpen') p1.set([num(p, 'amount', 100) / 100, num(p, 'threshold', 0) / 255])

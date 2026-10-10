@@ -3564,6 +3564,11 @@
             "title": "Margin Pct",
             "type": "integer"
           },
+          "match_colour": {
+            "default": false,
+            "title": "Match Colour",
+            "type": "boolean"
+          },
           "model_id": {
             "default": "klein-base-9b",
             "title": "Model Id",
@@ -4238,6 +4243,15 @@
       "Inpaint": {
         "description": "Inpaint / outpaint (10 §4, D7): Fill (Klein + LanPaint), Fill-Match (Klein ICM), Fill Hero (dev + LanPaint),\nRemove (Klein ICM with the hole neutralised), Outpaint (LanPaint on an edge-padded canvas). The region comes\nfrom the document's selection (uploaded by the editor) unless the mode is outpaint.",
         "properties": {
+          "blend": {
+            "default": "feather",
+            "enum": [
+              "feather",
+              "seamless"
+            ],
+            "title": "Blend",
+            "type": "string"
+          },
           "document_id": {
             "default": "",
             "title": "Document Id",

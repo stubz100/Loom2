@@ -22,6 +22,9 @@ listed here; model weights are governed by the licence register in `.docs/proto0
 | `frontend/src/suites/edit/selectionOps.ts` (EDT, expand / contract / border / smooth / feather, wand rules in `EditorCanvas.tsx`) | `crates/algo/src/selection.rs`, `selection/distance.rs`, `selection_blur.rs` | D44 |
 | `orchestrator/loom2/maskops.py` (bounded EDT, expand / contract) | `crates/algo/src/selection.rs`, `selection/distance.rs` | D44 |
 | `orchestrator/loom2/matting.py` (guided filter, smart radius, refine order) | `crates/algo/src/matting.rs` | D45 |
+| `orchestrator/loom2/poisson.py` (membrane solve, seamless clone) | `crates/algo/src/poisson.rs` | D47 |
+| `orchestrator/loom2/tone.py` (Lab statistics, match colour) | `crates/algo/src/tone.rs` | D48 |
+| `orchestrator/loom2/compose.py` `_color_to_alpha`, `frontend/src/suites/edit/adjustFilters.ts` (colour to alpha) | `crates/algo/src/color_to_alpha.rs` | D49 |
 
 The psd-tools test files (`bench/corpus/psd-tools/`, fetched, never committed) are MIT, Copyright (c) 2019 Kota Yamaguchi;
 the corpus pins were taken from PhotoCraft's `xtask/psd-tools-corpus.sha256`.

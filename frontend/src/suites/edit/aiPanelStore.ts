@@ -17,6 +17,8 @@ export interface AiPanelState {
   // AI Select (M5 slice 2): BiRefNet subject matte or SAM 3 text / points / box, joined with the selection
   selModel: 'birefnet' | 'sam3'; selMode: SelMode; selText: string; selThreshold: number; selOp: SelOp; selExpand: number; selFeather: number
   selRefine: boolean                         // D45: run Refine Edge (the Selection panel's settings) on the result
+  blend: 'feather' | 'seamless'              // D47: paste-back — feather only, or Poisson-cloned onto the plate inside the feather
+  matchColour: boolean                       // D48 (Refine): map the result's colour statistics onto the original's
 }
 
 export const AI_DEFAULT: AiPanelState = {
@@ -24,7 +26,7 @@ export const AI_DEFAULT: AiPanelState = {
   refineModel: 'klein-base-9b', strength: 0.3, refineSource: 'visible', upscaleModel: 'realesrgan-x2', upscaleSource: 'visible', asLayer: true,
   refineTiled: false, tiledModel: 'klein-base-9b', tiledStrength: 0.25, tile: 1024, overlap: 128,
   pad: { left: 0, top: 0, right: 256, bottom: 0 }, outpaintHero: false, teId: null,
-  selModel: 'birefnet', selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false,
+  selModel: 'birefnet', selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false,
 }
 
 export const useAiPanel = create<AiPanelState & { set: (p: Partial<AiPanelState>) => void }>()((set) => ({ ...AI_DEFAULT, set: (p) => set(p) }))

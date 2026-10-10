@@ -308,7 +308,7 @@ when the wave starts.
 | --- | --- | --- |
 | **PE1 · Fidelity** | PC3 + PC1 + PC2 → D39 Photoshop compositing · PC4 → D40 Photoshop oracle · PC5 → D41 PSD export · PC6 → D42 rename retry | compose unit tests; `cmpdiag` grid p99 ≤ 1; corpus floor; psd-tools read-back; fsio failure injection |
 | **PE2 · Selection** | PC7 → D43 selection history · PC8 → D44 manual toolkit · PC9 → D45 refine edge · PC10 → D46 clipboard | headed tour by mouse; EDT vs brute force |
-| PE3 · AI blend-in | PC11 seamless paste-back · PC12 match colour · PC13 colour to alpha · S1 → PC14, PC15 | bench inpaint sheets on the rig |
+| **PE3 · AI blend-in** | PC11 → D47 seamless paste-back + result masks · PC12 → D48 match colour · PC13 → D49 colour to alpha · S1 → PC14, PC15 | bench inpaint sheets on the rig |
 | PE4 · Paint and masks | PC16 brush model · PC17 smoothing · PC18 masks · PC19 partial uploads | headed paint + perf |
 | PE5 · Panels | PC22 mouse kit · PC20 layers panel · PC21 properties | headed tour |
 | PE6 · Transform | PC23 transform · S2 → PC24 quick select | headed tour; spike numbers |
@@ -319,6 +319,8 @@ relative to H2.
 
 **PE2 status 2026-10-10: closed.** D43 (selection history), D44 (selection toolkit; orchestrator EDT), D45 (Refine Edge, rig 0.71 s at
 1080p), D46 (clipboard, OS paste and drops) landed. Next Edit wave: PE3 (AI blend-in) at the author's choice relative to H2.
+
+**PE3 status 2026-10-10: open** (D47–D49; S1 to be recorded when it runs).
 
 ## 9. Totals and parallelism
 

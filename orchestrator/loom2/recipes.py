@@ -84,6 +84,8 @@ class I2I(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
     margin_pct: int = Field(25, ge=0, le=200)     # selection source: context ring
     feather: int = Field(8, ge=0, le=256)         # selection source: paste-back feather
+    match_colour: bool = False                    # D48: undo the refine's colour drift — the result's Lab statistics mapped onto the plate's
+                                                  # (on the context ring for a selection, over the whole image / layer otherwise)
     te_device: str | None = None                  # CLIPLoader.device: "cpu" keeps the 8 GB encoder out of VRAM (2026-10-07 DynamicVRAM measurements)
     te_id: str | None = None                      # text encoder override: the preset's encoder or one of /capabilities.te_alternates (a .gguf loads through CLIPLoaderGGUF)
 
@@ -103,8 +105,9 @@ class Inpaint(BaseModel):
     margin_pct: int = Field(25, ge=0, le=200)     # context ring around the mask (% of its longer side)
     min_size: int = Field(1024, ge=0, le=4096)    # auto-upscale small regions to ≥ this on the longer side
     max_pixels: int = Field(1_048_576, ge=65_536, le=4_194_304)   # cap on the engine image (≈ 1 MP; VRAM headroom on 16 GB, TDR 2026-10-05)
-    feather: int = Field(8, ge=0, le=256)         # paste-back feather on the layer's alpha (px)
+    feather: int = Field(8, ge=0, le=256)         # paste-back feather on the result's layer mask (px)
     expand: int = Field(0, ge=0, le=256)          # grow the mask before sampling (px)
+    blend: Literal["feather", "seamless"] = "feather"   # D47: seamless = Poisson-clone onto the plate inside the feathered edge
     prompt_mode: Literal["image_first", "prompt_first"] = "image_first"   # LanPaint (E8b: prompt_first λ 8)
     outpaint: dict[str, Annotated[int, Field(ge=0, le=4096)]] | None = None   # {left, top, right, bottom} for mode == outpaint
     image_blob: str | None = None                 # 10 §13 shape kept for blob-fed callers; unused with document_id

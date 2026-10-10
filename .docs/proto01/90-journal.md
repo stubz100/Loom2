@@ -2169,3 +2169,33 @@ Inspector → lineage → split → pages.
   alpha 0); copy merged the same size; a synthetic Ctrl+V paste event with a 40×30 PNG → "Pasted image" 40×30; `dropFiles` with the
   bench file → a layer with lineage — **all passed**; `tour`, `cmpdiag`, `paint` all passed; 156 offline; build ok, lint unchanged.
 - **Wave PE2 closed** (D43–D46); 12 §8c updated. Next Edit wave PE3 (AI blend-in), relative to H2 at the author's choice.
+
+## 2026-10-10 16:32 — Wave PE3 opened (D47–D49): seamless paste-back with result masks, match colour on Refine, Colour to Alpha
+
+- Recorded D47–D49 in 13 before the work; 12 §8c PE3 open (S1 to be recorded when it runs).
+- **D47** `loom2/poisson.py` (port of PhotoCraft `poisson.rs`): membrane solve by cascadic multigrid with red-black SOR (vectorised), seamless
+  clone on the mask's bounding box. Measured: against full-range noise on the boundary the cascadic solve is 8–14 levels off a converged
+  one (the coarse grids move the boundary); smoothing the boundary mismatch with σ = 2 px (normalised over known pixels) brings it to
+  0.73 levels and is the right model anyway — the paste-back corrects colour / light drift, not pixel noise along the seam. 1 MP crop,
+  600×500 mask: 3.3 s → 0.54 s with the bbox. Inpaint gains `blend: feather | seamless` (`edit_ai.harmonise`: clone through the mask
+  contracted by the feather, 1-px plate margin, then the feathered mask as before). Paste-back results (Inpaint, Outpaint, Refine of the
+  selection) are now opaque pixels plus a **linked layer mask** (`_add_result_layer(as_mask=True)`), rendering identically to the old
+  baked alpha (test) but repaintable.
+- **D48** `loom2/tone.py` (Lab statistics transfer, port of PhotoCraft `tone.rs`). Designed for Inpaint on the context ring, then
+  **measured on the rig and moved to Refine**: loom2's inpaint graphs composite the original outside the mask (LanPaint decode,
+  `ImageCompositeMasked`), so the engine's context ring equals the plate — Fill and Fill-Match came back identical with and without it
+  (ring drift 0.84 / 0.98 levels). Refine re-decodes every pixel: on the bench at strength 0.35 it brightened L* by +2.3; with match colour
+  the Lab mean shift is 0.0 (mean |Δrgb| 20.96 → 19.02, the rest is the refined detail). I2I gains `match_colour` (ring around a
+  selection, else the whole image / layer); the AI panel's switch sits under Refine. D48's row in 13 says so.
+- **D49** Colour to Alpha: the exact unmix (`_color_to_alpha` in compose.py, the same in the filter shader), `colour` /
+  `transparency_threshold` / `opacity_threshold` with a colour picker for hex parameters in Properties; "Ink from white" applies it to the
+  active raster layer in place (one undo step).
+- **Rig (temporary state, `scripts/pe3_blend_rig.py`), bench task 01 (remove the crates), Klein 9B Fill, seed 7:** feather 59.7 s (cold) ·
+  seam energy 1.00; seamless 45.1 s · **0.07**; every result came back with a linked mask over opaque pixels; sheets in
+  `engine/spikes/out/pe3/` — the seamless brick wall sits darker, in the plate's light, the feather one is brighter than its
+  surroundings. Fill-Match: 37.2 / 22.4 s, identical with / without match colour (above).
+- **Checks:** `test_pe3_blend.py` (9: membrane within an 8-bit step on smooth data, offset removed with texture kept, Lab round trip and
+  match, drift removed but new content kept, no step at the seam, default path unchanged, result layers with a linked mask render as
+  before, refine match over the whole image, colour to alpha unmix / round trip / thresholds) → **165 offline**; headed `cmpdiag`
+  (colour_to_alpha p99 0, max 1), `selection` (ink from white: grey → black at α ½, white → transparent, one step, undone), `tour`: all
+  passed; build ok, lint unchanged; API contract regenerated.

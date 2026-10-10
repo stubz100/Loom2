@@ -39,7 +39,7 @@ class StaleStack(StateError):
     """C1: a stack PUT based on an older revision than the server's (the API answers 409; the editor merges and retries)."""
 NodeKind = Literal["raster", "group", "adjustment", "filter"]
 ADJ_TYPES = ["levels", "curves", "hue_saturation", "color_balance", "brightness_contrast", "exposure", "black_white", "invert"]
-FILTER_TYPES = ["gaussian_blur", "sharpen", "noise", "high_pass"]
+FILTER_TYPES = ["gaussian_blur", "sharpen", "noise", "high_pass", "color_to_alpha"]
 SVG_OPS = {"normal": "svg:src-over", "multiply": "svg:multiply", "screen": "svg:screen", "overlay": "svg:overlay", "darken": "svg:darken", "lighten": "svg:lighten",
            "color-dodge": "svg:color-dodge", "color-burn": "svg:color-burn", "hard-light": "svg:hard-light", "soft-light": "svg:soft-light", "difference": "svg:difference",
            "exclusion": "svg:exclusion", "hue": "svg:hue", "saturation": "svg:saturation", "color": "svg:color", "luminosity": "svg:luminosity"}

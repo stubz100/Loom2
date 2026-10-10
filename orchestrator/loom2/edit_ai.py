@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import maskops
+from . import maskops, poisson, tone
 
 
 def round16_up(n: float) -> int:
@@ -195,16 +195,43 @@ def combine_selection(current: np.ndarray | None, mask: np.ndarray, op: str) -> 
     raise ValueError(f"unknown selection op {op!r}")
 
 
-def assemble_layer(result: np.ndarray, plan: RegionPlan, alpha_mask: np.ndarray | None, feather_px: int) -> np.ndarray:
+def harmonise(rgb: np.ndarray, context: np.ndarray, mask: np.ndarray, feather_px: int, blend: str = "feather", match_colour: bool = False) -> np.ndarray:
+    """Make an engine result sit in the plate (crop-sized uint8 RGB in, out). `context` is the original composite over the same crop,
+    `mask` the selection there (before feathering).
+
+    D48 match colour: the Lab statistics of the result on the *context ring* (outside the mask grown past the feather) are mapped onto
+    the plate's on the same ring and applied to the whole result — the model's drift goes, an intended change inside the mask stays.
+    D47 seamless: the result is Poisson-cloned onto the plate through the mask contracted by the feather, so where the layer is (almost)
+    opaque it keeps the AI texture but meets the plate's colour and light; the feathered mask then fades it in as before."""
+    if match_colour:
+        ring = maskops.expand(mask, feather_px + 4) < 128
+        rgb = tone.match_colour(rgb, rgb, context, ring)
+    if blend == "seamless":
+        core = maskops.contract(mask, max(1, feather_px)) >= 128
+        core[0, :] = core[-1, :] = False                  # a 1-px plate margin: a fully Dirichlet problem
+        core[:, 0] = core[:, -1] = False
+        if core.any():
+            rgb = poisson.seamless_clone(rgb, context, core)
+    return rgb
+
+
+def assemble_layer(result: np.ndarray, plan: RegionPlan, alpha_mask: np.ndarray | None, feather_px: int, context: np.ndarray | None = None,
+                   blend: str = "feather", match_colour: bool = False, match_on: str = "ring") -> np.ndarray:
     """The new layer's RGBA (h×w) from the engine result: resized back to the crop, alpha = feathered mask
-    (document-sized `alpha_mask` cropped to the plan, or opaque when None)."""
+    (document-sized `alpha_mask` cropped to the plan, or opaque when None). With `context` (the plate over the crop), D47 / D48 run
+    first: `match_on="ring"` measures the colour drift around a selection (`harmonise`), `"all"` over the whole image or layer (a refine
+    of the visible composite or of a layer, whose decode changes every pixel)."""
     rgb = _resize_rgb(np.ascontiguousarray(result[..., :3]), plan.w, plan.h)
     if alpha_mask is None:
         a = np.full((plan.h, plan.w), 255, dtype=np.uint8)
+    elif alpha_mask.shape[0] == plan.h and alpha_mask.shape[1] == plan.w:
+        a = alpha_mask
     else:
-        if alpha_mask.shape[0] == plan.h and alpha_mask.shape[1] == plan.w:
-            a = alpha_mask
-        else:
-            a = np.ascontiguousarray(alpha_mask[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w])
+        a = np.ascontiguousarray(alpha_mask[plan.y:plan.y + plan.h, plan.x:plan.x + plan.w])
+    if context is not None and match_colour and match_on == "all":
+        rgb = tone.match_colour(rgb, rgb, context, a > 0)
+    elif context is not None and alpha_mask is not None and (blend != "feather" or match_colour):
+        rgb = harmonise(rgb, context, a, feather_px, blend, match_colour)
+    if alpha_mask is not None:
         a = feather(a, feather_px)
     return np.dstack([rgb, a]).astype(np.uint8)

@@ -366,9 +366,36 @@ def _high_pass(rgba: Arr, p: dict) -> Arr:
     return out
 
 
+def _hex_rgb(value: object, default: str = "#ffffff") -> Arr:
+    h = str(value or default).lstrip("#")
+    if len(h) != 6:
+        h = default.lstrip("#")
+    return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], dtype=np.float32) / 255.0
+
+
+def _color_to_alpha(rgba: Arr, p: dict) -> Arr:
+    """D49 Colour to Alpha: a pixel P that is a colour Q over the key C (P = a·Q + (1 − a)·C) gets the smallest a that keeps Q in range
+    (aᵢ = (Pᵢ − Cᵢ)/(1 − Cᵢ) above the key, (Cᵢ − Pᵢ)/Cᵢ below, a = maxᵢ aᵢ), Q = C + (P − C)/a and alpha × a; thresholds (0–100 %) map
+    a ≤ transparency to 0 and a ≥ opacity to 1, linear between. Over C again it gives back P. PhotoCraft crates/algo/src/color_to_alpha.rs
+    @ b37bff98 (MIT OR Apache-2.0, © 2026 ArtCraft Team and the PhotoCraft contributors)."""
+    key = _hex_rgb(p.get("colour"))
+    t = float(np.clip(p.get("transparency_threshold", 0) / 100, 0, 1))
+    o = float(np.clip(p.get("opacity_threshold", 100) / 100, 0, 1))
+    c = rgba[..., :3]
+    up = np.where(key < 1, (c - key) / np.maximum(1 - key, 1e-6), 1.0)
+    down = np.where(key > 0, (key - c) / np.maximum(key, 1e-6), 1.0)
+    a = np.clip(np.where(c > key, up, np.where(c < key, down, 0.0)).max(axis=-1), 0, 1)
+    a = np.where(a <= t, 0.0, np.where(a >= o, 1.0, np.clip((a - t) / max(o - t, 1e-6), 0, 1)))[..., None]
+    q = np.where(a >= 1, c, np.where(a <= 0, key, np.clip(key + (c - key) / np.maximum(a, 1e-6), 0, 1)))
+    out = rgba.copy()
+    out[..., :3] = q
+    out[..., 3:4] = rgba[..., 3:4] * a
+    return out
+
+
 FILTERS: dict[str, Callable[[Arr, dict], Arr]] = {
     "gaussian_blur": lambda rgba, p: _blur_premult(rgba, p.get("radius", 2.0)),
-    "sharpen": _sharpen, "noise": _noise, "high_pass": _high_pass,
+    "sharpen": _sharpen, "noise": _noise, "high_pass": _high_pass, "color_to_alpha": _color_to_alpha,
 }
 
 

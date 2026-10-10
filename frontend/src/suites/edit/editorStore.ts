@@ -43,6 +43,7 @@ export const ADJUSTMENT_DEFAULTS: Record<string, Record<string, unknown>> = {
 }
 export const FILTER_DEFAULTS: Record<string, Record<string, unknown>> = {
   gaussian_blur: { radius: 2 }, sharpen: { amount: 100, radius: 1, threshold: 0 }, noise: { amount: 10, seed: 0, monochrome: true }, high_pass: { radius: 3 },
+  color_to_alpha: { colour: '#ffffff', transparency_threshold: 0, opacity_threshold: 100 },      // D49
 }
 
 export interface CompareResult { mean: number; p99: number; max: number; rgb_mean: number; rgb_p99: number; rgb_max: number; w: number; h: number; at: string }
@@ -166,6 +167,8 @@ export interface EditorState {
   layerVia: (cut: boolean) => void
   addImageLayer: (img: CanvasImageSource & { width: number; height: number }, name: string, at?: { x: number; y: number }, lineage?: string) => string | null
   dropFiles: (paths: string[]) => Promise<void>
+  /** D49: Colour to Alpha with white on the active raster layer, destructively (one undo step) — line art becomes ink. */
+  inkFromWhite: () => void
   refineParams: () => RefineEdgeParams
   refineSelection: () => Promise<void>
   closeLassoPoly: (mode?: SelectionMode) => void
@@ -233,6 +236,17 @@ async function putRaw(docId: string, lid: string, kind: 'image' | 'mask', lp: La
  * the next save a 409, and the resync that follows merges back server layers the snapshot lacks — re-adding an undone layer. */
 function keepServerState(stack: DocumentStack, cur: DocumentStack | null): DocumentStack {
   return cur ? { ...stack, revision: cur.revision, saved_at: cur.saved_at } : stack
+}
+
+/** D49 Colour to Alpha with white as the key, in place on straight RGBA bytes (compose.py `_color_to_alpha`): a = max over the
+ * channels of (255 − P) / 255, Q = 255 − (255 − P) / a, alpha × a — black ink at 50 % over paper becomes black at alpha 50 %. */
+function unmixWhite(d: Uint8ClampedArray): void {
+  for (let i = 0; i < d.length; i += 4) {
+    const a = Math.max(255 - d[i], 255 - d[i + 1], 255 - d[i + 2]) / 255
+    if (a <= 0) { d[i + 3] = 0; continue }
+    for (let c = 0; c < 3; c++) d[i + c] = Math.round(255 - (255 - d[i + c]) / a)
+    d[i + 3] = Math.round(d[i + 3] * a)
+  }
 }
 
 /** D46: the PNG size last written to the OS clipboard — a paste of the same size is our own copy (and keeps its position). */
@@ -1037,6 +1051,17 @@ export const useEditor = create<EditorState>()(
           if (!get().copySelection({ cut })) return
           const c = get().clipboard!
           get().addImageLayer(c.canvas, `${n.name} (${cut ? 'cut' : 'copy'})`, { x: c.x, y: c.y })
+        },
+        inkFromWhite: () => {
+          const n = findNode(get().doc, get().activeId)
+          const lp = n?.kind === 'raster' && !n.locked ? get().pixels.get(n.id) : null
+          if (!n || !lp) { useSession.getState().toast('Ink from white needs an unlocked raster layer', 'info'); return }
+          lp.beginStroke(); lp.touch(0, 0, lp.width, lp.height)
+          const img = lp.ctx.getImageData(0, 0, lp.width, lp.height)
+          unmixWhite(img.data)
+          lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
+          get().pushHistory({ label: 'ink from white', layerId: n.id, kind: 'image', tiles: lp.endStroke(), at: Date.now() })
+          set({ docDirty: true, revision: get().revision + 1 })
         },
         dropFiles: async (paths) => {
           const s = useSession.getState()

@@ -27,6 +27,7 @@ const PARAM_RANGES: Record<string, [number, number, number]> = {
   hue: [-180, 180, 1], saturation: [-100, 100, 1], lightness: [-100, 100, 1], brightness: [-100, 100, 1], contrast: [-100, 100, 1],
   exposure: [-5, 5, 0.01], offset: [-0.5, 0.5, 0.001], r: [0, 100, 1], g: [0, 100, 1], b: [0, 100, 1],
   radius: [0, 100, 0.1], amount: [0, 500, 1], threshold: [0, 255, 1], seed: [0, 99999, 1],
+  transparency_threshold: [0, 100, 1], opacity_threshold: [0, 100, 1],                      // D49 colour to alpha (%)
 }
 const BRUSH_PRESETS: BrushPreset[] = [
   { name: 'hard round', size: 48, hardness: 1, flow: 1, opacity: 1, spacing: 0.1, smoothing: 0.3, builtin: true },
@@ -317,9 +318,9 @@ function AiTab() {
     : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
   const run = (stage = false) => {
     const base = { seeds: seeds(), prompt_text: p.prompt }
-    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, prompt_mode: p.promptMode, ...base }, stage)
+    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, ...base }, stage)
     else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: hero ? 'flux2-dev-fp8mixed' : kleinId, te_id: teId(hero ? 'flux2-dev-fp8mixed' : kleinId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
-    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, ...base }, stage)
+    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base }, stage)
     else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
       refine: p.refineTiled, refine_model_id: tiledModel, te_id: p.refineTiled ? teId(tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
   }
@@ -340,6 +341,8 @@ function AiTab() {
           <Slider label="min size" value={p.minSize} min={512} max={2048} step={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ minSize: v })} />
           <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />
           <Slider label="expand" value={p.expand} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ expand: v })} />
+          <label>blend</label><div className="segmented"><button className={p.blend === 'feather' ? 'active' : ''} title="the result fades in over the feather" onClick={() => setP({ blend: 'feather' })}>feather</button><button className={p.blend === 'seamless' ? 'active' : ''} title="Poisson-blend the result into the plate: it keeps its texture but takes the plate's colour and light at the seam — best for removals and continuing a texture; it also pulls an intended colour change towards the old colour near the edge (D47)" onClick={() => setP({ blend: 'seamless' })}>seamless</button></div>
+          <span className="hint full">results land with a layer mask: paint it (click the mask thumbnail) to adjust the seam</span>
         </>}
         {p.op === 'outpaint' && <>
           <label>grow</label><div className="pad-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <label key={k}>{k}<input type="number" min={0} max={2048} step={16} value={p.pad[k]} onChange={(e) => setP({ pad: { ...p.pad, [k]: Math.max(0, Number(e.target.value)) } })} /></label>)}</div>
@@ -355,6 +358,7 @@ function AiTab() {
           <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} fmt={(v) => v.toFixed(2)} onChange={(v) => setP({ strength: v })} />
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
           {p.refineSource === 'selection' && <Slider label="feather" value={p.feather} min={0} max={64} fmt={(v) => `${v} px`} onChange={(v) => setP({ feather: v })} />}
+          <label /><label className="chk" title="undo the refine's colour drift: the result's colour statistics are mapped onto the original's — around the selection, or over the whole image / layer (D48)"><input type="checkbox" checked={p.matchColour} onChange={(e) => setP({ matchColour: e.target.checked })} /> match colour to the original</label>
         </>}
         {p.op === 'upscale' && <>
           <label>model</label><select value={p.upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}><option value="realesrgan-x2">Real-ESRGAN 2× {health('realesrgan-x2') === 'missing' ? '(not fetched)' : ''}</option><option value="realesrgan-x4">Real-ESRGAN 4× {health('realesrgan-x4') === 'missing' ? '(not fetched)' : ''}</option></select>
@@ -623,6 +627,7 @@ function PropertiesTab() {
         {Object.entries(params).map(([k, v]) => {
           if (typeof v === 'number') { const [min, max, step] = PARAM_RANGES[k] ?? [-100, 100, 1]; return <Slider key={k} label={k.replace('_', ' ')} value={v} min={min} max={max} step={step} onStart={start} onChange={(x) => setParam(k, x)} onCommit={() => commit(`${n.type} ${k}`)} /> }
           if (typeof v === 'boolean') return <Fragment key={k}><label>{k}</label><input type="checkbox" checked={v} onChange={(e) => { start(); setParam(k, e.target.checked); setTimeout(() => commit(`${n.type} ${k}`)) }} /></Fragment>
+          if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) return <Fragment key={k}><label>{k}</label><input type="color" value={v} onFocus={start} onChange={(e) => setParam(k, e.target.value)} onBlur={() => commit(`${n.type} ${k}`)} /></Fragment>
           return <Fragment key={k}><label>{k}</label><input type="text" defaultValue={JSON.stringify(v)} onFocus={start} onBlur={(e) => { try { setParam(k, JSON.parse(e.target.value)); commit(`${n.type} ${k}`) } catch { useSession.getState().toast(`${k}: not valid JSON`, 'error') } }} /></Fragment>
         })}
         {!Object.keys(params).length && <span className="hint full">no parameters</span>}

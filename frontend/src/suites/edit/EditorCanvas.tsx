@@ -18,6 +18,7 @@ import { makeDab, selectionAlphaCanvas, type LayerPixels } from './layerPixels'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
+import { listenFileDrop } from '../../shell/tauri'
 
 /** Inverts RGB (keeps alpha) and adds: red where a mask/selection is black, nothing where it is white. */
 function negativeAdd(): ColorMatrixFilter { const f = new ColorMatrixFilter(); f.negative(false); f.blendMode = 'add'; return f }
@@ -899,6 +900,9 @@ export function EditorCanvas() {
       st.touch(); st.bump()
     }
     const unregDrop = registerDropTarget(host, { accept: onlyAssets, drop: (p) => assetIds(p).forEach((id) => void useEditor.getState().addLayerFromAsset(id)) })   // tiles become layers
+    // D46: OS files dropped on the canvas go through the Catalogue (lineage) and land as layers; Tauri reports real paths
+    const unlistenFiles = listenFileDrop({ over: (inside) => host.classList.toggle('file-over', inside), within: () => host,
+      drop: (paths) => { host.classList.remove('file-over'); void useEditor.getState().dropFiles(paths) } })
     // an open polygon ends when it is closed or cancelled elsewhere (✓ / ⊘, Enter / Esc) or when the tool changes
     const unsubPoly = useEditor.subscribe((s, prev) => {
       if (prev.lassoPoly && !s.lassoPoly) clearPreview()
@@ -913,7 +917,7 @@ export function EditorCanvas() {
     const onContext = (e: MouseEvent) => { e.preventDefault(); if (drag) return; showMenu(e, canvasMenu()) }
     host.addEventListener('contextmenu', onContext)
     return () => {
-      unregDrop()
+      unregDrop(); unlistenFiles()
       host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointermove', onMove); host.removeEventListener('pointerup', onUp); host.removeEventListener('pointercancel', onUp)
       host.removeEventListener('dblclick', onDouble); unsubPoly()
       host.removeEventListener('wheel', onWheel); host.removeEventListener('contextmenu', onContext)

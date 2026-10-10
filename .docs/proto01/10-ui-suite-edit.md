@@ -171,7 +171,13 @@ deletes at once (undoable; the toast offers Undo) — no confirmation dialog any
   settings but Photoshop's maths differ — the export toast names them; filter layers have no Photoshop equivalent and are
   skipped with a warning, the merged image includes them); verified by reading the file back with psd-tools
   (`edit_headed_check.py psd`)), layer PNGs, selection as PNG mask.
-- **Import** layer from file or Catalogue (drop onto canvas → new layer, placed and transformable).
+- **Import** layer from file or Catalogue (drop onto canvas → new layer, placed and transformable). D46: an OS file dropped on the
+  canvas is imported into the Catalogue first (lineage) and lands as a layer.
+- **Clipboard** (D46): Copy (`Ctrl+C`, the selected pixels of the active layer — soft selections copy soft), Cut (`Ctrl+X`), Copy merged
+  (`Ctrl+Shift+C`, the selected part of the composite), Paste (`Ctrl+V`, a new layer centred on the document — an image copied in
+  another app wins over the editor's own copy), Paste in place (`Ctrl+Shift+V`), Layer via copy (`Ctrl+Alt+J`) / via cut (`Ctrl+Shift+J`);
+  all in the canvas menu. Copies are mirrored to the OS clipboard as PNG; `Ctrl+V` reaches the editor as the browser's paste event, so
+  images from other apps need no clipboard permission. Pasted bitmaps from other apps have no lineage (no file behind them).
 
 ## 8. Workflows
 1. **Fix a hand**: open hero → `A` click the hand (SAM) → expand 8 px, feather 4 → AI · Inpaint · Fill, prompt
@@ -203,7 +209,7 @@ delete — the Alt-click/Shift-click/double-click gestures are listed as hints),
 selection or quick mask exists), the Selection panel (all/none/invert/feather/quick mask/mask from
 selection/load mask/crop) and the Tool options (brush size/hardness steps, colour swap/defaults).
 
-`Ctrl+Z`/`Ctrl+Shift+Z` undo/redo · `Ctrl+D` deselect · `Ctrl+Shift+I` invert selection · `Q` quick mask ·
+`Ctrl+Z`/`Ctrl+Shift+Z` undo/redo · `Ctrl+C`/`X`/`V` copy / cut / paste · `Ctrl+Shift+C`/`V` copy merged / paste in place · `Ctrl+D` deselect · `Ctrl+Shift+I` invert selection · `Q` quick mask ·
 `Ctrl+J` duplicate layer · `Ctrl+G` group · `Ctrl+E` merge down · `Ctrl+Shift+E` export · `Ctrl+T` transform ·
 `Ctrl+Shift+N` new layer · `Alt+click` eye = solo · `\` mask overlay / before · `Ctrl+Enter` run AI ·
 `1–4` pick candidate · `Delete` clear selection pixels · `X` swap colours · `D` default colours.

@@ -2147,3 +2147,25 @@ Inspector → lineage → split → pages.
 - **Checks:** `test_matting_d45.py` (6: box mean and running extremes vs brute force, guided filter reproduces a linear guide, soft / hard /
   untouched, post steps, defaults = worker, route + capabilities + 400 / 422) → **156 offline**; headed `selection` adds refine (0 → 15 841
   soft px, one history step, undo exact): all passed; build ok.
+
+## 2026-10-10 15:40 — D46 clipboard and pasting in Edit; wave PE2 closed
+
+- Store: `copySelection({merged, cut})` copies the selection's bounding box of the active layer (or of the GPU composite for Copy
+  merged) masked by the selection (soft selections copy soft) into the editor's clipboard with its document position, mirrors it to the
+  OS clipboard as PNG (best effort) and remembers the PNG's size; `pasteClipboard(inPlace)` / `pasteFromEvent(files)` add a new raster
+  layer — centred on the document, or where it was copied from — and prefer an image copied in another app (a different PNG size than
+  our own) over the editor's clipboard; `layerVia(cut)`; `addImageLayer`; `dropFiles(paths)` imports OS files through the Catalogue
+  (`/assets/import`) and adds them with lineage.
+- Commands with mouse placements (canvas menu: a "clipboard" group while there is a selection, a Clipboard ▸ submenu otherwise): Copy
+  `Ctrl+C`, Cut `Ctrl+X`, Copy merged `Ctrl+Shift+C`, Paste `Ctrl+V`, Paste in place `Ctrl+Shift+V`, Layer via copy `Ctrl+Alt+J`, Layer
+  via cut `Ctrl+Shift+J` (`Ctrl+J` stays Duplicate: the key dispatcher stops at the first matching command even when it is disabled, so
+  two commands cannot share a key). `Ctrl+V` is let through to the browser so its `paste` event carries images from other apps without a
+  clipboard permission; the Paste command's mouse path tries `navigator.clipboard.read()` and falls back to the editor's clipboard.
+- OS files dropped on the canvas (Tauri's drag-drop paths, `listenFileDrop`) go through the Catalogue; the canvas shows a dashed accent
+  outline while a file hovers it. Found while testing: a paste event dispatched on the window has no `closest()` — the guard checks
+  `instanceof Element` first.
+- **Checks:** headed `selection` gains (system clipboard stubbed in the test page, so the author's clipboard is never touched): copy
+  288×218 at 96,54; paste centred on the document, undone; paste in place at 96,54; layer via copy; layer via cut (the source pixel's
+  alpha 0); copy merged the same size; a synthetic Ctrl+V paste event with a 40×30 PNG → "Pasted image" 40×30; `dropFiles` with the
+  bench file → a layer with lineage — **all passed**; `tour`, `cmpdiag`, `paint` all passed; 156 offline; build ok, lint unchanged.
+- **Wave PE2 closed** (D43–D46); 12 §8c updated. Next Edit wave PE3 (AI blend-in), relative to H2 at the author's choice.

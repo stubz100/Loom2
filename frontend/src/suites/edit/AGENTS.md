@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard).
 
 ## Files
 
@@ -44,6 +44,9 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 9. **Selection changes go through `editSelection` (D43).** It diffs the selection before / after by tile and records presence, so undo
    restores "no selection" too. Tools build a document-sized shape and call `applySelectionShape(shape, mode, label, feather)`; read
    values with `selectionValues()` / `toRaw()` (red × alpha), never the red channel alone.
+10. **`Ctrl+V` is not a registry key path (D46).** The key handler lets it through so the browser fires `paste` (which carries images
+   from other apps without a permission prompt); `handleKeyFor` would `preventDefault` it. The Paste command keeps `Ctrl+V` as its
+   displayed accelerator and its mouse path tries `navigator.clipboard.read()` before the editor's own clipboard.
 
 ## Renderer selection
 

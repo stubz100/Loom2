@@ -699,6 +699,7 @@ function useEditKeys() {
       const st = ed()
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && k.toLowerCase() === 'v') return             // D46: let the browser's paste event carry the clipboard
       if (k === 'Escape') { if (st.lassoPoly) st.setLassoPoly(null); else if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.deselect(); return }
       if (st.candidates && !e.ctrlKey && !e.altKey) {                                                   // 10 §10: 1–4 pick, Enter keeps the visible one
         if (/^[1-4]$/.test(k)) { const id = st.candidates.ids[Number(k) - 1]; if (id) st.pickCandidate(id); return }
@@ -710,6 +711,13 @@ function useEditKeys() {
       if (handleKeyFor('edit', e)) e.stopImmediatePropagation()
     }
     const up = (e: KeyboardEvent) => { if (e.key === '\\') ed().setView({ before: false }) }
+    const paste = (e: ClipboardEvent) => {                              // D46: Ctrl+V — an image from another app, or the editor's clipboard
+      if (useSession.getState().ui.suite !== 'edit' || !ed().doc) return
+      if (e.target instanceof Element && e.target.closest('input, textarea, [contenteditable], .modal')) return   // the target may be the window
+      e.preventDefault()
+      void ed().pasteFromEvent(Array.from(e.clipboardData?.files ?? []))
+    }
+    window.addEventListener('paste', paste)
     window.addEventListener('keydown', down, { capture: true })
     window.addEventListener('keyup', up)
     // deep links for the verification loop (07 §1.7): ?doc=<id> opens that document once the project is open;
@@ -735,7 +743,7 @@ function useEditKeys() {
       if (!tryOpen()) unsubDeep = useSession.subscribe(() => { if (tryOpen()) unsubDeep() })
     }
     ensureEditorAutosave()                                       // B20: survives suite switches (this hook unmounts with the strip)
-    return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); unsubDeep() }
+    return () => { window.removeEventListener('keydown', down, { capture: true }); window.removeEventListener('keyup', up); window.removeEventListener('paste', paste); unsubDeep() }
   }, [])
 }
 

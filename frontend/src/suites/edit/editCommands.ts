@@ -1,6 +1,6 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Circle, CircleDashed, ClipboardPaste, Copy, Scissors, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, PaintBucket, Paintbrush, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
@@ -56,6 +56,14 @@ registerCommands([
     id: `edit.sel.${op}`, scope: 'edit' as const, label: `${op[0].toUpperCase()}${op.slice(1)} selection`, placement: ['panel', 'context'] as ['panel', 'context'], when: hasSel,
     hint: 'by the amount set in the Selection panel', run: () => { const st = ed(); st.modifySelection(op, st.selModifyPx) },
   })),
+  // D46 clipboard: Ctrl+V reaches the editor as the browser's paste event (it carries images from other apps without a permission prompt)
+  { id: 'edit.copy', scope: 'edit', label: 'Copy', icon: Copy, keys: 'Ctrl+C', placement: ['panel', 'context'], when: activeRaster, hint: 'the selected pixels of the active layer (all of it without a selection)', run: () => { ed().copySelection() } },
+  { id: 'edit.cut', scope: 'edit', label: 'Cut', icon: Scissors, keys: 'Ctrl+X', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => { ed().copySelection({ cut: true }) } },
+  { id: 'edit.copyMerged', scope: 'edit', label: 'Copy merged', icon: Copy, keys: 'Ctrl+Shift+C', placement: ['panel', 'context'], when: hasDoc, hint: 'the selected part of the visible composite', run: () => { ed().copySelection({ merged: true }) } },
+  { id: 'edit.paste', scope: 'edit', label: 'Paste', icon: ClipboardPaste, keys: 'Ctrl+V', placement: ['panel', 'context'], when: hasDoc, hint: 'as a new layer — an image copied in another app, or the last copy', run: () => void ed().pasteClipboard(false) },
+  { id: 'edit.pasteInPlace', scope: 'edit', label: 'Paste in place', icon: ClipboardPaste, keys: 'Ctrl+Shift+V', placement: ['panel', 'context'], when: () => hasDoc() && !!ed().clipboard, hint: 'as a new layer where it was copied from', run: () => void ed().pasteClipboard(true) },
+  { id: 'edit.layer.viaCopy', scope: 'edit', label: 'Layer via copy', icon: Copy, keys: 'Ctrl+Alt+J', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => ed().layerVia(false) },
+  { id: 'edit.layer.viaCut', scope: 'edit', label: 'Layer via cut', icon: Scissors, keys: 'Ctrl+Shift+J', placement: ['panel', 'context'], when: () => activeRaster() && hasSel(), run: () => ed().layerVia(true) },
   { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: hasSel, hint: 'soft, image-aware edges with the Selection panel\'s settings (D45)', run: () => void ed().refineSelection() },
   { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: activeRaster, hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
   { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'context'], when: () => (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => ed().closeLassoPoly() },
@@ -136,6 +144,8 @@ export function canvasMenu(): MenuItem[] {
     ...(st.lassoPoly ? [{ heading: 'polygonal lasso' }, { cmd: 'edit.sel.polyClose' }, { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),
+    ...(hasSel() ? [{ heading: 'clipboard' }, { cmd: 'edit.layer.viaCopy' }, { cmd: 'edit.layer.viaCut' }, { cmd: 'edit.copy' }, { cmd: 'edit.cut' }, { cmd: 'edit.copyMerged' }, { cmd: 'edit.paste' }, { cmd: 'edit.pasteInPlace' }, sep]
+      : [{ label: 'Clipboard', icon: ClipboardPaste, items: [{ cmd: 'edit.copy' }, { cmd: 'edit.copyMerged' }, { cmd: 'edit.paste' }, { cmd: 'edit.pasteInPlace' }] }]),
     { label: 'Layer', icon: Copy, items: layer }, { label: 'View', icon: Maximize, items: view }, { label: 'Tool', icon: MousePointer2, items: tools }, { label: 'Document', icon: Save, items: files },
   ]
 }

@@ -70,6 +70,8 @@ export interface EditorState {
   selModifyPx: number
   /** D45: the user's Refine Edge settings over /capabilities.refine_edge.defaults (empty = the server's defaults, T8). */
   refineEdge: Partial<RefineEdgeParams>
+  /** D46: the editor's clipboard — the copied pixels and where they came from (document coordinates). */
+  clipboard: { canvas: HTMLCanvasElement; x: number; y: number } | null
   zoom: number; pan: { x: number; y: number }; fitRequested: number; overlay: boolean; before: boolean; pixelGrid: boolean; quickMask: boolean
   history: HistoryEntry[]; future: HistoryEntry[]
   renderer: string; cursor: { x: number; y: number } | null
@@ -156,6 +158,14 @@ export interface EditorState {
   selectLayerAlpha: (id: string) => void
   setLassoPoly: (pts: { x: number; y: number }[] | null) => void
   setRefineEdge: (p: Partial<RefineEdgeParams> | null) => void
+  // D46 clipboard: copy / cut the selected pixels of the active layer (or of the composite), paste as a new layer
+  copySelection: (opts?: { merged?: boolean; cut?: boolean }) => boolean
+  pasteClipboard: (inPlace?: boolean) => Promise<void>
+  /** A DOM paste (Ctrl+V): an image from the OS clipboard, or the editor's own clipboard. */
+  pasteFromEvent: (files: File[]) => Promise<void>
+  layerVia: (cut: boolean) => void
+  addImageLayer: (img: CanvasImageSource & { width: number; height: number }, name: string, at?: { x: number; y: number }, lineage?: string) => string | null
+  dropFiles: (paths: string[]) => Promise<void>
   refineParams: () => RefineEdgeParams
   refineSelection: () => Promise<void>
   closeLassoPoly: (mode?: SelectionMode) => void
@@ -224,6 +234,9 @@ async function putRaw(docId: string, lid: string, kind: 'image' | 'mask', lp: La
 function keepServerState(stack: DocumentStack, cur: DocumentStack | null): DocumentStack {
   return cur ? { ...stack, revision: cur.revision, saved_at: cur.saved_at } : stack
 }
+
+/** D46: the PNG size last written to the OS clipboard — a paste of the same size is our own copy (and keeps its position). */
+let osClipboardSize = -1
 
 export const useEditor = create<EditorState>()(
   persist(
@@ -323,7 +336,7 @@ export const useEditor = create<EditorState>()(
       return {
         doc: null, docDirty: false, loading: false, saving: false, error: null, activeId: null, editingMask: false,
         tool: 'brush', brush: DEFAULT_BRUSH, marqueeShape: 'rect', selectionMode: 'replace', tolerance: 32, fillMode: 'solid',
-        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {},
+        marqueeFeather: 0, marqueeStyle: 'normal', marqueeW: 16, marqueeH: 9, lassoKind: 'freehand', lassoPoly: null, wandContiguous: true, wandMerged: false, wandAA: true, selModifyPx: 4, refineEdge: {}, clipboard: null,
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
@@ -947,6 +960,93 @@ export const useEditor = create<EditorState>()(
         },
         setLassoPoly: (pts) => set({ lassoPoly: pts, revision: get().revision + 1 }),
         setRefineEdge: (p) => set({ refineEdge: p === null ? {} : { ...get().refineEdge, ...p } }),
+        copySelection: (opts = {}) => {
+          const { doc, selection } = get()
+          const s = useSession.getState()
+          if (!doc) return false
+          const n = findNode(doc, get().activeId)
+          let src: HTMLCanvasElement | null = null, ox = 0, oy = 0
+          if (opts.merged) src = get().extractor?.() ?? null
+          else if (n?.kind === 'raster') { src = get().pixels.get(n.id)?.canvas ?? null; ox = n.x ?? 0; oy = n.y ?? 0 }
+          if (!src) { s.toast(opts.merged ? 'The composite is not available yet' : 'Copy needs a raster layer (or Copy merged)', 'info'); return false }
+          // the region: the selection's bounding box (or the whole source) within the source
+          let x0 = ox, y0 = oy, x1 = ox + src.width, y1 = oy + src.height
+          const v = selection ? selectionValues(selection) : null
+          if (v) {
+            let bx0 = doc.w, by0 = doc.h, bx1 = -1, by1 = -1
+            for (let y = 0; y < doc.h; y++) for (let x = 0; x < doc.w; x++) if (v[y * doc.w + x]) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y }
+            if (bx1 < 0) { s.toast('The selection is empty', 'info'); return false }
+            x0 = Math.max(x0, bx0); y0 = Math.max(y0, by0); x1 = Math.min(x1, bx1 + 1); y1 = Math.min(y1, by1 + 1)
+          }
+          if (x1 <= x0 || y1 <= y0) { s.toast('Nothing selected on this layer', 'info'); return false }
+          const out = document.createElement('canvas'); out.width = x1 - x0; out.height = y1 - y0
+          const cx = out.getContext('2d')!
+          cx.drawImage(src, ox - x0, oy - y0)
+          if (selection) { cx.globalCompositeOperation = 'destination-in'; cx.drawImage(selectionAlphaCanvas(selection), -x0, -y0) }  // soft selections copy soft
+          set({ clipboard: { canvas: out, x: x0, y: y0 } })
+          // mirrored to the OS clipboard as PNG (best effort: WebView2 may refuse); its size tells a later paste whether it is ours
+          out.toBlob((blob) => {
+            if (!blob) return
+            osClipboardSize = blob.size
+            try { void navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': blob })]).catch(() => undefined) } catch { /* no async clipboard */ }
+          }, 'image/png')
+          if (opts.cut) get().clearSelected()
+          s.toast(`${opts.cut ? 'Cut' : 'Copied'} ${out.width}×${out.height} px${opts.merged ? ' (merged)' : ''}`, 'info')
+          return true
+        },
+        addImageLayer: (img, name, at, lineage) => {
+          const doc = get().doc
+          if (!doc) return null
+          const x = at ? Math.round(at.x) : Math.round((doc.w - img.width) / 2), y = at ? Math.round(at.y) : Math.round((doc.h - img.height) / 2)
+          const node = get().addLayer('raster', { name, x, y, w: img.width, h: img.height, ...(lineage ? { lineage_asset_id: lineage } : {}) })
+          if (!node) return null
+          const lp = new LayerPixels(img.width, img.height)
+          lp.ctx.drawImage(img, 0, 0); lp.refresh(); lp.dirty = true
+          get().pixels.get(node.id)?.destroy(); get().pixels.set(node.id, lp)
+          set({ revision: get().revision + 1 })
+          return node.id
+        },
+        pasteClipboard: async (inPlace = false) => {
+          const s = useSession.getState()
+          if (!get().doc) return
+          if (!inPlace) {
+            try {                                                         // an image copied in another app wins over our own clipboard
+              for (const item of (await navigator.clipboard.read())) {
+                const type = item.types.find((t) => t.startsWith('image/'))
+                if (!type) continue
+                const blob = await item.getType(type)
+                if (blob.size === osClipboardSize && get().clipboard) break   // our own copy: paste it with what we know
+                get().addImageLayer(await createImageBitmap(blob), 'Pasted image')
+                return
+              }
+            } catch { /* permission refused or no async clipboard: the editor's own clipboard */ }
+          }
+          const c = get().clipboard
+          if (!c) { s.toast('Nothing to paste: copy a selection first (Ctrl+C), or paste an image with Ctrl+V', 'info'); return }
+          get().addImageLayer(c.canvas, inPlace ? 'Pasted in place' : 'Pasted', inPlace ? { x: c.x, y: c.y } : undefined)
+        },
+        pasteFromEvent: async (files) => {
+          if (!get().doc) return
+          const img = files.find((f) => f.type.startsWith('image/'))
+          if (img && !(img.size === osClipboardSize && get().clipboard)) { get().addImageLayer(await createImageBitmap(img), 'Pasted image'); return }
+          await get().pasteClipboard(false)
+        },
+        layerVia: (cut) => {
+          const n = findNode(get().doc, get().activeId)
+          if (n?.kind !== 'raster' || !get().selection) { useSession.getState().toast(`Layer via ${cut ? 'cut' : 'copy'} needs a selection on a raster layer`, 'info'); return }
+          if (!get().copySelection({ cut })) return
+          const c = get().clipboard!
+          get().addImageLayer(c.canvas, `${n.name} (${cut ? 'cut' : 'copy'})`, { x: c.x, y: c.y })
+        },
+        dropFiles: async (paths) => {
+          const s = useSession.getState()
+          if (!get().doc || !paths.length) return
+          try {                                                           // D46: through the Catalogue first, so the layer has lineage
+            const r = await unwrap(http.POST('/assets/import', { body: { paths } }))
+            for (const a of r.items) await get().addLayerFromAsset(a.id)
+            void s.refreshAll()
+          } catch (e) { s.toast(`Could not import: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
+        },
         refineParams: () => {
           const d = useSession.getState().capabilities?.refine_edge?.defaults
           return { radius: 10, smart_radius: true, smooth: 0, feather: 0, contrast: 0, shift_edge: 0, ...(d ?? {}), ...get().refineEdge } as RefineEdgeParams

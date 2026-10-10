@@ -95,3 +95,6 @@
 /* mask editing hint under the layer list (10 §6) */
 .mask-hint { margin: 6px 0 2px; padding: 6px 8px; border: 1px dashed var(--line2); border-radius: 6px; font-size: 12px; line-height: 1.4; }
 .mask-hint button { margin-left: 4px; }
+
+/* D46: an OS file dragged over the canvas */
+.edit-canvas.file-over { outline: 2px dashed var(--accent); outline-offset: -4px; }

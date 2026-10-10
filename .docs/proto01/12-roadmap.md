@@ -333,7 +333,9 @@ spline curves — the oracle floor rose to 9) landed; headed kit, layers, props 
 (PC23 transform, S2 → PC24), PC25 / PC26 with H3, and the author's S1 decision.
 
 **PE6 status 2026-10-10: D58 landed** (free transform: homography, skew / distort / perspective, numeric fields, interpolation,
-prefilter, selection lifts, groups). Next: spike S2, whose go / no-go — a Rust → WASM build in the frontend — is the author's, before PC24.
+prefilter, selection lifts, groups). Spike S2 ran (journal): 44 KB gzipped, magnetic lasso ≈ 1 ms per segment, quick select
+50–120 ms per click and 0.6–1.1 s per long drag (wasm ≈ native) — it recommends **go** for PC24 in a Worker; the go / no-go (a Rust →
+wasm build in the frontend) is the author's.
 
 ## 9. Totals and parallelism
 

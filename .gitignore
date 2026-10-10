@@ -44,3 +44,4 @@ bench/corpus/*/
 
 # S1 spike build output
 engine/spikes/pcalgo/target/
+engine/spikes/pcwasm/target/

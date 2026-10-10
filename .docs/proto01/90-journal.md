@@ -2449,3 +2449,31 @@ Inspector → lineage → split → pages.
   prefiltered shrink to 30 % 61 / 166 ms — fine on the main thread for an apply.
 - Not ported (PhotoCraft has them, D58 did not ask): Warp mode, Transform Selection (the outline alone), Transform Again, a session-local
   undo inside the open box, the 9-point reference locator, transforming an unlinked mask alone.
+
+## 2026-10-10 20:46 — Spike S2: PhotoCraft's Quick Selection and Magnetic Lasso as WebAssembly
+
+- **Build:** `engine/spikes/pcwasm` — `photocraft-algo` (local checkout b37bff98, by path) for `wasm32-unknown-unknown` with a plain C ABI
+  (`alloc` / `set_image` / `quick` / `region_*` / `trace` / `path_ptr`; no wasm-bindgen, no JS glue). The crate already builds for wasm32
+  (its rayon is native-only). `rustup target add wasm32-unknown-unknown` (one-time); release build with LTO, `panic = "abort"`, stripped:
+  **25 s** cold. Module **109 309 B, 43 947 B gzip -9**; instantiation **0.6–0.7 ms**.
+- **Measured** (`scripts/s2_wasm_bench.mjs`, a Node worker thread — the same V8 as Edge / WebView2; the bench source.png resized):
+
+  | | 1920 × 1080 | 3840 × 2160 |
+  | --- | --- | --- |
+  | set image | 2.1 ms | 8.3 ms |
+  | quick select click, 30 px brush (five places) | 48 / 59 / 63 / 62 / 112 ms | 61 / 77 / 90 / 98 / 119 ms |
+  | quick select drag, 15 points, 40 px brush | 581 ms | 1 082 ms |
+  | quick select click, 200 px brush | 692 ms | 810 ms |
+  | magnetic lasso, 120 px segment | 1.9 ms first, then 0.7–1.3 ms | 1.9 ms first, then 0.7–1.1 ms |
+
+  The same strokes **natively** (one thread): clicks 35–103 / 47–123 ms, drag 568 / 992–1 024 ms, 200 px click 637 / 819–833 ms — the
+  wasm build is within ~5–10 % of native, so the cost is the algorithm (one banded min cut at half resolution above 512² px, as
+  Photoshop works), not WebAssembly. Moving it to the orchestrator (S1's PyO3 route) would buy nothing and add a pixel round trip.
+- **Reading:** the Magnetic Lasso is comfortably interactive (≈ 1 ms per pointer move). Quick Selection clicks feel immediate
+  (50–120 ms), but a long drag or a large brush takes 0.6–1.1 s per evaluation — usable in a Worker if the tool evaluates on release
+  (and at most every ~300 ms during a drag, showing the last result), not on every pointer move.
+- **Recommendation: go** for PC24 with both tools in a Worker — Quick Selection evaluated on stroke end (plus throttled previews), the
+  Magnetic Lasso live. A go is a stack change (house rules): the frontend gains a Rust → wasm build. Two ways to carry it: (a) CI and
+  `scripts/setup` install the wasm32 target and build it (≈ 25 s cold), or (b) commit the 44 KB `.wasm` with its pinned PhotoCraft
+  commit, a checksum and the build script, rebuilt only when the pin moves (no Rust needed for the app build). I would take (b).
+  **The decision — and its D-number — is the author's**; PC24 waits for it. Licence: MIT OR Apache-2.0 (no EU issue).

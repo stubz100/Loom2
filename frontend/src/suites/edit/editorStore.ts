@@ -8,7 +8,7 @@ import { useSession } from '../../store/session'
 import { LayerPixels, lumaOf, selectionAlphaCanvas, type TileSnapshot } from './layerPixels'
 import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
 import { maskAlphaCanvas } from './maskDerived'
-import { isIdentity, resample, type Xform } from './transform'
+import { compositeOver, Homography, homographyOf, isIdentity, premultiply, rectCorners, splitSelected, toStraight8, warpGray, warpRaster, type Raster, type Xform } from './transform'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
 export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number; default?: number }   // D52: density 0–1, feather σ px; D54: the value outside the extent
@@ -54,6 +54,8 @@ export interface CompareResult { mean: number; p99: number; max: number; rgb_mea
 export interface BrushOptions { size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; color: string; background: string }
 export interface BrushPreset { name: string; size: number; hardness: number; opacity: number; flow: number; spacing: number; smoothing: number; builtin?: boolean }
 export interface HistoryEntry {
+  /** D58: `more` swaps further layers' canvases (a group transform), `selSwap` the selection canvas (it moved with the pixels). */
+  more?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null }[]; selSwap?: { lp: LayerPixels | null }
   label: string; layerId: string; kind: 'image' | 'mask'; tiles: TileSnapshot[]; stack?: DocumentStack; at: number; swap?: { layerId: string; lp: LayerPixels; mask: LayerPixels | null }
   /** D43: a selection edit — whether a selection existed before and after it (undo / redo restore its presence too). */
   sel?: { had: boolean; has: boolean }
@@ -215,6 +217,29 @@ export interface EditorState {
 
 const DEFAULT_BRUSH: BrushOptions = { size: 48, hardness: 0.8, opacity: 1, flow: 0.6, spacing: 0.15, smoothing: 0.4, color: '#f0a63a', background: '#111111' }
 
+/** D58: the free transform's preview canvases, per raster (the moving pixels; with a selection, what stays behind). Read by EditorCanvas. */
+export const transformPreview = new Map<string, { moving: HTMLCanvasElement; rest?: HTMLCanvasElement; x: number; y: number; maskBaked: boolean }>()
+/** A premultiplied raster as layer pixels, trimmed to its visible pixels (a warp pads its bounds; transparency adds nothing). */
+function rasterToPixels(r: Raster): { lp: LayerPixels; x: number; y: number } {
+  const d = toStraight8(r)
+  let x0 = r.w, y0 = r.h, x1 = -1, y1 = -1
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (d[(y * r.w + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+  if (x1 < 0) { x0 = y0 = 0; x1 = y1 = 0 }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1
+  const lp = new LayerPixels(w, h)
+  const img = lp.ctx.createImageData(w, h)
+  for (let y = 0; y < h; y++) img.data.set(d.subarray(((y + y0) * r.w + x0) * 4, ((y + y0) * r.w + x0 + w) * 4), y * w * 4)
+  lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
+  return { lp, x: r.x + x0, y: r.y + y0 }
+}
+function greyToPixels(v: Uint8Array, w: number, h: number): LayerPixels {
+  const lp = new LayerPixels(w, h, true)
+  const img = lp.ctx.createImageData(w, h)
+  for (let i = 0, j = 0; i < v.length; i++, j += 4) { img.data[j] = img.data[j + 1] = img.data[j + 2] = v[i]; img.data[j + 3] = 255 }
+  lp.ctx.putImageData(img, 0, 0); lp.refresh(); lp.dirty = true
+  return lp
+}
+
 /** D56 helpers: ids in panel order (top first, a group before its children), each id's parent group, the top-level subset of ids. */
 function walkOrder(doc: DocumentStack): string[] { const out: string[] = []; walk(doc.layers, (n) => { out.push(n.id) }); return out }
 function parentMap(doc: DocumentStack): Map<string, string | null> {
@@ -321,10 +346,13 @@ export const useEditor = create<EditorState>()(
       /** Destroy the canvases that only these (dropped) history entries referenced: swapped-out transform sources. */
       const releaseEntries = (entries: HistoryEntry[]) => {
         const live = new Set<LayerPixels>([...get().pixels.values(), ...get().masks.values()])
+        if (get().selection) live.add(get().selection!)
         for (const e of entries) {
-          if (!e.swap) continue
-          if (!live.has(e.swap.lp)) e.swap.lp.destroy()
-          if (e.swap.mask && !live.has(e.swap.mask)) e.swap.mask.destroy()
+          for (const sw of [...(e.swap ? [e.swap] : []), ...(e.more ?? [])]) {
+            if (!live.has(sw.lp)) sw.lp.destroy()
+            if (sw.mask && !live.has(sw.mask)) sw.mask.destroy()
+          }
+          if (e.selSwap?.lp && !live.has(e.selSwap.lp)) e.selSwap.lp.destroy()
         }
       }
       /** Drop pixel / mask canvases no stack (current, undo or redo) refers to any more — deleted layers, picked-over candidates, removed masks. */
@@ -363,31 +391,73 @@ export const useEditor = create<EditorState>()(
         set({ doc: next, docDirty: true, revision: get().revision + 1, ...extra })
         get().pushHistory({ label, layerId, kind: 'image', tiles: [], stack: before, at: Date.now(), coalesce })
       }
-      /** Bake `t` into the layer's pixels (and its linked mask); the old canvases ride along in history for undo. */
-      const resampleLayer = (t: Xform, label: string) => {
+      /** D58: bake a transform into its layers once, from their current (original) pixels — the active raster, or every raster of a
+       * group with one homography; with `t.selection` only the selected pixels move (lifted, warped, composited back) and the selection
+       * moves with them; linked masks follow, flattened onto their default. One history step; the old canvases ride along for undo. */
+      const bakeTransform = (t: Xform, label: string): boolean => {
         const doc = get().doc
-        const n = findNode(doc, t.nodeId)
-        const lp = n ? get().pixels.get(n.id) : undefined
-        if (!doc || !n || !lp) return
+        const root = findNode(doc, t.nodeId)
+        const H = homographyOf(t)
+        if (!doc || !root) return false
+        if (!H || !H.inverse()) { useSession.getState().toast('The transform collapses the layer', 'info'); return false }
+        const targets: Node[] = []
+        walk([root], (n) => { if (n.kind === 'raster') targets.push(n) })
+        const selLp = t.selection ? get().selection : null
+        const selVals = selLp ? selectionValues(selLp) : null
+        const k = selVals ? (x: number, y: number) => (x >= 0 && y >= 0 && x < doc.w && y < doc.h ? selVals[y * doc.w + x] / 255 : 0) : undefined
         const before = clone(doc)
-        const r = resample(lp.canvas, t, n.x ?? 0, n.y ?? 0)
-        const nlp = LayerPixels.fromImage(r.canvas); nlp.dirty = true
-        const oldMask = get().masks.get(n.id) ?? null
-        let newMask: LayerPixels | null = null
-        let maskPatch: Partial<Node> = {}
-        if (n.mask?.linked && oldMask) {
-          const m = resample(oldMask.canvas, t, (n.x ?? 0) + n.mask.x, (n.y ?? 0) + n.mask.y)
-          newMask = LayerPixels.fromImage(m.canvas); newMask.dirty = true
-          // keep it grey: fromImage makes an RGBA canvas, the mask flag only changes what toRaw() uploads
-          Object.defineProperty(newMask, 'grey', { value: true })
-          maskPatch = { mask: { ...n.mask, x: m.x - r.x, y: m.y - r.y } }
-          get().masks.set(n.id, newMask)
-        }
-        get().pixels.set(n.id, nlp)
         const next = clone(doc)
-        walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: r.x, y: r.y, w: nlp.width, h: nlp.height }, maskPatch); return true } })
+        const swaps: NonNullable<HistoryEntry['swap']>[] = []
+        for (const n of targets) {
+          const lp = get().pixels.get(n.id)
+          if (!lp) continue
+          const src = premultiply(lp.ctx.getImageData(0, 0, lp.width, lp.height).data, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+          let out: Raster | null
+          if (k) { const parts = splitSelected(src, k); const moved = warpRaster(parts.lifted, H, t.interp); out = moved ? compositeOver(parts.rest, moved) : parts.rest }
+          else out = warpRaster(src, H, t.interp)
+          if (!out) continue
+          const nlp = rasterToPixels(out)
+          let maskPatch: Partial<Node> = {}
+          const oldMask = get().masks.get(n.id) ?? null
+          let newMask: LayerPixels | null = null
+          if (n.mask?.linked && oldMask) {
+            const off = maskOffset(n)
+            const g = warpGray(oldMask.greyValues(0, 0, oldMask.width, oldMask.height), oldMask.width, oldMask.height, off.x, off.y, H, t.interp, n.mask.default ?? 0, k)
+            newMask = greyToPixels(g.vals, g.w, g.h)
+            maskPatch = { mask: { ...n.mask, x: g.x - nlp.x, y: g.y - nlp.y } }
+            get().masks.set(n.id, newMask)
+          }
+          get().pixels.set(n.id, nlp.lp)
+          walk(next.layers, (m) => { if (m.id === n.id) { Object.assign(m, { x: nlp.x, y: nlp.y, w: nlp.lp.width, h: nlp.lp.height }, maskPatch); return true } })
+          swaps.push({ layerId: n.id, lp, mask: newMask ? oldMask : null })
+        }
+        let selSwap: HistoryEntry['selSwap']
+        if (selLp && selVals) {                                       // the selection travels with the pixels
+          const g = warpGray(selVals, doc.w, doc.h, 0, 0, H, 'bilinear', 0)
+          const v = new Uint8Array(doc.w * doc.h)
+          for (let y = 0; y < doc.h; y++) for (let x = 0; x < doc.w; x++) { const sx = x - g.x, sy = y - g.y; if (sx >= 0 && sy >= 0 && sx < g.w && sy < g.h) v[y * doc.w + x] = g.vals[sy * g.w + sx] }
+          const ns = new LayerPixels(doc.w, doc.h, true)
+          writeSelection(ns, v)
+          selSwap = { lp: selLp }
+          set({ selection: ns })
+        }
+        if (!swaps.length) return false
         set({ doc: next, docDirty: true, revision: get().revision + 1 })
-        get().pushHistory({ label, layerId: n.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: n.id, lp, mask: newMask ? oldMask : null } })
+        get().pushHistory({ label, layerId: t.nodeId, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: swaps[0], more: swaps.slice(1), selSwap })
+        return true
+      }
+      /** PhotoCraft's rotate / flip presets: exact pixel permutations (nearest, integer offsets about the layer's rounded centre). */
+      const preset = (kind: 'flipH' | 'flipV' | 'rot180' | 'rot90cw' | 'rot90ccw') => {
+        const n = findNode(get().doc, get().activeId)
+        const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
+        if (!n || !lp || n.locked) return
+        const rect: [number, number, number, number] = [n.x ?? 0, n.y ?? 0, (n.x ?? 0) + lp.width, (n.y ?? 0) + lp.height]
+        const sx = rect[0] + rect[2], sy = rect[1] + rect[3], cx = sx / 2, cy = sy / 2
+        const m = { flipH: [-1, 0, 0, 1, sx, 0], flipV: [1, 0, 0, -1, 0, sy], rot180: [-1, 0, 0, -1, sx, sy], rot90cw: [0, 1, -1, 0, Math.round(cx + cy), Math.round(cy - cx)], rot90ccw: [0, -1, 1, 0, Math.round(cx - cy), Math.round(cx + cy)] }[kind]
+        const H = Homography.affine(m[0], m[1], m[2], m[3], m[4], m[5])
+        const quad = rectCorners(rect).map((c) => H.apply(c.x, c.y)) as Xform['quad']
+        bakeTransform({ nodeId: n.id, rect, quad, pivot: { x: cx, y: cy }, interp: 'nearest', mode: 'free', selection: false },
+          { flipH: 'flip horizontal', flipV: 'flip vertical', rot180: 'rotate 180°', rot90cw: 'rotate 90°', rot90ccw: 'rotate 270°' }[kind])
       }
       const setCanvas = (w: number, h: number, dx: number, dy: number, label: string) => {
         const doc = get().doc
@@ -516,33 +586,61 @@ export const useEditor = create<EditorState>()(
         },
 
         beginTransform: () => {
-          const n = findNode(get().doc, get().activeId)
-          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
-          if (!n || !lp || n.locked) { useSession.getState().toast('Free transform needs an unlocked raster layer', 'info'); return }
-          set({ transform: { nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: 1, sy: 1, rot: 0 }, tool: 'move' })
+          const { doc, activeId, selection } = get()
+          const n = findNode(doc, activeId)
+          if (!doc || !n || n.locked || (n.kind !== 'raster' && n.kind !== 'group')) { useSession.getState().toast(n?.locked ? 'Layer is locked' : 'Free transform works on a pixel layer or a group', 'info'); return }
+          const rasters: Node[] = []
+          walk([n], (m) => { if (m.kind === 'raster' && get().pixels.has(m.id)) rasters.push(m) })
+          if (!rasters.length) { useSession.getState().toast('The group holds no pixel layers to transform', 'info'); return }
+          // the frame: the layer (the group's rasters together), cut to the selection's bounds when only selected pixels move (D58)
+          let r = [Infinity, Infinity, -Infinity, -Infinity]
+          for (const m of rasters) { const lp = get().pixels.get(m.id)!; r = [Math.min(r[0], m.x ?? 0), Math.min(r[1], m.y ?? 0), Math.max(r[2], (m.x ?? 0) + lp.width), Math.max(r[3], (m.y ?? 0) + lp.height)] }
+          const lift = n.kind === 'raster' && !!selection
+          let k: ((x: number, y: number) => number) | null = null
+          if (lift) {
+            const v = selectionValues(selection!)
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+            for (let y = 0; y < doc.h; y++) for (let x = 0; x < doc.w; x++) if (v[y * doc.w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+            r = [Math.max(r[0], x0), Math.max(r[1], y0), Math.min(r[2], x1 + 1), Math.min(r[3], y1 + 1)]
+            if (r[2] <= r[0] || r[3] <= r[1]) { useSession.getState().toast('The selection does not cover this layer', 'info'); return }
+            k = (x, y) => (x >= 0 && y >= 0 && x < doc.w && y < doc.h ? v[y * doc.w + x] / 255 : 0)
+          }
+          // preview canvases (PhotoCraft transform_tex): the moving pixels with a linked mask baked in; with a selection, what stays behind
+          transformPreview.clear()
+          for (const m of rasters) {
+            const lp = get().pixels.get(m.id)!
+            const mx = m.x ?? 0, my = m.y ?? 0
+            const moving = document.createElement('canvas'); moving.width = lp.width; moving.height = lp.height
+            const mc = moving.getContext('2d')!
+            mc.drawImage(lp.canvas, 0, 0)
+            const mask = m.mask?.linked && m.mask.enabled ? get().masks.get(m.id) : undefined
+            if (mask && m.mask) { const off = maskOffset(m); mc.globalCompositeOperation = 'destination-in'; mc.drawImage(maskAlphaCanvas(mask, m.mask, off.x, off.y, mx, my, lp.width, lp.height), 0, 0); mc.globalCompositeOperation = 'source-over' }
+            let rest: HTMLCanvasElement | undefined
+            if (k) {
+              rest = document.createElement('canvas'); rest.width = lp.width; rest.height = lp.height
+              const rc = rest.getContext('2d')!; rc.drawImage(moving, 0, 0)
+              const a = mc.getImageData(0, 0, lp.width, lp.height), b = rc.getImageData(0, 0, lp.width, lp.height)
+              for (let y = 0; y < lp.height; y++) for (let x = 0; x < lp.width; x++) { const f = k(mx + x, my + y), i = (y * lp.width + x) * 4 + 3; a.data[i] = Math.round(a.data[i] * f); b.data[i] = Math.round(b.data[i] * (1 - f)) }
+              mc.putImageData(a, 0, 0); rc.putImageData(b, 0, 0)
+            }
+            transformPreview.set(m.id, { moving, rest, x: mx, y: my, maskBaked: !!mask })
+          }
+          const rect: [number, number, number, number] = [Math.round(r[0]), Math.round(r[1]), Math.round(r[2]), Math.round(r[3])]
+          set({ transform: { nodeId: n.id, rect, quad: rectCorners(rect), pivot: { x: (rect[0] + rect[2]) / 2, y: (rect[1] + rect[3]) / 2 }, interp: 'bicubic', mode: 'free', selection: lift }, tool: 'move' })
         },
         setTransform: (patch) => { const t = get().transform; if (t) set({ transform: { ...t, ...patch } }) },
-        cancelTransform: () => set({ transform: null, revision: get().revision + 1 }),
+        cancelTransform: () => { transformPreview.clear(); set({ transform: null, revision: get().revision + 1 }) },
         applyTransform: () => {
           const t = get().transform
-          const n = t ? findNode(get().doc, t.nodeId) : null
-          if (!t || !n) { set({ transform: null }); return }
-          if (isIdentity(t, n.x ?? 0, n.y ?? 0)) { get().cancelTransform(); return }
-          resampleLayer(t, 'free transform')
-          set({ transform: null })
+          if (!t || !findNode(get().doc, t.nodeId)) { get().cancelTransform(); return }
+          if (isIdentity(t)) { get().cancelTransform(); return }
+          const ok = bakeTransform(t, 'free transform')
+          transformPreview.clear()
+          set({ transform: null, revision: get().revision + 1 })
+          if (!ok) set({ revision: get().revision + 1 })
         },
-        flipLayer: (axis) => {
-          const n = findNode(get().doc, get().activeId)
-          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
-          if (!n || !lp || n.locked) return
-          resampleLayer({ nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: axis === 'h' ? -1 : 1, sy: axis === 'v' ? -1 : 1, rot: 0 }, axis === 'h' ? 'flip horizontal' : 'flip vertical')
-        },
-        rotateLayer: (deg) => {
-          const n = findNode(get().doc, get().activeId)
-          const lp = n?.kind === 'raster' ? get().pixels.get(n.id) : undefined
-          if (!n || !lp || n.locked) return
-          resampleLayer({ nodeId: n.id, cx: (n.x ?? 0) + lp.width / 2, cy: (n.y ?? 0) + lp.height / 2, w: lp.width, h: lp.height, sx: 1, sy: 1, rot: deg * Math.PI / 180 }, `rotate ${deg}°`)
-        },
+        flipLayer: (axis) => preset(axis === 'h' ? 'flipH' : 'flipV'),
+        rotateLayer: (deg) => preset(deg === 180 ? 'rot180' : deg === 90 ? 'rot90cw' : 'rot90ccw'),
 
         /** GPU composite vs the orchestrator's exact flatten (10 §14 item 1); PixiJS un-premultiplies on extract. */
         compareWithExact: async () => {
@@ -1196,13 +1294,15 @@ export const useEditor = create<EditorState>()(
           const h = get().history
           if (!h.length) return
           const e = h[h.length - 1]
-          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
+          const redoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) redoEntry.tiles = target.restore(e.tiles)
           }
           if (e.sel) setSelectionPresence(e.sel.had)
           if (e.swap) redoEntry.swap = swapPixels(e.swap)
+          if (e.more) redoEntry.more = e.more.map(swapPixels)
+          if (e.selSwap) { redoEntry.selSwap = { lp: get().selection }; set({ selection: e.selSwap.lp }) }
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ history: h.slice(0, -1), future: [...get().future, redoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },
@@ -1210,13 +1310,15 @@ export const useEditor = create<EditorState>()(
           const f = get().future
           if (!f.length) return
           const e = f[f.length - 1]
-          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined }
+          const undoEntry: HistoryEntry = { ...e, tiles: [], stack: e.stack && get().doc ? clone(get().doc!) : undefined, swap: undefined, more: undefined, selSwap: undefined }
           if (e.tiles.length) {
             const target = e.layerId === 'selection' ? selectionFor(e) : e.kind === 'mask' ? get().masks.get(e.layerId) : get().pixels.get(e.layerId)
             if (target) undoEntry.tiles = target.restore(e.tiles)
           }
           if (e.sel) setSelectionPresence(e.sel.has)
           if (e.swap) undoEntry.swap = swapPixels(e.swap)
+          if (e.more) undoEntry.more = e.more.map(swapPixels)
+          if (e.selSwap) { undoEntry.selSwap = { lp: get().selection }; set({ selection: e.selSwap.lp }) }
           if (e.stack) set({ doc: keepServerState(e.stack, get().doc), activeId: findNode(e.stack, get().activeId) ? get().activeId : e.stack.layers[0]?.id ?? null })
           set({ future: f.slice(0, -1), history: [...get().history, undoEntry], docDirty: true, transform: null, revision: get().revision + 1 })
         },

@@ -93,7 +93,13 @@ registerCommands([
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => activeRaster() || (ed().editingMask && !!active()?.mask), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: hasSel, run: () => ed().cropToSelection() },
   // free transform (10 §4)
-  { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => activeRaster() && !ed().transform, run: () => ed().beginTransform() },
+  { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
+  // D58: Edit › Transform modes — start a box, or switch the open one (PhotoCraft TransformMode)
+  ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({
+    id: `edit.transform.mode.${m}`, scope: 'edit' as const, label: m === 'free' ? 'Free transform (scale / rotate)' : m[0].toUpperCase() + m.slice(1), placement: ['context'] as ['context'],
+    when: () => !!ed().transform || !!active(), hint: m === 'free' ? undefined : `a plain handle drag ${m === 'skew' ? 'skews (edges)' : m === 'distort' ? 'moves one corner' : 'mirrors a corner'}`,
+    run: () => { if (!ed().transform) ed().beginTransform(); if (ed().transform) ed().setTransform({ mode: m }) },
+  })),
   { id: 'edit.transform.apply', scope: 'edit', label: 'Apply transform', icon: Check, keys: 'Enter', alt: ['Ctrl+Enter'], placement: ['strip', 'context'], when: () => !!ed().transform, hint: 'or double-click inside the box', run: () => ed().applyTransform() },
   { id: 'edit.transform.cancel', scope: 'edit', label: 'Cancel transform', icon: X, keys: 'Escape', placement: ['strip', 'context'], when: () => !!ed().transform, run: () => ed().cancelTransform() },
   { id: 'edit.layer.flipH', scope: 'edit', label: 'Flip horizontal', icon: FlipHorizontal, placement: ['panel', 'context'], when: activeRaster, run: () => ed().flipLayer('h') },
@@ -150,7 +156,7 @@ export function layerMenu(): MenuItem[] {
     { cmd: 'edit.layer.delete', label: ed().editingMask && n.mask ? 'Delete layer mask' : many ? 'Delete layers' : undefined },
   ]
 }
-const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]
+const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.mode.skew' }, { cmd: 'edit.transform.mode.distort' }, { cmd: 'edit.transform.mode.perspective' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]
 /** D55 menu audit (dev builds): the headed `kit` check builds every menu in every tool and state and checks each entry resolves. */
 if (import.meta.env.DEV) setTimeout(() => { (window as unknown as { __loom2EditMenus?: unknown }).__loom2EditMenus = { layerMenu, canvasMenu } })
 
@@ -165,7 +171,7 @@ export function canvasMenu(): MenuItem[] {
   const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.compare' }, { cmd: 'edit.close' }]
   const tools: MenuItem[] = TOOLS.map(([tool, label, , icon]) => ({ label, icon, checked: st.tool === tool, run: setTool(tool) }))
   return [
-    ...(st.transform ? [{ heading: 'free transform' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
+    ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: (m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1)) + (st.transform!.mode === m ? '  ✓' : '') })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
     ...(st.lassoPoly ? [{ heading: 'polygonal lasso' }, { cmd: 'edit.sel.polyClose' }, { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),

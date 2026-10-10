@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves), D58 (free transform).
 
 ## Files
 
@@ -18,7 +18,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `curves.ts` | D57: PhotoCraft's natural-spline curve LUT (4096 entries, flat ends, clamped) — the same code as `compose.spline_lut`; the shader table and the Curves editor use it |
 | `propsEditors.tsx` | D57: Properties sections, the histogram of the layers below, Levels / Curves / Colour balance editors |
 | `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
-| `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
+| `transform.ts` | D58: PhotoCraft's free transform — `Homography` (rect → quad, inverse), `warpRaster` (nearest / bilinear / Catmull-Rom on premultiplied pixels, area prefilter below 50 %), `warpGray` (masks, the selection, flattened onto their default), split / composite for selection lifts, `hitTest` / `applyDrag` for the box |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
 | `psdExport.ts` | PSD export via ag-psd (lazy-loaded): adjustment layers, fill, clip, locks, pass-through (D41); `fixLevelsBlocks` repairs ag-psd's Levels block in place; checked by `edit_headed_check.py psd` with psd-tools |
 | `editCommands.ts` / `EditSuite.tsx` | commands, tool table, panels, the AI tab |
@@ -69,6 +69,9 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    drag, eye sweep and footer drops call `moveNodesTo` / `deleteNodes` / `duplicateNodes` / `groupNodes`, one history step per gesture
    (stack-only entries with one coalesce key merge across layers). Layer rows must not select text (`user-select: none`): a text
    selection turns a row drag into a native drag and the pointer stream ends in `pointercancel`.
+15. **A transform is a rect, a quad and a pivot (D58).** Never accumulate: drags compute from the quad at the drag's start, the
+   preview is a `PerspectiveMesh` per moving raster over canvases captured at `beginTransform` (`transformPreview`), and apply
+   (`bakeTransform`) resamples each target once from its current pixels — one history step with `swap` / `more` / `selSwap`.
 
 ## Renderer selection
 

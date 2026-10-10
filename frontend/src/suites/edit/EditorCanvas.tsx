@@ -3,7 +3,7 @@
 // shaders, adjustment/filter layers as per-layer filters), the selection's marching ants, the free-transform
 // box, a checkerboard, and the pointer handling for the tools (brush, eraser, move/transform, hand, zoom,
 // marquee, lasso, wand, fill, eyedropper).
-import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite } from 'pixi.js'
+import { Application, ColorMatrixFilter, Container, Graphics, Matrix, PerspectiveMesh, Rectangle, RendererType, RenderTexture, Sprite, Texture, TilingSprite } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useMemo, useRef } from 'react'
 import { useSession } from '../../store/session'
@@ -12,13 +12,13 @@ import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
-import { findNode, useEditor, type MaskRef, type Node } from './editorStore'
+import { findNode, transformPreview, useEditor, type MaskRef, type Node } from './editorStore'
 import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
 import { PathWalker, Smoother, Stroke } from './brushEngine'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
-import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
+import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
 import { listenFileDrop } from '../../shell/tauri'
 
@@ -77,6 +77,9 @@ export function EditorCanvas() {
   const spritesRef = useRef<Map<string, Sprite | Container>>(new Map())
   const passesRef = useRef<{ rt: RenderTexture; content: Container; transform: Matrix; dirty: boolean }[]>([])
   const derivedRef = useRef<{ raw: LayerPixels; ref: MaskRef; sprite: Sprite }[]>([])   // D52: mask sprites showing a derived mask
+  // D58: the free transform's perspective meshes (one per moving raster, at that raster's document rect) and their canvas textures
+  const meshRef = useRef<{ mesh: PerspectiveMesh; r: [number, number, number, number] }[]>([])
+  const previewTex = useRef(new Map<HTMLCanvasElement, Texture>())
   const renderPending = useRef(0)
   const antsRef = useRef<{ rev: number; segs: number[] }>({ rev: -1, segs: [] })
   const negRef = useRef<ColorMatrixFilter[] | null>(null)              // C21: the two overlay filters are made once, not per rebuild
@@ -130,6 +133,7 @@ export function EditorCanvas() {
   const pixelGrid = useEditor((s) => s.pixelGrid)
   const hasSel = useEditor((s) => !!s.selection)
   const transform = useEditor((s) => s.transform)
+  const transformId = useEditor((s) => (s.transform ? `${s.transform.nodeId}:${s.transform.rect.join(',')}` : null))   // D58: rebuild at begin / end
 
   // ---- overlay drawers (marching ants, transform box) ------------------------------------------------
   const drawAnts = () => {
@@ -191,19 +195,21 @@ export function EditorCanvas() {
     const st = useEditor.getState(); const t = st.transform
     if (!t) return
     const z = st.zoom, hs = 5 / z
-    g.poly(corners(t).flatMap((p) => [p.x, p.y]), true).stroke({ color: 0xf0a63a, width: 1 / z })
-    for (const p of handles(t)) g.rect(p.x - hs, p.y - hs, hs * 2, hs * 2).fill(0xffffff).stroke({ color: 0x000000, width: 1 / z })
-    g.circle(t.cx, t.cy, 3 / z).stroke({ color: 0xf0a63a, width: 1 / z })
+    g.poly(t.quad.flatMap((p) => [p.x, p.y]), true).stroke({ color: 0xf0a63a, width: 1 / z })
+    for (const p of [...t.quad, ...(t.mode === 'distort' ? [] : edgeHandles(t))]) g.rect(p.x - hs, p.y - hs, hs * 2, hs * 2).fill(0xffffff).stroke({ color: 0x000000, width: 1 / z })
+    g.circle(t.pivot.x, t.pivot.y, 4 / z).stroke({ color: 0xf0a63a, width: 1.5 / z }).moveTo(t.pivot.x - 6 / z, t.pivot.y).lineTo(t.pivot.x + 6 / z, t.pivot.y).moveTo(t.pivot.x, t.pivot.y - 6 / z).lineTo(t.pivot.x, t.pivot.y + 6 / z).stroke({ color: 0xf0a63a, width: 1 / z })
   }
+  /** D58: every moving raster's mesh takes the image of its rect under the transform's homography. */
   const applyTransformPreview = () => {
     const t = useEditor.getState().transform
     if (!t) return
-    const obj = spritesRef.current.get(t.nodeId)
-    if (!obj) return
-    obj.pivot.set(t.w / 2, t.h / 2)
-    obj.position.set(t.cx, t.cy)
-    obj.scale.set(t.sx, t.sy)
-    obj.rotation = t.rot
+    const H = homographyOf(t)
+    if (!H) return
+    for (const { mesh, r } of meshRef.current) {
+      const c = rectCorners(r).map((q) => H.apply(q.x, q.y))
+      if (c.some((q) => !Number.isFinite(q.x) || !Number.isFinite(q.y))) continue
+      mesh.setCorners(c[0].x, c[0].y, c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y)
+    }
     markPassesDirty()                                                      // the layer may sit inside a pass (clip run, mask)
   }
 
@@ -340,6 +346,25 @@ export function EditorCanvas() {
     for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }   // C21: pass content containers too
     passesRef.current = []
     derivedRef.current = []
+    meshRef.current = []
+    for (const [c, tex] of previewTex.current) if (![...transformPreview.values()].some((p) => p.moving === c || p.rest === c)) { tex.destroy(true); previewTex.current.delete(c) }
+    const texOf = (c: HTMLCanvasElement) => { let tx = previewTex.current.get(c); if (!tx) { tx = Texture.from(c); previewTex.current.set(c, tx) } return tx }
+    /** A raster's display object: its sprite, or while it is being transformed (D58) what stays behind plus a perspective mesh of the
+     * moving pixels; the mask applies unless a linked one is baked into the preview. */
+    const rasterObj = (n: Node, lp: LayerPixels): Container => {
+      const pv = st.transform ? transformPreview.get(n.id) : undefined
+      if (!pv) {
+        const sp = new Sprite(lp.texture)
+        sp.position.set(n.x ?? 0, n.y ?? 0)
+        return withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+      }
+      const c = new Container()
+      if (pv.rest) { const rs = new Sprite(texOf(pv.rest)); rs.position.set(pv.x, pv.y); c.addChild(rs) }
+      const mesh = new PerspectiveMesh({ texture: texOf(pv.moving), verticesX: 24, verticesY: 24 })
+      c.addChild(mesh)
+      meshRef.current.push({ mesh, r: [pv.x, pv.y, pv.x + pv.moving.width, pv.y + pv.moving.height] })
+      return pv.maskBaked || !n.mask?.enabled ? c : withMask(n, c, doc.w, doc.h, 0, 0)
+    }
     let lastBlend = ''                                                   // alternate names so equal modes never batch
     const pickBlend = (mode: string) => { const a = blendName(mode, false); const name = a === lastBlend ? blendName(mode, true) : a; lastBlend = name; return name }
     const setBlend = (obj: Container, name: string) => { (obj as unknown as { blendMode: string }).blendMode = name }
@@ -400,9 +425,7 @@ export function EditorCanvas() {
       if (n.kind === 'raster') {
         const lp = st.pixels.get(n.id)
         if (!lp) return
-        const sp = new Sprite(lp.texture)
-        sp.position.set(n.x ?? 0, n.y ?? 0)
-        const obj = withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+        const obj = rasterObj(n, lp)
         parent.addChild(obj); reg(n.id, obj)
       } else if (n.kind === 'group') {
         const c = new Container()
@@ -415,9 +438,7 @@ export function EditorCanvas() {
       if (n.kind === 'raster') {
         const lp = st.pixels.get(n.id)
         if (!lp) return
-        const sp = new Sprite(lp.texture)
-        sp.position.set(n.x ?? 0, n.y ?? 0)
-        const obj = withMask(n, sp, lp.width, lp.height, n.x ?? 0, n.y ?? 0)
+        const obj = rasterObj(n, lp)
         obj.alpha = n.opacity * (n.fill ?? 1)
         setBlend(obj, pickBlend(n.blend))
         parent.addChild(obj); reg(n.id, obj)
@@ -553,7 +574,7 @@ export function EditorCanvas() {
     applyTransformPreview()
     drawTransformBox()
     requestRender()
-  }, [doc, revision, before, overlay, quickMask, editingMask, activeId, maskView]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc, revision, before, overlay, quickMask, editingMask, activeId, maskView, transformId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- view (zoom / pan / fit), document frame and pixel grid -------------------------------------
   useEffect(() => {
@@ -602,7 +623,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xmove' | 'xscale' | 'xrotate' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; t0?: Xform; hx?: number; hy?: number; a0?: number; alt?: boolean
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
       // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
@@ -682,12 +703,12 @@ export function EditorCanvas() {
       const p = toDoc(e)
       const tool = spaceHeld || e.button === 1 || st.tool === 'hand' ? 'hand' : st.tool
       if (tool === 'hand') { drag = { kind: 'pan', start: { x: e.clientX, y: e.clientY }, last: p, startPan: { ...st.pan } }; host.style.cursor = 'grabbing'; return }
-      if (st.transform) {                                               // free transform owns the pointer
+      if (st.transform) {                                               // free transform owns the pointer (D58, PhotoCraft transform_tool)
         const t = st.transform
-        const hit = handles(t).find((h) => Math.hypot(h.x - p.x, h.y - p.y) <= 7 / st.zoom)
-        if (hit) drag = { kind: 'xscale', start: p, last: p, t0: { ...t }, hx: hit.hx, hy: hit.hy }
-        else if (insideQuad(t, p)) drag = { kind: 'xmove', start: p, last: p, t0: { ...t } }
-        else drag = { kind: 'xrotate', start: p, last: p, t0: { ...t }, a0: Math.atan2(p.y - t.cy, p.x - t.cx) }
+        let hit = hitTest(t, p, 12 / st.zoom)
+        if (mods(e).altKey && (hit.kind === 'inside' || hit.kind === 'outside')) { st.setTransform({ pivot: p }); hit = { kind: 'pivot' } }   // Alt-click: the reference point
+        if (t.mode === 'distort' && (hit.kind === 'outside' || hit.kind === 'edge')) return
+        drag = { kind: 'xform', start: p, last: p, hit, quad0: t.quad, pivot0: useEditor.getState().transform!.pivot }
         return
       }
       const m = mods(e)
@@ -740,19 +761,10 @@ export function EditorCanvas() {
       if (!drag && st.tool === 'lasso' && st.lassoPoly) { previewPoly(st.lassoPoly, p); return }
       if (!drag) return
       if (drag.kind === 'pan') { st.setView({ pan: { x: drag.startPan!.x + e.clientX - drag.start.x, y: drag.startPan!.y + e.clientY - drag.start.y } }); return }
-      if (drag.kind === 'xmove') { st.setTransform({ cx: drag.t0!.cx + p.x - drag.start.x, cy: drag.t0!.cy + p.y - drag.start.y }); return }
-      if (drag.kind === 'xrotate') {
-        let a = drag.t0!.rot + Math.atan2(p.y - drag.t0!.cy, p.x - drag.t0!.cx) - drag.a0!
-        if (mods(e).shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12)
-        st.setTransform({ rot: a }); return
-      }
-      if (drag.kind === 'xscale') {
-        const t0 = drag.t0!
-        const u = toLocal(t0, p)
-        let sx = drag.hx ? u.x / (drag.hx * t0.w / 2) : t0.sx
-        let sy = drag.hy ? u.y / (drag.hy * t0.h / 2) : t0.sy
-        if (mods(e).shiftKey && drag.hx && drag.hy) { const s = (Math.abs(sx) + Math.abs(sy)) / 2; sx = Math.sign(sx) * s; sy = Math.sign(sy) * s }
-        st.setTransform({ sx: Math.abs(sx) < 0.01 ? 0.01 * Math.sign(sx || 1) : sx, sy: Math.abs(sy) < 0.01 ? 0.01 * Math.sign(sy || 1) : sy }); return
+      if (drag.kind === 'xform' && st.transform) {                   // every step from the quad at the drag's start: nothing accumulates
+        const m = mods(e)
+        st.setTransform(applyDrag(st.transform, drag.hit!, drag.quad0!, drag.pivot0!, drag.start, p, { shift: m.shiftKey, alt: m.altKey, ctrl: m.ctrlKey || m.metaKey }))
+        return
       }
       if (drag.kind === 'paint' && drag.stroke) {
         const o = drag.offset!
@@ -823,7 +835,7 @@ export function EditorCanvas() {
     }
     const onDouble = (e: MouseEvent) => {
       const st = useEditor.getState()
-      if (st.transform && insideQuad(st.transform, toDoc(e))) st.applyTransform()
+      if (st.transform && insideQuad(st.transform.quad, toDoc(e))) st.applyTransform()
       else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(mods(e), st.selectionMode)) }
     }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {

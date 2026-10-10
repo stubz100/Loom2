@@ -2412,3 +2412,40 @@ Inspector → lineage → split → pages.
 
 - Run 38074280397 at b2a9974 (D55–D57): offline tests + frontend build for both variants (full, open) and both installers passed; the
   draft release job is skipped off tags.
+
+## 2026-10-10 20:41 — Wave PE6 opened; D58 free transform like PhotoCraft's
+
+- **PhotoCraft read first** (subagent report on b37bff98: `algo/src/transform.rs`, `resample.rs`, `engine/src/transform_cmds.rs`,
+  `extra_cmds.rs`, `ui-egui/src/transform_tool.rs`). Corrections to the plan, D58 amended before the work: PhotoCraft has no persistent
+  floating layer (a selection's pixels are lifted, warped and composited back into the same layer, the hole stays transparent, the
+  selection moves along), no multi-layer transform (a group transforms its rasters together), no skew fields; proportions are kept by
+  default (Shift frees them, as in Photoshop CC).
+- **`transform.ts` rewritten as the port:** `Homography` (row-major 3×3, Heckbert square → quad, rect → quad, inverse, local scale);
+  `warpRaster` — inverse mapping at pixel centres, nearest / bilinear / Catmull-Rom (Keys a = −0.5) on premultiplied pixels, transparent
+  outside, colour clamped to alpha, U8 rounding half up; below 50 % (local scale at the centre) a real separable resize first (the Keys
+  kernel stretched by 1 / scale, normalised, premultiplied) to a power of two, the homography rescaled; `warpGray` for masks and the
+  selection (lifted, warped, flattened onto the default, the vacated part reading the default); `splitSelected` / `compositeOver`;
+  `hitTest` (corners, edge handles at the image of each edge's middle, the pivot, 12 screen px; inside even-odd, else rotate), `applyDrag`
+  (move with an 8-direction Shift lock, pivot, rotate with a 15° Shift snap about the pivot, perspective mirroring a corner on its
+  neighbour, distort one corner, skew an edge — Shift along it, Alt both edges — and scale in the box's own unit frame, proportional by
+  default, Alt about the pivot), `keepConvex` (40 bisections), `carryPivot`, `modeMods` for the menu modes.
+- **Editor:** the transform state is `{ rect, quad, pivot, interp, mode, selection }`; `beginTransform` frames the raster (cut to the
+  selection's bounds when lifting) or a group's rasters and captures preview canvases (linked masks baked in; with a selection the lifted
+  part and what stays); the scene renders each moving raster as a 24 × 24 `PerspectiveMesh` (and the rest as a sprite) — the drag only
+  moves mesh corners; `bakeTransform` resamples every target once from its current pixels, warps linked masks and the selection, trims
+  transparent margins, and records one history step (`swap` + new `more` / `selSwap`). Flip H / V and rotate 90 / 180 / 270 are
+  PhotoCraft's exact presets (nearest, integer offsets). The strip's transform bar: X / Y of the reference point, W / H % with a link,
+  angle, interpolation, Free / Skew / Distort / Perspective, ✓ / ⊘; the same modes in the Transform menus; arrows nudge (Shift 10 px);
+  the Free transform command now also takes a group.
+- **Headed mode `transform`** passes: homography corner error 2.8e-14, inverse round trip 5e-15, collapsed quad degenerate; an integer
+  translation pixel-exact under all three interpolations; an 8× shrink of a 1-px checkerboard → 128/255; corner drag proportional
+  (960×544 → 864×490); Shift frees; Ctrl-corner distorts one corner; perspective mode mirrors (+30 / −30); a Shift rotation snaps
+  (1.90° → −45°) about the pivot; Alt-click places the pivot; Shift+→ nudges 10 px; W = 50 % halves the width; apply in one step and the
+  GPU = exact flatten (p99 0, max 1), undo restores; flip H twice and rotate 90° + 270° give back identical pixels; a selection lift moves
+  only the selected pixels (+200, +200), leaves a transparent hole, moves the selection, GPU = exact (max 0), undo restores both; a group's
+  two rasters scale together in one step (the 100 px square trims to 52 px, the full layer 960 → 480), GPU = exact, one undo restores
+  both. Full regression (13 modes incl. psd) passes; build clean; lint 97 (the TransformBar component note).
+- **Apply cost (Node, one thread):** perspective bicubic 103 ms at 1080p, 431 ms at 4K (bilinear 54 / 189, nearest 48 / 143); a
+  prefiltered shrink to 30 % 61 / 166 ms — fine on the main thread for an apply.
+- Not ported (PhotoCraft has them, D58 did not ask): Warp mode, Transform Selection (the outline alone), Transform Again, a session-local
+  undo inside the open box, the 9-point reference locator, transforming an unlinked mask alone.

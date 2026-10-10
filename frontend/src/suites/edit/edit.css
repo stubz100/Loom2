@@ -160,3 +160,9 @@
 .cb-row span:nth-child(3) { text-align: right; }
 .cb-row input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; }
 .cb-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 1px solid var(--bg); }
+
+/* D58: the transform bar in the strip */
+.xform-bar { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.xform-bar .vfield { width: 84px; }
+.xform-bar > label { color: var(--fg3); font-size: 11px; }
+.xform-bar .segmented button { text-transform: capitalize; padding: 2px 6px; }

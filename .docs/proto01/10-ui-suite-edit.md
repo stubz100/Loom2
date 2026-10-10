@@ -218,6 +218,17 @@ clipping). **Colour balance**: shadows / midtones / highlights, three gradient r
 clip to the layer below, Reset to defaults. No JSON text fields remain. Headed mode `props`; the oracle's curves_rgb.psd went from
 max 255 to max 12 (3 of 40 000 pixels over 2/255).
 
+**Free transform (D58, 2026-10-10).** `Ctrl+T` (or the menus) frames the active pixel layer, the selected part of it, or every pixel
+layer of a group. The box is a quad: drag inside to move (Shift: 8 directions), a corner or an edge to scale — in proportion by
+default, Shift frees it, Alt scales about the reference point — outside to rotate about the reference point (Shift: 15° steps).
+Ctrl-drag a corner to distort, an edge to skew (Shift along the edge, Alt both edges), Ctrl+Alt+Shift a corner for perspective; the
+strip's Skew / Distort / Perspective modes make a plain handle drag do the same. Alt-click places the reference point; arrows nudge
+(Shift 10 px). The strip shows X / Y (the reference point), W / H % with a link, the angle, the interpolation (bicubic, bilinear,
+nearest neighbour) and ✓ / ⊘. The preview is a perspective mesh; Enter, Ctrl+Enter, double-click or ✓ resample once from the
+original pixels (PhotoCraft's homography and Catmull-Rom warp, with a real downscale first below 50 %) — one undo step. With a
+selection only the selected pixels move (the hole stays transparent) and the selection moves with them; linked masks follow.
+Flip and rotate 90 / 180 are exact pixel permutations. Headed mode `transform`.
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

@@ -12,6 +12,7 @@ import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { BlendSelect, LatchButton, ValueField } from './widgets'
 import { ColorBalanceEditor, CurvesEditor, LevelsEditor, Section } from './propsEditors'
+import { readout, rotateAboutPivot, scaleAboutPivot, type Interp, type TransformMode } from './transform'
 import { EditorCanvas } from './EditorCanvas'
 import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, FILTER_DEFAULTS, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
@@ -139,7 +140,7 @@ function ToolOptions() {
         <div className="tool-opts">
           <label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div>
           <label>transform</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{transforming ? <CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /> : <CommandButton id="edit.transform" text />}<CommandRow ids={['edit.layer.flipH', 'edit.layer.flipV', 'edit.layer.rot270', 'edit.layer.rot90']} /></div>
-          <span className="hint full">{transforming ? 'drag inside to move, handles to scale (Shift keeps the ratio), outside to rotate (Shift snaps 15°); Enter / double-click applies, Esc cancels' : 'drag the active raster layer on the canvas; Ctrl+T enters free transform'}</span>
+          <span className="hint full">{transforming ? 'drag inside to move, a corner or edge to scale (in proportion — Shift frees it, Alt from the reference point), outside to rotate (Shift snaps 15°); Ctrl-drag a corner to distort, an edge to skew, Ctrl+Alt+Shift a corner for perspective (or pick the mode in the strip); Alt-click places the reference point; Enter / double-click applies, Esc cancels' : 'drag the active raster layer on the canvas; Ctrl+T enters free transform'}</span>
         </div>
       )}
       {tool === 'crop' && (
@@ -486,6 +487,36 @@ function PrimaryAction() {
 }
 
 // ------------------------------------------------------------------ Strip / Stage
+/** D58: the free transform's options in the strip (PhotoCraft transform_fields): the reference point, W / H (linked), the angle, the
+ * interpolation and the mode, with ✓ / ⊘. */
+function TransformBar() {
+  const t = useEditor((s) => s.transform)
+  const [link, setLink] = useState(true)
+  if (!t) return null
+  const ro = readout(t)
+  const set = ed().setTransform
+  const move = (dx: number, dy: number) => set({ quad: t.quad.map((c) => ({ x: c.x + dx, y: c.y + dy })) as typeof t.quad, pivot: { x: t.pivot.x + dx, y: t.pivot.y + dy } })
+  const scale = (kx: number, ky: number) => { if (Number.isFinite(kx) && Number.isFinite(ky) && kx > 0 && ky > 0) set({ quad: scaleAboutPivot(t, kx, ky) }) }
+  return (
+    <span className="xform-bar">
+      <span style={{ color: 'var(--accent)' }}>transform</span>
+      <ValueField label="X" value={t.pivot.x} min={-300000} max={300000} unit="px" title="the reference point (Alt-click the canvas to place it)" onChange={(v) => move(v - t.pivot.x, 0)} />
+      <ValueField label="Y" value={t.pivot.y} min={-300000} max={300000} unit="px" title="the reference point (Alt-click the canvas to place it)" onChange={(v) => move(0, v - t.pivot.y)} />
+      <ValueField label="W" value={ro.sx * 100} min={0.1} max={100000} unit="%" onChange={(v) => { const k = v / 100 / ro.sx; scale(k, link ? k : 1) }} />
+      <button type="button" className={`quiet latch${link ? ' active' : ''}`} aria-pressed={link} title="keep W and H in proportion" onClick={() => setLink(!link)}>⛓</button>
+      <ValueField label="H" value={ro.sy * 100} min={0.1} max={100000} unit="%" onChange={(v) => { const k = v / 100 / ro.sy; scale(link ? k : 1, k) }} />
+      <ValueField label="angle" value={Math.round(ro.angle * 100) / 100} min={-180} max={180} unit="°" onChange={(v) => set({ quad: rotateAboutPivot(t, v - ro.angle) })} />
+      <select value={t.interp} title="interpolation for the apply" onChange={(e) => set({ interp: e.target.value as Interp })}>
+        <option value="bicubic">bicubic</option><option value="bilinear">bilinear</option><option value="nearest">nearest neighbour</option>
+      </select>
+      <span className="segmented" title="what a plain handle drag does (Ctrl / Ctrl+Alt+Shift do the same without the mode)">
+        {(['free', 'skew', 'distort', 'perspective'] as TransformMode[]).map((m) => <button key={m} className={t.mode === m ? 'active' : ''} onClick={() => set({ mode: m })}>{m}</button>)}
+      </span>
+      <CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} />
+    </span>
+  )
+}
+
 function Strip() {
   useEditKeys()
   const doc = useEditor((s) => s.doc)
@@ -506,7 +537,7 @@ function Strip() {
   return (
     <>
       <span>{doc ? `${doc.name}${dirty ? ' •' : ''} · ${doc.w}×${doc.h}` : 'Edit'}</span>
-      {transforming && <><span style={{ color: 'var(--accent)' }}>free transform</span><CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /></>}
+      {transforming && <TransformBar />}
       {polyOpen && <><span style={{ color: 'var(--accent)' }}>polygon</span><CommandRow ids={['edit.sel.polyClose', 'edit.sel.polyCancel']} /></>}
       <span className="latches" title="Latched modifiers: each stays on for every canvas gesture until clicked again (no keyboard needed)">
         {(['shift', 'ctrl', 'alt'] as const).map((k) => <LatchButton key={k} on={latched[k]} label={k === 'shift' ? '⇧' : k === 'ctrl' ? 'Ctrl' : 'Alt'}
@@ -899,6 +930,13 @@ function useEditKeys() {
       const k = e.key
       if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && k.toLowerCase() === 'v') return             // D46: let the browser's paste event carry the clipboard
+      if (st.transform && k.startsWith('Arrow') && !e.ctrlKey && !e.altKey) {                        // D58: arrows nudge the box (Shift 10 px)
+        e.preventDefault()
+        const d = e.shiftKey ? 10 : 1, dx = k === 'ArrowLeft' ? -d : k === 'ArrowRight' ? d : 0, dy = k === 'ArrowUp' ? -d : k === 'ArrowDown' ? d : 0
+        const t = st.transform
+        st.setTransform({ quad: t.quad.map((c) => ({ x: c.x + dx, y: c.y + dy })) as typeof t.quad, pivot: { x: t.pivot.x + dx, y: t.pivot.y + dy } })
+        return
+      }
       if (k === 'Escape') { if (st.lassoPoly) st.setLassoPoly(null); else if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.deselect(); return }
       if (st.candidates && !e.ctrlKey && !e.altKey) {                                                   // 10 §10: 1–4 pick, Enter keeps the visible one
         if (/^[1-4]$/.test(k)) { const id = st.candidates.ids[Number(k) - 1]; if (id) st.pickCandidate(id); return }
@@ -935,7 +973,7 @@ function useEditKeys() {
           const tab = q.get('tab'); if (tab) setRailTab('edit', tab)                                      // dev: open a panel section
           if (q.get('sel') === 'all') ed().selectAll()                                                   // dev: marching ants
           if (q.get('sel') === 'half') { const s = ed().ensureSelection(); s.ctx.fillStyle = '#fff'; s.ctx.beginPath(); s.ctx.ellipse(s.width / 2, s.height / 2, s.width / 3, s.height / 3, 0, 0, Math.PI * 2); s.ctx.fill(); s.refresh(); ed().bump() }
-          if (q.get('xform')) { ed().beginTransform(); ed().setTransform({ rot: 0.25, sx: 0.8, sy: 0.9 }) }   // dev: transform box
+          if (q.get('xform')) { ed().beginTransform(); const t = ed().transform; if (t) ed().setTransform({ quad: rotateAboutPivot({ ...t, quad: scaleAboutPivot(t, 0.8, 0.9) }, 14) }) }   // dev: transform box
         })
         return true
       }

@@ -13,6 +13,9 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      eye sweep, drops on the footer's trash and New layer, right-click on the set — by mouse, one step per gesture
   props              D57: Curves (add, drag, drag off, Ctrl / right-click, per channel), Levels (triangles, Auto, histogram), Colour
                      balance rows — each against the exact flatten — sections, quick actions, Ungroup
+  transform          D58: homography and warp maths in the page, the box by mouse (proportional corners, Shift free, Ctrl distort,
+                     perspective mode, Shift-snapped rotation, Alt pivot, nudge, the W field), apply against the exact flatten and
+                     undo, exact flip / rotate presets, a selection's pixels lifted and moved, a group scaled together
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -42,12 +45,13 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import subprocess
 import sys
@@ -1688,6 +1692,176 @@ def main() -> int:
             ug = cdp.eval("!![...document.querySelectorAll('.quick-grid .cmd-btn')].find((b) => b.textContent.includes('Ungroup'))")
             cdp.eval("[...document.querySelectorAll('.quick-grid .cmd-btn')].find((b) => b.textContent.includes('Ungroup'))?.click(); 1"); time.sleep(0.4)
             check(ug and cdp.eval(f"{S}.doc.layers.length") == n0 and cdp.eval(f"{S}.doc.layers.every((n) => n.kind !== 'group')"), "a group's quick action Ungroup puts its layers back")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "transform":
+            # D58 free transform: the maths in the page (PhotoCraft's own unit tests), the gestures by mouse, the bake against the exact
+            # flatten, selection lifts, groups, undo, the exact presets
+            S, C = STORE, "window.__loom2Commands"
+            T = "window.__loom2Transform"
+            hist = lambda: cdp.eval(f"{S}.history.length")  # noqa: E731
+            js = lambda body: cdp.eval(f"(() => {{ const s = {S}; {body} }})()")  # noqa: E731
+            run = lambda cid: cdp.eval(f"{C}.runCommand('{cid}')")  # noqa: E731
+            # ---- maths
+            m = json.loads(cdp.eval(f"""(() => {{ const X = {T};
+              const q = [{{x: 10, y: 20}}, {{x: 110, y: 10}}, {{x: 130, y: 90}}, {{x: 0, y: 100}}];
+              const H = X.Homography.rectToQuad([0, 0, 40, 30], q), I = H.inverse();
+              const cs = X.rectCorners([0, 0, 40, 30]).map((c) => H.apply(c.x, c.y));
+              const cerr = Math.max(...cs.map((c, i) => Math.hypot(c.x - q[i].x, c.y - q[i].y)));
+              const p = H.apply(17, 9), b = I.apply(p.x, p.y), rerr = Math.hypot(b.x - 17, b.y - 9);
+              const degen = X.Homography.rectToQuad([0, 0, 1, 1], [{{x:0,y:0}},{{x:0,y:0}},{{x:0,y:0}},{{x:0,y:0}}]);
+              // integer translate is exact under all three interpolations
+              const W = 16, Hh = 8, px = new Uint8ClampedArray(W * Hh * 4);
+              for (let i = 0; i < W * Hh; i++) {{ px[i * 4] = (i * 37) % 256; px[i * 4 + 1] = (i * 11) % 256; px[i * 4 + 2] = 200; px[i * 4 + 3] = 255 }}
+              const src = X.premultiply(px, W, Hh, 0, 0), T1 = X.Homography.affine(1, 0, 0, 1, 11, 1);
+              const exact = ['nearest', 'bilinear', 'bicubic'].map((it) => {{ const r = X.warpRaster(src, T1, it), o = X.toStraight8(r); let bad = 0;
+                for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) for (let c = 0; c < 4; c++) if (o[((y + 1 - r.y) * r.w + (x + 11 - r.x)) * 4 + c] !== px[(y * W + x) * 4 + c]) bad++; return bad }});
+              // an 8× shrink of a 1-px checkerboard is prefiltered to ≈ 50 % grey (bicubic alone would alias)
+              const N = 64, cb = new Uint8ClampedArray(N * N * 4);
+              for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {{ const v = (x + y) % 2 ? 255 : 0; cb.set([v, v, v, 255], (y * N + x) * 4) }}
+              const r8 = X.warpRaster(X.premultiply(cb, N, N, 0, 0), X.Homography.affine(1 / 8, 0, 0, 1 / 8, 0, 0), 'bicubic'), o8 = X.toStraight8(r8);
+              const mid = o8[((Math.floor(r8.h / 2)) * r8.w + Math.floor(r8.w / 2)) * 4];
+              return JSON.stringify({{ cerr, rerr, degen: degen === null || degen.inverse() === null, exact, mid }}) }})()"""))
+            check(m["cerr"] < 1e-9 and m["rerr"] < 1e-9 and m["degen"], f"the homography maps the rect's corners onto the quad and inverts (errors {m['cerr']:.1e}, {m['rerr']:.1e}); a collapsed quad is degenerate")
+            check(m["exact"] == [0, 0, 0], f"an integer translation is pixel-exact under nearest, bilinear and bicubic (differing values {m['exact']})")
+            check(100 <= m["mid"] <= 155, f"an 8× shrink of a 1-px checkerboard is prefiltered to grey ({m['mid']}/255)")
+            # ---- the box, by mouse
+            geo = json.loads(cdp.eval(f"JSON.stringify((() => {{ const r = document.querySelector('.edit-canvas').getBoundingClientRect(); const s = {S}; return {{ x: r.left, y: r.top, zoom: s.zoom, px: s.pan.x, py: s.pan.y }} }})())"))
+            scr = lambda x, y: (geo["x"] + geo["px"] + x * geo["zoom"], geo["y"] + geo["py"] + y * geo["zoom"])  # noqa: E731
+
+            def drag(a: tuple[float, float], b: tuple[float, float], modifiers: int = 0) -> None:
+                (x0, y0), (x1, y1) = scr(*a), scr(*b)
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0, y=y0)
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=x0, y=y0, button="left", buttons=1, clickCount=1, modifiers=modifiers)
+                for i in range(1, 9):
+                    cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0 + (x1 - x0) * i / 8, y=y0 + (y1 - y0) * i / 8, button="left", buttons=1, modifiers=modifiers)
+                    time.sleep(0.02)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=x1, y=y1, button="left", buttons=0, clickCount=1, modifiers=modifiers)
+                time.sleep(0.3)
+            tq = lambda: json.loads(cdp.eval(f"JSON.stringify({S}.transform)"))  # noqa: E731
+
+            def compare(label: str) -> None:
+                cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+                t0 = time.time()
+                while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+                    time.sleep(0.3)
+                r = json.loads(cdp.eval("JSON.stringify(window.__cmp && [window.__cmp.rgb_p99, window.__cmp.rgb_max])") or "null")
+                check(r is not None and r[0] <= 1, f"{label}: GPU = exact flatten (p99, max = {r})")
+
+            base = js("return s.doc.layers[s.doc.layers.length - 1].id")
+            js(f"s.setActive('{base}'); return 1")
+            n0 = json.loads(js("const n = s.doc.layers.find((x) => x.id === s.activeId); return JSON.stringify([n.x, n.y, n.w, n.h])"))
+            run("edit.transform"); time.sleep(0.4)
+            t = tq()
+            check(t is not None and t["rect"] == [n0[0], n0[1], n0[0] + n0[2], n0[1] + n0[3]] and t["mode"] == "free", f"Free transform frames the layer ({t and t['rect']})")
+            before = cdp.shot(OUT / f"{mode}{tag}-0.png")
+            q = t["quad"]
+            drag((q[2]["x"], q[2]["y"]), (q[2]["x"] - n0[2] * 0.3, q[2]["y"] - n0[3] * 0.1))
+            t = tq(); q = t["quad"]
+            w1, h1 = q[1]["x"] - q[0]["x"], q[3]["y"] - q[0]["y"]
+            check(abs(w1 / h1 - n0[2] / n0[3]) < 0.01 and w1 < n0[2], f"a corner drag scales in proportion by default ({w1:.0f}×{h1:.0f}, was {n0[2]}×{n0[3]})")
+            drag((q[2]["x"], q[2]["y"]), (q[2]["x"] + 60, q[2]["y"] - 40), modifiers=8)
+            t = tq(); q = t["quad"]
+            check(abs((q[1]["x"] - q[0]["x"]) / (q[3]["y"] - q[0]["y"]) - n0[2] / n0[3]) > 0.05, "Shift frees the proportions")
+            q0 = q
+            drag((q[1]["x"], q[1]["y"]), (q[1]["x"] + 40, q[1]["y"] + 30), modifiers=2)
+            t = tq(); q = t["quad"]
+            moved = [i for i in range(4) if abs(q[i]["x"] - q0[i]["x"]) + abs(q[i]["y"] - q0[i]["y"]) > 0.5]
+            check(moved == [1], f"Ctrl-dragging a corner distorts: only that corner moves ({moved})")
+            mid = cdp.shot(OUT / f"{mode}{tag}-1-distort.png")
+            check(region_diff(before, mid, (canvas["x"] + canvas["cssW"] * 0.2, canvas["y"] + canvas["cssH"] * 0.2, canvas["x"] + canvas["cssW"] * 0.8, canvas["y"] + canvas["cssH"] * 0.8)) > 3, "the preview shows the distorted layer while the box is open")
+            js("s.setTransform({ mode: 'perspective' }); return 1"); time.sleep(0.2)
+            q0 = q
+            drag((q[0]["x"], q[0]["y"]), (q[0]["x"] + 30, q[0]["y"]))
+            t = tq(); q = t["quad"]
+            check(abs((q[0]["x"] - q0[0]["x"]) + (q[1]["x"] - q0[1]["x"])) < 0.5 and q[0]["x"] - q0[0]["x"] > 10, f"perspective mode mirrors a corner drag on its neighbour ({q[0]['x'] - q0[0]['x']:.1f}, {q[1]['x'] - q0[1]['x']:.1f})")
+            js("s.setTransform({ mode: 'free' }); return 1")
+            p0 = t["pivot"]
+            dw, dh = js("return s.doc.w"), js("return s.doc.h")
+            far = next(pt for pt in [(dw - 8, dh - 8), (dw - 8, 8), (8, dh - 8), (8, 8)] if not js(f"return {T}.insideQuad(s.transform.quad, {{ x: {pt[0]}, y: {pt[1]} }})") and min(math.hypot(pt[0] - c["x"], pt[1] - c["y"]) for c in q) > 40)
+            ang0 = math.degrees(math.atan2(q[1]["y"] - q[0]["y"], q[1]["x"] - q[0]["x"]))
+            a40 = math.radians(-40)                                        # the grab point swung 40° about the reference point
+            to = (p0["x"] + (far[0] - p0["x"]) * math.cos(a40) - (far[1] - p0["y"]) * math.sin(a40), p0["y"] + (far[0] - p0["x"]) * math.sin(a40) + (far[1] - p0["y"]) * math.cos(a40))
+            drag(far, to, modifiers=8)
+            t = tq(); q = t["quad"]
+            ang = math.degrees(math.atan2(q[1]["y"] - q[0]["y"], q[1]["x"] - q[0]["x"]))
+            check(abs(ang / 15 - round(ang / 15)) < 1e-6 and abs(ang - ang0) > 20 and abs(t["pivot"]["x"] - p0["x"]) < 1e-6, f"dragging outside rotates about the reference point, Shift snaps to 15° ({ang0:.2f}° → {ang:.2f}°)")
+            px_, py_ = t["pivot"]["x"] + 80, t["pivot"]["y"] + 30          # away from the pivot handle (a press there would drag it)
+            sx, sy = scr(px_, py_)
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=sx, y=sy)
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=sx, y=sy, button="left", buttons=1, clickCount=1, modifiers=1)
+            cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=sx, y=sy, button="left", buttons=0, clickCount=1, modifiers=1)
+            time.sleep(0.3)
+            pv = tq()["pivot"]
+            check(abs(pv["x"] - px_) < 1 and abs(pv["y"] - py_) < 1, "Alt-click places the reference point")
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="ArrowRight", code="ArrowRight", windowsVirtualKeyCode=39, modifiers=8)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="ArrowRight", code="ArrowRight", windowsVirtualKeyCode=39, modifiers=8)
+            time.sleep(0.2)
+            check(abs(tq()["pivot"]["x"] - pv["x"] - 10) < 1e-6, "Shift+→ nudges the box 10 px")
+            # the strip's W field halves the width about the reference point
+            wbox = json.loads(cdp.eval("JSON.stringify((() => { const i = [...document.querySelectorAll('.xform-bar input.vfield-num')].find((e) => e.getAttribute('aria-label') === 'W'); const r = i.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())"))
+            w_before = tq()
+            cdp.eval("(() => { const i = [...document.querySelectorAll('.xform-bar input.vfield-num')].find((e) => e.getAttribute('aria-label') === 'W'); i.focus(); i.select(); return 1 })()")
+            ro0 = js("const t = s.transform; return Math.hypot(t.quad[1].x - t.quad[0].x, t.quad[1].y - t.quad[0].y)")
+            cdp.call("Input.insertText", text="50")
+            cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+            cdp.call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter", windowsVirtualKeyCode=13)
+            time.sleep(0.3)
+            ro1 = js("const t = s.transform; return Math.hypot(t.quad[1].x - t.quad[0].x, t.quad[1].y - t.quad[0].y)")
+            check(abs(ro1 - js("return s.transform.rect[2] - s.transform.rect[0]") * 0.5) < 0.6, f"typing W = 50 % sets the width to half the frame ({ro0:.0f} → {ro1:.0f} px)")
+            del w_before, wbox
+            h0 = hist()
+            run("edit.transform.apply"); time.sleep(2.0)
+            n1 = json.loads(js("const n = s.doc.layers.find((x) => x.id === s.activeId); return JSON.stringify([n.x, n.y, n.w, n.h])"))
+            check(cdp.eval(f"{S}.transform") is None and hist() == h0 + 1 and n1 != n0, f"apply bakes the layer in one step ({n0} → {n1})")
+            compare("a perspective-distorted, rotated, half-width layer")
+            run("edit.undo"); time.sleep(0.6)
+            n2 = json.loads(js("const n = s.doc.layers.find((x) => x.id === s.activeId); return JSON.stringify([n.x, n.y, n.w, n.h])"))
+            check(n2 == n0, f"undo restores the layer ({n2})")
+            # presets are exact permutations
+            sig = lambda: js("const lp = s.pixels.get(s.activeId); const d = lp.ctx.getImageData(0, 0, lp.width, lp.height).data; let h = 0; for (let i = 0; i < d.length; i += 97) h = (h * 31 + d[i]) | 0; return h + ':' + lp.width + 'x' + lp.height")  # noqa: E731
+            s0 = sig()
+            run("edit.layer.flipH"); time.sleep(0.8); run("edit.layer.flipH"); time.sleep(0.8)
+            check(sig() == s0, "flip horizontal twice gives back the very same pixels")
+            run("edit.layer.rot90"); time.sleep(0.8)
+            s90 = sig()
+            run("edit.layer.rot270"); time.sleep(0.8)
+            check(sig() == s0 and s90.split(":")[1] == "x".join(reversed(s0.split(":")[1].split("x"))), f"rotate 90° then 270° gives back the same pixels ({s90.split(':')[1]})")
+            # with a selection only the selected pixels move; the hole stays transparent; the selection moves with them
+            js(f"s.editSelection('t', () => {{ const sel = s.ensureSelection(); sel.ctx.fillStyle = '#fff'; sel.ctx.fillRect(100, 100, 120, 80); sel.refresh() }}); return 1"); time.sleep(0.3)
+            px = lambda x, y: json.loads(js(f"const n = s.doc.layers.find((q) => q.id === s.activeId); const lp = s.pixels.get(n.id); return JSON.stringify(Array.from(lp.ctx.getImageData({x} - n.x, {y} - n.y, 1, 1).data))"))  # noqa: E731
+            a0, out0 = px(150, 140), px(60, 60)
+            run("edit.transform"); time.sleep(0.4)
+            t = tq()
+            check(t["selection"] and t["rect"] == [100, 100, 220, 180], f"with a selection the frame is the selected part ({t['rect']})")
+            drag((120, 115), (320, 315))                                   # away from the reference point at the frame's centre
+            run("edit.transform.apply"); time.sleep(1.5)
+            a1, hole, out1 = px(350, 340), px(150, 140), px(60, 60)
+            selmoved = js("const v = s.selection.ctx.getImageData(350, 340, 1, 1).data[0]; const w = s.selection.ctx.getImageData(150, 140, 1, 1).data[0]; return JSON.stringify([v, w])")
+            check(a1 == a0 and hole[3] == 0 and out1 == out0 and json.loads(selmoved) == [255, 0], f"the selected pixels moved (+200, +200), the hole is transparent, the rest untouched, the selection followed ({a0} → {a1}, hole {hole}, sel {selmoved})")
+            compare("pixels moved out of a selection")
+            run("edit.undo"); time.sleep(0.5)
+            check(px(150, 140) == a0 and json.loads(js("return JSON.stringify(s.selection ? s.selection.ctx.getImageData(150, 140, 1, 1).data[0] : null)")) == 255, "undo puts the pixels and the selection back")
+            run("edit.sel.none"); time.sleep(0.3)
+            # a group transforms its rasters together, one undo step
+            run("edit.layer.new"); time.sleep(0.3)
+            js("const lp = s.pixels.get(s.activeId); lp.ctx.fillStyle = '#ff0000'; lp.ctx.fillRect(200, 200, 100, 100); lp.refresh(); lp.dirty = true; s.touch(); s.bump(); return 1"); time.sleep(0.3)
+            top = js("return s.activeId")
+            js(f"s.selectLayer('{top}'); s.selectLayer('{base}', 'toggle'); return 1")
+            run("edit.layer.group"); time.sleep(0.4)
+            g = js("return s.activeId")
+            run("edit.transform"); time.sleep(0.4)
+            js("const t = s.transform; s.setTransform({ quad: t.quad.map((c) => ({ x: t.pivot.x + (c.x - t.pivot.x) * 0.5, y: t.pivot.y + (c.y - t.pivot.y) * 0.5 })) }); return 1")
+            sizes0 = json.loads(js(f"const g = s.doc.layers.find((x) => x.id === '{g}'); return JSON.stringify(g.children.map((c) => [c.w, c.h]))"))
+            h0 = hist()
+            run("edit.transform.apply"); time.sleep(2.5)
+            sizes1 = json.loads(js(f"const g = s.doc.layers.find((x) => x.id === '{g}'); return JSON.stringify(g.children.map((c) => [c.w, c.h]))"))
+            # the top raster holds a 100 px square (the bake trims transparent margins), the bottom one fills the document
+            check(hist() == h0 + 1 and 49 <= sizes1[0][0] <= 53 and abs(sizes1[1][0] - sizes0[1][0] / 2) <= 2, f"a group's rasters scale together in one step ({sizes0} → {sizes1})")
+            compare("a group scaled to 50 %")
+            run("edit.undo"); time.sleep(0.6)
+            sizes2 = json.loads(js(f"const g = s.doc.layers.find((x) => x.id === '{g}'); return JSON.stringify(g.children.map((c) => [c.w, c.h]))"))
+            check(sizes2 == sizes0, f"undo restores every raster of the group ({sizes2})")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":

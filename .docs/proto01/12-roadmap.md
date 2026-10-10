@@ -332,6 +332,9 @@ multi-select, drag and drop, eye sweep, footer drops), D57 (properties: sections
 spline curves — the oracle floor rose to 9) landed; headed kit, layers, props and the earlier modes pass. Remaining Edit work: PE6
 (PC23 transform, S2 → PC24), PC25 / PC26 with H3, and the author's S1 decision.
 
+**PE6 status 2026-10-10: D58 landed** (free transform: homography, skew / distort / perspective, numeric fields, interpolation,
+prefilter, selection lifts, groups). Next: spike S2, whose go / no-go — a Rust → WASM build in the frontend — is the author's, before PC24.
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

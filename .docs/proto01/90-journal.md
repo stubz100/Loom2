@@ -2407,3 +2407,8 @@ Inspector → lineage → split → pages.
   a Colour balance row → midtones red 76 in one step, GPU = exact (max 1); a section collapses; Ungroup. Full regression: props, layers,
   kit, masks, paint, brush, cmpdiag, grid, tour, selection, render, psd pass; 178 offline + the corpus oracle; build clean; lint 96.
 - **PE5 closed** (D55–D57). Left for the author: PE6 (transform, S2), PC25 / PC26 with H3, the S1 go / no-go.
+
+## 2026-10-10 20:12 — CI green on wave PE5
+
+- Run 38074280397 at b2a9974 (D55–D57): offline tests + frontend build for both variants (full, open) and both installers passed; the
+  draft release job is skipped off tags.

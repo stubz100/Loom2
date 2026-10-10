@@ -2294,3 +2294,8 @@ Inspector → lineage → split → pages.
 - 171 offline tests; frontend build and lint clean (one more per-component Fast Refresh note); API contract regenerated.
 - **PE4 closed** (D50–D53). Remaining Edit work: PE5 (PC22 mouse kit, PC20 layers panel, PC21 properties incl. the Curves spline and
   a Levels histogram), PE6 (PC23 transform, S2 → PC24), PC25 / PC26 with H3; the S1 go / no-go is the author's.
+
+## 2026-10-10 18:31 — CI green on wave PE4
+
+- Run 38067539037 at d1faf87: offline tests + frontend build for both variants (full, open) and both installers passed; the draft
+  release job is skipped off tags. Wave PE4 (D50–D53) is closed on CI too.

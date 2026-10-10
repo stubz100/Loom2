@@ -2243,3 +2243,17 @@ Inspector → lineage → split → pages.
 - **Environment, not code:** `tour` failed twice at PSD export / compare with "504 Outdated Optimize Dep" — the author's own `npm run
   dev` (started 17:32) holds a stale dependency hash after a Vite of mine, refused on the busy port, re-optimised the shared
   `node_modules/.vite` cache. Restarting `npm run dev` clears it; the same tour steps passed at `1de73aa`.
+
+## 2026-10-10 17:59 — D53 partial texture uploads
+
+- `LayerPixels.refreshRect` uploads only a stroke's changed rect through a renderer hook EditorCanvas registers
+  (`setPartialUpload`), done the way Pixi uploads a canvas: WebGPU `copyExternalImageToTexture` with origin and size (premultiplied on
+  upload as the source's alpha mode says), WebGL2 `texSubImage2D` from the region's ImageData with Pixi's premultiply / binding caches kept
+  true; any failure falls back to the whole texture. `window.__loom2FullUpload = true` forces whole uploads (A/B).
+- **Correctness:** headed `brush` now ends with a GPU-vs-exact compare after all its strokes — p99 0, max 0 on WebGPU **and** WebGL2
+  (`EXTRA=&renderer=webgl`); `paint`, `selection`, `cmpdiag` passed (one `cmpdiag` run failed at its first case with p99 0 on a page
+  error and passed on two reruns — the author's dev server was reloading).
+- **Performance:** not measurable with the instruments here: `perf` on the 4K document reads 33.3 ms per presented frame either way (the
+  31 Hz display), handler CPU 0.2 / 0.3 ms and render CPU 0.3 / 0.4 ms with partial / full uploads — the whole-texture upload is queued
+  GPU / driver work that CPU timings do not see. Each move now sends ≈ 14 KB instead of 33 MB; the gain should show on a faster display or
+  larger documents. `perf` reports the render CPU time now and takes `FULL_UPLOAD=1`.

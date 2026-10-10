@@ -580,6 +580,13 @@ def brush_check(cdp: CDP) -> list[str]:
     stroke([(500, 100), (600, 100)])
     end = px(598, 100)
     check(end[3] > 200, f"with heavy smoothing the stroke still reaches the release point ({end})")
+    # D53: every stroke above went up as a partial texture upload — the GPU composite must still equal the exact flatten
+    cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+    t0 = time.time()
+    while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+        time.sleep(0.3)
+    cmp_ = json.loads(cdp.eval("JSON.stringify(window.__cmp && [window.__cmp.rgb_p99, window.__cmp.rgb_max])") or "null")
+    check(cmp_ is not None and cmp_[0] <= 1, f"after partial uploads the GPU composite equals the exact flatten (p99, max = {cmp_})")
     errs = cdp.page_errors()
     check(not errs, "no page errors" + ("".join("\n       " + x for x in errs)))
     return fails
@@ -1014,9 +1021,11 @@ def perf_check(cdp: CDP, doc_id: str, clip_id: str, base_url: str) -> list[str]:
     stroke_js = """(() => new Promise((res) => { const host = document.querySelector('.edit-canvas'); const r = host.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
         const ev = (type, x, y) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true }));
         const lags = []; ev('pointerdown', cx - 200, cy); let i = 0;
-        const work = []; const step = () => { const t0 = performance.now(); ev('pointermove', cx - 200 + i * 8, cy + Math.sin(i / 5) * 40); work.push(performance.now() - t0); requestAnimationFrame((t) => { lags.push(t - t0); if (++i < 50) step(); else { ev('pointerup', cx + 200, cy); lags.sort((a, b) => a - b); work.sort((a, b) => a - b); res(JSON.stringify({p50: lags[25], p95: lags[47], max: lags[49], work50: work[25], work95: work[47]})) } }) }; step() }))()"""
+        const work = [], rend = []; const step = () => { const t0 = performance.now(); ev('pointermove', cx - 200 + i * 8, cy + Math.sin(i / 5) * 40); work.push(performance.now() - t0); requestAnimationFrame((t) => { requestAnimationFrame(() => { rend.push(window.__loom2RenderMs || 0); lags.push(t - t0); if (++i < 50) step(); else { ev('pointerup', cx + 200, cy); lags.sort((a, b) => a - b); work.sort((a, b) => a - b); rend.sort((a, b) => a - b); res(JSON.stringify({p50: lags[25], p95: lags[47], max: lags[49], work50: work[25], work95: work[47], render50: rend[25], render95: rend[47]})) } }) }) }; step() }))()"""
+    if os.environ.get("FULL_UPLOAD"):                                    # D53 A/B: whole-texture uploads as before
+        cdp.eval("window.__loom2FullUpload = true; 1")
     br = json.loads(cdp.eval(stroke_js))
-    report(br["p95"] <= 1000 / max(1.0, raf["fps"]) * 1.15, f"Brush on the 4K document: pointer move → next presented frame p50 {br['p50']:.1f} ms · p95 {br['p95']:.1f} ms · max {br['max']:.1f} ms; handler CPU p50 {br['work50']:.1f} ms · p95 {br['work95']:.1f} ms (budget ≤ 1 display frame = {1000 / max(1.0, raf['fps']):.1f} ms at {raf['fps']:.0f} Hz)")
+    report(br["p95"] <= 1000 / max(1.0, raf["fps"]) * 1.15, f"Brush on the 4K document: pointer move → next presented frame p50 {br['p50']:.1f} ms · p95 {br['p95']:.1f} ms · max {br['max']:.1f} ms; handler CPU p50 {br['work50']:.1f} ms · p95 {br['work95']:.1f} ms; render CPU p50 {br['render50']:.1f} ms · p95 {br['render95']:.1f} ms (budget ≤ 1 display frame = {1000 / max(1.0, raf['fps']):.1f} ms at {raf['fps']:.0f} Hz)")
     cdp.eval("window.__loom2Editor.getState().undo(); 1")
     errs = cdp.page_errors()
     if errs:

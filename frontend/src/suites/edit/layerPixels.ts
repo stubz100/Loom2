@@ -6,6 +6,12 @@ export const TILE = 256
 
 export interface TileSnapshot { x: number; y: number; data: ImageData }
 
+/** D53: the renderer's sub-region upload, registered by EditorCanvas (returns false when it could not upload — then the whole texture
+ * goes up). `window.__loom2FullUpload = true` forces whole-texture uploads, for A/B measurements. */
+type PartialUpload = (lp: LayerPixels, x0: number, y0: number, x1: number, y1: number) => boolean
+let partialUpload: PartialUpload | null = null
+export function setPartialUpload(fn: PartialUpload | null): void { partialUpload = fn }
+
 export class LayerPixels {
   readonly canvas: HTMLCanvasElement
   readonly ctx: CanvasRenderingContext2D
@@ -89,9 +95,14 @@ export class LayerPixels {
     return out
   }
 
-  /** Upload a changed region (layer pixels, x1 / y1 exclusive) to the GPU texture. */
+  /** D53: upload only a changed region (layer pixels, x1 / y1 exclusive) to the GPU texture; the whole texture when the renderer cannot. */
   refreshRect(x0: number, y0: number, x1: number, y1: number): void {
-    void x0; void y0; void x1; void y1
+    const full = (globalThis as { __loom2FullUpload?: boolean }).__loom2FullUpload
+    if (!full && partialUpload) {
+      const ax = Math.max(0, Math.floor(x0)), ay = Math.max(0, Math.floor(y0)), bx = Math.min(this.width, Math.ceil(x1)), by = Math.min(this.height, Math.ceil(y1))
+      if (bx <= ax || by <= ay) return
+      try { if (partialUpload(this, ax, ay, bx, by)) return } catch { /* fall through to the whole texture */ }
+    }
     this.refresh()
   }
 

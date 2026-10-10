@@ -14,7 +14,7 @@ import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
 import { findNode, useEditor, type Node } from './editorStore'
 import { useAiPanel } from './aiPanelStore'
-import { selectionAlphaCanvas, type LayerPixels } from './layerPixels'
+import { selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
 import { PathWalker, Smoother, Stroke } from './brushEngine'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { corners, handles, insideQuad, toLocal, type Xform } from './transform'
@@ -93,7 +93,12 @@ export function EditorCanvas() {
   const requestRender = () => {
     if (!appRef.current) return
     if (renderPending.current) return
-    const run = () => { renderPending.current = 0; renderPasses(); appRef.current?.render() }
+    const run = () => {
+      renderPending.current = 0
+      const t0 = performance.now()
+      renderPasses(); appRef.current?.render()
+      ;(window as unknown as { __loom2RenderMs?: number }).__loom2RenderMs = performance.now() - t0    // read by edit_headed_check.py perf
+    }
     renderPending.current = requestAnimationFrame(run)
   }
   const cancelPendingRender = () => { if (renderPending.current) cancelAnimationFrame(renderPending.current); renderPending.current = 0 }
@@ -246,6 +251,26 @@ export function EditorCanvas() {
       const kind = app.renderer.type === RendererType.WEBGPU ? 'WebGPU' : app.renderer.type === RendererType.WEBGL ? 'WebGL2' : 'canvas'
       useEditor.getState().setRenderer(fellBack ? `${kind} (fallback)` : kind)
       if (fellBack) useSession.getState().toast('WebGPU initialised but drew nothing here — the editor is using WebGL2 (the renderer badge in the strip switches)', 'info')
+      // D53: sub-region texture uploads for strokes, done the way Pixi uploads a canvas (premultiplied on upload), for the changed rect
+      setPartialUpload((lp, x0, y0, x1, y1) => {
+        const source = lp.texture.source as unknown as { alphaMode?: string }
+        const premultiplied = source.alphaMode === 'premultiply-alpha-on-upload'
+        const w = x1 - x0, h = y1 - y0
+        if (app.renderer.type === RendererType.WEBGPU) {
+          const r = app.renderer as unknown as { texture: { getGpuSource: (s: unknown) => GPUTexture }; gpu: { device: GPUDevice } }
+          const tex = r.texture.getGpuSource(lp.texture.source)
+          r.gpu.device.queue.copyExternalImageToTexture({ source: lp.canvas, origin: { x: x0, y: y0 } }, { texture: tex, origin: { x: x0, y: y0 }, premultipliedAlpha: premultiplied }, { width: w, height: h })
+          return true
+        }
+        const r = app.renderer as unknown as { gl: WebGL2RenderingContext; texture: { getGlSource: (s: unknown) => { texture: WebGLTexture; format: number; type: number; target: number }; _premultiplyAlpha: boolean; _activeTextureLocation: number; _setBoundTexture: (loc: number, s: unknown) => void } }
+        const gl = r.gl
+        const glTex = r.texture.getGlSource(lp.texture.source)
+        gl.bindTexture(glTex.target, glTex.texture)
+        r.texture._setBoundTexture(r.texture._activeTextureLocation, lp.texture.source)             // keep Pixi's binding cache true
+        if (r.texture._premultiplyAlpha !== premultiplied) { r.texture._premultiplyAlpha = premultiplied; gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiplied) }
+        gl.texSubImage2D(glTex.target, 0, x0, y0, w, h, glTex.format, glTex.type, lp.ctx.getImageData(x0, y0, w, h))
+        return true
+      })
       useEditor.getState().setExtractor(() => {
         const d = useEditor.getState().doc
         if (!d || !layersRef.current) return null
@@ -275,6 +300,7 @@ export function EditorCanvas() {
       unsubTheme?.()
       cancelPendingRender()                                              // and clear the flag: a stale id blocked every later request (2026-10-06)
       useEditor.getState().setExtractor(null)
+      setPartialUpload(null)
       for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }
       passesRef.current = []
       negRef.current?.forEach((f) => f.destroy()); negRef.current = null

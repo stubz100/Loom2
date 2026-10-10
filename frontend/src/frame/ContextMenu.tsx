@@ -46,7 +46,8 @@ function resolve(it: MenuItem): Resolved | null {
   return { kind: 'item', label: it.label, icon: it.icon, keys: it.keys, run: it.run, disabled: !!it.disabled, danger: it.danger, checked: it.checked }
 }
 
-function MenuList({ items, x, y, depth, onClose }: { items: MenuItem[]; x: number; y: number; depth: number; onClose: () => void }) {
+/** `parentLeft`: a submenu's parent's left edge — when the submenu does not fit on the right it opens to the parent's left, never over it. */
+function MenuList({ items, x, y, depth, onClose, parentLeft }: { items: MenuItem[]; x: number; y: number; depth: number; onClose: () => void; parentLeft?: number }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
   const [focus, setFocus] = useState(-1)
@@ -56,9 +57,11 @@ function MenuList({ items, x, y, depth, onClose }: { items: MenuItem[]; x: numbe
     const el = ref.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    const nx = Math.min(x, window.innerWidth - r.width - 6), ny = Math.min(y, window.innerHeight - r.height - 6)
+    const fits = x + r.width <= window.innerWidth - 6
+    const nx = fits ? x : parentLeft !== undefined && parentLeft - r.width + 4 >= 4 ? parentLeft - r.width + 4 : Math.min(x, window.innerWidth - r.width - 6)
+    const ny = Math.min(y, window.innerHeight - r.height - 6)
     setPos({ x: Math.max(4, nx), y: Math.max(4, ny) })
-  }, [x, y, items])
+  }, [x, y, items, parentLeft])
   useEffect(() => {
     if (depth !== 0) return
     const onKey = (e: KeyboardEvent) => {
@@ -89,7 +92,7 @@ function MenuList({ items, x, y, depth, onClose }: { items: MenuItem[]; x: numbe
         if (r.kind === 'sub') return (
           <div key={i} className={`item sub${focus === i ? ' focus' : ''}`} role="menuitem" onMouseEnter={() => { setFocus(i); setSub(i) }} onClick={(e) => { e.stopPropagation(); setSub(i) }}>
             <span className="ic">{Icon ? <Icon size={14} /> : null}</span><span className="lbl">{r.label}</span><span className="arrow">▸</span>
-            {sub === i && ref.current && <MenuList items={r.items} x={pos.x + ref.current.offsetWidth - 4} y={pos.y + (ref.current.children[i] as HTMLElement).offsetTop - 4} depth={depth + 1} onClose={onClose} />}
+            {sub === i && ref.current && <MenuList items={r.items} x={pos.x + ref.current.offsetWidth - 4} y={pos.y + (ref.current.children[i] as HTMLElement).offsetTop - 4} depth={depth + 1} onClose={onClose} parentLeft={pos.x} />}
           </div>
         )
         return (

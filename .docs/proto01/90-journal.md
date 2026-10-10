@@ -2568,3 +2568,20 @@ Inspector → lineage → split → pages.
 - Run 38080084162 at 3152e54: offline tests + frontend build for both variants (incl. the new steps: settings audit, the content-aware
   wheel and smart-select WebAssembly pin checks, the vendored wheel installed by `--extra native`) and both installers passed. The runs on
   f21af1f, d777f39 and 1af077f were cancelled by newer pushes; e76b482 (D59–D61) passed.
+
+## 2026-10-10 22:05 — the author's UI report: popup backgrounds, submenus over their parent, Multiply "resizing" a layer
+
+- **Transparent pop-ups:** the blend list and the value field's slider pop-up used `var(--panel, var(--bg))` and the option hover
+  `var(--hover, …)` — none of those variables exists in the theme, so both drew transparent. Now `--bg2` / `--bg3` like the context
+  menu. A scan of every `var(--…)` in `frontend/src` found one more undefined name (`--bg` on the colour-balance slider thumb → `--bg0`);
+  none remain. Headed mode `kit` asserts both pop-ups are opaque.
+- **Submenu over its parent:** `ContextMenu`'s MenuList clamped a submenu that did not fit on the right back into the viewport — on a
+  layer row near the right edge the Transform submenu covered the parent's Mask entry. A submenu now opens to the parent's left when the
+  right side has no room; `.ctx-menu` is `width: max-content` because a menu placed at the edge measured narrower (its labels wrapped)
+  than it rendered after the flip (13 px overlap). Headed mode `layers` hovers every submenu of a row's menu: overlap 4 px (the
+  intended tuck) for Transform and Mask.
+- **Multiply resizing a layer: not reproduced.** A temporary on-screen probe (diff against the layer hidden, devicePixelRatio 1.5, zoom
+  86 %) for a full-size layer, a 200 × 150 layer at (500, 150), the same with a mask, and a full-size masked layer, through Normal,
+  Multiply, Screen, Overlay, Color Burn, Difference, Hue in both orders: the layer's footprint never moved or changed size. Asked the author
+  for the case (layer kind, size, mask, group, zoom). The probe was not kept.
+- Build clean; headed `layers` and `kit` pass.

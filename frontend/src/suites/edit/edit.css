@@ -114,15 +114,15 @@
 .vfield-unit { font-style: normal; color: var(--fg3); font-size: 11px; width: 16px; text-align: left; padding-left: 2px; }
 .vfield-arrow { width: 14px; height: 22px; padding: 0; border: 0; border-left: 1px solid var(--line); background: none; color: var(--fg3); font-size: 9px; cursor: pointer; }
 .vfield-arrow:hover { color: var(--fg); }
-.vfield-pop { position: absolute; right: 0; top: 26px; z-index: 30; height: 22px; padding: 2px 0; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.35); cursor: pointer; }
+.vfield-pop { position: absolute; right: 0; top: 26px; z-index: 30; height: 22px; padding: 2px 0; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.35); cursor: pointer; }
 .vfield-track { position: relative; margin: 8px 7px; height: 2px; background: var(--line2); }
 .vfield-knob { position: absolute; top: -5px; width: 10px; height: 12px; margin-left: -5px; border-radius: 2px; background: var(--accent); }
 .blend-select { position: relative; }
 .blend-btn { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; text-transform: capitalize; }
 .blend-btn .caret { font-size: 9px; color: var(--fg3); margin-left: 6px; }
-.blend-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; max-height: 320px; overflow-y: auto; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+.blend-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; max-height: 320px; overflow-y: auto; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
 .blend-opt { padding: 3px 8px; cursor: pointer; text-transform: capitalize; font-size: 12px; }
-.blend-opt:hover { background: var(--hover, rgba(255,255,255,.08)); }
+.blend-opt:hover { background: var(--bg3); }
 .blend-opt.current { color: var(--accent); }
 .latches { display: inline-flex; gap: 2px; }
 .latch { min-width: 30px; }
@@ -159,7 +159,7 @@
 .cb-row { display: grid; grid-template-columns: 54px 1fr 44px 32px; gap: 6px; align-items: center; font-size: 12px; }
 .cb-row span:nth-child(3) { text-align: right; }
 .cb-row input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; }
-.cb-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 1px solid var(--bg); }
+.cb-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 1px solid var(--bg0); }
 
 /* D58: the transform bar in the strip */
 .xform-bar { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }

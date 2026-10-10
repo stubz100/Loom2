@@ -1,8 +1,8 @@
 {
   "comment": "D40 ratchet for orchestrator/tests/test_compose_oracle_d40.py: raise, never lower. pass = compose.py within 2/255 (premultiplied max) of Photoshop's merged image.",
-  "pass_floor": 8,
+  "pass_floor": 9,
   "known_failures": {
-    "adjustments/curves_rgb.psd": "Photoshop interpolates curves with a natural cubic spline, loom2 linearly (PC21)",
+    "adjustments/curves_rgb.psd": "D57 spline (PhotoCraft's natural cubic): 3 of 40 000 pixels over 2/255, max 12 at the x = 0 column (linear curves were max 255, mean 50.8)",
     "adjustments/exposure_rgb.psd": "max 5/255 after the linear-light fix; Photoshop rounds to 8 bits after each adjustment layer, compose.py does not"
   }
 }

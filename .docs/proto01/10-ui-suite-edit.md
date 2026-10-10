@@ -207,6 +207,17 @@ first. Drag rows to reorder: the line shows above or below a row, a group's midd
 near its edges; Alt on release drops copies. Drop rows on the footer's trash (delete), New layer or Duplicate (duplicate) or Group
 (group). Drag down the eye column to show or hide every row passed. Each gesture is one undo step. Headed mode `layers`.
 
+**Properties (D57, 2026-10-10).** The panel follows the active layer in collapsible sections — Layer (x / y value fields, size,
+lineage) or Group (mode), the adjustment's editor, Layer mask, AI recipe, Quick actions (only those that can run: select layer
+transparency, free transform, mask from transparency, lock transparency, ink from white, duplicate; Ungroup for groups). **Curves**: RGB /
+Red / Green / Blue; click adds a point (up to 16), drag moves it, dragging it off the graph, Ctrl-click, right-click or Delete removes
+it, arrows nudge; the histogram behind is that of the visible pixel layers below. New curves are **splines** (`interp: "spline"`,
+PhotoCraft's natural cubic, each channel before the master) — Photoshop's own; curves saved before D57 keep their straight lines until
+edited. **Levels**: histogram, black / grey / white input triangles (grey left raises gamma), output triangles, value fields, Auto (0.1 %
+clipping). **Colour balance**: shadows / midtones / highlights, three gradient rows (double-click resets one). Below each adjustment:
+clip to the layer below, Reset to defaults. No JSON text fields remain. Headed mode `props`; the oracle's curves_rgb.psd went from
+max 255 to max 12 (3 of 40 000 pixels over 2/255).
+
 ## 7. Files
 - **Open from Catalogue** (`E` anywhere): creates `documents/<id>.ora` with one background layer (or opens the
   existing document linked to the asset).

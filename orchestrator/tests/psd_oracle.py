@@ -119,6 +119,7 @@ def _adjustment(layer) -> tuple[str, dict]:
             if key is None:
                 raise OutOfScope(f"curves channel {item.channel_id} on {layer.name!r}")
             params[key] = [[int(i), int(o)] for o, i in item.points]      # PSD stores (output, input)
+        params["interp"] = "spline"                                   # D57: Photoshop's curves are splines
         if not params:
             raise OutOfScope(f"legacy curves on {layer.name!r}")
         return "curves", params

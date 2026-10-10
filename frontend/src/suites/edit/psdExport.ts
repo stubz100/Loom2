@@ -1,6 +1,6 @@
 // PSD export through ag-psd (10 §7): layers, groups (pass-through or isolated), masks, blend modes, opacity, fill, clipping, locks,
 // adjustment layers, 8-bit. D41: adjustment layers are written as Photoshop adjustment layers (ag-psd `adjustment` records) with their
-// mask, clip, blend and opacity. Levels, Curves, Exposure and Invert carry over exactly; Hue/Saturation (master), Colour Balance,
+// mask, clip, blend and opacity. Levels, Curves (D57 splines; older straight-line curves are reported approximate), Exposure and Invert carry over exactly; Hue/Saturation (master), Colour Balance,
 // Brightness/Contrast (legacy) and Black & White keep their settings, but Photoshop's maths for them differ from compose.py's, so
 // those look slightly different there (the export reports them). Filter layers have no Photoshop equivalent and are skipped with
 // a warning (10 §15); the merged image still contains them.
@@ -105,6 +105,7 @@ export function buildPsd(doc: DocumentStack, pixels: Map<string, LayerPixels>, m
         const adjustment = psdAdjustment(n.type ?? '', n.params ?? {})
         if (!adjustment) { skipped.push(`${n.name} (adjustment ${n.type ?? ''})`); continue }
         if (APPROXIMATE.has(n.type ?? '')) approximate.push(`${n.name} (${(n.type ?? '').replace('_', ' ')})`)
+        else if (n.type === 'curves' && n.params?.interp !== 'spline') approximate.push(`${n.name} (curves from before D57: straight lines in loom2, Photoshop smooths them)`)   // D57
         out.push({ ...base, adjustment })
       } else {
         skipped.push(`${n.name} (${n.kind} ${n.type ?? ''})`.trim())

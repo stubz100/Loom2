@@ -137,3 +137,26 @@
 .cmd-btn.drop-target { outline: 2px solid var(--accent); outline-offset: 1px; }
 .layer-ghost { position: fixed; z-index: 60; pointer-events: none; padding: 3px 8px; border-radius: 4px; font-size: 12px; background: var(--bg3); border: 1px solid var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
 .layer-ghost.copy::after { content: ' +'; color: var(--accent); }
+
+/* D57: Properties sections and tone editors */
+.props-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0 6px; }
+.props-title b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.props-title .kind { color: var(--fg3); font-size: 11px; white-space: nowrap; }
+.props-section { border-top: 1px solid var(--line); }
+.props-head { width: 100%; height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; background: none; color: var(--fg); font-weight: 600; font-size: 12px; text-transform: capitalize; cursor: pointer; text-align: left; }
+.props-head .chev { width: 12px; color: var(--fg3); font-size: 11px; }
+.props-body { padding: 4px 0 10px; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px; }
+.quick-grid .cmd-btn { width: 100%; justify-content: flex-start; }
+.tone-editor { display: flex; flex-direction: column; gap: 4px; max-width: 300px; }
+.tone-hist { background: var(--bg2); border: 1px solid var(--line); border-radius: 3px; }
+.tone-handles { cursor: ew-resize; overflow: visible; touch-action: none; }
+.tone-bar { height: 8px; border-radius: 2px; background: linear-gradient(90deg, #000, #fff); border: 1px solid var(--line); }
+.tone-fields { margin-top: 4px; }
+.curves-graph { width: 100%; max-width: 300px; aspect-ratio: 1; cursor: crosshair; touch-action: none; outline: none; }
+.curves-graph:focus { filter: drop-shadow(0 0 1px var(--accent)); }
+.curves-ch button, .tone-editor .segmented button { text-transform: capitalize; }
+.cb-row { display: grid; grid-template-columns: 54px 1fr 44px 32px; gap: 6px; align-items: center; font-size: 12px; }
+.cb-row span:nth-child(3) { text-align: right; }
+.cb-row input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; }
+.cb-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 1px solid var(--bg); }

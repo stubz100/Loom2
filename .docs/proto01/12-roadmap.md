@@ -327,7 +327,10 @@ spike S1 ran (journal) and recommends **no-go** for PC14 / PC15 — awaiting the
 density / feather, any node kind, apply / from transparency), D53 (partial texture uploads) landed; headed brush, paint, cmpdiag and
 tour pass. Next Edit waves: PE5 (mouse kit, layers panel, properties) and PE6 (transform, S2), at the author's choice relative to H2.
 
-**PE5 status 2026-10-10: open** (D55 mouse kit, D56 layers panel, D57 properties; in that order).
+**PE5 status 2026-10-10: closed.** D55 (mouse-first kit: latches, press menus, value fields, blend preview), D56 (layers panel:
+multi-select, drag and drop, eye sweep, footer drops), D57 (properties: sections, quick actions, Levels / Curves / Colour balance editors,
+spline curves — the oracle floor rose to 9) landed; headed kit, layers, props and the earlier modes pass. Remaining Edit work: PE6
+(PC23 transform, S2 → PC24), PC25 / PC26 with H3, and the author's S1 decision.
 
 ## 9. Totals and parallelism
 

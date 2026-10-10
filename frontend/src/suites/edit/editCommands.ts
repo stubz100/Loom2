@@ -31,6 +31,7 @@ registerCommands([
   { id: 'edit.layer.newGroup', scope: 'edit', label: 'New empty group', icon: FolderPlus, placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('group') } },
   // D56: these act on the layer selection (the active layer alone when nothing else is selected)
   { id: 'edit.layer.group', scope: 'edit', label: 'Group layers', icon: Group, keys: 'Ctrl+G', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().groupNodes(ed().targetIds()) },
+  { id: 'edit.layer.ungroup', scope: 'edit', label: 'Ungroup', icon: Group, placement: ['context', 'inspector'], when: () => active()?.kind === 'group', hint: 'the group\'s layers take its place', run: () => ed().ungroupNode(ed().activeId!) },
   { id: 'edit.layer.duplicate', scope: 'edit', label: 'Duplicate layer', icon: Copy, keys: 'Ctrl+J', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().duplicateNodes(ed().targetIds()) },
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
@@ -142,7 +143,7 @@ export function layerMenu(): MenuItem[] {
   return [
     { cmd: 'edit.layer.rename' }, sep,
     { cmd: 'edit.layer.visibility', label: many ? (n.visible ? 'Hide layers' : 'Show layers') : visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: many ? (n.locked ? 'Unlock layers' : 'Lock layers') : lockLabel() }, sep,
-    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
+    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,

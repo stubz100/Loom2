@@ -11,6 +11,8 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      the polygon's ✓ / ⊘ in the strip and an audit of every Edit menu in every tool and state
   layers             D56: Ctrl / Shift selection, commands on the set, drag to reorder / into and out of a group / Alt copies,
                      eye sweep, drops on the footer's trash and New layer, right-click on the set — by mouse, one step per gesture
+  props              D57: Curves (add, drag, drag off, Ctrl / right-click, per channel), Levels (triangles, Auto, histogram), Colour
+                     balance rows — each against the exact flatten — sections, quick actions, Ungroup
   masks              D54: the mask workflow by mouse, judged on screenshots — + box adds a reveal-all mask with the mask colours,
                      brush hides / eraser reveals / X swaps, the row keeps the target, the pixel thumbnail restores the image
                      colours, Alt-click shows the mask alone, Shift-click disables, Alt + box hides all
@@ -40,7 +42,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
 """
 from __future__ import annotations
 
@@ -1582,6 +1584,110 @@ def main() -> int:
             check("Delete layers" in labels and "Merge layers" in labels and len(sel()) == 2, f"right-click on a row in the selection keeps it; the menu acts on the set ({[l for l in labels if 'layers' in l]})")
             cdp.call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
             time.sleep(0.2)
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "props":
+            # D57 Properties, by mouse: Curves (add, drag, drag off, Ctrl-click, right-click, per channel), the spline on the GPU against
+            # the exact flatten, Levels (triangles, Auto, histogram), Colour balance rows, sections, quick actions, Ungroup
+            S, C = STORE, "window.__loom2Commands"
+            hist = lambda: cdp.eval(f"{S}.history.length")  # noqa: E731
+            act = lambda: json.loads(cdp.eval(f"JSON.stringify((() => {{ const s = {S}; let hit = null; const w = (xs) => xs.forEach((x) => {{ if (x.id === s.activeId) hit = x; if (x.children) w(x.children) }}); w(s.doc.layers); return hit }})())"))  # noqa: E731
+
+            def box(sel: str) -> list[float]:
+                return json.loads(cdp.eval(f"JSON.stringify((() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null; e.scrollIntoView({{ block: 'center' }}); const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height] }})())"))
+
+            def mouse(kind: str, x: float, y: float, button: str = "left", modifiers: int = 0) -> None:
+                cdp.call("Input.dispatchMouseEvent", type=kind, x=x, y=y, button=button, buttons=(0 if kind == "mouseReleased" else (2 if button == "right" else 1)) if kind != "mouseMoved" else 0, clickCount=1, modifiers=modifiers)
+
+            def drag(a: tuple[float, float], b: tuple[float, float], modifiers: int = 0) -> None:
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=a[0], y=a[1])
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=a[0], y=a[1], button="left", buttons=1, clickCount=1, modifiers=modifiers)
+                for i in range(1, 11):
+                    cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=a[0] + (b[0] - a[0]) * i / 10, y=a[1] + (b[1] - a[1]) * i / 10, button="left", buttons=1, modifiers=modifiers)
+                    time.sleep(0.02)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=b[0], y=b[1], button="left", buttons=0, clickCount=1, modifiers=modifiers)
+                time.sleep(0.4)
+
+            def compare(label: str) -> None:
+                cdp.eval(f"window.__cmp = undefined; {S}.compareWithExact().then((r) => {{ window.__cmp = r || null }}, (e) => {{ window.__cmp = 'rejected: ' + e }}); 1")
+                t0 = time.time()
+                while time.time() - t0 < 40 and cdp.eval("window.__cmp === undefined"):
+                    time.sleep(0.3)
+                r = json.loads(cdp.eval("JSON.stringify(window.__cmp && [window.__cmp.rgb_p99, window.__cmp.rgb_max])") or "null")
+                check(r is not None and r[0] <= 1, f"{label}: GPU preview = exact flatten (p99, max = {r})")
+
+            cdp.eval("[...document.querySelectorAll('.tabs2 button')].find((b) => b.textContent === 'properties')?.click(); 1"); time.sleep(0.3)
+            check(bool(cdp.eval("!!document.querySelector('.props-section')")), "the Properties tab shows sections")
+            qa = json.loads(cdp.eval("JSON.stringify([...document.querySelectorAll('.quick-grid .cmd-btn')].map((b) => b.textContent))"))
+            check("Select layer pixels" in " ".join(qa) or len(qa) >= 3, f"a pixel layer offers quick actions ({qa})")
+            # Curves
+            cdp.eval(f"{C}.runCommand('edit.layer.adjustment.curves'); 1"); time.sleep(0.5)
+            check(act()["params"].get("interp") == "spline" and not cdp.eval("!!document.querySelector('.props input[type=text]')"), "a new Curves layer is a spline, edited without JSON fields")
+            g = box(".curves-graph")
+            gx = lambda v: g[0] + g[2] * (5 + v * 256 / 255) / 266  # noqa: E731
+            gy = lambda v: g[1] + g[3] * (5 + 256 - v * 256 / 255) / 266  # noqa: E731
+            h0 = hist()
+            drag((gx(64), gy(64)), (gx(64), gy(110)))
+            pts = act()["params"]["rgb"]
+            check(len(pts) == 3 and abs(pts[1][0] - 64) <= 2 and abs(pts[1][1] - 110) <= 3 and hist() == h0 + 1, f"press on the curve adds a point and drags it, one step ({pts})")
+            compare("a three-point spline curve")
+            h0 = hist()
+            drag((gx(pts[1][0]), gy(pts[1][1])), (g[0] + g[2] + 40, gy(pts[1][1])))
+            check(len(act()["params"]["rgb"]) == 2 and hist() == h0 + 1, f"dragging a point off the graph removes it, one step ({act()['params']['rgb']})")
+            drag((gx(190), gy(190)), (gx(190), gy(150)))
+            p2 = act()["params"]["rgb"]
+            mouse("mouseMoved", gx(p2[1][0]), gy(p2[1][1])); mouse("mousePressed", gx(p2[1][0]), gy(p2[1][1]), modifiers=2); mouse("mouseReleased", gx(p2[1][0]), gy(p2[1][1]), modifiers=2); time.sleep(0.3)
+            check(len(act()["params"]["rgb"]) == 2, f"Ctrl-click removes a point ({act()['params']['rgb']})")
+            drag((gx(128), gy(128)), (gx(128), gy(160)))
+            p3 = act()["params"]["rgb"]
+            mouse("mouseMoved", gx(p3[1][0]), gy(p3[1][1])); mouse("mousePressed", gx(p3[1][0]), gy(p3[1][1]), button="right"); mouse("mouseReleased", gx(p3[1][0]), gy(p3[1][1]), button="right"); time.sleep(0.3)
+            check(len(act()["params"]["rgb"]) == 2 and not cdp.eval("!!document.querySelector('.ctx-menu')"), "right-click on a point removes it (no menu)")
+            cdp.eval("[...document.querySelectorAll('.curves-ch button')].find((b) => b.textContent === 'Red').click(); 1"); time.sleep(0.2)
+            drag((gx(128), gy(128)), (gx(128), gy(170)))
+            r = act()["params"].get("r")
+            check(r is not None and len(r) == 3 and len(act()["params"]["rgb"]) == 2, f"the Red channel takes its own points ({r})")
+            compare("a red-channel spline under an identity master")
+            cdp.eval("document.querySelector('.curves-graph').scrollIntoView({ block: 'center' }); 1"); time.sleep(0.2); cdp.shot(OUT / f"{mode}{tag}-curves.png")
+            cdp.eval(f"{C}.runCommand('edit.layer.delete'); 1"); time.sleep(0.4)
+            # Levels
+            cdp.eval(f"{C}.runCommand('edit.layer.adjustment.levels'); 1"); time.sleep(0.5)
+            check(bool(cdp.eval("document.querySelector('.tone-hist path')?.getAttribute('d')?.length > 50")), "Levels shows the histogram of the layers below")
+            hb = box(".tone-handles")
+            hx = lambda v: hb[0] + hb[2] * (6 + v * 256 / 255) / 268  # noqa: E731
+            h0 = hist()
+            drag((hx(0), hb[1] + 7), (hx(40), hb[1] + 7))
+            ib = act()["params"]["in_black"]
+            check(30 <= ib <= 50 and hist() == h0 + 1, f"dragging the black triangle raises input black, one step ({ib})")
+            p = act()["params"]
+            gpos = p["in_black"] + (p["in_white"] - p["in_black"]) * 0.5 ** p["gamma"]
+            drag((hx(gpos), hb[1] + 7), (hx(gpos - 40), hb[1] + 7))
+            gm = act()["params"]["gamma"]
+            check(gm > 1.2, f"dragging the grey triangle left raises gamma, as in Photoshop ({gm})")
+            compare("levels with a black point and gamma")
+            cdp.eval("document.querySelector('.tone-hist').scrollIntoView({ block: 'center' }); 1"); time.sleep(0.2); cdp.shot(OUT / f"{mode}{tag}-levels.png")
+            cdp.eval("[...document.querySelectorAll('.tone-editor button')].find((b) => b.textContent === 'Auto').click(); 1"); time.sleep(0.4)
+            p = act()["params"]
+            check(p["gamma"] == 1 and p["in_white"] > p["in_black"], f"Auto sets the black and white points from the histogram, gamma 1 ({p})")
+            cdp.eval(f"{C}.runCommand('edit.layer.delete'); 1"); time.sleep(0.4)
+            # Colour balance
+            cdp.eval(f"{C}.runCommand('edit.layer.adjustment.color_balance'); 1"); time.sleep(0.5)
+            rb = box(".cb-row input[type=range]")
+            h0 = hist()
+            drag((rb[0] + rb[2] / 2, rb[1] + rb[3] / 2), (rb[0] + rb[2] * 0.85, rb[1] + rb[3] / 2))
+            mid = act()["params"]["midtones"]
+            check(mid[0] > 30 and hist() == h0 + 1, f"the Cyan · Red row moves the midtones' red, one step ({mid})")
+            compare("colour balance midtones")
+            cdp.shot(OUT / f"{mode}{tag}-balance.png")
+            cdp.eval(f"{C}.runCommand('edit.layer.delete'); 1"); time.sleep(0.4)
+            # sections collapse; groups ungroup
+            cdp.eval("document.querySelector('.props-head').click(); 1"); time.sleep(0.2)
+            check(cdp.eval("document.querySelector('.props-head').getAttribute('aria-expanded')") == "false", "a section header collapses its section")
+            cdp.eval("document.querySelector('.props-head').click(); 1")
+            n0 = cdp.eval(f"{S}.doc.layers.length")
+            cdp.eval(f"{C}.runCommand('edit.layer.group'); 1"); time.sleep(0.4)
+            ug = cdp.eval("!![...document.querySelectorAll('.quick-grid .cmd-btn')].find((b) => b.textContent.includes('Ungroup'))")
+            cdp.eval("[...document.querySelectorAll('.quick-grid .cmd-btn')].find((b) => b.textContent.includes('Ungroup'))?.click(); 1"); time.sleep(0.4)
+            check(ug and cdp.eval(f"{S}.doc.layers.length") == n0 and cdp.eval(f"{S}.doc.layers.every((n) => n.kind !== 'group')"), "a group's quick action Ungroup puts its layers back")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "masks":

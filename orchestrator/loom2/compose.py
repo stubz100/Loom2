@@ -227,8 +227,70 @@ def _curve(x: Arr, points: list) -> Arr:
     return np.interp(x, xs, ys)
 
 
+CURVE_LUT_N = 4096
+
+
+def spline_lut(points: list) -> Arr:
+    """D57: Photoshop's curve as PhotoCraft samples it (crates/compose/src/adjust.rs curve_lut @ b37bff98, MIT OR Apache-2.0) — a
+    natural cubic spline through the points (it may overshoot between them, as Photoshop's does), flat outside the first / last point,
+    clamped to 0..1, sampled into 4096 entries. `points` are [input, output] pairs in 0..255."""
+    pts = sorted((float(a) / 255, float(b) / 255) for a, b in points)
+    dedup: list[tuple[float, float]] = []
+    for q in pts:
+        if dedup and abs(q[0] - dedup[-1][0]) < 1e-6:
+            continue
+        dedup.append(q)
+    xs_lut = np.arange(CURVE_LUT_N, dtype=np.float64) / (CURVE_LUT_N - 1)
+    if len(dedup) < 2:
+        return xs_lut.astype(np.float32)
+    n = len(dedup)
+    x = np.array([q[0] for q in dedup], dtype=np.float64)
+    y = np.array([q[1] for q in dedup], dtype=np.float64)
+    m2 = np.zeros(n)
+    if n > 2:                                                    # second derivatives of the natural spline (tridiagonal solve)
+        c = np.zeros(n)
+        d = np.zeros(n)
+        for i in range(1, n - 1):
+            h0, h1 = x[i] - x[i - 1], x[i + 1] - x[i]
+            a_, b_, cc = h0 / 6.0, (h0 + h1) / 3.0, h1 / 6.0
+            r = (y[i + 1] - y[i]) / h1 - (y[i] - y[i - 1]) / h0
+            denom = b_ - a_ * c[i - 1]
+            c[i] = cc / denom
+            d[i] = (r - a_ * d[i - 1]) / denom
+        for i in range(n - 2, 0, -1):
+            m2[i] = d[i] - c[i] * m2[i + 1]
+    xv = xs_lut.astype(np.float32).astype(np.float64)               # PhotoCraft samples at f32 positions
+    i = np.clip(np.searchsorted(x, xv, side="left") - 1, 0, n - 2)
+    x0, x1, y0, y1 = x[i], x[i + 1], y[i], y[i + 1]
+    h = x1 - x0
+    aa = (x1 - xv) / h
+    bb = (xv - x0) / h
+    out = aa * y0 + bb * y1 + ((aa ** 3 - aa) * m2[i] + (bb ** 3 - bb) * m2[i + 1]) * h * h / 6.0
+    out = np.where(xv <= x[0], y[0], np.where(xv >= x[-1], y[-1], out))
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
+def lut_lookup(table: Arr, v: Arr) -> Arr:
+    """Linear interpolation between LUT entries (PhotoCraft `lut`)."""
+    xi = np.clip(v, 0.0, 1.0) * (len(table) - 1)
+    i = np.floor(xi).astype(np.int64)
+    j = np.minimum(i + 1, len(table) - 1)
+    f = (xi - i).astype(np.float32)
+    return table[i] * (1 - f) + table[j] * f
+
+
 def _curves(rgb: Arr, p: dict) -> Arr:
     out = rgb.copy()
+    if p.get("interp") == "spline":
+        # D57: each channel's curve first, then the master (PhotoCraft tone_luts_q, fitted on psd-tools curves_rgb.psd)
+        master = spline_lut(p["rgb"]) if p.get("rgb") else None
+        for i, ch in enumerate(("r", "g", "b")):
+            v = rgb[..., i]
+            if p.get(ch):
+                v = lut_lookup(spline_lut(p[ch]), v)
+            out[..., i] = lut_lookup(master, v) if master is not None else v
+        return out
+    # documents before D57: straight lines, the master before the channels (kept exactly as they rendered)
     if p.get("rgb"):
         out = _curve(out, p["rgb"])
     for i, ch in enumerate(("r", "g", "b")):

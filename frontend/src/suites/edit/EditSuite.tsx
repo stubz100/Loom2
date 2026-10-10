@@ -5,14 +5,15 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '../../api/client'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { command, handleKeyFor, isEnabled, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu } from './editCommands'
 import { BlendSelect, LatchButton, ValueField } from './widgets'
+import { ColorBalanceEditor, CurvesEditor, LevelsEditor, Section } from './propsEditors'
 import { EditorCanvas } from './EditorCanvas'
-import { BLEND_MODES, countRasters, ensureEditorAutosave, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
+import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, FILTER_DEFAULTS, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node, type Tool } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import './edit.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
@@ -736,46 +737,96 @@ function MaskOptions({ n }: { n: Node }) {
   )
 }
 
+/** D57: quick actions per layer kind (PhotoCraft props_layout.rs), shown only while they can run. */
+const QUICK: Record<string, string[]> = {
+  raster: ['edit.sel.fromLayer', 'edit.transform', 'edit.mask.fromTransparency', 'edit.layer.lockAlpha', 'edit.layer.inkFromWhite', 'edit.layer.duplicate'],
+  group: ['edit.layer.ungroup', 'edit.layer.duplicate'],
+  adjustment: [], filter: [],
+}
+const KIND_LABEL: Record<string, string> = { raster: 'Pixel layer', group: 'Group', adjustment: 'Adjustment', filter: 'Filter' }
+
+/** D57: the Properties panel follows the active layer — sections (PhotoCraft props_layout.rs), inline Levels / Curves / Colour balance
+ * editors with the histogram of the layers below, the mask, the AI recipe and quick actions. */
 function PropertiesTab() {
   const doc = useEditor((s) => s.doc)!
   const activeId = useEditor((s) => s.activeId)
+  useEditor((s) => s.revision)                                        // quick actions re-evaluate their enablement
   const before = useRef<DocumentStack | null>(null)
   const n = findNode(doc, activeId)
   if (!n) return <span className="muted">Select a layer.</span>
   const start = () => { before.current = snapshot(doc) }
-  const commit = (label: string) => { if (before.current) { ed().pushHistory({ label, layerId: n.id, kind: 'image', tiles: [], stack: before.current, at: Date.now() }); before.current = null } }
-  if (n.kind === 'raster') return (
-    <dl className="kv">
-      <dt>name</dt><dd>{n.name}</dd>
-      <dt>position</dt><dd><input type="number" value={n.x ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { x: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /> , <input type="number" value={n.y ?? 0} onFocus={start} onChange={(e) => ed().updateNode(n.id, { y: Number(e.target.value) })} onBlur={() => commit('move layer')} style={{ width: 76 }} /></dd>
-      <dt>size</dt><dd>{n.w}×{n.h}</dd>
-      <dt>lineage</dt><dd className="mono">{n.lineage_asset_id ?? '—'}</dd>
-      <dt>recipe</dt><dd>{n.recipe ? <>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <button onClick={() => { const r = { ...n.recipe } as Record<string, unknown>; delete r.seed; delete r.job_id; delete r.batch_id; delete r.region; delete r.document_id; void ed().runAi({ ...r, seeds: [Math.floor(Math.random() * 2 ** 31)] }) }} title="runs the same recipe on the current document with a new seed (the selection must still cover the region)">Re-run (new seed)</button>
-          <button className="quiet" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2))}>copy JSON</button>
-        </div>
-        <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre></> : <span className="muted">— AI layers carry their recipe (seed, region, model)</span>}</dd>
-      {n.mask && <><dt>mask</dt><dd><div className="tool-opts"><MaskOptions n={n} /></div><span className="hint">offset {n.mask.x}, {n.mask.y} ({n.mask.linked ? 'from the layer' : 'in the document'})</span></dd></>}
-    </dl>
-  )
-  if (n.kind === 'group') return <><dl className="kv"><dt>group</dt><dd>{n.children?.length ?? 0} children · {n.passthrough ? 'pass-through' : 'isolated'}</dd></dl>{n.mask && <div className="tool-opts"><MaskOptions n={n} /></div>}</>
+  const commit = (label: string) => { if (before.current) { pushStackEntry(label, n.id, before.current); before.current = null } }
+  const quick = (QUICK[n.kind] ?? []).filter((id) => { const c = command(id); return !!c && isEnabled(c) })
   const params = n.params ?? {}
-  const setParam = (k: string, v: unknown) => ed().updateNode(n.id, { params: { ...params, [k]: v } })
+  const setParams = (p: Record<string, unknown>) => ed().updateNode(n.id, { params: p })
+  const setParam = (k: string, v: unknown) => setParams({ ...params, [k]: v })
+  const editorProps = { id: n.id, params, set: setParams, start, commit }
+  const editor = n.kind === 'adjustment' && n.type === 'levels' ? <LevelsEditor key={n.id} {...editorProps} />
+    : n.kind === 'adjustment' && n.type === 'curves' ? <CurvesEditor key={n.id} {...editorProps} />
+    : n.kind === 'adjustment' && n.type === 'color_balance' ? <ColorBalanceEditor key={n.id} {...editorProps} />
+    : null
+  const defaults = n.kind === 'adjustment' ? ADJUSTMENT_DEFAULTS[n.type ?? ''] : n.kind === 'filter' ? FILTER_DEFAULTS[n.type ?? ''] : undefined
   return (
-    <div>
-      <div className="tool-opts">
-        <label>type</label><span>{n.type}</span>
-        {Object.entries(params).map(([k, v]) => {
-          if (typeof v === 'number') { const [min, max, step] = PARAM_RANGES[k] ?? [-100, 100, 1]; return <Slider key={k} label={k.replace('_', ' ')} value={v} min={min} max={max} step={step} onStart={start} onChange={(x) => setParam(k, x)} onCommit={() => commit(`${n.type} ${k}`)} /> }
-          if (typeof v === 'boolean') return <Fragment key={k}><label>{k}</label><input type="checkbox" checked={v} onChange={(e) => { start(); setParam(k, e.target.checked); setTimeout(() => commit(`${n.type} ${k}`)) }} /></Fragment>
-          if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) return <Fragment key={k}><label>{k}</label><input type="color" value={v} onFocus={start} onChange={(e) => setParam(k, e.target.value)} onBlur={() => commit(`${n.type} ${k}`)} /></Fragment>
-          return <Fragment key={k}><label>{k}</label><input type="text" defaultValue={JSON.stringify(v)} onFocus={start} onBlur={(e) => { try { setParam(k, JSON.parse(e.target.value)); commit(`${n.type} ${k}`) } catch { useSession.getState().toast(`${k}: not valid JSON`, 'error') } }} /></Fragment>
-        })}
-        {!Object.keys(params).length && <span className="hint full">no parameters</span>}
-        {n.mask && <MaskOptions n={n} />}
-      </div>
-      <p className="hint">Previewed on the canvas with the compositor's own formulas (blur exact up to radius 4, strided above); rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).</p>
+    <div className="props">
+      <div className="props-title"><b>{n.name}</b><span className="kind">{KIND_LABEL[n.kind]}{n.type ? ` · ${n.type.replace('_', ' ')}` : ''}</span></div>
+      {n.kind === 'raster' && (
+        <Section id="layer" title="Layer">
+          <div className="tool-opts">
+            <ValueField label="x" value={n.x ?? 0} min={-100000} max={100000} unit="px" onStart={start} onChange={(v) => ed().updateNode(n.id, { x: Math.round(v) })} onCommit={() => commit('move layer')} />
+            <ValueField label="y" value={n.y ?? 0} min={-100000} max={100000} unit="px" onStart={start} onChange={(v) => ed().updateNode(n.id, { y: Math.round(v) })} onCommit={() => commit('move layer')} />
+            <label>size</label><span>{n.w}×{n.h}</span>
+            <label>lineage</label><span className="mono">{n.lineage_asset_id ?? '—'}</span>
+          </div>
+        </Section>
+      )}
+      {n.kind === 'group' && (
+        <Section id="group" title="Group">
+          <div className="tool-opts">
+            <label>layers</label><span>{n.children?.length ?? 0}</span>
+            <label>mode</label><div className="segmented"><button className={n.passthrough ? 'active' : ''} onClick={() => ed().updateNode(n.id, { passthrough: true }, 'group mode')}>pass-through</button><button className={!n.passthrough ? 'active' : ''} onClick={() => ed().updateNode(n.id, { passthrough: false }, 'group mode')}>isolated</button></div>
+          </div>
+        </Section>
+      )}
+      {(n.kind === 'adjustment' || n.kind === 'filter') && (
+        <Section id="adjustment" title={(n.type ?? '').replace('_', ' ')}>
+          {editor ?? (
+            <div className="tool-opts">
+              {Object.entries(params).map(([k, v]) => {
+                if (typeof v === 'number') { const [min, max, step] = PARAM_RANGES[k] ?? [-100, 100, 1]; return <Slider key={k} label={k.replace('_', ' ')} value={v} min={min} max={max} step={step} onStart={start} onChange={(x) => setParam(k, x)} onCommit={() => commit(`${n.type} ${k}`)} /> }
+                if (typeof v === 'boolean') return <Fragment key={k}><label>{k.replace('_', ' ')}</label><input type="checkbox" checked={v} onChange={(e) => { start(); setParam(k, e.target.checked); commit(`${n.type} ${k}`) }} /></Fragment>
+                if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) return <Fragment key={k}><label>{k}</label><input type="color" value={v} onFocus={start} onChange={(e) => setParam(k, e.target.value)} onBlur={() => commit(`${n.type} ${k}`)} /></Fragment>
+                return null                                            // D57: no JSON text fields — structured values have their own editors
+              })}
+              {!Object.keys(params).length && <span className="hint full">no parameters</span>}
+            </div>
+          )}
+          <div className="tool-opts" style={{ marginTop: 8 }}>
+            <label>clip</label><label className="chk"><input type="checkbox" checked={n.clip} onChange={(e) => ed().updateNode(n.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
+            <label /><button type="button" className="quiet" disabled={!defaults} onClick={() => { if (defaults) { start(); setParams(JSON.parse(JSON.stringify(defaults))); commit(`${n.type} reset`) } }}>Reset to defaults</button>
+          </div>
+          <p className="hint">Previewed on the canvas with the compositor's own formulas; rendered exactly in the orchestrator on Save to Catalogue / Export (10 §3).{editor && n.type !== 'color_balance' ? ' The histogram shows the visible pixel layers below this one.' : ''}</p>
+        </Section>
+      )}
+      {n.mask && (
+        <Section id="mask" title="Layer mask">
+          <div className="tool-opts"><MaskOptions n={n} /></div>
+          <span className="hint">offset {n.mask.x}, {n.mask.y} ({n.mask.linked ? 'from the layer' : 'in the document'})</span>
+        </Section>
+      )}
+      {n.kind === 'raster' && n.recipe && (
+        <Section id="recipe" title="AI recipe">
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <button onClick={() => { const r = { ...n.recipe } as Record<string, unknown>; delete r.seed; delete r.job_id; delete r.batch_id; delete r.region; delete r.document_id; void ed().runAi({ ...r, seeds: [Math.floor(Math.random() * 2 ** 31)] }) }} title="runs the same recipe on the current document with a new seed (the selection must still cover the region)">Re-run (new seed)</button>
+            <button className="quiet" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2))}>copy JSON</button>
+          </div>
+          <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre>
+        </Section>
+      )}
+      {quick.length > 0 && (
+        <Section id="quick" title="Quick actions">
+          <div className="quick-grid">{quick.map((id) => <CommandButton key={id} id={id} text />)}</div>
+        </Section>
+      )}
     </div>
   )
 }

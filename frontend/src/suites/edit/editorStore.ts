@@ -37,7 +37,7 @@ export const BLEND_MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-b
 /** Default parameters per adjustment / filter type; names and scales match orchestrator/loom2/compose.py. */
 export const ADJUSTMENT_DEFAULTS: Record<string, Record<string, unknown>> = {
   levels: { in_black: 0, in_white: 255, gamma: 1, out_black: 0, out_white: 255 },
-  curves: { rgb: [[0, 0], [255, 255]] },
+  curves: { interp: 'spline', rgb: [[0, 0], [255, 255]] },             // D57: new curves are splines; older documents keep 'linear'
   hue_saturation: { hue: 0, saturation: 0, lightness: 0 },
   color_balance: { shadows: [0, 0, 0], midtones: [0, 0, 0], highlights: [0, 0, 0] },
   brightness_contrast: { brightness: 0, contrast: 0 },
@@ -163,6 +163,8 @@ export interface EditorState {
   deleteNodes: (ids: string[]) => void
   duplicateNodes: (ids: string[]) => void
   groupNodes: (ids: string[]) => void
+  /** D57 quick action: the group's children take its place (its opacity, blend and mask go, as in Photoshop). */
+  ungroupNode: (id: string) => void
   mergeNodes: (ids: string[]) => void
   setPropsFor: (ids: string[], patch: Partial<Node>, label: string) => void
   /** Reorder: the layers go above / below the target row, or into a group (at its top); `copy` drops duplicates. One history step. */
@@ -835,6 +837,18 @@ export const useEditor = create<EditorState>()(
           const strip = (list: Node[]) => { for (let i = list.length - 1; i >= 0; i--) { const n = list[i]; if (n === group) continue; if (ids.includes(n.id)) list.splice(i, 1); else if (n.children) strip(n.children) } }
           strip(next.layers)
           commit(next, before, ids.length > 1 ? `group ${ids.length} layers` : 'group', group.id, { activeId: group.id, selectedIds: [group.id], anchorId: group.id, editingMask: false })
+        },
+        ungroupNode: (id) => {
+          const doc = get().doc
+          const g = findNode(doc, id)
+          if (!doc || !g || g.kind !== 'group') return
+          const before = clone(doc)
+          const next = clone(doc)
+          const p = findParent(next, id)!
+          const kids = p.list[p.index].children ?? []
+          p.list.splice(p.index, 1, ...kids)
+          const ids = kids.map((k) => k.id)
+          commit(next, before, 'ungroup', id, { activeId: ids[0] ?? null, selectedIds: ids, anchorId: ids[0] ?? null, editingMask: false })
         },
         mergeNodes: (ids) => {
           const doc = get().doc

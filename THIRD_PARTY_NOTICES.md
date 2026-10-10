@@ -26,6 +26,8 @@ listed here; model weights are governed by the licence register in `.docs/proto0
 | `orchestrator/loom2/tone.py` (Lab statistics, match colour) | `crates/algo/src/tone.rs` | D48 |
 | `frontend/src/suites/edit/brushEngine.ts` (coverage accumulation, tip falloff, path walker, pulled-string smoothing) | `crates/paint/src/render.rs`, `lib.rs`, `dynamics.rs` | D50, D51 |
 | `orchestrator/loom2/compose.py` `_color_to_alpha`, `frontend/src/suites/edit/adjustFilters.ts` (colour to alpha) | `crates/algo/src/color_to_alpha.rs` | D49 |
+| `orchestrator/loom2/compose.py` `spline_lut` / `lut_lookup`, `frontend/src/suites/edit/curves.ts` (natural-spline curve LUT) | `crates/compose/src/adjust.rs` (`curve_lut`, `lut`, `tone_luts_q`) | D57 |
+| `frontend/src/suites/edit/widgets.tsx`, `propsEditors.tsx`, `frontend/src/frame/ContextMenu.tsx` press menus (behaviour and constants; code written anew) | `crates/ui-egui/src/widgets.rs`, `blend_preview.rs`, `press_menu.rs`, `props_layout.rs`, `adjust_editors.rs`, `point_curve.rs`, `tone.rs` | D55, D57 |
 
 The psd-tools test files (`bench/corpus/psd-tools/`, fetched, never committed) are MIT, Copyright (c) 2019 Kota Yamaguchi;
 the corpus pins were taken from PhotoCraft's `xtask/psd-tools-corpus.sha256`.

@@ -8,6 +8,7 @@
 // 256-entry LUT with the exact formulas; hue/saturation, colour balance and black & white run the same math in the
 // shader; blur-based filters sample the premultiplied backdrop with compose.py's Gaussian (exact up to a 12-tap
 // radius, strided above); noise hashes (seed, x, y) with the same integer hash + Box-Muller as compose.py, so it is exact too.
+import { cachedLut, lutAt, type CurvePoints } from './curves'
 import { BufferImageSource, ExtensionType, extensions, Filter, GlProgram, GpuProgram, Texture } from 'pixi.js'
 import { BLEND_GL, BLEND_WGSL, modeIndex } from './blendModes'
 import type { Node } from './editorStore'
@@ -237,7 +238,14 @@ function channelMap(type: string, p: Record<string, unknown>): (x: number, ch: n
   switch (type) {
     case 'levels': { const ib = num(p, 'in_black', 0) / 255, iw = num(p, 'in_white', 255) / 255, g = Math.max(0.01, num(p, 'gamma', 1)), ob = num(p, 'out_black', 0) / 255, ow = num(p, 'out_white', 255) / 255
       return (x) => ob + Math.min(1, Math.max(0, (x - ib) / Math.max(1e-6, iw - ib))) ** (1 / g) * (ow - ob) }
-    case 'curves': return (x, ch) => curve(curve(x, p.rgb), p[['r', 'g', 'b'][ch]])
+    case 'curves': {
+      if (p.interp !== 'spline') return (x, ch) => curve(curve(x, p.rgb), p[['r', 'g', 'b'][ch]])        // before D57: lines, master first
+      // D57: PhotoCraft's spline LUTs, each channel's curve before the master (compose.py _curves)
+      const ok = (v: unknown): v is CurvePoints => Array.isArray(v) && v.length > 0
+      const m = ok(p.rgb) ? cachedLut(p.rgb) : null
+      const cl = (['r', 'g', 'b'] as const).map((k) => (ok(p[k]) ? cachedLut(p[k] as CurvePoints) : null))
+      return (x, ch) => { const c = cl[ch]; const v = c ? lutAt(c, x) : x; return m ? lutAt(m, v) : v }
+    }
     // D40: Photoshop's Exposure works in linear light through a pure 2.2 power (compose.py _exposure)
     case 'exposure': { const ev = num(p, 'exposure', 0), off = num(p, 'offset', 0), g = Math.max(0.01, num(p, 'gamma', 1)); return (x) => Math.min(1, Math.max(0, Math.max(0, x ** 2.2 * 2 ** ev + off) ** (1 / g)) ** (1 / 2.2)) }
     case 'brightness_contrast': { const b = num(p, 'brightness', 0) / 100, c = num(p, 'contrast', 0) / 100; const f = c < 1 ? (1 + c) / Math.max(1e-6, 1 - c) : 1e6; return (x) => Math.min(1, Math.max(0, (x + b - 0.5) * f + 0.5)) }

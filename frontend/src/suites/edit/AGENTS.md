@@ -1,7 +1,7 @@
 # frontend/src/suites/edit — notes for coding agents
 
 Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (layout, tools, AI panel, acceptance),
-`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel).
+`.docs/proto01/05-frontend-engine-evaluation.md` (why PixiJS v8). Decisions D3, D4, D5, D7, D22, D31 (compositing), D33, D39 (Photoshop compositing semantics), D40 (Photoshop oracle), D41 (PSD export), D43 (selection history), D44 (selection toolkit), D45 (Refine Edge), D46 (clipboard), D47–D49 (paste-back, match colour, colour to alpha), D50 / D51 (brush, smoothing), D52 (masks), D53 (partial uploads), D54 (mask mechanics from PhotoCraft), D55 (mouse-first kit), D56 (layers panel), D57 (properties, spline curves).
 
 ## Files
 
@@ -15,6 +15,8 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `brushEngine.ts` | D50 / D51: per-stroke coverage buffer recomposited from the undo snapshots (`LayerPixels.preStroke`), tip falloff, `PathWalker`, pulled-string `Smoother` |
 | `maskDerived.ts` | D52: a mask as it renders (feather = three-box Gaussian, then density), cached per mask canvas and re-derived around a stroke's damaged rect only |
 | `widgets.tsx` | D55: `ValueField` (type, scrub, ▾ pop-up slider; one gesture = one `onStart` / `onCommit`), `BlendSelect` (wheel steps, hover previews through `blendPreview`), `LatchButton` |
+| `curves.ts` | D57: PhotoCraft's natural-spline curve LUT (4096 entries, flat ends, clamped) — the same code as `compose.spline_lut`; the shader table and the Curves editor use it |
+| `propsEditors.tsx` | D57: Properties sections, the histogram of the layers below, Levels / Curves / Colour balance editors |
 | `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
 | `transform.ts` | free-transform maths (corners, handles, hit tests, resample) |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |

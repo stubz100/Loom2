@@ -2381,3 +2381,29 @@ Inspector → lineage → split → pages.
   *Show / Lock / Duplicate / Merge / Group / Delete layers*. kit, masks, paint, brush, cmpdiag, tour, selection, render pass. The tour's
   PNG-export step slept a fixed 2.5 s while the export runs the exact flatten first — it failed twice under load; it now polls up to
   20 s like the PSD step. 172 offline; build clean; lint unchanged.
+
+## 2026-10-10 20:03 — D57 properties like PhotoCraft's; wave PE5 closed
+
+- **Curves (compose + editor):** `compose.spline_lut` / `lut_lookup` and `frontend/src/suites/edit/curves.ts` port PhotoCraft's
+  `curve_lut` (natural cubic spline, f64 tridiagonal solve, flat outside the end points, clamped, 4096 entries sampled at f32 positions,
+  linear lookup); `interp: "spline"` curves apply each channel's curve before the master (PhotoCraft `tone_luts_q`); curves without
+  `interp` (every document before D57) keep their straight lines, master first, exactly. New Curves layers default to the spline; the
+  editor's 256-entry shader table is filled from the same LUT. `test_props_d57.py` (6): identity within 1e-4, S-curve monotone and
+  bent, flat ends and clamped overshoot, passes through its points, channel before master, pre-D57 lines unchanged.
+- **Oracle:** the psd-tools converter marks curves `interp: "spline"`. curves_rgb.psd: linear max 255 / mean 50.8 / 37 871 of 40 000
+  pixels over 2 → spline max 12 / mean 0.38 / **3** pixels over 2 (all in the x = 0 column) — still a known failure by the 2/255 rule,
+  reason updated; passes 8 → **9**, floor raised to 9.
+- **Properties panel:** `propsEditors.tsx` — collapsible sections, quick actions per kind filtered to the enabled ones (new command
+  *Ungroup*, store `ungroupNode`), the histogram of the visible pixel layers below (CPU, ≤ 384 px, canvas blends; RGB = mean of R, G, B;
+  scale top = 251st-smallest bin × 1.1), Levels (triangles: the nearest grabs, black ≤ white − 2, grey → gamma = ln t / ln ½; output
+  handles; value fields; Auto at 0.1 % clipping), Curves (16 points, 2-level gap, 9 px hit, 12 px drag-off removes and drag-back
+  reinserts, Ctrl / right-click / Delete remove, arrows nudge; other channels drawn on RGB; editing a pre-D57 curve makes it a spline,
+  said in the panel), Colour balance (tone segments, three gradient rows, double-click resets, Reset all tones; no preserve-luminosity
+  box — compose has no such parameter). Clip to layer below and Reset to defaults under every adjustment. The JSON text fields are
+  gone. PSD export reports pre-D57 linear curves as approximate.
+- **Headed mode `props`** passes: quick actions on a pixel layer; a new Curves layer is a spline without JSON fields; add + drag a point
+  in one step; GPU = exact (p99 0, max 0) for a 3-point spline and a red-channel spline; drag off / Ctrl-click / right-click remove;
+  the Levels histogram is drawn, black triangle → 44 in one step, grey left → gamma 1.67, GPU = exact (max 0), Auto → 3 / 245 / gamma 1;
+  a Colour balance row → midtones red 76 in one step, GPU = exact (max 1); a section collapses; Ungroup. Full regression: props, layers,
+  kit, masks, paint, brush, cmpdiag, grid, tour, selection, render, psd pass; 178 offline + the corpus oracle; build clean; lint 96.
+- **PE5 closed** (D55–D57). Left for the author: PE6 (transform, S2), PC25 / PC26 with H3, the S1 go / no-go.

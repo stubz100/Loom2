@@ -1987,3 +1987,18 @@ Inspector → lineage → split → pages.
 - CI at `e942fb9`: the `open` leg's offline tests now pass; both legs still failed at the agent-doc step. Cause: `git check-ignore
   engine/.venv` answers "not ignored" when the directory does not exist (CI), because `.gitignore`'s `.venv/` matches directories only;
   `engine/.venv/` matches. `ignored()` now asks both spellings. Simulated CI by moving `engine/.venv` aside: 0 problems; restored.
+
+## 2026-10-10 13:18 — PhotoCraft study for the Edit suite (`.docs/photocraft/` 00–06)
+
+- PhotoCraft (`F:\source\repos\photocraft`, `b37bff98`, v0.6.0) is a clean-room Photoshop-class editor in Rust (egui, wgpu) by the
+  ArtCraft team, licensed **MIT OR Apache-2.0** — unlike ArtCraft, its code may be ported with attribution. Read in five passes
+  (engine/compositing, tools/algorithms, UI, formats/practices, and an inventory of loom2's Edit suite at `1cdc6d2`); nothing built.
+- **Verified loom2 findings F1–F10** (06 §2): clipping multiplies by the accumulated backdrop alpha, so a clipped layer over an opaque
+  background is not clipped (editor `-clip` shaders do the same; the one test clips to a base that is the whole backdrop); a pass-through
+  group below 100 % opacity renders isolated; adjustment layers ignore their blend mode; Soft Light (upper half), Vivid Light and Hard Mix
+  follow W3C, not Photoshop; brush opacity is per dab; selection edits are not in history; PSD export skips adjustment layers although
+  ag-psd 31.0.2 writes all eight types; AI paste-back is alpha-feather only (spec's "match colour" and "layer with mask" missing);
+  `fsio` has no Windows rename retry; every brush move re-uploads the whole texture.
+- **Proposals PC1–PC26** in waves PE1 (fidelity) – PE6 (transform, smart select), spikes S1 (PyO3 `photocraft-algo`: content-aware
+  fill, healing) and S2 (WASM: quick select, magnetic lasso); routes port / idea / crate. The author accepted the study and asked to
+  start with PE1.

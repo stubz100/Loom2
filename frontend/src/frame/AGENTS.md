@@ -59,7 +59,15 @@ literals; image content (brush colours, overlays on images) is the exception.
 `frontend/src/store/session.ts` holds the app-wide store (backend, health, project, engine, queue, jobs, previews, capabilities, toasts,
 banners, the ask dialog, persisted `ui` layout) and `applyEvent()`, which routes WebSocket frames to the suite stores. Project data never lives
 in component state. `frontend/src/api/client.ts` is the only HTTP / WebSocket client; `frontend/src/shell/tauri.ts` is the only module that
-imports `@tauri-apps/*`.
+imports `@tauri-apps/*`. A view that needs raw frames subscribes with `onEvents(types, cb)` (no `window` CustomEvents — D66 removed that
+bus); a toast takes an `action {label, run}` (a bare function still means Undo).
+
+**Models come from `/capabilities` (D65):** never write a model id — `frontend/src/store/modelCaps.ts` sorts `caps.models` / `caps.i2v.models`
+/ `caps.tools` by `order`, reads `caps.defaults[kind]` (variant-aware) and finds tools by what they run (`recipes.segment`, `upscale_factor`).
+`scripts/model_literals_check.py` (CI) fails on a quoted model id.
+
+**Jobs carry an origin (D66):** every `POST /jobs` sends `origin {suite, surface, ref?, payload?}`; `frontend/src/store/origin.ts` turns it back
+into a place (`goToOrigin`, the Dock's "Go to origin"). Interim strips list their own suite's jobs (and jobs from before D66).
 
 **API calls are typed (D38):** `await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id } } }))` — paths, parameters, bodies
 and replies come from `frontend/src/api/schema.d.ts`, generated from the orchestrator. `frontend/src/api/types.ts` re-exports the reply types

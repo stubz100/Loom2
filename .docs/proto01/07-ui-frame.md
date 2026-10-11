@@ -124,6 +124,10 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 - **Engine states** (chip + banner): starting · idle (no model) · resident `<model>` (VRAM used) · busy · down.
 - **Job states**: staged → queued → running (progress, ETA from engine estimate × measured history) → done ·
   failed (log tail inline, "Open log") · cancelled.
+- **Where a result goes (D66):** every job carries its origin (suite, surface, ref). The Dock's job row offers **Go to origin** (menu and
+  row button) — Generate's batch, the Animate clip, the Edit document, the Catalogue group. Animate switches the player to a new clip
+  only when the job was started in Animate and the clip it was asked from is still on screen; otherwise a toast offers **Play**.
+  Interim strips show their own suite's jobs.
 - **Disk**: chip shows project cap and disk free; warn < 5 %, hard-stop < 2 % blocks new jobs with a banner.
 - **Weights**: a job needing missing weights shows an inline "Fetch N GB" action; fetch runs as a job with a
   byte meter in the Dock.

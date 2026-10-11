@@ -2731,3 +2731,30 @@ split by file so that no two hands touched the same module.
   animate pass. The add-a-model checklist in `engine/AGENTS.md` is now roster entry → spec → (builder for a new graph) → sweep → rig.
 - **Rig (P2, running):** M5's background-swap check read the layer's pixel alpha, which D47 made opaque (the edge is a linked mask
   since 2026-10-10) — the script now multiplies the mask in; results with the next entry.
+
+## 2026-10-11 09:28 — H2 rig (P2, P1) and P4 job origin (D66) built; H2 closed
+
+- **Rig, first pass (P2 code d7ae242, temp state, project `F:/loom2-projects/acceptance-20261011-h2`):** M6 **17/17** — Wan Draft 246.2 s
+  (2026-10-05: 256), Wan FLF 255.3 s (255), LTX with a beat 184.3 s (172, +7 %); all within ±10 %. M5 24/25: the background-swap check
+  read the result layer's pixel alpha, which D47 made opaque (the soft edge is the linked layer mask since 2026-10-10) — the script now
+  multiplies the mask in. A sub-agent ran headed checks (Edge on WebGPU) during this M5 pass, so its timings were not trusted.
+- **Rig, quiet pass (P1 + P4 backend, the working tree after ad320a3):** dev T2I Turbo 960×544 109.6 s cold / 87.2 s warm (origin
+  echoed on the job and the asset); **M5 25/25** (background swap: alpha on subject 0.026 / on background 0.996 — 0.027 / 0.996 on
+  10-07; BiRefNet 2.7 s, SAM 3 text 32.5 / point 3.3 / box 3.2 s, upscale 4.1 s, **tiled refine 269 s** against 892 s on 10-07);
+  **Wan Draft 247.1 s** (7/7). The Klein jobs per candidate are 14–37 % slower than on 10-07 (fill 46.5 vs 39.4, Fill-Match 27.0 vs 19.7,
+  remove 23.1 vs 19.9, refine 53.4 vs 45) in both passes — **inside the engine**: every job spends 1–2 s outside its nodes (upload,
+  paste-back, save) and the graphs are byte-identical to the pre-refactor ones (`test_graph_parity_d64`), so the difference is the
+  machine / engine state since 10-07, not P2 or P1. Recorded as an open measurement (with the earlier tiled-refine swing), not a regression.
+- **P4 (D66) backend:** `loom2/origin.py` `JobOrigin {suite, surface, ref?, payload?}`; `JobRecord.origin` (queue schema 2 — a version-1
+  file loads with none), `AssetRecord.origin` (asset schema 2, copied at ingest by the Asset / Document / Clip finishers), `clip.ready`
+  carries it; `POST /jobs` takes it, `POST /documents/{id}/ai` sets `{edit, ai, doc}` server-side. `test_origin_d66.py` (3): v1 queue
+  loads, origin survives a restart and reaches the job events, the asset, its manifest and `asset.created`; the Edit route sets it.
+- **P4 frontend (sub-agent, frontend/src only):** Generate, Animate (`{animate, clip, ref: the clip on screen}`) and the Catalogue
+  re-run / variations verbs send an origin; the Dock's job rows gain **Go to origin** (menu + row button; `store/origin.ts`); Animate's
+  `onClipReady` switches the player only when Animate is on screen, the job came from Animate and the clip it was asked from is still
+  shown (a batch plays through) — otherwise a toast with **Play** (toasts gained a generic `action`); interim strips list their own
+  suite's jobs (and pre-D66 jobs); the `loom2:` window-event bus is gone (`onEvents()` store subscription; PageView uses it).
+  Not built: placement into the source's group (D34 stands; the author's call). The live acceptance scenarios (finish an Animate job
+  while on the Catalogue; Go to origin on a Generate batch) need an engine job — they wait for P6's harness or the next rig session.
+- Checks: 219 offline; settings audit 154 / 0; literal check 0; API current; build clean, lint 100; headed tour, animate, aipanel, kit
+  pass. **H2 (P2, P1, P4) closed.** Next by the programme: H3 (P9 authenticated reads, P6 frontend test harness).

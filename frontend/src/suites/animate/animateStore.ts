@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
-import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe } from '../../api/types'
+import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe, type JobOrigin } from '../../api/types'
 import { byOrder, resolveModel } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 
@@ -120,6 +120,11 @@ interface AnimateState {
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let previewSeq = 0
 
+/** D66: an Animate submission names the clip on screen when it was made (null: none), so a finished clip knows which view it belongs to. */
+const clipOrigin = (ref: string | null): JobOrigin => ({ suite: 'animate', surface: 'clip', ref })
+/** The last automatic switch: from the clip a job was started on to the clip it produced (a batch of clips plays through in turn). */
+let followed: { from: string | null; to: string } | null = null
+
 export const useAnimate = create<AnimateState>()(
   persist(
     (set, get) => ({
@@ -195,11 +200,30 @@ export const useAnimate = create<AnimateState>()(
           })
         }
       },
+      // D66 — the player switches to a new clip only when the clip belongs to the view on screen:
+      //   · Animate is the active suite, and
+      //   · the job was started in Animate (`origin.suite === 'animate'`) from the clip still shown (`origin.ref`, null = no clip shown),
+      //     or the player is on the clip this rule last switched to from that same clip (the next clip of a batch follows on).
+      // Anything else — the user went to another suite or opened another clip, or the job came from elsewhere — leaves the player alone
+      // and toasts "Play". A clip without an origin (its job was queued before D66) follows whenever Animate is on screen, as before.
       onClipReady: (d) => {
         void unwrap(http.GET('/clips')).then((r) => {
           set({ clips: r.items })
-          get().select(d.clip_id)
-          useSession.getState().toast('Clip ready — playing in Animate', 'success')
+          const s = useSession.getState()
+          const o = d.origin ?? null
+          const from = o?.ref ?? null
+          const cur = get().current
+          const onScreen = s.ui.suite === 'animate' && (!o || (o.suite === 'animate' && (from === cur || (followed?.from === from && followed.to === cur))))
+          if (onScreen) {
+            followed = { from, to: d.clip_id }
+            get().select(d.clip_id)
+            s.toast('Clip ready — playing in Animate', 'success')
+            return
+          }
+          const c = r.items.find((x) => x.id === d.clip_id)
+          s.toast(`Clip ready${c ? ` — seed ${c.seed}` : ''}`, 'success', { label: 'Play', run: () => {
+            useSession.getState().setSuite('animate'); get().select(d.clip_id); get().togglePlay(true)
+          } })
         }).catch(() => undefined)
       },
       onClipUpdated: (d) => set({ clips: get().clips.map((c) => c.id === d.clip_id ? { ...c, identity: d.identity ?? c.identity } : c) }),
@@ -223,7 +247,7 @@ export const useAnimate = create<AnimateState>()(
         if (!p.start) { s.toast('Set a start frame first (drop a Catalogue tile on the slot, or Shift+A in the Catalogue)', 'info'); return }
         if (get().preview?.missing.length) { s.toast(`Weights missing: ${get().preview!.missing.map((m) => m.model_id).join(', ')} — fetch them in Models`, 'error'); return }
         try {
-          const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage } }))
+          const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage, origin: clipOrigin(get().current) } }))
           const n = r.jobs.length
           s.toast(stage ? `${n} clip${n > 1 ? 's' : ''} staged` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`, 'success')
           if (p.seed_mode === 'increment') get().set({ seed: p.seed + n })
@@ -233,13 +257,13 @@ export const useAnimate = create<AnimateState>()(
         const c = get().clip()
         if (!c) return
         const recipe = { ...(c.params.recipe as Record<string, unknown>), seeds: Array.from({ length: Math.max(1, get().panel.count) }, () => 0) }
-        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast('Variations queued (new seeds)', 'success') } catch (e) { useSession.getState().toast(`Variations failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false, origin: clipOrigin(c.id) } })); useSession.getState().toast('Variations queued (new seeds)', 'success') } catch (e) { useSession.getState().toast(`Variations failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
       rerun: async () => {
         const c = get().clip()
         if (!c) return
         const recipe = { ...(c.params.recipe as Record<string, unknown>), seeds: [c.seed] }
-        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast(`Re-running seed ${c.seed}`, 'success') } catch (e) { useSession.getState().toast(`Re-run failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false, origin: clipOrigin(c.id) } })); useSession.getState().toast(`Re-running seed ${c.seed}`, 'success') } catch (e) { useSession.getState().toast(`Re-run failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
       tryOther: async () => {
         const c = get().clip()
@@ -249,7 +273,7 @@ export const useAnimate = create<AnimateState>()(
         const r = modelRules(other)
         const base = c.params.recipe as Record<string, unknown>
         const recipe = { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0] }
-        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false } })); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false, origin: clipOrigin(c.id) } })); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
       setView: (view) => set({ view, playing: view === 'filmstrip' ? false : get().playing }),

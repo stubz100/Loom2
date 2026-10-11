@@ -60,7 +60,8 @@ class AssetFinisher:
                 job_id=job.id, batch_id=job.batch_id, suite="generate", model_id=recipe.model_id, seed=job.seed,
                 prompt_text=compiled.serialized_prompt or getattr(recipe, "prompt_text", None), prompt_json=getattr(recipe, "prompt_json", None),
                 params=compiled.summary | {"recipe": recipe.model_dump()}, timings={"wall_s": q.wall_s(), "node_s": job.node_times},
-                compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=[r.asset_id for r in (getattr(recipe, "refs", []) or []) if getattr(r, "asset_id", None)])
+                compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=[r.asset_id for r in (getattr(recipe, "refs", []) or []) if getattr(r, "asset_id", None)],
+                origin=job.origin)
             assets.append(rec)
             q.hub.broadcast("asset.created", rec.model_dump())
         job.progress_text = "thumbnails"
@@ -116,7 +117,7 @@ class DocumentFinisher:
             parents = [od.doc.source_asset_id] if od.doc.source_asset_id else []
             rec = await asyncio.to_thread(q.catalogue.ingest_file, src, kind="image", move=True, job_id=job.id, batch_id=job.batch_id, suite="edit",
                                           model_id=recipe.model_id, seed=job.seed, params={"recipe": recipe.model_dump(), "document_id": od.doc.id},
-                                          timings={"wall_s": q.wall_s(), "node_s": job.node_times}, parents=parents)
+                                          timings={"wall_s": q.wall_s(), "node_s": job.node_times}, parents=parents, origin=job.origin)
             rec = await asyncio.to_thread(q.catalogue.make_thumbs, rec)
             q.hub.broadcast("asset.created", rec.model_dump())
             job.result["asset_ids"] = [rec.id]
@@ -209,7 +210,7 @@ class ClipFinisher:
                                         suite="animate", model_id=recipe.model_id, seed=job.seed, prompt_text=recipe.prompt_text,
                                         params={"clip_id": rec.id, "preset": recipe.preset, "recipe": recipe.model_dump(), **ep},
                                         timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash,
-                                        parents=parents, frames=rec.frames, w=rec.w, h=rec.h, variant=job.variant)
+                                        parents=parents, frames=rec.frames, w=rec.w, h=rec.h, variant=job.variant, origin=job.origin)
         asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
         rec.asset_id = asset.id
         rec.timings["wall_s"] = q.wall_s()
@@ -218,7 +219,8 @@ class ClipFinisher:
         job.result["asset_ids"] = [asset.id]
         job.result["clip_id"] = rec.id
         job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
-        q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h})
+        q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
+                                       "origin": job.origin.model_dump() if job.origin else None})
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
 

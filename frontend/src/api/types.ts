@@ -70,6 +70,8 @@ export type SegmentRecipe = In['Segment']
 export type RefineEdgeParams = In['RefineEdge']            // D45
 export type I2VRecipe = In['I2V']
 export type DocumentRecipe = InpaintRecipe | I2IRecipe | UpscaleRecipe | SegmentRecipe
+/** D66: where a job was started (`POST /jobs` body `origin`); `Job.origin`, `Asset.origin` and `clip.ready` echo it back. */
+export type JobOrigin = In['JobOrigin-Input']
 
 // ---- WebSocket event payloads the suites handle ----------------------------------------------------------------------
 export type DocumentChangedData = S['DocumentChanged']

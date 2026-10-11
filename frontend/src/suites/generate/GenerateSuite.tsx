@@ -14,7 +14,7 @@ import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPresets'
-import { useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { batchOf, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import './generate.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
@@ -412,7 +412,11 @@ function Interim() {
   const caps = useSession((s) => s.capabilities)
   const cancel = useSession((s) => s.cancelJob)
   const release = useSession((s) => s.releaseJob)
-  const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 't2i' && ['running', 'queued', 'staged'].includes(j.status)).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs])
+  const lastBatch = useGenerate((g) => g.lastBatch)
+  // D66: Generate's own jobs (origin suite 'generate'), plus the batch it is showing (a Catalogue re-run / variations lands here too);
+  // jobs without an origin (queued before D66) keep showing
+  const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 't2i' && ['running', 'queued', 'staged'].includes(j.status) && (!j.origin || j.origin.suite === 'generate' || batchOf(j) === lastBatch))
+    .sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs, lastBatch])
   if (!list.length) return null
   return (
     <div className="interim">

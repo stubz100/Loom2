@@ -1530,6 +1530,7 @@ export interface components {
             lineage_kind: string | null;
             /** Model Id */
             model_id: string | null;
+            origin: components["schemas"]["JobOrigin-Output"] | null;
             /** Params */
             params: {
                 [key: string]: unknown;
@@ -1553,7 +1554,7 @@ export interface components {
             root_id: string | null;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Seed */
@@ -1736,6 +1737,8 @@ export interface components {
             h: number;
             /** Job Id */
             job_id: string;
+            /** @default null */
+            origin?: components["schemas"]["JobOrigin"] | null;
             /** W */
             w: number;
         } & {
@@ -3349,6 +3352,60 @@ export interface components {
             /** Items */
             items: components["schemas"]["JobRecord"][];
         };
+        /** JobOrigin */
+        JobOrigin: {
+            /**
+             * Payload
+             * @default null
+             */
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Ref
+             * @default null
+             */
+            ref: string | null;
+            /**
+             * Suite
+             * @enum {string}
+             */
+            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            /** Surface */
+            surface: string;
+        };
+        /** JobOrigin */
+        "JobOrigin-Input": {
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ref */
+            ref?: string | null;
+            /**
+             * Suite
+             * @enum {string}
+             */
+            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            /** Surface */
+            surface: string;
+        };
+        /** JobOrigin */
+        "JobOrigin-Output": {
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            /** Ref */
+            ref: string | null;
+            /**
+             * Suite
+             * @enum {string}
+             */
+            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            /** Surface */
+            surface: string;
+        };
         /** JobProgress */
         JobProgress: {
             /** Id */
@@ -3404,6 +3461,7 @@ export interface components {
             node_times: {
                 [key: string]: number;
             };
+            origin: components["schemas"]["JobOrigin-Output"] | null;
             /**
              * Progress
              * @default 0
@@ -3436,7 +3494,7 @@ export interface components {
             retry_count: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /**
@@ -3472,6 +3530,7 @@ export interface components {
         };
         /** JobSubmit */
         JobSubmit: {
+            origin?: components["schemas"]["JobOrigin-Input"] | null;
             /** Recipe */
             recipe: {
                 [key: string]: unknown;

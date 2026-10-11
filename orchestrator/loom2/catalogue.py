@@ -21,10 +21,11 @@ from typing import Any, Literal
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
+from .origin import JobOrigin
 from .fsio import StateError, _tmp_for, atomic_copy, atomic_move, atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
-ASSET_SCHEMA_VERSION = 1
+ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manifest loads with none)
 INDEX_SCHEMA_VERSION = 2
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class AssetRecord(BaseModel):
     trashed_at: str | None = None
     bytes: int | None = None
     sha256: str | None = None
+    origin: JobOrigin | None = None             # D66: the job's origin, copied at ingest (lineage at write time)
 
 
 GROUP_KEY = {"batch": "COALESCE(batch_id, job_id, id)", "lineage": "COALESCE(root_id, id)", "session": "COALESCE(session_id, '')", "model": "COALESCE(model_id, '')"}

@@ -6,11 +6,11 @@
 import { ArrowDownToLine, ArrowUpToLine, BookOpen, Columns2, Copy, Expand, FolderPlus, Layers, Pencil, Redo, Undo, Ungroup, X } from 'lucide-react'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, http, unwrap } from '../../api/client'
-import type { Asset, GroupItem, GroupPage, GroupSummary } from '../../api/types'
+import type { GroupItem, GroupPage, GroupSummary } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { carry, registerDropTarget, type DragItem, type DragPayload } from '../../frame/drag'
-import { askConfirm, askText, useSession } from '../../store/session'
+import { askConfirm, askText, onEvents, useSession } from '../../store/session'
 import { useAlbum } from './albumStore'
 import { tileMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
@@ -49,16 +49,11 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     catch (e) { setError(e instanceof ApiError && e.status === 404 ? 'This group no longer exists.' : (e as Error).message) }
   }, [gid])
   useEffect(() => { setPage(null); undo.current = []; redo.current = []; void load() }, [load])
-  useEffect(() => {
-    const onGroups = (e: Event) => { const ids = (e as CustomEvent<{ ids?: string[] }>).detail?.ids ?? []; if (ids.includes(gid) || ids.some((i) => page?.groups[i])) void load() }
-    const onAsset = (e: Event) => {
-      const f = (e as CustomEvent<{ type: string; data: Asset }>).detail
-      if (f.type === 'asset.updated') setPage((p) => (p && p.assets[f.data.id] ? { ...p, assets: { ...p.assets, [f.data.id]: f.data } } : p))
-      else if (f.type === 'asset.deleted' && page?.assets[f.data.id]) void load()
-    }
-    window.addEventListener('loom2:group-changed', onGroups); window.addEventListener('loom2:asset-event', onAsset)
-    return () => { window.removeEventListener('loom2:group-changed', onGroups); window.removeEventListener('loom2:asset-event', onAsset) }
-  }, [gid, load, page])
+  useEffect(() => onEvents(['group.changed', 'asset.updated', 'asset.deleted'], (f) => {    // D66: the session store's frames, no window events
+    if (f.type === 'group.changed') { if (f.data.ids.includes(gid) || f.data.ids.some((i) => page?.groups[i])) void load() }
+    else if (f.type === 'asset.updated') { const a = f.data; setPage((p) => (p && p.assets[a.id] ? { ...p, assets: { ...p.assets, [a.id]: a } } : p)) }
+    else if (page?.assets[f.data.id]) void load()
+  }), [gid, load, page])
 
   // ---- geometry --------------------------------------------------------------------------------------
   const items = page?.group.items ?? []

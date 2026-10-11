@@ -2,6 +2,7 @@
 every call here stays on the event loop.
 """
 from __future__ import annotations
+from ..origin import JobOrigin
 from ..engine.graphs import FieldError
 
 from typing import Any
@@ -19,13 +20,14 @@ router = APIRouter(tags=["jobs"])
 class JobSubmit(BaseModel):
     recipe: dict[str, Any]
     stage: bool = False
+    origin: JobOrigin | None = None               # D66: the suite / surface that asks
 
 
 @router.post("/jobs", response_model=JobsSubmitted)
 async def jobs_submit(svc: Svc, body: JobSubmit):
     _, _, q = svc.require_project()
     try:
-        jobs = q.submit(body.recipe, stage=body.stage)
+        jobs = q.submit(body.recipe, stage=body.stage, origin=body.origin)
     except FieldError as e:
         raise HTTPException(422, e.detail())                                  # D65: {field, value, allowed, message}
     except ValueError as e:

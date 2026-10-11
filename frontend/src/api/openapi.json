@@ -482,6 +482,16 @@
             ],
             "title": "Model Id"
           },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOrigin-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "params": {
             "additionalProperties": true,
             "title": "Params",
@@ -538,7 +548,7 @@
             "title": "Root Id"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -675,7 +685,8 @@
           "thumb_status",
           "trashed_at",
           "bytes",
-          "sha256"
+          "sha256",
+          "origin"
         ],
         "title": "AssetRecord",
         "type": "object"
@@ -1032,6 +1043,17 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "w": {
             "title": "W",
@@ -4891,6 +4913,156 @@
         "title": "JobList",
         "type": "object"
       },
+      "JobOrigin": {
+        "properties": {
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Payload"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ref"
+          },
+          "suite": {
+            "enum": [
+              "generate",
+              "edit",
+              "animate",
+              "catalogue",
+              "api"
+            ],
+            "title": "Suite",
+            "type": "string"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suite",
+          "surface",
+          "ref",
+          "payload"
+        ],
+        "title": "JobOrigin",
+        "type": "object"
+      },
+      "JobOrigin-Input": {
+        "properties": {
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "suite": {
+            "enum": [
+              "generate",
+              "edit",
+              "animate",
+              "catalogue",
+              "api"
+            ],
+            "title": "Suite",
+            "type": "string"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suite",
+          "surface"
+        ],
+        "title": "JobOrigin",
+        "type": "object"
+      },
+      "JobOrigin-Output": {
+        "properties": {
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "suite": {
+            "enum": [
+              "generate",
+              "edit",
+              "animate",
+              "catalogue",
+              "api"
+            ],
+            "title": "Suite",
+            "type": "string"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suite",
+          "surface",
+          "ref",
+          "payload"
+        ],
+        "title": "JobOrigin",
+        "type": "object"
+      },
       "JobProgress": {
         "properties": {
           "id": {
@@ -5022,6 +5194,16 @@
             "title": "Node Times",
             "type": "object"
           },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOrigin-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "progress": {
             "default": 0.0,
             "title": "Progress",
@@ -5064,7 +5246,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -5148,13 +5330,24 @@
           "resumable",
           "prompt_id",
           "node_times",
-          "variant"
+          "variant",
+          "origin"
         ],
         "title": "JobRecord",
         "type": "object"
       },
       "JobSubmit": {
         "properties": {
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOrigin-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recipe": {
             "additionalProperties": true,
             "title": "Recipe",

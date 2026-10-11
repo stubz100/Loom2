@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
-import { isT2IPreview, type Asset, type Job, type T2IPreview, type T2IRecipe } from '../../api/types'
+import { isT2IPreview, type Asset, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 
@@ -104,6 +104,11 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
   return out
 }
 
+/** D66: a submission from the Generate panel; its results show as "this batch" in Generate's grid. */
+export const GENERATE_ORIGIN: JobOrigin = { suite: 'generate', surface: 'results' }
+/** The batch a job belongs to, as Generate's "this batch" view names it (a single job is its own batch). */
+export const batchOf = (j: Pick<Job, 'id' | 'batch_id'>): string => j.batch_id ?? j.id
+
 export interface GenerateState {
   panel: Panel; preview: Preview | null; previewError: string | null; previewing: boolean
   presets: Preset[]; lastPreset: string | null; snippets: Snippet[]
@@ -117,9 +122,10 @@ export interface GenerateState {
   treeToJson: () => void
   jsonToTree: () => boolean
   refreshPreview: () => Promise<void>
-  generate: (stage?: boolean) => Promise<Job[] | null>
-  variations: (asset: Asset, n?: number) => Promise<void>
-  rerun: (asset: Asset) => Promise<void>
+  /** `origin` (D66) says where the request was made; the panel's own submissions default to Generate's results. */
+  generate: (stage?: boolean, origin?: JobOrigin) => Promise<Job[] | null>
+  variations: (asset: Asset, n?: number, origin?: JobOrigin) => Promise<void>
+  rerun: (asset: Asset, origin?: JobOrigin) => Promise<void>
   loadFromAsset: (asset: Asset, keepSeeds?: boolean) => void
   addRef: (assetId: string) => void
   removeRef: (assetId: string) => void
@@ -166,11 +172,11 @@ export const useGenerate = create<GenerateState>()(
         } finally { if (seq === previewSeq) set({ previewing: false }) }
       },
 
-      generate: async (stage = false) => {
+      generate: async (stage = false, origin = GENERATE_ORIGIN) => {
         const s = useSession.getState()
         try {
-          const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage } }))
-          const batch = jobs.jobs[0]?.batch_id ?? jobs.jobs[0]?.id ?? null
+          const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
+          const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
           s.toast(stage ? `Staged ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`, 'success')
           await s.refreshAll()
@@ -178,19 +184,19 @@ export const useGenerate = create<GenerateState>()(
           return jobs.jobs
         } catch (e) { s.toast(`Generate failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
       },
-      variations: async (asset, n = 4) => {
+      variations: async (asset, n = 4, origin) => {
         const r = (asset.params?.recipe as Record<string, unknown> | undefined)
         if (!r) { useSession.getState().toast('This asset has no recipe to vary', 'error'); return }
         get().loadFromAsset(asset, false)
         get().set({ seed_mode: 'random', count: n })
         useSession.getState().setSuite('generate')
-        await get().generate(false)
+        await get().generate(false, origin)
       },
-      rerun: async (asset) => {
+      rerun: async (asset, origin) => {
         if (!asset.params?.recipe) { useSession.getState().toast('This asset has no recipe to re-run', 'error'); return }
         get().loadFromAsset(asset, true)
         useSession.getState().setSuite('generate')
-        await get().generate(false)
+        await get().generate(false, origin)
       },
       loadFromAsset: (asset, keepSeeds = false) => {
         const r = asset.params?.recipe as Record<string, unknown> | undefined

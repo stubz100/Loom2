@@ -21,6 +21,7 @@ from .roster import RosterEntry
 from .workspace import ProjectFormat
 
 
+from .origin import JobOrigin
 from .models.spec import Geometry, Inputs, Recipes, VideoPreset
 
 class Out(BaseModel):
@@ -674,6 +675,7 @@ class ClipReady(Open):
     fps: float
     w: int
     h: int
+    origin: JobOrigin | None = None                 # D66: Animate plays the clip only when it was asked for from the view on screen
 
 
 class ClipUpdated(Open):

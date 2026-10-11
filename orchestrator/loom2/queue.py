@@ -28,11 +28,12 @@ from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_jso
 from .recipes import T2I, I2V, Inpaint, parse_recipe, warm_group
 from .documents import DocumentStore
 from . import native
+from .origin import JobOrigin
 from .roster import ROSTER_BY_ID, Roster
 from .workspace import Workspace
 
 log = logging.getLogger("loom2.queue")
-QUEUE_SCHEMA_VERSION = 1
+QUEUE_SCHEMA_VERSION = 2                     # D66: jobs carry `origin` (a version-1 file loads with none)
 MAX_WARM_SKIP_S = 600.0
 
 
@@ -72,6 +73,7 @@ class JobRecord(BaseModel):
     prompt_id: str | None = None
     node_times: dict[str, float] = Field(default_factory=dict)
     variant: str = "full"
+    origin: JobOrigin | None = None             # D66: the suite / surface that asked (echoed on events and on the assets it makes)
 
 
 class JobQueue:
@@ -232,7 +234,7 @@ class JobQueue:
         self.persist(clean_shutdown=True)
 
     # ---- API --------------------------------------------------------------------------------------
-    def submit(self, recipe_data: dict, stage: bool = False) -> list[JobRecord]:
+    def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
         plan(recipe, self.app.settings.variant)          # D65: a size off the grid (size_policy error), a bad sampler … → 422 here
@@ -244,7 +246,7 @@ class JobQueue:
             seed = int(seed) if int(seed) > 0 else int(time.time_ns() % (2**32))
             rec = JobRecord(kind=recipe.kind, recipe=recipe.model_dump(), seed=seed, batch_id=batch_id, status="staged" if stage else "queued",
                             vram_estimate_gb=estimate_vram_gb(recipe, self.app.settings.variant), warm_group=warm_group(recipe, self.app.settings.variant),
-                            variant=self.app.settings.variant)
+                            variant=self.app.settings.variant, origin=origin)
             if rec.vram_estimate_gb > self.app.settings.vram_budget_gb:
                 rec.status, rec.error, rec.finished_at = "failed", f"VRAM estimate {rec.vram_estimate_gb} GB exceeds the budget {self.app.settings.vram_budget_gb} GB", utc_now()
                 self.catalogue.record_job(rec.model_dump())                 # C16: a refused job is still a job in the index

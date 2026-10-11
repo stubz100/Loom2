@@ -1,6 +1,7 @@
-import { ChevronUp, ClipboardCopy, Pause, Play, X } from 'lucide-react'
+import { ChevronUp, ClipboardCopy, LocateFixed, Pause, Play, X } from 'lucide-react'
 import { useMemo } from 'react'
 import type { Job } from '../api/types'
+import { canGoToOrigin, goToOrigin, originLabel } from '../store/origin'
 import { useSession } from '../store/session'
 import { sep, type MenuItem } from './commands'
 import { showMenu } from './ContextMenu'
@@ -11,7 +12,11 @@ function JobRow({ j }: { j: Job }) {
   const releaseJob = useSession((s) => s.releaseJob)
   const label = `${j.kind} · ${String((j.recipe as { model_id?: string }).model_id ?? '')} · seed ${j.seed}`
   const live = j.status === 'running' || j.status === 'queued'
+  const hasOrigin = canGoToOrigin(j)                          // D66: switch to the suite the job came from and show its batch, clip, document or group
+  const originTitle = hasOrigin ? `Go to origin: ${originLabel(j.origin)}` : `Go to origin: ${j.origin ? 'submitted through the API' : originLabel(null)}`
   const menu = (): MenuItem[] => [
+    { label: 'Go to origin', icon: LocateFixed, disabled: !hasOrigin, run: () => goToOrigin(j) },
+    sep,
     { label: 'Cancel job', icon: X, disabled: !live, run: () => void cancelJob(j.id) },
     { label: 'Run now (release staged)', icon: Play, disabled: j.status !== 'staged', run: () => void releaseJob(j.id) },
     { label: 'Remove from the list', icon: X, disabled: live, run: () => void deleteJob(j.id) },
@@ -27,6 +32,7 @@ function JobRow({ j }: { j: Job }) {
       {j.error && <div className="err">{j.error}</div>}
       <span className="meta">{j.id}</span>
       <span>
+        <button className="quiet" title={originTitle} aria-label="Go to origin" disabled={!hasOrigin} onClick={() => goToOrigin(j)}><LocateFixed size={14} /></button>
         {(j.status === 'running' || j.status === 'queued') && <button className="quiet" title="cancel" onClick={() => void cancelJob(j.id)}><X size={14} /></button>}
         {['done', 'failed', 'cancelled'].includes(j.status) && <button className="quiet" title="remove" onClick={() => void deleteJob(j.id)}><X size={14} /></button>}
       </span>

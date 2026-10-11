@@ -7,7 +7,8 @@ import { revealPath } from '../../shell/tauri'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { flatGroups, useAlbum } from './albumStore'
 import { activeCatalogue } from './catalogueContext'
-import { selectedOrPrimary, type GroupMode } from './catalogueStore'
+import type { JobOrigin } from '../../api/types'
+import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 
 export const GROUP_MODES: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
 
@@ -18,6 +19,13 @@ const hasSel = () => ids().length > 0
 const inTrash = () => cat().q.folder === 'trash'
 const gen = () => import('../generate/generateStore').then((m) => m.useGenerate.getState())
 const focusField = (id: string) => setTimeout(() => document.getElementById(id)?.focus(), 50)
+/** D66: where a re-run / variations from the grid was asked for — Generate's results grid, or the Catalogue pane on screen (a group page
+ *  names its group in `ref`; elsewhere `ref` is null and the payload keeps the folder, so "Go to origin" can return to it). */
+const originHere = (): JobOrigin => {
+  if (activeCatalogue.current === useGenerateResults) return { suite: 'generate', surface: 'results' }
+  const q = cat().q
+  return { suite: 'catalogue', surface: 'group', ref: q.group_id ?? null, payload: { folder: q.folder } }
+}
 
 registerCommands([
   { id: 'cat.selectAll', scope: 'catalogue', label: 'Select all', icon: SquareCheck, keys: 'Ctrl+A', placement: ['context', 'strip'], run: () => cat().selectAll() },
@@ -30,8 +38,8 @@ registerCommands([
   ...[0, 1, 2, 3, 4, 5].map((n) => ({ id: `cat.rate.${n}`, scope: 'catalogue' as const, label: n ? `Rate ${'★'.repeat(n)}` : 'Remove rating', icon: Star, keys: String(n), placement: ['context', 'inspector'] as ['context', 'inspector'], when: hasSel, run: () => void cat().setRating(ids(), n) })),
   { id: 'cat.tag', scope: 'catalogue', label: 'Tag…', icon: Tag, keys: 'T', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => { if (!useSession.getState().ui.inspectorOpen) useSession.getState().setUi({ inspectorOpen: true }); focusField('insp-tag') } },
   { id: 'cat.reference', scope: 'catalogue', label: 'Use as reference in Generate', icon: Images, keys: 'R', placement: ['context', 'inspector', 'strip'], when: hasSel, run: () => { const list = ids(); void gen().then((g) => list.forEach((id) => g.addRef(id))) } },
-  { id: 'cat.rerun', scope: 'catalogue', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); if (a) void gen().then((g) => g.rerun(a)) } },
-  { id: 'cat.variations', scope: 'catalogue', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); if (a) void gen().then((g) => g.variations(a)) } },
+  { id: 'cat.rerun', scope: 'catalogue', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.rerun(a, o)) } },
+  { id: 'cat.variations', scope: 'catalogue', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.variations(a, undefined, o)) } },
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
   { id: 'cat.compare', scope: 'catalogue', label: 'Open compare', icon: Columns2, keys: 'Shift+C', placement: ['context', 'strip'], when: () => cat().compare.length >= 2, run: () => cat().setCompareOpen(true) },
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },

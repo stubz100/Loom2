@@ -169,13 +169,14 @@ a project.
 | Entity | Key fields |
 | --- | --- |
 | Project | id, name, `format.target` (aspect 16:9, 1920×1080, 24 fps — fixed at creation), `format.default_tier` (thumb / draft / hd / full; default draft — D18, 04 §9), size_cap, created |
-| Asset | id, kind (image / video / mask / document-render), path, w, h, frames?, created, **job_id**, **parents[]** (asset ids), suite, model_id, format, seed, prompt_text, prompt_json, params, timings, state (keep / reject / none), rating 0–5, tags[], collection_ids[], thumb_status |
+| Asset | id, kind (image / video / mask / document-render), path, w, h, frames?, created, **job_id**, **parents[]** (asset ids), suite, model_id, format, seed, prompt_text, prompt_json, params, timings, state (keep / reject / none), rating 0–5, tags[], collection_ids[], thumb_status, **origin?** (D66: copied from its job) |
 | Document | id, name, w, h, bit_depth, layers (ordered tree: raster / group / adjustment / filter; each with mask?, blend, opacity, visible, locked, bounds), history_ref, source_asset_id?, saved_at |
 | Clip | id, start_asset_id, end_asset_id?, prompt, model_id, frames, fps, w, h, master_path, proxy_path, job_id, extracted_asset_ids[] |
-| Job | id, recipe (typed), engine, status (staged / queued / running / done / failed / cancelled), progress, vram_estimate, created / started / finished, wall_s, result (asset ids, manifest path), error, log_tail, warm_group, retry_count, resumable |
+| Job | id, recipe (typed), engine, status (staged / queued / running / done / failed / cancelled), progress, vram_estimate, created / started / finished, wall_s, result (asset ids, manifest path), error, log_tail, warm_group, retry_count, resumable, **origin?** (D66: `{suite, surface, ref?, payload?}` — queue schema 2) |
 | LineageEdge | from_asset → to_asset, via_job, kind (generate / inpaint / refine / frame-extract / import / flatten) |
 | Collection | id, name, kind (manual / smart), filter_json? |
 | ModelEntry | roster fields (04 §1b) + resolved path + health + `variants: [full, open]` |
+| JobOrigin (D66) | `suite` (generate / edit / animate / catalogue / api), `surface` (results, ref-slot, clip, ai, group …), `ref?` (batch, clip, document or group id), `payload?` — set by the caller (the Edit AI route sets it server-side), echoed on `job.*`, `asset.created` and `clip.ready`, copied into the asset manifest; placement into the source's group is **not** built (D34's "everything lands in Unprocessed" stands until the author decides) |
 
 **Forward compatibility with the Story workspace (D23).** loom's L1–L4 design maps onto this model without
 migration: a Collection can become an AssetProfile (ref set) with versions layered on top; Asset lineage already

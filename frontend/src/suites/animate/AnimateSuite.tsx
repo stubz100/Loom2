@@ -404,7 +404,8 @@ function Timeline({ clip }: { clip: Clip }) {
 function Interim() {
   const caps = useSession((s) => s.capabilities)
   const jobs = useSession((s) => s.jobs)
-  const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 'i2v' && ['running', 'queued', 'staged'].includes(j.status)).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs])
+  // D66: Animate's own jobs (origin suite 'animate'); jobs without an origin (queued before D66) keep showing
+  const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 'i2v' && ['running', 'queued', 'staged'].includes(j.status) && (!j.origin || j.origin.suite === 'animate')).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs])
   if (!list.length) return null
   return (
     <div className="anim-interim">

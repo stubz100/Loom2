@@ -3,11 +3,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, EventsSocket, http, setBackend, unwrap } from '../api/client'
-import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState, HealthInfo, Job, ModelEntry, ProjectInfo, QueueState, Settings, Suite, UnlistedFile } from '../api/types'
+import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState, HealthInfo, Job, JobOrigin, ModelEntry, ProjectInfo, QueueState, Settings, Suite, UnlistedFile } from '../api/types'
 import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
 
-export interface Toast { id: number; kind: 'info' | 'success' | 'error'; text: string; undo?: () => void; sticky?: boolean }
+/** A toast's one button (Undo, Play, …); a bare function passed to `toast()` is an Undo. */
+export interface ToastAction { label: string; run: () => void }
+export interface Toast { id: number; kind: 'info' | 'success' | 'error'; text: string; action?: ToastAction; sticky?: boolean }
 export interface Banner { id: string; text: string; action?: { label: string; run: () => void }; kind?: 'info' | 'warn' | 'error' }
 
 interface UiState {
@@ -33,7 +35,7 @@ export interface SessionState {
   openProject: (path: string) => Promise<void>
   createProject: (path: string, name: string) => Promise<void>
   closeProject: () => Promise<void>
-  submitJob: (recipe: Record<string, unknown>) => Promise<Job[]>
+  submitJob: (recipe: Record<string, unknown>, origin?: JobOrigin) => Promise<Job[]>
   cancelJob: (id: string) => Promise<void>
   releaseJob: (id: string) => Promise<void>
   deleteJob: (id: string) => Promise<void>
@@ -43,7 +45,7 @@ export interface SessionState {
   fetchModel: (id: string) => Promise<void>
   verifyModel: (id: string) => Promise<{ sha256: string; matches_ledger: boolean | null }>
   saveSettings: (patch: Partial<Settings> | Record<string, unknown>) => Promise<void>
-  toast: (text: string, kind?: Toast['kind'], undo?: () => void) => void
+  toast: (text: string, kind?: Toast['kind'], action?: (() => void) | ToastAction) => void
   askConfirm: (o: AskOptions) => Promise<boolean>
   askText: (o: AskOptions) => Promise<string | null>
   resolveAsk: (value: string | boolean | null) => void
@@ -147,8 +149,8 @@ export const useSession = create<SessionState>()(
         set({ project: { open: false }, queue: null, jobs: {} })
       },
 
-      submitJob: async (recipe) => {
-        const r = await unwrap(http.POST('/jobs', { body: { recipe } }))
+      submitJob: async (recipe, origin) => {
+        const r = await unwrap(http.POST('/jobs', { body: { recipe, origin } }))
         set({ jobs: { ...get().jobs, ...Object.fromEntries(r.jobs.map((j) => [j.id, j])) } })
         return r.jobs
       },
@@ -183,10 +185,11 @@ export const useSession = create<SessionState>()(
         get().toast('Settings saved', 'success')
       },
 
-      toast: (text, kind = 'info', undo) => {
+      toast: (text, kind = 'info', act) => {
         const id = toastSeq++
-        const kept = get().toasts.filter((t) => t.text !== text || t.undo)          // a repeated message replaces its older copy
-        set({ toasts: [...kept, { id, kind, text, undo, sticky: kind === 'error' }].slice(-3) })   // at most three on screen (review U15)
+        const action = typeof act === 'function' ? { label: 'Undo', run: act } : act
+        const kept = get().toasts.filter((t) => t.text !== text || t.action)        // a repeated message replaces its older copy
+        set({ toasts: [...kept, { id, kind, text, action, sticky: kind === 'error' }].slice(-3) })   // at most three on screen (review U15)
         if (kind !== 'error') setTimeout(() => get().dismissToast(id), 6000)
       },
       dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
@@ -264,11 +267,9 @@ function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get:
     case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
       void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
-      window.dispatchEvent(new CustomEvent('loom2:group-changed', { detail: f.data }))
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
-      window.dispatchEvent(new CustomEvent('loom2:asset-event', { detail: f }))           // album pages patch their asset records
       break
     case 'clip.updated':
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(f.data))
@@ -289,6 +290,18 @@ export const selectJobsByStatus = (s: SessionState) => {
   return { running: all.filter((j) => j.status === 'running'), queued: all.filter((j) => j.status === 'queued'), recent: all.filter((j) => ['done', 'failed', 'cancelled'].includes(j.status)) }
 }
 export type { Asset }
+
+/** The frames whose `type` can be one of T (an `asset.*` frame's type is itself a union). */
+type FrameOf<T extends EventFrame['type'], F = EventFrame> = F extends { type: infer U } ? ([Extract<U, T>] extends [never] ? never : F) : never
+/** D66: subscribe to WebSocket frames of the given types (album pages patch their records on `group.changed` and `asset.*`). Every frame
+ *  lands in `events` with one `set` before it is routed, and zustand calls listeners synchronously, so the newest entry is the frame. */
+export function onEvents<T extends EventFrame['type']>(types: readonly T[], cb: (f: FrameOf<T>) => void): () => void {
+  return useSession.subscribe((s, prev) => {
+    if (s.events === prev.events) return
+    const f = s.events[s.events.length - 1]
+    if (f && (types as readonly string[]).includes(f.type)) cb(f as FrameOf<T>)
+  })
+}
 
 /** In-app confirm (resolves false when cancelled) and text prompt (null when cancelled) — the only dialogs besides OS file pickers. */
 export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)

@@ -251,6 +251,7 @@ test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep 
 
   const [a, b] = [tiles(page).nth(10), tiles(page).nth(11)]
   const [ida, idb] = [(await a.getAttribute('data-id'))!, (await b.getAttribute('data-id'))!]
+  for (const id of [ida, idb]) await api('PATCH', `/assets/${id}`, { state: 'none' })      // arranged: the synthetic project gives some tiles a state
   await a.click({ button: 'right' })                                                     // the tile menu shows J
   await expect(page.locator('.ctx-menu button.item', { hasText: /^Keep/ }).locator('kbd')).toHaveText('J')
   await a.click()                                                                         // closes the menu and selects the tile (Esc would clear it)

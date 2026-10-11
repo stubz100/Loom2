@@ -2943,3 +2943,9 @@ split by file so that no two hands touched the same module.
   chords, fixed keys both ways, null / reset / back-to-default, persistence across a reload incl. a later-registered command,
   migration, a broken store, chord recording); audit 6/6 with the wider rule; 160 unit; lint 100; headed tour, kit, brush, animate,
   render pass.
+
+## 2026-10-11 13:36 — CI: the D72 smoke assumed a tile's state
+
+- CI (full) failed the D72 scenario at "K does nothing": the synthetic project gives some tiles a state at random and the second tile
+  was already kept, so the check could not tell. The test now arranges both tiles to no state through the API first (the open run had
+  drawn other tiles). Not a product bug; local run passes.

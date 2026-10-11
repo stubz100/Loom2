@@ -5,6 +5,8 @@ fresh clone runs without configuration; the user overrides live in `app.json`.
 from __future__ import annotations
 
 import os
+import hashlib
+import hmac
 import secrets
 from pathlib import Path
 from typing import Literal
@@ -80,6 +82,9 @@ class AppState:
         if self.variant_override:
             self.record.settings.variant = self.variant_override  # type: ignore[assignment]
         self.token = os.environ.get("LOOM2_TOKEN") or secrets.token_urlsafe(24)
+        # D67: a read-only key for the media URLs <img> / <video> load (`?k=`): it reads pixels and nothing else. Derived from the token,
+        # so a launch has exactly one and a script that knows the token can compute it.
+        self.media_key = hmac.new(self.token.encode(), b"loom2-media-key", hashlib.sha256).hexdigest()[:32]
         self.session_id = new_id("ses")
 
     @property

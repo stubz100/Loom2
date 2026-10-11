@@ -2080,6 +2080,21 @@ def main() -> int:
             check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "media":
+            # D67: <img> / <video> carry the read-only media key — the Catalogue's thumbnails load, none answer 401 (a broken image)
+            cdp.eval("window.__loom2Session.getState().setSuite('catalogue'); 1")
+            t0 = time.time()
+            stats = {}
+            while time.time() - t0 < 15:
+                stats = json.loads(cdp.eval("JSON.stringify((() => { const im = [...document.images].filter((i) => i.src.includes('/thumbs/') || i.src.includes('/assets/')); return { n: im.length, loaded: im.filter((i) => i.complete && i.naturalWidth > 0).length, broken: im.filter((i) => i.complete && i.naturalWidth === 0).length, keyed: im.filter((i) => /[?&]k=/.test(i.src)).length } })())"))
+                if stats["n"] and stats["loaded"] + stats["broken"] == stats["n"]:
+                    break
+                time.sleep(0.3)
+            cdp.shot(OUT / "media-catalogue.png")
+            check(stats.get("n", 0) > 0 and stats["loaded"] == stats["n"] and stats["broken"] == 0 and stats["keyed"] == stats["n"],
+                  f"the Catalogue's thumbnails load through the media key, none broken ({stats})")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "adjscreen":
             # an adjustment layer on screen at the display's scaling (150 % here): its filter read the backdrop at the screen's resolution
             # and its input at 1, so the picture was stretched sideways and squashed with a black band below — while the compare,

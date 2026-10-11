@@ -53,7 +53,10 @@ must answer cleanly when it is absent; `/capabilities.content_aware.available` t
    **Every JSON route declares `response_model=`** (D38; `tests/test_contract_d38.py` enforces it) — a record model, or a model in
    `schemas.py`. A record returned in replies sets `json_schema_serialization_defaults_required=True`. After any API change run
    `scripts/export_openapi.py` and `npm run api:types` (in `frontend/`) and commit `openapi.json` + `schema.d.ts`; CI fails otherwise.
-5. **Token.** Mutating routes require `X-Loom-Token` (`token_gate` in `api.py`); the token is per launch and never persisted.
+5. **Token (D67).** Every route but `/health` requires `X-Loom-Token` (`token_gate` in `api.py`); the token is per launch and never
+   persisted. Media GETs (`MEDIA_PATH`) also accept the read-only `?k=` media key (`AppState.media_key`, `GET /session`); a new media
+   route goes into `MEDIA_PATH` and the matrix in `tests/test_auth_d67.py`. The WebSocket authenticates with its first message. Tests get
+   an authenticated `TestClient` by default (`conftest.py`); pass `headers={}` to test the gate.
 6. **Lineage at write time.** Parents, `lineage_kind`, model, seed, prompt, `compiled_graph_hash` and the variant are stamped when an asset
    is ingested; nothing reconstructs them later.
 7. **IDs** are prefixed (`ast_`, `job_`, `doc_`, `clp_`, `grp_`, `bat_`) via `fsio.new_id`.

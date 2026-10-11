@@ -46,9 +46,13 @@ Processes: shell (1) · orchestrator (1) · engine (1 resident, restartable) · 
 | Inside the webview | `SharedArrayBuffer` (COOP/COEP set by Tauri `app.security.headers`) between brush worker and main thread |
 | Between Python processes | `multiprocessing.shared_memory` / `np.memmap` for decode → thumbnail → API |
 
-Security: every mutating endpoint requires `X-Loom-Token` (generated per launch, injected by the shell at
-READY); CORS allowlist for the dev origin and `tauri.localhost`; blob paths are content-addressed, output
-paths are project-relative and traversal-guarded (loom rules).
+Security (D67, 2026-10-11): **every** route requires `X-Loom-Token` (generated per launch, injected by the shell at READY) except
+`/health` — reads too, since settings, paths, prompts and pixels are private. The media GETs an `<img>` / `<video>` makes (thumbnails,
+asset files, clip proxies and frames, document thumbnails, blobs) also take a read-only **media key** `?k=` (derived from the token,
+handed out by `GET /session`): it opens pixels and nothing else, and never a write. The WebSocket connects bare and authenticates with
+its first message `{"type": "auth", "token": …}` within 2 s (4401 otherwise), so no credential sits in a URL; the access log is off.
+`/docs`, `/redoc` and `/openapi.json` exist only with `LOOM2_DEV=1`. CORS allowlist for the dev origin and `tauri.localhost`; blob
+paths are content-addressed, output paths are project-relative and traversal-guarded (loom rules).
 
 ## 3. Engine layer — decision D2: ComfyUI as the headless engine
 

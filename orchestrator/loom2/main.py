@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
 
     def ready(svc) -> None:
-        line = {"event": "LOOM2_READY", "port": port, "host": host, "token": svc.app.token, "state": str(svc.app.state_dir),
+        line = {"event": "LOOM2_READY", "port": port, "host": host, "token": svc.app.token, "media_key": svc.app.media_key, "state": str(svc.app.state_dir),
                 "project": str(svc.ws.path) if svc.ws else None}
         sys.stdout.write("LOOM2_READY " + json.dumps(line) + "\n")
         sys.stdout.flush()

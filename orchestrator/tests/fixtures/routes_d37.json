@@ -35,6 +35,7 @@
  "GET /project/presets",
  "GET /projects",
  "GET /queue",
+ "GET /session",
  "GET /settings",
  "GET /snippets",
  "GET /thumbs/{asset_id}/{size}",

@@ -2758,3 +2758,23 @@ split by file so that no two hands touched the same module.
   while on the Catalogue; Go to origin on a Generate batch) need an engine job — they wait for P6's harness or the next rig session.
 - Checks: 219 offline; settings audit 154 / 0; literal check 0; API current; build clean, lint 100; headed tour, animate, aipanel, kit
   pass. **H2 (P2, P1, P4) closed.** Next by the programme: H3 (P9 authenticated reads, P6 frontend test harness).
+
+## 2026-10-11 10:02 — H3 opens: D67–D68 recorded; P9 every route authenticated (D67) built
+
+- **Decisions:** D67 (P9 authenticated reads and WebSocket) and D68 (P6 frontend test harness) entered in 13 before the work.
+- **Server:** `token_gate` covers every route but `/health` (36 GETs were open: settings, paths, prompts, pixels); the six media GETs
+  (`/thumbs`, `/assets/{id}/file`, `/clips/{id}/proxy.mp4`, `/clips/{id}/frames/*`, `/documents/{id}/thumbnail`, `/blobs/*`) also take a
+  read-only media key `?k=` — HMAC of the token, one per launch, handed out by the gated `GET /session` (deviation from 08's plan, which put
+  it in the shell's `backend_info`: the session route serves the shell and browser dev alike) and printed on the READY line for scripts;
+  it never opens settings, jobs, prompts or a write. The WebSocket accepts bare and closes with 4401 unless its first message is
+  `{"type": "auth", "token": …}` within 2 s — no credential in a URL. `/docs`, `/redoc`, `/openapi.json` only with `LOOM2_DEV=1`
+  (`export_openapi.py` calls `app.openapi()`); the access log was already off.
+- **Frontend:** the session fetches the media key before the app marks itself connected; `api.fileUrl` / `thumbUrl` / `assetUrl` append it
+  (every media URL already went through them); the event socket sends the auth message on open. Scripts already sent the token on GETs.
+- **Tests:** `test_auth_d67.py` (4): the route matrix over all 76 OpenAPI paths (401 without credentials except /health; the key opens
+  exactly the media GETs, nothing else, no write; a wrong key is 401; `/settings` is 401 bare), `/session`, the WebSocket's 4401 (wrong
+  token, wrong first message, silence) and hello after auth, docs off unless dev. `conftest.py` gives test clients the token by default
+  (`headers={}` tests the gate); route snapshot + API regenerated. **223 offline under full and open.**
+- **Checks:** headed tour, animate, render, kit pass; new headed mode `media` — the Catalogue's thumbnails load through the key, none
+  broken; `csp_check.py` clean on all six pages of the production build; **M1 rig acceptance 20/20** (162 s: generation, hard kill
+  mid-job, paused relaunch, cancel, graceful stop). Settings audit 154 / 0, literal check 0, build clean, lint 100.

@@ -14,7 +14,7 @@ from ..capabilities import capabilities as build_capabilities
 from ..engine.graphs import CompileError, FieldError
 from ..engine.pipeline import plan, preview_problems
 from ..recipes import I2V, T2I, parse_recipe
-from ..schemas import Capabilities, DocumentPreview, HealthInfo, I2VPreview, ShuttingDown, T2IPreview, VersionInfo
+from ..schemas import Capabilities, DocumentPreview, HealthInfo, I2VPreview, SessionInfo, ShuttingDown, T2IPreview, VersionInfo
 from .deps import Svc
 
 router = APIRouter(tags=["meta"])
@@ -38,6 +38,12 @@ async def version(svc: Svc):
     pin = info.pop("engine_pin")
     return {**info, "variant": svc.app.settings.variant, "engine": {"pin": pin, "running": svc.engine.version},
             "paths": {"state": str(svc.app.state_dir), "logs": str(svc.app.logs_dir), "models_root": str(svc.app.models_root)}}
+
+
+@router.get("/session", response_model=SessionInfo)
+async def session_info(svc: Svc):
+    """D67: what this launch's client needs besides the token — the read-only media key for <img> / <video> URLs (`?k=`)."""
+    return {"session_id": svc.app.session_id, "media_key": svc.app.media_key}
 
 
 @router.get("/capabilities", response_model=Capabilities)

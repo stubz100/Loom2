@@ -2,7 +2,7 @@
 // Project data never lives in component state; layout memory persists per suite in localStorage (07 §1.7).
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { ApiError, EventsSocket, http, setBackend, unwrap } from '../api/client'
+import { ApiError, EventsSocket, http, setBackend, setMediaKey, unwrap } from '../api/client'
 import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState, HealthInfo, Job, JobOrigin, ModelEntry, ProjectInfo, QueueState, Settings, Suite, UnlistedFile } from '../api/types'
 import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
@@ -76,6 +76,7 @@ export const useSession = create<SessionState>()(
         try {
           const b = await discoverBackend()
           setBackend(b)
+          setMediaKey((await unwrap(http.GET('/session'))).media_key)      // D67: before any <img> asks for a thumbnail
           set({ backend: b, backendError: null })
         } catch (e) {
           set({ backendError: (e as Error).message })

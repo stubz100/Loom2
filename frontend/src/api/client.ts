@@ -13,6 +13,11 @@ export class ApiError extends Error {
 }
 
 let backend: Backend | null = null
+/** D67: the per-launch read-only key the media URLs carry (`?k=`): <img> / <video> cannot send the token header. */
+let mediaKey = ''
+export const setMediaKey = (k: string) => { mediaKey = k }
+/** A media URL with the key: thumbnails, asset files, clip proxies and frames, document thumbnails, blobs. */
+const withKey = (url: string) => (mediaKey ? `${url}${url.includes('?') ? '&' : '?'}k=${encodeURIComponent(mediaKey)}` : url)
 export const getBackend = () => backend
 export const baseUrl = () => backend ? `http://${backend.host}:${backend.port}` : ''
 
@@ -56,9 +61,9 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: BodyI
 /** Byte transfers and URLs (D4: pixels never go through JSON). JSON calls use `unwrap(http.GET(…))` and friends (D38). */
 export const api = {
   putBlob: async (sha256: string, bytes: ArrayBuffer | Blob) => call<{ sha256: string; bytes: number }>('PUT', `/blobs/${sha256}`, undefined, bytes),
-  fileUrl: (path: string) => baseUrl() + path,
-  thumbUrl: (assetId: string, size: 256 | 512 | 1024 = 256) => `${baseUrl()}/thumbs/${assetId}/${size}`,
-  assetUrl: (assetId: string) => `${baseUrl()}/assets/${assetId}/file`,
+  fileUrl: (path: string) => withKey(baseUrl() + path),
+  thumbUrl: (assetId: string, size: 256 | 512 | 1024 = 256) => withKey(`${baseUrl()}/thumbs/${assetId}/${size}`),
+  assetUrl: (assetId: string) => withKey(`${baseUrl()}/assets/${assetId}/file`),
 }
 
 export async function sha256Hex(data: ArrayBuffer): Promise<string> {
@@ -82,11 +87,11 @@ export class EventsSocket {
 
   connect(): void {
     if (!backend || this.closed) return
-    const url = `ws://${backend.host}:${backend.port}/events?token=${encodeURIComponent(backend.token)}`
-    const ws = new WebSocket(url)
+    const token = backend.token
+    const ws = new WebSocket(`ws://${backend.host}:${backend.port}/events`)       // D67: no credential in the URL
     ws.binaryType = 'arraybuffer'
     this.ws = ws
-    ws.onopen = () => { this.backoff = 500; this.onStatus('open') }
+    ws.onopen = () => { ws.send(JSON.stringify({ type: 'auth', token })); this.backoff = 500; this.onStatus('open') }
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         let f: EventFrame | { type: 'pong' }

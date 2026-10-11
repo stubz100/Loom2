@@ -1250,6 +1250,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session Info
+         * @description D67: what this launch's client needs besides the token — the read-only media key for <img> / <video> URLs (`?k=`).
+         */
+        get: operations["session_info_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -4293,6 +4313,16 @@ export interface components {
         SelectionReply: {
             /** Selection */
             selection: number[] | null;
+        };
+        /**
+         * SessionInfo
+         * @description D67: the per-launch read-only media key (`?k=` on media URLs) and the session id.
+         */
+        SessionInfo: {
+            /** Media Key */
+            media_key: string;
+            /** Session Id */
+            session_id: string;
         };
         /** Settings */
         Settings: {
@@ -7355,6 +7385,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_info_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionInfo"];
                 };
             };
         };

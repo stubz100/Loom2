@@ -7,6 +7,8 @@ This module assembles the app (D37): lifespan, CORS, the token gate, error mappi
 from __future__ import annotations
 
 import logging
+import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -29,6 +31,10 @@ RECIPES = (T2I, I2I, Inpaint, Upscale, Segment, I2V)
 
 FileResponse.chunk_size = 4 * 2**20   # E2: 64 KiB chunks cap loopback at ~400 MiB/s; 4 MiB gives > 1 GiB/s
 log = logging.getLogger("loom2.api")
+# D67: routes anyone may call, and the media routes the read-only key (`?k=`) opens — pixels only, never settings, jobs or prompts
+OPEN_PATHS = {"/health"}
+DEV_DOCS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
+MEDIA_PATH = re.compile(r"^/(thumbs/[^/]+/[^/]+|assets/[^/]+/file|clips/[^/]+/(proxy\.mp4|frames/[^/]+)|documents/[^/]+/thumbnail|blobs/[^/]+)$")
 DEV_ORIGINS = ["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
 ERROR_STATUS = {StaleStack: 409,       # C1: the editor merges the newer server layers and saves again
                 StaleGroup: 409,       # D34: the page reloads the group and redoes the drag
@@ -58,17 +64,24 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
             await svc.engine.stop()
             await svc.engine.client.aclose()
 
-    app = FastAPI(title="loom2 orchestrator", version=__version__, lifespan=lifespan)
+    dev = os.environ.get("LOOM2_DEV") == "1"                  # D67: the interactive docs only in development
+    app = FastAPI(title="loom2 orchestrator", version=__version__, lifespan=lifespan,
+                  docs_url="/docs" if dev else None, redoc_url="/redoc" if dev else None, openapi_url="/openapi.json" if dev else None)
+    open_paths = OPEN_PATHS | (DEV_DOCS if dev else set())
     app.state.services = svc
     app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["X-Loom-Width", "X-Loom-Height", "X-Loom-Channels", "Content-Disposition"])
 
     @app.middleware("http")
     async def token_gate(request: Request, call_next):
-        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path not in ("/health",):
-            if request.headers.get("X-Loom-Token") != svc.app.token:
-                return JSONResponse({"detail": "missing or wrong X-Loom-Token"}, status_code=401)
-        return await call_next(request)
+        """D67: every route needs the token (`X-Loom-Token`) but /health; the media GETs an <img> / <video> makes also take the
+        read-only media key as `?k=`. CORS preflights pass (they carry no headers by design)."""
+        path = request.url.path
+        if request.method == "OPTIONS" or path in open_paths or request.headers.get("X-Loom-Token") == svc.app.token:
+            return await call_next(request)
+        if request.method in ("GET", "HEAD") and MEDIA_PATH.match(path) and request.query_params.get("k") == svc.app.media_key:
+            return await call_next(request)
+        return JSONResponse({"detail": "missing or wrong X-Loom-Token"}, status_code=401)
 
     for exc, status in ERROR_STATUS.items():
         app.add_exception_handler(exc, _status_handler(status))

@@ -59,7 +59,8 @@ literals; image content (brush colours, overlays on images) is the exception.
 `frontend/src/store/session.ts` holds the app-wide store (backend, health, project, engine, queue, jobs, previews, capabilities, toasts,
 banners, the ask dialog, persisted `ui` layout) and `applyEvent()`, which routes WebSocket frames to the suite stores. Project data never lives
 in component state. `frontend/src/api/client.ts` is the only HTTP / WebSocket client; `frontend/src/shell/tauri.ts` is the only module that
-imports `@tauri-apps/*`. A view that needs raw frames subscribes with `onEvents(types, cb)` (no `window` CustomEvents — D66 removed that
+imports `@tauri-apps/*`. Media URLs come only from `api.fileUrl` / `api.thumbUrl` / `api.assetUrl`, which append the read-only media key (D67: an `<img>`
+cannot send the token header; every other request does); the event socket authenticates with its first message. A view that needs raw frames subscribes with `onEvents(types, cb)` (no `window` CustomEvents — D66 removed that
 bus); a toast takes an `action {label, run}` (a bare function still means Undo).
 
 **Models come from `/capabilities` (D65):** never write a model id — `frontend/src/store/modelCaps.ts` sorts `caps.models` / `caps.i2v.models`

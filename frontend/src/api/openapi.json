@@ -7100,6 +7100,25 @@
         "title": "SelectionReply",
         "type": "object"
       },
+      "SessionInfo": {
+        "description": "D67: the per-launch read-only media key (`?k=` on media URLs) and the session id.",
+        "properties": {
+          "media_key": {
+            "title": "Media Key",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "media_key"
+        ],
+        "title": "SessionInfo",
+        "type": "object"
+      },
       "Settings": {
         "properties": {
           "api_host": {
@@ -12563,6 +12582,28 @@
           }
         },
         "summary": "Recipe Preview",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/session": {
+      "get": {
+        "description": "D67: what this launch's client needs besides the token — the read-only media key for <img> / <video> URLs (`?k=`).",
+        "operationId": "session_info_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Session Info",
         "tags": [
           "meta"
         ]

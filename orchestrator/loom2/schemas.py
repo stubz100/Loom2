@@ -208,6 +208,12 @@ class ContentAwareCaps(Open):
     modes: list[str]
 
 
+class SessionInfo(Out):
+    """D67: the per-launch read-only media key (`?k=` on media URLs) and the session id."""
+    session_id: str
+    media_key: str
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps

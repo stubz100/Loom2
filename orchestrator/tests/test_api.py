@@ -25,7 +25,7 @@ def test_api_flow(tmp_path: Path):
     H = {"X-Loom-Token": token}
     with client:
         assert client.get("/health").json()["ok"] is True
-        assert client.post("/project/close").status_code == 401                      # token gate
+        assert client.post("/project/close", headers={"X-Loom-Token": "wrong"}).status_code == 401   # token gate
         assert client.get("/project").json() == {"open": False}
         assert client.get("/assets").status_code == 409                               # no project
         r = client.post("/project", json={"path": str(tmp_path / "proj"), "name": "Smoke", "size_cap_gb": 10}, headers=H)
@@ -64,7 +64,8 @@ def test_api_flow(tmp_path: Path):
         assert client.put(f"/blobs/{'0' * 64}", content=body, headers=H).status_code == 400
         assert client.get(f"/blobs/{sha}").content == body
         # events: hello frame carries recent history
-        with client.websocket_connect(f"/events?token={token}") as ws:
+        with client.websocket_connect("/events") as ws:
+            ws.send_json({"type": "auth", "token": token})                         # D67: the token travels in the first message, not the URL
             hello = ws.receive_json()
             assert hello["type"] == "hello" and any(e["type"] == "project.opened" for e in hello["data"]["recent"])
         assert client.get("/engine").json()["running"] is False
@@ -115,7 +116,8 @@ def test_empty_trash_purges_everything_with_one_event(tmp_path: Path):
         items = client.post("/assets/import", json={"paths": paths}, headers=H).json()["items"]
         ids = [a["id"] for a in items]
         client.post("/assets/trash", json={"ids": ids[:55]}, headers=H)
-        with client.websocket_connect(f"/events?token={token}") as ws:
+        with client.websocket_connect("/events") as ws:
+            ws.send_json({"type": "auth", "token": token})
             ws.receive_json()                                                       # hello
             r = client.post("/assets/purge", json={"ids": None}, headers=H).json()
             assert r["purged"] == 55 and r["ids"] == []

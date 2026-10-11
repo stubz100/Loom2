@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isT2IPreview, type Asset, type Job, type T2IPreview, type T2IRecipe } from '../../api/types'
+import { defaultModel, resolveModel } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 
 export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string }
@@ -33,7 +34,7 @@ export const NEW_SUBJECT: Subject = { description: '', position: '', action: '',
 const EMPTY_TREE: Tree = { scene: '', subjects: [], style: '', color_palette: [], lighting: '', mood: '', background: '', composition: '', camera: { angle: '', lens: '', depth_of_field: '', 'f-number': '', distance: '' } }
 export const DEFAULT_PANEL: Panel = {
   prompt_mode: 'tree', tree: EMPTY_TREE, json_text: '', text: '', negative: '',
-  model_id: 'flux2-dev-fp8mixed', steps: null, guidance: null, cfg: null, sampler: null, scheduler: null, turbo: true,
+  model_id: '', steps: null, guidance: null, cfg: null, sampler: null, scheduler: null, turbo: true,
   turbo_strength: 1, weight_dtype: null, te_device: null, te_id: null, base_shift: null, max_shift: null, tiled_vae: false, tile_size: 512,
   seed_mode: 'random', seed: 1, count: 4, width: 960, height: 544, tier: 'draft', refs: [], ref_max_px: 1024, loras: [],
 }
@@ -67,14 +68,21 @@ export function treeFromJson(j: Record<string, unknown>): Tree {
   return t
 }
 
+/** D65: the panel's model, or the variant's t2i default while the panel holds none ('' before the capabilities arrived). */
+export function panelModel(p: Panel): string {
+  return resolveModel(p.model_id, 't2i', (id) => !!useSession.getState().capabilities?.models[id])
+}
+
 export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
+  const model_id = panelModel(p)
+  const cap = useSession.getState().capabilities?.models[model_id]
   let prompt_json: Record<string, unknown> | undefined
   if (p.prompt_mode === 'tree') prompt_json = cleanTree(p.tree)
   else if (p.prompt_mode === 'json') { try { prompt_json = JSON.parse(p.json_text || '{}') } catch { prompt_json = undefined } }
   const seedList = seeds ?? Array.from({ length: p.count }, (_, i) => (p.seed_mode === 'random' ? 0 : p.seed_mode === 'fixed' ? p.seed : p.seed + i))
   return {
-    kind: 't2i', model_id: p.model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
-    width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo,
+    kind: 't2i', model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
+    width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
   }
@@ -82,7 +90,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
 
 export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): Partial<Panel> {
   const out: Partial<Panel> = {
-    model_id: String(r.model_id ?? 'flux2-dev-fp8mixed'), prompt_mode: (r.prompt_mode as PromptMode) ?? (r.prompt_json ? 'tree' : 'text'),
+    model_id: String(r.model_id ?? defaultModel('t2i')), prompt_mode: (r.prompt_mode as PromptMode) ?? (r.prompt_json ? 'tree' : 'text'),
     text: String(r.prompt_text ?? ''), negative: String(r.negative ?? ''), width: Number(r.width ?? 960), height: Number(r.height ?? 544),
     steps: (r.steps as number | null) ?? null, guidance: (r.guidance as number | null) ?? null, cfg: (r.cfg as number | null) ?? null,
     sampler: (r.sampler as string | null) ?? null, scheduler: (r.scheduler as string | null) ?? null, turbo: Boolean(r.turbo), tier: 'custom',

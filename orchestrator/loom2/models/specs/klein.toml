@@ -1,0 +1,72 @@
+# FLUX.2 Klein (04 §3): distilled 4-step variants run ICM (Fill-Match, Remove); base variants partial-denoise (refine, tiled refine).
+# D31: the 9B family defaults to the Qwen3-8B Q4_K_M GGUF encoder (stays resident beside the transformer), fp8 as the alternate.
+
+[[model]]
+id = "klein-4b"
+family = "klein"
+order = 4
+label = "Klein 4B"
+graph = "klein"
+roles.te = { default = "qwen3-4b" }
+roles.vae = "flux2-vae"
+sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
+recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"] }
+inputs = { refs_max = 4 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
+estimates = { vram_gb = 8.5, base_seconds = 10.0, doc_seconds = 28.0 }
+
+[[model]]
+id = "klein-base-4b"
+family = "klein"
+order = 5
+label = "Klein 4B base"
+graph = "klein"
+roles.te = { default = "qwen3-4b" }
+roles.vae = "flux2-vae"
+sampling = { steps = 20, guidance = 1.0, cfg = 3.5, weight_dtype = "fp8_e4m3fn", distilled = false, json_prompt = false, model_shift = 2.02, cfg_note = "base: 3–5, negatives work" }
+recipes = { t2i = true, i2i = true, inpaint = ["fill", "outpaint"] }
+inputs = { refs_max = 4 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
+estimates = { vram_gb = 9.2, base_seconds = 30.0, doc_seconds = 28.0, tile_seconds = 38.0 }
+
+[[model]]
+id = "klein-9b"
+family = "klein"
+order = 1
+label = "Klein 9B"
+graph = "klein"
+roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
+roles.vae = "flux2-vae"
+sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
+recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"] }
+inputs = { refs_max = 4, refs_suggest = { at = 2, model = "klein-9b-kv", why = "2.5× faster with several references" } }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
+estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }
+
+[[model]]
+id = "klein-base-9b"
+family = "klein"
+order = 2
+label = "Klein 9B base"
+graph = "klein"
+roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
+roles.vae = "flux2-vae"
+sampling = { steps = 20, guidance = 1.0, cfg = 3.5, weight_dtype = "fp8_e4m3fn", distilled = false, json_prompt = false, model_shift = 2.02, cfg_note = "base: 3–5, negatives work" }
+recipes = { default_for = ["i2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"] }
+inputs = { refs_max = 4 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
+estimates = { vram_gb = 15.0, base_seconds = 50.0, doc_seconds = 28.0, tile_seconds = 38.0 }
+
+[[model]]
+id = "klein-9b-kv"
+family = "klein"
+order = 3
+label = "Klein 9B KV"
+graph = "klein"
+roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
+roles.vae = "flux2-vae"
+sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
+recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"] }
+inputs = { refs_max = 4 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
+estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }

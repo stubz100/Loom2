@@ -50,6 +50,8 @@ jobs:
         run: orchestrator/.venv/Scripts/python.exe scripts/agents_check.py
       - name: settings audit (D60) — every Settings field, recipe field and /capabilities parameter reaches the code that runs
         run: orchestrator/.venv/Scripts/python.exe scripts/settings_audit.py
+      - name: model ids live in the specs (D65) — no quoted roster id in the orchestrator's or the frontend's code
+        run: orchestrator/.venv/Scripts/python.exe scripts/model_literals_check.py
       - name: content-aware wheel (D62) — the committed extension matches its PhotoCraft pin and checksum
         run: orchestrator/.venv/Scripts/python.exe scripts/build_pcalgo.py --check
       - name: smart-select WebAssembly (D59) — the committed module matches its PhotoCraft pin and checksum

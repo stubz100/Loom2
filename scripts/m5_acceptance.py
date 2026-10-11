@@ -64,6 +64,19 @@ def layer_png(base: str, did: str, lid: str) -> Image.Image:
     return Image.open(io.BytesIO(raw)).convert("RGBA")
 
 
+def layer_coverage(base: str, did: str, lid: str) -> Image.Image:
+    """The layer as it composites: since D47 a paste-back is opaque pixels under a linked layer mask, so the alpha is pixels × mask."""
+    rgba = layer_png(base, did, lid)
+    try:
+        mask = Image.open(io.BytesIO(call(base, "GET", f"/documents/{did}/layers/{lid}/pixels?kind=mask", raw=True))).convert("L")
+    except Exception:                                    # no mask: the pixels' own alpha
+        return rgba
+    a = (np.asarray(rgba)[..., 3].astype(np.float32) * np.asarray(mask.resize(rgba.size)).astype(np.float32) / 255).astype(np.uint8)
+    out = np.asarray(rgba).copy()
+    out[..., 3] = a
+    return Image.fromarray(out, "RGBA")
+
+
 def sheet(name: str, original: Image.Image, results: list[tuple[str, Image.Image]], region: dict | None) -> Path:
     """Original crop on the left, candidates composited over it on the right."""
     if region:
@@ -213,7 +226,7 @@ def main() -> int:
             done, d2 = run("fill · 03 background swap (inverted matte)", {"kind": "inpaint", "mode": "fill", "prompt_text": tasks["03"]["prompt"], "feather": 6, "margin_pct": 0, "seeds": seeds[:1]})
             lids = [l for j in done for l in (j["result"].get("layers") or [])]
             if lids and done[0]["result"].get("region"):
-                layer = layer_png(base, did, lids[0]); reg = done[0]["result"]["region"]
+                layer = layer_coverage(base, did, lids[0]); reg = done[0]["result"]["region"]   # pixels × the D47 layer mask
                 full = Image.new("RGBA", (DW, DH), (0, 0, 0, 0)); full.paste(layer, (reg["x"], reg["y"]))
                 alpha = np.asarray(full)[..., 3]                 # not `a`: that is the argparse namespace (the summary reads a.keep)
                 inside = float(alpha[matte > 200].mean() / 255) if (matte > 200).any() else 1.0

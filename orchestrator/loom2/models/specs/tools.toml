@@ -1,0 +1,32 @@
+# Edit tools (M5): upscalers and AI Select. Seconds from the M5 acceptance (warm).
+[[model]]
+id = "realesrgan-x2"
+family = "tools"
+label = "Real-ESRGAN 2×"
+graph = "esrgan"
+recipes = { default_for = ["upscale"], upscale_factor = 2 }
+estimates = { vram_gb = 2.0, doc_seconds = 6.0 }
+
+[[model]]
+id = "realesrgan-x4"
+family = "tools"
+label = "Real-ESRGAN 4×"
+graph = "esrgan"
+recipes = { upscale_factor = 4 }
+estimates = { vram_gb = 2.5, doc_seconds = 6.0 }
+
+[[model]]
+id = "birefnet"
+family = "tools"
+label = "Subject · BiRefNet"
+graph = "matte"
+recipes = { default_for = ["segment"], segment = ["subject"] }
+estimates = { vram_gb = 2.5, doc_seconds = 2.5 }
+
+[[model]]
+id = "sam3"
+family = "tools"
+label = "SAM 3"
+graph = "sam"
+recipes = { segment = ["text", "points", "box"] }
+estimates = { vram_gb = 5.0, doc_seconds = 3.5 }

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from loom2.models import registry
 from loom2.api import create_app
 from loom2.clips import ClipStore
 from loom2.config import AppState
@@ -46,10 +47,13 @@ def _nodes(c: graphs.Compiled, cls: str) -> list[dict]:
 
 # ---- compiler ----------------------------------------------------------------------------------------------
 def test_i2v_params_snap_to_each_models_rule():
-    wan = graphs.i2v_params(I2V(start_asset="a", width=833, height=481, frames=80))
-    assert (wan["width"], wan["height"], wan["frames"]) == (832, 480, 81) and wan["family"] == "wan22"
-    ltx = graphs.i2v_params(I2V(start_asset="a", model_id="ltx23-distilled-fp8", width=1010, height=570, frames=120, fps=24))
+    wan = graphs.i2v_params(I2V(start_asset="a", width=833, height=481, frames=84))
+    assert (wan["width"], wan["height"], wan["frames"]) == (832, 480, 81) and wan["family"] == "wan22"     # D65: snapped down
+    ltx = graphs.i2v_params(I2V(start_asset="a", model_id="ltx23-distilled-fp8", width=1010, height=570, frames=120, fps=24, size_policy="snap_up"))
     assert (ltx["width"], ltx["height"], ltx["frames"]) == (1024, 576, 121) and ltx["steps"] == 8
+    with pytest.raises(graphs.FieldError) as e:
+        graphs.i2v_params(I2V(start_asset="a", frames=80, size_policy="error"))
+    assert (e.value.field, e.value.value, e.value.allowed) == ("frames", 80, [77, 81])                     # Wan takes 4n+1 frames
     motion = graphs.i2v_params(I2V(start_asset="a", preset="motion"))
     assert (motion["steps"], motion["split"], motion["cfg_high"], motion["cfg_low"], motion["lora_high"], motion["lora_low"]) == (8, 4, 3.5, 1.0, False, True)
     with pytest.raises(graphs.CompileError):
@@ -64,7 +68,7 @@ def test_wan_graphs_pass_the_contract_for_every_preset_and_flf(tmp_path: Path, o
         assert not c.problems, c.problems
         assert _nodes(c, "WanImageToVideo") and not _nodes(c, "WanFirstLastFrameToVideo")
         ks = _nodes(c, "KSamplerAdvanced")
-        assert len(ks) == 2 and ks[0]["inputs"]["noise_seed"] == 7 and ks[0]["inputs"]["steps"] == graphs.WAN_PRESETS[preset].steps
+        assert len(ks) == 2 and ks[0]["inputs"]["noise_seed"] == 7 and ks[0]["inputs"]["steps"] == registry.get("wan22-i2v-high-fp8").video.presets[preset].steps
         assert len(_nodes(c, "LoraLoaderModelOnly")) == {"draft": 2, "motion": 1, "quality": 0}[preset]
         save = _nodes(c, "SaveImage")
         assert len(save) == 1 and save[0]["inputs"]["filename_prefix"] == "loom2/j1" and not _nodes(c, "SaveVideo")

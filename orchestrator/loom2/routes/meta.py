@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from .. import __version__
 from ..build_info import version_info
 from ..capabilities import capabilities as build_capabilities
-from ..engine.graphs import CompileError
+from ..engine.graphs import CompileError, FieldError
 from ..engine.pipeline import plan, preview_problems
 from ..recipes import I2V, T2I, parse_recipe
 from ..schemas import Capabilities, DocumentPreview, HealthInfo, I2VPreview, ShuttingDown, T2IPreview, VersionInfo
@@ -56,6 +56,8 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
     variant = svc.app.settings.variant
     try:
         p = plan(recipe, variant, svc.queue.timing_history() if svc.queue else None)
+    except FieldError as e:
+        raise HTTPException(422, e.detail())                                  # D65: {field, value, allowed, message}
     except CompileError as e:
         raise HTTPException(422, str(e))
     missing = []

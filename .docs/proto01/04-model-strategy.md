@@ -30,6 +30,12 @@ tooling.
 
 ### 1b. The roster (replaces loom's four manifests)
 
+**Specs beside the roster (D65, 2026-10-11).** The roster lists weights (file, folder, licence, variants); what loom2 knows about
+a *model* — its builder, encoder and alternates, sampling defaults, the recipes it runs, sizes and tiers, video presets, VRAM and time
+estimates — lives in `orchestrator/loom2/models/specs/<family>.toml`, validated against the roster at import. `/capabilities` is generated
+from the specs and the panels read it; no model id is written in code (`scripts/model_literals_check.py`, CI). Adding a model is a
+roster entry plus a spec (`orchestrator/loom2/engine/AGENTS.md`).
+
 One `models.roster.json` (versioned, in git) + a per-machine resolved index (SQLite). Each entry:
 
 ```

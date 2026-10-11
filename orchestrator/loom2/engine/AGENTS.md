@@ -9,7 +9,7 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/06-architecture.md` §3
 | --- | --- |
 | `supervisor.py` | `EngineSupervisor`: starts `engine/comfyui/main.py` from `engine/.venv` (lazily on the first job), health via `/system_stats`, Job Object + `taskkill` backstop, adopts an engine already on the port, restart policy, logs under `<state>/logs/engine-*.log` |
 | `client.py` | `ComfyClient`: REST (`/prompt`, `/history`, `/interrupt`, `/free`, `/upload/image`, `/view`, `/object_info`) and the `/ws` event stream (binary preview frames) |
-| `graphs.py` | model knowledge today (`ModelPreset` / `PRESETS`, `TE_ALTERNATES`, `VRAM_ESTIMATE_GB`, `BASE_SECONDS`, `I2V_RULES`, `WAN_PRESETS`) and the builders `build_t2i`, `build_i2i`, `build_inpaint`, `build_upscale`, `build_segment`, `build_i2v`; `compile_recipe` dispatches and runs the contract check |
+| `graphs.py` | the builders (they read `models/registry.py` specs — D65: no model constants or id comparisons here) `build_t2i`, `build_i2i`, `build_inpaint`, `build_upscale`, `build_segment`, `build_i2v`; `compile_recipe` dispatches and runs the contract check |
 | `contract.py` | `resolve_names` (basename → engine enum value) and `check_graph` (unknown class, missing input, enum value, link type) against `/object_info` |
 | `pipeline.py` | D64: `plan()` (pure: effective params, needs, weights, warm group, VRAM, ETA — `/recipes/preview` for every kind), `preview_problems()` (compile on placeholder inputs), `finalize()` (references, document region, i2v frames uploaded; compile + contract), `prepare_document` / `prepare_i2v` / `fit_reference`, `JobCancelled` |
 | `finishers.py` | D64: `finisher_for(recipe)` → `AssetFinisher` · `DocumentFinisher` (paste-back, upscale; `add_result_layer`) · `SelectionFinisher` · `ClipFinisher` (+ the identity side task); `run_quick_remove` (no engine) |
@@ -27,22 +27,28 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
    (`engine/patches/`). Adding a custom node needs a decision in 13 (D33 kept segmentation core-only on purpose).
 4. **Output naming:** `SaveImage` / video savers use `filename_prefix = loom2/<job_id>` so the queue finds and moves the outputs.
 5. **Provenance:** `Compiled.graph_hash` (sha256 of the graph) goes into every manifest; `serialized_prompt` is the exact string the model saw.
-6. **Display == reality:** whatever `/capabilities` and `/recipes/preview` show must come from the same presets the builders use.
+6. **Display == reality:** whatever `/capabilities` and `/recipes/preview` show comes from the same specs the builders read (D65).
 
-## Add a model (today)
+## Add a model (D65: specs are data)
 
-1. Fetch the weights into the models root (`scripts/fetch_weights.py`, ComfyUI layout, sha256 into `roster.index.json`).
-2. Add a `RosterEntry` to `ROSTER` in `orchestrator/loom2/roster.py`: id, file name, ComfyUI folder, family, role, HF repo/file, **licence
-   read against EU terms (D17)**, `variants` (`open` only for Apache/MIT, D26), `approx_gb`.
-3. Add its behaviour in `graphs.py`: a `ModelPreset` in `PRESETS` (image models) or an `I2V_WEIGHTS` / `I2V_RULES` entry (video), plus
-   `VRAM_ESTIMATE_GB` and `BASE_SECONDS`. A new family needs a builder.
-4. If the graph uses node classes the fixture lacks: capture `/object_info` from the running engine and rerun
+1. **Roster entry** — the weight file, its ComfyUI folder, family, role, HF repo/file, **licence read against EU terms (D17)**, `variants`
+   (`open` only for Apache/MIT, D26), `approx_gb`: in `orchestrator/loom2/roster.py`, or as a `weight = { … }` table inside the spec (the
+   registry adds it to the roster at load). Fetch it into the models root (`scripts/fetch_weights.py`, sha256 into `roster.index.json`).
+2. **Spec** — a `[[model]]` in `orchestrator/loom2/models/specs/<family>.toml` (or a file in a folder named by `LOOM2_MODEL_SPECS`):
+   `graph` (the builder), roles (encoder + alternates, VAE, extras), sampling, recipes it runs (`t2i`, `i2i`, inpaint modes, `inpaint_hero`,
+   `icm_default`, upscale factor, segment modes, i2v / flf / beats, `default_for`), inputs, geometry (size multiple, tiers, video rules),
+   estimates (VRAM, seconds), video presets. `registry.load()` validates it against the roster at import. Nothing else names the id:
+   `scripts/model_literals_check.py` (CI) fails on a quoted roster id in the orchestrator's or the frontend's code.
+3. **Builder** — only for a new `graph` (a new family's node layout). Builders read the spec; they never compare model ids.
+4. **Fixture** — if the graph uses node classes the fixture lacks, capture `/object_info` from the running engine and rerun
    `scripts/make_object_info_fixture.py`.
-5. Tests: compile every recipe kind the model supports against the fixture with zero `problems` (see `test_generate_m3.py`,
-   `test_edit_ai_m5.py`, `test_animate_m6.py`); add the variant to `scripts/pin_review.py` `recipes()` and rerun
-   `test_graph_parity_d64.py --parity-update` (the snapshot guards every other graph against unintended change).
-6. Frontend: Generate / Edit / Animate still hard-code some model ids (D38/P1 removes this) — grep for an existing id of the same family.
-7. Rig: run the model through the app, record time and VRAM in the journal. Delete weights that lose (D30).
+5. **Tests** — `test_registry_d65.py::test_sweep_every_spec_compiles` compiles every spec × tier / mode / preset against the fixture with
+   zero problems and checks the estimates grow with pixels and frames; add the variant to `scripts/pin_review.py` `recipes()` and rerun
+   `test_graph_parity_d64.py --parity-update` only for an intended graph change.
+6. **Frontend** — nothing: the panels list `caps.models` / `caps.i2v.models` / `caps.tools` by `order`, gate controls on `recipes` / `inputs`,
+   and start from `caps.defaults` (variant-aware).
+7. **Rig** — run the model through the app, record time and VRAM in the journal (then put the measured numbers into the spec's
+   `estimates`). Delete weights that lose (D30).
 
 ## Bump the ComfyUI pin
 
@@ -61,5 +67,7 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
   1157 s cold vs 279 s with the Q4_K_M GGUF encoder, D31). Measure cold and warm.
 - The engine runs with `--reserve-vram` (`Settings.engine.reserve_vram_gb`, 1.5) so the editor's WebGPU canvas keeps headroom.
 - SAM 3 box prompts read output 1 and need `editor_state {}` (review C32).
-- Distilled presets reject I2I and tiled refine; the dev Turbo rule lives in three places in `graphs.py` (`build_t2i`, `effective_params`,
-  `recipe_weights`) — change them together.
+- Models without `recipes.i2i` (the distilled ones) reject I2I and tiled refine. A spec's Turbo LoRA (`sampling.turbo`) is optional in
+  t2i (the recipe's `turbo`) but always chained in the Edit graphs (`_flux2_loaders`), and `recipe_weights` lists it accordingly.
+- A size or frame count off the grid is snapped **down** by default (D65 `size_policy`, D18): 950 × 540 runs at 944 × 528; `snap_up` or
+  `error` (a 422 naming the field and the two values allowed) on request.

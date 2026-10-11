@@ -37,7 +37,7 @@ def test_compile_t2i_dev_json_prompt(dev_roster: Roster, object_info: dict):
     r = T2I(prompt_json={"scene": "a rainy alley", "subject": {"name": "a woman", "pose": "turning"}}, width=950, height=540, turbo=True)
     c = graphs.compile_recipe(r, dev_roster, object_info, seed=7, out_prefix="loom2/job_x")
     assert c.problems == [], c.problems
-    assert c.graph["8"]["inputs"] == {"width": 944, "height": 544, "batch_size": 1}   # multiples of 16
+    assert c.graph["8"]["inputs"] == {"width": 944, "height": 528, "batch_size": 1}   # multiples of 16, snapped down (D65)
     assert c.graph["9"]["inputs"]["steps"] == 8 and c.graph["9"]["inputs"]["model"] == ["4", 0]    # turbo LoRA in the chain
     assert json.loads(c.graph["5"]["inputs"]["text"])["scene"] == "a rainy alley"                    # JSON verbatim for dev
     assert c.graph["11"]["inputs"]["filename_prefix"] == "loom2/job_x" and c.graph_hash and c.summary["prompt_mode"] == "json"

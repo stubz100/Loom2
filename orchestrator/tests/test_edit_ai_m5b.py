@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from loom2.models import registry
 from loom2 import edit_ai
 from loom2.api import create_app
 from loom2.config import AppState
@@ -100,7 +101,7 @@ def test_tiled_refine_upscale_graph(tmp_path: Path, object_info):
     feathers = [n for n in c.graph.values() if n["class_type"] == "FeatherMask"]
     first = next(n for n in feathers if n["inputs"]["left"] == 0 and n["inputs"]["top"] == 0)
     assert first["inputs"]["right"] == 64 and first["inputs"]["bottom"] == 64            # the corner tile feathers only inward
-    assert warm_group(r) == "klein-base-9b" and graphs.estimate_vram_gb(r) == graphs.VRAM_ESTIMATE_GB["klein-base-9b"]
+    assert warm_group(r) == "klein-base-9b" and graphs.estimate_vram_gb(r) == registry.get("klein-base-9b").estimates.vram_gb
     with pytest.raises(graphs.CompileError):
         graphs.compile_recipe(Upscale(document_id="d", refine=True, refine_model_id="klein-9b"), roster, object_info, 0, "loom2/u", inputs={"image": "image.png", "w": 960, "h": 544})
 

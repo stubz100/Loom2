@@ -1,0 +1,16 @@
+# FLUX.2 dev (D30: fp8 streamed from RAM beats GGUF on 16 GB). Values from the E0 / E8 spikes and the M3–M5 rig.
+[[model]]
+id = "flux2-dev-fp8mixed"
+family = "flux2"
+label = "FLUX.2 dev · JSON"
+short = "dev"
+hint = "slow, best adherence"
+order = 0
+graph = "flux2"
+roles.te = { default = "mistral3-small-flux2-fp8" }
+roles.vae = "flux2-vae"
+sampling = { steps = 20, guidance = 4.0, cfg = 1.0, weight_dtype = "default", json_prompt = true, turbo = { lora = "flux2-turbo-lora", steps = 8 }, edit_steps = 8, edit_guidance = 4.0, edit_negative = "zero_out", model_shift = 2.02, cfg_fixed = true, cfg_note = "dev is guidance-distilled: CFG stays 1.0" }
+recipes = { default_for = ["t2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"], inpaint_hero = true }
+inputs = { refs_max = 10 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
+estimates = { vram_gb = 14.0, base_seconds = 65.0, turbo_seconds = 40.0, doc_seconds = 270.0 }

@@ -4,6 +4,7 @@ Pixels travel as raw bytes with `X-Loom-Width/Height/Channels` (D4). `DocumentSt
 pure work (decode, encode, compare, zip reads) moves off the event loop besides the store's own `get` / `save` / `flatten`.
 """
 from __future__ import annotations
+from ..engine.graphs import FieldError
 
 import asyncio
 import io
@@ -252,6 +253,8 @@ async def documents_ai(svc: Svc, doc_id: str, body: JobSubmit):
     recipe["document_id"] = doc_id
     try:
         jobs = q.submit(recipe, stage=body.stage)                            # the queue is not thread-safe: stays on the loop
+    except FieldError as e:
+        raise HTTPException(422, e.detail())                                  # D65: {field, value, allowed, message}
     except ValueError as e:
         raise HTTPException(422, str(e))
     out = {"jobs": [j.model_dump() for j in jobs]}                        # the state at submission, before the loop runs on

@@ -1,0 +1,23 @@
+# Wan 2.2 I2V-A14B (D8, 11 §3b): two experts, Lightning LoRAs for Draft. Presets and seconds from the E4 / E4b / E4c spikes.
+[[model]]
+id = "wan22-i2v-high-fp8"
+family = "wan22"
+label = "Wan 2.2 I2V-A14B · faithful"
+short = "Wan"
+order = 0
+graph = "wan22"
+roles.te = { default = "umt5-xxl-fp8" }
+roles.vae = "wan21-vae"
+roles.extra = { low_expert = "wan22-i2v-low-fp8", lightning_high = "wan22-lightning-high", lightning_low = "wan22-lightning-low" }
+recipes = { default_for = ["i2v"], i2v = true, flf = true }
+geometry = { size_mult = 16, frame_step = 4, fps = 16, frames = 81, size = [832, 480], tiers = { draft = [832, 480], hd = [1280, 720], portrait = [480, 832], square = [640, 640] } }
+estimates = { vram_gb = 14.5 }
+
+[model.video]
+label = "Wan 2.2 I2V-A14B · faithful"
+negative = "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+
+[model.video.presets]
+draft = { label = "Draft · Lightning 2 + 2 (≈ 4 min at 480p)", steps = 4, split = 2, cfg_high = 1.0, cfg_low = 1.0, shift = 5.0, lora_high = true, lora_low = true, seconds = 236.0 }
+motion = { label = "Motion · undistilled high expert at CFG 3.5 (≈ 8 min)", steps = 8, split = 4, cfg_high = 3.5, cfg_low = 1.0, shift = 5.0, lora_low = true, seconds = 495.0 }
+quality = { label = "Quality · 10 + 10 steps, no LoRA (slow)", steps = 20, split = 10, cfg_high = 3.5, cfg_low = 3.5, shift = 8.0, seconds = 900.0 }

@@ -770,6 +770,13 @@
           "content_aware": {
             "$ref": "#/components/schemas/ContentAwareCaps"
           },
+          "defaults": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Defaults",
+            "type": "object"
+          },
           "facesim": {
             "$ref": "#/components/schemas/FaceSimCaps"
           },
@@ -844,6 +851,13 @@
             "title": "Tiers",
             "type": "object"
           },
+          "tools": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolCaps"
+            },
+            "title": "Tools",
+            "type": "object"
+          },
           "variant": {
             "title": "Variant",
             "type": "string"
@@ -864,6 +878,8 @@
           "recipes",
           "i2v",
           "models",
+          "tools",
+          "defaults",
           "facesim",
           "variant",
           "vram_budget_gb",
@@ -2916,6 +2932,76 @@
         "title": "Freed",
         "type": "object"
       },
+      "Geometry": {
+        "additionalProperties": false,
+        "properties": {
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "frame_step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Step"
+          },
+          "frames": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frames"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "size_mult": {
+            "default": 16,
+            "title": "Size Mult",
+            "type": "integer"
+          },
+          "tiers": {
+            "additionalProperties": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Tiers",
+            "type": "object"
+          }
+        },
+        "title": "Geometry",
+        "type": "object"
+      },
       "GitInfo": {
         "additionalProperties": true,
         "properties": {
@@ -3692,7 +3778,7 @@
             "type": "boolean"
           },
           "model_id": {
-            "default": "klein-base-9b",
+            "description": "roster id; default: the registry's i2i model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -3838,7 +3924,7 @@
             "type": "array"
           },
           "model_id": {
-            "default": "wan22-i2v-high-fp8",
+            "description": "roster id; default: the registry's i2v model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -3889,6 +3975,16 @@
             ],
             "default": null,
             "title": "Shift"
+          },
+          "size_policy": {
+            "default": "snap_down",
+            "enum": [
+              "snap_down",
+              "snap_up",
+              "error"
+            ],
+            "title": "Size Policy",
+            "type": "string"
           },
           "start_asset": {
             "title": "Start Asset",
@@ -4132,9 +4228,26 @@
             "title": "Frames",
             "type": "integer"
           },
+          "geometry": {
+            "$ref": "#/components/schemas/Geometry"
+          },
           "health": {
             "title": "Health",
             "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
           },
           "label": {
             "title": "Label",
@@ -4151,12 +4264,30 @@
             "title": "Missing",
             "type": "array"
           },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "preset_params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/VideoPreset"
+            },
+            "title": "Preset Params",
+            "type": "object"
+          },
           "presets": {
             "additionalProperties": {
               "type": "string"
             },
             "title": "Presets",
             "type": "object"
+          },
+          "recipes": {
+            "$ref": "#/components/schemas/Recipes"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
           },
           "size": {
             "maxItems": 2,
@@ -4202,7 +4333,13 @@
           "beats",
           "flf",
           "license",
-          "approx_gb"
+          "approx_gb",
+          "preset_params",
+          "recipes",
+          "inputs",
+          "geometry",
+          "short",
+          "order"
         ],
         "title": "I2vModelCaps",
         "type": "object"
@@ -4259,6 +4396,21 @@
             "title": "Cfg",
             "type": "number"
           },
+          "cfg_fixed": {
+            "title": "Cfg Fixed",
+            "type": "boolean"
+          },
+          "cfg_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cfg Note"
+          },
           "distilled": {
             "title": "Distilled",
             "type": "boolean"
@@ -4267,6 +4419,9 @@
             "title": "Family",
             "type": "string"
           },
+          "geometry": {
+            "$ref": "#/components/schemas/Geometry"
+          },
           "guidance": {
             "title": "Guidance",
             "type": "number"
@@ -4274,6 +4429,20 @@
           "health": {
             "title": "Health",
             "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
           },
           "json_prompt": {
             "title": "Json Prompt",
@@ -4291,12 +4460,34 @@
             "title": "Max Refs",
             "type": "integer"
           },
+          "model_shift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Shift"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "recipes": {
+            "$ref": "#/components/schemas/Recipes"
+          },
           "sampler": {
             "title": "Sampler",
             "type": "string"
           },
           "scheduler": {
             "title": "Scheduler",
+            "type": "string"
+          },
+          "short": {
+            "title": "Short",
             "type": "string"
           },
           "steps": {
@@ -4369,7 +4560,13 @@
           "scheduler",
           "wired",
           "license",
-          "variants"
+          "variants",
+          "recipes",
+          "inputs",
+          "geometry",
+          "short",
+          "order",
+          "cfg_fixed"
         ],
         "title": "ImageModelCaps",
         "type": "object"
@@ -4498,7 +4695,7 @@
             "type": "string"
           },
           "model_id": {
-            "default": "klein-9b",
+            "description": "roster id; default: the registry's inpaint model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -4571,6 +4768,28 @@
           }
         },
         "title": "Inpaint",
+        "type": "object"
+      },
+      "Inputs": {
+        "additionalProperties": false,
+        "properties": {
+          "refs_max": {
+            "default": 0,
+            "title": "Refs Max",
+            "type": "integer"
+          },
+          "refs_suggest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefsSuggest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "Inputs",
         "type": "object"
       },
       "ItemRef": {
@@ -6253,6 +6472,86 @@
         "title": "RecipeBody",
         "type": "object"
       },
+      "Recipes": {
+        "additionalProperties": false,
+        "properties": {
+          "beats": {
+            "default": false,
+            "title": "Beats",
+            "type": "boolean"
+          },
+          "default_for": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default For",
+            "type": "array"
+          },
+          "flf": {
+            "default": false,
+            "title": "Flf",
+            "type": "boolean"
+          },
+          "i2i": {
+            "default": false,
+            "title": "I2I",
+            "type": "boolean"
+          },
+          "i2v": {
+            "default": false,
+            "title": "I2V",
+            "type": "boolean"
+          },
+          "icm_default": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Icm Default",
+            "type": "array"
+          },
+          "inpaint": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Inpaint",
+            "type": "array"
+          },
+          "inpaint_hero": {
+            "default": false,
+            "title": "Inpaint Hero",
+            "type": "boolean"
+          },
+          "segment": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment",
+            "type": "array"
+          },
+          "t2i": {
+            "default": false,
+            "title": "T2I",
+            "type": "boolean"
+          },
+          "upscale_factor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upscale Factor"
+          }
+        },
+        "title": "Recipes",
+        "type": "object"
+      },
       "RefImage": {
         "properties": {
           "asset_id": {
@@ -6394,6 +6693,30 @@
         "title": "RefineReply",
         "type": "object"
       },
+      "RefsSuggest": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "model",
+          "why"
+        ],
+        "title": "RefsSuggest",
+        "type": "object"
+      },
       "Released": {
         "properties": {
           "released": {
@@ -6506,7 +6829,7 @@
             "type": "string"
           },
           "model_id": {
-            "default": "birefnet",
+            "description": "roster id; default: the registry's segment model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -6822,7 +7145,7 @@
             "title": "Max Shift"
           },
           "model_id": {
-            "default": "flux2-dev-fp8mixed",
+            "description": "roster id; default: the registry's t2i model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -6901,6 +7224,16 @@
             },
             "title": "Seeds",
             "type": "array"
+          },
+          "size_policy": {
+            "default": "snap_down",
+            "enum": [
+              "snap_down",
+              "snap_up",
+              "error"
+            ],
+            "title": "Size Policy",
+            "type": "string"
           },
           "steps": {
             "anyOf": [
@@ -7297,6 +7630,85 @@
         "title": "TeOption",
         "type": "object"
       },
+      "ToolCaps": {
+        "additionalProperties": true,
+        "description": "D65: an Edit tool (an upscaler, an AI Select model) from the registry.",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/Geometry"
+          },
+          "graph": {
+            "title": "Graph",
+            "type": "string"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "recipes": {
+            "$ref": "#/components/schemas/Recipes"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          },
+          "vram_gb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vram Gb"
+          }
+        },
+        "required": [
+          "family",
+          "label",
+          "graph",
+          "health",
+          "license",
+          "recipes",
+          "inputs",
+          "geometry",
+          "short",
+          "order"
+        ],
+        "title": "ToolCaps",
+        "type": "object"
+      },
       "Trashed": {
         "properties": {
           "trashed": {
@@ -7409,7 +7821,7 @@
             "type": "array"
           },
           "model_id": {
-            "default": "realesrgan-x2",
+            "description": "roster id; default: the registry's upscale model (D65)",
             "title": "Model Id",
             "type": "string"
           },
@@ -7431,7 +7843,7 @@
             "type": "boolean"
           },
           "refine_model_id": {
-            "default": "klein-base-9b",
+            "description": "roster id; default: the registry's i2i model (D65)",
             "title": "Refine Model Id",
             "type": "string"
           },
@@ -7617,6 +8029,90 @@
           "paths"
         ],
         "title": "VersionInfo",
+        "type": "object"
+      },
+      "VideoPreset": {
+        "additionalProperties": false,
+        "properties": {
+          "cfg_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cfg High"
+          },
+          "cfg_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cfg Low"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lora_high": {
+            "default": false,
+            "title": "Lora High",
+            "type": "boolean"
+          },
+          "lora_low": {
+            "default": false,
+            "title": "Lora Low",
+            "type": "boolean"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "shift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shift"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "steps"
+        ],
+        "title": "VideoPreset",
         "type": "object"
       }
     }

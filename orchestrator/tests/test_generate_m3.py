@@ -37,7 +37,12 @@ def test_serialisation_per_model():
 
 def test_effective_params_rules():
     ep = graphs.effective_params(T2I(prompt_json=TREE, turbo=True, sampler="res_multistep", scheduler="sgm_uniform", width=950, height=540))
-    assert ep["steps"] == 8 and ep["sampler"] == "res_multistep" and ep["scheduler"] == "sgm_uniform" and (ep["width"], ep["height"]) == (944, 544)
+    assert ep["steps"] == 8 and ep["sampler"] == "res_multistep" and ep["scheduler"] == "sgm_uniform" and (ep["width"], ep["height"]) == (944, 528)   # D65: snap down
+    up = graphs.effective_params(T2I(prompt_text="x", width=950, height=540, size_policy="snap_up"))
+    assert (up["width"], up["height"]) == (960, 544)
+    with pytest.raises(graphs.FieldError) as e:
+        graphs.effective_params(T2I(prompt_text="x", width=960, height=540, size_policy="error"))
+    assert e.value.detail() == {"message": e.value.args[0], "field": "height", "value": 540, "allowed": [528, 544]}
     ep = graphs.effective_params(T2I(model_id="klein-9b", prompt_text="x", steps=30, cfg=5, negative="blurry"))
     assert ep["steps"] == 4 and ep["cfg"] == 1.0 and ep["negative_used"] is False and ep["sampler"] == "euler" and ep["distilled"]
     with pytest.raises(graphs.CompileError, match="unknown sampler"):            # 2026-10-06: no silent fall-back to the preset

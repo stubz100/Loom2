@@ -1635,6 +1635,10 @@ export interface components {
         Capabilities: {
             advanced: components["schemas"]["AdvancedCaps"];
             content_aware: components["schemas"]["ContentAwareCaps"];
+            /** Defaults */
+            defaults: {
+                [key: string]: string;
+            };
             facesim: components["schemas"]["FaceSimCaps"];
             i2v: components["schemas"]["I2vCaps"];
             /** Models */
@@ -1662,6 +1666,10 @@ export interface components {
                         number
                     ];
                 };
+            };
+            /** Tools */
+            tools: {
+                [key: string]: components["schemas"]["ToolCaps"];
             };
             /** Variant */
             variant: string;
@@ -2480,6 +2488,29 @@ export interface components {
             /** Freed */
             freed: boolean;
         };
+        /** Geometry */
+        Geometry: {
+            /** Fps */
+            fps?: number | null;
+            /** Frame Step */
+            frame_step?: number | null;
+            /** Frames */
+            frames?: number | null;
+            /** Size */
+            size?: number[] | null;
+            /**
+             * Size Mult
+             * @default 16
+             */
+            size_mult?: number;
+            /**
+             * Tiers
+             * @default {}
+             */
+            tiers?: {
+                [key: string]: number[];
+            };
+        };
         /** GitInfo */
         GitInfo: {
             /** Describe */
@@ -2817,7 +2848,7 @@ export interface components {
             match_colour?: boolean;
             /**
              * Model Id
-             * @default klein-base-9b
+             * @description roster id; default: the registry's i2i model (D65)
              */
             model_id?: string;
             /**
@@ -2898,7 +2929,7 @@ export interface components {
             loras?: components["schemas"]["LoraRef"][];
             /**
              * Model Id
-             * @default wan22-i2v-high-fp8
+             * @description roster id; default: the registry's i2v model (D65)
              */
             model_id?: string;
             /**
@@ -2924,6 +2955,12 @@ export interface components {
              * @default null
              */
             shift?: number | null;
+            /**
+             * Size Policy
+             * @default snap_down
+             * @enum {string}
+             */
+            size_policy?: "snap_down" | "snap_up" | "error";
             /** Start Asset */
             start_asset: string;
             /**
@@ -3025,18 +3062,31 @@ export interface components {
             frame_step: number;
             /** Frames */
             frames: number;
+            geometry: components["schemas"]["Geometry"];
             /** Health */
             health: string;
+            /** Hint */
+            hint?: string | null;
+            inputs: components["schemas"]["Inputs"];
             /** Label */
             label: string;
             /** License */
             license: string;
             /** Missing */
             missing: string[];
+            /** Order */
+            order: number;
+            /** Preset Params */
+            preset_params: {
+                [key: string]: components["schemas"]["VideoPreset"];
+            };
             /** Presets */
             presets: {
                 [key: string]: string;
             };
+            recipes: components["schemas"]["Recipes"];
+            /** Short */
+            short: string;
             /** Size */
             size: [
                 number,
@@ -3068,14 +3118,22 @@ export interface components {
         ImageModelCaps: {
             /** Cfg */
             cfg: number;
+            /** Cfg Fixed */
+            cfg_fixed: boolean;
+            /** Cfg Note */
+            cfg_note?: string | null;
             /** Distilled */
             distilled: boolean;
             /** Family */
             family: string;
+            geometry: components["schemas"]["Geometry"];
             /** Guidance */
             guidance: number;
             /** Health */
             health: string;
+            /** Hint */
+            hint?: string | null;
+            inputs: components["schemas"]["Inputs"];
             /** Json Prompt */
             json_prompt: boolean;
             /** Label */
@@ -3084,10 +3142,17 @@ export interface components {
             license: string;
             /** Max Refs */
             max_refs: number;
+            /** Model Shift */
+            model_shift?: number | null;
+            /** Order */
+            order: number;
+            recipes: components["schemas"]["Recipes"];
             /** Sampler */
             sampler: string;
             /** Scheduler */
             scheduler: string;
+            /** Short */
+            short: string;
             /** Steps */
             steps: number;
             /** Te Id */
@@ -3189,7 +3254,7 @@ export interface components {
             mode?: "fill" | "fill_match" | "fill_hero" | "remove" | "outpaint" | "quick_remove";
             /**
              * Model Id
-             * @default klein-9b
+             * @description roster id; default: the registry's inpaint model (D65)
              */
             model_id?: string;
             /**
@@ -3227,6 +3292,15 @@ export interface components {
              * @default null
              */
             te_id?: string | null;
+        };
+        /** Inputs */
+        Inputs: {
+            /**
+             * Refs Max
+             * @default 0
+             */
+            refs_max?: number;
+            refs_suggest?: components["schemas"]["RefsSuggest"] | null;
         };
         /** ItemRef */
         ItemRef: {
@@ -3922,6 +3996,61 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** Recipes */
+        Recipes: {
+            /**
+             * Beats
+             * @default false
+             */
+            beats?: boolean;
+            /**
+             * Default For
+             * @default []
+             */
+            default_for?: string[];
+            /**
+             * Flf
+             * @default false
+             */
+            flf?: boolean;
+            /**
+             * I2I
+             * @default false
+             */
+            i2i?: boolean;
+            /**
+             * I2V
+             * @default false
+             */
+            i2v?: boolean;
+            /**
+             * Icm Default
+             * @default []
+             */
+            icm_default?: string[];
+            /**
+             * Inpaint
+             * @default []
+             */
+            inpaint?: string[];
+            /**
+             * Inpaint Hero
+             * @default false
+             */
+            inpaint_hero?: boolean;
+            /**
+             * Segment
+             * @default []
+             */
+            segment?: string[];
+            /**
+             * T2I
+             * @default false
+             */
+            t2i?: boolean;
+            /** Upscale Factor */
+            upscale_factor?: number | null;
+        };
         /** RefImage */
         RefImage: {
             /**
@@ -4001,6 +4130,15 @@ export interface components {
             /** Selection */
             selection: number[];
         };
+        /** RefsSuggest */
+        RefsSuggest: {
+            /** At */
+            at: number;
+            /** Model */
+            model: string;
+            /** Why */
+            why: string;
+        };
         /** Released */
         Released: {
             /** Released */
@@ -4061,7 +4199,7 @@ export interface components {
             mode?: "subject" | "text" | "points" | "box";
             /**
              * Model Id
-             * @default birefnet
+             * @description roster id; default: the registry's segment model (D65)
              */
             model_id?: string;
             /**
@@ -4220,7 +4358,7 @@ export interface components {
             max_shift?: number | null;
             /**
              * Model Id
-             * @default flux2-dev-fp8mixed
+             * @description roster id; default: the registry's t2i model (D65)
              */
             model_id?: string;
             /**
@@ -4265,6 +4403,12 @@ export interface components {
             scheduler?: string | null;
             /** Seeds */
             seeds?: number[];
+            /**
+             * Size Policy
+             * @default snap_down
+             * @enum {string}
+             */
+            size_policy?: "snap_down" | "snap_up" | "error";
             /**
              * Steps
              * @default null
@@ -4426,6 +4570,35 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ToolCaps
+         * @description D65: an Edit tool (an upscaler, an AI Select model) from the registry.
+         */
+        ToolCaps: {
+            /** Family */
+            family: string;
+            geometry: components["schemas"]["Geometry"];
+            /** Graph */
+            graph: string;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            inputs: components["schemas"]["Inputs"];
+            /** Label */
+            label: string;
+            /** License */
+            license: string;
+            /** Order */
+            order: number;
+            recipes: components["schemas"]["Recipes"];
+            /** Short */
+            short: string;
+            /** Vram Gb */
+            vram_gb?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** Trashed */
         Trashed: {
             /** Trashed */
@@ -4484,7 +4657,7 @@ export interface components {
             loras?: components["schemas"]["LoraRef"][];
             /**
              * Model Id
-             * @default realesrgan-x2
+             * @description roster id; default: the registry's upscale model (D65)
              */
             model_id?: string;
             /**
@@ -4504,7 +4677,7 @@ export interface components {
             refine?: boolean;
             /**
              * Refine Model Id
-             * @default klein-base-9b
+             * @description roster id; default: the registry's i2i model (D65)
              */
             refine_model_id?: string;
             /** Seeds */
@@ -4577,6 +4750,33 @@ export interface components {
             variant: "full" | "open";
         } & {
             [key: string]: unknown;
+        };
+        /** VideoPreset */
+        VideoPreset: {
+            /** Cfg High */
+            cfg_high?: number | null;
+            /** Cfg Low */
+            cfg_low?: number | null;
+            /** Label */
+            label: string;
+            /**
+             * Lora High
+             * @default false
+             */
+            lora_high?: boolean;
+            /**
+             * Lora Low
+             * @default false
+             */
+            lora_low?: boolean;
+            /** Seconds */
+            seconds?: number | null;
+            /** Shift */
+            shift?: number | null;
+            /** Split */
+            split?: number | null;
+            /** Steps */
+            steps: number;
         };
     };
     responses: never;

@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe } from '../../api/types'
+import { byOrder, resolveModel } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
@@ -20,30 +21,37 @@ export type AnimPreview = I2VPreview                       // D38: the server's 
 export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: string }
 export type AnimView = 'player' | 'filmstrip' | 'compare'
 
-/** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes and the frame rule per model (the server snaps anyway). */
-export const MODEL_RULES: Record<string, { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string }> = {
-  'wan22-i2v-high-fp8': { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: 'Wan' },
-  'ltx23-distilled-fp8': { fps: 24, frames: 121, step: 8, mult: 32, draft: [1024, 576], hd: [1280, 704], portrait: [576, 1024], square: [640, 640], short: 'LTX' },
-}
+/** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes, the frame rule and keyframe beats of a video model (the server snaps anyway). */
+export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean }
 export const MOTION_CHIPS = ['slow push-in', 'orbit left', 'handheld camera', 'wind in hair', 'turns to camera', 'walks left to right', 'camera holds still', 'rain keeps falling', 'looks down, then back up', 'subtle breathing']
 export const DEFAULT_PANEL: AnimPanel = {
   start: null, end: null, prompt: '', negative: '', use_negative: false,
-  model_id: 'wan22-i2v-high-fp8', preset: 'draft', steps: null, cfg: null, shift: null,
+  model_id: '', preset: 'draft', steps: null, cfg: null, shift: null,
   tier: 'draft', orientation: 'landscape', width: 832, height: 480, frames: 81, fps: 16, seed_mode: 'random', seed: 1, count: 1, beats: [],
 }
 
-/** C25: the server's rule for a model once the capabilities are loaded (`I2V_RULES` through `/capabilities.i2v`); the table above is
- * the fallback before that and the source of the short label. */
-export function modelRules(id: string): (typeof MODEL_RULES)[string] {
-  const base = MODEL_RULES[id] ?? MODEL_RULES['wan22-i2v-high-fp8']
+/** Before the capabilities arrive: the panel's own defaults, no beats (the server snaps and checks anyway). */
+const NEUTRAL: ModelRules = { fps: 16, frames: 81, step: 4, mult: 16, draft: [832, 480], hd: [1280, 720], portrait: [480, 832], square: [640, 640], short: '', beats: false }
+
+/** C25 / D65: a video model's rules from `/capabilities.i2v.models[id]` (its spec's geometry); a neutral fallback before they load. */
+export function modelRules(id: string): ModelRules {
   const caps = useSession.getState().capabilities?.i2v
   const m = caps?.models[id]
-  if (!caps || !m) return base
-  const fam = m.family
+  if (!m) return { ...NEUTRAL, short: id }
+  const t = m.geometry?.tiers ?? {}
   const pair = (v: number[] | undefined, fallback: [number, number]): [number, number] => (v && v.length === 2 ? [v[0], v[1]] : fallback)
-  return { ...base, fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, draft: pair(caps.tiers.draft?.[fam], base.draft), hd: pair(caps.tiers.hd?.[fam], base.hd),
-    portrait: pair(caps.portrait?.[fam], base.portrait), square: pair(caps.square?.[fam], base.square) }
+  const draft = pair(t.draft ?? caps?.tiers.draft?.[m.family] ?? m.size, NEUTRAL.draft)
+  return { fps: m.fps, frames: m.frames, step: m.frame_step, mult: m.size_mult, short: m.short, beats: !!(m.recipes?.beats ?? m.beats), draft,
+    hd: pair(t.hd ?? caps?.tiers.hd?.[m.family], draft), portrait: pair(t.portrait ?? caps?.portrait?.[m.family], [draft[1], draft[0]]), square: pair(t.square ?? caps?.square?.[m.family], NEUTRAL.square) }
 }
+
+/** D65: the panel's model, or the variant's i2v default while it holds none (or one this build does not offer). */
+export function panelModel(id: string): string {
+  return resolveModel(id, 'i2v', (x) => !!useSession.getState().capabilities?.i2v?.models[x])
+}
+
+/** The video models in the server's order. */
+export const videoModels = () => byOrder(useSession.getState().capabilities?.i2v?.models)
 
 export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: AnimPanel['orientation'], current: [number, number]): [number, number] {
   const r = modelRules(model_id)
@@ -56,11 +64,12 @@ export function sizeFor(model_id: string, tier: AnimPanel['tier'], orientation: 
 /** The I2V recipe (11 §10) the server compiles; seeds follow the seed mode (0 = the server picks one). */
 /** The I2V recipe for a panel with a start frame (callers check `start` first: Animate asks for one, the preview uses a placeholder). */
 export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I2VRecipe {
+  const model_id = panelModel(p.model_id)
   const s = seeds ?? (p.seed_mode === 'random' ? Array.from({ length: p.count }, () => 0) : p.seed_mode === 'fixed' ? Array.from({ length: p.count }, () => p.seed) : Array.from({ length: p.count }, (_, i) => p.seed + i))
   return {
-    kind: 'i2v', model_id: p.model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative ? p.negative : null,
+    kind: 'i2v', model_id, start_asset: p.start, end_asset: p.end || null, prompt_text: p.prompt, negative: p.use_negative ? p.negative : null,
     frames: p.frames, fps: p.fps, width: p.width, height: p.height, preset: p.preset, steps: p.steps, cfg: p.cfg, shift: p.shift,
-    beats: p.model_id === 'ltx23-distilled-fp8' ? p.beats : [], seeds: s,
+    beats: modelRules(model_id).beats ? p.beats : [], seeds: s,
   }
 }
 
@@ -121,7 +130,7 @@ export const useAnimate = create<AnimateState>()(
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); get().refreshPreview() },
       setModel: (model_id) => {
         const p = get().panel
-        if (!MODEL_RULES[model_id] && !useSession.getState().capabilities?.i2v?.models[model_id]) return
+        if (!useSession.getState().capabilities?.i2v?.models[model_id]) return
         const r = modelRules(model_id)
         const [width, height] = sizeFor(model_id, p.tier, p.orientation, [p.width, p.height])
         get().set({ model_id, fps: r.fps, frames: r.frames, width, height, steps: null, cfg: null, shift: null })
@@ -235,7 +244,8 @@ export const useAnimate = create<AnimateState>()(
       tryOther: async () => {
         const c = get().clip()
         if (!c) return
-        const other = c.model_id === 'wan22-i2v-high-fp8' ? 'ltx23-distilled-fp8' : 'wan22-i2v-high-fp8'
+        const other = videoModels().find(([id]) => id !== c.model_id)?.[0]
+        if (!other) { useSession.getState().toast('No other video model is offered in this build', 'info'); return }
         const r = modelRules(other)
         const base = c.params.recipe as Record<string, unknown>
         const recipe = { ...base, model_id: other, fps: r.fps, frames: r.frames, width: r.draft[0], height: r.draft[1], beats: [], seeds: [0] }

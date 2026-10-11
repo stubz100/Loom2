@@ -1,0 +1,23 @@
+# LTX-2.3 distilled (D9): joint audio-video latent, end frame and beats as guides. Steps and seconds from the E5 / E5b spikes.
+[[model]]
+id = "ltx23-distilled-fp8"
+family = "ltx23"
+label = "LTX-2.3 distilled · fast, beats"
+short = "LTX"
+order = 1
+graph = "ltx23"
+roles.te = { default = "gemma3-12b-fp8" }
+roles.vae = "ltx23-video-vae"
+roles.extra = { projection = "ltx23-text-projection", audio_vae = "ltx23-audio-vae" }
+recipes = { i2v = true, flf = true, beats = true }
+geometry = { size_mult = 32, frame_step = 8, fps = 24, frames = 121, size = [1024, 576], tiers = { draft = [1024, 576], hd = [1280, 704], portrait = [576, 1024], square = [640, 640] } }
+estimates = { vram_gb = 14.0 }
+
+[model.video]
+label = "LTX-2.3 distilled · fast, beats"
+negative = "blurry, distorted, low quality, static, watermark"
+
+[model.video.presets]
+draft = { label = "8 steps", steps = 8, seconds = 141.0 }
+motion = { label = "12 steps", steps = 12, seconds = 165.0 }
+quality = { label = "20 steps", steps = 20, seconds = 210.0 }

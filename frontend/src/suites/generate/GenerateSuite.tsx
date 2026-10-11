@@ -8,6 +8,7 @@ import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand, sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import type { SuiteDef } from '../../frame/suiteRegistry'
+import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
@@ -79,8 +80,11 @@ function SubjectCard({ i, s }: { i: number; s: Subject }) {
 function RefSlots() {
   const g = useGenerate()
   const p = g.panel
-  const cap = useSession((s) => s.capabilities?.models[p.model_id])
+  const caps = useSession((s) => s.capabilities)
+  const cap = caps?.models[p.model_id]
   const max = cap?.max_refs ?? 4
+  const suggest = cap?.inputs.refs_suggest                                // D65: a faster model for several references, from the spec
+  const suggestCap = suggest ? caps?.models[suggest.model] : undefined
   const slots = Array.from({ length: Math.min(10, Math.max(max, p.refs.length)) }, (_, i) => p.refs[i])
   const { ref: dropRef, over } = useDropTarget(onlyAssets, (d) => assetIds(d).slice(0, max - p.refs.length).forEach((id) => g.addRef(id)))
   return (
@@ -111,7 +115,7 @@ function RefSlots() {
           <span className="disabled-why"> a 1024² reference ≈ 4 096 tokens</span>
         </div>
       </div>
-      {p.refs.length >= 2 && p.model_id === 'klein-9b' && <p className="disabled-why">Klein 9B-KV is suggested for ≥ 2 references (2.5× faster multi-ref) — coming in M5.</p>}
+      {suggest && p.refs.length >= suggest.at && <p className="disabled-why">{suggestCap?.label ?? suggest.model} is suggested for ≥ {suggest.at} references ({suggest.why}).</p>}
     </>
   )
 }
@@ -216,21 +220,19 @@ function ModelTab() {
     if (p.te_id && cap && !teOpts.some((o) => o.id === p.te_id)) g.set({ te_id: null })        // a persisted choice from another model
     else if (teGguf && p.te_device) g.set({ te_device: null })                                  // CLIPLoaderGGUF has no device input
   }, [p.te_id, p.te_device, cap, teGguf]) // eslint-disable-line react-hooks/exhaustive-deps
-  const order = ['flux2-dev-fp8mixed', 'klein-9b', 'klein-base-9b', 'klein-9b-kv', 'klein-4b', 'klein-base-4b']
   const shiftCustom = p.base_shift !== null || p.max_shift !== null
-  const modelShift = caps?.advanced?.model_shift[p.model_id.startsWith('klein') ? 'klein' : p.model_id] ?? 2.02
+  const modelShift = cap?.model_shift ?? 2.02
   const nodeDefaults = caps?.advanced?.shift_node_defaults ?? { base: 0.5, max: 1.15 }
   const flux2 = caps?.advanced?.flux2_schedule ?? 'flux2'
   return (
     <div>
       <div className="model-grid">
-        {order.filter((m) => caps?.models[m]).map((m) => {
-          const c = caps!.models[m]
+        {byOrder(caps?.models).map(([m, c]) => {
           const r = models.find((x) => x.id === m)
           const off = !c.wired
           return (
-            <button key={m} className={`model-card${p.model_id === m ? ' active' : ''}${off ? ' off' : ''}`} onClick={() => !off && g.set({ model_id: m, turbo: m === 'flux2-dev-fp8mixed' ? p.turbo : false })} disabled={off} title={off ? 'coming in M5' : undefined}>
-              <span>{c.label}{m === 'flux2-dev-fp8mixed' ? ' · slow, best adherence' : ''}</span>
+            <button key={m} className={`model-card${p.model_id === m ? ' active' : ''}${off ? ' off' : ''}`} onClick={() => !off && g.set({ model_id: m, turbo: c.turbo ? p.turbo : false })} disabled={off} title={off ? 'coming in M5' : undefined}>
+              <span>{c.label}{c.hint ? ` · ${c.hint}` : ''}</span>
               <small>{r?.license ?? ''} · {c.health}{c.distilled ? ' · distilled' : ''}{off ? ' · coming in M5' : ''}</small>
             </button>
           )
@@ -246,8 +248,8 @@ function ModelTab() {
         <label>guidance</label>
         <div><input type="number" step={0.1} min={0} max={10} value={p.guidance ?? pv?.guidance ?? cap?.guidance ?? 4} onChange={(e) => g.set({ guidance: Number(e.target.value) })} style={{ width: 90 }} /><span className="disabled-why"> dev 3–4.5 · Klein 1.0</span></div>
         <label>CFG</label>
-        <div><input type="number" step={0.1} min={1} max={10} value={p.cfg ?? pv?.cfg ?? cap?.cfg ?? 1} disabled={!!cap?.distilled || p.model_id === 'flux2-dev-fp8mixed'} onChange={(e) => g.set({ cfg: Number(e.target.value) })} style={{ width: 90 }} />
-          <span className="disabled-why"> {cap?.distilled ? 'fixed at 1.0 (distilled)' : p.model_id === 'flux2-dev-fp8mixed' ? 'dev is guidance-distilled: CFG stays 1.0' : 'base: 3–5, negatives work'}</span></div>
+        <div><input type="number" step={0.1} min={1} max={10} value={p.cfg ?? pv?.cfg ?? cap?.cfg ?? 1} disabled={!!cap?.distilled || !!cap?.cfg_fixed} onChange={(e) => g.set({ cfg: Number(e.target.value) })} style={{ width: 90 }} />
+          <span className="disabled-why"> {cap?.distilled ? 'fixed at 1.0 (distilled)' : cap?.cfg_note ?? ''}</span></div>
         <label>sampler</label>
         <div><select value={p.sampler ?? ''} onChange={(e) => g.set({ sampler: e.target.value || null })}><option value="">preset ({cap?.sampler ?? 'euler'})</option>{caps?.samplers.map((x) => <option key={x}>{x}</option>)}</select>
           <span className="disabled-why"> {caps?.samplers.length ?? 0} samplers from the engine · res_multistep is the author's ComfyUI setting; euler is what E0 measured</span></div>
@@ -296,7 +298,7 @@ function SizeTab() {
   const p = g.panel
   const caps = useSession((s) => s.capabilities)
   const fmt = useSession((s) => s.project?.format)
-  const fam = p.model_id.startsWith('klein') ? 'klein' : 'flux2'
+  const fam = caps?.models[p.model_id]?.family ?? ''
   const tiers = caps?.tiers ?? {}
   const aspect = fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]}` : '16:9'
   const applyAspect = (aw: number, ah: number) => {
@@ -351,8 +353,13 @@ function Panel({ tab }: { tab: string }) {
   const caps = useSession((s) => s.capabilities)
   const refresh = useGenerate((g) => g.refreshPreview)
   useEffect(() => { if (project?.open) { void refresh(); void useGenerate.getState().loadSnippets() } }, [project?.path, refresh])   // C23: the ✦ menus need the field presets
-  // C3 (D26): a persisted model this build does not offer (dev under `open`) falls back to Klein 4B, else the first model listed
-  useEffect(() => { const g = useGenerate.getState(); if (caps && !caps.models[g.panel.model_id]) { const next = caps.models['klein-4b'] ? 'klein-4b' : Object.keys(caps.models)[0]; if (next) g.set({ model_id: next, turbo: false }) } }, [caps])
+  // C3 (D26) / D65: no model yet, or a persisted one this build does not offer (dev under `open`) → the variant's t2i default, else the first listed
+  useEffect(() => {
+    const g = useGenerate.getState()
+    if (!caps || caps.models[g.panel.model_id]) return
+    const next = (caps.models[caps.defaults.t2i] ? caps.defaults.t2i : '') || byOrder(caps.models)[0]?.[0]
+    if (next) g.set({ model_id: next, turbo: caps.models[next].turbo ? g.panel.turbo : false })
+  }, [caps])
   if (!project?.open) return <span style={{ color: 'var(--fg3)' }}>Open or create a project.</span>
   if (tab === 'model') return <ModelTab />
   if (tab === 'size') return <SizeTab />
@@ -402,6 +409,7 @@ function Strip() {
 function Interim() {
   const jobs = useSession((s) => s.jobs)
   const previews = useSession((s) => s.previews)
+  const caps = useSession((s) => s.capabilities)
   const cancel = useSession((s) => s.cancelJob)
   const release = useSession((s) => s.releaseJob)
   const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 't2i' && ['running', 'queued', 'staged'].includes(j.status)).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs])
@@ -412,7 +420,7 @@ function Interim() {
         <div className="card" key={j.id}>
           <div className="img">{previews[j.id] ? <img src={previews[j.id]} alt="" /> : <span style={{ color: 'var(--fg3)' }}>{j.status === 'running' ? j.progress_text || 'starting' : j.status}</span>}</div>
           <div className="bar"><i style={{ width: `${Math.round((j.progress ?? 0) * 100)}%` }} /></div>
-          <div className="t"><span>{String((j.recipe as { model_id?: string }).model_id ?? '').replace('flux2-dev-fp8mixed', 'dev')} · {j.seed}</span>
+          <div className="t"><span>{shortName((j.recipe as { model_id?: string }).model_id, caps)} · {j.seed}</span>
             <span>{j.status === 'staged' ? <button className="quiet" onClick={() => void release(j.id)}>run</button> : <button className="quiet" onClick={() => void cancel(j.id)}>✕</button>}</span></div>
         </div>
       ))}

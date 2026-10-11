@@ -42,6 +42,8 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "te_alternates": ["recipe:T2I.te_id", "recipe:I2I.te_id", "recipe:Inpaint.te_id", "recipe:Upscale.te_id"],
     "advanced": ["recipe:T2I.base_shift", "recipe:T2I.max_shift", "recipe:T2I.tile_size"],
     "tiers": ["recipe:T2I.tier"],
+    "tools": ["recipe:Upscale.model_id", "recipe:Segment.model_id"],          # D65: the Edit tools from the registry
+    "defaults": ["recipe:T2I.model_id", "recipe:I2I.model_id", "recipe:Inpaint.model_id", "recipe:Upscale.model_id", "recipe:Segment.model_id", "recipe:I2V.model_id"],
     "refine_edge": ["recipe:RefineEdge.radius"],
     "content_aware": ["recipe:Inpaint.mode", "recipe:Inpaint.prefill"],     # D62: Quick Remove, the Remove pre-fill
 }

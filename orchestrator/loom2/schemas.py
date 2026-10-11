@@ -21,6 +21,8 @@ from .roster import RosterEntry
 from .workspace import ProjectFormat
 
 
+from .models.spec import Geometry, Inputs, Recipes, VideoPreset
+
 class Out(BaseModel):
     """A strict reply: every field is always present (required in the schema)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
@@ -122,6 +124,15 @@ class ImageModelCaps(Open):
     variants: list[str]
     te_id: str | None = None
     te_options: list[TeOption] = []
+    recipes: Recipes                               # D65: what the model runs — the panels gate their controls on these
+    inputs: Inputs
+    geometry: Geometry
+    short: str
+    hint: str | None = None
+    order: int
+    cfg_fixed: bool
+    cfg_note: str | None = None
+    model_shift: float | None = None
 
 
 class I2vModelCaps(Open):
@@ -140,6 +151,29 @@ class I2vModelCaps(Open):
     vram_gb: float | None = None
     license: str
     approx_gb: float
+    preset_params: dict[str, VideoPreset]
+    recipes: Recipes
+    inputs: Inputs
+    geometry: Geometry
+    short: str
+    hint: str | None = None
+    order: int
+
+
+class ToolCaps(Open):
+    """D65: an Edit tool (an upscaler, an AI Select model) from the registry."""
+    family: str
+    label: str
+    graph: str
+    health: str
+    vram_gb: float | None = None
+    license: str
+    recipes: Recipes
+    inputs: Inputs
+    geometry: Geometry
+    short: str
+    hint: str | None = None
+    order: int
 
 
 class I2vCaps(Open):
@@ -177,6 +211,8 @@ class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
     models: dict[str, ImageModelCaps]
+    tools: dict[str, ToolCaps]
+    defaults: dict[str, str]                       # D65: the default model per recipe kind
     facesim: FaceSimCaps
     variant: str
     vram_budget_gb: float

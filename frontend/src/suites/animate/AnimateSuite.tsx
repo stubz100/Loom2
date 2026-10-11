@@ -4,14 +4,15 @@
 import { Bookmark, Boxes, Clock, Film, Image as ImageIcon, Lock, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
-import type { Clip, I2vModelCaps } from '../../api/types'
+import type { Clip } from '../../api/types'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import type { SuiteDef } from '../../frame/suiteRegistry'
+import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
 import { playerMenu } from './animateCommands'
-import { fmtTime, MODEL_RULES, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
+import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
 import { Player } from './Player'
 import './animate.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
@@ -41,12 +42,16 @@ function Slot({ which }: { which: 'start' | 'end' }) {
 function InputsTab() {
   const p = useAnimate((s) => s.panel)
   const assets = useAnimate((s) => s.assets)
-  const isLtx = p.model_id === 'ltx23-distilled-fp8'
+  const caps = useSession((s) => s.capabilities?.i2v)
+  const cur = caps?.models[p.model_id]
+  const beats = !!cur?.recipes.beats                                       // D65: keyframe beats where the spec says so
+  const beatModel = byOrder(caps?.models).find(([, m]) => m.recipes.beats)?.[1]
+  const cfgPresets = Object.values(cur?.preset_params ?? {}).filter((x) => (x.cfg_high ?? 1) > 1 || (x.cfg_low ?? 1) > 1).map((x) => x.label.split(' · ')[0])
   const { ref: beatRef, over: beatOver } = useDropTarget(onlyAssets, (d) => { const ids = assetIds(d); ids.forEach((id, k) => an().addBeat(id, Math.round(an().panel.frames * (k + 1) / (ids.length + 1)))) })
   return (
     <div className="anim-form">
       <div className="slots full"><Slot which="start" /><span className="slot-swap"><CommandButton id="anim.swap" /></span><Slot which="end" /></div>
-      {p.end && !isLtx && <span className="hint">First/last-frame on Wan: a large pose or composition gap morphs mid-clip — try LTX beats or a shorter clip when it does (11 §3a).</span>}
+      {p.end && cur && !beats && <span className="hint">First/last-frame on {cur.short}: a large pose or composition gap morphs mid-clip — try {beatModel ? `${beatModel.short} beats` : 'a different end frame'} or a shorter clip when it does (11 §3a).</span>}
       <label>prompt</label>
       <div>
         <textarea value={p.prompt} onChange={(e) => an().set({ prompt: e.target.value })} placeholder="motion, camera, mood — e.g. she turns toward the window, soft push-in" />
@@ -55,9 +60,9 @@ function InputsTab() {
       <label>negative</label>
       <div>
         <label className="chk"><input type="checkbox" checked={p.use_negative} onChange={(e) => an().set({ use_negative: e.target.checked })} /> write my own</label>
-        {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">{isLtx ? 'LTX uses a short stock negative (blurry, distorted, static, watermark).' : 'Wan uses its official negative list (over-exposure, static frames, extra fingers, …); it only matters above CFG 1 (Motion / Quality).'}</span>}
+        {p.use_negative ? <textarea value={p.negative} onChange={(e) => an().set({ negative: e.target.value })} placeholder="what to avoid" /> : <span className="hint">{cur ? `${cur.short} uses its stock negative list${cfgPresets.length ? `; it only matters above CFG 1 (${cfgPresets.join(' / ')})` : ''}.` : 'the model uses its stock negative list.'}</span>}
       </div>
-      {isLtx && <>
+      {beats && <>
         <label>beats</label>
         <div>
           <div className="beats">
@@ -81,8 +86,12 @@ function InputsTab() {
 function ModelTab() {
   const p = useAnimate((s) => s.panel)
   const caps = useSession((s) => s.capabilities?.i2v)
-  const models: [string, I2vModelCaps | undefined][] = Object.keys(MODEL_RULES).filter((id) => !caps || caps.models[id]).map((id) => [id, caps?.models[id]])   // C3: the open build lists Wan only
+  const models = byOrder(caps?.models)                                    // C3 / D65: what this build offers (the open build lists Wan only)
   const cur = caps?.models[p.model_id]
+  const pp = cur?.preset_params[p.preset]                                 // D65: the preset's own steps / split / CFG / shift
+  const loraHigh = !!pp?.lora_high
+  const distilled = Object.entries(cur?.preset_params ?? {}).find(([, x]) => x.lora_high)     // the preset whose high expert runs a distilled LoRA
+  const cap1 = (k: string) => k.charAt(0).toUpperCase() + k.slice(1)
   const h3 = useSession((s) => !!s.settings?.h3_licence_confirmed)
   const presetLabel = (k: string) => cur?.presets[k] ?? k
   return (
@@ -92,10 +101,10 @@ function ModelTab() {
         {models.map(([id, m]) => {
           const r = modelRules(id)
           return <button key={id} className={`model-card${p.model_id === id ? ' active' : ''}`} onClick={() => an().setModel(id)}>
-            <b>{r.short === 'Wan' ? 'Wan (faithful)' : 'LTX (fast, beats)'}</b>
-            <small>{m?.label ?? id}</small>
-            <small>{r.frames} f @ {r.fps} fps · {r.draft[0]}×{r.draft[1]}{id === 'ltx23-distilled-fp8' ? ' · keyframe beats' : ' · FLF'}</small>
-            <span className={`badge ${m?.health ?? 'missing'} health`}>{m ? (m.health === 'missing' ? `fetch ${m.approx_gb} GB` : m.health) : '…'}</span>
+            <b>{m.short}{m.label.includes(' · ') ? ` (${m.label.split(' · ').slice(1).join(' · ')})` : ''}</b>
+            <small>{m.label}</small>
+            <small>{r.frames} f @ {r.fps} fps · {r.draft[0]}×{r.draft[1]}{m.recipes.beats ? ' · keyframe beats' : m.recipes.flf ? ' · FLF' : ''}</small>
+            <span className={`badge ${m.health} health`}>{m.health === 'missing' ? `fetch ${m.approx_gb} GB` : m.health}</span>
           </button>
         })}
         <button className={`model-card locked${h3 ? ' confirmed' : ''}`} disabled title={h3 ? 'Licence confirmed (D17) — the H3 graph and weights arrive post-MVP (04 §5b)' : 'MiniMax H3 unlocks once Settings records that the EU licence application is filed (D17)'}>
@@ -108,13 +117,13 @@ function ModelTab() {
       <span className="hint">{presetLabel(p.preset)}</span>
       <h4 className="full sect">advanced</h4>
       <label>steps</label>
-      <div className="row"><input type="number" min={1} max={60} placeholder="preset" value={p.steps ?? ''} onChange={(e) => an().set({ steps: e.target.value === '' ? null : Number(e.target.value) })} /><span className="hint" style={{ margin: 0 }}>empty = the preset's steps{p.model_id === 'wan22-i2v-high-fp8' ? ' (split high / low in the same ratio)' : ''}</span></div>
-      {p.model_id === 'wan22-i2v-high-fp8' && <>
+      <div className="row"><input type="number" min={1} max={60} placeholder="preset" value={p.steps ?? ''} onChange={(e) => an().set({ steps: e.target.value === '' ? null : Number(e.target.value) })} /><span className="hint" style={{ margin: 0 }}>empty = the preset's steps{pp?.split != null ? ' (split high / low in the same ratio)' : ''}</span></div>
+      {pp?.cfg_high != null && <>
         <label>CFG</label>
-        <div className="row"><input type="number" min={1} max={12} step={0.5} placeholder={p.preset === 'draft' ? '1 (distilled)' : '3.5'} value={p.cfg ?? ''} onChange={(e) => an().set({ cfg: e.target.value === '' ? null : Number(e.target.value) })} disabled={p.preset === 'draft'} /><span className="hint" style={{ margin: 0 }}>high expert only; Draft runs at CFG 1</span></div>
+        <div className="row"><input type="number" min={1} max={12} step={0.5} placeholder={loraHigh ? `${pp.cfg_high} (distilled)` : String(pp.cfg_high)} value={p.cfg ?? ''} onChange={(e) => an().set({ cfg: e.target.value === '' ? null : Number(e.target.value) })} disabled={loraHigh} /><span className="hint" style={{ margin: 0 }}>high expert only{distilled ? `; ${cap1(distilled[0])} runs at CFG ${distilled[1].cfg_high ?? 1}` : ''}</span></div>
       </>}
       <label>shift</label>
-      <div className="row"><input type="number" min={0.5} max={12} step={0.5} placeholder={p.model_id === 'wan22-i2v-high-fp8' ? (p.preset === 'quality' ? '8' : '5') : 'scheduler'} value={p.shift ?? ''} onChange={(e) => an().set({ shift: e.target.value === '' ? null : Number(e.target.value) })} /></div>
+      <div className="row"><input type="number" min={0.5} max={12} step={0.5} placeholder={pp?.shift != null ? String(pp.shift) : 'scheduler'} value={p.shift ?? ''} onChange={(e) => an().set({ shift: e.target.value === '' ? null : Number(e.target.value) })} /></div>
     </div>
   )
 }
@@ -173,13 +182,14 @@ function LengthTab() {
 
 // ------------------------------------------------------------------ Panel · Presets · Clips
 function PresetsTab() {
+  const caps = useSession((s) => s.capabilities)
   const presets = useAnimate((s) => s.presets)
   const last = useAnimate((s) => s.lastPreset)
   return (
     <div>
       <button className="primary" onClick={() => void askText({ title: 'Save Animate preset', text: 'Model, preset, size, frames, seed mode and prompt — frames and beats are not saved.', initial: last ?? '', placeholder: 'preset name' }).then((n) => { if (n) an().savePreset(n) })}>Save panel preset…</button>
       <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
-        {presets.map((pr) => <div key={pr.name} style={{ display: 'flex', gap: 4 }}><button style={{ flex: 1 }} className={last === pr.name ? 'active' : ''} onClick={() => an().applyPreset(pr.name)}><span>{pr.name}</span> <small>{MODEL_RULES[pr.panel.model_id]?.short} · {pr.panel.preset} · {pr.panel.width}×{pr.panel.height}</small></button><button className="quiet" title="Delete preset" aria-label="Delete preset" onClick={() => an().deletePreset(pr.name)}><X size={14} /></button></div>)}
+        {presets.map((pr) => <div key={pr.name} style={{ display: 'flex', gap: 4 }}><button style={{ flex: 1 }} className={last === pr.name ? 'active' : ''} onClick={() => an().applyPreset(pr.name)}><span>{pr.name}</span> <small>{shortName(pr.panel.model_id, caps)} · {pr.panel.preset} · {pr.panel.width}×{pr.panel.height}</small></button><button className="quiet" title="Delete preset" aria-label="Delete preset" onClick={() => an().deletePreset(pr.name)}><X size={14} /></button></div>)}
         {!presets.length && <span className="hint">No presets yet.</span>}
       </div>
     </div>
@@ -187,6 +197,7 @@ function PresetsTab() {
 }
 
 function ClipsTab() {
+  const caps = useSession((s) => s.capabilities)
   const clips = useAnimate((s) => s.clips)
   const current = useAnimate((s) => s.current)
   const assets = useAnimate((s) => s.assets)
@@ -196,7 +207,7 @@ function ClipsTab() {
         const a = c.asset_id ? assets[c.asset_id] : undefined
         return <button key={c.id} className={`clip-row${c.id === current ? ' active' : ''}`} onClick={() => an().select(c.id)} title={c.prompt}>
           {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
-          <span>{c.prompt || '(no prompt)'}<small>{MODEL_RULES[c.model_id]?.short ?? c.model_id} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
+          <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
         </button>
       })}
       {!clips.length && <span className="hint">No clips in this project yet.</span>}
@@ -208,7 +219,9 @@ function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities?.i2v)
   useEffect(() => { if (project?.open) an().refreshPreview() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (caps && !caps.models[an().panel.model_id]) an().setModel('wan22-i2v-high-fp8') }, [caps])   // C3: a persisted LTX panel under `open`
+  // C3 / D65: no model yet, or a persisted one this build does not offer (LTX under `open`) → the variant's i2v default
+  const def = useSession((s) => s.capabilities?.defaults.i2v)
+  useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'model') return <ModelTab />
   if (tab === 'length') return <LengthTab />
@@ -311,6 +324,7 @@ function Filmstrip({ clip }: { clip: Clip }) {
 }
 
 function Compare({ clip }: { clip: Clip }) {
+  const caps = useSession((s) => s.capabilities)
   const frame = useAnimate((s) => s.frame)
   const onion = useAnimate((s) => s.onion)
   const clips = useAnimate((s) => s.clips)
@@ -326,7 +340,7 @@ function Compare({ clip }: { clip: Clip }) {
           <select value={other ?? 'start'} onChange={(e) => useAnimate.setState({ compareWith: e.target.value === 'start' ? null : e.target.value })}>
             <option value="start">start still</option>
             {clip.end_asset_id && <option value="end">end still</option>}
-            {clips.filter((c) => c.id !== clip.id).map((c) => <option key={c.id} value={c.id}>{MODEL_RULES[c.model_id]?.short ?? c.model_id} · {c.prompt.slice(0, 32) || c.id} · seed {c.seed}</option>)}
+            {clips.filter((c) => c.id !== clip.id).map((c) => <option key={c.id} value={c.id}>{shortName(c.model_id, caps)} · {c.prompt.slice(0, 32) || c.id} · seed {c.seed}</option>)}
           </select>
           {b && <span>frame {frameB} (synced by time)</span>}
         </div>
@@ -388,13 +402,14 @@ function Timeline({ clip }: { clip: Clip }) {
 }
 
 function Interim() {
+  const caps = useSession((s) => s.capabilities)
   const jobs = useSession((s) => s.jobs)
   const list = useMemo(() => Object.values(jobs).filter((j) => j.kind === 'i2v' && ['running', 'queued', 'staged'].includes(j.status)).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.created_at < b.created_at ? -1 : 1)), [jobs])
   if (!list.length) return null
   return (
     <div className="anim-interim">
       {list.map((j) => { const r = j.recipe as { model_id?: string; frames?: number; prompt_text?: string }; return <div key={j.id} className="card">
-        <span>{MODEL_RULES[r.model_id ?? '']?.short ?? r.model_id} · {r.frames} f · seed {j.seed} · {j.status === 'running' ? j.progress_text : j.status}</span>
+        <span>{shortName(r.model_id, caps)} · {r.frames} f · seed {j.seed} · {j.status === 'running' ? j.progress_text : j.status}</span>
         <div className="bar"><i style={{ width: `${Math.round((j.progress ?? 0) * 100)}%` }} /></div>
         <span>{(r.prompt_text ?? '').slice(0, 60)}</span>
       </div> })}
@@ -488,13 +503,14 @@ function FramesTab({ clip }: { clip: Clip }) {
 }
 
 function LineageTab({ clip }: { clip: Clip }) {
+  const caps = useSession((s) => s.capabilities)
   const clips = useAnimate((s) => s.clips)
   const siblings = clips.filter((c) => c.id !== clip.id && ((clip.batch_id && c.batch_id === clip.batch_id) || c.start_asset_id === clip.start_asset_id))
   return (
     <dl className="kv">
       <dt>sources</dt><dd className="insp-thumbs"><img src={api.thumbUrl(clip.start_asset_id, 256)} alt="" title={`start ${clip.start_asset_id}`} />{clip.end_asset_id && <img src={api.thumbUrl(clip.end_asset_id, 256)} alt="" title={`end ${clip.end_asset_id}`} />}</dd>
       <dt>extracted</dt><dd className="insp-thumbs">{clip.extracted_asset_ids.map((id) => <img key={id} src={api.thumbUrl(id, 256)} alt="" title={id} />)}{!clip.extracted_asset_ids.length && <span className="hint">none yet</span>}</dd>
-      <dt>siblings</dt><dd>{siblings.length ? siblings.map((c) => <button key={c.id} className="quiet" onClick={() => an().select(c.id)} title={c.prompt}>{MODEL_RULES[c.model_id]?.short ?? c.model_id} · seed {c.seed}</button>) : <span className="hint">no other clips from this start frame</span>}</dd>
+      <dt>siblings</dt><dd>{siblings.length ? siblings.map((c) => <button key={c.id} className="quiet" onClick={() => an().select(c.id)} title={c.prompt}>{shortName(c.model_id, caps)} · seed {c.seed}</button>) : <span className="hint">no other clips from this start frame</span>}</dd>
       <dt>asset</dt><dd className="mono">{clip.asset_id ?? '—'}</dd>
     </dl>
   )

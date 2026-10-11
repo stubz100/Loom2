@@ -2698,3 +2698,36 @@ split by file so that no two hands touched the same module.
   reading `queue.json`. **212 offline**; settings audit 150 / 0 (it scans pipeline.py and finishers.py); API types regenerated; build
   clean, lint 100; headed `aipanel` asserts the ETA comes from the preview.
 - **Rig owed:** `m5_acceptance.py` and `m6_acceptance.py` against this code, timings within ±10 % of 2026-10-07 / 2026-10-05.
+
+## 2026-10-11 08:53 — H2 · P1 model registry (D65) built
+
+- **Specs:** `orchestrator/loom2/models/` — `ModelSpec` (pydantic, strict), five TOML files (flux2, klein, wan22, ltx23, tools; 12 models)
+  transcribed from the constants and checked value for value against them before they were deleted; `registry.py` loads them (plus
+  folders in `LOOM2_MODEL_SPECS`) and validates every roster id at import; a spec may carry its own `weight` table for a weight the roster
+  does not list. Lookups replace id literals: `default_model(kind, variant)` (variant-aware: Klein 4B / 4B base under `open`),
+  `hero_model()`, `icm_model(variant)`, `segment_model(mode)`, `offered()`.
+- **Builders read specs:** PRESETS, TE_ALTERNATES / TE_LABELS, VRAM_ESTIMATE_GB, BASE_SECONDS, I2V_WEIGHTS / I2V_RULES, WAN_PRESETS,
+  LTX_STEPS, I2V_BASE_SECONDS, the negatives and the D64 document baselines are gone from `graphs.py`; the dev special cases became flags
+  (`edit_steps` / `edit_guidance`, `edit_negative = zero_out`, `recipes.i2i`, `inpaint_hero`, `icm_default`), the upscale factor is data
+  (no regex on the id), AI Select's model follows the mode. Recipe defaults and `inpaint_model_id` read the registry. **Graph parity
+  17/17 unchanged** through every step.
+- **/capabilities from the registry:** first-release keys kept; every model gains `recipes` / `inputs` / `geometry` and `short`, `hint`,
+  `order`, `cfg_fixed` / `cfg_note`, `model_shift`; video models `preset_params`; new `tools` (upscalers, AI Select) and `defaults` (per
+  kind, for the session's variant). AI Select's builders were renamed `matte` / `sam` so no builder name equals a model id.
+- **Size policy:** T2I and I2V carry `size_policy` — `snap_down` (default, D18: never more pixels than asked), `snap_up`, `error` → 422
+  `{field, value, allowed, message}` at submission and in the preview (frames reported as frame counts: 80 → allowed 77 / 81 on Wan). This
+  changes the old round-to-nearest: 950 × 540 now runs at 944 × 528 (two tests updated). Submission now plans the recipe, so a bad
+  sampler or size is a 422 at once instead of a failed job later.
+- **Frontend (slice 4, by a sub-agent on frontend/src only):** `MODEL_RULES` and every hard-coded model id removed — `store/modelCaps.ts`
+  helpers; Generate sorts cards by `order`, CFG / shift / refs hint from caps; Animate's rules, CFG / shift / split hints from
+  `preset_params`; Edit's AI Select tools, refine / upscale lists, hero buttons and inpaint model from caps; the `open` special cases
+  are gone (defaults are variant-aware). Behaviour change: under `full` the refine lists also offer Klein 4B base (its spec runs i2i).
+  Left as prose (fields named for later): the stock negatives, the Full-tier dev timing hint, the encoder / steps hints, tool timings.
+- **Tests and checks:** `test_registry_d65.py` (4): an unknown weight fails at load; **a spec file alone adds a model** (a fake Klein
+  variant with its `weight` table appears in /capabilities, compiles t2i and runs ICM itself, defaults unmoved); the 422 shape at
+  submission and in the preview; the sweep compiles every spec × tier / mode / preset (≥ 40 graphs, zero problems) with estimates rising
+  with pixels and frames. `scripts/model_literals_check.py` (CI): 0 quoted roster ids in code outside specs, roster, tests and generated
+  API files. 216 offline; settings audit 154 / 0; agents_check clean; API regenerated; build clean, lint 100; headed aipanel, kit, tour,
+  animate pass. The add-a-model checklist in `engine/AGENTS.md` is now roster entry → spec → (builder for a new graph) → sweep → rig.
+- **Rig (P2, running):** M5's background-swap check read the layer's pixel alpha, which D47 made opaque (the edge is a linked mask
+  since 2026-10-10) — the script now multiplies the mask in; results with the next entry.

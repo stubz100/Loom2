@@ -11,6 +11,13 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from .models import registry
+
+
+def _default(kind: str) -> Any:
+    """D65: a recipe's default model comes from the registry (the spec whose `recipes.default_for` names the kind)."""
+    return Field(default_factory=lambda: registry.default_model(kind), description=f"roster id; default: the registry's {kind} model (D65)")
+
 PromptMode = Literal["tree", "json", "text"]
 # The pinned engine's own enums (ComfyUI v0.39.0 `comfy.samplers.KSampler.SAMPLERS` / `SCHEDULERS` — unchanged since v0.38.2 — captured in
 # tests/fixtures/object_info.json). `/capabilities` prefers the live engine's lists; "flux2" is loom2's name for the
@@ -23,6 +30,9 @@ SAMPLERS = ["euler", "euler_cfg_pp", "euler_ancestral", "euler_ancestral_cfg_pp"
             "seeds_3", "sa_solver", "sa_solver_pece", "ddim", "uni_pc", "uni_pc_bh2"]
 SCHEDULERS = ["simple", "sgm_uniform", "karras", "exponential", "ddim_uniform", "beta", "normal", "linear_quadratic", "kl_optimal"]
 FLUX2_SCHEDULE = "flux2"
+# D65: a size or frame count off the model's grid is snapped down (the default — never more VRAM than asked, D18), snapped up, or
+# refused with a 422 that names the field and the two values allowed around it
+SizePolicy = Literal["snap_down", "snap_up", "error"]
 WEIGHT_DTYPES = ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"]       # UNETLoader.weight_dtype
 TE_DEVICES = ["default", "cpu"]                                                 # CLIPLoader.device
 
@@ -40,13 +50,14 @@ class RefImage(BaseModel):
 
 class T2I(BaseModel):
     kind: Literal["t2i"] = "t2i"
-    model_id: str = "flux2-dev-fp8mixed"
+    model_id: str = _default("t2i")
     prompt_mode: PromptMode = "json"              # which of the three carries the prompt
     prompt_json: dict[str, Any] | None = None     # the BFL tree (04 §3c) — used by tree and json modes
     prompt_text: str = ""                         # plain prompt (text mode) or an extra lead sentence for Klein
     negative: str = ""                            # honoured by CFG-capable variants only (Klein base)
     width: int = 960
     height: int = 544
+    size_policy: SizePolicy = "snap_down"
     steps: int | None = None                      # None = the model preset (dev 20, Klein 4, Turbo 8)
     guidance: float | None = None                 # None = the model preset
     cfg: float | None = None                      # None = the model preset (1.0 distilled / 3.5 base)
@@ -73,7 +84,7 @@ class I2I(BaseModel):
     """Refine (10 §4): partial-denoise img2img over the visible composite, the active layer or the selection crop.
     Distilled Klein cannot partial-denoise (04 §4), so the model is Klein base or dev."""
     kind: Literal["i2i"] = "i2i"
-    model_id: str = "klein-base-9b"
+    model_id: str = _default("i2i")
     document_id: str = ""
     source: Literal["visible", "active", "selection"] = "visible"
     layer_id: str | None = None                   # for source == active
@@ -95,7 +106,7 @@ class Inpaint(BaseModel):
     Remove (Klein ICM with the hole neutralised), Outpaint (LanPaint on an edge-padded canvas). The region comes
     from the document's selection (uploaded by the editor) unless the mode is outpaint."""
     kind: Literal["inpaint"] = "inpaint"
-    model_id: str = "klein-9b"                    # fill / outpaint: klein-9b (or klein-4b); fill_hero forces dev
+    model_id: str = _default("inpaint")           # fill / outpaint run it; fill_hero runs the hero spec; ICM modes need a distilled model
     mode: Literal["fill", "fill_match", "fill_hero", "remove", "outpaint", "quick_remove"] = "fill"   # D62: quick_remove = CPU content-aware fill, no engine
     document_id: str = ""
     prompt_text: str = ""
@@ -122,7 +133,7 @@ class Upscale(BaseModel):
     new size (lineage to the document's source) and, optionally, a 1× "detail" layer in the document. With `refine`
     the upscaled image is re-sampled tile by tile at low strength (Klein base / dev; Ultimate-SD-Upscale pattern)."""
     kind: Literal["upscale"] = "upscale"
-    model_id: str = "realesrgan-x2"
+    model_id: str = _default("upscale")
     document_id: str = ""
     source: Literal["visible", "active"] = "visible"
     layer_id: str | None = None
@@ -130,7 +141,7 @@ class Upscale(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
     refine: bool = False                          # tiled refine after the model upscale (10 §4: Klein base, tile 1024, overlap 128, strength 0.25)
-    refine_model_id: str = "klein-base-9b"
+    refine_model_id: str = _default("i2i")
     strength: float = Field(0.25, ge=0.05, le=0.8)
     tile: int = Field(1024, ge=256, le=2048)
     overlap: int = Field(128, ge=0, le=512)
@@ -155,7 +166,7 @@ class Segment(BaseModel):
     `subject` = BiRefNet matte through the core background-removal nodes; `text` / `points` / `box` = SAM 3
     (core `SAM3_Detect` on the sam3.pt checkpoint). Coordinates are document pixels; the queue scales them."""
     kind: Literal["segment"] = "segment"
-    model_id: str = "birefnet"                    # birefnet | sam3
+    model_id: str = _default("segment")           # the subject matte, or SAM 3 (the mode picks the model that runs)
     document_id: str = ""
     mode: Literal["subject", "text", "points", "box"] = "subject"
     text: str = ""
@@ -184,7 +195,7 @@ class I2V(BaseModel):
     fp8 with keyframe beats). Sizes and frame counts snap to the model's rule in the compiler (Wan ×16 and 4n+1,
     LTX ×32 and 8n+1); `graphs.i2v_params` shows the UI what will run."""
     kind: Literal["i2v"] = "i2v"
-    model_id: str = "wan22-i2v-high-fp8"          # wan22-i2v-high-fp8 (Wan) | ltx23-distilled-fp8 (LTX)
+    model_id: str = _default("i2v")               # Wan 2.2 or LTX-2.3 (the registry's video specs)
     start_asset: str
     end_asset: str | None = None                  # first/last-frame mode
     prompt_text: str = ""
@@ -193,6 +204,7 @@ class I2V(BaseModel):
     fps: int = Field(16, ge=8, le=48)
     width: int = Field(832, ge=128, le=1920)
     height: int = Field(480, ge=128, le=1920)
+    size_policy: SizePolicy = "snap_down"     # D65: width, height and frames off the model's grid
     preset: Literal["draft", "motion", "quality"] = "draft"   # Wan: Lightning 2+2 / undistilled high + distilled low / 10+10; LTX: 8 / 12 / 20 steps
     steps: int | None = Field(None, ge=1, le=60)  # overrides the preset's step count
     cfg: float | None = Field(None, ge=1.0, le=12.0)          # Wan high expert CFG (motion / quality); the distilled paths ignore it
@@ -218,11 +230,12 @@ def inpaint_model_id(recipe: Inpaint, variant: str = "full") -> str:
     """The transformer an inpaint mode actually runs (10 §4): Fill Hero is dev; Fill-Match and Remove need a distilled Klein
     (ICM), falling back to Klein 9B — or to Klein 4B under the `open` variant (C3, D26)."""
     if recipe.mode == "fill_hero":
-        return "flux2-dev-fp8mixed"
+        return registry.hero_model()
     if recipe.mode in ("fill_match", "remove"):
-        if recipe.model_id.startswith("klein") and "base" not in recipe.model_id:
+        spec = registry.get(recipe.model_id)
+        if spec is not None and recipe.mode in spec.recipes.inpaint:
             return recipe.model_id
-        return "klein-4b" if variant == "open" else "klein-9b"
+        return registry.icm_model(variant)                # D65: the spec marked as the variant's ICM fallback
     return recipe.model_id
 
 

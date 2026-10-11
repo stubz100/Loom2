@@ -2,6 +2,7 @@
 every call here stays on the event loop.
 """
 from __future__ import annotations
+from ..engine.graphs import FieldError
 
 from typing import Any
 
@@ -25,6 +26,8 @@ async def jobs_submit(svc: Svc, body: JobSubmit):
     _, _, q = svc.require_project()
     try:
         jobs = q.submit(body.recipe, stage=body.stage)
+    except FieldError as e:
+        raise HTTPException(422, e.detail())                                  # D65: {field, value, allowed, message}
     except ValueError as e:
         raise HTTPException(422, str(e))
     out = {"jobs": [j.model_dump() for j in jobs]}                        # the state at submission, before the loop runs on

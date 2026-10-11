@@ -19,7 +19,8 @@ from .config import AppState
 from .engine.client import EngineError
 from .engine.follow import EngineFollower
 from .engine.finishers import finisher_for, run_quick_remove
-from .engine.graphs import CompileError, I2V_WEIGHTS, PRESETS, estimate_vram_gb, recipe_te_id, recipe_weights
+from .engine.graphs import CompileError, estimate_vram_gb, recipe_te_id, recipe_weights
+from .models import registry
 from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
@@ -234,6 +235,7 @@ class JobQueue:
     def submit(self, recipe_data: dict, stage: bool = False) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
+        plan(recipe, self.app.settings.variant)          # D65: a size off the grid (size_policy error), a bad sampler … → 422 here
         self._disk_guard()
         seeds = recipe.seeds or [0]
         batch_id = new_id("bat") if len(seeds) > 1 else None
@@ -348,7 +350,8 @@ class JobQueue:
         for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])], *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
-        if isinstance(recipe, T2I) and recipe.model_id not in PRESETS:
+        spec = registry.get(recipe.model_id)
+        if isinstance(recipe, T2I) and (spec is None or not spec.recipes.t2i):
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
         if getattr(recipe, "te_id", None):
             try:
@@ -356,10 +359,10 @@ class JobQueue:
             except CompileError as e:
                 raise ValueError(str(e))
         if isinstance(recipe, I2V):
-            if recipe.model_id not in I2V_WEIGHTS:
+            if spec is None or not spec.recipes.i2v:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
-            if recipe.beats and ROSTER_BY_ID[recipe.model_id].family != "ltx23":
-                raise ValueError("keyframe beats need LTX-2.3; Wan takes a start and an end frame")
+            if recipe.beats and not spec.recipes.beats:
+                raise ValueError(f"keyframe beats need a model that takes them ({', '.join(s.label for s in registry.video_specs() if s.recipes.beats)}); {spec.label} takes a start and an end frame")
         variant = self.app.settings.variant
         if variant == "open":
             for mid in recipe_weights(recipe, variant):

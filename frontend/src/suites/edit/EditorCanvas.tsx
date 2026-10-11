@@ -7,6 +7,7 @@ import { Application, ColorMatrixFilter, Container, Graphics, Matrix, Perspectiv
 import 'pixi.js/advanced-blend-modes'
 import { useEffect, useMemo, useRef } from 'react'
 import { useSession } from '../../store/session'
+import { segmentTool } from '../../store/modelCaps'
 import { CANVAS_COLOURS } from '../../frame/theme'
 import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
@@ -842,10 +843,10 @@ export function EditorCanvas() {
         const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
         if (moved < 4) {                                                   // a click: one SAM 3 point (Alt = exclude)
           st.setAiPrompt({ points: [...st.aiPrompt.points, { x: Math.round(drag.start.x), y: Math.round(drag.start.y), label: drag.alt ? 0 : 1 }] })
-          useAiPanel.getState().set({ selModel: 'sam3', selMode: 'points' })
+          const tool = segmentTool('points'); if (tool) useAiPanel.getState().set({ selModel: tool, selMode: 'points' })
         } else {
           st.setAiPrompt({ box: [Math.round(Math.min(drag.start.x, drag.last.x)), Math.round(Math.min(drag.start.y, drag.last.y)), Math.round(Math.max(drag.start.x, drag.last.x)), Math.round(Math.max(drag.start.y, drag.last.y))] })
-          useAiPanel.getState().set({ selModel: 'sam3', selMode: 'box' })
+          const tool = segmentTool('box'); if (tool) useAiPanel.getState().set({ selModel: tool, selMode: 'box' })
         }
       }
       if (drag.kind === 'gradient') gradientFill(drag.start, drag.last)

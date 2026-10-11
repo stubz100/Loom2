@@ -126,6 +126,11 @@ watchdog); `engine/finishers.py` turns outputs into results — `AssetFinisher` 
 `SelectionFinisher` (AI Select), `ClipFinisher` (Animate) — and `run_quick_remove` is the engine-less job. `JobQueue._complete` is the
 single completion tail; the queue file is written off the event loop (`persist()` → one writer, `await flush()` where it must be on disk).
 
+**Model registry (D65, ArtCraft P1).** `models/registry.py` loads `models/specs/*.toml` (plus folders in `LOOM2_MODEL_SPECS`): one
+`ModelSpec` per model — the builder (`graph`), roles, sampling, recipes it runs, inputs, geometry, estimates, video presets. Builders,
+recipe defaults (variant-aware), admission, estimates and `/capabilities` read it; a recipe's `size_policy` (snap_down by default, D18;
+snap_up; error → 422 `{field, value, allowed}`) governs sizes and frame counts off the model's grid.
+
 ## 4. Storage layout
 
 ```

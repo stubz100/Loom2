@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from loom2.models import registry
 from loom2.engine import graphs
 from loom2.engine.contract import check_graph
 from loom2.recipes import I2I, Inpaint, T2I, Upscale
@@ -31,8 +32,8 @@ def test_roster_and_presets_follow_d31():
     assert q.folder == "text_encoders" and q.family == "klein" and q.role == "text_encoder" and q.name.endswith(".gguf") and q.repo == "unsloth/Qwen3-8B-GGUF" and not q.retired
     assert ROSTER_BY_ID["qwen3-8b-q4ks"].retired and ROSTER_BY_ID["qwen3-8b-q3km"].retired
     for mid in ("klein-9b", "klein-base-9b", "klein-9b-kv"):
-        assert graphs.PRESETS[mid].te_id == "qwen3-8b-q4km" and graphs.te_options(graphs.PRESETS[mid]) == ["qwen3-8b-q4km", "qwen3-8b-fp8mixed"]
-    assert graphs.te_options(graphs.PRESETS["klein-4b"]) == ["qwen3-4b"] and graphs.te_options(graphs.PRESETS["flux2-dev-fp8mixed"]) == ["mistral3-small-flux2-fp8"]
+        assert registry.get(mid).roles.te.default == "qwen3-8b-q4km" and graphs.te_options(registry.get(mid)) == ["qwen3-8b-q4km", "qwen3-8b-fp8mixed"]
+    assert graphs.te_options(registry.get("klein-4b")) == ["qwen3-4b"] and graphs.te_options(registry.get("flux2-dev-fp8mixed")) == ["mistral3-small-flux2-fp8"]
 
 
 def test_default_is_clip_loader_gguf_and_fp8_is_the_alternate(tmp_path: Path, object_info):
@@ -86,7 +87,7 @@ def test_weight_list_queue_gate_and_capabilities_see_the_encoder(tmp_path: Path)
             resp = c.post("/jobs", json={"recipe": {"kind": "t2i", "model_id": "klein-9b", "prompt_mode": "text", "prompt_text": "x", "te_id": te}}, headers=h)
             assert resp.status_code == 422, (te, resp.text)
         caps = c.get("/capabilities", headers=h).json()
-        assert caps["te_alternates"] == graphs.TE_ALTERNATES
+        assert caps["te_alternates"] == graphs.te_alternates() == {"qwen3-8b-q4km": ["qwen3-8b-fp8mixed"]}
         opts = caps["models"]["klein-9b"]["te_options"]
         assert caps["models"]["klein-9b"]["te_id"] == "qwen3-8b-q4km" and [o["id"] for o in opts] == ["qwen3-8b-q4km", "qwen3-8b-fp8mixed"]
         assert opts[0]["default"] and opts[0]["gguf"] and opts[0]["health"] == "present" and not opts[1]["default"] and not opts[1]["gguf"]

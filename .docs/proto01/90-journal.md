@@ -2992,3 +2992,11 @@ split by file so that no two hands touched the same module.
   its draft once, when it opened; opened before `GET /settings` answered (right after a start or reload — CI's slower runner hit it),
   the draft stayed empty, the dialog rendered nothing and stayed open invisibly until closed. A real bug, not the test's: the draft is
   now the loaded settings until the first edit, and the dialog says "Loading the settings…" meanwhile. Smoke 12/12, 163 unit, lint 100.
+
+## 2026-10-11 14:25 — CI (open): a typed @ before the album loaded; one unexplained page-load timeout
+
+- The D73 scenario typed `@` before the album tree had arrived: the menu showed "Loading the album…" and never refreshed. Typed `@` now
+  waits for the tree and then opens the menu (the @ button keeps the loading entry; the tree loads with the field, so it is rare).
+- In the same run the Edit scenario timed out on its first page load (`.frame` not visible in 15 s) — it passed in every earlier run
+  and in two local runs under `open` now; nothing in the annotation says why. Recorded as unexplained; watched in the next runs.
+- Smoke 12/12 under full and twice under open; lint 100.

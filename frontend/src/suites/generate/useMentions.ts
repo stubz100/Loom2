@@ -33,7 +33,9 @@ export function useMentions(value: string, onChange: (v: string) => void) {
   const onKeyUp = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== '@') return
     const field = e.currentTarget, at = field.selectionStart
-    openPressMenu({ button: 0, currentTarget: field, preventDefault: () => undefined }, () => groupItems(insertAt(at, true, field)), true)
+    const open = () => openPressMenu({ button: 0, currentTarget: field, preventDefault: () => undefined }, () => groupItems(insertAt(at, true, field)), true)
+    if (useAlbum.getState().tree) open()
+    else void useAlbum.getState().load().then(open)                     // typed before the album arrived: open the menu once it has (CI, 2026-10-11)
   }
   const button = createElement(MenuButton, { label: 'Mention a group (@)', icon: AtSign, items: () => groupItems(insertAt(value.length, false)) })
   return { onKeyUp, button }

@@ -13,7 +13,7 @@ import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
 import { selectedOrPrimary, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
 import { useActiveCatalogue, useCat } from './catalogueContext'
-import { CommandButton, CommandRow } from '../../frame/CommandButton'
+import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
@@ -104,7 +104,14 @@ function EmptyGrid() {
   const filtered = !!c.q.search || Object.entries(CLEAR_ALL).some(([k, v]) => k !== 'search' && JSON.stringify((c.q as unknown as Record<string, unknown>)[k] ?? v) !== JSON.stringify(v))
   const [title, text] = filtered ? ['Nothing matches these filters', ''] : c.q.folder === 'unprocessed' ? ['Nothing to sort', 'New generations, edits, clips and imports land here. Import files with the Import button or drop them here.']
     : c.q.folder === 'trash' ? ['Trash is empty', ''] : c.q.group_id ? ['This page is empty', 'Drag photos onto this group in the Places panel, or use "Move to group" on a tile.'] : ['No assets yet', 'Import files, or generate your first image.']
-  return <div className="cat-empty"><div><h2>{title}</h2>{text && <p>{text}</p>}{filtered && <button onClick={() => void c.setQuery(CLEAR_ALL)}>Clear filters</button>}</div></div>
+  const cards = !filtered && c.q.folder !== 'trash' && !c.q.group_id                   // D71 (P15): where to start, one click each
+  return <div className="cat-empty"><div><h2>{title}</h2>{text && <p>{text}</p>}{filtered && <button onClick={() => void c.setQuery(CLEAR_ALL)}>Clear filters</button>}
+    {cards && <div className="quick-cards">
+      <CommandCard id="global.start.generate" hint="text to image" />
+      <CommandCard id="cat.import" label="Import files" hint="or drop them here" />
+      <CommandCard id="global.start.newDocument" hint="an empty 1920×1080 canvas" />
+      <CommandCard id="global.project.open" hint="switch projects" />
+    </div>}</div></div>
 }
 
 type Row = { kind: 'header'; g: GroupHeader } | { kind: 'tiles'; items: Asset[] } | { kind: 'note'; text: string; key: string }
@@ -228,7 +235,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragIds={() => selectedOrPrimary(c)} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: c.byId(id)?.kind === 'video' ? 'video' as const : 'image' as const }))} />)}
             </div>
           )
         })}

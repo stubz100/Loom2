@@ -156,9 +156,31 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow-strong); font-size: 12px; color: var(--fg2); opacity: .92; }
 .drag-ghost img { width: 48px; height: 36px; object-fit: cover; border-radius: 3px; background: var(--media-bg); }
 .drag-ghost.can-drop { border-color: var(--accent); color: var(--fg); }
+/* D71: what a drop would do (✓) or why it would not (✕), under the ghost's label */
+.drag-ghost .drop-hint:empty { display: none; }
+.drag-ghost .drop-hint { padding-left: 6px; border-left: 1px solid var(--line2); color: var(--accent); white-space: nowrap; }
+.drag-ghost.refused { border-color: var(--error); }
+.drag-ghost.refused .drop-hint { color: var(--error); }
 .drop-over { outline: 2px solid var(--accent) !important; outline-offset: -2px; }
 
 .toast .toast-text { flex: 1; }
 /* D69: a lazy suite's part while its code loads (first visit only) */
 .suite-loading { flex: 1; min-height: 0; }
 .stage-loading { display: flex; align-items: center; justify-content: center; color: var(--fg3); font-size: 13px; }
+/* D71: a drag resting on a suite tab opens it after 600 ms (TopBar SPRING_MS); the bar fills meanwhile */
+.tabs .tab.spring { position: relative; }
+.tabs .tab.spring::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--accent); transform-origin: left; animation: tab-spring 600ms linear forwards; }
+@keyframes tab-spring { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* D71 (P15): quick-action cards — empty states and the Catalogue Inspector's "Start from this image" */
+.quick-cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 16px; }
+.quick-card { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 150px; padding: 14px 10px; background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius); color: var(--fg); cursor: pointer; text-align: center; }
+.quick-card:hover:not(:disabled) { border-color: var(--accent); background: var(--bg2); }
+.quick-card:disabled { opacity: .5; cursor: default; }
+.quick-card svg { color: var(--accent); }
+.quick-card .qc-label { font-size: 13px; font-weight: 600; }
+.quick-card .qc-hint { font-size: 11px; color: var(--fg3); }
+.quick-cards.compact { justify-content: flex-start; gap: 6px; margin-top: 4px; }
+.quick-cards.compact .quick-card { width: calc(50% - 3px); flex-direction: row; align-items: center; gap: 8px; padding: 8px; text-align: left; }
+.quick-cards.compact .quick-card svg { width: 16px; height: 16px; flex: none; }
+.quick-cards.compact .quick-card .qc-label { font-size: 12px; }
+.quick-cards.compact .quick-card .qc-hint { display: none; }

@@ -1,12 +1,14 @@
 // Loupe and Compare (08 §3c): zoom/pan at any scale, prev/next, facts strip; 2-up / 4-up with locked zoom/pan,
 // wipe slider and difference toggle. One transform shared by every cell in Compare.
+import { Ellipsis, Film, FolderInput, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
-import { CommandButton, CommandRow } from '../../frame/CommandButton'
+import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { handleKeyFor } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
-import { tileMenu } from './catalogueCommands'
+import { moveToMenu, rateMenu, tileMenu } from './catalogueCommands'
+import type { MenuItem } from '../../frame/commands'
 import { useCat } from './catalogueContext'
 
 interface Xf { s: number; x: number; y: number }
@@ -65,6 +67,7 @@ export function Loupe({ asset }: { asset: Asset }) {
     return () => window.removeEventListener('keydown', h)
   }, [c, idx, order, fit, one, asset.id])
   const pinned = c.compare.indexOf(asset.id) + 1
+  const subItems = (m: MenuItem): MenuItem[] => ('items' in m ? m.items : [])
   return (
     <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, tileMenu()) }}>
       <div className="view" ref={ref} {...handlers}>
@@ -81,9 +84,25 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span>{Math.round(xf.s * 100)}%</span>
         <button className="quiet" onClick={fit}>Fit</button>
         <button className="quiet" onClick={one}>1:1</button>
-        <CommandButton id="cat.pin" text label={pinned ? `Unpin C${pinned}` : undefined} />
-        <CommandRow ids={['cat.keep', 'cat.reject', 'cat.edit', 'cat.reference']} />
         <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
+      </div>
+      {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.
+          The verbs act on the selection, so a press here selects the loupe's asset first (as its right-click and keys do). */}
+      <div className="hub" role="toolbar" aria-label="Send this image" onPointerDownCapture={() => { if (!c.selected.includes(asset.id) || c.selected.length > 1) c.select(asset.id, 'single') }}>
+        <CommandRow ids={['cat.keep', 'cat.reject']} />
+        <span className="secondary"><CommandButton id="cat.unstate" /></span>
+        <span className="secondary"><MenuButton label="Rate" icon={Star} items={() => subItems(rateMenu())} /></span>
+        <span className="gap" />
+        <CommandButton id="cat.edit" text label="Edit" />
+        <CommandButton id="cat.reference" text label="Reference" />
+        <MenuButton label="Animate" icon={Film} text items={() => [{ cmd: 'cat.animate', label: 'As the start frame' }, { cmd: 'cat.animateEnd', label: 'As the end frame' }]} />
+        <span className="gap secondary" />
+        <span className="secondary"><CommandRow ids={['cat.rerun', 'cat.variations', 'cat.duplicate']} /></span>
+        <span className="secondary"><MenuButton label="Move to group" icon={FolderInput} items={() => subItems(moveToMenu())} /></span>
+        <span className="secondary"><CommandRow ids={['cat.lineage', 'cat.reveal']} /></span>
+        <span className="secondary"><CommandButton id="cat.pin" text label={pinned ? `Unpin C${pinned}` : 'Pin'} /></span>
+        <span className="spacer" />
+        <MenuButton label="More" icon={Ellipsis} items={tileMenu} />
       </div>
     </div>
   )

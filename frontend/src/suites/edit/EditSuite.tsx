@@ -24,7 +24,8 @@ import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, F
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
 import { planSize } from './planSize'
 import './edit.css'
-import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
+import { onlyAssets, useDropTarget } from '../../frame/drag'
+import { editOpenDrop, layerDrop } from '../../frame/dropRules'
 
 const TOOLS = TOOL_TABLE.map(([tool, label, key, icon]) => ({ tool, label, key, icon }))
 /** min, max, step for the numeric adjustment / filter parameters (names from compose.py). */
@@ -771,6 +772,12 @@ function LayersTab() {
   const editingMask = useEditor((s) => s.editingMask)
   const revision = useEditor((s) => s.revision)
   const hasSel = useEditor((s) => !!s.selection)
+  // D71 (P11): Catalogue tiles dropped on the list become layers above the row they land on (on empty space: at the top)
+  const { ref: dropRef, over: dropOver } = useDropTarget((p) => onlyAssets(p) && layerDrop(p).verdict.ok, (p, info) => {
+    const row = (document.elementFromPoint(info.x, info.y) as HTMLElement | null)?.closest('.layer-row[data-id]') as HTMLElement | null
+    ed().setActive(row?.dataset.id ?? null)                             // addLayer inserts above the active layer; each new one becomes active
+    void (async () => { for (const id of layerDrop(p).take) await ed().addLayerFromAsset(id) })()
+  }, (p) => layerDrop(p, 'at this row').verdict)
   const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); st.pixels.forEach((lp, id) => m.set(id, lp.thumbnail(64))); st.masks.forEach((lp, id) => m.set('m:' + id, lp.thumbnail(48))); return m }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
   const before = useRef<DocumentStack | null>(null)
   const active = findNode(doc, activeId)
@@ -806,7 +813,7 @@ function LayersTab() {
   ))
   return (
     <div>
-      <div className="layers">{rows(doc.layers, 0)}</div>
+      <div ref={dropRef} className={`layers${dropOver ? ' drop-over' : ''}`}>{rows(doc.layers, 0)}</div>
       {editingMask && active?.mask && <div className="mask-hint">Editing the <b>mask</b> of “{active.name}” with the mask colours: the brush paints the foreground (black hides, white shows), the eraser the background — X swaps them; G fills, Delete clears to the background. Alt-click the mask thumbnail to see it alone.{' '}
         {active.kind === 'raster' && <button className="quiet" onClick={() => { ed().setActive(active.id, false); ed().setView({ maskView: 'off' }) }}>Edit pixels instead</button>}</div>}
       {active && (
@@ -1076,7 +1083,7 @@ function useEditKeys() {
 
 /** The empty Edit stage takes a dropped tile and opens it (frame/drag.ts). */
 function EmptyDrop({ children }: { children: React.ReactNode }) {
-  const { ref, over } = useDropTarget(onlyAssets, (p) => void ed().openFromAsset(assetIds(p)[0]))
+  const { ref, over } = useDropTarget((p) => onlyAssets(p) && editOpenDrop(p).verdict.ok, (p) => { const id = editOpenDrop(p).open; if (id) void ed().openFromAsset(id) }, (p) => editOpenDrop(p).verdict)
   return <div ref={ref} className={`edit-empty${over ? ' drop-over' : ''}`}>{children}</div>
 }
 

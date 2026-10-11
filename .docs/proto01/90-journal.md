@@ -2870,3 +2870,45 @@ split by file so that no two hands touched the same module.
   with a toast and leaves the visible one, lazy meta + load once). 227 offline (full and open), 134 unit, smoke 6/6, perf 3/3; headed
   keepalive, perf, tour, animate, render, kit, aiclick, layers, media pass; CSP clean (incl. the lazy chunks and the wasm Worker); settings
   audit 154 / 0, literal check 0, agents 0, versions 0; lint 100; API regenerated (`VramPressure`). **H4 (P10, P5) closed.**
+
+## 2026-10-11 13:14 — X1 opens: D71–D73 recorded; P11 send-to hub and P15 quick actions (D71) built
+
+- **Decisions:** D71 (P11 + P15), D72 (P16 remappable keys) and D73 (P12 reference notes and `@`mentions) entered in 13 before the work,
+  in build order: D71, then D72, then D73 (P12 needs a rig check of the notes).
+- **Loupe hub:** under the facts strip, one bar with every verb of the tile menu — Keep / Reject / Clear, Rate ▾, Edit, Reference,
+  Animate ▾ (start / end), Re-run, Variations, Duplicate, Move to group ▾, Lineage, Reveal, Pin, More ▾ (the tile menu). A press on
+  the bar selects the loupe's asset first (the verbs act on the selection). Container queries: below 760 px the secondary verbs fold
+  into More, below 480 px icons only. Seen in screenshots at 1600 and 900 px wide; the first narrow version wrapped to three rows and
+  clipped More — fixed (no shrinking, tighter spacing).
+- **Found on the way — press menus at the window's foot:** a menu that did not fit below its button was clamped up over the button, so
+  a plain click (press + release on the button) chose the first item: the hub's Animate ▾ set a start frame. Press menus now open above
+  their button when they do not fit below (`ContextMenu` `openerTop`), as submenus already flip left.
+- **Drops explain themselves:** `DropTarget.describe(payload) → {ok, label?, reason?}`; the ghost shows ✓ + label or ✕ + reason with a red
+  border. The rules are pure (`frame/dropRules.ts`: references, Animate start / end / beats, Edit open, layers), used for accept, drop
+  and describe alike. Tile, lineage and album-page drags carry each item's media (image / clip). `resolveTarget` takes the innermost
+  accepting target, else the innermost refusal with a reason. Two refusals are fixes, not just messages: a clip dropped on Animate's
+  start or end slot or on beats used to be set as a frame and would fail at run time (frames go through Pillow), and the Generate tab
+  added references past the model's `max_refs`. Reference drops are capped and a toast says what did not fit; a clip on the Animate tab
+  plays it (as the tile menu's Animate does).
+- **Spring-loaded tabs:** a drag resting 600 ms on the Edit, Generate or Animate tab opens it (a bar fills under the tab) and the drag
+  carries on to a slot; the timer survives TopBar re-renders (job progress). **Edit's layers list** takes tiles: layers above the row
+  they land on.
+- **P15 quick actions:** `frame/openWith.ts` — `openWith(assetId, {suite, tool, aiOp, selMode, slot})` through dynamic imports (Edit is
+  lazy, D69), and `?suite=edit&tool=ai&ai=select&sel=subject[&asset=]` deep links. `CommandCard` (a registry command as a card).
+  Catalogue empty state: Generate an image · Import files · New document · Open a project; Animate's empty player: Animate from an
+  image; the Inspector of one image: **Start from this image** (Remove background → Edit, AI Select · Subject; Upscale → Edit, AI
+  Upscale; Animate from here; Variations), also a tile-menu submenu. New commands: `global.project.new` / `.open`,
+  `global.start.generate` / `.newDocument` / `.animate`, `cat.start.removeBg` / `.upscale`. The tool list moved to a leaf module
+  (`suites/edit/tools.ts`) so the frame can validate deep links without loading the editor; the editor store is exposed to dev hooks when
+  it loads (the canvas did it before, so a test without a document could not read it).
+- **Tests:** vitest `dropRules.test.ts` (15: every rule's labels and reasons, caps, dedupe, clips, unknown media, `resolveTarget`) and
+  `openWith.test.ts` (3); Playwright smoke 10/10 — new: a tile held on the Generate tab opens it, the ghost reads "✓ Add as reference 1
+  of 4 — or hold to open Generate", the slot takes it, a second drag of the same tile reads "✕ Already a reference" and the tab does not
+  open; holds on Animate (end slot) and Edit (empty stage); the loupe hub's 13 verbs, the Animate press menu, the fold at 900 px and
+  Reference from the hub; Remove background from the Inspector reaches Edit with tool `ai`, op `select`, selector `subject` and the AI
+  rail tab, and `?suite=edit&tool=ai&ai=upscale` does too. 152 unit, lint 100, headed layers / animate / keepalive (median 71.8 ms) pass.
+- **Seen once — a Pixi render error:** the first headed `tour` after a cold Vite start failed one step with an uncaught `TypeError:
+  Cannot read properties of null (reading 'geometry')` in `BatcherPipe.execute` from `app.render()`, right after the known "textureSource
+  destroyed while still bound" warnings of a scene rebuild (journal 2026-10-08, 10-10); the next frame drew and every later check
+  passed. Nine more tours on the same server passed without it (the Vite log holds that one occurrence). Not caused by D71 (no render code changed); recorded as open with the stack.
+- Startup chunk `main` 455 → 466 KB (drop rules, `openWith`, cards); Pixi and Mediabunny stay out.

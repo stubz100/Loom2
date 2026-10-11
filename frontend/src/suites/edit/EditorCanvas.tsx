@@ -23,7 +23,8 @@ import { quickSelect } from './smartselect/client'
 import { ensureDocImage } from './smartselect/source'
 import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
-import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
+import { onlyAssets, registerDropTarget } from '../../frame/drag'
+import { layerDrop } from '../../frame/dropRules'
 import { listenFileDrop } from '../../shell/tauri'
 import { useStageActive } from '../../frame/stageKeep'
 import { DEV_HOOKS } from '../../devHooks'
@@ -1197,7 +1198,7 @@ export function EditorCanvas() {
       st.pushHistory({ label: 'fill', layerId: t.id, kind: t.kind, tiles: t.lp.endStroke(), at: Date.now() })
       st.touch(); st.bump()
     }
-    const unregDrop = registerDropTarget(host, { accept: onlyAssets, drop: (p) => assetIds(p).forEach((id) => void useEditor.getState().addLayerFromAsset(id)) })   // tiles become layers
+    const unregDrop = registerDropTarget(host, { accept: (p) => onlyAssets(p) && layerDrop(p).verdict.ok, drop: (p) => layerDrop(p).take.forEach((id) => void useEditor.getState().addLayerFromAsset(id)), describe: (p) => layerDrop(p).verdict })   // tiles become layers (D71: clips skipped, said on the ghost)
     // D46: OS files dropped on the canvas go through the Catalogue (lineage) and land as layers; Tauri reports real paths
     const unlistenFiles = listenFileDrop({ over: (inside) => host.classList.toggle('file-over', inside), within: () => host,
       drop: (paths) => { host.classList.remove('file-over'); void useEditor.getState().dropFiles(paths) } })

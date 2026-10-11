@@ -1,9 +1,10 @@
 // Global commands (07 §4): frame toggles, settings, help, the command palette. Suite switching stays on the
 // TopBar tabs (Ctrl+1…5) and is registered here so the help overlay lists it.
-import { Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, RefreshCw, Settings } from 'lucide-react'
+import { Clapperboard, FilePlus, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, RefreshCw, Settings, Sparkles } from 'lucide-react'
 const CircleHelp = Info
 import { useSession } from '../store/session'
 import { registerCommands } from './commands'
+import { openWith } from './openWith'
 import { usePalette } from './CommandPalette'
 
 const s = () => useSession.getState()
@@ -23,4 +24,13 @@ registerCommands([
   { id: 'global.suite.edit', scope: 'global', label: 'Edit', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('edit') },
   { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('animate') },
   { id: 'global.suite.models', scope: 'global', label: 'Models', keys: 'Ctrl+5', placement: ['topbar'], run: () => s().setSuite('models') },
+  // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
+  { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },
+  { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },
+  { id: 'global.start.generate', scope: 'global', label: 'Generate an image', icon: Sparkles, placement: ['toolbar'], when: () => !!s().project?.open,
+    run: () => { s().setSuite('generate'); void import('./suiteRegistry').then((m) => m.setRailTab('generate', 'prompt')) } },
+  { id: 'global.start.newDocument', scope: 'global', label: 'New document', icon: FilePlus, placement: ['toolbar'], when: () => !!s().project?.open,
+    run: () => void openWith(null, { suite: 'edit' }).then(() => import('../suites/edit/editorStore')).then((m) => m.useEditor.getState().newDocument(1920, 1080)) },
+  { id: 'global.start.animate', scope: 'global', label: 'Animate from an image', icon: Clapperboard, placement: ['toolbar'], when: () => !!s().project?.open,
+    run: () => { s().setSuite('catalogue'); s().toast('Pick an image, then Animate ▾ under the loupe or in the Inspector (Shift+A), or drag it onto the Animate tab', 'info') } },
 ])

@@ -14,9 +14,9 @@ import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPresets'
-import { batchOf, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { batchOf, dropRefs, refDropFor, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import './generate.css'
-import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
+import { onlyAssets, useDropTarget } from '../../frame/drag'
 
 const ASPECTS: [string, number, number][] = [['16:9', 16, 9], ['1:1', 1, 1], ['3:2', 3, 2], ['2:3', 2, 3], ['9:16', 9, 16], ['21:9', 21, 9]]
 const snap16 = (n: number) => Math.max(64, Math.round(n / 16) * 16)
@@ -86,7 +86,7 @@ function RefSlots() {
   const suggest = cap?.inputs.refs_suggest                                // D65: a faster model for several references, from the spec
   const suggestCap = suggest ? caps?.models[suggest.model] : undefined
   const slots = Array.from({ length: Math.min(10, Math.max(max, p.refs.length)) }, (_, i) => p.refs[i])
-  const { ref: dropRef, over } = useDropTarget(onlyAssets, (d) => assetIds(d).slice(0, max - p.refs.length).forEach((id) => g.addRef(id)))
+  const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && refDropFor(d).verdict.ok, dropRefs, (d) => refDropFor(d).verdict)   // D71: says what a drop adds, or why not
   return (
     <>
       <div ref={dropRef} className="ref-slots">

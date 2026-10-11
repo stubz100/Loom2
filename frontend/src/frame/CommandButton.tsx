@@ -27,6 +27,19 @@ export function CommandButton({ id, active, text, size = 16, className = '', lab
   )
 }
 
+/** D71 (P15): a quick-action card (empty states, "Start from this image") bound to a registry command: icon, label, a one-line hint. */
+export function CommandCard({ id, hint, label }: { id: string; hint?: string; label?: string }) {
+  const c = command(id)
+  if (!c) return null
+  markUsed(id)
+  const Icon = c.icon
+  return (
+    <button type="button" className="quick-card" title={titleFor(c, label)} disabled={!isEnabled(c)} onClick={() => runCommand(id)}>
+      {Icon ? <Icon size={22} /> : null}<span className="qc-label">{label ?? c.label}</span>{hint && <span className="qc-hint">{hint}</span>}
+    </button>
+  )
+}
+
 export function CommandRow({ ids, active, className = '', drops, labels }: { ids: (string | 'gap')[]; active?: string; className?: string; drops?: Record<string, string>; labels?: Record<string, string> }) {
   return <span className={`cmd-row ${className}`}>{ids.map((id, i) => id === 'gap' ? <span key={i} className="gap" /> : <CommandButton key={id} id={id} active={active === id} drop={drops?.[id]} label={labels?.[id]} />)}</span>
 }

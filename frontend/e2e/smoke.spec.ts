@@ -119,3 +119,110 @@ test('Animate: the tile menu fills the start and the end slots', async ({ page }
     expect(await slots.nth(k).locator('img').getAttribute('src')).toContain(`/thumbs/${id}/`)
   }
 })
+
+test('send-to by drag (D71): a tile held on the Generate tab opens it, the ghost says what a drop adds, a slot takes it, a repeat is refused', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  const tile = tiles(page).nth(3)
+  const id = (await tile.getAttribute('data-id'))!
+  const tab = page.locator('nav.tabs button.tab', { hasText: 'Generate' })
+  const hint = page.locator('.drag-ghost .drop-hint')
+  const from = await centre(tile), onTab = await centre(tab)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
+  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
+  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+ — or hold to open Generate$/)
+  // resting on the tab for 600 ms opens Generate; the drag carries on to a particular slot
+  await expect(page.locator('.ref-slots')).toBeVisible()
+  await expect(page.locator('.drag-ghost')).toBeVisible()
+  const slot = await centre(page.locator('.ref-slots .ref-slot').nth(1))
+  await page.mouse.move(slot.x, slot.y, { steps: 8 })
+  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+$/)
+  await page.mouse.up()
+  await expect(page.locator('.drag-ghost')).toHaveCount(0)
+  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
+  await expect(page.locator('.ref-slots .ref-slot img').first()).toHaveAttribute('src', new RegExp(id))
+  // the same tile again, onto the tab: refused, and the ghost says why; nothing changes
+  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  const again = await centre(page.locator(`.cat-grid .tile[data-id="${id}"]`))
+  await page.mouse.move(again.x, again.y)
+  await page.mouse.down()
+  await page.mouse.move(again.x + 12, again.y + 8, { steps: 3 })
+  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
+  await expect(hint).toHaveText('✕ Already a reference')
+  await expect(page.locator('.drag-ghost')).toHaveClass(/refused/)
+  await page.waitForTimeout(800)                                          // a refused tab does not spring open
+  await expect(tab).not.toHaveClass(/active/)
+  await page.mouse.up()
+  await tab.click()
+  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
+})
+
+/** Press on `from`, carry the tile to `tab` and rest there until its suite is up (D71 spring-loaded tabs); the pointer stays down. */
+async function carryAndHold(page: import('@playwright/test').Page, from: { x: number; y: number }, tab: string, up: string): Promise<void> {
+  const onTab = await centre(page.locator('nav.tabs button.tab', { hasText: tab }))
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
+  await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
+  await expect(page.locator(up)).toBeVisible()
+  await expect(page.locator('.drag-ghost')).toBeVisible()
+}
+
+test('spring-loaded tabs (D71) in Animate and Edit: hold, then drop on the end slot / the empty stage', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  const tile = tiles(page).nth(5)
+  const id = (await tile.getAttribute('data-id'))!
+  await carryAndHold(page, await centre(tile), 'Animate', '.slots.full')
+  const end = page.locator('.slots .slot').nth(1)
+  const onEnd = await centre(end)
+  await page.mouse.move(onEnd.x, onEnd.y, { steps: 8 })
+  await expect(page.locator('.drag-ghost .drop-hint')).toHaveText('✓ Set the end frame')
+  await page.mouse.up()
+  await expect(end.locator('img')).toHaveAttribute('src', new RegExp(id))
+  await expect(page.locator('.slots .slot').nth(0).locator('img')).toHaveCount(0)        // the end slot only
+
+  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await carryAndHold(page, await centre(tiles(page).nth(6)), 'Edit', '.edit-empty')
+  const stage = await centre(page.locator('.edit-empty'))
+  await page.mouse.move(stage.x, stage.y, { steps: 8 })
+  await expect(page.locator('.drag-ghost .drop-hint')).toHaveText('✓ Open in Edit')
+  await page.mouse.up()
+  await page.waitForFunction(() => !!(window as unknown as { __loom2Editor?: { getState: () => { doc?: unknown } } }).__loom2Editor?.getState().doc, null, { timeout: 30_000 })
+})
+
+test('the loupe is the send-to hub (D71): every verb on its bar; narrow, the secondary ones fold into More', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(7).dblclick()
+  const hub = page.locator('.loupe .hub')
+  await expect(hub).toBeVisible()
+  for (const label of ['Keep', 'Reject', 'Rate', 'Edit', 'Reference', 'Animate', 'Re-run (same seed)', 'Variations (new seeds)', 'Duplicate', 'Move to group', 'Show lineage', 'Reveal in folder', 'More'])
+    await expect(hub.getByRole('button', { name: label, exact: true })).toBeVisible()
+  await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a press menu: click opens it
+  await expect(page.locator('.ctx-menu button.item', { hasText: 'As the end frame' })).toBeVisible()
+  await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a second press on the button closes it (Esc would close the loupe too)
+  await expect(page.locator('.ctx-menu')).toHaveCount(0)
+  await page.setViewportSize({ width: 900, height: 800 })
+  await expect(hub.getByRole('button', { name: 'Duplicate', exact: true })).toBeHidden()
+  await expect(hub.getByRole('button', { name: 'More', exact: true })).toBeVisible()
+  await hub.getByRole('button', { name: 'Reference', exact: true }).click()
+  await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)                  // Reference sends it to Generate
+})
+
+type EdWin = { __loom2Editor?: { getState: () => { doc?: { id: string }; tool: string } }; __loom2AiPanel?: { getState: () => { op: string; selMode: string } } }
+const editorTool = (page: import('@playwright/test').Page) => page.evaluate(() => { const w = window as unknown as EdWin; const ed = w.__loom2Editor?.getState(); const ai = w.__loom2AiPanel?.getState()
+  return ed ? { doc: !!ed.doc, tool: ed.tool, op: ai?.op, sel: ai?.selMode } : null })
+
+test('quick actions (D71): "Remove background" in the Inspector reaches Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  await tiles(page).nth(8).click()
+  const card = page.locator('.insp .quick-card', { hasText: 'Remove background' })
+  await expect(card).toBeEnabled()
+  await card.click()
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toEqual({ doc: true, tool: 'ai', op: 'select', sel: 'subject' })
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Edit/)
+  await expect(page.locator('nav.rail button.active[title^="AI"]')).toBeVisible()
+
+  await openApp(page, { suite: 'edit', tool: 'ai', ai: 'upscale' })
+  await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'upscale' })
+})

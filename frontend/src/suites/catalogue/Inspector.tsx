@@ -9,6 +9,7 @@ import { api, http, unwrap } from '../../api/client'
 import type { Asset, LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { runCommand, type MenuItem } from '../../frame/commands'
+import { CommandCard } from '../../frame/CommandButton'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum, type PathStep } from './albumStore'
 import { moveToMenu } from './catalogueCommands'
@@ -230,6 +231,14 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
         </div>
       </Section>
+      {a.kind !== 'video' && <Section id="start" title="Start from this image">
+        <div className="quick-cards compact">
+          <CommandCard id="cat.start.removeBg" label="Remove background" hint="Edit · AI Select · Subject" />
+          <CommandCard id="cat.start.upscale" label="Upscale" hint="Edit · AI Upscale" />
+          <CommandCard id="cat.animate" label="Animate from here" hint="the start frame" />
+          <CommandCard id="cat.variations" label="Variations" hint="new seeds" />
+        </div>
+      </Section>}
       <Section id="lineage" title="Lineage" right={<button className="link" onClick={() => c.openLineage(a.id)}><GitBranch size={12} /> Open tree</button>}><LineagePath a={a} /></Section>
       <Section id="prompt" title="Prompt" fold><PromptBody a={a} /></Section>
       <Section id="details" title="Details" fold><DetailsBody a={a} /></Section>

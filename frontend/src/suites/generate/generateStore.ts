@@ -5,6 +5,8 @@ import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isT2IPreview, type Asset, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
+import type { DragPayload } from '../../frame/drag'
+import { refDrop } from '../../frame/dropRules'
 import { useSession } from '../../store/session'
 
 export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string }
@@ -143,6 +145,18 @@ export interface GenerateState {
 
 let previewTimer: number | null = null
 let previewSeq = 0
+
+/** D71 (P11): references from a drag (the slots, the Generate tab): images only, no duplicates, capped by the model's `max_refs`. */
+export function refDropFor(p: DragPayload) {
+  const g = useGenerate.getState()
+  return refDrop(g.panel.refs.map((r) => r.asset_id), p, useSession.getState().capabilities?.models[g.panel.model_id]?.max_refs ?? 4)
+}
+/** Add a drag's references; a toast says what did not fit or was skipped. */
+export function dropRefs(p: DragPayload): void {
+  const { take, verdict } = refDropFor(p)
+  take.forEach((id) => useGenerate.getState().addRef(id))
+  if (verdict.ok && verdict.label?.includes(' · ')) useSession.getState().toast(verdict.label.replace(/^Add/, 'Added'), 'info')
+}
 
 export const useGenerate = create<GenerateState>()(
   persist(

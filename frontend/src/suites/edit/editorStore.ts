@@ -1,6 +1,7 @@
 // Edit suite state (10): the open document (stack + pixels), view, tools and options, selection, history,
 // and persistence against /documents. Pixels live in LayerPixels (canvas + texture); the store holds references.
 import { create } from 'zustand'
+import { DEV_HOOKS } from '../../devHooks'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import type { DocSummary as ApiDocSummary, Document as ApiDocument, DocumentChangedData, DocumentRecipe, RefineEdgeParams } from '../../api/types'
@@ -31,7 +32,8 @@ export type DocSummary = ApiDocSummary
  *  this is the one place a server document becomes that model (D38: the API side of the boundary is typed). */
 const asStack = (d: ApiDocument): DocumentStack => d as unknown as DocumentStack
 const asBody = (s: DocumentStack): { [key: string]: unknown } => s as unknown as { [key: string]: unknown }
-export type Tool = 'move' | 'marquee' | 'lasso' | 'wand' | 'quick' | 'heal' | 'ai' | 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'crop' | 'hand' | 'zoom'
+import type { Tool } from './tools'
+export type { Tool } from './tools'
 export const TOOL_KEYS: Record<string, Tool> = { v: 'move', m: 'marquee', l: 'lasso', w: 'wand', j: 'heal', a: 'ai', b: 'brush', e: 'eraser', g: 'fill', i: 'eyedropper', c: 'crop', h: 'hand', z: 'zoom' }
 export const BLEND_MODES = ['normal', 'dissolve', 'darken', 'multiply', 'color-burn', 'linear-burn', 'lighten', 'screen', 'color-dodge', 'linear-dodge', 'overlay', 'soft-light', 'hard-light',
   'vivid-light', 'linear-light', 'pin-light', 'hard-mix', 'difference', 'exclusion', 'subtract', 'divide', 'hue', 'saturation', 'color', 'luminosity']
@@ -1710,3 +1712,6 @@ export function canvasBlend(mode: string): GlobalCompositeOperation {
 }
 
 export { walk }
+
+// dev: DevTools, the headed check and the e2e smoke read the store before any canvas exists (the canvas sets __loom2App too)
+if (DEV_HOOKS) (window as unknown as { __loom2Editor?: typeof useEditor }).__loom2Editor = useEditor

@@ -78,6 +78,15 @@ selected" bulk actions when more than one.
 delivers dropped files with their paths, for imports) gives the page no HTML5 drag events. Every drop site (suite tabs, Generate's
 reference slots, Animate's slots, the Edit stage, Places rows, panes, album pages) registers with the manager.
 
+**Drops explain themselves (D71, 2026-10-11).** A target may `describe` the payload: what a drop would do or why it would not. While
+it hovers, the drag ghost shows **✓** with that text ("Add as reference 3 of 4", "Set the end frame", "Add 2 layers at this row · 1 clip
+skipped") or **✕** with the reason ("Clips can't be references", "Already a reference", "All 4 reference slots are full") and a red
+border. The rules are pure functions in `frame/dropRules.ts`; a tile drag carries each item's media (image / clip). Reference drops are
+capped by the model's `max_refs` and a toast says what did not fit. **Spring-loaded suite tabs:** a drag resting on the Edit,
+Generate or Animate tab for 600 ms (a bar fills under the tab) opens that suite and the drag carries on, so a tile reaches a particular
+slot; a quick drop does the tab's own verb (Edit opens the first image, Generate adds references, Animate sets the start or plays a clip).
+Edit's layers list takes tiles too (layers above the row they land on). Press menus that do not fit below their button open above it.
+
 ### 3c. Cross-suite verbs (context menu, Inspector, and keys)
 **Operating rule (D32, 2026-10-05):** every action is reachable with the mouse — an icon/button where the user
 looks (strip, toolbar, panel, Inspector) and/or the **right-click menu of the object** it acts on; keyboard
@@ -92,6 +101,7 @@ open the menu of the focused item.
 | Verb | Key | Effect |
 | --- | --- | --- |
 | Send to Edit | `E` | opens the asset in Edit (creates a document if none) |
+| Start from this image (D71) | — | Remove background (Edit, AI Select · Subject), Upscale (Edit, AI Upscale), Animate from here, Variations — Inspector cards and a tile-menu submenu |
 | Send to Animate as start / end | `Shift+A` / `Shift+Z` | fills the Animate inputs |
 | Use as reference | `R` | adds to Generate's reference slots |
 | Re-run / Variations | `Ctrl+R` / `V` | opens Generate with the asset's parameters (same seed / new seeds) |

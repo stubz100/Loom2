@@ -46,8 +46,10 @@ function resolve(it: MenuItem): Resolved | null {
   return { kind: 'item', label: it.label, icon: it.icon, keys: it.keys, run: it.run, disabled: !!it.disabled, danger: it.danger, checked: it.checked }
 }
 
-/** `parentLeft`: a submenu's parent's left edge — when the submenu does not fit on the right it opens to the parent's left, never over it. */
-function MenuList({ items, x, y, depth, onClose, parentLeft }: { items: MenuItem[]; x: number; y: number; depth: number; onClose: () => void; parentLeft?: number }) {
+/** `parentLeft`: a submenu's parent's left edge — when the submenu does not fit on the right it opens to the parent's left, never over it.
+ *  `openerTop`: a press menu's button top — when the menu does not fit below the button it opens above it, never over it (a press released
+ *  on the button would otherwise choose the item under it: the loupe's bar at the window's foot, D71). */
+function MenuList({ items, x, y, depth, onClose, parentLeft, openerTop }: { items: MenuItem[]; x: number; y: number; depth: number; onClose: () => void; parentLeft?: number; openerTop?: number }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
   const [focus, setFocus] = useState(-1)
@@ -59,9 +61,10 @@ function MenuList({ items, x, y, depth, onClose, parentLeft }: { items: MenuItem
     const r = el.getBoundingClientRect()
     const fits = x + r.width <= window.innerWidth - 6
     const nx = fits ? x : parentLeft !== undefined && parentLeft - r.width + 4 >= 4 ? parentLeft - r.width + 4 : Math.min(x, window.innerWidth - r.width - 6)
-    const ny = Math.min(y, window.innerHeight - r.height - 6)
+    const below = y + r.height <= window.innerHeight - 6
+    const ny = below ? y : openerTop !== undefined && openerTop - r.height - 2 >= 4 ? openerTop - r.height - 2 : Math.min(y, window.innerHeight - r.height - 6)
     setPos({ x: Math.max(4, nx), y: Math.max(4, ny) })
-  }, [x, y, items, parentLeft])
+  }, [x, y, items, parentLeft, openerTop])
   useEffect(() => {
     if (depth !== 0) return
     const onKey = (e: KeyboardEvent) => {
@@ -129,5 +132,5 @@ export function ContextMenuHost() {
     return () => { window.removeEventListener('pointerdown', onDown, { capture: true }); window.removeEventListener('pointerup', onUp, { capture: true }); window.removeEventListener('wheel', close) }
   }, [open, hide])
   if (!open) return null
-  return <MenuList items={open.items} x={open.x} y={open.y} depth={0} onClose={hide} />
+  return <MenuList items={open.items} x={open.x} y={open.y} depth={0} onClose={hide} openerTop={open.opener?.getBoundingClientRect().top} />
 }

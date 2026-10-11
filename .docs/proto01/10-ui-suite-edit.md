@@ -119,6 +119,9 @@ lands as one undo step; AI Select can run it on its result (**refine edge** swit
 selection as a red overlay with the brush. The AI selectors (SAM 3, BiRefNet) live in the `A` tool and the AI panel's **Select** operation.
 
 ### Panel · AI
+**Deep links and quick actions (D71, 2026-10-11):** `?suite=edit&tool=ai&ai=select&sel=subject` (optionally `&asset=<id>`) opens Edit
+with that tool, AI operation and selector chosen (`frame/openWith.ts`); the Catalogue's *Start from this image* cards use the same
+helper. Tiles dropped on the layers list become layers above the row they land on.
 The AI panel is the heart of the suite; it always operates on the **current selection** (or the whole
 document when none) and returns **new layers**.
 

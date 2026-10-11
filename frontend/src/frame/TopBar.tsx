@@ -1,12 +1,14 @@
 import { ChevronDown, Menu } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
 import { runCommand } from './commands'
 import { preloadSuite } from './lazySuite'
 import { THEMES } from './theme'
-import { assetIds, onlyAssets, useDropTarget } from './drag'
+import { onlyAssets, useDropTarget, type DragPayload, type DropVerdict } from './drag'
+import { editOpenDrop, startDrop } from './dropRules'
+import { dropRefs, refDropFor } from '../suites/generate/generateStore'
 
 export const SUITES: { id: Suite; label: string; key: string }[] = [
   { id: 'catalogue', label: 'Catalogue', key: '1' }, { id: 'generate', label: 'Generate', key: '2' }, { id: 'edit', label: 'Edit', key: '3' },
@@ -23,17 +25,43 @@ function useOutside(onClose: () => void) {
   return ref
 }
 
-/** A suite tab; Edit, Generate and Animate take dropped tiles (frame/drag.ts). */
+/** What a quick drop on a suite tab does (D71): Edit opens the first image, Generate adds references (capped), Animate starts. */
+function tabDrop(id: string, p: DragPayload): DropVerdict | null {
+  if (id === 'edit') return editOpenDrop(p).verdict
+  if (id === 'generate') return refDropFor(p).verdict
+  if (id === 'animate') return startDrop(p, { tab: true }).verdict
+  return null
+}
+
+const SPRING_MS = 600
+
+/** A suite tab; Edit, Generate and Animate take dropped tiles (frame/drag.ts). D71: a drag resting on one for 600 ms switches to that suite
+ *  and carries on, so a tile reaches a particular slot there; a quick drop does the tab's own verb. */
 function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: boolean; onOpen: () => void }) {
-  const takes = t.id === 'edit' || t.id === 'generate' || t.id === 'animate'
-  const { ref, over } = useDropTarget((p) => takes && onlyAssets(p), (p) => {
-    const ids = assetIds(p)
-    if (t.id === 'edit') void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(ids[0]))
-    else if (t.id === 'generate') void import('../suites/generate/generateStore').then((m) => ids.forEach((id) => m.useGenerate.getState().addRef(id)))
-    else if (t.id === 'animate') void import('../suites/animate/animateStore').then((m) => { const a = m.useAnimate.getState(); a.setStart(ids[0], true); if (ids[1]) a.setEnd(ids[1]) })
-  })
+  const { ref, over } = useDropTarget((p) => onlyAssets(p) && !!tabDrop(t.id, p)?.ok, (p) => {
+    if (t.id === 'edit') { const id = editOpenDrop(p).open; if (id) void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }
+    else if (t.id === 'generate') dropRefs(p)
+    else if (t.id === 'animate') {
+      const r = startDrop(p, { tab: true })
+      void import('../suites/animate/animateStore').then((m) => {
+        const a = m.useAnimate.getState()
+        if (r.play) void a.loadAsset(r.play).then((asset) => {             // a clip plays (as the tile menu's Animate does)
+          const clip = (asset?.params as { clip_id?: string } | undefined)?.clip_id
+          useSession.getState().setSuite('animate'); if (clip) void a.loadClips().then(() => a.select(clip))
+        })
+        else if (r.start) { a.setStart(r.start, true); if (r.end) a.setEnd(r.end) }
+      })
+    }
+  }, (p) => { const v = tabDrop(t.id, p); return v && (active || !v.ok ? v : { ...v, label: `${v.label} — or hold to open ${t.label}` }) })
+  const open = useRef(onOpen)
+  useLayoutEffect(() => { open.current = onOpen })                       // TopBar re-renders on every session change: keep the timer running
+  useEffect(() => {
+    if (!over || active) return
+    const timer = window.setTimeout(() => open.current(), SPRING_MS)
+    return () => window.clearTimeout(timer)
+  }, [over, active])
   return (
-    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}`} onClick={onOpen} onPointerEnter={() => preloadSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
+    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}${over && !active ? ' spring' : ''}`} onClick={onOpen} onPointerEnter={() => preloadSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
       {t.label}<kbd>Ctrl+{t.key}</kbd>
     </button>
   )

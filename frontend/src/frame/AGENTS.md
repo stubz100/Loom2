@@ -43,9 +43,12 @@ delivers **no HTML5 drag events inside the page**. All internal drags use the po
 
 - sources call `beginDrag(e, () => payload)` (starts after 5 px; a click stays a click), or `carry(payload, x, y)` to hand over a pointer that
   is already moving (album pages do this when the pointer leaves the page);
-- targets use `useDropTarget(accept, drop)` → `{ref, over}`, or `registerDropTarget(el, {accept, drop, over})`;
-- payloads are `{items: [{kind: 'asset' | 'group', id}], from?, thumb?, label?}`; `assetIds` / `onlyAssets` help; Esc cancels; the click after a
-  drop is swallowed.
+- targets use `useDropTarget(accept, drop, describe?)` → `{ref, over}`, or `registerDropTarget(el, {accept, drop, over, describe})`;
+- payloads are `{items: [{kind: 'asset' | 'group', id, media?}], from?, thumb?, label?}` — a source that knows the asset sets `media`
+  (`'image' | 'video'`); `assetIds` / `onlyAssets` help; Esc cancels; the click after a drop is swallowed.
+- **D71:** `describe(payload) → {ok, label?, reason?}` is shown on the ghost (✓ label / ✕ reason). Put the rule in `dropRules.ts` (pure,
+  unit-tested) and use it for `accept`, `drop` and `describe` alike, so what the ghost says is what the drop does. A refusing target
+  with a reason does not block an accepting parent (`resolveTarget`).
 
 Current drop sites: TopBar suite tabs (Edit opens, Generate adds references, Animate sets start/end), Generate reference slots, Animate
 slots and beats, the Edit canvas and empty stage, Places rows, pane bodies, album pages.

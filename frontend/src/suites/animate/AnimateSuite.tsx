@@ -6,7 +6,7 @@ import { Lock, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
-import { CommandButton, CommandRow } from '../../frame/CommandButton'
+import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
@@ -17,7 +17,8 @@ import { playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
 import { Player } from './Player'
 import './animate.css'
-import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
+import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
+import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
 
 const an = () => useAnimate.getState()
 const EMPTY_PINS: { frame: number; asset_id: string }[] = []
@@ -27,7 +28,11 @@ function Slot({ which }: { which: 'start' | 'end' }) {
   const id = useAnimate((s) => s.panel[which])
   const asset = useAnimate((s) => (id ? s.assets[id] : undefined))
   const set = (v: string | null) => (which === 'start' ? an().setStart(v) : an().setEnd(v))
-  const { ref, over } = useDropTarget(onlyAssets, (p) => { const ids = assetIds(p); set(ids[0]); if (which === 'start' && ids[1] && !an().panel.end) an().setEnd(ids[1]) })
+  const verdict = (p: DragPayload) => (which === 'start' ? startDrop(p) : endDrop(p))   // D71: clips are not frames; the ghost says so
+  const { ref, over } = useDropTarget((p) => onlyAssets(p) && verdict(p).verdict.ok, (p) => {
+    if (which === 'end') { set(endDrop(p).end ?? null); return }
+    const r = startDrop(p); set(r.start ?? null); if (r.end && !an().panel.end) an().setEnd(r.end)
+  }, (p) => verdict(p).verdict)
   return (
     <div ref={ref} className={`slot${over ? ' over' : ''}`}
       title={which === 'start' ? 'Start frame: drop a Catalogue tile, or Shift+A on a tile in the Catalogue' : 'End frame (optional): drop a tile, or Shift+Z in the Catalogue — enables first/last-frame mode'}>
@@ -49,7 +54,7 @@ function InputsTab() {
   const beats = !!cur?.recipes.beats                                       // D65: keyframe beats where the spec says so
   const beatModel = byOrder(caps?.models).find(([, m]) => m.recipes.beats)?.[1]
   const cfgPresets = Object.values(cur?.preset_params ?? {}).filter((x) => (x.cfg_high ?? 1) > 1 || (x.cfg_low ?? 1) > 1).map((x) => x.label.split(' · ')[0])
-  const { ref: beatRef, over: beatOver } = useDropTarget(onlyAssets, (d) => { const ids = assetIds(d); ids.forEach((id, k) => an().addBeat(id, Math.round(an().panel.frames * (k + 1) / (ids.length + 1)))) })
+  const { ref: beatRef, over: beatOver } = useDropTarget((d) => onlyAssets(d) && beatDrop(d).verdict.ok, (d) => { const ids = beatDrop(d).take; ids.forEach((id, k) => an().addBeat(id, Math.round(an().panel.frames * (k + 1) / (ids.length + 1)))) }, (d) => beatDrop(d).verdict)
   return (
     <div className="anim-form">
       <div className="slots full"><Slot which="start" /><span className="slot-swap"><CommandButton id="anim.swap" /></span><Slot which="end" /></div>
@@ -430,6 +435,7 @@ function Stage() {
   const frame = useAnimate((s) => s.frame)
   const onion = useAnimate((s) => s.onion)
   const running = useSession((s) => Object.values(s.jobs).some((j) => j.kind === 'i2v' && j.status === 'running'))
+  const startSet = useAnimate((s) => !!s.panel.start)
   useEffect(() => { if (project?.open) void an().loadClips() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // deep link ?clip=<id> (the headed check and the verification loop)
   useEffect(() => { const q = new URLSearchParams(location.search).get('clip'); if (q && clips.some((c) => c.id === q) && an().current !== q) an().select(q) }, [clips])
@@ -438,7 +444,8 @@ function Stage() {
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
-        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : 'set a start frame (Shift+A on a Catalogue tile, or drop it on the Inputs slot), write the motion, Animate ▶'}</div>
+        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : <>set a start frame (Shift+A on a Catalogue tile, or drop it on the Inputs slot), write the motion, Animate ▶
+          {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Catalogue" /></div>}</>}</div>
           : view === 'player' ? <Player clip={clip} frame={frame} onion={onion} /> : view === 'filmstrip' ? <Filmstrip clip={clip} /> : <Compare clip={clip} />}
       </div>
       {clip && <Transport clip={clip} />}

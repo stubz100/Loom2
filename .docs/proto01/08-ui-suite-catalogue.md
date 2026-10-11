@@ -64,6 +64,13 @@ Add to collection, Delete); zoom slider (tile 96–512 px) and Fit/Fill toggle f
   with a ✎ badge.
 - **Loupe** (`Enter` / double-click): fills the Stage; zoom/pan at any scale (1:1, fit, Ctrl+wheel);
   prev/next (`←/→`); facts strip (model · size · seed · time · state); `C` pins for compare; `Esc` back.
+  **Send-to hub (D71, 2026-10-11):** under the facts, one bar carries every verb of the tile menu — Keep / Reject / Clear, Rate ▾,
+  Edit, Reference, Animate ▾ (start / end), Re-run, Variations, Duplicate, Move to group ▾, Lineage, Reveal, Pin — and More ▾ (the whole
+  tile menu). Below 760 px the secondary verbs fold into More; below 480 px the bar is icons only. A press on the bar selects the
+  loupe's asset first, as its right-click and keys do.
+- **Empty states and quick actions (D71):** an empty library shows cards — Generate an image · Import files · New document · Open a
+  project; the Inspector of one image has **Start from this image** (Remove background → Edit with AI Select · Subject, Upscale →
+  Edit's AI Upscale, Animate from here, Variations). Every card is a registry command (palette, D32 audit).
 - **Compare**: 2-up or 4-up with locked zoom/pan; A/B wipe slider; "difference" toggle; swap (`Tab`);
   comparing a frame against its clip's start/end stills is supported.
 

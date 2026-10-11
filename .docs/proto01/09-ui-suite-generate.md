@@ -93,7 +93,8 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
 ### 3d. References (FLUX.2 unified editing) — inside the Prompt tab since 2026-10-06
 Up to 4 (Klein) / 10 (dev) numbered slots in a compact grid directly under `scene` (also shown in the JSON and
 Text modes); drop Catalogue tiles or press `R` on a selection. Each slot: thumbnail, order number (the prompt refers
-to "reference image 1"), remove, move left; right-click: remove / move first / left / right / clear all. Downscale
+to "reference image 1"), remove, move left; right-click: remove / move first / left / right / clear all. A drop is capped by the model's
+`max_refs` (clips and references already present are skipped) and says so on the drag ghost and in a toast (D71). Downscale
 select (≤ 512² / 768² / 1024² / original) with the token-cost hint ("a 1024² reference ≈ 4 096 tokens"). Klein 9B-KV
 is suggested when ≥ 2 references are present.
 

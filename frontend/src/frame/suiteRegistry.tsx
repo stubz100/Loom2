@@ -49,6 +49,8 @@ export const setRailTab = (suite: string, tab: string) => useRailState.getState(
   const q = new URLSearchParams(location.search)
   const s = q.get('suite'), t = q.get('tab')
   if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(s, t)
+  // D71: ?suite=edit&tool=ai&ai=select[&sel=subject][&asset=<id>] — Edit with that tool / AI operation chosen (frame/openWith.ts)
+  if (q.get('tool') || q.get('ai')) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })
 }
 
 export function useSuiteRail() {

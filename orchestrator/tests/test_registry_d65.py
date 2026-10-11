@@ -38,7 +38,7 @@ recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"] }
 inputs = { refs_max = 4 }
 geometry = { size_mult = 16, tiers = { draft = [1280, 720] } }
 estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }
-weight = { name = "flux-2-klein-9b-test.safetensors", folder = "diffusion_models", role = "transformer", license = "test", variants = ["full"] }
+weight = { name = "flux-2-klein-9b-test.safetensors", folder = "diffusion_models", role = "transformer", license = "test", variants = ["full", "open"] }
 '''
 
 
@@ -85,7 +85,7 @@ def test_a_spec_file_adds_a_model_without_code(extra_specs: Path, tmp_path: Path
         caps = cl.get("/capabilities").json()
         m = caps["models"]["klein-9b-test"]
         assert m["label"] == "Klein 9B test" and m["order"] == 9 and m["recipes"]["t2i"] and m["license"] == "test"
-        assert caps["defaults"]["t2i"] == "flux2-dev-fp8mixed"                      # the defaults did not move
+        assert caps["defaults"]["t2i"] == registry.default_model("t2i", caps["variant"]) != "klein-9b-test"   # the defaults did not move
 
 
 def test_size_policy_answers_a_field_named_422(tmp_path: Path):
@@ -94,7 +94,8 @@ def test_size_policy_answers_a_field_named_422(tmp_path: Path):
     app = create_app(state)
     with TestClient(app, headers={"X-Loom-Token": app.state.services.app.token}) as cl:
         assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
-        bad = {"kind": "t2i", "prompt_text": "x", "width": 950, "height": 544, "size_policy": "error"}
+        t2i = cl.get("/capabilities").json()["defaults"]["t2i"]                      # the variant's default model (CI runs open and full)
+        bad = {"kind": "t2i", "model_id": t2i, "prompt_text": "x", "width": 950, "height": 544, "size_policy": "error"}
         for r in (cl.post("/jobs", json={"recipe": bad}), cl.post("/recipes/preview", json={"recipe": bad})):
             assert r.status_code == 422
             d = r.json()["detail"]

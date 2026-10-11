@@ -68,5 +68,6 @@ def test_the_edit_ai_route_sets_the_origin(tmp_path: Path):
         r = c.post(f"/documents/{did}/ai", json={"recipe": {"kind": "segment", "mode": "subject"}})
         assert r.status_code == 200, r.text
         assert r.json()["jobs"][0]["origin"] == {"suite": "edit", "surface": "ai", "ref": did, "payload": None}
-        g = c.post("/jobs", json={"recipe": {"kind": "t2i", "prompt_text": "x"}, "stage": True, "origin": {"suite": "animate", "surface": "clip", "ref": "clp_1"}})
+        t2i = c.get("/capabilities").json()["defaults"]["t2i"]                             # the variant's default (dev is refused under open)
+        g = c.post("/jobs", json={"recipe": {"kind": "t2i", "model_id": t2i, "prompt_text": "x"}, "stage": True, "origin": {"suite": "animate", "surface": "clip", "ref": "clp_1"}})
         assert g.status_code == 200 and g.json()["jobs"][0]["origin"]["ref"] == "clp_1"

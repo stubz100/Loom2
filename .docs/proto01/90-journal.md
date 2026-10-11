@@ -2810,3 +2810,26 @@ split by file so that no two hands touched the same module.
   last two files (`--fail-over PCT`).
 - **CI:** `npm test` and `npm run build:e2e && npm run test:e2e` per variant (results uploaded on failure). Checks: 223 offline,
   122 unit, smoke 6/6, settings audit 154 / 0, literal check 0, API current, lint 100 / 0 errors. **H3 (P9, P6) closed.**
+
+## 2026-10-11 11:08 — H4 opens: D69–D70 recorded; P10 idle pre-save in Edit (D70) built
+
+- **Decisions:** D69 (P5 keep-alive stages, release policy, lazy suites) and D70 (P10 idle pre-save) entered in 13 before the work.
+- **Slice 1 — what an AI job reads:** the open document. `DocumentStore.get` serves an open document from memory; the editor's stack PUT
+  and layer-pixel PUTs update it; `prepare_document` flattens it. `test_presave_d70.py`: after a layer upload and a stack PUT, with no
+  `POST /save`, the flatten shows the upload and the .ora bytes are unchanged until a save. So the idle flush never writes the .ora.
+- **Store (editorStore):** `sync()` — the stack PUT (adopting the server's new revision, so the next PUT is not a 409; the C1 merge path
+  unchanged) and only the dirty layers, two at a time, plus the selection when its version moved; no .ora, no toast; one flight at a time
+  (waiters retry a failed one). `save({quiet})` = sync, then `POST /save` only when the .ora lags (`fileDirty`), the toast only for user
+  saves; autosave is quiet. **Idle flush:** 1.5 s after the last revision change, never during a pointer gesture (the canvas reports
+  `setInteracting`) or another flight. AI verbs, Refine Edge and the compare sync instead of saving. A document opens with its selection
+  marked as already on the server. **Deviation from 08:** no `requestAnimationFrame` yield before the AI post — fetch does not block
+  painting, and the yield cost ≈ 50 ms behind a busy frame on the headed run (click → post 63 ms → 31 ms).
+- **Headed `aiclick`** (new): clean document, Select all then Inpaint — **31 ms** click → `/ai` request (budget 50; includes the selection
+  upload made 0.6 s earlier); a 3840 × 2160 document with a brush stroke 2 s earlier — **1.6 ms** (budget 100; the idle flush had sent
+  everything); no "Saved" toast. The candidate strip needs a live engine — not checked here. The mode also found a server bug: `POST
+  /documents` with `background: "white"` reached the compositor and answered 500 — the field (and the document model) now accept
+  `transparent` or `#rrggbb` only (422 otherwise; regression test).
+- **Tests:** vitest `presave.test.ts` (6: the fast path sends nothing; sync sends the stack and only dirty layers, adopts the revision,
+  writes no .ora, no toast; a stroke during a flight re-dirties and rides the next sync; concurrent syncs share one flight; save writes the
+  .ora only when it lags and a quiet save toasts nothing; the selection is uploaded once per version). 225 offline (full and open), 128
+  unit; headed masks, layers, selection, props, tour, heal pass; lint 100; API regenerated.

@@ -13,7 +13,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
-import { findNode, transformPreview, useEditor, type MaskRef, type Node } from './editorStore'
+import { findNode, transformPreview, useEditor, type MaskRef, type Node, setInteracting } from './editorStore'
 import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
@@ -702,6 +702,7 @@ export function EditorCanvas() {
     }
 
     const onDown = (e: PointerEvent) => {
+      setInteracting(true)                                             // D70: no idle flush mid-gesture
       if (e.button !== 0 && e.button !== 1) return
       const st = useEditor.getState()
       if (!st.doc) return
@@ -823,6 +824,7 @@ export function EditorCanvas() {
       if (drag.kind === 'gradient') { drag.last = p; drawGuide(drag.start, p); return }
     }
     const onUp = (e: PointerEvent) => {
+      setInteracting(false)
       const st = useEditor.getState()
       if (!drag) return
       host.releasePointerCapture(e.pointerId)

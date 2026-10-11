@@ -122,6 +122,11 @@ selection as a red overlay with the brush. The AI selectors (SAM 3, BiRefNet) li
 The AI panel is the heart of the suite; it always operates on the **current selection** (or the whole
 document when none) and returns **new layers**.
 
+**Click to job (D70, 2026-10-11).** A job reads the server's *open* document, not the saved .ora. The editor keeps that document current in
+the background: 1.5 s after the last change (never mid-stroke) it sends the stack, the dirty layers and a changed selection. An AI click
+then only waits for what changed since — 31 ms on a clean document, under 2 ms after an edit two seconds earlier — and shows no "Saved"
+toast; the .ora is written by Save, autosave (quiet) and close.
+
 | Operation | Modes | Controls | Result |
 | --- | --- | --- | --- |
 | **Inpaint** | Fill (Klein + LanPaint, default) · Fill-Match (Klein ICM/ReferenceLatent, conservative texture continuation) · Fill Hero (FLUX.2 dev + LanPaint, slow) · Remove (Klein ICM with the hole neutralised in the reference and a background-only prompt, E8b) — E8 2026-10-05 dropped Fill Pro (FLUX.1 Fill) and deferred Edit by instruction (Qwen) post-MVP | encoder (D31: Q4_K_M GGUF default / fp8), prompt (text or compact tree), candidates 1–4 (**default 4 on Klein, 2 on dev**, D22), seed, **region**: context margin % (default 25), min working size (auto-upscale small regions to ≥ 1024 px), paste-back feather px, "match colour to surroundings", mask expand px | N candidate layers in a **variant strip** over the canvas; pick one (`1–4`, Enter) → kept as a layer with mask; others discarded (or "keep all hidden") |

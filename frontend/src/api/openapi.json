@@ -1708,6 +1708,7 @@
         "properties": {
           "background": {
             "default": "transparent",
+            "pattern": "^(transparent|#[0-9a-fA-F]{6})$",
             "title": "Background",
             "type": "string"
           },
@@ -2021,6 +2022,7 @@
         "properties": {
           "background": {
             "default": "transparent",
+            "pattern": "^(transparent|#[0-9a-fA-F]{6})$",
             "title": "Background",
             "type": "string"
           },
@@ -2172,6 +2174,7 @@
         "properties": {
           "background": {
             "default": "transparent",
+            "pattern": "^(transparent|#[0-9a-fA-F]{6})$",
             "title": "Background",
             "type": "string"
           },

@@ -117,7 +117,7 @@ class Document(BaseModel):
     name: str = "Untitled"
     w: int = 1920
     h: int = 1080
-    background: str = "transparent"      # or "#rrggbb"
+    background: str = Field("transparent", pattern=r"^(transparent|#[0-9a-fA-F]{6})$")   # or "#rrggbb" (a name like "white" was a 500 in the compositor)
     source_asset_id: str | None = None
     created_at: str = Field(default_factory=utc_now)
     saved_at: str | None = None

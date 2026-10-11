@@ -2080,6 +2080,56 @@ def main() -> int:
             check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "aiclick":
+            # D70: an AI click posts the job at once — no full save, no "Saved" toast; a 4K document edited 2 s earlier only waits for
+            # what the idle pre-save has not sent yet. Timed in the page: performance.now() before the click → the /ai request's start.
+            S = STORE
+            def ai_click(label: str, budget_ms: float) -> None:
+                cdp.eval("window.__loom2Session.getState().setUi({ panelOpen: true }); 1")
+                cdp.eval("(() => { const b = [...document.querySelectorAll('.rail button')].find((x) => (x.title || '').startsWith('AI')); b && !b.classList.contains('active') && b.click(); return 1 })()")
+                time.sleep(0.4)
+                cdp.eval("(() => { const b = [...[...document.querySelectorAll('.panel .body .segmented')][0].querySelectorAll('button')].find((x) => x.textContent === 'Inpaint'); b && b.click(); return 1 })()")
+                time.sleep(0.4)
+                xy = json.loads(cdp.eval("JSON.stringify((() => { const b = [...document.querySelectorAll('.panel .body button.primary')].find((x) => x.textContent.startsWith('AI')); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })())"))
+                check(xy is not None, f"{label}: the AI button is enabled")
+                if xy is None:
+                    return
+                cdp.eval("performance.clearResourceTimings(); window.__toasts0 = window.__loom2Session.getState().toasts.length; 1")
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=xy[0], y=xy[1])
+                cdp.eval("window.__t0 = performance.now(); 1")
+                cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=xy[0], y=xy[1], button="left", buttons=1, clickCount=1)
+                cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=xy[0], y=xy[1], button="left", buttons=0, clickCount=1)
+                t1 = time.time()
+                ms = None
+                while time.time() - t1 < 10 and ms is None:
+                    ms = cdp.eval("(() => { const e = performance.getEntriesByType('resource').find((r) => { const p = new URL(r.name).pathname; return p.startsWith('/documents/') && p.endsWith('/ai') }); return e ? e.startTime - window.__t0 : null })()")
+                    time.sleep(0.05)
+                time.sleep(0.5)
+                toasts = json.loads(cdp.eval("JSON.stringify(window.__loom2Session.getState().toasts.slice(window.__toasts0).map((t) => t.text))"))
+                check(ms is not None and ms <= budget_ms and "Saved" not in toasts, f"{label}: click → job posted in {ms if ms is None else round(ms, 1)} ms (≤ {budget_ms}), toasts {toasts}")
+            cdp.eval(f"window.__loom2Commands.runCommand('edit.sel.all'); 1"); time.sleep(0.6)
+            ai_click("clean document", 50)
+            # a 3840×2160 document, a brush stroke, 2 s, the click
+            d4 = api("POST", "/documents", {"name": "4k", "w": 3840, "h": 2160, "background": "#ffffff"})
+            cdp.eval(f"{S}.openDocument({json.dumps(d4['id'])}); 1")
+            t1 = time.time()
+            while time.time() - t1 < 30 and not cdp.eval(f"!!({S}.doc && {S}.doc.id === {json.dumps(d4['id'])} && !{S}.loading)"):
+                time.sleep(0.2)
+            time.sleep(1.0)
+            cdp.eval(f"{S}.setTool('brush'); window.__loom2Commands.runCommand('edit.layer.new'); 1"); time.sleep(0.5)
+            box = json.loads(cdp.eval("JSON.stringify((() => { const r = document.querySelector('.edit-canvas').getBoundingClientRect(); return [r.left, r.top, r.width, r.height] })())"))
+            x0, y0 = box[0] + box[2] * 0.3, box[1] + box[3] * 0.5
+            cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0, y=y0)
+            cdp.call("Input.dispatchMouseEvent", type="mousePressed", x=x0, y=y0, button="left", buttons=1, clickCount=1)
+            for i in range(1, 25):
+                cdp.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0 + i * box[2] * 0.015, y=y0 + (i % 5) * 4, button="left", buttons=1)
+                time.sleep(0.01)
+            cdp.call("Input.dispatchMouseEvent", type="mouseReleased", x=x0 + 24 * box[2] * 0.015, y=y0, button="left", buttons=0, clickCount=1)
+            time.sleep(2.0)
+            cdp.eval(f"window.__loom2Commands.runCommand('edit.sel.all'); 1"); time.sleep(0.6)
+            ai_click("4K layer painted 2 s earlier", 100)
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n" + x for x in errs))
         elif mode == "media":
             # D67: <img> / <video> carry the read-only media key — the Catalogue's thumbnails load, none answer 401 (a broken image)
             cdp.eval("window.__loom2Session.getState().setSuite('catalogue'); 1")

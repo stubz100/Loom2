@@ -132,7 +132,11 @@ export interface EditorState {
   closeDocument: () => void
   listDocuments: () => Promise<DocSummary[]>
   deleteDocument: (id: string) => Promise<void>
-  save: () => Promise<boolean>
+  /** D70: the stack and the dirty layers to the server's open document (what AI jobs, Refine Edge and the compare read) — no .ora
+   * write, no toast; concurrent calls share one flight. */
+  sync: () => Promise<boolean>
+  /** sync, then write the .ora when it lags the open document; `quiet` (autosave) shows no "Saved" toast. */
+  save: (opts?: { quiet?: boolean }) => Promise<boolean>
   resync: () => Promise<void>
   saveToCatalogue: () => Promise<void>
   exportPng: () => Promise<void>
@@ -305,6 +309,15 @@ const maskEditExtras = (tool: Tool): { tool?: Tool } => {
   return PAINTS_MASK.includes(tool) ? {} : { tool: 'brush' }
 }
 let openSeq = 0                                                   // C31: the latest openDocument() wins; a superseded load frees what it fetched
+// D70 idle pre-save: one flush in flight at a time; `fileDirty` — the server's open document has changes its .ora does not (synced, not
+// saved); the selection is uploaded only when its LayerPixels version (app-wide monotonic, F7) moved; strokes are never flushed half-way.
+let flushing: Promise<boolean> | null = null
+let fileDirty = false
+let selectionUploaded: string | null = null
+let interacting = false
+/** The canvas says when a pointer gesture is under way: the idle flush waits for it to end (a half-painted layer is never uploaded). */
+export const setInteracting = (on: boolean) => { interacting = on }
+const selectionKey = (sel: LayerPixels | null) => (sel ? `${sel.width}x${sel.height}:${sel.version}` : 'none')
 const download = (blob: Blob, name: string) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000) }
 const maskOffset = (n: Node) => ({ x: (n.mask?.linked ? (n.x ?? 0) : 0) + (n.mask?.x ?? 0), y: (n.mask?.linked ? (n.y ?? 0) : 0) + (n.mask?.y ?? 0) })
 
@@ -393,10 +406,13 @@ export const useEditor = create<EditorState>()(
         const { doc, selection } = get()
         const b = useSession.getState().backend!
         if (!doc) return
+        const key = `${doc.id}:${selectionKey(selection)}`
+        if (key === selectionUploaded) return                              // D70: the server has this selection already
         const body = selection ? (selection.toRaw() as BodyInit) : new Uint8Array(0)
         const r0 = await fetch(`http://${b.host}:${b.port}/documents/${doc.id}/selection?w=${selection?.width ?? 0}&h=${selection?.height ?? 0}`,
           { method: 'PUT', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/octet-stream' }, body })
         if (!r0.ok) throw new Error(`selection upload ${r0.status}`)
+        selectionUploaded = key
       }
       /** D43: the selection canvas an undo / redo restores into — a blank one when there is none (no selection = all zero). */
       const selectionFor = (e: HistoryEntry): LayerPixels | null => {
@@ -552,8 +568,10 @@ export const useEditor = create<EditorState>()(
           const s = useSession.getState()
           if (!doc) return
           try {
-            if (!(await get().save())) return                               // the job reads the saved document
+            if (!(await get().sync())) return                               // D70: the job reads the open document — no .ora write, no toast
             await uploadSelection()
+            // no frame yield before the post (08 planned one): fetch does not block painting, so the busy state paints while the request
+            // is in flight — a yield only waited behind a busy frame (≈ 50 ms on the headed aiclick run)
             const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
             set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null })
@@ -583,6 +601,7 @@ export const useEditor = create<EditorState>()(
             if (transformOpen()) return                                   // F10
             const sel = LayerPixels.fromRaw(w, h, bytes, 1)
             get().editSelection(label, () => { get().selection?.destroy(); set({ selection: sel, quickMask: false }) })
+            if (get().selection === sel) selectionUploaded = `${doc.id}:${selectionKey(sel)}`   // D70: it came from the server
             if (label === 'AI select') useSession.getState().toast('AI Select: selection updated', 'success')
           } catch (e) { useSession.getState().toast(`Could not load the selection: ${(e as Error).message}`, 'error') }
         },
@@ -719,7 +738,7 @@ export const useEditor = create<EditorState>()(
 
         /** GPU composite vs the orchestrator's exact flatten (10 §14 item 1); PixiJS un-premultiplies on extract. */
         compareWithExact: async () => {
-          if (get().docDirty && !(await get().save())) return null       // the exact flatten runs on the saved document
+          if (!(await get().sync())) return null                          // D70: the exact flatten reads the open document
           const { doc, extractor } = get()
           const c = doc && extractor ? extractor() : null
           if (!doc || !c) return null
@@ -757,6 +776,7 @@ export const useEditor = create<EditorState>()(
             const candidates = top?.kind === 'group' && top.name.startsWith('AI ') && (top.children?.length ?? 0) > 1 && top.children!.filter((c) => c.visible).length <= 1
               ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
             endTransformState()
+            fileDirty = false; selectionUploaded = `${doc.id}:none`        // D70: a document opens in sync with its .ora (its selection loads after)
             set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1,
               lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: first ? [first] : [], anchorId: first, blendPreview: null })   // F17: nothing of the last document's gestures
             get().requestFit()
@@ -814,12 +834,16 @@ export const useEditor = create<EditorState>()(
           useSession.getState().toast('Document deleted', 'info')
         },
 
-        save: async () => {
+        sync: async () => {
+          while (flushing) await flushing.catch(() => false)               // one flight at a time; a later call syncs what came after (and retries a failed one)
+          const run = async (): Promise<boolean> => {
           const { doc, pixels, masks } = get()
           if (!doc) return false
+          const layerDirty = [...pixels.values(), ...masks.values()].some((lp) => lp.dirty)
+          if (!get().docDirty && !layerDirty) { await uploadSelection(); return true }   // D70 fast path: at most a changed selection
           // B14: clear the flags *before* the uploads — a stroke that lands meanwhile re-dirties the document and its
-          // layer and rides the next save; a failure below puts the document flag back
-          set({ saving: true, docDirty: false })
+          // layer and rides the next sync; a failure below puts the document flag back
+          set({ docDirty: false })
           try {
             type Reply = DocumentStack & { missing_pixels: string[]; missing_masks: string[] }
             const put = async (s: DocumentStack): Promise<Reply> => {
@@ -839,24 +863,48 @@ export const useEditor = create<EditorState>()(
             }
             const rasters = new Set<string>(), masked = new Set<string>()
             walk(stack.layers, (n) => { if (n.kind === 'raster') rasters.add(n.id); if (n.mask) masked.add(n.id) })
-            const upload = async (map: Map<string, LayerPixels>, kind: 'image' | 'mask', inStack: Set<string>, missing: string[] | undefined) => {
+            const cur0 = get().doc                                 // the server is at the PUT's revision now: the next PUT builds on it
+            if (cur0 && cur0.id === doc.id) set({ doc: { ...cur0, revision: server.revision } })
+            const jobs: (() => Promise<void>)[] = []
+            const queue = (map: Map<string, LayerPixels>, kind: 'image' | 'mask', inStack: Set<string>, missing: string[] | undefined) => {
               const need = new Set(missing ?? [])
               for (const [lid, lp] of map) {
                 if (!inStack.has(lid)) continue                      // B12: deleted here (kept for undo) and dropped by the server
                 if (!lp.dirty && !need.has(lid)) continue            // B15: the server has no bytes for it → upload even when clean
                 lp.dirty = false
-                try { await putRaw(doc.id, lid, kind, lp) } catch (e) { lp.dirty = true; throw e }
+                jobs.push(async () => { try { await putRaw(doc.id, lid, kind, lp) } catch (e) { lp.dirty = true; throw e } })
               }
             }
-            await upload(pixels, 'image', rasters, server.missing_pixels)
-            await upload(masks, 'mask', masked, server.missing_masks)
-            const saved = asStack(await unwrap(http.POST('/documents/{doc_id}/save', { params: { path: { doc_id: doc.id } } })))
-            const cur = get().doc
-            if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at, revision: saved.revision } })
-            useSession.getState().toast('Saved', 'success')
+            queue(pixels, 'image', rasters, server.missing_pixels)
+            queue(masks, 'mask', masked, server.missing_masks)
+            const lanes = Array.from({ length: Math.min(2, jobs.length) }, async () => { for (let j = jobs.shift(); j; j = jobs.shift()) await j() })   // D70: two at a time
+            await Promise.all(lanes)
+            fileDirty = true
+            await uploadSelection()                                // D70: the selection rides the flush (versioned: skipped when unchanged)
             return true
           } catch (e) {
             set({ docDirty: true })
+            throw e
+          }
+          }
+          flushing = run()
+          try { return await flushing } finally { flushing = null }
+        },
+        save: async (opts = {}) => {
+          const { doc } = get()
+          if (!doc) return false
+          set({ saving: true })
+          try {
+            if (!(await get().sync())) return false
+            if (fileDirty) {                                         // D70: the .ora is written only when it lags the open document
+              const saved = asStack(await unwrap(http.POST('/documents/{doc_id}/save', { params: { path: { doc_id: doc.id } } })))
+              fileDirty = false
+              const cur = get().doc
+              if (cur && cur.id === doc.id) set({ doc: { ...cur, saved_at: saved.saved_at, revision: saved.revision } })
+            }
+            if (!opts.quiet) useSession.getState().toast('Saved', 'success')
+            return true
+          } catch (e) {
             useSession.getState().toast(`Save failed: ${(e as ApiError).detail ?? (e as Error).message}`, 'error')
             return false
           } finally { set({ saving: false }) }
@@ -1555,7 +1603,7 @@ export const useEditor = create<EditorState>()(
           const s = useSession.getState()
           if (!doc || !selection) { s.toast('Refine Edge needs a selection', 'info'); return }
           try {
-            if (!(await get().save())) return                               // the guide is the server's exact composite
+            if (!(await get().sync())) return                               // the guide is the server's exact composite (open document, D70)
             await uploadSelection()
             const r = await unwrap(http.POST('/documents/{doc_id}/selection/refine', { params: { path: { doc_id: doc.id } }, body: get().refineParams() }))
             await get().loadSelectionFromServer('refine edge')
@@ -1639,7 +1687,17 @@ let autosaveStarted = false
 export function ensureEditorAutosave(): void {
   if (autosaveStarted) return
   autosaveStarted = true
-  setInterval(() => { const st = useEditor.getState(); if (st.doc && st.docDirty && !st.saving) void st.save() }, 120_000)
+  setInterval(() => { const st = useEditor.getState(); if (st.doc && (st.docDirty || fileDirty) && !st.saving) void st.save({ quiet: true }) }, 120_000)
+  // D70 idle pre-save: 1.5 s after the last change, with no gesture under way and nothing in flight, the open document catches up (an AI
+  // click then only waits for what changed since). Failures stay quiet here — the next explicit save reports them.
+  let timer = 0
+  const idle = () => {
+    const st = useEditor.getState()
+    if (!st.doc) return
+    if (interacting || st.saving || flushing) { timer = window.setTimeout(idle, 500); return }
+    void st.sync().catch(() => { /* re-dirtied; the next sync or save retries */ })
+  }
+  useEditor.subscribe((s, p) => { if (s.revision !== p.revision && s.doc) { window.clearTimeout(timer); timer = window.setTimeout(idle, 1500) } })
   useSession.subscribe((s, prev) => { if (prev.ui.suite === 'edit' && s.ui.suite !== 'edit' && useEditor.getState().docDirty) s.toast('Unsaved changes in Edit — autosave runs every 2 min, Ctrl+S saves now', 'info') })
 }
 

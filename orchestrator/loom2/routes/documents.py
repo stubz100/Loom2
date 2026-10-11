@@ -18,7 +18,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import matting
 from ..compose import srgb_delta
@@ -37,7 +37,7 @@ class DocumentCreate(BaseModel):
     name: str | None = None
     w: int | None = None
     h: int | None = None
-    background: str = "transparent"
+    background: str = Field("transparent", pattern=r"^(transparent|#[0-9a-fA-F]{6})$")   # "transparent" or "#rrggbb"
 
 
 class FlattenRequest(BaseModel):

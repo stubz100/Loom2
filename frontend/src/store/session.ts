@@ -6,6 +6,7 @@ import { ApiError, EventsSocket, http, setBackend, setMediaKey, unwrap } from '.
 import type { Asset, Backend, Capabilities, EngineState, EventFrame, FetchState, HealthInfo, Job, JobOrigin, ModelEntry, ProjectInfo, QueueState, Settings, Suite, UnlistedFile } from '../api/types'
 import type { Theme } from '../frame/theme'
 import { discoverBackend } from '../shell/tauri'
+import { DEV_HOOKS } from '../devHooks'
 
 /** A toast's one button (Undo, Play, …); a bare function passed to `toast()` is an Undo. */
 export interface ToastAction { label: string; run: () => void }
@@ -224,8 +225,9 @@ export const useSession = create<SessionState>()(
   ),
 )
 
-/** Routes one WebSocket frame (D38: `EventFrame` is the generated union, so each case sees its own `data` type). */
-function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get: () => SessionState): void {
+/** Routes one WebSocket frame (D38: `EventFrame` is the generated union, so each case sees its own `data` type). Exported for the unit
+ *  suite (D68); the app calls it only from the event socket. */
+export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => void, get: () => SessionState): void {
   const s = get()
   set({ events: [...s.events.slice(-199), f] })
   switch (f.type) {
@@ -308,4 +310,4 @@ export function onEvents<T extends EventFrame['type']>(types: readonly T[], cb: 
 export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)
 export const askText = (o: AskOptions): Promise<string | null> => useSession.getState().askText(o)
 
-if (import.meta.env.DEV) (window as unknown as { __loom2Session?: typeof useSession }).__loom2Session = useSession      // dev: the headed check switches suites
+if (DEV_HOOKS) (window as unknown as { __loom2Session?: typeof useSession }).__loom2Session = useSession      // dev: the headed check switches suites

@@ -25,6 +25,7 @@ import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
 import { listenFileDrop } from '../../shell/tauri'
+import { DEV_HOOKS } from '../../devHooks'
 
 /** Inverts RGB (keeps alpha) and adds: red where a mask/selection is black, nothing where it is white. */
 function negativeAdd(): ColorMatrixFilter { const f = new ColorMatrixFilter(); f.negative(false); f.blendMode = 'add'; return f }
@@ -224,7 +225,7 @@ export function EditorCanvas() {
     let cancelled = false
     let ro: ResizeObserver | null = null
     let unsubTheme: (() => void) | null = null
-    const devOverride = import.meta.env.DEV ? new URLSearchParams(location.search).get('renderer') : null      // dev deep link: &renderer=webgl|webgpu
+    const devOverride = DEV_HOOKS ? new URLSearchParams(location.search).get('renderer') : null      // dev deep link: &renderer=webgl|webgpu
     const pref = useEditor.getState().rendererPref
     const want: 'webgpu' | 'webgl' = devOverride === 'webgl' || (devOverride !== 'webgpu' && pref === 'webgl') ? 'webgl' : 'webgpu'
     const boot = async (preference: 'webgpu' | 'webgl') => {
@@ -272,7 +273,7 @@ export function EditorCanvas() {
       world.addChild(checker, layers, overlayC)
       app.stage.addChild(world)
       appRef.current = app; worldRef.current = world; layersRef.current = layers; overlayRef.current = overlayC
-      if (import.meta.env.DEV) { const w = window as unknown as { __loom2App?: Application; __loom2Editor?: typeof useEditor }; w.__loom2App = app; w.__loom2Editor = useEditor }      // dev: inspect / drive the editor from DevTools or the headed check
+      if (DEV_HOOKS) { const w = window as unknown as { __loom2App?: Application; __loom2Editor?: typeof useEditor }; w.__loom2App = app; w.__loom2Editor = useEditor }      // dev: inspect / drive the editor from DevTools or the headed check
       const kind = app.renderer.type === RendererType.WEBGPU ? 'WebGPU' : app.renderer.type === RendererType.WEBGL ? 'WebGL2' : 'canvas'
       useEditor.getState().setRenderer(fellBack ? `${kind} (fallback)` : kind)
       if (fellBack) useSession.getState().toast('WebGPU initialised but drew nothing here — the editor is using WebGL2 (the renderer badge in the strip switches)', 'info')

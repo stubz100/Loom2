@@ -1,6 +1,7 @@
 // The AI panel's settings (10 §4): one small store shared by the AI tab and the A-tool options so both views edit
 // the same values; it is UI state only (not persisted) — recipes carry everything that matters into the manifest.
 import { create } from 'zustand'
+import { DEV_HOOKS } from '../../devHooks'
 
 export type AiOp = 'select' | 'inpaint' | 'refine' | 'upscale' | 'outpaint'
 export type SelMode = 'subject' | 'text' | 'points' | 'box'
@@ -32,4 +33,4 @@ export const AI_DEFAULT: AiPanelState = {
 }
 
 export const useAiPanel = create<AiPanelState & { set: (p: Partial<AiPanelState>) => void }>()((set) => ({ ...AI_DEFAULT, set: (p) => set(p) }))
-if (import.meta.env.DEV) (globalThis as unknown as { __loom2AiPanel?: unknown }).__loom2AiPanel = useAiPanel   // read by edit_headed_check.py kit (D63)
+if (DEV_HOOKS) (globalThis as unknown as { __loom2AiPanel?: unknown }).__loom2AiPanel = useAiPanel   // read by edit_headed_check.py kit (D63)

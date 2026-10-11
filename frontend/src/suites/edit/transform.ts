@@ -6,6 +6,8 @@
 // computed from the quad at the start of the drag (nothing accumulates); apply resamples the original pixels once — inverse mapping at
 // pixel centres, nearest / bilinear / Catmull-Rom bicubic on premultiplied pixels, transparent outside — after a real downscale when
 // the transform shrinks below 50 %.
+import { DEV_HOOKS } from '../../devHooks'
+
 export interface Pt { x: number; y: number }
 export type Quad = [Pt, Pt, Pt, Pt]
 export type Interp = 'bicubic' | 'bilinear' | 'nearest'
@@ -440,4 +442,4 @@ export function scaleAboutPivot(t: Xform, kx: number, ky: number): Quad {
 export const rotateAboutPivot = (t: Xform, deg: number): Quad => t.quad.map((c) => rot(c, t.pivot, (deg * Math.PI) / 180)) as Quad
 
 /** Dev builds: the headed check exercises the maths in the page. */
-if (import.meta.env.DEV) (globalThis as unknown as { __loom2Transform?: unknown }).__loom2Transform = { Homography, warpRaster, premultiply, toStraight8, resizeRaster, rectCorners, applyDrag, warpGray, insideQuad, hitTest }
+if (DEV_HOOKS) (globalThis as unknown as { __loom2Transform?: unknown }).__loom2Transform = { Homography, warpRaster, premultiply, toStraight8, resizeRaster, rectCorners, applyDrag, warpGray, insideQuad, hitTest }

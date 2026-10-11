@@ -15,9 +15,9 @@ import { useAlbum } from './albumStore'
 import { tileMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { FILTERS } from './filters'
+import { fitView, itemHeight, marqueeHits, resizedWidth, restack, toPage as pageAt, zoomAbout } from './pageLayout'
 import { openInOtherPane, openPlace } from './split'
 
-export const CARD_RATIO = 0.8                                       // groups.py CARD_RATIO: a card is drawn in w × 0.8w
 type Item = GroupItem
 type Summary = GroupSummary
 type Page = GroupPage
@@ -57,21 +57,14 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
 
   // ---- geometry --------------------------------------------------------------------------------------
   const items = page?.group.items ?? []
-  const heightOf = useCallback((it: { kind: string; id: string; w: number }) => {
-    if (it.kind === 'group') return it.w * CARD_RATIO
-    const a = page?.assets[it.id]
-    return a?.w && a?.h ? it.w * (a.h / a.w) : it.w * 0.75
-  }, [page])
+  const heightOf = useCallback((it: { kind: string; id: string; w: number }) => itemHeight(it, it.kind === 'asset' ? page?.assets[it.id] : undefined), [page])
   const pos = (it: Item): Pos => live?.[key(it)] ?? it
-  const toPage = (cx: number, cy: number) => { const r = host.current!.getBoundingClientRect(); return { x: (cx - r.left - view.x) / z, y: (cy - r.top - view.y) / z } }
+  const toPage = (cx: number, cy: number) => pageAt(cx, cy, host.current!.getBoundingClientRect(), view, z)
   const fit = useCallback(() => {
     const el = host.current
-    if (!el || !items.length) { setView({ x: 40, y: 40 }); c.setPageZoom(1); return }
-    const x0 = Math.min(...items.map((i) => i.x)), y0 = Math.min(...items.map((i) => i.y))
-    const x1 = Math.max(...items.map((i) => i.x + i.w)), y1 = Math.max(...items.map((i) => i.y + heightOf(i)))
-    const s = Math.max(0.1, Math.min(1, (el.clientWidth - 64) / (x1 - x0 || 1), (el.clientHeight - 64) / (y1 - y0 || 1)))
-    c.setPageZoom(s)
-    setView({ x: (el.clientWidth - (x1 - x0) * s) / 2 - x0 * s, y: Math.max(24, (el.clientHeight - (y1 - y0) * s) / 2) - y0 * s })
+    const f = fitView(el ? items : [], heightOf, el?.clientWidth ?? 0, el?.clientHeight ?? 0)
+    c.setPageZoom(f.zoom)
+    setView(f.view)
   }, [items, heightOf, c])
   const fitted = useRef<string | null>(null)
   useEffect(() => {                                                // first open of a page: its saved view, else fit
@@ -91,7 +84,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     const r = el.getBoundingClientRect()
     const cx = anchor.current ? anchor.current.cx - r.left : el.clientWidth / 2, cy = anchor.current ? anchor.current.cy - r.top : el.clientHeight / 2
     const k = z / lastZ.current
-    setView((v) => ({ x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }))
+    setView((v) => zoomAbout(v, cx, cy, k))
     lastZ.current = z
     anchor.current = null
   }, [z])
@@ -123,8 +116,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
     }
   }, [page, gid, toast, load])
   const topZ = () => Math.max(0, ...items.map((i) => i.z))
-  const bottomZ = () => Math.min(0, ...items.map((i) => i.z))
-  const stack = (front: boolean) => { const sel = selectedItems(); if (!sel.length) return; let z0 = front ? topZ() : bottomZ() - sel.length; void commit(sel.map((i) => ({ ...i, z: ++z0 }))) }
+  const stack = (front: boolean) => { const sel = selectedItems(); if (!sel.length) return; void commit(restack(items, sel, front)) }
   const undoLayout = () => { const u = undo.current.pop(); if (!u) return; redo.current.push(u); void commit(u.before, false) }
   const redoLayout = () => { const u = redo.current.pop(); if (!u) return; undo.current.push(u); void commit(u.after, false) }
   const backToUnprocessed = (sel: Item[]) => {
@@ -186,8 +178,8 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
   const onResizeDown = (e: React.PointerEvent, it: Item) => {
     e.stopPropagation(); e.preventDefault()
     const x0 = e.clientX
-    const move = (ev: PointerEvent) => setLive({ [key(it)]: { x: it.x, y: it.y, w: Math.max(48, it.w + (ev.clientX - x0) / z), z: it.z } })
-    const up = (ev: PointerEvent) => { cleanup(); setLive(null); void commit([{ ...it, w: Math.round(Math.max(48, it.w + (ev.clientX - x0) / z)) }]) }
+    const move = (ev: PointerEvent) => setLive({ [key(it)]: { x: it.x, y: it.y, w: resizedWidth(it.w, ev.clientX - x0, z), z: it.z } })
+    const up = (ev: PointerEvent) => { cleanup(); setLive(null); void commit([{ ...it, w: Math.round(resizedWidth(it.w, ev.clientX - x0, z)) }]) }
     const cleanup = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
@@ -214,9 +206,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
       if (!moved && Math.hypot(m.x1 - m.x0, m.y1 - m.y0) < 4) return
       moved = true
       setMarquee(m)
-      const [ax, bx] = [Math.min(m.x0, m.x1), Math.max(m.x0, m.x1)].map((v) => (v - view.x) / z)
-      const [ay, by] = [Math.min(m.y0, m.y1), Math.max(m.y0, m.y1)].map((v) => (v - view.y) / z)
-      const hit = items.filter((i) => i.x < bx && i.x + i.w > ax && i.y < by && i.y + heightOf(i) > ay)
+      const hit = marqueeHits(items, m, view, z, heightOf)
       setSel([...new Set([...base.a, ...hit.filter((i) => i.kind === 'asset').map((i) => i.id)])], [...new Set([...base.g, ...hit.filter((i) => i.kind === 'group').map((i) => i.id)])])
     }
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setMarquee(null); if (!moved && !add) setSel([], []) }

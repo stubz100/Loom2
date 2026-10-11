@@ -1,0 +1,91 @@
+"""Prepares the state for the frontend end-to-end run (D68, ArtCraft P6): called by `frontend/e2e/global-setup.ts`, which then starts
+the fake engine (`orchestrator/tests/fake_comfy.py`), the orchestrator and `vite preview` itself.
+
+    orchestrator/.venv/Scripts/python.exe scripts/e2e_setup.py --state DIR --project DIR --engine-port N [--count 200]
+
+Writes
+- `<state>/models/`: zero-byte-ish weight files for the Klein 4B text-to-image path (transformer, encoder, VAE — the names come from the
+  model registry and the roster, so a spec change follows), offered under both variants;
+- `<state>/app.json`: settings pointing the engine at the fake engine's port and the models root at that tree, no mounted trees;
+- the project: `scripts/make_synthetic_assets.py --count N` (reused when it already holds a project made by the same inputs — the perf
+  run keeps a 10k project between runs, keyed by a hash of the scripts and modules that shape it).
+Prints one JSON line `{"project": …, "assets": N, "reused": bool}`.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "orchestrator"))
+
+from loom2.config import AppRecord, Settings  # noqa: E402
+from loom2.fsio import atomic_write_json  # noqa: E402
+from loom2.models import registry  # noqa: E402
+from loom2.roster import ROSTER_BY_ID  # noqa: E402
+
+SMOKE_MODEL_LABEL = "Klein 4B"          # the T2I model the smoke run generates with: offered in `full` and `open`
+SHAPERS = ["scripts/make_synthetic_assets.py", "orchestrator/loom2/catalogue.py", "orchestrator/loom2/workspace.py"]
+
+
+def fake_models(root: Path) -> list[str]:
+    spec = next((s for s in registry.load().values() if s.label == SMOKE_MODEL_LABEL), None)
+    if spec is None:
+        raise SystemExit(f"no model labelled {SMOKE_MODEL_LABEL!r} in the registry")
+    written = []
+    for rid in spec.weights():
+        e = ROSTER_BY_ID[rid]
+        p = root / e.folder / e.name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * 16)
+        written.append(f"{e.folder}/{e.name}")
+    (root / "roster.index.json").write_text(json.dumps({"files": []}), encoding="utf-8")
+    return written
+
+
+def project_key(count: int) -> str:
+    h = hashlib.sha256(str(count).encode())
+    for rel in SHAPERS:
+        h.update((REPO / rel).read_bytes())
+    return h.hexdigest()[:16]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--project", required=True)
+    ap.add_argument("--engine-port", type=int, required=True)
+    ap.add_argument("--count", type=int, default=200)
+    a = ap.parse_args()
+    state, project = Path(a.state), Path(a.project)
+    state.mkdir(parents=True, exist_ok=True)
+    models = state / "models"
+    weights = fake_models(models)
+    settings = Settings().model_dump()
+    settings.update(models_root=str(models), mounted_model_trees=[], reopen_last_project=False)
+    # the orchestrator adopts the fake engine listening on that port; should it be down, the "engine" it launches is `python -c …`, which
+    # exits at once (never the real ComfyUI on the GPU)
+    settings["engine"].update(port=a.engine_port, health_timeout_s=10.0, python=sys.executable, main="-c")
+    atomic_write_json(state / "app.json", AppRecord(settings=Settings.model_validate(settings)).model_dump())
+
+    key = project_key(a.count)
+    marker = project / ".e2e-key"
+    reused = (project / "project.json").exists() and marker.exists() and marker.read_text(encoding="utf-8").strip() == key
+    if not reused:
+        if project.exists() and any(project.iterdir()):
+            raise SystemExit(f"{project} exists and was not made by this script with these inputs: delete it first")
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        subprocess.run([sys.executable, str(REPO / "scripts" / "make_synthetic_assets.py"), "--project", str(project), "--count", str(a.count)],
+                       check=True, env=env, stdout=subprocess.DEVNULL)
+        marker.write_text(key, encoding="utf-8")
+    print(json.dumps({"project": str(project), "assets": a.count, "reused": reused, "weights": weights}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -76,5 +76,10 @@ and replies come from `frontend/src/api/schema.d.ts`, generated from the orchest
 
 ## Checks
 
-`npm run build` (tsc + vite) and `npm run lint`. There are no frontend unit tests yet (P6 adds them); interactive checks run through
-`scripts/edit_headed_check.py tour` in a visible Edge window against the Vite dev server.
+`npm run build` (tsc + vite), `npm run lint`, **`npm test`** (Vitest + jsdom, `src/**/*.test.ts(x)`, ≈ 2 s — incl. `commandAudit.test.ts`, the
+D32 audit: every registered command needs a mouse placement, a chord shared within a scope needs an allow-list entry with its reason)
+and **`npm run build:e2e && npm run test:e2e`** (Playwright on Edge, WebGL2, against `vite preview` of `dist-e2e/`, a real orchestrator
+and `orchestrator/tests/fake_comfy.py` as a process — `e2e/global-setup.ts`; dev hooks stay in the e2e build through `src/devHooks.ts`).
+`npm run perf` measures startup, suite switches, Edit re-entry and scroll pacing over 10 000 assets into `bench/perf/<date>.json`;
+`scripts/perf_compare.py` diffs the last two. Pure code goes in its own module (not a component file) so it can be tested; WebGPU and
+pixel-exact editor checks stay in `scripts/edit_headed_check.py` (a visible Edge window against the Vite dev server).

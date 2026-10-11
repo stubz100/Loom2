@@ -21,6 +21,7 @@ import { probe as probeSmartSelect } from './smartselect/client'
 import { EditorCanvas } from './EditorCanvas'
 import { ADJUSTMENT_DEFAULTS, BLEND_MODES, countRasters, ensureEditorAutosave, FILTER_DEFAULTS, findNode, useEditor, walk, type BrushPreset, type DocSummary, type DocumentStack, type Node } from './editorStore'
 import { useAiPanel, type AiOp, type AiPanelState } from './aiPanelStore'
+import { planSize } from './planSize'
 import './edit.css'
 import { assetIds, onlyAssets, useDropTarget } from '../../frame/drag'
 
@@ -43,16 +44,6 @@ const BRUSH_PRESETS: BrushPreset[] = [
   { name: 'wash', size: 160, hardness: 0.2, flow: 0.08, opacity: 0.5, spacing: 0.1, smoothing: 0.6, builtin: true },
 ]
 const ed = () => useEditor.getState()
-/** Mirrors edit_ai._engine_size: ≥ min on the longer side, ≤ max, ≤ 1 MP, multiples of 16. */
-function planSize(w: number, h: number, minSize: number, maxSize: number, maxPixels = 1048576): { w: number; h: number; scale: number } {
-  const longer = Math.max(w, h)
-  let s = 1
-  if (minSize && longer < minSize) s = minSize / longer
-  if (maxSize && longer * s > maxSize) s = maxSize / longer
-  if (maxPixels && w * h * s * s > maxPixels) s = Math.sqrt(maxPixels / (w * h))
-  const r16 = (n: number) => Math.max(16, Math.ceil(n / 16) * 16)
-  return { w: r16(w * s), h: r16(h * s), scale: s }
-}
 const snapshot = (d: DocumentStack): DocumentStack => JSON.parse(JSON.stringify(d))
 
 /** Range + value. With `num` the value is also an editable number field: `scale` 100 shows a 0–1 value as a percentage, `unit` is its suffix. */

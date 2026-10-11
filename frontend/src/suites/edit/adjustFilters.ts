@@ -223,7 +223,8 @@ function mains(type: string, kind: 'adjustment' | 'filter'): [string, string] {
 }
 
 // ---- exact per-channel maps for the LUT types (compose.py) ------------------------------------------------
-function curve(x: number, points: unknown): number {
+/** The pre-D57 Curves map: straight lines through the points (0–255), flat beyond the first / last point. */
+export function curve(x: number, points: unknown): number {
   if (!Array.isArray(points) || !points.length) return x
   let pts = (points as [number, number][]).map(([a, b]) => [Number(a) / 255, Number(b) / 255] as [number, number]).sort((p, q) => p[0] - q[0])
   if (pts[0][0] > 0) pts = [[0, pts[0][1]], ...pts]
@@ -234,7 +235,8 @@ function curve(x: number, points: unknown): number {
 }
 const hexRgb = (h: string): [number, number, number] => { const m = /^#?([0-9a-f]{6})$/i.exec(h.trim()); const v = m ? m[1] : 'ffffff'; return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) / 255) as [number, number, number] }
 const num = (p: Record<string, unknown>, k: string, d: number) => { const v = Number(p[k]); return Number.isFinite(v) ? v : d }
-function channelMap(type: string, p: Record<string, unknown>): (x: number, ch: number) => number {
+/** One channel's exact map (0–1 → 0–1) for the LUT adjustment types, as compose.py computes it; `ch` 0–2 is R, G, B. */
+export function channelMap(type: string, p: Record<string, unknown>): (x: number, ch: number) => number {
   switch (type) {
     case 'levels': { const ib = num(p, 'in_black', 0) / 255, iw = num(p, 'in_white', 255) / 255, g = Math.max(0.01, num(p, 'gamma', 1)), ob = num(p, 'out_black', 0) / 255, ow = num(p, 'out_white', 255) / 255
       return (x) => ob + Math.min(1, Math.max(0, (x - ib) / Math.max(1e-6, iw - ib))) ** (1 / g) * (ow - ob) }

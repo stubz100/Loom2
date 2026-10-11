@@ -3,6 +3,7 @@
 // overlay all read from here, so a key is only ever an accelerator for something that is also clickable.
 // The `placement` tuple is non-empty by type: a command cannot be registered as keyboard-only.
 import type { ComponentType } from 'react'
+import { DEV_HOOKS } from '../devHooks'
 
 export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'models'
 /** Where the command is reachable with the mouse. */
@@ -44,7 +45,7 @@ export function runCommand(id: string): boolean {
 /** Menus and toolbars call this when they render a command, so the dev audit can list the ones nothing shows. */
 export function markUsed(id: string): void { USED.add(id) }
 // dev: the headed check (`scripts/edit_headed_check.py tour`) runs every command of a scope through this hook
-if (import.meta.env.DEV) (window as unknown as { __loom2Commands?: unknown }).__loom2Commands = { commandsFor, runCommand, isEnabled, command }
+if (DEV_HOOKS) (window as unknown as { __loom2Commands?: unknown }).__loom2Commands = { commandsFor, runCommand, isEnabled, command }
 export function unusedCommands(scope: Scope): Command[] { return commandsFor(scope).filter((c) => !USED.has(c.id)) }
 
 // ---- shortcuts ---------------------------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 // the canvas (through onPreview — nothing is recorded) and commits on click; each choice is one history step.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import { parseNum } from './parseNum'
 
 const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const SLIDER_W = 160
@@ -36,33 +37,6 @@ function usePopupPlace(anchor: RefObject<HTMLElement | null>, open: boolean, siz
     return () => { window.removeEventListener('scroll', at, true); window.removeEventListener('resize', at) }
   }, [open, anchor, size.w, size.h, size.align])
   return open ? place : null
-}
-
-/** + − × ÷ and parentheses over numbers; null when the text is not such an expression. */
-function parseNum(text: string): number | null {
-  const s = text.replace(/\s+/g, '').replace(/,/g, '.')
-  if (!s) return null
-  let i = 0
-  const num = (): number | null => {
-    if (s[i] === '(') { i++; const v = sum(); if (s[i] !== ')') return null; i++; return v }
-    if (s[i] === '-') { i++; const v = num(); return v === null ? null : -v }
-    const m = /^\d*\.?\d+(e[+-]?\d+)?/i.exec(s.slice(i)) ?? /^\d+\./.exec(s.slice(i))
-    if (!m) return null
-    i += m[0].length
-    return parseFloat(m[0])
-  }
-  const prod = (): number | null => {
-    let v = num()
-    while (v !== null && (s[i] === '*' || s[i] === '/' || s[i] === 'x')) { const op = s[i++]; const r = num(); if (r === null) return null; v = op === '/' ? v / r : v * r }
-    return v
-  }
-  const sum = (): number | null => {
-    let v = prod()
-    while (v !== null && (s[i] === '+' || s[i] === '-')) { const op = s[i++]; const r = prod(); if (r === null) return null; v = op === '+' ? v + r : v - r }
-    return v
-  }
-  const v = sum()
-  return v !== null && i === s.length && Number.isFinite(v) ? v : null
 }
 
 export interface ValueFieldProps {

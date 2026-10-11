@@ -6,6 +6,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
 import { typeLabel } from './labels'
+import { DEV_HOOKS } from '../../devHooks'
 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
@@ -163,7 +164,7 @@ export function layerMenu(): MenuItem[] {
 }
 const transformItems = (): MenuItem[] => [{ cmd: 'edit.transform' }, { cmd: 'edit.transform.mode.skew' }, { cmd: 'edit.transform.mode.distort' }, { cmd: 'edit.transform.mode.perspective' }, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep, { cmd: 'edit.layer.flipH' }, { cmd: 'edit.layer.flipV' }, { cmd: 'edit.layer.rot90' }, { cmd: 'edit.layer.rot270' }, { cmd: 'edit.layer.rot180' }]
 /** D55 menu audit (dev builds): the headed `kit` check builds every menu in every tool and state and checks each entry resolves. */
-if (import.meta.env.DEV) setTimeout(() => { (window as unknown as { __loom2EditMenus?: unknown }).__loom2EditMenus = { layerMenu, canvasMenu } })
+if (DEV_HOOKS) setTimeout(() => { (window as unknown as { __loom2EditMenus?: unknown }).__loom2EditMenus = { layerMenu, canvasMenu } })
 
 /** Right-click on the canvas: tool-aware. */
 export function canvasMenu(): MenuItem[] {

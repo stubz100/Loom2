@@ -2778,3 +2778,35 @@ split by file so that no two hands touched the same module.
 - **Checks:** headed tour, animate, render, kit pass; new headed mode `media` — the Catalogue's thumbnails load through the key, none
   broken; `csp_check.py` clean on all six pages of the production build; **M1 rig acceptance 20/20** (162 s: generation, hard kill
   mid-job, paused relaunch, cancel, graceful stop). Settings audit 154 / 0, literal check 0, build clean, lint 100.
+
+## 2026-10-11 10:35 — H3 · P6 frontend test harness (D68) built; H3 closed
+
+- **Dependencies** (pinned exact, each ≥ 2 weeks old): vitest 5.0.2, jsdom 30.1.1, @playwright/test 1.63.0 (Edge via `channel: 'msedge'`,
+  no browser download). npm 10.9.3 failed on vitest with an arborist bug ("Cannot read properties of null (reading 'edgesOut')" in
+  `#loadPeerSet`); npm 11.20.0 through `npx` installed it cleanly — the lockfile stays version 3.
+- **Unit (slices 1–2, a sub-agent):** `npm test`, **122 tests in 13 files, ≈ 2 s**. Pure code moved out of components into testable modules
+  (`catalogue/pageLayout.ts`, `edit/planSize.ts`, `edit/parseNum.ts`; `queryOf`, `curve` / `channelMap`, `applyEvent` exported).
+  `commandAudit.test.ts` is the D32 audit: it finds every `registerCommands` module by source scan, checks placements, unique ids, labels,
+  chords that match their own key event, and shared chords within a scope only through an allow-list with reasons (Enter: polygon close /
+  transform apply; Escape: polygon cancel / transform cancel; Delete and Backspace: clear / magnetic back). Demonstrated: a
+  `matchChord` that returns false fails 7 tests; a command without a placement fails the audit. Two bugs the tests exposed, fixed:
+  the Edit AI panel's engine size overshot the 1 MP cap (1920 × 1080 showed 1376 × 768, the engine runs 1360 × 768 — now the same step-down
+  as `edit_ai._engine_size`, checked against the Python values); "Send to back" on album pages could tie with the item already at the
+  back. Known vitest 5.0.2 quirk: a second dynamic `import()` of a `vi.mock`ed module while the first is in flight resolves the real one —
+  `session.test.ts` routes store-bound frames one at a time.
+- **Smoke and perf (slices 3–5, a sub-agent):** `orchestrator/tests/fake_comfy.py` runs standalone; `scripts/e2e_setup.py` builds a fake
+  models tree for the registry's Klein 4B (the engine command is `python -c`, so ComfyUI can never start), the app.json and a synthetic
+  project; `e2e/global-setup.ts` starts the fake engine and the orchestrator (`LOOM2_TOKEN=e2etoken`, the CI variant) and refuses a
+  non-e2e build; `src/devHooks.ts` keeps the hooks in `--mode e2e` only (a production build has none — the setup's guard proves it). The
+  e2e build goes to `dist-e2e/` so a plain build cannot replace it mid-run. Six scenarios with real mouse input: open the project (12
+  thumbnails decoded), Keep / Reject / clear from the context menu, a pointer drag of a tile onto a group in Places, Generate on Klein 4B
+  through the fake engine (the id from /capabilities) landing in Unprocessed, Edit on WebGL2 — a brush stroke dirties, Save stores, Animate
+  start / end slots from the tile menus. **6/6 in ≈ 16–27 s, under full and open.**
+- **First perf baseline** (`bench/perf/2026-10-11.json`; 10 000 assets, headless Edge 155, WebGL2, Ryzen 9 9950X, medians of 5): startup to
+  first painted tile **194.5 ms** (cold ≈ 300); first Open in Edit incl. creating the document 224 ms; Edit → Catalogue 10.6 ms; **Edit
+  re-entry 22.2 ms** (a 64 px document — P5 needs a large one); Catalogue → Edit → Catalogue 32.5 ms; scrolling 4000 px/s for 5 s: frame
+  time p50 0.6 / p95 1.3 / p99 2.0 / max 17.9 ms, 0 long frames (uncapped: `--disable-frame-rate-limit`). Headless numbers, for change
+  tracking on this machine — not presented frame times (`edit_headed_check.py perf` measures those). `scripts/perf_compare.py` diffs the
+  last two files (`--fail-over PCT`).
+- **CI:** `npm test` and `npm run build:e2e && npm run test:e2e` per variant (results uploaded on failure). Checks: 223 offline,
+  122 unit, smoke 6/6, settings audit 154 / 0, literal check 0, API current, lint 100 / 0 errors. **H3 (P9, P6) closed.**

@@ -279,6 +279,11 @@ Edit-suite engine (05): PixiJS v8 WebGPU with WebGL2 fallback, 2048² tiles, wor
 - Test tiers: unit (recipe compiler, roster resolver, workspace I/O), contract (graph builders vs pinned
   `/object_info`), integration without GPU (fake engine), **rig acceptance** (executable scripts per suite,
   results appended to the journal). "Done" requires the rig run.
+- Frontend tiers (D68, 2026-10-11): **Vitest** unit suites over pure modules (commands and the D32 audit, transform, stores, layout maths,
+  event routing; CI); a **Playwright smoke** on Edge with WebGL2 against `vite preview` of the e2e build, the orchestrator and the fake
+  engine as a process (open the project, Keep / Reject, drag to a group, Generate on Klein 4B, Edit a stroke and save, Animate slots — CI,
+  both variants); a **perf** run (`bench/perf/<date>.json`, compared run to run); the visible-Edge checks
+  (`scripts/edit_headed_check.py`) keep WebGPU and pixel-exact editor work.
 
 ## 10. Risks specific to this architecture
 

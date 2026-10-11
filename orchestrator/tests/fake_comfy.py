@@ -186,3 +186,27 @@ def graph_image_name(graph: dict, class_type: str = "LoadImage") -> str | None:
     n = next((n for n in graph.values() if n.get("class_type") == class_type), None)
     return (n or {}).get("inputs", {}).get("image")
 
+
+def main(argv: list[str] | None = None) -> int:
+    """Standalone fake engine for the frontend end-to-end run (D68, P6): serves until killed. The orchestrator adopts it because it
+    already listens on the configured engine port; `--output-dir` must be the orchestrator's `<state>/engine_out`."""
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser(prog="fake_comfy")
+    ap.add_argument("--port", type=int, required=True)
+    ap.add_argument("--mode", choices=("success", "silent", "error"), default="success")
+    ap.add_argument("--object-info", default=str(Path(__file__).resolve().parent / "fixtures" / "object_info.json"))
+    ap.add_argument("--output-dir", required=True, help="the orchestrator's <state>/engine_out")
+    a = ap.parse_args(argv)
+    data = json.loads(Path(a.object_info).read_text(encoding="utf-8"))
+    fake = FakeComfy(data.get("object_info", data), Path(a.output_dir), behaviour=a.mode)
+    sys.stdout.write(f"fake ComfyUI ({a.mode}) starting on 127.0.0.1:{a.port}, outputs in {a.output_dir}\n")   # callers poll /system_stats
+    sys.stdout.flush()
+    uvicorn.run(fake.app, host="127.0.0.1", port=a.port, log_level="warning", lifespan="off")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

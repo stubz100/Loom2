@@ -25,6 +25,7 @@ the engine. The author works mouse-first and is EU-based.
 | Photoshop oracle (D40) | `python scripts/fetch_corpus.py` once, then `… -m pytest orchestrator -m corpus -s` (needs `--extra oracle`); floor in `bench/corpus/psd-tools.floor.json` |
 | Frontend typecheck + build | `cd frontend; npm run build` (`tsc -b` + `vite build`) |
 | Lint (frontend) | `cd frontend; npm run lint` (oxlint) |
+| Frontend tests (D68) | `cd frontend; npm test` (Vitest, ≈ 2 s) · `npm run build:e2e; npm run test:e2e` (Playwright on Edge against the orchestrator + fake engine, ≈ 20 s; needs 1420 free) · `npm run perf` then `python scripts/perf_compare.py` |
 | Agent-doc path check | `orchestrator/.venv/Scripts/python.exe scripts/agents_check.py` |
 | Settings audit (D60) | `orchestrator/.venv/Scripts/python.exe scripts/settings_audit.py` — every Settings field, recipe field and `/capabilities` parameter must reach the code that runs (allow-list with reasons) |
 | Model specs (D65) | `orchestrator/loom2/models/specs/*.toml` hold every model's knowledge; `orchestrator/.venv/Scripts/python.exe scripts/model_literals_check.py` (CI) fails on a model id in code. Add a model: `orchestrator/loom2/engine/AGENTS.md` |

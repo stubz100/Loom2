@@ -68,6 +68,21 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: frontend unit tests (D68) — vitest, incl. the D32 command audit
+        working-directory: frontend
+        run: npm test
+      - name: end-to-end smoke (D68) — Playwright on Edge (WebGL2) against the orchestrator and the fake engine, this variant
+        working-directory: frontend
+        run: |
+          npm run build:e2e
+          npm run test:e2e
+      - name: smoke results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-${{ matrix.variant }}
+          path: frontend/node_modules/.e2e/smoke
+          if-no-files-found: ignore
       - name: API contract (D38) — openapi.json and schema.d.ts match the app
         shell: bash
         run: |

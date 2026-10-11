@@ -7,6 +7,7 @@ import { ApiError, http, unwrap } from '../../api/client'
 import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe, type JobOrigin } from '../../api/types'
 import { byOrder, resolveModel } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
+import { DEV_HOOKS } from '../../devHooks'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
 export interface Beat { frame: number; asset_id: string; strength: number }
@@ -330,4 +331,4 @@ export const useAnimate = create<AnimateState>()(
   ),
 )
 
-if (import.meta.env.DEV) (window as unknown as { __loom2Animate?: typeof useAnimate }).__loom2Animate = useAnimate      // dev: the headed check drives the player
+if (DEV_HOOKS) (window as unknown as { __loom2Animate?: typeof useAnimate }).__loom2Animate = useAnimate      // dev: the headed check drives the player

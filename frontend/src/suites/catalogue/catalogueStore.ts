@@ -24,7 +24,7 @@ const DEFAULT_QUERY: Query = { folder: 'all', state: 'all', rating_min: 0, tags_
 
 /** The store's query as GET /assets parameters: empty strings and unset fields are left out; booleans are sent when set, `false`
  *  included (D38 fix: "No derivations" sent nothing before, so its chip showed every asset). */
-function queryOf(q: Query, extra: Partial<AssetQueryParams> = {}): AssetQueryParams {
+export function queryOf(q: Query, extra: Partial<AssetQueryParams> = {}): AssetQueryParams {
   const out: AssetQueryParams = { folder: q.folder, state: q.state, sort: q.sort, group: q.group }
   const text = (v: string | undefined) => (v ? v : undefined)
   Object.assign(out, {

@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
 import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { command, handleKeyFor, isEnabled, markUsed, runCommand } from '../../frame/commands'
+import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
@@ -1023,7 +1023,8 @@ function useEditKeys() {
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal, .curves-graph')) return   // the Curves graph owns Delete / arrows (F8)
       const st = ed()
       const k = e.key
-      if (k === '\\' && !e.altKey) { e.preventDefault(); st.setView({ before: true }); return }              // hold: before
+      const before = command('edit.view.before')                                                    // D72: hold its key (remappable) for before
+      if (before && matchesCommand(e, before)) { e.preventDefault(); st.setView({ before: true }); return }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && k.toLowerCase() === 'v') return             // D46: let the browser's paste event carry the clipboard
       if (magnetic.active && (k === 'Backspace' || k === 'Delete')) { e.preventDefault(); void magnetic.removeLast(); return }   // D59
       if (st.transform && k.startsWith('Arrow') && !e.ctrlKey && !e.altKey) {                        // D58: arrows nudge the box (Shift 10 px)
@@ -1034,16 +1035,11 @@ function useEditKeys() {
         return
       }
       if (k === 'Escape') { if (magnetic.active) magnetic.cancel(); else if (st.lassoPoly) st.setLassoPoly(null); else if (st.transform) st.cancelTransform(); else if (st.quickMask) st.setView({ quickMask: false }); else if (st.selection) st.deselect(); return }
-      if (st.candidates && !e.ctrlKey && !e.altKey) {                                                   // 10 §10: 1–4 pick, Enter keeps the visible one
-        if (/^[1-4]$/.test(k)) { const id = st.candidates.ids[Number(k) - 1]; if (id) st.pickCandidate(id); return }
-        if (k === 'Enter' && !st.transform) { const vis = st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]; st.pickCandidate(vis); return }
-      }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(k)) { st.setBrush({ opacity: k === '0' ? 1 : Number(k) / 10 }); return }
       // every other key is an accelerator for a registry command; a handled key stops here so the global
       // suite switch (Ctrl+1/2, 07 §4) yields to the view keys of 10 §5 while a document is open
       if (handleKeyFor('edit', e)) e.stopImmediatePropagation()
     }
-    const up = (e: KeyboardEvent) => { if (e.key === '\\') ed().setView({ before: false }) }
+    const up = (e: KeyboardEvent) => { const b = command('edit.view.before')?.keys; if (b && e.key.toLowerCase() === parseChord(b).key) ed().setView({ before: false }) }
     const paste = (e: ClipboardEvent) => {                              // D46: Ctrl+V — an image from another app, or the editor's clipboard
       if (useSession.getState().ui.suite !== 'edit' || !ed().doc) return
       if (e.target instanceof Element && e.target.closest('input, textarea, [contenteditable], .modal')) return   // the target may be the window

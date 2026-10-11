@@ -226,3 +226,54 @@ test('quick actions (D71): "Remove background" in the Inspector reaches Edit wit
   await openApp(page, { suite: 'edit', tool: 'ai', ai: 'upscale' })
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toMatchObject({ tool: 'ai', op: 'upscale' })
 })
+
+test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep to J — menu, tooltip and help show J, J keeps, K does not, it survives a reload', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  const openKeys = async () => {
+    await page.locator('nav.rail').getByRole('button', { name: 'Settings…', exact: true }).click()
+    const row = page.locator('.keys-row[data-cmd="cat.keep"]')
+    await row.scrollIntoViewIfNeeded()
+    return row
+  }
+  const closeSettings = () => page.locator('.modal-backdrop').click({ position: { x: 4, y: 4 } })
+  let row = await openKeys()
+  await expect(row.locator('.keys-chord')).toHaveText('K')
+  await row.locator('.keys-chord').click()
+  await expect(row.locator('.keys-chord')).toHaveText('press a key…')
+  await page.keyboard.press('g')                                                         // the plan's example: G is Cycle grouping's — refused, with its name
+  await expect(row.locator('.keys-note.error')).toContainText('“Cycle grouping”')
+  await expect(row.locator('.keys-chord')).toHaveText('K')
+  await row.locator('.keys-chord').click()
+  await page.keyboard.press('j')
+  await expect(row.locator('.keys-chord')).toHaveText('J')
+  await expect(row.locator('.keys-note')).toHaveText('now J')
+  await closeSettings()
+
+  const [a, b] = [tiles(page).nth(10), tiles(page).nth(11)]
+  const [ida, idb] = [(await a.getAttribute('data-id'))!, (await b.getAttribute('data-id'))!]
+  await a.click({ button: 'right' })                                                     // the tile menu shows J
+  await expect(page.locator('.ctx-menu button.item', { hasText: /^Keep/ }).locator('kbd')).toHaveText('J')
+  await a.click()                                                                         // closes the menu and selects the tile (Esc would clear it)
+  await expect(page.locator('.ctx-menu')).toHaveCount(0)
+  await a.dblclick()                                                                      // the loupe hub's Keep button: its tooltip says J
+  await expect(page.locator('.loupe .hub button[aria-label="Keep"]')).toHaveAttribute('title', 'Keep (J)')
+  await page.keyboard.press('j')                                                          // J keeps
+  await expect.poll(async () => (await api<AssetLite>('GET', `/assets/${ida}`)).state).toBe('keep')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.loupe')).toHaveCount(0)
+  await b.click()
+  await page.keyboard.press('k')                                                          // K does nothing now
+  await page.waitForTimeout(500)
+  expect((await api<AssetLite>('GET', `/assets/${idb}`)).state).not.toBe('keep')
+  await page.keyboard.press('?')                                                          // help lists Keep with J
+  await expect(page.locator('.cmd-help .row', { hasText: /^Keep/ }).first().locator('kbd')).toHaveText('J')
+  await page.keyboard.press('Escape')
+
+  await page.reload()                                                                     // a restart keeps it
+  await expect(page.locator('.frame')).toBeVisible()
+  row = await openKeys()
+  await expect(row.locator('.keys-chord')).toHaveText('J')
+  await expect(row).toHaveClass(/changed/)
+  await row.getByRole('button', { name: 'Reset the key of Keep' }).click()
+  await expect(row.locator('.keys-chord')).toHaveText('K')
+})

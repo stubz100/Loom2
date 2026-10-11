@@ -4,6 +4,7 @@
 // The `placement` tuple is non-empty by type: a command cannot be registered as keyboard-only.
 import type { ComponentType } from 'react'
 import { DEV_HOOKS } from '../devHooks'
+import { loadOverrides, type Overrides } from './keyStore'
 
 export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'models'
 /** Where the command is reachable with the mouse. */
@@ -25,14 +26,39 @@ export interface Command {
   danger?: boolean
   /** Short note shown in the help overlay (e.g. the gesture equivalent). */
   hint?: string
+  /** D72: the key belongs to the shared gesture vocabulary (Arrows, Esc, Space, Tab): listed in help and Settings, not remappable. */
+  fixed?: boolean
 }
 
 const REGISTRY = new Map<string, Command>()
 const USED = new Set<string>()
+// D72: each command's own keys, kept aside while the user's overrides (keyStore.ts) replace `keys` / `alt` on the registered command —
+// so every reader (key dispatch, tooltips, menus, help, the palette) follows a remap without knowing about it
+const DEFAULTS = new Map<string, { keys?: string; alt?: string[] }>()
+let overrides: Overrides = loadOverrides()
+
+function applyOverride(c: Command): void {
+  const d = DEFAULTS.get(c.id)
+  if (!d) return
+  c.keys = d.keys; c.alt = d.alt
+  if (!c.fixed && Object.hasOwn(overrides, c.id)) { c.keys = overrides[c.id] ?? undefined; c.alt = undefined }
+}
+
+/** The fixed gesture keys (unmodified Arrows, Esc, Space, Tab, 07 §4): a command whose own key is one of them is `fixed`. */
+export const FIXED_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'escape', ' ', 'tab'])
+export function isFixedChord(s: string): boolean { const c = parseChord(s); return FIXED_KEYS.has(c.key) && !c.ctrl && !c.alt && !c.shift }
 
 export function registerCommands(cmds: Command[]): void {
-  for (const c of cmds) REGISTRY.set(c.id, c)
+  for (const c of cmds) {
+    if (c.keys && isFixedChord(c.keys)) c.fixed = true
+    REGISTRY.set(c.id, c); DEFAULTS.set(c.id, { keys: c.keys, alt: c.alt }); applyOverride(c)
+  }
 }
+/** D72: replace the key overrides (keymap.ts persists them); every registered command takes its default or its override again. */
+export function applyKeyOverrides(o: Overrides): void { overrides = o; for (const c of REGISTRY.values()) applyOverride(c) }
+/** D72: the command's own chord(s), whatever the override. */
+export function defaultKeysOf(id: string): { keys?: string; alt?: string[] } | undefined { return DEFAULTS.get(id) }
+export function allCommands(): Command[] { return [...REGISTRY.values()] }
 export function command(id: string): Command | undefined { return REGISTRY.get(id) }
 export function commandsFor(scope: Scope): Command[] { return [...REGISTRY.values()].filter((c) => c.scope === scope) }
 export function isEnabled(c: Command): boolean { try { return c.when ? c.when() : true } catch { return false } }

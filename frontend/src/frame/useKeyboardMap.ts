@@ -3,7 +3,7 @@
 // focused element so every right-click menu is reachable from the keyboard.
 import { useEffect } from 'react'
 import { useSession } from '../store/session'
-import { handleKeyFor } from './commands'
+import { command, handleKeyFor, matchesCommand } from './commands'
 import { usePalette } from './CommandPalette'
 import './globalCommands'
 
@@ -19,8 +19,10 @@ export function useKeyboardMap() {
     const h = (e: KeyboardEvent) => {
       const s = useSession.getState()
       const inField = (e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')    // a modal owns its keys
-      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openContextMenuAtFocus(); return }
-      if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); usePalette.getState().toggle(); return }
+      // D72: the menu key and the palette answer in fields too, through their registry commands (so a remap applies)
+      const menu = command('global.contextMenu'), palette = command('global.palette')
+      if (menu && matchesCommand(e, menu)) { e.preventDefault(); openContextMenuAtFocus(); return }
+      if (palette && matchesCommand(e, palette)) { e.preventDefault(); usePalette.getState().toggle(); return }
       if (usePalette.getState().open) return
       if (e.ctrlKey || e.metaKey) { if (handleKeyFor('global', e)) return }
       if (inField) return
@@ -30,8 +32,7 @@ export function useKeyboardMap() {
         else if (s.projectDialog) s.setProjectDialog(null)
         return
       }
-      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) { e.preventDefault(); s.setUi({ focusMode: !s.ui.focusMode }); return }
-      handleKeyFor('global', e)
+      handleKeyFor('global', e)                                         // incl. Tab → focus mode (global.focus, a fixed key)
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)

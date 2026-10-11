@@ -2,6 +2,7 @@
 // command marked as mouse-reachable for the dev audit (07 §3c).
 import { command, isEnabled, markUsed, runCommand, titleFor, type IconType, type MenuItem } from './commands'
 import { openPressMenu } from './ContextMenu'
+import { useKeymap } from './keymap'
 
 /** A toolbar button that opens a menu (e.g. "add adjustment ▾") — a press menu (D55): press, drag onto an item, release; or click
  * to open it and click an item. */
@@ -16,6 +17,7 @@ export function MenuButton({ label, icon: Icon, items, text, size = 16 }: { labe
 }
 
 export function CommandButton({ id, active, text, size = 16, className = '', label, drop }: { id: string; active?: boolean; text?: boolean; size?: number; className?: string; label?: string; drop?: string }) {
+  useKeymap((k) => k.version)                                          // D72: re-render the tooltip after a remap
   const c = command(id)
   if (!c) return null
   markUsed(id)
@@ -29,6 +31,7 @@ export function CommandButton({ id, active, text, size = 16, className = '', lab
 
 /** D71 (P15): a quick-action card (empty states, "Start from this image") bound to a registry command: icon, label, a one-line hint. */
 export function CommandCard({ id, hint, label }: { id: string; hint?: string; label?: string }) {
+  useKeymap((k) => k.version)                                          // D72: re-render the tooltip after a remap
   const c = command(id)
   if (!c) return null
   markUsed(id)

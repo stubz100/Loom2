@@ -1,3 +1,4 @@
+import { KeyboardSettings } from './KeyboardSettings'
 import { useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
@@ -64,6 +65,8 @@ export function SettingsModal() {
           <label>Log level</label>
           <select value={draft.log_level} onChange={(e) => set({ log_level: e.target.value })}>{['DEBUG', 'INFO', 'WARNING', 'ERROR'].map((l) => <option key={l}>{l}</option>)}</select>
           <span className="hint">Pen pressure curve appears when a pen is detected (D19). Project format defaults arrive with their suites.</span>
+          <h4 id="settings-keyboard">Keyboard</h4>
+          <KeyboardSettings />
           <h4>Licences</h4>
           <label>MiniMax H3</label><label className="chk"><input type="checkbox" checked={!!draft.h3_licence_confirmed} onChange={(e) => set({ h3_licence_confirmed: e.target.checked })} /> the EU community-licence application is filed (D17)</label>
           <span className="hint">Records the confirmation that unlocks the H3 hero tier in Animate once its graph and weights land (04 §5b). Licence checks are read against EU terms.</span>

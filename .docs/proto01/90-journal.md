@@ -2912,3 +2912,34 @@ split by file so that no two hands touched the same module.
   destroyed while still bound" warnings of a scene rebuild (journal 2026-10-08, 10-10); the next frame drew and every later check
   passed. Nine more tours on the same server passed without it (the Vite log holds that one occurrence). Not caused by D71 (no render code changed); recorded as open with the stack.
 - Startup chunk `main` 455 → 466 KB (drop rules, `openWith`, cards); Pixi and Mediabunny stay out.
+
+## 2026-10-11 13:28 — X1 · P16 remappable keys (D72) built
+
+- **Registry:** each command's own chords are kept aside (`defaultKeysOf`); the user's overrides (`keyStore.ts`: `loom2.keys`,
+  `{schema_version: 1, keys: {id: chord | null}}`, a bare map from before migrated, junk dropped, a broken store = none) are written
+  into `keys` / `alt` at registration and on every change, so dispatch, tooltips, menus, help and the palette follow without knowing
+  (and lazily registered suites get them when they load). A command whose own key is an unmodified Arrow, Esc, Space or Tab is
+  marked `fixed` at registration. `keymap.ts`: `remap` (refused for fixed commands, for the fixed keys, and when another command that can
+  fire in the same place — same scope, or either global — answers to the chord, naming it), `resetKey`, `resetAllKeys`,
+  `chordFromEvent`, and `SHARED_KEYS`, moved here from the audit test so the test and the remap check read one list.
+- **The audit got wider:** shared chords are now checked across overlapping scopes (a suite and global), not only within a scope. It
+  found two undeclared pairs — Ctrl+1 / Ctrl+2 are suite switches and Edit's 100 % / 200 % — which work by dispatch order (Edit's
+  capture-phase hook stops them while a document is open, 10 §5); declared as `byDispatch` with that reason.
+- **Keys moved into the registry:** the menu key (`global.contextMenu`, Shift+F10 / Menu), the palette and focus mode through their
+  commands in `useKeyboardMap`; Edit's candidate picks (`edit.cand.1–4`, `edit.cand.keep` on Enter — registered first so Enter keeps a
+  candidate before it closes a polygon, as before) and brush-opacity digits (`edit.brush.opacity.0–9`), with the four digit pairs and
+  the two Enter pairs declared; the before key `\` (`edit.view.before`, still held: the hook matches the command's chord on keydown and its
+  key on keyup); the loupe's Ctrl+0 / Ctrl+1 (`cat.loupe.fit` / `.one`, now the Fit and 1:1 buttons) and Compare's swap
+  (`cat.compare.swap`, Tab, fixed, the Swap button). `TOOL_KEYS` deleted. **Found by reading:** Compare's Tab handler and the global
+  focus-mode Tab were both window listeners, so Tab in Compare also toggled focus mode; Compare now listens in the capture phase and
+  stops it.
+- **Settings › Keyboard** (`KeyboardSettings.tsx`): search, by scope, click a key and press the new one (Esc cancels), × no key, ↺ back to
+  the default, Reset all (askConfirm); a refusal shows the reason on the row; it preloads the lazy suites so the conflict check sees
+  every command. Key changes apply at once (Save / Cancel do not touch them; the section says so). Help lists fixed keys as such plus a
+  fixed-keys section, and its footer shows the keys in force. Command buttons re-render their tooltips on a remap.
+- **Acceptance (Playwright, smoke 11/11):** the plan's example, Keep to **G**, is refused — G is Cycle grouping's — and the row says
+  “Cycle grouping”; Keep to **J**: the tile menu, the loupe hub's tooltip and the help show J, J keeps (API), K no longer does, the
+  setting survives a reload, ↺ restores K. Vitest `keymap.test.ts` (8: override resolution and dispatch, conflicts incl. global and alt
+  chords, fixed keys both ways, null / reset / back-to-default, persistence across a reload incl. a later-registered command,
+  migration, a broken store, chord recording); audit 6/6 with the wider rule; 160 unit; lint 100; headed tour, kit, brush, animate,
+  render pass.

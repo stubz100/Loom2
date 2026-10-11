@@ -32,7 +32,14 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   releasing anywhere else leaves it open (a click then chooses); a press on the open menu's button closes it. `openPressMenu` in
   `ContextMenu.tsx` owns the gesture; plain `showMenu` (right-click menus) is unchanged.
 - Keys are dispatched by `useKeyboardMap.ts` (global) and the suites' key hooks via `handleKeyFor(scope, e)`. Never add a raw `keydown`
-  listener for a user action that has no command.
+  listener for a user action that has no command; a hook that must see a key first (a hold, a capture-phase claim) matches it with
+  `matchesCommand(e, command(id))`, never a literal key — the user may have remapped it.
+- **Keys are remappable (D72).** `keymap.ts` holds the user's overrides (`loom2.keys`, `keyStore.ts`); the registry keeps each command's
+  own chords (`defaultKeysOf`) and writes the override into `keys` / `alt`, so every reader follows. A command whose own key is an
+  unmodified Arrow, Esc, Space or Tab is `fixed` (listed, not remappable). Two commands that can fire in the same place (same scope, or
+  either global) may share a chord only if the pair is in `keymap.ts SHARED_KEYS` with the reason they never fire together
+  (`byDispatch` when a handler's order decides, not `when`); the audit test and the remap check both read that list. Settings ›
+  Keyboard is `KeyboardSettings.tsx`.
 - The dev build marks rendered commands (`markUsed`) and can list commands with no mouse home (`unusedCommands`); `window.__loom2Commands`
   exposes the registry to the headed checks.
 

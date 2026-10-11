@@ -5,6 +5,7 @@
 // The registering modules are found by reading the sources, so a new `registerCommands([...])` anywhere under src/ joins the audit.
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Command, Placement, Scope } from './commands'
+import { SHARED_KEYS } from './keymap'
 
 const seen = vi.hoisted(() => [] as Command[])
 vi.mock('./commands', async (importOriginal) => {
@@ -20,14 +21,6 @@ const REGISTERING = Object.keys(SOURCES).filter((p) => p !== './commands.ts' && 
 const SCOPES: Scope[] = ['global', 'catalogue', 'generate', 'edit', 'animate', 'models']
 const PLACEMENTS: Placement[] = ['context', 'toolbar', 'strip', 'panel', 'inspector', 'topbar', 'rail', 'dock']
 
-/** Chords two commands of one scope may share, each with the reason the pair never fires together. Sorted ids, normalised chord. */
-const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; why: string }[] = [
-  { scope: 'edit', chord: 'enter', ids: ['edit.sel.polyClose', 'edit.transform.apply'], why: 'Enter closes an open polygon / magnetic border, else applies an open transform; both are `when`-guarded and the first enabled one runs (F3)' },
-  { scope: 'edit', chord: 'escape', ids: ['edit.sel.polyCancel', 'edit.transform.cancel'], why: 'useEditKeys resolves Esc itself (lasso first, then transform) before the registry; the registry entries carry the accelerator for menus' },
-  { scope: 'edit', chord: 'delete', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'useEditKeys sends Delete to the magnetic lasso while it is active (D59) before handleKeyFor; otherwise only Clear is enabled' },
-  { scope: 'edit', chord: 'backspace', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'as Delete: the magnetic lasso takes Backspace first while it is active (D59)' },
-]
-
 type Chord = ReturnType<typeof import('./commands').parseChord>
 const norm = (c: Chord) => `${c.ctrl ? 'ctrl+' : ''}${c.alt ? 'alt+' : ''}${c.shift ? 'shift+' : ''}${c.key}`
 const chordsOf = (c: Command) => [c.keys, ...(c.alt ?? [])].filter((k): k is string => !!k)
@@ -36,15 +29,20 @@ const chordsOf = (c: Command) => [c.keys, ...(c.alt ?? [])].filter((k): k is str
 function missingPlacement(cmds: Command[]): string[] {
   return cmds.filter((c) => !Array.isArray(c.placement) || c.placement.length === 0 || c.placement.some((p) => !PLACEMENTS.includes(p))).map((c) => c.id)
 }
-/** Every chord shared by two or more commands of one scope, as `scope chord: id, id`. */
+/** Every chord two commands can both answer to — same scope, or either is global (D72) — as `scope chord: id, id` (the suite's scope). */
 function sharedChords(cmds: Command[], parse: (s: string) => Chord): { scope: Scope; chord: string; ids: string[] }[] {
-  const out: { scope: Scope; chord: string; ids: string[] }[] = []
-  for (const scope of SCOPES) {
-    const by = new Map<string, Set<string>>()
-    for (const c of cmds.filter((x) => x.scope === scope)) for (const k of chordsOf(c)) { const n = norm(parse(k)); by.set(n, (by.get(n) ?? new Set()).add(c.id)) }
-    for (const [chord, ids] of by) if (ids.size > 1) out.push({ scope, chord, ids: [...ids].sort() })
+  const out = new Map<string, { scope: Scope; chord: string; ids: string[] }>()
+  for (const a of cmds) for (const b of cmds) {
+    if (a.id >= b.id || !(a.scope === b.scope || a.scope === 'global' || b.scope === 'global')) continue
+    const bn = new Set(chordsOf(b).map((k) => norm(parse(k))))
+    for (const k of chordsOf(a)) {
+      const n = norm(parse(k))
+      if (!bn.has(n)) continue
+      const scope = a.scope === 'global' ? b.scope : a.scope
+      out.set(`${scope} ${n} ${a.id} ${b.id}`, { scope, chord: n, ids: [a.id, b.id] })
+    }
   }
-  return out
+  return [...out.values()]
 }
 
 let commands: typeof import('./commands')
@@ -98,7 +96,7 @@ describe('D32 command audit', () => {
     for (const a of SHARED_KEYS) {
       expect(shared.some((s) => s.scope === a.scope && s.chord === a.chord && s.ids.join() === a.ids.join()), `${a.chord}: ${a.ids.join()} no longer shared`).toBe(true)
       expect(a.why.length).toBeGreaterThan(20)
-      for (const id of a.ids) expect(commands.command(id)?.when, `${id} needs a when`).toBeTypeOf('function')
+      if (!a.byDispatch) for (const id of a.ids) expect(commands.command(id)?.when, `${id} needs a when`).toBeTypeOf('function')
     }
   })
 })

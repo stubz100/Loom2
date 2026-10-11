@@ -184,3 +184,18 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .quick-cards.compact .quick-card svg { width: 16px; height: 16px; flex: none; }
 .quick-cards.compact .quick-card .qc-label { font-size: 12px; }
 .quick-cards.compact .quick-card .qc-hint { display: none; }
+/* D72: Settings › Keyboard */
+.keys-settings { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.keys-settings .keys-top { display: flex; gap: 8px; align-items: center; }
+.keys-settings .keys-top input { flex: 1; }
+.keys-settings h5 { margin: 8px 0 2px; color: var(--fg3); font-size: 11px; font-weight: 600; }
+.keys-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 4px; border-radius: var(--radius); }
+.keys-row:hover { background: var(--bg2); }
+.keys-row .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keys-row.changed .lbl { color: var(--accent); }
+.keys-row .keys-note { font-size: 11px; color: var(--fg3); white-space: nowrap; }
+.keys-row .keys-note.error { color: var(--error); white-space: normal; }
+.keys-row .keys-chord { min-width: 92px; font: var(--mono); font-size: 12px; }
+.keys-row .keys-chord.recording { border-color: var(--accent); color: var(--accent); }
+.keys-row .keys-chord:disabled { opacity: .55; }
+.keys-row button.icon { padding: 2px 4px; }

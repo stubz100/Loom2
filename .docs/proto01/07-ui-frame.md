@@ -122,6 +122,13 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 
 ## 4. Global keyboard map
 
+**Remappable (D72, 2026-10-11).** Every key below is a registry command's default; Settings › Keyboard changes them (search, by scope,
+click a key and press the new one, × for no key, ↺ back to the default, Reset all). A key another command already answers to where
+both can fire is refused with that command's name; unmodified Arrows, Esc, Space and Tab are fixed gesture keys (listed in help, not
+remappable). Overrides stay on this machine (`loom2.keys`). Menus, tooltips, the help overlay and the palette show the key in force.
+Keys that used to live outside the registry are commands now: the menu key, Edit's candidate picks (1–4, Enter) and brush-opacity
+digits, the before key (`\`, held), the loupe's Ctrl+0 / Ctrl+1 and Compare's swap (Tab, fixed).
+
 | Key | Action |
 | --- | --- |
 | `Ctrl+1…5` | switch suite (Catalogue, Generate, Edit, Animate, Models) |

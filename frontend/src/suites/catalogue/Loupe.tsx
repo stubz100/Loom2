@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { handleKeyFor } from '../../frame/commands'
+import { handleKeyFor, runCommand } from '../../frame/commands'
+import { catView } from './viewKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { moveToMenu, rateMenu, tileMenu } from './catalogueCommands'
 import type { MenuItem } from '../../frame/commands'
@@ -57,8 +58,7 @@ export function Loupe({ asset }: { asset: Asset }) {
     const h = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea')) return
       if (e.key === 'Escape') c.openLoupe(null)
-      else if (e.ctrlKey && e.key === '0') { e.preventDefault(); fit() }
-      else if (e.ctrlKey && e.key === '1') { e.preventDefault(); one() }
+      else if (e.ctrlKey && handleKeyFor('catalogue', e)) return                     // D72: Ctrl+0 / Ctrl+1 are cat.loupe.fit / .one
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') handleKeyFor('catalogue', e)
       else if (!e.ctrlKey && !e.metaKey && !e.altKey) { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); handleKeyFor('catalogue', e) }
       else return
@@ -66,6 +66,7 @@ export function Loupe({ asset }: { asset: Asset }) {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [c, idx, order, fit, one, asset.id])
+  useEffect(() => { catView.fit = fit; catView.one = one; return () => { catView.fit = undefined; catView.one = undefined } }, [fit, one])   // D72
   const pinned = c.compare.indexOf(asset.id) + 1
   const subItems = (m: MenuItem): MenuItem[] => ('items' in m ? m.items : [])
   return (
@@ -82,8 +83,8 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span>{asset.state !== 'none' ? asset.state : ''} {asset.rating ? '★'.repeat(asset.rating) : ''}</span>
         <span className="spacer" />
         <span>{Math.round(xf.s * 100)}%</span>
-        <button className="quiet" onClick={fit}>Fit</button>
-        <button className="quiet" onClick={one}>1:1</button>
+        <CommandButton id="cat.loupe.fit" text label="Fit" />
+        <CommandButton id="cat.loupe.one" text label="1:1" />
         <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
       </div>
       {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.
@@ -118,14 +119,15 @@ export function Compare({ assets }: { assets: Asset[] }) {
   const { xf, ref, fit, one, handlers } = useZoomPan(dims)
   const shown = two ? assets.slice(0, 2) : assets.slice(0, 4)
   const swap = () => { if (assets.length >= 2) { c.clearCompare(); [assets[1], assets[0], ...assets.slice(2)].forEach((a) => c.togglePin(a.id)) } }
+  useEffect(() => { catView.swap = swap; return () => { catView.swap = undefined } })                // D72: cat.compare.swap (Tab, the Swap button)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea')) return
       if (e.key === 'Escape') c.setCompareOpen(false)
-      else if (e.key === 'Tab') { e.preventDefault(); swap() }
+      else if (e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); runCommand('cat.compare.swap') }   // D72: before the global Tab (focus mode)
     }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    window.addEventListener('keydown', h, { capture: true })
+    return () => window.removeEventListener('keydown', h, { capture: true })
   })
   const cols = shown.length <= 2 ? shown.length : 2
   return (
@@ -145,7 +147,7 @@ export function Compare({ assets }: { assets: Asset[] }) {
         {two && !diff && <><span>wipe</span><input type="range" min={0} max={1} step={0.01} value={wipe} onChange={(e) => setWipe(Number(e.target.value))} /></>}
         <label><input type="checkbox" checked={diff} onChange={(e) => setDiff(e.target.checked)} /> difference</label>
         <button className="quiet" onClick={() => setTwo(!two)} disabled={assets.length < 3}>{two ? '4-up' : '2-up'}</button>
-        <button className="quiet" onClick={swap}>Swap (Tab)</button>
+        <CommandButton id="cat.compare.swap" text label="Swap" />
         <span className="spacer" />
         <span>{Math.round(xf.s * 100)}%</span>
         <button className="quiet" onClick={fit}>Fit</button>

@@ -20,7 +20,17 @@ export const TOOLS: [Tool, string, string, typeof Hand][] = [
   ['brush', 'Brush', 'B', Paintbrush], ['eraser', 'Eraser', 'E', Eraser], ['fill', 'Fill / gradient', 'G', PaintBucket], ['eyedropper', 'Eyedropper', 'I', Pipette], ['crop', 'Crop / canvas', 'C', Crop], ['hand', 'Hand', 'H', Hand], ['zoom', 'Zoom', 'Z', ZoomIn],
 ]
 
+const OPACITY_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0] as const
+
 registerCommands([
+  // D72: keys that lived only in useEditKeys. While AI candidates show, 1–4 keep one and Enter keeps the visible one (10 §10); otherwise
+  // the digits set the brush opacity (0 = 100 %). Registered first so Enter keeps a candidate before it closes a polygon, as before.
+  ...([1, 2, 3, 4] as const).map((n) => ({ id: `edit.cand.${n}`, scope: 'edit' as const, label: `Keep candidate ${n}`, keys: String(n), placement: ['strip'] as ['strip'],
+    hint: 'or click it in the candidate strip', when: () => !!ed().candidates?.ids[n - 1], run: () => { const id = ed().candidates?.ids[n - 1]; if (id) ed().pickCandidate(id) } })),
+  { id: 'edit.cand.keep', scope: 'edit', label: 'Keep the visible candidate', icon: Check, keys: 'Enter', placement: ['strip'], when: () => !!ed().candidates && !ed().transform,
+    run: () => { const st = ed(); if (!st.candidates) return; st.pickCandidate(st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]) } },
+  ...OPACITY_DIGITS.map((n) => ({ id: `edit.brush.opacity.${n}`, scope: 'edit' as const, label: `Brush opacity ${n === 0 ? 100 : n * 10} %`, keys: String(n), placement: ['panel'] as ['panel'],
+    hint: 'or the Opacity slider in Tool options', when: () => !(n >= 1 && n <= 4 && ed().candidates), run: () => ed().setBrush({ opacity: n === 0 ? 1 : n / 10 }) })),
   // history / files
   { id: 'edit.undo', scope: 'edit', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['strip', 'context'], when: () => ed().history.length > 0, run: () => ed().undo() },
   { id: 'edit.redo', scope: 'edit', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', alt: ['Ctrl+Y'], placement: ['strip', 'context'], when: () => ed().future.length > 0, run: () => ed().redo() },
@@ -120,7 +130,7 @@ registerCommands([
   { id: 'edit.view.200', scope: 'edit', label: 'Zoom 200 %', keys: 'Ctrl+2', placement: ['context'], when: hasDoc, run: () => ed().zoomTo(2) },
   { id: 'edit.view.grid', scope: 'edit', label: 'Pixel grid', placement: ['strip', 'context'], run: () => ed().setView({ pixelGrid: !ed().pixelGrid }) },
   { id: 'edit.view.overlay', scope: 'edit', label: 'Mask overlay', keys: 'Alt+\\', placement: ['strip', 'context'], run: () => ed().setView({ overlay: !ed().overlay }) },
-  { id: 'edit.view.before', scope: 'edit', label: 'Before (hide the active layer)', placement: ['strip'], hint: 'hold \\', when: hasDoc, run: () => ed().setView({ before: !ed().before }) },
+  { id: 'edit.view.before', scope: 'edit', label: 'Before (hide the active layer)', keys: '\\', placement: ['strip'], hint: 'hold the key; a click toggles', when: hasDoc, run: () => ed().setView({ before: !ed().before }) },   // D72: useEditKeys holds it
   // colours and brush
   { id: 'edit.colour.swap', scope: 'edit', label: 'Swap colours', icon: Shuffle, keys: 'X', placement: ['panel'], run: () => { const b = ed().brush; ed().setBrush({ color: b.background, background: b.color }) } },
   { id: 'edit.colour.default', scope: 'edit', label: 'Default colours', icon: RotateCcw, keys: 'D', placement: ['panel'], run: () => ed().setBrush({ color: '#000000', background: '#ffffff' }) },

@@ -266,6 +266,7 @@ class AdjFilter extends Filter {
     const glProgram = GlProgram.from({ vertex: GL_VERT, fragment: GL_FRAG.replace('{BLEND}', BLEND_GL).replace('{MAIN}', glMain) })
     super({
       gpuProgram, glProgram, blendRequired: true,
+      resolution: 'inherit',                                             // the backdrop copy is at the target's resolution; the input must match (screen ≠ 1 at 150 % display scaling)
       resources: {
         adjUniforms: { uP0: { value: st.p[0], type: 'vec4<f32>' }, uP1: { value: st.p[1], type: 'vec4<f32>' }, uP2: { value: st.p[2], type: 'vec4<f32>' }, uP3: { value: st.p[3], type: 'vec4<f32>' } },
         uBackTexture: Texture.EMPTY, uLutTexture: st.lut, uLutSampler: st.lut.style,

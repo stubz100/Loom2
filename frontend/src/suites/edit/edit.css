@@ -17,12 +17,14 @@
 .toolbox .tool.active b { color: var(--accent); }
 .toolbox .tool.later { opacity: .55; }
 
-.tool-opts { display: grid; grid-template-columns: 84px 1fr; gap: 8px 10px; align-items: center; }
+.tool-opts { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px 10px; align-items: center; }   /* the value column never grows past the panel */
+.tool-opts > * { min-width: 0; }
 .tool-opts label { color: var(--fg2); }
 .tool-opts .slider { display: flex; gap: 6px; align-items: center; }
 .tool-opts .slider input[type=range] { flex: 1; min-width: 0; }
 .tool-opts .val { display: inline-block; min-width: 44px; text-align: right; color: var(--fg3); font-size: 12px; }
-.tool-opts select { max-width: 100%; }
+.tool-opts select, .tool-opts textarea, .tool-opts input[type=text] { width: 100%; min-width: 0; box-sizing: border-box; }   /* long option texts are cut, not widening the panel */
+.tool-opts .segmented { flex-wrap: wrap; max-width: 100%; }
 .chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .nudge { display: grid; grid-template-columns: repeat(4, 32px); gap: 4px; }
 .nudge button { padding: 0; min-height: 26px; }
@@ -115,13 +117,13 @@
 .vfield-unit { font-style: normal; color: var(--fg3); font-size: 11px; width: 16px; text-align: left; padding-left: 2px; }
 .vfield-arrow { width: 14px; height: 22px; padding: 0; border: 0; border-left: 1px solid var(--line); background: none; color: var(--fg3); font-size: 11px; cursor: pointer; }
 .vfield-arrow:hover { color: var(--fg); }
-.vfield-pop { position: absolute; right: 0; top: 26px; z-index: 30; height: 22px; padding: 2px 0; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 4px 12px var(--shadow); cursor: pointer; }
+.vfield-pop { position: fixed; z-index: 70; height: 22px; padding: 2px 0; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 4px 12px var(--shadow); cursor: pointer; }
 .vfield-track { position: relative; margin: 8px 7px; height: 2px; background: var(--line2); }
 .vfield-knob { position: absolute; top: -5px; width: 10px; height: 12px; margin-left: -5px; border-radius: 2px; background: var(--accent); }
 .blend-select { position: relative; }
 .blend-btn { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; }
 .blend-btn .caret { font-size: 11px; color: var(--fg3); margin-left: 6px; }
-.blend-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; max-height: 320px; overflow-y: auto; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 6px 16px var(--shadow); }
+.blend-list { position: fixed; z-index: 70; overflow-y: auto; background: var(--bg2); border: 1px solid var(--line2); border-radius: 4px; box-shadow: 0 6px 16px var(--shadow); }
 .blend-opt { padding: 3px 8px; cursor: pointer; font-size: 12px; }
 .blend-opt:hover { background: var(--bg3); }
 .blend-opt.current { color: var(--accent); }
@@ -156,7 +158,7 @@
 .tone-fields { margin-top: 4px; }
 .curves-graph { width: 100%; max-width: 300px; aspect-ratio: 1; cursor: crosshair; touch-action: none; outline: none; }
 .curves-graph:focus { filter: drop-shadow(0 0 1px var(--accent)); }
-.cb-row { display: grid; grid-template-columns: 54px 1fr 44px 32px; gap: 6px; align-items: center; font-size: 12px; }
+.cb-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 40px 72px; gap: 6px; align-items: center; font-size: 12px; }
 .cb-row span:nth-child(3) { text-align: right; }
 .cb-row input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; }
 .cb-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); border: 1px solid var(--bg0); }
@@ -171,3 +173,10 @@
 
 .tool-opts .full { grid-column: 1 / -1; }   /* headings and hints that span the label + control grid */
 .tool-opts > .auto-btn { justify-self: start; }
+.grow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; }   /* outpaint: left / top / right / bottom */
+.grow-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.grow-cell small { color: var(--fg3); font-size: 11px; }
+.tool-opts > .ai-advanced { order: 99; }   /* after candidates and seed */
+.ai-advanced .props-section { border-top: 1px solid var(--line); padding-top: 4px; }
+.ai-advanced .props-body { padding-top: 6px; }
+.cb-row .vfield { width: 72px; min-width: 0; }   /* the colour balance number fits its column */

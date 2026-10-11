@@ -368,6 +368,8 @@ function AiTab() {
       refine: p.refineTiled, refine_model_id: tiledModel, te_id: p.refineTiled ? teId(tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
   }
   const ops: [AiOp, string][] = [['select', 'Select'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
+  /** The tuning controls of an operation: a collapsible Advanced section (closed until opened; it remembers), its own label grid. */
+  const advanced = (id: string, body: ReactNode) => <div className="full ai-advanced"><Section id={`ai-advanced-${id}`} title="Advanced" defaultOpen={false}><div className="tool-opts">{body}</div></Section></div>
   return (
     <div>
       <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => setP({ op: k, candidates: k === 'inpaint' || k === 'outpaint' || k === 'refine' ? (hero ? 2 : 4) : 1 })}>{l}</button>)}</div>
@@ -375,13 +377,14 @@ function AiTab() {
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
           <label>mode</label><select value={mode} onChange={(e) => { const m = e.target.value as AiPanelState['mode']; setP({ mode: m, candidates: m === 'fill_hero' ? 2 : 4 }) }}>
-            <option value="fill">Fill — Klein + LanPaint (default)</option><option value="fill_match">Fill-Match — Klein ICM, continues texture</option>{!open && <option value="fill_hero">Fill Hero — FLUX.2 dev + LanPaint (slow, best detail)</option>}<option value="remove">Remove — background-only prompt</option>{contentAware && <option value="quick_remove">Quick remove — content-aware fill, CPU, seconds, no GPU</option>}
+            <option value="fill" title="Klein + LanPaint (the default)">Fill</option><option value="fill_match" title="Klein ICM: continues the surrounding texture">Fill-Match · continues texture</option>{!open && <option value="fill_hero" title="FLUX.2 dev + LanPaint: slow, best detail">Fill Hero · slow, best detail</option>}<option value="remove" title="paints what is behind, from a background-only prompt">Remove</option>{contentAware && <option value="quick_remove" title="content-aware fill on the CPU: seconds, no GPU">Quick remove · CPU</option>}
           </select>
           {mode === 'remove' && contentAware && <><label /><label className="chk" title="the hole is content-aware filled (PhotoCraft, CPU) and the model starts from that instead of a grey hole — try it where Remove leaves an object's ghost"><input type="checkbox" checked={p.prefill} onChange={(e) => setP({ prefill: e.target.checked })} /> pre-fill the hole (content-aware)</label></>}
           {mode === 'quick_remove' && <span className="hint full">PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones</span>}
-          {mode !== 'quick_remove' && <EncoderPick model={kleinId} />}
           {mode !== 'quick_remove' && <><label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
 </>}
+          {advanced('inpaint', <>
+          {mode !== 'quick_remove' && <EncoderPick model={kleinId} />}
           {p.mode !== 'fill_match' && p.mode !== 'remove' && p.mode !== 'quick_remove' && <><label>LanPaint</label><div className="segmented"><button className={p.promptMode === 'image_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'image_first' })}>image first</button><button className={p.promptMode === 'prompt_first' ? 'active' : ''} onClick={() => setP({ promptMode: 'prompt_first' })}>prompt first</button></div></>}
           <Slider label="margin" value={p.margin} min={0} max={100} step={1} unit="%" onChange={(v) => setP({ margin: v })} />
           <Slider label="min size" value={p.minSize} min={512} max={2048} step={64} unit="px" onChange={(v) => setP({ minSize: v })} />
@@ -389,22 +392,27 @@ function AiTab() {
           <Slider label="expand" value={p.expand} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ expand: v })} />
           <label>blend</label><div className="segmented"><button className={p.blend === 'feather' ? 'active' : ''} title="the result fades in over the feather" onClick={() => setP({ blend: 'feather' })}>feather</button><button className={p.blend === 'seamless' ? 'active' : ''} title="Poisson-blend the result into the plate: it keeps its texture but takes the plate's colour and light at the seam — best for removals and continuing a texture; it also pulls an intended colour change towards the old colour near the edge" onClick={() => setP({ blend: 'seamless' })}>seamless</button></div>
           <span className="hint full">results land with a layer mask: paint it (click the mask thumbnail) to adjust the seam</span>
+          </>)}
         </>}
         {p.op === 'outpaint' && <>
-          {(['left', 'top', 'right', 'bottom'] as const).map((k) => <ValueField key={k} label={`grow ${k}`} value={p.pad[k]} min={0} max={2048} step={16} unit="px" onChange={(v) => setP({ pad: { ...p.pad, [k]: v } })} />)}
+          <label>grow</label><div className="grow-grid">{(['left', 'top', 'right', 'bottom'] as const).map((k) => <span key={k} className="grow-cell"><small>{k}</small><ValueField bare label={`grow ${k}`} value={p.pad[k]} min={0} max={2048} step={16} unit="px" onChange={(v) => setP({ pad: { ...p.pad, [k]: v } })} /></span>)}</div>
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="what continues beyond the edge" onChange={(e) => setP({ prompt: e.target.value })} />
           <label>model</label><div className="segmented"><button className={!hero ? 'active' : ''} onClick={() => setP({ outpaintHero: false, candidates: 4 })}>Klein + LanPaint</button>{!open && <button className={hero ? 'active' : ''} onClick={() => setP({ outpaintHero: true, candidates: 2 })}>dev (hero)</button>}</div>
+          {advanced('outpaint', <>
           <EncoderPick model={hero ? 'flux2-dev-fp8mixed' : kleinId} />
           <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />
+          </>)}
         </>}
         {p.op === 'refine' && <>
           <label>model</label><select value={refineModel} onChange={(e) => setP({ refineModel: e.target.value, candidates: e.target.value === 'flux2-dev-fp8mixed' ? 2 : 4 })}>{open ? <option value="klein-base-4b">Klein 4B base (CFG, negatives)</option> : <><option value="klein-base-9b">Klein 9B base (CFG, negatives)</option><option value="flux2-dev-fp8mixed">FLUX.2 dev + Turbo</option></>}</select>
-          <EncoderPick model={refineModel} />
           <label>on</label><div className="segmented">{(['visible', 'active', 'selection'] as const).map((s) => <button key={s} className={p.refineSource === s ? 'active' : ''} onClick={() => setP({ refineSource: s })}>{s}</button>)}</div>
           <Slider label="strength" value={p.strength} min={0.1} max={0.8} step={0.01} onChange={(v) => setP({ strength: v })} />
           <label>prompt</label><textarea value={p.prompt} rows={3} placeholder="defaults to the source asset's prompt when empty" onChange={(e) => setP({ prompt: e.target.value })} />
+          {advanced('refine', <>
+          <EncoderPick model={refineModel} />
           {p.refineSource === 'selection' && <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />}
           <label /><label className="chk" title="undo the refine's colour drift: the result's colour statistics are mapped onto the original's — around the selection, or over the whole image / layer"><input type="checkbox" checked={p.matchColour} onChange={(e) => setP({ matchColour: e.target.checked })} /> match colour to the original</label>
+          </>)}
         </>}
         {p.op === 'upscale' && <>
           <label>model</label><select value={p.upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}><option value="realesrgan-x2">Real-ESRGAN 2× {health('realesrgan-x2') === 'missing' ? '(not fetched)' : ''}</option><option value="realesrgan-x4">Real-ESRGAN 4× {health('realesrgan-x4') === 'missing' ? '(not fetched)' : ''}</option></select>

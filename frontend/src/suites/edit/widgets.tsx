@@ -7,11 +7,36 @@
 //
 // BlendSelect: a dropdown whose closed button steps the mode with the mouse wheel and whose open list previews the hovered mode on
 // the canvas (through onPreview — nothing is recorded) and commits on click; each choice is one history step.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 
 const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const SLIDER_W = 160
 const ARROW_W = 14
+
+/** A pop-up's place on the page, next to its anchor: rendered through a portal with fixed positioning, so a scrolling panel never
+ * clips it; below the anchor, or above when the space below is short; inside the window horizontally. Follows scrolls and resizes. */
+function usePopupPlace(anchor: RefObject<HTMLElement | null>, open: boolean, size: { w?: number; h: number; align: 'left' | 'right' }) {
+  const [place, setPlace] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!open) return
+    const at = () => {
+      const el = anchor.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const width = size.w ?? r.width
+      const below = window.innerHeight - r.bottom - 6, above = r.top - 6
+      const up = below < Math.min(size.h, 120) && above > below
+      const maxHeight = Math.max(40, Math.min(size.h, up ? above : below))
+      const left = clampTo(size.align === 'right' ? r.right - width : r.left, 4, window.innerWidth - width - 4)
+      setPlace({ left, width, maxHeight, top: up ? r.top - 2 - maxHeight : r.bottom + 2 })
+    }
+    at()
+    window.addEventListener('scroll', at, true); window.addEventListener('resize', at)
+    return () => { window.removeEventListener('scroll', at, true); window.removeEventListener('resize', at) }
+  }, [open, anchor, size.w, size.h, size.align])
+  return open ? place : null
+}
 
 /** + − × ÷ and parentheses over numbers; null when the text is not such an expression. */
 function parseNum(text: string): number | null {
@@ -49,16 +74,20 @@ export interface ValueFieldProps {
   onChange: (v: number) => void
   onStart?: () => void; onCommit?: () => void
   disabled?: boolean; title?: string
+  /** No grid label of its own (the row around it names it); `label` still names the field for assistive tech and tooltips. */
+  bare?: boolean
 }
 
-export function ValueField({ label, value, min, max, scale = 1, unit, step, onChange, onStart, onCommit, disabled, title }: ValueFieldProps) {
+export function ValueField({ label, value, min, max, scale = 1, unit, step, onChange, onStart, onCommit, disabled, title, bare }: ValueFieldProps) {
   const lo = min * scale, hi = max * scale
-  const fine = hi - lo <= 10
+  const fine = hi - lo <= 10 && !(step !== undefined && step * scale >= 1)    // whole-number fields (candidates 1–4) show no decimals
   const shown = value * scale
   const fmt = (v: number) => (fine ? v.toFixed(2) : String(Math.round(v * 100) / 100))
   const [text, setText] = useState<string | null>(null)
   const [popup, setPopup] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  const place = usePopupPlace(wrap, popup, { w: SLIDER_W, h: 26, align: 'right' })
   const typing = useRef<number | null>(null)                          // F11: the shown value when typing began — one gesture until Enter / blur
   const typed = (v: number) => { if (typing.current === null) { typing.current = shown; onStart?.() } set(v) }
   const endTyping = () => { if (typing.current !== null) { typing.current = null; onCommit?.() } }
@@ -66,7 +95,7 @@ export function ValueField({ label, value, min, max, scale = 1, unit, step, onCh
   const set = (display: number) => onChange(snap(clampTo(Math.round(display * 10000) / 10000, lo, hi) / scale))
   useEffect(() => {                                                  // the slider pop-up closes on a press outside it
     if (!popup) return
-    const off = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setPopup(false) }
+    const off = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node) && !pop.current?.contains(e.target as Node)) setPopup(false) }
     window.addEventListener('pointerdown', off, { capture: true })
     return () => window.removeEventListener('pointerdown', off, { capture: true })
   }, [popup])
@@ -135,18 +164,17 @@ export function ValueField({ label, value, min, max, scale = 1, unit, step, onCh
   const f = hi > lo ? (shown - lo) / (hi - lo) : 0
   return (
     <>
-      <label>{label}</label>
+      {!bare && <label>{label}</label>}
       <div className={`vfield${disabled ? ' disabled' : ''}`} ref={wrap} title={title ?? `${label}: drag the number to scrub (Shift: fine), type a value or a sum, ↑ ↓ step; ▾ drag for a slider`}>
         <input className="vfield-num" value={text ?? fmt(shown)} disabled={disabled} aria-label={label}
           onPointerDown={onNumDown} onChange={(e) => { setText(e.target.value); const v = Number(e.target.value); if (e.target.value.trim() !== '' && Number.isFinite(v)) typed(v) }}
           onBlur={(e) => { const v = parseNum(e.target.value); if (text !== null && v !== null && v !== shown) typed(v); endTyping(); setText(null) }} onKeyDown={onKey} />
         {unit ? <i className="vfield-unit">{unit}</i> : null}
         <button type="button" className="vfield-arrow" aria-label={`${label} slider`} title={`${label}: press and drag, or click for a slider`} disabled={disabled} onPointerDown={onArrowDown}>▾</button>
-        {popup && (
-          <div className="vfield-pop" onPointerDown={onTrack} style={{ width: SLIDER_W }}>
+        {popup && place && createPortal(
+          <div className="vfield-pop" ref={pop} onPointerDown={onTrack} style={{ left: place.left, top: place.top, width: SLIDER_W }}>
             <div className="vfield-track"><div className="vfield-knob" style={{ left: `calc(7px + ${f} * (100% - 14px))` }} /></div>
-          </div>
-        )}
+          </div>, document.body)}
       </div>
     </>
   )
@@ -159,6 +187,7 @@ export function BlendSelect({ value, options, onChoose, onPreview, disabled }: {
   const [open, setOpen] = useState(false)
   const btn = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
+  const place = usePopupPlace(btn, open, { h: 320, align: 'left' })
   const wheelAcc = useRef(0)
   const idx = Math.max(0, options.findIndex((o) => o.value === value))
   const step = (d: number) => { const j = clampTo(idx + d, 0, options.length - 1); if (j !== idx) onChoose(options[j].value) }
@@ -191,14 +220,13 @@ export function BlendSelect({ value, options, onChoose, onPreview, disabled }: {
       <button type="button" ref={btn} className="blend-btn" disabled={disabled} aria-haspopup="listbox" aria-expanded={open}
         title="Blend mode — the wheel steps through the modes; open the list and hover a mode to preview it on the canvas"
         onClick={() => { setOpen((o) => !o); onPreview(null) }}>{options[idx]?.label ?? value}<span className="caret">▾</span></button>
-      {open && (
-        <div className="blend-list" ref={list} role="listbox" onPointerLeave={() => onPreview(null)}>
+      {open && place && createPortal(
+        <div className="blend-list" ref={list} role="listbox" style={{ left: place.left, top: place.top, width: place.width, maxHeight: place.maxHeight }} onPointerLeave={() => onPreview(null)}>
           {options.map((o) => (
             <div key={o.value} role="option" aria-selected={o.value === value} className={`blend-opt${o.value === value ? ' current' : ''}`}
               onPointerEnter={() => onPreview(o.value === value ? null : o.value)} onClick={() => { onPreview(null); if (o.value !== value) onChoose(o.value); setOpen(false) }}>{o.label}</div>
           ))}
-        </div>
-      )}
+        </div>, document.body)}
     </div>
   )
 }

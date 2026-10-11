@@ -1460,6 +1460,7 @@ def main() -> int:
             press(*bb)
             bg = cdp.eval("getComputedStyle(document.querySelector('.blend-list')).backgroundColor")
             check(bg not in ("rgba(0, 0, 0, 0)", "transparent"), f"the blend list has an opaque background ({bg})")
+            check(cdp.eval("document.querySelector('.blend-list').parentElement === document.body"), "the blend list floats above the panels (a portal: a scrolling panel cannot clip it)")
             mul = cdp.eval("JSON.stringify((() => { const e = [...document.querySelectorAll('.blend-opt')].find((o) => o.textContent === 'Multiply'); const r = e.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2] })())")
             mx, my = json.loads(mul)
             h0 = hist()
@@ -1756,6 +1757,8 @@ def main() -> int:
             check(mid[0] > 30 and hist() == h0 + 1, f"the Cyan · Red row moves the midtones' red, one step ({mid})")
             compare("colour balance midtones")
             cdp.shot(OUT / f"{mode}{tag}-balance.png")
+            spill = json.loads(cdp.eval("JSON.stringify((() => { const b = document.querySelector('.inspector .body'); const r = b.getBoundingClientRect(); return { hscroll: b.scrollWidth > b.clientWidth + 1, out: [...b.querySelectorAll('.cb-row *')].filter((e) => e.getBoundingClientRect().right > r.right - 4).length } })())"))
+            check(not spill["hscroll"] and spill["out"] == 0, f"the colour balance rows fit the Inspector ({spill})")
             cdp.eval(f"{C}.runCommand('edit.layer.delete'); 1"); time.sleep(0.4)
             # sections collapse; groups ungroup
             cdp.eval("document.querySelector('.props-head').click(); 1"); time.sleep(0.2)
@@ -2077,6 +2080,53 @@ def main() -> int:
             check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "adjscreen":
+            # an adjustment layer on screen at the display's scaling (150 % here): its filter read the backdrop at the screen's resolution
+            # and its input at 1, so the picture was stretched sideways and squashed with a black band below — while the compare,
+            # which renders at resolution 1, matched; judged on screenshots, before and after a compare
+            S = STORE
+            cdp.eval(f"{S}.addLayer('adjustment', {{ type: 'color_balance', params: {{ shadows: [0,0,0], midtones: [60,0,0], highlights: [0,0,0], preserve_luminosity: true }} }}); 1"); time.sleep(0.8)
+            import numpy as np
+            def black_rows(name: str) -> int:
+                a = np.asarray(cdp.shot(OUT / f"adjscreen-{name}.png")).astype(int)[..., :3]
+                z, px, py = cdp.eval(f"{S}.zoom"), cdp.eval(f"{S}.pan.x"), cdp.eval(f"{S}.pan.y")
+                x = int((canvas["x"] + px + 480 * z) * dpr)                       # the document's middle column, its full height
+                y0, y1 = int((canvas["y"] + py + 4 * z) * dpr), int((canvas["y"] + py + 540 * z) * dpr)
+                return int((a[y0:y1, x].max(axis=1) < 12).sum())
+            b0 = black_rows("before")
+            cdp.eval(f"window.__c = 0; {S}.compareWithExact().then(() => {{ window.__c = 1 }}); 1")
+            t0 = time.time()
+            while time.time() - t0 < 40 and not cdp.eval("window.__c"):
+                time.sleep(0.3)
+            time.sleep(0.5)
+            b1 = black_rows("after-compare")
+            check(b0 == 0 and b1 == 0, f"an adjustment layer fills the document on screen, before and after a compare (black rows {b0}, {b1})")
+        elif mode == "aipanel":
+            # the AI panel fits its column: for each operation (and Inpaint's modes) nothing reaches past the panel's right edge, no
+            # control is squeezed below its content, and the body scrolls vertically instead of spilling (the author's report 2026-10-11)
+            cdp.eval("(() => { const b = [...document.querySelectorAll('.rail button')].find((x) => (x.title || '').startsWith('AI')); b && b.click(); return 1 })()"); time.sleep(0.5)
+            probe = """JSON.stringify((() => {
+              const body = document.querySelector('.panel .body'); if (!body) return null
+              const r = body.getBoundingClientRect(), bad = []
+              body.querySelectorAll('*').forEach((e) => { const q = e.getBoundingClientRect(); if (!q.width || !q.height) return
+                if (q.right > r.right + 1 || q.left < r.left - 1) bad.push('outside:' + (e.className || e.tagName) + ':' + Math.round(q.right - r.right))
+                if (['BUTTON', 'SELECT', 'INPUT'].includes(e.tagName) && e.scrollWidth > e.clientWidth + 2) bad.push('squeezed:' + (e.textContent || e.value || e.className).slice(0, 24)) })
+              const panel = document.querySelector('.panel').getBoundingClientRect()
+              return { hscroll: body.scrollWidth > body.clientWidth + 1, bad: [...new Set(bad)].slice(0, 12), bodyBottom: Math.round(r.bottom), panelBottom: Math.round(panel.bottom), scrollH: body.scrollHeight, clientH: body.clientHeight }
+            })())"""
+            ops = json.loads(cdp.eval("JSON.stringify([...document.querySelectorAll('.panel .body .segmented')][0] ? [...[...document.querySelectorAll('.panel .body .segmented')][0].querySelectorAll('button')].map((b) => b.textContent) : [])"))
+            check(len(ops) >= 4, f"the AI panel shows its operations ({ops})")
+            for op in ops:
+                cdp.eval(f"(() => {{ const b = [...[...document.querySelectorAll('.panel .body .segmented')][0].querySelectorAll('button')].find((x) => x.textContent === {json.dumps(op)}); b.click(); return 1 }})()"); time.sleep(0.4)
+                cdp.shot(OUT / f"aipanel-{op.lower()}.png")
+                m = json.loads(cdp.eval(probe))
+                check(m and not m["hscroll"] and not m["bad"] and m["bodyBottom"] <= m["panelBottom"] + 1, f"AI · {op}: fits the panel (no sideways scroll, nothing outside or squeezed; {m})")
+                if cdp.eval("!!document.querySelector('.ai-advanced .props-head')"):
+                    cdp.eval("document.querySelector('.ai-advanced .props-head').click(); 1"); time.sleep(0.3)
+                    cdp.shot(OUT / f"aipanel-{op.lower()}-advanced.png")
+                    m = json.loads(cdp.eval(probe))
+                    check(m and not m["hscroll"] and not m["bad"], f"AI · {op} with Advanced open: fits the panel ({m})")
+                    cdp.eval("document.querySelector('.ai-advanced .props-head').click(); 1"); time.sleep(0.2)
         elif mode == "masks":
             # D54: the author's workflow by mouse, judged on screenshots only (the extractor re-renders every pass and would hide a stale
             # stage) — add a mask, paint it with the brush, erase, swap colours, select the row, view the mask alone, hide all

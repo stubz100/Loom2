@@ -9,6 +9,7 @@ import { LayerPixels, lumaOf, selectionAlphaCanvas, type TileSnapshot } from './
 import { border, changedTiles, combine, contract, expand, feather, selectionValues, smooth, writeSelection, type SelectionMode } from './selectionOps'
 import { maskAlphaCanvas } from './maskDerived'
 import { compositeOver, Homography, homographyOf, isIdentity, premultiply, rectCorners, splitSelected, toStraight8, warpGray, warpRaster, type Raster, type Xform } from './transform'
+import { typeLabel } from './labels'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
 export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number; default?: number }   // D52: density 0–1, feather σ px; D54: the value outside the extent
@@ -1115,7 +1116,7 @@ export const useEditor = create<EditorState>()(
           if (!doc) return null
           const before = clone(doc)
           const type = extra.type ?? (kind === 'adjustment' ? 'levels' : 'gaussian_blur')
-          const node: Node = { kind, id: newId('lyr'), name: extra.name ?? (kind === 'raster' ? `Layer ${countRasters(doc) + 1}` : kind === 'group' ? 'Group' : type.replace('_', ' ')),
+          const node: Node = { kind, id: newId('lyr'), name: extra.name ?? (kind === 'raster' ? `Layer ${countRasters(doc) + 1}` : kind === 'group' ? 'Group' : typeLabel(type)),
             opacity: 1, blend: 'normal', visible: true, locked: false, clip: false, mask: null, ...(kind === 'raster' ? { x: 0, y: 0, w: doc.w, h: doc.h, fill: 1 } : {}),
             ...(kind === 'group' ? { passthrough: true, children: [] } : {}), ...(kind === 'adjustment' ? { type, params: extra.params ?? clone(ADJUSTMENT_DEFAULTS[type] ?? {}) } : {}),
             ...(kind === 'filter' ? { type, params: extra.params ?? clone(FILTER_DEFAULTS[type] ?? {}) } : {}), ...extra }

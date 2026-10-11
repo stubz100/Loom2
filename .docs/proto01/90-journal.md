@@ -2647,3 +2647,27 @@ split by file so that no two hands touched the same module.
 - **Checks:** offline 200 (was 186; incl. the corpus test with `--extra oracle`); settings audit 150 / 0 problems; agents_check clean;
   build clean; lint 100 warnings, 0 errors (unchanged). Headed: all 16 modes pass (render, paint, kit, layers, props, transform, smartsel, heal, masks, selection, brush, grid, psd, cmpdiag, tour, animate) — psd / tour first failed on Vite's "504 Outdated Optimize Dep" from the long-running dev server (re-optimised by touching vite.config.ts), not on the code. New headed assertions: popups opaque, strip fits, typing is one
   step, Enter applies a transform, Ctrl latch in the Layers panel, find field; heal's undo check accepts the first stroke removing its layer.
+
+## 2026-10-11 08:05 — The review's two open UI items, the AI panel's layout, and adjustment layers at 150 % display scaling
+
+- **Pop-ups no longer clipped:** the value field's ▾ slider and the blend list render through a portal with fixed positioning
+  (`usePopupPlace` in `widgets.tsx`): below the anchor, above when the space below is short, inside the window, following scrolls and
+  resizes. Headed `kit` asserts the blend list's parent is the page body.
+- **Colour balance numbers:** each row keeps its gradient track and gains the shared value field (type, scrub, ▾ slider; `bare` — the
+  row names it); headed `props` asserts the rows fit the Inspector (the first layout ran 30 px past its edge).
+- **AI panel (the author: it overspills both ways):** the label grid's value column could grow past the panel — long mode / encoder option
+  texts and segmented rows widened it (Inpaint 157 px, Refine and Outpaint 64 px of sideways scroll). Now `minmax(0, 1fr)`, dropdowns
+  and text fields take the column, segments wrap; the mode names are short (detail in their tooltips); whole-number fields show no decimals
+  (candidates "4", not "4.00"). Vertically: the tuning controls (encoder, LanPaint order, margin, min size, feather, expand, blend, colour
+  match) moved into a collapsible **Advanced** section per operation, closed until opened and remembered, placed after candidates and
+  seed; Outpaint's four grow fields are a 2 × 2 block. New headed mode `aipanel`: every operation, Advanced closed and open, nothing
+  outside or squeezed, no sideways scroll.
+- **Adjustment layers were stretched on screen at 150 % display scaling** (found while checking the colour balance screenshot; review U16
+  had blamed the compare): the adjustment filter rendered its input at resolution 1 while Pixi copied the backdrop at the screen's 1.5, and
+  the shader samples both at the same coordinates — the picture came out 4/3 wider and 3/4 shorter with a black band below, before any
+  compare. The compare renders at resolution 1, where both match, so it reported max 1/255. Fixed with `resolution: 'inherit'` on the
+  filter. New headed mode `adjscreen` judges the screen (black rows in the document's middle column: 168 → 0, before and after a compare).
+  New adjustment layers are named with the shared labels ("Colour balance").
+- Offline 200; build clean; lint 100 (unchanged); headed: all 18 modes pass (adjscreen, aipanel, render, paint, kit, layers, props,
+  transform, smartsel, heal, masks, selection, brush, grid, psd, cmpdiag, tour, animate). The author reports the Multiply "resize" no longer
+  appears.

@@ -10,8 +10,8 @@ import { ValueField } from './widgets'
 
 // ---- sections -----------------------------------------------------------------------------------------------
 const OPEN = new Map<string, boolean>()                              // open state per section id, for the session (PhotoCraft: egui temp memory)
-export function Section({ id, title, children, extra }: { id: string; title: string; children: ReactNode; extra?: ReactNode }) {
-  const [open, setOpen] = useState(OPEN.get(id) ?? true)
+export function Section({ id, title, children, extra, defaultOpen = true }: { id: string; title: string; children: ReactNode; extra?: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(OPEN.get(id) ?? defaultOpen)
   return (
     <div className="props-section">
       <button type="button" className="props-head" aria-expanded={open} onClick={() => { OPEN.set(id, !open); setOpen(!open) }}>
@@ -261,7 +261,8 @@ export function ColorBalanceEditor({ params, set, start, commit }: EditorProps) 
           <input type="range" min={-100} max={100} step={1} value={Number(vals[i]) || 0} style={{ background: `linear-gradient(90deg, ${ca}, ${cb})` }}
             onPointerDown={start} onChange={(e) => setRow(i, Number(e.target.value))} onPointerUp={() => commit(`colour balance ${tone}`)}
             onKeyDown={(e) => { if (!e.repeat) start() }} onKeyUp={() => commit(`colour balance ${tone}`)} onDoubleClick={() => { start(); setRow(i, 0); commit(`colour balance ${tone}`) }} />
-          <span>{b}</span><span className="val">{Number(vals[i]) || 0}</span>
+          <span>{b}</span>
+          <ValueField bare label={`${a} – ${b}`} value={Number(vals[i]) || 0} min={-100} max={100} step={1} onStart={start} onChange={(v) => setRow(i, v)} onCommit={() => commit(`colour balance ${tone}`)} />
         </div>
       ))}
     </div>

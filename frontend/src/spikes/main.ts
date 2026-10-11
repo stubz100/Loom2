@@ -1,10 +1,11 @@
 // loom2 frontend — M0 spike harness. Plain DOM for the spikes (React arrives with the real frame in M1).
-// Routes: #e1 (WebGPU compositor) · #e1-webgl · #e2 (loopback transfer) · #e3 (brush) · #e6 (video scrub) · #all
+// Routes: #e1 (WebGPU compositor) · #e1-webgl · #e2 (loopback transfer) · #e3 (brush) · #e6 (video scrub) · #e13 (timeline, D74) · #all
 import './spikes.css'
 import { runE1 } from './e1Compositor'
 import { runE2 } from './e2Transfer'
 import { runE3 } from './e3Brush'
 import { runE6 } from './e6Video'
+import { runE13 } from './e13Timeline'
 import { hostInfo } from './report'
 
 const ORDER = ['e1', 'e1-webgl', 'e2', 'e3', 'e6']
@@ -38,6 +39,7 @@ async function route() {
     else if (current === 'e2') await runE2(mount, out)
     else if (current === 'e3') await runE3(mount, out, { synthetic: true })
     else if (current === 'e6') await runE6(mount, out)
+    else if (current === 'e13') await runE13(mount, out)
     else out.textContent = 'pick a spike above, or #all to run the sequence'
   } catch (e) {
     out.textContent = `FAILED: ${(e as Error).stack ?? e}`

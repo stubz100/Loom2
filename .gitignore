@@ -33,6 +33,7 @@ engine/comfyui_user/
 # spike + frontend artefacts
 orchestrator/spikes/out/
 frontend/public/spikes/*.mp4
+frontend/public/spikes/e13/*.mp4
 frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/schemas/

@@ -24,6 +24,10 @@ MANIFEST = [
     # ---- M5 Edit AI tools ----
     dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", dest="upscale_models", license="bsd-3-clause"),
     dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x4.pth", dest="upscale_models", license="bsd-3-clause"),
+    # ---- E12 angles, method B (D74): Qwen-Image-Edit 2511 as a Q4_K_M GGUF + fal's 96-pose angles LoRA + lightx2v's 4-step LoRA ----
+    dict(spike="e12", repo="unsloth/Qwen-Image-Edit-2511-GGUF", file="qwen-image-edit-2511-Q4_K_M.gguf", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="e12", repo="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA", file="qwen-image-edit-2511-multiple-angles-lora.safetensors", dest="loras", license="apache-2.0"),
+    dict(spike="e12", repo="lightx2v/Qwen-Image-Edit-2511-Lightning", file="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", dest="loras", license="apache-2.0"),
     # ---- E8 inpaint bake-off (and M5 Klein tiers) ----
     dict(spike="e8", repo="Comfy-Org/flux2-klein-9B", file="split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors",
          dest="text_encoders", license="flux-nc (TE: Qwen3 Apache-2.0 repack)"),

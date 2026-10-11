@@ -3024,3 +3024,21 @@ split by file so that no two hands touched the same module.
   recurrence explains itself. New smoke scenario: Edit's chunk refused by the network → one explanation in the stage, the rest of the
   app works, reload after the network is back → Edit loads. Smoke 13/13 under full and open, 164 unit, lint 100, headed tour / render /
   transform / masks / kit / perf pass (6×4K composite p95 7.0 ms).
+
+## 2026-10-11 16:30 — Spikes open (D74); E13 timeline passed (D75); E12 angles running
+
+- **D74:** the spikes E10–E14 run, one decision per result; the author approved the model downloads (licences read against D17 / D26,
+  a losing method's weights deleted). Order: E12 (its method A is on disk), E13 (no rig), E10, E11, E14.
+- **E13 timeline** (`frontend/src/spikes/e13Lane.ts` model + `e13Timeline.ts` view, `#e13` in the spike harness, runner
+  `frontend/e2e/spikes/e13.run.mjs`; clips from `orchestrator/spikes/e13_make_clips.py`: 10 × 120 frames, 640 × 360, GOP 6, an 11-bit
+  clip + frame code burned in). Headless Edge: **scrub** 260 checks (every cut ± 3 frames, 200 random seeks) — 0 frames off, the right clip
+  every time, 5.6 / 13.2 ms p50 / p95 per step; **trims** with 50 clips, 240 steps of model update + forced re-layout — 0.6 / 0.9 ms p50 /
+  p95; **crossfade** mid-dissolve pixel within 0.3 / 255 of the weighted mix; **export** EDL (35 lines) and FCPXML 1.10 (well formed,
+  2 dissolves, 1176 frames); **bundle** +9.4 KB minified / 3.9 KB gzip. Vitest `e13Lane.test.ts` (7). Verdict: **pass → D75**; the Resolve
+  import of `engine/spikes/out/e13/e13.fcpxml` / `e13.edl` is left to the author (Resolve is installed; opening it is theirs to do).
+- **E12 angles** (`engine/spikes/e12_angles.py`): ten frozen sources in `bench/angles/` (Klein 9B from bench/t2i 01–10, 1024 × 576, seed
+  20261011, `sources.json`); methods A (Qwen-Edit 2509 fp8 + the dx8152 angles LoRA + Lightning 4-step) and C (Klein 9B + the source as
+  ReferenceLatent + an English camera instruction) over five moves are running; method B's weights (2511 Q4_K_M + fal's angles LoRA +
+  lightx2v's 2511 Lightning, Apache-2.0, ≈ 13.4 GB) are downloading through `scripts/fetch_weights.py --only e12`. First numbers for A:
+  cold 428 s, warm 90 s (bars 180 / 60) — the 20 GB transformer and the 8 GB encoder do not fit together, so each job re-stages weights;
+  sampling itself is ≈ 10 s.

@@ -7,7 +7,7 @@ import numpy as np
 
 from loom2 import compose, edit_ai, poisson, tone
 from loom2.documents import Document, OpenDocument
-from loom2.queue import JobQueue
+from loom2.engine import finishers
 from loom2.recipes import Inpaint
 
 rng = np.random.default_rng(11)
@@ -108,7 +108,7 @@ def test_result_layers_carry_a_linked_mask(tmp_path: Path):
     rgba[..., :3] = 200
     rgba[5:15, 5:25, 3] = 255
     rgba[..., 3][rgba[..., 3] == 0] = 40                                                    # a soft edge
-    asyncio.run(JobQueue._add_result_layer(fake, job, od, Inpaint(), rgba, 10, 8, "fill", as_mask=True))
+    asyncio.run(finishers.add_result_layer(fake, job, od, Inpaint(), rgba, 10, 8, "fill", as_mask=True))
     lid = job.result["layers"][0]
     node = od.doc.find(lid)
     assert node.mask is not None and node.mask.linked and node.mask.enabled

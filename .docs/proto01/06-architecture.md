@@ -117,6 +117,15 @@ Recipe = T2I | I2I | Inpaint | InstructEdit | Upscale | Segment | Matte | I2V | 
 Recipes carry roster ids, not file paths; the compiler resolves them. Every recipe records its exact compiled
 graph into the job manifest (provenance, loom lesson 7).
 
+**As built (D64, ArtCraft P2): plan → finalize → submit.** `engine/pipeline.py`: `plan(recipe, variant, history)` is pure — effective
+parameters, what the job needs (`refs` · `document` · `frames`), the weights it loads, warm group, VRAM and ETA; `/recipes/preview`
+returns it for every kind, plus the contract problems of a compile on placeholder inputs against the engine's last `/object_info`.
+`finalize(job, recipe, queue)` does the I/O (references fitted and uploaded, the document region cropped and uploaded, i2v frames,
+object_info refresh) and compiles with the contract check. `engine/follow.py` follows the prompt (events, history fallback, stall
+watchdog); `engine/finishers.py` turns outputs into results — `AssetFinisher` (Generate), `DocumentFinisher` (paste-back, upscale),
+`SelectionFinisher` (AI Select), `ClipFinisher` (Animate) — and `run_quick_remove` is the engine-less job. `JobQueue._complete` is the
+single completion tail; the queue file is written off the event loop (`persist()` → one writer, `await flush()` where it must be on disk).
+
 ## 4. Storage layout
 
 ```
@@ -224,6 +233,10 @@ upscaled tile if the region is small → orchestrator pastes back with seam feat
 **Animate:** `I2V{start_asset, end_asset?, prompt, model (wan|ltx|h3), frames, fps, w, h, seed}` → engine →
 MP4 + PNG sequence written to `clips/` (master = PNG sequence, proxy = MP4) → Mediabunny scrubs the proxy;
 frame extraction creates assets with lineage `frame-extract` from the clip.
+
+**Every job (D64):** `JobQueue._run_one` → `plan()` (an engine-less plan runs `run_quick_remove`) → engine up → the roster rescanned only
+when a model folder changed → `finalize()` → submit → `follow()` → `irreversible()` (C8: non-resumable, flushed) → the finisher →
+`_complete()`.
 
 **Durability:** kill the app anywhere → `queue.json` reloads paused with running jobs re-queued (or failed
 if non-resumable and crashed); the engine process is reaped by the Job Object; `engine_out/` leftovers are

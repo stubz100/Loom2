@@ -2034,6 +2034,101 @@
         "title": "DocumentCreate",
         "type": "object"
       },
+      "DocumentPreview": {
+        "additionalProperties": true,
+        "description": "`POST /recipes/preview` for an Edit recipe (inpaint, i2i, upscale, segment — D64): the settings that shape the run, what it needs,\nthe weights, ETA and VRAM fit, and the contract problems a submission would hit. The region is read at run time, not here.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "boolean"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/Estimate"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/MissingWeight"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
+          },
+          "warm_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm Group"
+          },
+          "weights": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weights",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "engine",
+          "params",
+          "needs",
+          "missing",
+          "estimate",
+          "count"
+        ],
+        "title": "DocumentPreview",
+        "type": "object"
+      },
       "DocumentPutReply": {
         "description": "The stack as stored plus the layers / masks the server has no bytes for (B15).",
         "properties": {
@@ -3873,9 +3968,42 @@
             "title": "Missing",
             "type": "array"
           },
+          "problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
+          },
           "steps": {
             "title": "Steps",
             "type": "integer"
+          },
+          "warm_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm Group"
+          },
+          "weights": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weights",
+            "type": "array"
           },
           "width": {
             "title": "Width",
@@ -6944,6 +7072,20 @@
             "title": "Negative Used",
             "type": "boolean"
           },
+          "problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
+          },
           "prompt_mode": {
             "title": "Prompt Mode",
             "type": "string"
@@ -7010,9 +7152,28 @@
             ],
             "title": "Turbo Strength"
           },
+          "warm_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warm Group"
+          },
           "weight_dtype": {
             "title": "Weight Dtype",
             "type": "string"
+          },
+          "weights": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weights",
+            "type": "array"
           },
           "width": {
             "title": "Width",
@@ -11667,7 +11828,7 @@
     },
     "/recipes/preview": {
       "post": {
-        "description": "09 §3a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights.",
+        "description": "09 §3a / D64: the plan of any recipe — effective parameters (the exact string the engine will receive for t2i), what it needs,\nETA and VRAM fit, missing weights, and the contract problems a submission would hit (checked against the engine's last object_info).",
         "operationId": "recipe_preview_recipes_preview_post",
         "requestBody": {
           "content": {
@@ -11690,6 +11851,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/I2VPreview"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DocumentPreview"
                     }
                   ],
                   "title": "Response Recipe Preview Recipes Preview Post"

@@ -254,7 +254,9 @@ async def documents_ai(svc: Svc, doc_id: str, body: JobSubmit):
         jobs = q.submit(recipe, stage=body.stage)                            # the queue is not thread-safe: stays on the loop
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"jobs": [j.model_dump() for j in jobs]}
+    out = {"jobs": [j.model_dump() for j in jobs]}                        # the state at submission, before the loop runs on
+    await q.flush()                                                          # D64: on disk before the reply
+    return out
 
 
 @router.post("/documents/{doc_id}/close", response_model=Closed)

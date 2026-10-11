@@ -11,9 +11,10 @@ from pydantic import BaseModel
 from .. import __version__
 from ..build_info import version_info
 from ..capabilities import capabilities as build_capabilities
-from ..engine.graphs import CompileError, I2V_WEIGHTS, PRESETS, effective_params, estimate_i2v_seconds, i2v_params
+from ..engine.graphs import CompileError
+from ..engine.pipeline import plan, preview_problems
 from ..recipes import I2V, T2I, parse_recipe
-from ..schemas import Capabilities, HealthInfo, I2VPreview, ShuttingDown, T2IPreview, VersionInfo
+from ..schemas import Capabilities, DocumentPreview, HealthInfo, I2VPreview, ShuttingDown, T2IPreview, VersionInfo
 from .deps import Svc
 
 router = APIRouter(tags=["meta"])
@@ -44,41 +45,33 @@ async def capabilities(svc: Svc):
     return build_capabilities(svc)
 
 
-@router.post("/recipes/preview", response_model=T2IPreview | I2VPreview, response_model_exclude_unset=True)
+@router.post("/recipes/preview", response_model=T2IPreview | I2VPreview | DocumentPreview, response_model_exclude_unset=True)
 async def recipe_preview(svc: Svc, body: RecipeBody):
-    """09 §3a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights."""
+    """09 §3a / D64: the plan of any recipe — effective parameters (the exact string the engine will receive for t2i), what it needs,
+    ETA and VRAM fit, missing weights, and the contract problems a submission would hit (checked against the engine's last object_info)."""
     try:
         recipe = parse_recipe(body.recipe)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    if isinstance(recipe, I2V):                                  # M6: snapped size / frames, the preset that runs, missing weights, ETA
-        try:
-            ep = i2v_params(recipe)
-        except CompileError as e:
-            raise HTTPException(422, str(e))
-        missing = []
-        for mid in I2V_WEIGHTS[recipe.model_id]:
-            r = svc.roster.resolve(mid)
-            if r.path is None:
-                missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
-        return {**ep, "missing": missing, "estimate": estimate_i2v_seconds(recipe), "count": len(recipe.seeds or [0])}
-    if not isinstance(recipe, T2I):
-        raise HTTPException(422, "preview supports t2i and i2v recipes")
+    variant = svc.app.settings.variant
     try:
-        ep = effective_params(recipe)
+        p = plan(recipe, variant, svc.queue.timing_history() if svc.queue else None)
     except CompileError as e:
         raise HTTPException(422, str(e))
     missing = []
-    preset = PRESETS[recipe.model_id]
-    for mid in [recipe.model_id, ep["te_id"], preset.vae_id, *([preset.turbo_lora] if ep["turbo"] and preset.turbo_lora else []), *[l.model_id for l in recipe.loras]]:
+    for mid in p.weights:
         try:
             r = svc.roster.resolve(mid)
         except KeyError as e:
             raise HTTPException(422, str(e))              # B11: an unknown LoRA id is the caller's error, not a 500
         if r.path is None:
             missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
-    est = svc.queue.estimate(recipe) if svc.queue else {"seconds": None, "source": "no project"}
-    return {**ep, "missing": missing, "estimate": est, "count": len(recipe.seeds or [0])}
+    est = svc.queue.estimate(recipe) if svc.queue else {**p.estimate, "vram_gb": p.vram_gb}
+    problems = preview_problems(recipe, svc.roster, svc.queue.object_info_cached() if svc.queue else None, variant)
+    common = {"missing": missing, "estimate": est, "count": p.count, "problems": problems, "weights": p.weights, "warm_group": p.warm_group}
+    if isinstance(recipe, (T2I, I2V)):
+        return {**p.params, **common}
+    return {"kind": p.kind, "model_id": p.model_id, "engine": p.engine, "params": p.params, "needs": p.needs, **common}
 
 
 @router.post("/shutdown", response_model=ShuttingDown)

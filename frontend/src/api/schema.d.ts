@@ -1240,7 +1240,8 @@ export interface paths {
         put?: never;
         /**
          * Recipe Preview
-         * @description 09 §3a: the exact string the engine will receive, effective parameters, ETA and VRAM fit, missing weights.
+         * @description 09 §3a / D64: the plan of any recipe — effective parameters (the exact string the engine will receive for t2i), what it needs,
+         *     ETA and VRAM fit, missing weights, and the contract problems a submission would hit (checked against the engine's last object_info).
          */
         post: operations["recipe_preview_recipes_preview_post"];
         delete?: never;
@@ -2131,6 +2132,41 @@ export interface components {
             w?: number | null;
         };
         /**
+         * DocumentPreview
+         * @description `POST /recipes/preview` for an Edit recipe (inpaint, i2i, upscale, segment — D64): the settings that shape the run, what it needs,
+         *     the weights, ETA and VRAM fit, and the contract problems a submission would hit. The region is read at run time, not here.
+         */
+        DocumentPreview: {
+            /** Count */
+            count: number;
+            /** Engine */
+            engine: boolean;
+            estimate: components["schemas"]["Estimate"];
+            /** Kind */
+            kind: string;
+            /** Missing */
+            missing: components["schemas"]["MissingWeight"][];
+            /** Model Id */
+            model_id?: string | null;
+            /** Needs */
+            needs: string[];
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Problems */
+            problems?: string[] | null;
+            /** Warm Group */
+            warm_group?: string | null;
+            /**
+             * Weights
+             * @default []
+             */
+            weights?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * DocumentPutReply
          * @description The stack as stored plus the layers / masks the server has no bytes for (B15).
          */
@@ -2925,8 +2961,17 @@ export interface components {
             label: string;
             /** Missing */
             missing: components["schemas"]["MissingWeight"][];
+            /** Problems */
+            problems?: string[] | null;
             /** Steps */
             steps: number;
+            /** Warm Group */
+            warm_group?: string | null;
+            /**
+             * Weights
+             * @default []
+             */
+            weights?: string[];
             /** Width */
             width: number;
         } & {
@@ -4306,6 +4351,8 @@ export interface components {
             model_id: string;
             /** Negative Used */
             negative_used: boolean;
+            /** Problems */
+            problems?: string[] | null;
             /** Prompt Mode */
             prompt_mode: string;
             /** Refs */
@@ -4332,8 +4379,15 @@ export interface components {
             turbo: boolean;
             /** Turbo Strength */
             turbo_strength?: number | null;
+            /** Warm Group */
+            warm_group?: string | null;
             /** Weight Dtype */
             weight_dtype: string;
+            /**
+             * Weights
+             * @default []
+             */
+            weights?: string[];
             /** Width */
             width: number;
             /** Word Count */
@@ -7032,7 +7086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["T2IPreview"] | components["schemas"]["I2VPreview"];
+                    "application/json": components["schemas"]["T2IPreview"] | components["schemas"]["I2VPreview"] | components["schemas"]["DocumentPreview"];
                 };
             };
             /** @description Validation Error */

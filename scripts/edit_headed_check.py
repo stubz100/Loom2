@@ -2119,6 +2119,12 @@ def main() -> int:
             for op in ops:
                 cdp.eval(f"(() => {{ const b = [...[...document.querySelectorAll('.panel .body .segmented')][0].querySelectorAll('button')].find((x) => x.textContent === {json.dumps(op)}); b.click(); return 1 }})()"); time.sleep(0.4)
                 cdp.shot(OUT / f"aipanel-{op.lower()}.png")
+                if op != "Select":                       # D64: the ETA comes from /recipes/preview, not from text in the panel
+                    t0 = time.time()
+                    while time.time() - t0 < 5 and "per " not in (cdp.eval("[...document.querySelectorAll('.panel .body .hint')].map((e) => e.textContent).join(' | ')") or ""):
+                        time.sleep(0.2)
+                    hints = cdp.eval("[...document.querySelectorAll('.panel .body .hint')].map((e) => e.textContent).join(' | ')") or ""
+                    check("≈" in hints and ("per candidate" in hints or "per run" in hints), f"AI · {op}: the ETA comes from the preview ({hints[-160:]})")
                 m = json.loads(cdp.eval(probe))
                 check(m and not m["hscroll"] and not m["bad"] and m["bodyBottom"] <= m["panelBottom"] + 1, f"AI · {op}: fits the panel (no sideways scroll, nothing outside or squeezed; {m})")
                 if cdp.eval("!!document.querySelector('.ai-advanced .props-head')"):

@@ -236,6 +236,9 @@ class T2IPreview(Open):
     missing: list[MissingWeight]
     estimate: Estimate
     count: int
+    problems: list[str] | None = None             # D64: the contract check on placeholder inputs (None before the engine answered once)
+    weights: list[str] = []
+    warm_group: str | None = None
 
 
 class I2VPreview(Open):
@@ -252,6 +255,25 @@ class I2VPreview(Open):
     missing: list[MissingWeight]
     estimate: Estimate
     count: int
+    problems: list[str] | None = None             # D64: the contract check on placeholder inputs (None before the engine answered once)
+    weights: list[str] = []
+    warm_group: str | None = None
+
+
+class DocumentPreview(Open):
+    """`POST /recipes/preview` for an Edit recipe (inpaint, i2i, upscale, segment — D64): the settings that shape the run, what it needs,
+    the weights, ETA and VRAM fit, and the contract problems a submission would hit. The region is read at run time, not here."""
+    kind: str
+    model_id: str | None = None
+    engine: bool
+    params: dict[str, Any]
+    needs: list[str]
+    missing: list[MissingWeight]
+    estimate: Estimate
+    count: int
+    problems: list[str] | None = None             # D64: the contract check on placeholder inputs (None before the engine answered once)
+    weights: list[str] = []
+    warm_group: str | None = None
 
 
 # ---- projects --------------------------------------------------------------------------------------------------------

@@ -1,0 +1,348 @@
+{
+ "i2i refine": {
+  "graph_hash": "a84a122b93776fd6",
+  "problems": [],
+  "summary": {
+   "cfg": 3.5,
+   "guidance": 1.0,
+   "height": 544,
+   "model_id": "klein-base-9b",
+   "seed": 1,
+   "source": "visible",
+   "steps": 20,
+   "strength": 0.25,
+   "width": 960
+  }
+ },
+ "i2v ltx beats": {
+  "graph_hash": "23c9d7323401f186",
+  "problems": [],
+  "summary": {
+   "beats": 1,
+   "family": "ltx23",
+   "flf": true,
+   "fps": 24,
+   "frames": 121,
+   "height": 576,
+   "label": "LTX-2.3 distilled \u00b7 8 steps",
+   "model_id": "ltx23-distilled-fp8",
+   "preset": "draft",
+   "shift": null,
+   "steps": 8,
+   "width": 1024
+  }
+ },
+ "i2v wan draft": {
+  "graph_hash": "1dbcdd06e91114e2",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "cfg_high": 1.0,
+   "cfg_low": 1.0,
+   "family": "wan22",
+   "flf": false,
+   "fps": 16,
+   "frames": 81,
+   "height": 480,
+   "label": "Draft \u00b7 Lightning 2 + 2 (\u2248 4 min at 480p)",
+   "lora_high": true,
+   "lora_low": true,
+   "model_id": "wan22-i2v-high-fp8",
+   "preset": "draft",
+   "shift": 5.0,
+   "split": 2,
+   "steps": 4,
+   "width": 832
+  }
+ },
+ "i2v wan motion FLF": {
+  "graph_hash": "25012bdc7d69ae75",
+  "problems": [],
+  "summary": {
+   "beats": 0,
+   "cfg_high": 3.5,
+   "cfg_low": 1.0,
+   "family": "wan22",
+   "flf": true,
+   "fps": 16,
+   "frames": 81,
+   "height": 480,
+   "label": "Motion \u00b7 undistilled high expert at CFG 3.5 (\u2248 8 min)",
+   "lora_high": false,
+   "lora_low": true,
+   "model_id": "wan22-i2v-high-fp8",
+   "preset": "motion",
+   "shift": 5.0,
+   "split": 4,
+   "steps": 8,
+   "width": 832
+  }
+ },
+ "inpaint fill": {
+  "graph_hash": "1cf2b6091f35bfae",
+  "problems": [],
+  "summary": {
+   "feather": 8,
+   "guidance": 1.0,
+   "height": 544,
+   "lambda": 5.0,
+   "margin_pct": 25,
+   "mode": "fill",
+   "model_id": "klein-9b",
+   "prompt_mode": "image_first",
+   "sampler": "lanpaint",
+   "seed": 1,
+   "steps": 4,
+   "width": 960
+  }
+ },
+ "inpaint fill_hero": {
+  "graph_hash": "41c85c9fc73640f4",
+  "problems": [],
+  "summary": {
+   "feather": 8,
+   "guidance": 4.0,
+   "height": 544,
+   "lambda": 5.0,
+   "margin_pct": 25,
+   "mode": "fill_hero",
+   "model_id": "flux2-dev-fp8mixed",
+   "prompt_mode": "image_first",
+   "sampler": "lanpaint",
+   "seed": 1,
+   "steps": 8,
+   "width": 960
+  }
+ },
+ "inpaint fill_match": {
+  "graph_hash": "4bfff4766164284e",
+  "problems": [],
+  "summary": {
+   "cfg": 1.0,
+   "feather": 8,
+   "height": 544,
+   "hole": false,
+   "margin_pct": 25,
+   "mode": "fill_match",
+   "model_id": "klein-9b",
+   "prefill": false,
+   "sampler": "icm",
+   "seed": 1,
+   "steps": 4,
+   "width": 960
+  }
+ },
+ "inpaint outpaint": {
+  "graph_hash": "1cf2b6091f35bfae",
+  "problems": [],
+  "summary": {
+   "feather": 8,
+   "guidance": 1.0,
+   "height": 544,
+   "lambda": 5.0,
+   "margin_pct": 25,
+   "mode": "outpaint",
+   "model_id": "klein-9b",
+   "prompt_mode": "image_first",
+   "sampler": "lanpaint",
+   "seed": 1,
+   "steps": 4,
+   "width": 960
+  }
+ },
+ "inpaint remove": {
+  "graph_hash": "9808f0820b4230ec",
+  "problems": [],
+  "summary": {
+   "cfg": 1.0,
+   "feather": 8,
+   "height": 544,
+   "hole": true,
+   "margin_pct": 25,
+   "mode": "remove",
+   "model_id": "klein-9b",
+   "prefill": false,
+   "sampler": "icm",
+   "seed": 1,
+   "steps": 4,
+   "width": 960
+  }
+ },
+ "segment birefnet": {
+  "graph_hash": "b2bedef258e8de06",
+  "problems": [],
+  "summary": {
+   "expand": 0,
+   "feather": 0,
+   "mode": "subject",
+   "model_id": "birefnet",
+   "op": "replace"
+  }
+ },
+ "segment sam3 text": {
+  "graph_hash": "93342d18923e2888",
+  "problems": [],
+  "summary": {
+   "box": null,
+   "expand": 0,
+   "feather": 0,
+   "mode": "text",
+   "model_id": "sam3",
+   "op": "replace",
+   "points": 0,
+   "threshold": 0.5
+  }
+ },
+ "t2i dev json": {
+  "graph_hash": "5f6705e8d8e37765",
+  "problems": [],
+  "summary": {
+   "base_shift": null,
+   "cfg": 1.0,
+   "distilled": false,
+   "guidance": 4.0,
+   "height": 544,
+   "loras": [],
+   "max_refs": 10,
+   "max_shift": null,
+   "model_id": "flux2-dev-fp8mixed",
+   "negative_used": false,
+   "prompt_mode": "text",
+   "refs": 0,
+   "sampler": "euler",
+   "scheduler": "simple",
+   "steps": 20,
+   "te_device": "default",
+   "te_id": "mistral3-small-flux2-fp8",
+   "tile_size": null,
+   "tiled_vae": false,
+   "token_estimate": 10,
+   "turbo": false,
+   "turbo_strength": null,
+   "weight_dtype": "default",
+   "width": 960,
+   "word_count": 2
+  }
+ },
+ "t2i dev turbo": {
+  "graph_hash": "b9f8b274d24da762",
+  "problems": [],
+  "summary": {
+   "base_shift": null,
+   "cfg": 1.0,
+   "distilled": false,
+   "guidance": 4.0,
+   "height": 544,
+   "loras": [],
+   "max_refs": 10,
+   "max_shift": null,
+   "model_id": "flux2-dev-fp8mixed",
+   "negative_used": false,
+   "prompt_mode": "text",
+   "refs": 0,
+   "sampler": "euler",
+   "scheduler": "simple",
+   "steps": 8,
+   "te_device": "default",
+   "te_id": "mistral3-small-flux2-fp8",
+   "tile_size": null,
+   "tiled_vae": false,
+   "token_estimate": 10,
+   "turbo": true,
+   "turbo_strength": 1.0,
+   "weight_dtype": "default",
+   "width": 960,
+   "word_count": 2
+  }
+ },
+ "t2i klein 9b": {
+  "graph_hash": "c4a7b3eee9a2489a",
+  "problems": [],
+  "summary": {
+   "base_shift": null,
+   "cfg": 1.0,
+   "distilled": true,
+   "guidance": 1.0,
+   "height": 544,
+   "loras": [],
+   "max_refs": 4,
+   "max_shift": null,
+   "model_id": "klein-9b",
+   "negative_used": false,
+   "prompt_mode": "text",
+   "refs": 0,
+   "sampler": "euler",
+   "scheduler": "simple",
+   "steps": 4,
+   "te_device": "default",
+   "te_id": "qwen3-8b-q4km",
+   "tile_size": null,
+   "tiled_vae": false,
+   "token_estimate": 10,
+   "turbo": false,
+   "turbo_strength": null,
+   "weight_dtype": "fp8_e4m3fn",
+   "width": 960,
+   "word_count": 2
+  }
+ },
+ "t2i klein base 9b + refs": {
+  "graph_hash": "87a2045173668189",
+  "problems": [],
+  "summary": {
+   "base_shift": null,
+   "cfg": 3.5,
+   "distilled": false,
+   "guidance": 1.0,
+   "height": 544,
+   "loras": [],
+   "max_refs": 4,
+   "max_shift": null,
+   "model_id": "klein-base-9b",
+   "negative_used": false,
+   "prompt_mode": "text",
+   "refs": 1,
+   "sampler": "euler",
+   "scheduler": "simple",
+   "steps": 20,
+   "te_device": "default",
+   "te_id": "qwen3-8b-q4km",
+   "tile_size": null,
+   "tiled_vae": false,
+   "token_estimate": 10,
+   "turbo": false,
+   "turbo_strength": null,
+   "weight_dtype": "fp8_e4m3fn",
+   "width": 960,
+   "word_count": 2
+  }
+ },
+ "upscale + tiled refine": {
+  "graph_hash": "c6d968fa99207da9",
+  "problems": [],
+  "summary": {
+   "factor": 2,
+   "model_id": "realesrgan-x2",
+   "overlap": 128,
+   "refine_model_id": "klein-base-9b",
+   "source": "visible",
+   "steps": 20,
+   "strength": 0.25,
+   "tile": 1024,
+   "tiles": 4,
+   "upscaled": [
+    1920,
+    1088
+   ]
+  }
+ },
+ "upscale x2": {
+  "graph_hash": "061bece3e004bce2",
+  "problems": [],
+  "summary": {
+   "factor": 2,
+   "model_id": "realesrgan-x2",
+   "source": "visible"
+  }
+ }
+}

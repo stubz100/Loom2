@@ -753,6 +753,28 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
     return list(dict.fromkeys(ids))
 
 
+# D64: warm per-candidate seconds of the document jobs on the rig (journal: M5 acceptance 2026-10-06, D31 encoder 2026-10-07, D62 rig
+# 2026-10-10) — Klein 9B inpaint / refine incl. the model swap, dev hero 4–5 min, Real-ESRGAN, BiRefNet 2.3 s, SAM 3 3.3 s, Quick Remove
+DOC_BASE_SECONDS: dict[str, float] = {"klein": 28.0, "dev": 270.0, "esrgan": 6.0, "tile": 38.0, "birefnet": 2.5, "sam3": 3.5, "cpu": 1.0}
+
+
+def doc_estimate_seconds(recipe: I2I | Inpaint | Upscale | Segment, variant: str = "full") -> dict[str, Any]:
+    """ETA of one document job (per candidate). A tiled refine adds about one `tile` per 1024² tile of the upscaled image — the
+    region is not known before the document is read, so the source says so."""
+    if isinstance(recipe, Segment):
+        return {"seconds": DOC_BASE_SECONDS["sam3" if recipe.model_id == "sam3" else "birefnet"], "source": "baseline (M5 acceptance, warm)"}
+    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
+        return {"seconds": DOC_BASE_SECONDS["cpu"], "source": "baseline (D62 rig, CPU)"}
+    if isinstance(recipe, Upscale):
+        out = {"seconds": DOC_BASE_SECONDS["esrgan"], "source": "baseline (Real-ESRGAN)"}
+        if recipe.refine:
+            out["source"] += f"; tiled refine adds ≈ {DOC_BASE_SECONDS['tile']:.0f} s per {recipe.tile}² tile"
+        return out
+    mid = inpaint_model_id(recipe, variant) if isinstance(recipe, Inpaint) else recipe.model_id
+    key = "dev" if mid == "flux2-dev-fp8mixed" else "klein"
+    return {"seconds": DOC_BASE_SECONDS[key], "source": "baseline (rig, warm, incl. model swap)"}
+
+
 def estimate_seconds(recipe: T2I, history: list[dict] | None = None) -> dict[str, Any]:
     """ETA per image (09 §3c): rolling average of this project's matching jobs, else the spike baseline scaled by
     pixels (≈ linear) and steps. `history` rows: {model_id, px, steps, wall_s}."""

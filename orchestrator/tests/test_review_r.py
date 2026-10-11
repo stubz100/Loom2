@@ -22,7 +22,7 @@ from loom2.api import create_app
 from loom2.compose import Renderer
 from loom2.config import AppState
 from loom2.engine.graphs import estimate_vram_gb, recipe_weights
-from loom2.queue import JobQueue
+from loom2.engine import finishers
 from loom2.recipes import Inpaint
 
 
@@ -177,13 +177,13 @@ def test_review_r4_quick_remove_honours_cancel(tmp_path, fake_native):
 # ---- R5 ---------------------------------------------------------------------------------------------------------------
 def test_review_r5_quick_remove_is_not_resumable_before_its_layer_lands(tmp_path, fake_native, monkeypatch):
     seen: list[bool] = []
-    orig = JobQueue._add_result_layer
+    orig = finishers.add_result_layer
 
-    async def spy(self, job, *a, **kw):
-        on_disk = json.loads(self.ws.queue_path.read_text(encoding="utf-8"))
+    async def spy(q, job, *a, **kw):
+        on_disk = json.loads(q.ws.queue_path.read_text(encoding="utf-8"))
         seen.append(next(j for j in on_disk["jobs"] if j["id"] == job.id)["resumable"])
-        return await orig(self, job, *a, **kw)
-    monkeypatch.setattr(JobQueue, "_add_result_layer", spy)
+        return await orig(q, job, *a, **kw)
+    monkeypatch.setattr(finishers, "add_result_layer", spy)
     app, c, H = _app(tmp_path)
     with c:
         did = _doc_with_selection(c, H, tmp_path)

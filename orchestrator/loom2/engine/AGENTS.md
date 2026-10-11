@@ -11,6 +11,9 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/06-architecture.md` §3
 | `client.py` | `ComfyClient`: REST (`/prompt`, `/history`, `/interrupt`, `/free`, `/upload/image`, `/view`, `/object_info`) and the `/ws` event stream (binary preview frames) |
 | `graphs.py` | model knowledge today (`ModelPreset` / `PRESETS`, `TE_ALTERNATES`, `VRAM_ESTIMATE_GB`, `BASE_SECONDS`, `I2V_RULES`, `WAN_PRESETS`) and the builders `build_t2i`, `build_i2i`, `build_inpaint`, `build_upscale`, `build_segment`, `build_i2v`; `compile_recipe` dispatches and runs the contract check |
 | `contract.py` | `resolve_names` (basename → engine enum value) and `check_graph` (unknown class, missing input, enum value, link type) against `/object_info` |
+| `pipeline.py` | D64: `plan()` (pure: effective params, needs, weights, warm group, VRAM, ETA — `/recipes/preview` for every kind), `preview_problems()` (compile on placeholder inputs), `finalize()` (references, document region, i2v frames uploaded; compile + contract), `prepare_document` / `prepare_i2v` / `fit_reference`, `JobCancelled` |
+| `finishers.py` | D64: `finisher_for(recipe)` → `AssetFinisher` · `DocumentFinisher` (paste-back, upscale; `add_result_layer`) · `SelectionFinisher` · `ClipFinisher` (+ the identity side task); `run_quick_remove` (no engine) |
+| `follow.py` | D64: `EngineFollower` — the `/ws` event pump, `follow()` (progress, node times, history fallback, stall watchdog → engine restart + queue pause), `outputs()`, `free_cache()` |
 
 Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orchestrator/loom2/roster.py`.
 
@@ -36,7 +39,8 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
 4. If the graph uses node classes the fixture lacks: capture `/object_info` from the running engine and rerun
    `scripts/make_object_info_fixture.py`.
 5. Tests: compile every recipe kind the model supports against the fixture with zero `problems` (see `test_generate_m3.py`,
-   `test_edit_ai_m5.py`, `test_animate_m6.py`); add the variant to `scripts/pin_review.py` `recipes()`.
+   `test_edit_ai_m5.py`, `test_animate_m6.py`); add the variant to `scripts/pin_review.py` `recipes()` and rerun
+   `test_graph_parity_d64.py --parity-update` (the snapshot guards every other graph against unintended change).
 6. Frontend: Generate / Edit / Animate still hard-code some model ids (D38/P1 removes this) — grep for an existing id of the same family.
 7. Rig: run the model through the app, record time and VRAM in the journal. Delete weights that lose (D30).
 

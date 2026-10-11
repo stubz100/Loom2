@@ -39,8 +39,11 @@ export interface Backend { host: string; port: number; token: string }
 // ---- recipe preview (POST /recipes/preview answers per recipe kind) --------------------------------------------------
 export type T2IPreview = S['T2IPreview']
 export type I2VPreview = S['I2VPreview']
-export const isI2VPreview = (p: T2IPreview | I2VPreview): p is I2VPreview => 'frames' in p && 'family' in p
-export const isT2IPreview = (p: T2IPreview | I2VPreview): p is T2IPreview => 'serialized_prompt' in p
+export type DocumentPreview = S['DocumentPreview']
+export type AnyPreview = T2IPreview | I2VPreview | DocumentPreview          // D64: /recipes/preview plans every kind
+export const isI2VPreview = (p: AnyPreview): p is I2VPreview => 'frames' in p && 'family' in p
+export const isT2IPreview = (p: AnyPreview): p is T2IPreview => 'serialized_prompt' in p
+export const isDocumentPreview = (p: AnyPreview): p is DocumentPreview => 'needs' in p && 'engine' in p
 export type GroupHeader = S['GroupHeader']
 export type AssetPage = S['AssetPage']
 export type AlbumNode = S['AlbumNode']

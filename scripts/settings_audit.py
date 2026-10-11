@@ -25,7 +25,7 @@ from pydantic import BaseModel  # noqa: E402
 from loom2 import config, recipes  # noqa: E402
 
 # the code path that runs jobs (recipe fields must be read here)
-JOB_CODE = ["queue.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py"]
+JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py"]
 
 # /capabilities keys → what they parameterise ("recipe:Model.field", "settings:field") or None for informational keys
 CAPABILITIES: dict[str, list[str] | None] = {
@@ -79,7 +79,7 @@ def _models() -> dict[str, type[BaseModel]]:
 
 
 # R7: the names the job code binds each recipe model to (a field read is an attribute on one of them), and the files it is read in
-RECIPE_VARS = ("recipe", "early")                                   # the top-level recipes (queue._run_one, the graph builders)
+RECIPE_VARS = ("recipe", "early")                                   # the top-level recipes (pipeline / finishers / the graph builders)
 RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "LoraRef": (("l", "ref"), None),                                # `for l in recipe.loras`, graphs._lora_chain `for ref in loras`
     "RefImage": (("ref", "r"), None),                               # queue: `for ref in recipe.refs`, the parents list `r.asset_id`

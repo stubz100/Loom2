@@ -23,3 +23,7 @@ def models_tree(tmp_path: Path) -> Path:
     (root / "roster.index.json").write_text(json.dumps({"files": [
         {"path": str(root / "vae" / "flux2-vae.safetensors"), "size": 16, "sha256": "ab" * 32}]}), encoding="utf-8")
     return root
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--parity-update", action="store_true", default=False, help="rewrite fixtures/graph_parity.json (D64: intended graph changes only)")

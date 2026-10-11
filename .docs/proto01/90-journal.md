@@ -2671,3 +2671,30 @@ split by file so that no two hands touched the same module.
 - Offline 200; build clean; lint 100 (unchanged); headed: all 18 modes pass (adjscreen, aipanel, render, paint, kit, layers, props,
   transform, smartsel, heal, masks, selection, brush, grid, psd, cmpdiag, tour, animate). The author reports the Multiply "resize" no longer
   appears.
+
+## 2026-10-11 08:30 — H2 opens: D64–D66 recorded; P2 plan → finalize → submit (D64) built
+
+- **Decisions:** D64 (P2 plan → finalize → submit), D65 (P1 model registry), D66 (P4 job origin; placement into the source's group
+  not built — the author's call on D34) entered in 13 before the work.
+- **Guard first:** `test_graph_parity_d64.py` compiles the 17 `pin_review` variants against the pinned object_info and compares graph
+  hash and summary with `fixtures/graph_parity.json`, recorded on the unchanged code (17 graphs, 0 problems). It held through every
+  slice below (`--parity-update` only for an intended graph change).
+- **Slices:** finishers moved unchanged into `engine/finishers.py` (Asset / Document / Selection / Clip, `add_result_layer`,
+  `run_quick_remove`); the one completion tail `JobQueue._complete`; pure `plan()` in `engine/pipeline.py` (effective params, needs,
+  weights, warm group, VRAM, ETA — document jobs get warm baselines from the journal: Klein 28 s, dev 270 s, Real-ESRGAN 6 s, BiRefNet
+  2.5 s, SAM 3 3.5 s, Quick Remove 1 s); `finalize()` absorbs the reference / document / i2v preparation and the compile; the engine
+  follow code (event pump, follow, stall watchdog, outputs, free) moved to `engine/follow.py`; `_run_one` is plan → finalize → submit →
+  follow → `irreversible()` → finisher → `_complete` (≈ 75 lines); the roster is rescanned only when a model folder's mtime moved;
+  `persist()` snapshots and hands the write to one writer task (newest wins, call order kept), `await flush()` before a job starts, at
+  C8's irreversible point, in every mutating job route (replies built before the flush — the first version let the queue start the job
+  in between and the reply said "running") and at shutdown; the load at start writes synchronously. `queue.py` 1087 → 612 lines.
+- **Preview for every kind:** `/recipes/preview` returns `T2IPreview | I2VPreview | DocumentPreview` with `weights`, `warm_group` and
+  `problems` — the contract check of a compile on placeholder inputs (an image the engine lists) against the engine's last object_info
+  (None before the first job). The Edit AI panel reads it (debounced; fresh random seeds do not re-plan): the ETA per candidate with its
+  source, weights not fetched, and the problems the engine would refuse — the hard-coded "Klein ≈ 20–35 s" text is gone.
+- **Tests:** `test_pipeline_d64.py` (11: plan per kind, preview problems = a submission's for an object_info missing a node class,
+  Selection / Document finishers from output files without an engine, finisher per kind, the writer's order and its one-time error,
+  the preview route for Edit recipes); three tests moved to the new functions (`finishers.add_result_layer`), one now flushes before
+  reading `queue.json`. **212 offline**; settings audit 150 / 0 (it scans pipeline.py and finishers.py); API types regenerated; build
+  clean, lint 100; headed `aipanel` asserts the ETA comes from the preview.
+- **Rig owed:** `m5_acceptance.py` and `m6_acceptance.py` against this code, timings within ±10 % of 2026-10-07 / 2026-10-05.

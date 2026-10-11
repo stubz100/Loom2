@@ -27,7 +27,9 @@ async def jobs_submit(svc: Svc, body: JobSubmit):
         jobs = q.submit(body.recipe, stage=body.stage)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"jobs": [j.model_dump() for j in jobs]}
+    out = {"jobs": [j.model_dump() for j in jobs]}                        # the state at submission, before the loop runs on
+    await q.flush()                                                          # D64: on disk before the reply
+    return out
 
 
 @router.post("/jobs/{job_id}/release", response_model=Released)
@@ -36,13 +38,16 @@ async def job_release(svc: Svc, job_id: str):
     out = q.release(job_id)
     if not out:
         raise HTTPException(409, "job is not staged")
+    await q.flush()                                                          # D64: on disk before the reply
     return {"released": [j.id for j in out]}
 
 
 @router.post("/queue/release", response_model=Released)
 async def queue_release(svc: Svc):
     _, _, q = svc.require_project()
-    return {"released": [j.id for j in q.release()]}
+    out = q.release()
+    await q.flush()                                                          # D64: on disk before the reply
+    return {"released": [j.id for j in out]}
 
 
 @router.get("/jobs", response_model=JobList)
@@ -65,6 +70,7 @@ async def job_cancel(svc: Svc, job_id: str):
     _, _, q = svc.require_project()
     if not await q.cancel(job_id):
         raise HTTPException(409, "job is not cancellable")
+    await q.flush()                                                          # D64: on disk before the reply
     return {"cancelled": job_id}
 
 
@@ -73,6 +79,7 @@ async def job_delete(svc: Svc, job_id: str):
     _, _, q = svc.require_project()
     if not q.delete(job_id):
         raise HTTPException(409, "only finished jobs can be deleted")
+    await q.flush()                                                          # D64: on disk before the reply
     return {"deleted": job_id}
 
 
@@ -86,11 +93,15 @@ async def queue_get(svc: Svc):
 async def queue_pause(svc: Svc):
     _, _, q = svc.require_project()
     q.pause()
-    return q.state()
+    state = q.state()
+    await q.flush()                                                          # D64: on disk before the reply
+    return state
 
 
 @router.post("/queue/unpause", response_model=QueueState)
 async def queue_unpause(svc: Svc):
     _, _, q = svc.require_project()
     q.unpause()
-    return q.state()
+    state = q.state()
+    await q.flush()                                                          # D64: on disk before the reply
+    return state

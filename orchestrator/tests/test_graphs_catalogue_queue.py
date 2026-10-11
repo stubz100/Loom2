@@ -128,10 +128,12 @@ def test_queue_submit_persist_cancel_resume(tmp_path: Path):
         assert not await q.cancel(jobs[0].id) and q.delete(jobs[0].id) and q.get(jobs[0].id) is None
         assert not q.delete(jobs[1].id)                                     # queued jobs cannot be deleted
         q.pause()
+        await q.flush()                                                     # D64: writes are off the loop; flush when it must be on disk
         assert q.state()["paused"] and json.loads(ws.queue_path.read_text(encoding="utf-8"))["paused"]
         # simulate a crash while a job was running: it comes back queued with a retry count
         q.get(jobs[1].id).status = "running"
         q.persist(clean_shutdown=False)
+        await q.flush()
         q2, _ = await _queue(tmp_path / "other")  # fresh objects, same queue file
         q2.ws = ws
         q2.load()

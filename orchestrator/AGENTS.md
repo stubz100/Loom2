@@ -15,8 +15,8 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `routes/` | one `APIRouter` per domain (`meta`, `settings`, `projects`, `assets`, `groups`, `documents`, `clips`, `jobs`, `models`, `engine`, `blobs`, `events_ws`); request models live with their routes; `deps.py` gives handlers `svc: Svc` |
 | `capabilities.py` / `build_info.py` | the `/capabilities` document (07 §3d) and the `/version` facts (D36) |
 | `schemas.py` | response models (D38): `Out` (strict, every field present) and `Open` (composite dicts: extra fields pass, defaulted fields optional); the WebSocket event frames (`EVENT_FRAMES`) |
-| `queue.py` | `JobQueue` / `JobRecord`: durable queue, admission (models, disk guard, VRAM), warm-group scheduling, the run loop, engine event following, stall watchdog, document / i2v pre- and post-processing |
-| `engine/` | ComfyUI client, supervisor, recipe → graph builders, contract checks (see `orchestrator/loom2/engine/AGENTS.md`) |
+| `queue.py` | `JobQueue` / `JobRecord`: durable queue (written off the loop: `persist()` → one writer, `await flush()`), admission (models, disk guard, VRAM), warm-group scheduling, the run loop `_run_one` (plan → finalize → submit → follow → finish → `_complete`, D64) |
+| `engine/` | ComfyUI client, supervisor, recipe → graph builders, contract checks; the job pipeline (`pipeline.py`, `follow.py`, `finishers.py`, D64) — see `orchestrator/loom2/engine/AGENTS.md` |
 | `recipes.py` | pydantic recipes `T2I`, `I2I`, `Inpaint`, `Upscale`, `Segment`, `I2V` (discriminated on `kind`), sampler enums, `warm_group` |
 | `roster.py` | `ROSTER` (every weight file: repo, folder, licence, variants, retired), scan / resolve / sha256 ledger |
 | `catalogue.py` | `AssetRecord` sidecar manifests + the SQLite index (`catalogue.sqlite`, FTS5), ingest, thumbnails, lineage, trash, rebuild |

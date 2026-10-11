@@ -3,7 +3,8 @@
 import { Brush, Eye, EyeOff, Files, Lasso, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { api } from '../../api/client'
+import { api, http, unwrap } from '../../api/client'
+import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { command, handleKeyFor, isEnabled, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
@@ -319,6 +320,22 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
   )
 }
 
+const fmtSeconds = (s: number) => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`)
+/** D64: the plan of the AI panel's recipe from /recipes/preview — ETA and VRAM fit, weights not fetched, contract problems; debounced. */
+function useDocPreview(recipe: DocumentRecipe | null): DocumentPreview | null {
+  const key = recipe ? JSON.stringify({ ...recipe, seeds: (recipe.seeds ?? [0]).map(() => 0) }) : ''   // fresh random seeds must not re-plan; the count stays
+  const [pv, setPv] = useState<{ key: string; value: DocumentPreview } | null>(null)
+  useEffect(() => {
+    if (!key) return
+    let live = true
+    const t = setTimeout(() => {
+      void unwrap(http.POST('/recipes/preview', { body: { recipe: JSON.parse(key) } })).then((r) => { if (live && isDocumentPreview(r)) setPv({ key, value: r }) }, () => {})
+    }, 300)
+    return () => { live = false; clearTimeout(t) }
+  }, [key])
+  return pv && pv.key === key ? pv.value : null
+}
+
 function AiTab() {
   const p = useAiPanel()
   const setP = p.set
@@ -359,14 +376,17 @@ function AiTab() {
   const reason = !doc ? 'no document' : p.op === 'select' ? null : p.op === 'inpaint' && !hasSel ? 'select the region to repaint first (M, L, W, Q or AI select)'
     : p.op === 'refine' && p.refineSource === 'selection' && !hasSel ? 'no selection' : (p.op === 'refine' || p.op === 'upscale') && (p.op === 'refine' ? p.refineSource : p.upscaleSource) === 'active' && active?.kind !== 'raster' ? 'the active layer is not a raster layer'
     : p.op === 'upscale' && health(p.upscaleModel) === 'missing' ? `weights missing: fetch ${p.upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
-  const run = (stage = false) => {
+  /** The recipe the AI button sends — the same object the preview plans (D64). */
+  const recipeNow = (): DocumentRecipe => {
     const base = { seeds: seeds(), prompt_text: p.prompt }
-    if (p.op === 'inpaint') void ed().runAi({ kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: mode === 'remove' && p.prefill && contentAware, ...base }, stage)
-    else if (p.op === 'outpaint') void ed().runAi({ kind: 'inpaint', mode: 'outpaint', model_id: hero ? 'flux2-dev-fp8mixed' : kleinId, te_id: teId(hero ? 'flux2-dev-fp8mixed' : kleinId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base }, stage)
-    else if (p.op === 'refine') void ed().runAi({ kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base }, stage)
-    else void ed().runAi({ kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
-      refine: p.refineTiled, refine_model_id: tiledModel, te_id: p.refineTiled ? teId(tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt }, stage)
+    if (p.op === 'inpaint') return { kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: mode === 'remove' && p.prefill && contentAware, ...base } as DocumentRecipe
+    if (p.op === 'outpaint') return { kind: 'inpaint', mode: 'outpaint', model_id: hero ? 'flux2-dev-fp8mixed' : kleinId, te_id: teId(hero ? 'flux2-dev-fp8mixed' : kleinId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base } as DocumentRecipe
+    if (p.op === 'refine') return { kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base } as DocumentRecipe
+    return { kind: 'upscale', model_id: p.upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
+      refine: p.refineTiled, refine_model_id: tiledModel, te_id: p.refineTiled ? teId(tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt } as DocumentRecipe
   }
+  const run = (stage = false) => { void ed().runAi(recipeNow(), stage) }
+  const preview = useDocPreview(p.op === 'select' || !doc ? null : recipeNow())
   const ops: [AiOp, string][] = [['select', 'Select'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
   /** The tuning controls of an operation: a collapsible Advanced section (closed until opened; it remembers), its own label grid. */
   const advanced = (id: string, body: ReactNode) => <div className="full ai-advanced"><Section id={`ai-advanced-${id}`} title="Advanced" defaultOpen={false}><div className="tool-opts">{body}</div></Section></div>
@@ -440,7 +460,9 @@ function AiTab() {
       </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
       {engineSize && <p className="hint" style={{ marginTop: 6 }}>engine image ≈ {engineSize.w}×{engineSize.h} ({engineSize.scale > 1.01 ? `upscaled ×${engineSize.scale.toFixed(2)}` : engineSize.scale < 0.99 ? `downscaled ×${engineSize.scale.toFixed(2)} to stay within 1 MP` : '1:1'})</p>}
-      {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached. {hero ? 'Hero / dev: ≈ 4–5 min per candidate.' : p.op === 'upscale' && p.refineTiled ? 'Tiled refine: ≈ 30–45 s per 1024² tile on Klein base.' : 'Klein: ≈ 20–35 s per candidate incl. model swap.'}</p>}
+      {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached.{preview?.estimate?.seconds != null ? ` ≈ ${fmtSeconds(preview.estimate.seconds)} per ${p.op === 'upscale' ? 'run' : 'candidate'} — ${preview.estimate.source}.` : ''}</p>}
+      {p.op !== 'select' && preview && preview.missing.length > 0 && <p className="hint warn" style={{ marginTop: 6 }}>weights not fetched: {preview.missing.map((m) => m.model_id).join(', ')} — fetch them in Models</p>}
+      {p.op !== 'select' && preview?.problems && preview.problems.length > 0 && <p className="hint warn" style={{ marginTop: 6 }} title={preview.problems.join('\n')}>the engine would refuse this recipe: {preview.problems[0]}{preview.problems.length > 1 ? ` (+${preview.problems.length - 1} more)` : ''}</p>}
     </div>
   )
 }

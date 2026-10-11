@@ -199,3 +199,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .keys-row .keys-chord.recording { border-color: var(--accent); color: var(--accent); }
 .keys-row .keys-chord:disabled { opacity: .55; }
 .keys-row button.icon { padding: 2px 4px; }
+/* a part that failed to render (ErrorBoundary): says so, with Try again — never a blank window */
+.render-error { margin: 16px; padding: 12px 14px; border: 1px solid var(--error); border-radius: var(--radius); background: var(--bg1); color: var(--fg); display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.render-error pre { margin: 0; font: var(--mono); font-size: 12px; color: var(--error); white-space: pre-wrap; max-height: 160px; overflow: auto; }
+.render-error-line { margin: 12px; color: var(--fg3); font-size: 12px; }

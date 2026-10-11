@@ -42,7 +42,10 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    it already — the .ora is written only by `save()`), then posts `/documents/{id}/ai`; results come back as
    `document.changed {added, group}` and land as candidate layers in a per-batch "AI" group (the variant strip: `1–4` / Enter picks).
 7. **Destroy what you create.** Rebuilding the scene destroys sprites and passes but keeps `LayerPixels` textures (they live in the store);
-   unmount destroys the app (`app.destroy(true, {children: true})`, review C21). Leaving Edit does **not** unmount it (D69 keep-alive):
+   unmount destroys the app (`app.destroy(KEEP_SHARED, {children: true})`, review C21). Never `app.destroy(true)`: in Pixi 8 `true`
+   releases the global resource pools, and the batch pool is shared by every renderer — a live one then draws destroyed batches
+   ("Cannot read properties of null (reading 'geometry')"; `editorLifecycle.test.ts` guards it). Pixi's "textureSource destroyed while
+   still bound" warnings on scene rebuilds are its batch bind-group cache noticing a destroyed texture — noise, not a fault. Leaving Edit does **not** unmount it (D69 keep-alive):
    only the release policy does, so cleanup must stay complete; while hidden the host is 0 × 0 (`useStageActive()`), never resize to it.
 8. **Clipping groups are passes, not a shader variant (D39).** `buildClipRun`: the base's content (pixels × mask) renders into a pass,
    is drawn `w3c-opaque` into a second pass with the clipped layers over it, that pass is masked by the base's alpha

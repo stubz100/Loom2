@@ -20,6 +20,10 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   (their rails live in `railTabs.tsx`), the components load on first render behind a skeleton, and render directly once loaded (a lazy
   boundary would add React's ≈ 300 ms reveal throttle). `preloadSuite(id)` runs on a pointer over a tab; Edit is preloaded at idle.
   Commands register at import: a command module a lazy suite owns loads with it — keep Pixi and Mediabunny out of eager modules.
+- **Error boundaries.** `ErrorBoundary.tsx` wraps the app and every lazy suite part: a render error or a chunk that failed to load
+  shows where it happened (the Stage explains, the panel says one line, strip / inspector / foot stay empty) instead of blanking the
+  window. A failed load is not cached by `lazySuite` (Try again re-imports), but the browser keeps a failed module for the page, so a
+  chunk failure offers Reload first.
 
 ## Rule 1 — every action is a command (`commands.ts`, D32)
 

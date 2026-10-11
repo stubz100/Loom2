@@ -75,6 +75,12 @@ let lastPaint: { id: string; at: Pt } | null = null
 /** Overlay Graphics that live across scene rebuilds (cleared and redrawn in place); everything else in the overlay is rebuilt. */
 const OVERLAY_GRAPHICS = ['frame', 'ants', 'aiprompt', 'gguide', 'xform', 'preview']
 
+/** How an editor's Pixi application goes: its canvas removed, the global pools kept. `destroy(true)` would also release Pixi's global
+ *  resources (renderer.destroy: `true` = releaseGlobalResources), destroying pooled batches another live renderer is drawing with — its
+ *  next render throws "Cannot read properties of null (reading 'geometry')" (seen once in ten headed tours, 2026-10-11: React StrictMode's
+ *  cancelled first mount finished its slow init after the second had started rendering; any overlapping editor lifecycle can do it). */
+const KEEP_SHARED = { removeView: true } as const
+
 export function EditorCanvas() {
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
@@ -265,7 +271,7 @@ export function EditorCanvas() {
         app = await boot(want)
         const skipProbe = import.meta.env.DEV && new URLSearchParams(location.search).get('probe') === '0'   // dev deep link for bisecting
         if (!cancelled && !skipProbe && want === 'webgpu' && pref === 'auto' && app.renderer.type === RendererType.WEBGPU && !rendersPixels(app)) {
-          app.destroy(true)
+          app.destroy(KEEP_SHARED)
           if (cancelled) return
           app = await boot('webgl'); fellBack = true
         }
@@ -273,7 +279,7 @@ export function EditorCanvas() {
         if (!cancelled) useSession.getState().toast(`The editor's renderer could not start: ${(e as Error).message}`, 'error')
         return
       }
-      if (cancelled) { app.destroy(true); return }
+      if (cancelled) { app.destroy(KEEP_SHARED); return }
       host.replaceChildren(app.canvas)
       app.canvas.style.touchAction = 'none'
       const world = new Container()
@@ -342,7 +348,7 @@ export function EditorCanvas() {
       for (const p of passesRef.current) { p.content.destroy({ children: true }); p.rt.destroy(true) }
       passesRef.current = []
       negRef.current?.forEach((f) => f.destroy()); negRef.current = null
-      appRef.current?.destroy(true, { children: true }); appRef.current = null
+      appRef.current?.destroy(KEEP_SHARED, { children: true }); appRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

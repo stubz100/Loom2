@@ -3000,3 +3000,27 @@ split by file so that no two hands touched the same module.
 - In the same run the Edit scenario timed out on its first page load (`.frame` not visible in 15 s) — it passed in every earlier run
   and in two local runs under `open` now; nothing in the annotation says why. Recorded as unexplained; watched in the next runs.
 - Smoke 12/12 under full and twice under open; lint 100.
+
+## 2026-10-11 15:24 — the two open points: the Pixi render error found and fixed; CI page-load failures can no longer go dark
+
+- **Pixi "Cannot read properties of null (reading 'geometry')" (seen once in ten tours, 13:14).** Read Pixi 8.22: a `Batch` whose
+  `batcher` is null is one `Batch.destroy()` has run on; only `GlobalResourceRegistry.release()` does that, and it walks the whole
+  **global** batch pool array — which still holds batches a live renderer took from it (`getBatchFromPool` only moves an index).
+  `release()` runs from `renderer.destroy(true)`, and the editor destroyed its app with `app.destroy(true)` (meant: remove the canvas;
+  `true` also means releaseGlobalResources). Reproduced in Edge with the dev build's Pixi: a renderer rebuilds its scene, the pools are
+  released, its next render throws exactly that message (whether it hits in the app depends on pool slot order — hence 1 in 10). In the
+  app two editors overlap when React StrictMode's cancelled first mount finishes its slow init after the second started (a cold dev
+  server — the 13:14 run), or on any remount during a slow init. **Fix:** the three destroys use `{ removeView: true }` (`KEEP_SHARED`);
+  `editorLifecycle.test.ts` guards the source. Six cold-start cycles (Vite restarted, headed tour each): all passed, 0 render errors.
+- **The "textureSource destroyed while still bound" warnings (≈ 180 a tour)** are not a fault: a stack probe put ~112 on pass render
+  targets destroyed at scene rebuilds and the rest on layer canvases freed by undo GC; Pixi's batch bind-group cache keeps an entry per
+  texture set, and destroying any texture ever drawn makes that entry warn, however late (destroying a frame later was tried: no change,
+  reverted). Left as is, documented in the edit AGENTS; reusing pass targets across rebuilds would cut most of them if they ever matter.
+- **The unexplained CI timeout (`.frame` not visible, 13:5x).** `App` renders `Frame` unconditionally, so the tree never rendered or
+  React unmounted it — with no error boundary any render error blanks the window. Now: `ErrorBoundary` around the app and every lazy
+  suite part (the Stage explains, the panel says one line, the others stay empty; Try again / Reload); a failed suite chunk is no longer
+  cached by `lazySuite`, and because the browser keeps a failed module for the page, a chunk failure offers Reload first. The e2e
+  `openApp` now attaches the page's errors, console errors, failed requests, HTTP ≥ 400 and the page text to its failure, so a
+  recurrence explains itself. New smoke scenario: Edit's chunk refused by the network → one explanation in the stage, the rest of the
+  app works, reload after the network is back → Edit loads. Smoke 13/13 under full and open, 164 unit, lint 100, headed tour / render /
+  transform / masks / kit / perf pass (6×4K composite p95 7.0 ms).

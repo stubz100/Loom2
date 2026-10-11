@@ -3,7 +3,9 @@
 // Once the code has loaded (the idle preload, a pointer over the tab), the parts render the suite's components directly: `React.lazy`
 // suspends on its first render even for a resolved module, and React holds a revealed boundary back (≈ 300 ms throttle) — the first Edit
 // open measured 420–500 ms that way against 210–225 ms eager. Plain `createElement` in a .ts module: the components are built per suite.
-import { createElement, lazy, Suspense, useState, type ComponentType, type ReactNode } from 'react'
+import { createElement, lazy, Suspense, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { create } from 'zustand'
+import { ErrorBoundary } from './ErrorBoundary'
 import type { SuiteDef } from './suiteRegistry'
 
 type Part = 'Panel' | 'Strip' | 'Stage' | 'Inspector' | 'PrimaryAction'
@@ -20,13 +22,20 @@ const SKELETON: Record<Part, () => ReactNode> = {
 export function lazySuite(meta: Omit<SuiteDef, Part>, load: () => Promise<SuiteDef>, parts: Part[]): SuiteDef {
   let mod: Promise<SuiteDef> | undefined
   let ready: SuiteDef | undefined
-  const get = (loaders[meta.id] = () => (mod ??= load().then((d) => (ready = d))))
+  // a failed load is not kept: the next ask (Try again, a pointer over the tab) imports the chunk again
+  const get = (loaders[meta.id] = () => (mod ??= load().then((d) => (ready = d), (e: unknown) => { mod = undefined; throw e })))
   const out = { ...meta } as SuiteDef
+  const retries = create<{ n: number }>()(() => ({ n: 0 }))            // one Try again remounts every part of the suite
   for (const k of parts) {
-    const L = lazy(() => get().then((d) => ({ default: (d[k] ?? Nothing) as Loose })))
+    const make = () => lazy(() => get().then((d) => ({ default: (d[k] ?? Nothing) as Loose })))
+    const label = `${meta.id[0].toUpperCase()}${meta.id.slice(1)}`
     const C: Loose = (props) => {
       const [direct] = useState(() => !!ready)                         // fixed per mount: switching the element type would remount the part
-      return direct ? createElement((ready![k] ?? Nothing) as Loose, props) : createElement(Suspense, { fallback: SKELETON[k]() }, createElement(L, props))
+      const n = retries((r) => r.n)
+      const L = useMemo(() => make(), [n]) // eslint-disable-line react-hooks/exhaustive-deps -- n is the retry count: a new lazy per retry (React.lazy keeps a rejection)
+      const part = direct ? createElement((ready![k] ?? Nothing) as Loose, props) : createElement(Suspense, { fallback: SKELETON[k]() }, createElement(L, props))
+      // the Stage explains a failure; the panel says one line, the strip / inspector / foot stay empty
+      return createElement(ErrorBoundary, { key: n, label, quiet: k === 'Stage' ? undefined : k === 'Panel' ? 'line' : 'hide', onReset: () => retries.setState({ n: n + 1 }) }, part)
     }
     C.displayName = `${meta.id}.${k}`
     ;(out as unknown as Record<Part, Loose>)[k] = C

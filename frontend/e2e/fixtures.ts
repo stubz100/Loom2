@@ -28,11 +28,21 @@ export function appUrl(params: Record<string, string> = {}): string {
   return `http://127.0.0.1:${PREVIEW_PORT}/?${new URLSearchParams({ token: e.token, port: String(e.port), ...params })}`
 }
 
+/** Per page: what went wrong while it ran (page errors, console errors, failed requests, HTTP ≥ 400) — attached to a failed
+ *  `openApp`, so a CI failure says why the app did not come up (2026-10-11: a bare "`.frame` not visible" could not be explained). */
+const DIAG = new WeakMap<Page, string[]>()
+export const diagnostics = (page: Page): string[] => (DIAG.get(page) ?? []).slice(-40)
+
 /** Open the app and wait until the frame is up and the project is open. */
 export async function openApp(page: Page, params: Record<string, string> = {}): Promise<void> {
-  await page.goto(appUrl(params))
-  await expect(page.locator('.frame')).toBeVisible()
-  await page.waitForFunction(() => !!(window as unknown as { __loom2Session?: { getState: () => { project?: { open?: boolean } } } }).__loom2Session?.getState().project?.open)
+  try {
+    await page.goto(appUrl(params))
+    await expect(page.locator('.frame')).toBeVisible()
+    await page.waitForFunction(() => !!(window as unknown as { __loom2Session?: { getState: () => { project?: { open?: boolean } } } }).__loom2Session?.getState().project?.open)
+  } catch (e) {
+    const body = (await page.locator('body').innerText({ timeout: 2000 }).catch(() => '(no body)')).slice(0, 600)
+    throw new Error(`${(e as Error).message}\n--- page diagnostics ---\n${diagnostics(page).join('\n') || '(none)'}\n--- page text ---\n${body}`)
+  }
 }
 
 /** The centre of an element in page coordinates (for mouse gestures). */
@@ -64,7 +74,12 @@ export async function thumbsLoaded(page: Page, n: number): Promise<number> {
 export const test = base.extend<{ page: Page }>({
   page: async ({ page }, run) => {
     const errors: string[] = []
-    page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+    const diag: string[] = []
+    DIAG.set(page, diag)
+    page.on('pageerror', (e) => { errors.push(`pageerror: ${e.message}`); diag.push(`pageerror: ${e.message}`) })
+    page.on('console', (m) => { if (m.type() === 'error') diag.push(`console: ${m.text().slice(0, 300)}`) })
+    page.on('requestfailed', (r) => diag.push(`request failed: ${r.url()} — ${r.failure()?.errorText ?? '?'}`))
+    page.on('response', (r) => { if (r.status() >= 400) diag.push(`HTTP ${r.status()} ${r.request().method()} ${r.url()}`) })
     await run(page)
     const toasts = await page.locator('.toast.error').allTextContents().catch(() => [])
     errors.push(...toasts.map((t) => `error toast: ${t}`))

@@ -321,3 +321,21 @@ test('@mentions (D73): "@hero walks into @tavern" — both groups give reference
   await expect(ta).toHaveValue(`@${heroName} walks into ${tavernName} `)
   await expect(page.locator('.mention-chips .mchip')).toHaveCount(1)
 })
+
+test('a suite whose code fails to load says so and recovers (no blank window): the Edit chunk refused, then a reload', async ({ page }) => {
+  await page.route(/EditSuite-[\w-]+\.js$/, (r) => r.abort('failed'))               // the network refuses Edit's code (the idle preload hits it too)
+  await openApp(page, { suite: 'catalogue' })
+  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await expect(page.locator('.stage .render-error')).toContainText("Edit's code could not be loaded")
+  await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the panel says one line
+  await expect(page.locator('.render-error-line')).toContainText('Edit is not available')
+  await expect(page.locator('.frame')).toBeVisible()                                  // the rest of the app stays
+  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await expect(tiles(page).first()).toBeVisible()
+  await page.unroute(/EditSuite-[\w-]+\.js$/)
+  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await page.locator('.stage .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
+  await expect(page.locator('.frame')).toBeVisible()
+  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await expect(page.locator('.edit-empty')).toBeVisible()                            // the code loads this time
+})

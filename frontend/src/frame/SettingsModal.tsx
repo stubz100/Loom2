@@ -7,9 +7,16 @@ import { THEMES, type Theme } from './theme'
 
 export function SettingsModal() {
   const s = useSession()
-  const [draft, setDraft] = useState<Settings | null>(s.settings ? structuredClone(s.settings) : null)
+  // the edits; until the first one the draft is the settings as loaded — opened before they arrive (right after a start), the dialog
+  // showed nothing and stayed open invisibly (seen in CI, 2026-10-11); now it says so and fills in when they come
+  const [edits, setDraft] = useState<Settings | null>(null)
+  const draft = edits ?? (s.settings ? structuredClone(s.settings) : null)
   const [busy, setBusy] = useState(false)
-  if (!draft) return null
+  if (!draft) return (
+    <div className="modal-backdrop" onClick={() => s.openSettings(false)}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}><div className="head">Settings</div><div className="body"><p className="muted">Loading the settings…</p></div></div>
+    </div>
+  )
   const set = (patch: Partial<Settings>) => setDraft({ ...draft, ...patch })
   const setEngine = (patch: Partial<Settings['engine']>) => setDraft({ ...draft, engine: { ...draft.engine, ...patch } })
   const save = async () => {

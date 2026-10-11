@@ -2985,3 +2985,10 @@ split by file so that no two hands touched the same module.
   235 offline (full and open), 163 unit, smoke 12/12, settings audit 160 / 0 (`mentions.py` joined the job code; `Mention.asset_ids`
   allowed as provenance), literal check 0, parity fixture +2 zero keys per t2i recipe (no graph changed), lint 100, API regenerated.
   **X1 (P11, P15, P16, P12) closed.**
+
+## 2026-10-11 14:14 — CI found a Settings bug: opened before the settings load, the dialog stayed invisible
+
+- CI (full) failed the D72 scenario after its reload: Settings › Keyboard never appeared. Cause: `SettingsModal` copied the settings into
+  its draft once, when it opened; opened before `GET /settings` answered (right after a start or reload — CI's slower runner hit it),
+  the draft stayed empty, the dialog rendered nothing and stayed open invisibly until closed. A real bug, not the test's: the draft is
+  now the loaded settings until the first edit, and the dialog says "Loading the settings…" meanwhile. Smoke 12/12, 163 unit, lint 100.

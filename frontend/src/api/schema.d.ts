@@ -3663,6 +3663,41 @@ export interface components {
              */
             y: number;
         };
+        /**
+         * Mention
+         * @description D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and
+         *     stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again.
+         */
+        Mention: {
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Group Id */
+            group_id: string;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Revision
+             * @default null
+             */
+            revision?: number | null;
+        };
+        /** MentionOut */
+        MentionOut: {
+            /**
+             * Asset Ids
+             * @default []
+             */
+            asset_ids: string[];
+            /** Group Id */
+            group_id: string;
+            /** Name */
+            name: string | null;
+            /** Revision */
+            revision: number | null;
+        };
         /** MissingWeight */
         MissingWeight: {
             /** Approx Gb */
@@ -4143,10 +4178,26 @@ export interface components {
              */
             blob?: string | null;
             /**
+             * Mention
+             * @default null
+             */
+            mention?: string | null;
+            /**
              * Note
              * @default null
              */
             note?: string | null;
+        };
+        /** RefOut */
+        RefOut: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Blob */
+            blob: string | null;
+            /** Mention */
+            mention: string | null;
+            /** Note */
+            note: string | null;
         };
         /**
          * RefineEdge
@@ -4445,6 +4496,8 @@ export interface components {
              * @default null
              */
             max_shift?: number | null;
+            /** Mentions */
+            mentions?: components["schemas"]["Mention"][];
             /**
              * Model Id
              * @description roster id; default: the registry's t2i model (D65)
@@ -4578,6 +4631,11 @@ export interface components {
             max_refs: number;
             /** Max Shift */
             max_shift?: number | null;
+            /**
+             * Mentions
+             * @default []
+             */
+            mentions?: components["schemas"]["MentionOut"][];
             /** Missing */
             missing: components["schemas"]["MissingWeight"][];
             /** Model Id */
@@ -4588,8 +4646,23 @@ export interface components {
             problems?: string[] | null;
             /** Prompt Mode */
             prompt_mode: string;
+            /**
+             * Ref List
+             * @default []
+             */
+            ref_list?: components["schemas"]["RefOut"][];
+            /**
+             * Ref Notes
+             * @default 0
+             */
+            ref_notes?: number;
             /** Refs */
             refs: number;
+            /**
+             * Refs Dropped
+             * @default 0
+             */
+            refs_dropped?: number;
             /** Sampler */
             sampler: string;
             /** Scheduler */

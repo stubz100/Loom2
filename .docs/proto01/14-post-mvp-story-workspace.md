@@ -20,6 +20,10 @@ This document is a pointer and an adoption checklist, not a re-specification.
 ## 2. What loom2's MVP must keep open for it (checked in 06 §5)
 
 - Collections can become AssetProfiles with versions; assets keep stable ids and `asset@version`-style lineage.
+- **`@`mentions (D73, 2026-10-11):** Generate already resolves `@group` mentions to references in `orchestrator/loom2/mentions.py`
+  (`resolve_mentions`: the cover first, then page order, stamped `{group_id, revision, asset_ids}` into the recipe and the manifest).
+  The Story workspace swaps AssetProfiles in behind the same function — a profile version in place of a group revision — so prompts,
+  chips and provenance stay as they are.
 - Clips are PNG-sequence masters + proxy; `format.target` is the finalize gate; fps conform policy from E9.
 - Every AI/LLM call is a queue job; nothing auto-spends GPU (R141/R142); staged-then-queued stays (R118).
 - Style handling: one style per generation, appended not prepended (R47/R104), stamped as `style_id` at write

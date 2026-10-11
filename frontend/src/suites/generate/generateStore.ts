@@ -15,6 +15,9 @@ export interface Tree { scene?: string; subjects?: Subject[]; style?: string; co
 export type PromptMode = 'tree' | 'json' | 'text'
 export type SeedMode = 'random' | 'fixed' | 'increment'
 export interface RefSlot { asset_id: string; note?: string }
+/** D73: an @mention of an album group — the server turns it into references (the cover first, then page order) when the panel previews or
+ *  submits, and stamps the group's revision into the recipe. */
+export interface MentionRef { group_id: string; name: string }
 
 export interface Panel {
   prompt_mode: PromptMode; tree: Tree; json_text: string; text: string; negative: string
@@ -24,8 +27,24 @@ export interface Panel {
   seed_mode: SeedMode; seed: number; count: number
   width: number; height: number; tier: 'thumb' | 'draft' | 'full' | 'custom'
   refs: RefSlot[]; ref_max_px: number
+  mentions?: MentionRef[]
   loras: { model_id: string; strength: number }[]
 }
+
+/** Every prompt string of the panel (the Text field, the tree's fields, the JSON text) — where an @mention can be written. */
+function promptStrings(p: Panel): string[] {
+  const out: string[] = [p.text]
+  const walk = (v: unknown) => { if (typeof v === 'string') out.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') Object.values(v).forEach(walk) }
+  if (p.prompt_mode === 'tree') walk(p.tree)
+  if (p.prompt_mode === 'json') out.push(p.json_text)
+  return out
+}
+/** D73: the mentions still written somewhere in the prompt as `@name` (deleting the text drops the mention). */
+export function mentionsInUse(p: Panel): MentionRef[] {
+  const text = promptStrings(p).join('\n')
+  return (p.mentions ?? []).filter((m) => text.includes('@' + m.name))
+}
+const unmention = (s: string, name: string) => s.split('@' + name).join(name)
 
 export type Preview = T2IPreview                          // D38: the server's t2i preview reply
 export interface Preset { name: string; panel: Panel; saved_at: string }
@@ -87,6 +106,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
+    mentions: mentionsInUse(p).map((m) => ({ group_id: m.group_id, name: m.name })),
   }
 }
 
@@ -98,7 +118,9 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     sampler: (r.sampler as string | null) ?? null, scheduler: (r.scheduler as string | null) ?? null, turbo: Boolean(r.turbo), tier: 'custom',
     turbo_strength: Number(r.turbo_strength ?? 1), weight_dtype: (r.weight_dtype as string | null) ?? null, te_device: (r.te_device as string | null) ?? null, te_id: (r.te_id as string | null) ?? null,
     base_shift: (r.base_shift as number | null) ?? null, max_shift: (r.max_shift as number | null) ?? null, tiled_vae: Boolean(r.tiled_vae), tile_size: Number(r.tile_size ?? 512),
-    refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string }[]).filter((x) => x.asset_id).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
+    // D73: the references a mention gave are the server's to resolve again; the mentions come back unstamped (resolved at today's revision)
+    refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string; mention?: string | null }[]).filter((x) => x.asset_id && !x.mention).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
+    mentions: Array.isArray(r.mentions) ? (r.mentions as { group_id: string; name?: string | null }[]).filter((m) => m.group_id && m.name).map((m) => ({ group_id: m.group_id, name: m.name! })) : [],
     ref_max_px: Number(r.ref_max_px ?? 1024), loras: (r.loras as Panel['loras']) ?? [],
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }
@@ -131,6 +153,9 @@ export interface GenerateState {
   loadFromAsset: (asset: Asset, keepSeeds?: boolean) => void
   addRef: (assetId: string) => void
   removeRef: (assetId: string) => void
+  setRefNote: (assetId: string, note: string) => void
+  addMention: (m: MentionRef) => void
+  removeMention: (groupId: string) => void
   moveRef: (from: number, to: number) => void
   setShow: (s: GenerateState['show']) => void
   togglePinned: (id: string) => void
@@ -225,6 +250,15 @@ export const useGenerate = create<GenerateState>()(
         useSession.getState().setSuite('generate')
       },
       removeRef: (assetId) => get().set({ refs: get().panel.refs.filter((r) => r.asset_id !== assetId) }),
+      setRefNote: (assetId, note) => get().set({ refs: get().panel.refs.map((r) => (r.asset_id === assetId ? { ...r, note: note || undefined } : r)) }),
+      addMention: (m) => { const ms = get().panel.mentions ?? []; if (!ms.some((x) => x.group_id === m.group_id)) get().set({ mentions: [...ms, m] }) },
+      removeMention: (groupId) => {                                     // the chip's ×: the mention goes, its @name reads as plain text
+        const p = get().panel
+        const m = (p.mentions ?? []).find((x) => x.group_id === groupId)
+        if (!m) return
+        const fix = (v: unknown): unknown => (typeof v === 'string' ? unmention(v, m.name) : Array.isArray(v) ? v.map(fix) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fix(x)])) : v)
+        get().set({ mentions: (p.mentions ?? []).filter((x) => x.group_id !== groupId), text: unmention(p.text, m.name), tree: fix(p.tree) as Tree, json_text: unmention(p.json_text, m.name) })
+      },
       moveRef: (from, to) => { const refs = [...get().panel.refs]; const [x] = refs.splice(from, 1); refs.splice(to, 0, x); get().set({ refs }) },
       setShow: (show) => set({ show }),
       togglePinned: (id) => set({ pinned: get().pinned.includes(id) ? get().pinned.filter((x) => x !== id) : [...get().pinned, id].slice(-6) }),

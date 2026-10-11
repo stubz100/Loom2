@@ -45,6 +45,7 @@ class Services:
             documents = DocumentStore(ws)
             queue.documents = documents
             groups = await asyncio.to_thread(GroupStore, ws, catalogue)    # D34: the album pages; migrates collections once
+            queue.groups = groups                                           # D73: @mentions resolve against them
             if groups.migrated:
                 catalogue.recovery.append(f"{groups.migrated} collection{'s' if groups.migrated != 1 else ''} became groups on the Album page.")
             await queue.start()

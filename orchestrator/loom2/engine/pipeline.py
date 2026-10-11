@@ -23,8 +23,9 @@ from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
 from ..recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale, warm_group
+from ..models import registry
 from ..roster import Roster
-from .graphs import (CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
+from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
                      estimate_vram_gb, i2v_params, recipe_weights)
 
 if TYPE_CHECKING:
@@ -128,7 +129,10 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     empty selection) or CompileError."""
     object_info = await q.object_info_fresh()
     ref_files: dict[str, str] = {}
-    for ref in getattr(recipe, "refs", []) or []:
+    refs = getattr(recipe, "refs", []) or []
+    if isinstance(recipe, T2I) and (spec := registry.get(recipe.model_id)):
+        refs = kept_refs(recipe, spec)                                 # D73: references over the model's limit are not uploaded (preview says so)
+    for ref in refs:
         key = ref.asset_id or ref.blob or ""
         src = None
         if ref.asset_id:

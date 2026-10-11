@@ -25,7 +25,7 @@ from pydantic import BaseModel  # noqa: E402
 from loom2 import config, recipes  # noqa: E402
 
 # the code path that runs jobs (recipe fields must be read here)
-JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py"]
+JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py", "mentions.py"]
 
 # /capabilities keys → what they parameterise ("recipe:Model.field", "settings:field") or None for informational keys
 CAPABILITIES: dict[str, list[str] | None] = {
@@ -51,7 +51,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
 # fields that are not read by the job code on purpose — each with its reason
 ALLOW: dict[str, str] = {
     "*.kind": "the recipe union's discriminator (pydantic picks the model with it)",
-    "RefImage.note": "a user note shown in the panel; never sent to the engine",
+    "Mention.asset_ids": "provenance (D73): the images a mention gave, stamped at submit by mentions.py and kept with the recipe in the manifest — read by people, not by the job",
     "Inpaint.image_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",
     "Inpaint.mask_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",
     "Settings.schema_version": "the record's own version (fsio)",
@@ -86,6 +86,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "LoraRef": (("l", "ref"), None),                                # `for l in recipe.loras`, graphs._lora_chain `for ref in loras`
     "RefImage": (("ref", "r"), None),                               # queue: `for ref in recipe.refs`, the parents list `r.asset_id`
     "Beat": (("b",), None),                                         # `for b in recipe.beats`
+    "Mention": (("m",), None),                                      # D73: mentions.py `for m in todo`
     # D45: matting.params_from copies the fields by name (getattr) into matting.RefineParams; the kernels read them there
     "RefineEdge": (("params", "self"), ["matting.py"]),
 }

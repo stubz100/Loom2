@@ -98,6 +98,21 @@ to "reference image 1"), remove, move left; right-click: remove / move first / l
 select (≤ 512² / 768² / 1024² / original) with the token-cost hint ("a 1024² reference ≈ 4 096 tokens"). Klein 9B-KV
 is suggested when ≥ 2 references are present.
 
+**Notes, @mentions, no silent truncation (D73, 2026-10-11).**
+- *Notes:* each reference has a one-line note under the slots ("the hero, red coat"). The serialiser adds them per model family: a
+  JSON-prompted model (dev) gets `references: [{index, note}]`, prose and text prompts (Klein) a sentence per image ("Image 2 shows the
+  hero."). Rig check (journal 2026-10-11 14:02): no identity swaps in either arm; on dev a note made the reference win over conflicting prompt
+  text (bench 02's "knitted cap" vs the reference's peaked cap, 2/2 with notes, 0/2 without); Klein barely changed. Notes are on
+  whenever written.
+- *@mentions:* typing `@` in the Text field or a multi-line tree field (or the @ button beside it) lists the album's groups; the pick is
+  written as `@name` and becomes a chip ("@hero · 2 images ×"). On preview and submit the server resolves each mention to references —
+  the cover first, then the page in order, mentions taking turns, only into the room the model has left after the explicit slots —
+  with the group's name as the note; the preview shows those images under the slots. The prompt reads the plain name. The recipe and
+  the asset's manifest keep `mentions: [{group_id, name, revision, asset_ids}]`; a stored recipe re-runs with the same images. The
+  chip's × keeps the name as plain text.
+- *No silent truncation:* references over the model's limit are left out and the panel says how many; with `size_policy: error` a
+  submission over the limit is a 422 naming the field `refs`. References that are left out are not uploaded and are not lineage parents.
+
 ### 3e. Presets
 Save/load the whole Panel state (prompt + model + size) as named **panel presets**; "last used" restored per
 project. **Field presets** (the former snippet library) are created from each field's ✦ menu and listed here

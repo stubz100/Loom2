@@ -105,3 +105,37 @@ describe('recipeFromPanel ↔ panelFromRecipe', () => {
     expect(recipeFromPanel({ ...panel, prompt_mode: 'json', json_text: '{}' }).prompt_text).toBe('')
   })
 })
+
+// D73 (ArtCraft P12): @mentions go into the recipe only while their @name is written somewhere in the prompt; a stored recipe comes back
+// with its mentions unstamped and without the references they gave (the server resolves them again); removing a chip leaves the name as
+// plain text; notes are set per reference.
+describe('@mentions and notes', () => {
+  const hero = { group_id: 'grp_hero', name: 'hero' }, tavern = { group_id: 'grp_tavern', name: 'Old tavern' }
+  it('sends only the mentions the prompt still names, from any field of the mode in use', () => {
+    const text: Panel = { ...DEFAULT_PANEL, prompt_mode: 'text', text: '@hero walks in', mentions: [hero, tavern] }
+    expect(recipeFromPanel(text).mentions).toEqual([hero])
+    const tree: Panel = { ...DEFAULT_PANEL, prompt_mode: 'tree', tree: { scene: 'at the @Old tavern', subjects: [{ description: '@hero' }] }, mentions: [hero, tavern] }
+    expect(recipeFromPanel(tree).mentions).toEqual([hero, tavern])
+    expect(recipeFromPanel({ ...DEFAULT_PANEL, mentions: undefined }).mentions).toEqual([])          // a panel persisted before D73
+  })
+  it('loads a stored recipe: explicit references stay, the mentions come back unstamped', () => {
+    const stored = { kind: 't2i', model_id: 'fixture-turbo', prompt_mode: 'text', prompt_text: '@hero', mentions: [{ ...hero, revision: 4, asset_ids: ['ast_a'] }],
+      refs: [{ asset_id: 'ast_x', note: 'the lamp' }, { asset_id: 'ast_a', note: 'hero', mention: 'grp_hero' }] }
+    const p = panelFromRecipe(stored)
+    expect(p.refs).toEqual([{ asset_id: 'ast_x', note: 'the lamp' }])
+    expect(p.mentions).toEqual([hero])
+  })
+  it('a removed chip leaves the name as plain text everywhere; notes are set per reference', async () => {
+    const { useGenerate } = await import('./generateStore')
+    useGenerate.setState({ panel: { ...DEFAULT_PANEL, prompt_mode: 'tree', text: '@hero', json_text: '{"scene":"@hero"}', tree: { scene: '@hero by the fire', subjects: [{ description: 'tall @hero' }] }, mentions: [hero, tavern], refs: [{ asset_id: 'ast_1' }] } })
+    const g = useGenerate.getState()
+    g.removeMention('grp_hero')
+    g.setRefNote('ast_1', 'the lamp')
+    const p = useGenerate.getState().panel
+    expect(p.mentions).toEqual([tavern])
+    expect([p.text, p.json_text, p.tree.scene, p.tree.subjects?.[0].description]).toEqual(['hero', '{"scene":"hero"}', 'hero by the fire', 'tall hero'])
+    expect(p.refs).toEqual([{ asset_id: 'ast_1', note: 'the lamp' }])
+    useGenerate.getState().setRefNote('ast_1', '')
+    expect(useGenerate.getState().panel.refs).toEqual([{ asset_id: 'ast_1', note: undefined }])
+  })
+})

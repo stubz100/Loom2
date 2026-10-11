@@ -45,7 +45,17 @@ class LoraRef(BaseModel):
 class RefImage(BaseModel):
     asset_id: str | None = None                   # catalogue asset …
     blob: str | None = None                       # … or an uploaded blob (sha256)
-    note: str | None = None
+    note: str | None = None                       # D73: what the image shows — serialised into the prompt per model family
+    mention: str | None = None                    # D73: the group id of the @mention that added it (mentions.py)
+
+
+class Mention(BaseModel):
+    """D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and
+    stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again."""
+    group_id: str
+    name: str | None = None
+    revision: int | None = None
+    asset_ids: list[str] = Field(default_factory=list)
 
 
 class T2I(BaseModel):
@@ -77,6 +87,7 @@ class T2I(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
     refs: list[RefImage] = Field(default_factory=list)   # reference images (FLUX.2 unified editing)
     ref_max_px: int = 1024                        # references are downscaled to fit this square by default
+    mentions: list[Mention] = Field(default_factory=list)   # D73: @mentioned groups ("@hero walks into @tavern")
     tier: str | None = None
 
 

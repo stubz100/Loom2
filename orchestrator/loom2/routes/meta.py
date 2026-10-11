@@ -57,6 +57,8 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
     ETA and VRAM fit, missing weights, and the contract problems a submission would hit (checked against the engine's last object_info)."""
     try:
         recipe = parse_recipe(body.recipe)
+        if svc.queue:
+            recipe = svc.queue.resolve_mentions(recipe)                       # D73: the references the mentions give, as a submit would
     except ValueError as e:
         raise HTTPException(422, str(e))
     variant = svc.app.settings.variant
@@ -77,7 +79,10 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
     est = svc.queue.estimate(recipe) if svc.queue else {**p.estimate, "vram_gb": p.vram_gb}
     problems = preview_problems(recipe, svc.roster, svc.queue.object_info_cached() if svc.queue else None, variant)
     common = {"missing": missing, "estimate": est, "count": p.count, "problems": problems, "weights": p.weights, "warm_group": p.warm_group}
-    if isinstance(recipe, (T2I, I2V)):
+    if isinstance(recipe, T2I):                                               # D73: which images go in (mentions included) and what they say
+        kept = recipe.refs[: p.params.get("max_refs", len(recipe.refs))]
+        return {**p.params, **common, "ref_list": [r.model_dump() for r in kept], "mentions": [m.model_dump() for m in recipe.mentions]}
+    if isinstance(recipe, I2V):
         return {**p.params, **common}
     return {"kind": p.kind, "model_id": p.model_id, "engine": p.engine, "params": p.params, "needs": p.needs, **common}
 

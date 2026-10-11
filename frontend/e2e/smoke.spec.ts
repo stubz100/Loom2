@@ -278,3 +278,46 @@ test('remappable keys (D72): Keep to G is refused (Cycle grouping has it); Keep 
   await row.getByRole('button', { name: 'Reset the key of Keep' }).click()
   await expect(row.locator('.keys-chord')).toHaveText('K')
 })
+
+test('@mentions (D73): "@hero walks into @tavern" — both groups give references in the preview, and the job records both at their revisions', async ({ page }) => {
+  const tag = Date.now().toString(36)
+  const [heroName, tavernName] = [`hero ${tag}`, `tavern ${tag}`]                   // names with a space, as people write them
+  const hero = await api<Group>('POST', '/groups', { name: heroName }), tavern = await api<Group>('POST', '/groups', { name: tavernName })
+  const free = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=unprocessed&limit=40')).items.filter((a) => a.kind === 'image')
+  await api('POST', '/groups/move', { items: free.slice(0, 3).map((a) => ({ kind: 'asset', id: a.id })), to: hero.id })
+  await api('POST', '/groups/move', { items: free.slice(3, 5).map((a) => ({ kind: 'asset', id: a.id })), to: tavern.id })
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes 4 references
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  const ta = page.locator('.text-prompt textarea')
+  await ta.fill('')
+  await ta.click()
+  const mention = async (name: string) => {
+    await page.keyboard.type('@')                                                       // typing @ opens the album's groups at the field
+    await page.locator('.ctx-menu button.item', { hasText: name }).click()
+    await expect(ta).toBeFocused()                                                      // the pick hands the caret back to the field
+  }
+  await mention(heroName)
+  await page.keyboard.type('walks into ')
+  await mention(tavernName)
+  await expect(ta).toHaveValue(`@${heroName} walks into @${tavernName} `)
+  await expect(page.locator('.mention-chips .mchip')).toHaveCount(2)
+  await expect(page.locator('.ref-from-mentions .ref-slot')).toHaveCount(4)             // turns: hero, tavern, hero, tavern — the model's 4
+  await expect(page.locator('.mchip', { hasText: heroName })).toContainText('2 images')
+  await expect(page.locator('.preview-box')).toContainText(`${heroName} walks into ${tavernName}. Image 1 shows ${heroName}. Image 2 shows ${tavernName}.`)
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await go.click()
+  const job = await expect.poll(async () => (await api<{ items: { status: string; recipe: { mentions?: { group_id: string; revision: number; asset_ids: string[] }[] } }[] }>('GET', '/jobs')).items
+    .find((j) => j.recipe.mentions?.some((m) => m.group_id === hero.id))?.status, { timeout: 45_000 }).toBe('done')
+  void job
+  const rec = (await api<{ items: { recipe: { mentions: { group_id: string; revision: number; asset_ids: string[] }[] } }[] }>('GET', '/jobs')).items.find((j) => j.recipe.mentions?.some((m) => m.group_id === hero.id))!.recipe
+  for (const g of [hero, tavern]) {
+    const m = rec.mentions.find((x) => x.group_id === g.id)!
+    expect(m.revision).toBe((await api<{ group: { revision: number } }>('GET', `/groups/${g.id}`)).group.revision)
+    expect(m.asset_ids).toHaveLength(2)
+  }
+  await page.locator('.mchip', { hasText: tavernName }).getByRole('button').click()      // the chip's ×: the name stays as plain text
+  await expect(ta).toHaveValue(`@${heroName} walks into ${tavernName} `)
+  await expect(page.locator('.mention-chips .mchip')).toHaveCount(1)
+})

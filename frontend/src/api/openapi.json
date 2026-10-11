@@ -5615,6 +5615,97 @@
         "title": "Mask",
         "type": "object"
       },
+      "Mention": {
+        "description": "D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and\nstamps the group's revision and the asset ids it gave — a stamped mention is not resolved again.",
+        "properties": {
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "title": "Mention",
+        "type": "object"
+      },
+      "MentionOut": {
+        "properties": {
+          "asset_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "group_id",
+          "name",
+          "revision",
+          "asset_ids"
+        ],
+        "title": "MentionOut",
+        "type": "object"
+      },
       "MissingWeight": {
         "additionalProperties": true,
         "properties": {
@@ -6777,6 +6868,18 @@
             "default": null,
             "title": "Blob"
           },
+          "mention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mention"
+          },
           "note": {
             "anyOf": [
               {
@@ -6791,6 +6894,62 @@
           }
         },
         "title": "RefImage",
+        "type": "object"
+      },
+      "RefOut": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "blob": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blob"
+          },
+          "mention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mention"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "asset_id",
+          "blob",
+          "note",
+          "mention"
+        ],
+        "title": "RefOut",
         "type": "object"
       },
       "RefineEdge": {
@@ -7362,6 +7521,13 @@
             "default": null,
             "title": "Max Shift"
           },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/Mention"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
           "model_id": {
             "description": "roster id; default: the registry's t2i model (D65)",
             "title": "Model Id",
@@ -7608,6 +7774,14 @@
             ],
             "title": "Max Shift"
           },
+          "mentions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MentionOut"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
           "missing": {
             "items": {
               "$ref": "#/components/schemas/MissingWeight"
@@ -7641,8 +7815,26 @@
             "title": "Prompt Mode",
             "type": "string"
           },
+          "ref_list": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RefOut"
+            },
+            "title": "Ref List",
+            "type": "array"
+          },
+          "ref_notes": {
+            "default": 0,
+            "title": "Ref Notes",
+            "type": "integer"
+          },
           "refs": {
             "title": "Refs",
+            "type": "integer"
+          },
+          "refs_dropped": {
+            "default": 0,
+            "title": "Refs Dropped",
             "type": "integer"
           },
           "sampler": {

@@ -66,3 +66,17 @@
 .preset-list .row { display: flex; gap: 6px; align-items: center; font-size: 12px; }
 .preset-list .row .f { color: var(--fg3); min-width: 110px; }
 .preset-list .row .t { flex: 1; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* D73: @mentions, the references they resolve to, notes, the drop warning */
+.text-prompt { display: flex; gap: 4px; align-items: flex-start; }
+.text-prompt textarea { flex: 1; min-width: 0; }
+.mention-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.mchip { display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 8px; border: 1px solid var(--accent); border-radius: 12px; color: var(--accent); font-size: 12px; }
+.mchip .muted { color: var(--fg3); }
+.mchip button { padding: 0 4px; min-height: 18px; }
+.ref-from-mentions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; }
+.ref-slot.mentioned { border-style: solid; border-color: var(--accent); }
+.ref-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.ref-notes label { display: flex; align-items: center; gap: 6px; }
+.ref-notes .n { flex: none; min-width: 18px; text-align: center; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 11px; border-radius: 4px; }
+.ref-notes input { flex: 1; min-width: 0; }
+.ref-warn { color: var(--error); font-size: 12px; margin: 6px 0 0; }

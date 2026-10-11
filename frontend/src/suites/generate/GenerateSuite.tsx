@@ -15,6 +15,8 @@ import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPresets'
 import { batchOf, dropRefs, refDropFor, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { RefExtras, TextPrompt } from './RefExtras'
+import { useMentions } from './useMentions'
 import './generate.css'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 
@@ -35,6 +37,7 @@ function PresetButton({ field, current, onApply, onSaveStart }: { field: FieldKe
 
 function Field({ label, field, value, onChange, multiline, placeholder, rows }: { label?: string; field: FieldKey; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; rows?: number }) {
   const [naming, setNaming] = useState<string | null>(null)
+  const mention = useMentions(value, onChange)
   const save = useGenerate((g) => g.saveSnippet)
   const commit = () => { if (naming?.trim()) void save({ name: naming.trim(), field, text: value }); setNaming(null) }
   return (
@@ -43,8 +46,9 @@ function Field({ label, field, value, onChange, multiline, placeholder, rows }: 
       <div className="field">
         <div className="row">
           {multiline
-            ? <textarea value={value} rows={rows} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+            ? <textarea value={value} rows={rows} onChange={(e) => onChange(e.target.value)} onKeyUp={mention.onKeyUp} placeholder={placeholder} />
             : <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />}
+          {multiline && mention.button}
           <PresetButton field={field} current={value} onApply={(v) => onChange(appendValue(value, v, field))} onSaveStart={() => setNaming('')} />
         </div>
         {naming !== null && (
@@ -108,6 +112,7 @@ function RefSlots() {
           </div>
         ))}
       </div>
+      <RefExtras />
       <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr', marginTop: 6 }}>
         <label>downscale</label>
         <div>
@@ -188,7 +193,7 @@ function PromptTab() {
       )}
       {p.prompt_mode === 'text' && (
         <div>
-          <textarea value={p.text} onChange={(e) => g.set({ text: e.target.value })} rows={8} style={{ width: '100%' }} placeholder="plain prompt" />
+          <TextPrompt />
           <details open className="refs-block" style={{ marginTop: 10 }}>
             <summary>reference images · {p.refs.length} of {cap?.max_refs ?? 4}</summary>
             <RefSlots />

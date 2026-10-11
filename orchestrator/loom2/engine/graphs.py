@@ -287,16 +287,58 @@ def flatten_json_prompt(p: dict | list | str | int | float | None, depth: int = 
     return ". ".join(parts) if depth == 0 else ", ".join(parts)
 
 
+def kept_refs(recipe: T2I, spec: ModelSpec) -> list:
+    """D73: the references the model takes (its `refs_max`, in order); the rest are dropped — and said so (`refs_dropped`), never silently."""
+    return recipe.refs[: spec.inputs.refs_max]
+
+
+def _unmention(v: Any, names: list[str]) -> Any:
+    """D73: '@hero' → 'hero' in every string of the prompt (the mention's images and note carry the rest)."""
+    if isinstance(v, str):
+        for n in names:
+            v = v.replace("@" + n, n)
+        return v
+    if isinstance(v, list):
+        return [_unmention(x, names) for x in v]
+    if isinstance(v, dict):
+        return {k: _unmention(x, names) for k, x in v.items()}
+    return v
+
+
+def _then(text: str, more: str) -> str:
+    """`text`, then `more` as the next sentence."""
+    text = text.rstrip()
+    if not more:
+        return text
+    if not text:
+        return more
+    return f"{text}{'' if text[-1] in '.!?' else '.'} {more}"
+
+
+def ref_notes(recipe: T2I, spec: ModelSpec) -> list[tuple[int, str]]:
+    """(index, note) of the kept references that have a note — 1-based, the numbering the prompt uses ('image 1')."""
+    return [(i + 1, r.note.strip()) for i, r in enumerate(kept_refs(recipe, spec)) if r.note and r.note.strip()]
+
+
 def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, str]:
-    """The exact string the engine receives and how it was produced: 'json' | 'prose' | 'text'."""
+    """The exact string the engine receives and how it was produced: 'json' | 'prose' | 'text'. D73: reference notes go in per model
+    family — a JSON-prompted model (dev) gets a `references: [{index, note}]` section, prose and text prompts (Klein) a sentence per
+    image ("Image 2 shows the hero."); @mentions read as the plain name."""
     spec = spec or registry.get(recipe.model_id) or registry.SPECS[registry.default_model("t2i")]
+    names = sorted((m.name for m in recipe.mentions if m.name), key=len, reverse=True)
+    notes = ref_notes(recipe, spec)
+    sentences = " ".join(f"Image {i} shows {n.rstrip('.')}." for i, n in notes)
+    prompt_text = _unmention(recipe.prompt_text.strip(), names)
     if recipe.prompt_mode in ("tree", "json") and recipe.prompt_json:
-        tree = {k: v for k, v in recipe.prompt_json.items() if v not in (None, "", [], {})}
+        tree = {k: v for k, v in _unmention(recipe.prompt_json, names).items() if v not in (None, "", [], {})}
         if spec.sampling.json_prompt:
+            if notes:
+                tree["references"] = [{"index": i, "note": n} for i, n in notes]
             return json.dumps(tree, ensure_ascii=False, separators=(",", ":")), "json"
         prose = flatten_json_prompt(tree)
-        return (f"{recipe.prompt_text.strip()}. {prose}" if recipe.prompt_text.strip() else prose), "prose"
-    return recipe.prompt_text.strip(), "text"
+        text = f"{prompt_text}. {prose}" if prompt_text else prose
+        return _then(text, sentences), "prose"
+    return _then(prompt_text, sentences), "text"
 
 
 def word_count(text: str) -> int:
@@ -355,6 +397,9 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
     max_shift = recipe.max_shift if recipe.max_shift is not None else (1.15 if shift else None)
     mult = spec.geometry.size_mult
     w, h = snap(recipe.width, mult, mult, recipe.size_policy, "width"), snap(recipe.height, mult, mult, recipe.size_policy, "height")
+    refs_max = spec.inputs.refs_max
+    if len(recipe.refs) > refs_max and recipe.size_policy == "error":           # D73: no silent truncation — refused, field-named, on request
+        raise FieldError("refs", len(recipe.refs), [refs_max], f"{spec.short or spec.label} takes at most {refs_max} reference image{'s' if refs_max != 1 else ''}; {len(recipe.refs)} given")
     if w * h > 4_200_000 or w < 64 or h < 64:
         raise CompileError(f"size {w}×{h} outside the 64 px – 4 MP range")
     text, mode = serialize_prompt(recipe, spec)
@@ -364,7 +409,8 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
             "weight_dtype": weight_dtype, "te_device": te_device, "base_shift": base_shift, "max_shift": max_shift,
             "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
-            "refs": min(len(recipe.refs), spec.inputs.refs_max), "max_refs": spec.inputs.refs_max, "loras": [l.model_dump() for l in recipe.loras]}
+            "refs": min(len(recipe.refs), refs_max), "max_refs": refs_max, "refs_dropped": max(0, len(recipe.refs) - refs_max),
+            "ref_notes": len(ref_notes(recipe, spec)), "loras": [l.model_dump() for l in recipe.loras]}
 
 
 def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files: dict[str, str] | None = None) -> Compiled:
@@ -396,7 +442,7 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
     cond: list = ["5", 0]
     nid = 30
     ref_files = ref_files or {}
-    for i, ref in enumerate(recipe.refs[: spec.inputs.refs_max]):
+    for i, ref in enumerate(kept_refs(recipe, spec)):
         key = ref.asset_id or ref.blob or ""
         name = ref_files.get(key)
         if not name:
@@ -766,5 +812,5 @@ def estimate_seconds(recipe: T2I, history: list[dict] | None = None) -> dict[str
     base = base if base is not None else 60.0
     turbo = spec.sampling.turbo if spec else None
     base_steps = (turbo.steps if ep["turbo"] and turbo else (spec.sampling.steps if spec else 20))
-    seconds = base * (px / (960 * 544)) * (ep["steps"] / max(1, base_steps)) + 4 * len(recipe.refs)
+    seconds = base * (px / (960 * 544)) * (ep["steps"] / max(1, base_steps)) + 4 * min(len(recipe.refs), spec.inputs.refs_max if spec else len(recipe.refs))
     return {"seconds": round(seconds, 1), "source": "baseline (spikes)"}

@@ -21,6 +21,7 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `roster.py` | `ROSTER` (every weight file: repo, folder, licence, variants, retired), scan / resolve / sha256 ledger |
 | `catalogue.py` | `AssetRecord` sidecar manifests + the SQLite index (`catalogue.sqlite`, FTS5), ingest, thumbnails, lineage, trash, rebuild |
 | `groups.py` | D34 album: one JSON per group under `groups/`, one placement per item, revision → 409 |
+| `mentions.py` | D73: `@`mentions → references (cover first, then page order by position; mentions take turns within the model's remaining `refs_max`), stamped `{group_id, name, revision, asset_ids}`; run by `JobQueue.resolve_mentions` before `plan()` in submit and preview |
 | `documents.py` / `compose.py` / `edit_ai.py` | layered documents (ORA), the exact numpy compositor, AI region maths |
 | `maskops.py` / `matting.py` | bounded exact EDT, round expand / contract (D44); Refine Edge — guided filter, smart radius, post steps (D45) |
 | `clips.py` | clip masters (PNG sequence) + GOP-6 proxies |

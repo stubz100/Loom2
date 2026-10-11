@@ -248,6 +248,20 @@ class Estimate(Open):
     vram_fit: Literal["ok", "tight", "over"] | None = None
 
 
+class RefOut(Out):
+    asset_id: str | None = None
+    blob: str | None = None
+    note: str | None = None
+    mention: str | None = None
+
+
+class MentionOut(Out):
+    group_id: str
+    name: str | None = None
+    revision: int | None = None
+    asset_ids: list[str] = []
+
+
 class T2IPreview(Open):
     """`POST /recipes/preview` for a t2i recipe: the effective parameters, the exact serialised prompt, missing weights, ETA."""
     serialized_prompt: str
@@ -265,6 +279,10 @@ class T2IPreview(Open):
     token_estimate: int
     refs: int
     max_refs: int
+    refs_dropped: int = 0                         # D73: references over the model's limit — left out, and the panel says so
+    ref_notes: int = 0                            # D73: kept references whose note went into the prompt
+    ref_list: list[RefOut] = []                   # D73: the kept references in order (explicit, then those the mentions gave)
+    mentions: list[MentionOut] = []               # D73: the mentions, resolved and stamped
     model_id: str
     te_id: str
     negative_used: bool

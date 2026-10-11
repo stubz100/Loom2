@@ -1,0 +1,62 @@
+"""D73 (ArtCraft P12): `@`mentions of album groups resolve to reference images.
+
+A T2I recipe's `mentions` name groups; on submit and preview each unresolved mention becomes references: the group's cover first, then
+its assets in page order (top to bottom, left to right), skipping trashed assets and ones already referenced. Mentions take turns so
+two groups both get images, and they only fill the room the model has left after the explicit references (`refs_max`) — a mention
+never pushes a reference out. Each reference it adds carries the group's name as its note ("Image 2 shows the hero") and the group id
+in `mention`; the mention is stamped with the group's revision and the asset ids it gave (lineage at write time, loom lesson 7). A
+stamped mention is not resolved again, so re-running a stored recipe uses the same images. The Story workspace (14) will resolve
+AssetProfiles behind the same function.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from .recipes import Mention, RefImage, T2I
+
+if TYPE_CHECKING:
+    from .catalogue import Catalogue
+    from .groups import GroupStore
+
+
+def candidates(groups: GroupStore, catalogue: Catalogue, gid: str) -> list[str]:
+    """A group's assets as references: the cover, then the page's assets by position (y, then x); trashed ones skipped."""
+    g = groups.groups.get(gid)
+    if g is None:
+        raise ValueError(f"mentioned group {gid} does not exist")
+    live = lambda aid: (r := catalogue.get(aid)) is not None and r.trashed_at is None and r.kind == "image"  # noqa: E731
+    out = [g.cover_id] if g.cover_id and live(g.cover_id) else []
+    for it in sorted(g.items, key=lambda it: (it.y, it.x)):
+        if it.kind == "asset" and it.id not in out and live(it.id):
+            out.append(it.id)
+    return out
+
+
+def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogue | None, refs_max: int) -> T2I:
+    """The recipe with its unresolved mentions turned into references and stamped. Without mentions it is returned unchanged."""
+    todo = [m for m in recipe.mentions if m.revision is None]
+    if not todo:
+        return recipe
+    if groups is None or catalogue is None:
+        raise ValueError("mentions need an open project")
+    refs = [r for r in recipe.refs if not (r.mention and any(m.group_id == r.mention for m in todo))]   # a re-resolve replaces its own
+    taken = {r.asset_id for r in refs if r.asset_id}
+    queues = {m.group_id: [a for a in candidates(groups, catalogue, m.group_id)] for m in todo}
+    given: dict[str, list[str]] = {m.group_id: [] for m in todo}
+    names = {m.group_id: (m.name or groups.groups[m.group_id].name) for m in todo}
+    room = max(0, refs_max - len(refs))
+    while room > 0 and any(queues.values()):
+        for m in todo:                                                  # take turns: each group's next image
+            q = queues[m.group_id]
+            while q and q[0] in taken:
+                q.pop(0)
+            if not q or room <= 0:
+                continue
+            aid = q.pop(0)
+            taken.add(aid)
+            given[m.group_id].append(aid)
+            refs.append(RefImage(asset_id=aid, note=names[m.group_id], mention=m.group_id))
+            room -= 1
+    stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
+                                                        asset_ids=given[m.group_id]) for m in recipe.mentions]
+    return recipe.model_copy(update={"refs": refs, "mentions": stamped})

@@ -27,6 +27,8 @@ from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
 from .recipes import T2I, I2V, Inpaint, parse_recipe, warm_group
 from .documents import DocumentStore
+from .groups import GroupStore
+from .mentions import resolve_mentions
 from . import native
 from .origin import JobOrigin
 from .roster import ROSTER_BY_ID, Roster
@@ -79,6 +81,7 @@ class JobRecord(BaseModel):
 class JobQueue:
     def __init__(self, ws: Workspace, app: AppState, engine: EngineSupervisor, roster: Roster, catalogue: Catalogue, hub: EventHub) -> None:
         self.documents: DocumentStore | None = None      # set by Services once the project is open (M5 edit jobs)
+        self.groups: GroupStore | None = None            # set by Services too (D73: @mentions resolve against the album)
         self.ws, self.app, self.engine, self.roster, self.catalogue, self.hub = ws, app, engine, roster, catalogue, hub
         self.jobs: dict[str, JobRecord] = {}
         self.paused = False
@@ -233,10 +236,18 @@ class JobQueue:
             pass
         self.persist(clean_shutdown=True)
 
+    def resolve_mentions(self, recipe: Any) -> Any:
+        """D73: a T2I recipe's unresolved @mentions turned into references (mentions.py); other recipes unchanged."""
+        if not isinstance(recipe, T2I) or not recipe.mentions:
+            return recipe
+        spec = registry.get(recipe.model_id)
+        return resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0)
+
     # ---- API --------------------------------------------------------------------------------------
     def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None) -> list[JobRecord]:
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
+        recipe = self.resolve_mentions(recipe)                # D73: @mentions → references, stamped before the job record is written
         plan(recipe, self.app.settings.variant)          # D65: a size off the grid (size_policy error), a bad sampler … → 422 here
         self._disk_guard()
         seeds = recipe.seeds or [0]

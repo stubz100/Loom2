@@ -2949,3 +2949,39 @@ split by file so that no two hands touched the same module.
 - CI (full) failed the D72 scenario at "K does nothing": the synthetic project gives some tiles a state at random and the second tile
   was already kept, so the check could not tell. The test now arranges both tiles to no state through the API first (the open run had
   drawn other tiles). Not a product bug; local run passes.
+
+## 2026-10-11 14:02 — X1 · P12 reference notes, @mentions, no silent truncation (D73) built; X1 closed
+
+- **Read first:** references were truncated silently in two places — the compile (`graphs.py` `refs[:refs_max]`) and the preview count
+  (`min(len, max)`) — not at the line 08 named; `finalize` uploaded the dropped ones anyway and the asset listed them as parents.
+- **No silent truncation:** `kept_refs` is the one slice; the preview reports `refs_dropped` and the panel says how many are left out;
+  `size_policy: error` answers a 422 `{field: refs, value, allowed: [max]}` on preview and submit; dropped references are not uploaded,
+  not counted in the ETA and not lineage parents.
+- **Notes:** `RefImage.note` (declared since M3, ignored until now; the settings audit had it on the allow-list as "never sent") goes
+  into the prompt per model family — JSON models get `references: [{index, note}]`, prose / text a sentence per image ("Image 2 shows
+  …"), numbered over the kept references. The panel has a note per reference under the slots.
+- **@mentions:** `T2I.mentions` and `mentions.py resolve_mentions` — cover first, then the page in order (y, x), trashed and clip assets
+  skipped, deduplicated against the explicit references, mentions taking turns so two groups both get images, only into the room left
+  after the explicit references (a mention never pushes one out); each reference it adds carries the group's name as its note and the
+  group id; each mention is stamped `{group_id, name, revision, asset_ids}`; a stamped mention is not resolved again (a stored recipe
+  re-runs with the same images). `JobQueue.resolve_mentions` runs before `plan()` in submit (so the job record and the manifest carry the
+  stamp) and in `/recipes/preview` (which returns `ref_list` and `mentions`). `@name` in any prompt string reads as the plain name.
+  Panel: typing `@` (or the @ button) lists the album's groups; chips show what each gave; the references they resolved to show under
+  the slots; × keeps the name as plain text; a loaded recipe comes back with its mentions unstamped. The album tree loads with the
+  prompt field (the Catalogue may not have loaded it — found by the Playwright run: the menu said "No groups yet"), and a pick typed
+  with `@` hands the caret back to the field (found the same way: typing after a pick went nowhere).
+- **Rig check of the notes** (`scripts/d73_notes_rig.py`, 640 × 352, seeds 20261011 / 20261012; two reference stills made with Klein 9B:
+  the bench heroine and the grey-bearded captain alone on grey): bench 02 and 08 on Klein 9B, 02 on dev Turbo, each with both
+  references, without and with notes. **Identity: right in all 12 renders, no swaps or blends in either arm.** Klein 9B: the arms are
+  nearly identical. dev: bench 02's text says "knitted cap" while reference 2 wears a peaked cap — without notes dev followed the text
+  (0/2 peaked), with notes the reference (2/2). Timing unchanged (Klein 9.4–19.0 s, dev 84.9–102.7 s, both arms). Notes stay on
+  whenever written. Sheet: engine/spikes/out/d73/sheet.png (local).
+- **Tests:** `test_mentions_d73.py` (8: notes per family incl. only kept ones, @names read plain, drop reported / 422 / compile takes the
+  kept ones, page order + cover + trash, turns + room + stamping + no re-resolve + dedupe + empty / unknown group, preview `ref_list` /
+  `mentions` / `refs_dropped` / 422 over HTTP, a fake-engine job whose asset records both the stamp and the parents); vitest +3 (mentions
+  in use, stored recipe, chip removal and notes); Playwright: "@hero … walks into @tavern …" typed with `@` picks — two chips, four
+  references in the preview (turns, Klein 4B's limit), the serialised prompt reads "… walks into …. Image 1 shows hero …. Image 2
+  shows tavern …", the job's recipe has both mentions at the groups' current revisions with two images each, × leaves plain text.
+  235 offline (full and open), 163 unit, smoke 12/12, settings audit 160 / 0 (`mentions.py` joined the job code; `Mention.asset_ids`
+  allowed as provenance), literal check 0, parity fixture +2 zero keys per t2i recipe (no graph changed), lint 100, API regenerated.
+  **X1 (P11, P15, P16, P12) closed.**

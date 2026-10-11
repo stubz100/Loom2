@@ -8,10 +8,18 @@ context menu host, command palette, settings, project dialog, help overlay and A
 
 ## Suites plug in through `suiteRegistry.tsx`
 
-A suite is a `SuiteDef {id, rail, Panel, Strip, Stage, Inspector, primary?, wideStrip?, PrimaryAction?}` in `SUITE_DEFS`. The frame
-places the components; it knows nothing about a suite's internals. Deep links: `?suite=` and `?tab=` (rail tab). Panel, Strip, Stage and
-Inspector are keyed by the suite id, so switching suites remounts them (P5 in `.docs/artcraft/08-delivery-plans.md` plans keep-alive for Edit
-and Animate).
+A suite is a `SuiteDef {id, rail, Panel, Strip, Stage, Inspector, primary?, wideStrip?, keepAlive?, PrimaryAction?}` in `SUITE_DEFS`. The
+frame places the components; it knows nothing about a suite's internals. Deep links: `?suite=` and `?tab=` (rail tab). Panel, Strip and
+Inspector are keyed by the suite id, so switching suites remounts them.
+
+- **Keep-alive (D69).** A `keepAlive` suite's Stage (Edit, Animate) stays mounted, hidden, after its first visit (`Stage.tsx`,
+  `stageKeep.ts`). Inside it, `useStageActive()` says whether it is on screen: pause work while hidden, expect a 0 × 0 host, and redraw on
+  return without resetting view state. The release policy (`useStageKeep.expire` / `releaseHidden`, on `ui.editKeepAliveMin` or the
+  `engine.vram_pressure` event) unmounts hidden stages — so cleanup on unmount must still be complete.
+- **Lazy suites (D69).** Edit, Animate and Models come from `lazySuite(meta, load, parts)` (`lazySuite.ts`): rail and flags are static
+  (their rails live in `railTabs.tsx`), the components load on first render behind a skeleton, and render directly once loaded (a lazy
+  boundary would add React's ≈ 300 ms reveal throttle). `preloadSuite(id)` runs on a pointer over a tab; Edit is preloaded at idle.
+  Commands register at import: a command module a lazy suite owns loads with it — keep Pixi and Mediabunny out of eager modules.
 
 ## Rule 1 — every action is a command (`commands.ts`, D32)
 

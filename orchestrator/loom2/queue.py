@@ -522,6 +522,20 @@ class JobQueue:
             self.engine.jobs_since_start += 1
             self._last_group = job.warm_group
 
+    async def _vram_check(self, job: JobRecord) -> None:
+        """D69: a GPU job admitted while the engine has less free VRAM than its reserve + 1 GB tells the UI to release what it keeps on the
+        GPU while hidden (the Edit canvas kept alive for a fast switch-back). Advisory: a failed probe changes nothing."""
+        try:
+            stats = await asyncio.wait_for(self.engine.client.system_stats(), 5.0)
+            dev = (stats.get("devices") or [{}])[0]
+            free = float(dev.get("vram_free", 0)) / 2**30
+        except Exception:  # noqa: BLE001
+            return
+        threshold = float(getattr(self.app.settings.engine, "reserve_vram_gb", 1.5) or 0) + 1.0
+        if free < threshold:
+            log.info("job %s: engine free VRAM %.2f GB < %.2f GB — asking the UI to release hidden GPU stages", job.id, free, threshold)
+            self.hub.broadcast("engine.vram_pressure", {"job_id": job.id, "free_gb": round(free, 2), "threshold_gb": round(threshold, 2)})
+
     async def _scan_roster(self) -> None:
         """D64: the model trees are walked at the first job and whenever a root's mtime changed (a fetch, a delete), not per job."""
         def stamp_now() -> tuple:
@@ -563,6 +577,7 @@ class JobQueue:
                 return
             await self.follower.ensure_ws()
             self.check_cancel(job)
+            await self._vram_check(job)
             await self._scan_roster()
             sub = await finalize(job, recipe, self)
             if sub.compiled.problems:

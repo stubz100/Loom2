@@ -29,12 +29,13 @@ const FIRST_TILE = `(() => { const tick = () => { const i = document.querySelect
   if (i && i.complete && i.naturalWidth > 0) requestAnimationFrame((t) => { window.__perfFirstTile = t }); else requestAnimationFrame(tick) }; requestAnimationFrame(tick) })()`
 
 /** Readiness checks, installed in the page before it loads: the Catalogue shows a decoded thumbnail; Edit has a new Pixi Application on a
- *  connected canvas with the document's layers in its stage (P5: today leaving Edit destroys the Application, returning re-inits it). */
+ *  canvas on screen with the document's layers in its stage and a frame rendered since the switch (D69: a re-entry within the keep-alive
+ *  window finds the same Application, kept hidden; a first entry or a released one builds a new one). */
 const READY = `window.__perfReady = {
   catalogue: () => { const i = document.querySelector('.cat-grid .tile img'); return !!i && i.complete && i.naturalWidth > 0 },
   edit: () => { const w = window; const app = w.__loom2App; const ed = w.__loom2Editor && w.__loom2Editor.getState(); const world = app && app.stage && app.stage.children[0]
-    return !!(app && app !== w.__perfOldApp && app.canvas && app.canvas.isConnected && ed && ed.doc && !ed.loading && world && world.children[1] && world.children[1].children.length > 0) } }`
-type PerfWindow = Window & { __perfReady: Record<string, () => boolean>; __perfOldApp?: unknown; __loom2App?: unknown }
+    return !!(app && app.canvas && app.canvas.isConnected && app.canvas.getBoundingClientRect().width > 0 && w.__loom2RenderMs !== undefined && ed && ed.doc && !ed.loading && world && world.children[1] && world.children[1].children.length > 0) } }`
+type PerfWindow = Window & { __perfReady: Record<string, () => boolean>; __loom2RenderMs?: number; __loom2App?: unknown }
 
 /** Click a TopBar suite tab inside the page; resolve with the ms until the suite is ready on an animation frame, plus one more frame. */
 async function switchTo(page: Page, label: string, ready: 'catalogue' | 'edit'): Promise<number> {
@@ -78,7 +79,7 @@ test('suite switches: Catalogue → Edit (first entry), Edit → Catalogue, Edit
     await page.waitForTimeout(400)
     toCat.push(await switchTo(page, 'Catalogue', 'catalogue'))
     await page.waitForTimeout(400)
-    await page.evaluate(() => { const w = window as unknown as PerfWindow; w.__perfOldApp = w.__loom2App })
+    await page.evaluate(() => { (window as unknown as PerfWindow).__loom2RenderMs = undefined })   // the next rendered frame is the re-entry's
     reEnter.push(await switchTo(page, 'Edit', 'edit'))
   }
   metrics.edit_to_catalogue_ms = stat(toCat)

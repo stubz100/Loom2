@@ -2833,3 +2833,40 @@ split by file so that no two hands touched the same module.
   writes no .ora, no toast; a stroke during a flight re-dirties and rides the next sync; concurrent syncs share one flight; save writes the
   .ora only when it lags and a quiet save toasts nothing; the selection is uploaded once per version). 225 offline (full and open), 128
   unit; headed masks, layers, selection, props, tour, heal pass; lint 100; API regenerated.
+
+## 2026-10-11 11:38 — H4 · P5 keep-alive stages, release policy, lazy suites (D69) built; H4 closed
+
+- **Step 0 (today's destroy path, headed Edge, 6 × 3840 × 2160 document, `edit_headed_check.py keepalive`):** Catalogue → Edit
+  switch-back 208–216 ms to a rendered frame; zoom lost (370 → 216 ‰: the re-init refits). The headed Edge's dedicated GPU memory
+  (`GPU Process Memory` counters over its process tree): Edit visible 388.6 MiB, Edit left (destroyed) ≈ 150, back 404 — the editor holds
+  ≈ 240 MiB. Targets fixed before slice 2: switch-back ≤ 100 ms with zoom / tool / selection intact; the release frees the ≈ 240 MiB.
+- **Keep-alive:** `SuiteDef.keepAlive` (Edit, Animate); `Stage.tsx` renders every visited keep-alive stage in a `hidden` wrapper with a
+  `StageActive` context. The editor ignores 0 × 0 resizes, draws nothing while hidden and resizes + renders once on return (no refit);
+  Pixi's `resizeTo` is gone (it would follow the hidden host to 0 × 0 on a window resize) — init takes the host size, the ResizeObserver
+  the rest. **Deviation from 08:** no `app.stop()` — the editor's ticker was already off (`autoStart: false`, on-demand frames). The player
+  pauses when hidden.
+- **Release policy:** `stageKeep.ts` — `expire` (hidden longer than `ui.editKeepAliveMin`, default 10, checked every 30 s; Settings › App ›
+  *Keep Edit / Animate loaded*, 2–60 min) and `releaseHidden` on `engine.vram_pressure`: the queue reads ComfyUI's `/system_stats` after
+  admitting a GPU job and broadcasts it when free VRAM < `reserve_vram_gb + 1 GB` (log line; advisory — a failed probe changes nothing).
+  The active stage is never released; a toast names what was.
+- **Measured (same run, same document):** switch-back **57–91 ms** over three headed runs (medians 82, 75, 67.5 — budget 100), zoom /
+  tool / selection / layers intact (`[370,"lasso",true,6]` both sides); GPU memory with Edit hidden and alive 386–392 MiB, then a
+  pressure frame → **150–156 MiB** (236 MiB freed), Edit reloads the document in 212–245 ms. Composite of 6 × 4K p95 **6.8 ms** (budget
+  7.1, M7), brush and player latencies unchanged.
+- **Lazy suites:** Edit, Animate and Models load through `frame/lazySuite.ts` (static rail + flags; components on first render behind a
+  skeleton); the Edit / Animate rails moved to `railTabs.tsx`. Startup chunk `main` 795 → 455 KB; the 658 KB Mediabunny chunk is no
+  longer modulepreloaded (it sits in Animate's); `spikes.html` is built only with `LOOM2_SPIKES=1`. Edit's commands import the editor
+  store (Pixi textures), so they register with Edit's code, which is preloaded on the first idle moment after startup; Animate's commands
+  stay eager; a pointer over a tab preloads that suite. **Found on the way:** `React.lazy` suspends on its first render even for a
+  resolved module and React 19 throttles the reveal (≈ 300 ms) — the first Open in Edit went 209–223 → 416–502 ms (A/B against HEAD,
+  also with a 2 s settle, so not the chunk). Once loaded, the parts now render the suite's components directly (fixed per mount, so a
+  part never switches type and remounts): **239–243 ms**.
+- **Perf script (headless, `bench/perf/2026-10-11.json` replaced; the H3 numbers are in the 10:35 entry and in git):** first Catalogue
+  tile 194.5 → **180.6 ms**; first Open in Edit 224 → 243 ms (wall clock incl. a Playwright round trip); Edit → Catalogue 10.6 → 9.8;
+  **Edit re-entry 22.2 → 8.9 ms**; round trip 32.5 → 18.7; scroll p95 1.3 → 1.0 ms. The perf readiness for Edit is now "canvas on screen
+  and a frame rendered since the switch" (a kept-alive re-entry has the same Pixi app).
+- **Tests:** `test_keepalive_d69.py` (pressure at 1.2 GB free → one event with job, free and threshold; 12 GB → none; the job runs
+  either way); vitest `stageKeep.test.ts` (6: visit / hide, expiry spares the active stage, release, the event releases a hidden editor
+  with a toast and leaves the visible one, lazy meta + load once). 227 offline (full and open), 134 unit, smoke 6/6, perf 3/3; headed
+  keepalive, perf, tour, animate, render, kit, aiclick, layers, media pass; CSP clean (incl. the lazy chunks and the wasm Worker); settings
+  audit 154 / 0, literal check 0, agents 0, versions 0; lint 100; API regenerated (`VramPressure`). **H4 (P10, P5) closed.**

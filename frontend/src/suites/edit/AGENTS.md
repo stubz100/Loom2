@@ -38,10 +38,12 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
    `X-Loom-Width/Height/Channels`), the selection as one byte per pixel (`PUT /documents/{id}/selection?w&h`).
 5. **Stack writes carry the document revision.** A stale PUT returns 409; the store resyncs, merges server layers (AI results added while
    editing) and re-PUTs — never replace the server stack blindly (review C1 / C20).
-6. **AI jobs read the saved document.** `runAi` saves first, uploads the selection, then posts `/documents/{id}/ai`; results come back as
+6. **AI jobs read the open document (D70).** `runAi` awaits `sync()` (stack + dirty layers + a changed selection; the idle flush usually did
+   it already — the .ora is written only by `save()`), then posts `/documents/{id}/ai`; results come back as
    `document.changed {added, group}` and land as candidate layers in a per-batch "AI" group (the variant strip: `1–4` / Enter picks).
 7. **Destroy what you create.** Rebuilding the scene destroys sprites and passes but keeps `LayerPixels` textures (they live in the store);
-   unmount destroys the app (`app.destroy(true, {children: true})`, review C21).
+   unmount destroys the app (`app.destroy(true, {children: true})`, review C21). Leaving Edit does **not** unmount it (D69 keep-alive):
+   only the release policy does, so cleanup must stay complete; while hidden the host is 0 × 0 (`useStageActive()`), never resize to it.
 8. **Clipping groups are passes, not a shader variant (D39).** `buildClipRun`: the base's content (pixels × mask) renders into a pass,
    is drawn `w3c-opaque` into a second pass with the clipped layers over it, that pass is masked by the base's alpha
    (`setMask({channel: 'alpha'})`) in a third, and the unit blends with the base's mode and opacity × fill. A pass-through group below

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "date": "2026-10-11",
-  "recorded_at": "2026-10-11T08:31:07.624Z",
-  "commit": "92b8614",
+  "recorded_at": "2026-10-11T09:33:47.735Z",
+  "commit": "7dc1b5f",
   "dirty": true,
   "variant": "full",
   "assets": 10000,
@@ -17,70 +17,70 @@
   },
   "metrics": {
     "startup_first_tile_ms": {
-      "median": 194.5,
-      "min": 189.2,
-      "max": 296.2,
+      "median": 180.6,
+      "min": 177.6,
+      "max": 229.1,
       "runs": [
-        296.2,
-        194.5,
-        194.5,
-        189.2,
-        191.9
+        229.1,
+        185.7,
+        180.6,
+        179.1,
+        177.6
       ]
     },
-    "edit_first_open_ms": 224,
+    "edit_first_open_ms": 243,
     "edit_to_catalogue_ms": {
-      "median": 10.6,
-      "min": 9.4,
-      "max": 14.6,
+      "median": 9.8,
+      "min": 8.3,
+      "max": 11.2,
       "runs": [
-        11.8,
-        9.4,
-        10.6,
-        10.4,
-        14.6
+        10.8,
+        9.8,
+        8.5,
+        11.2,
+        8.3
       ]
     },
     "edit_reentry_ms": {
-      "median": 22.2,
-      "min": 21.6,
-      "max": 24.2,
+      "median": 8.9,
+      "min": 7.6,
+      "max": 10.7,
       "runs": [
-        23.4,
-        22.2,
-        21.9,
-        21.6,
-        24.2
+        10.7,
+        8.9,
+        9.6,
+        8.6,
+        7.6
       ]
     },
     "catalogue_edit_catalogue_roundtrip_ms": {
-      "median": 32.5,
-      "min": 31.6,
-      "max": 38.8,
+      "median": 18.7,
+      "min": 15.9,
+      "max": 21.5,
       "runs": [
-        35.2,
-        31.6,
-        32.5,
-        32,
-        38.8
+        21.5,
+        18.7,
+        18.1,
+        19.8,
+        15.9
       ]
     },
     "catalogue_scroll": {
       "px_per_s": 4000,
       "seconds": 5,
-      "idle_raf_hz": 57.7,
-      "fps": 1425.4,
-      "p50_ms": 0.6,
-      "p95_ms": 1.3,
-      "p99_ms": 2,
-      "max_ms": 17.9,
+      "idle_raf_hz": 57.5,
+      "fps": 1721.3,
+      "p50_ms": 0.5,
+      "p95_ms": 1,
+      "p99_ms": 1.8,
+      "max_ms": 17.1,
       "long_frames": 0,
-      "frames": 7128,
+      "frames": 8607,
       "starved_frames": 0,
-      "scrolled_px": 20002,
+      "scrolled_px": 20001,
       "rows_height_before_px": 7316,
       "rows_height_after_px": 29216,
-      "tiles_in_dom_after": 72
+      "tiles_in_dom_after": 76
     }
   }
 }

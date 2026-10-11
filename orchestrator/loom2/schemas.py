@@ -728,6 +728,18 @@ class EngineStateEvent(_Frame):
     data: EngineState
 
 
+class VramPressure(Out):
+    """D69: a GPU job was admitted while the engine had less free VRAM than its reserve + 1 GB — the UI releases hidden GPU stages."""
+    job_id: str
+    free_gb: float
+    threshold_gb: float
+
+
+class VramPressureEvent(_Frame):
+    type: Literal["engine.vram_pressure"]
+    data: VramPressure
+
+
 class AssetEvent(_Frame):
     type: Literal["asset.created", "asset.updated"]
     data: AssetRecord
@@ -785,5 +797,5 @@ class HelloEvent(_Frame):
 
 EVENT_FRAMES = (JobEvent, JobProgressEvent, JobDeletedEvent, QueueStateEvent, EngineStateEvent, AssetEvent, AssetDeletedEvent,
                 CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
-                ProjectOpenedEvent, ProjectClosedEvent, HelloEvent)
+                ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent)
 EVENT_TYPES = sorted({t for frame in EVENT_FRAMES for t in frame.model_fields["type"].annotation.__args__})

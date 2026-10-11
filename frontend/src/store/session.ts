@@ -16,6 +16,7 @@ export interface Banner { id: string; text: string; action?: { label: string; ru
 interface UiState {
   suite: Suite; panelOpen: boolean; inspectorOpen: boolean; dockOpen: boolean; focusMode: boolean; density: 'comfortable' | 'compact'; theme: Theme
   thumbFit: 'fit' | 'fill'; caption: 'off' | 'prompt' | 'model'                  // Settings · Catalogue (D34)
+  editKeepAliveMin?: number                                                     // D69: a hidden Edit / Animate stage is released after this long
   panelWidth: number; inspectorWidth: number; dismissedBanners: string[]
 }
 
@@ -255,6 +256,13 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     case 'job.deleted': { const jobs = { ...s.jobs }; delete jobs[f.data.id]; set({ jobs }); break }
     case 'queue.state': set({ queue: f.data }); break
     case 'engine.state': set({ engine: { ...(s.engine ?? {}), ...f.data } }); break
+    case 'engine.vram_pressure': {                                     // D69: a GPU job needs the memory a hidden stage holds
+      void import('../frame/stageKeep').then((m) => {
+        const gone = m.useStageKeep.getState().releaseHidden(s.ui.suite, `the engine had ${f.data.free_gb} GB free for job ${f.data.job_id}`)
+        if (gone.length) s.toast(`Released the hidden ${gone.map((id) => (id === 'edit' ? 'editor canvas' : id === 'animate' ? 'player' : id)).join(' and ')} to give the GPU job room — it reloads when you return`, 'info')
+      })
+      break
+    }
     case 'model.fetch': {
       const st = f.data
       set({ fetches: { ...s.fetches, [st.model_id]: st } })
@@ -310,4 +318,8 @@ export function onEvents<T extends EventFrame['type']>(types: readonly T[], cb: 
 export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)
 export const askText = (o: AskOptions): Promise<string | null> => useSession.getState().askText(o)
 
-if (DEV_HOOKS) (window as unknown as { __loom2Session?: typeof useSession }).__loom2Session = useSession      // dev: the headed check switches suites
+if (DEV_HOOKS) {                                                       // dev: the headed check switches suites and feeds event frames (D69 release)
+  const w = window as unknown as { __loom2Session?: typeof useSession; __loom2ApplyEvent?: (f: EventFrame) => void }
+  w.__loom2Session = useSession
+  w.__loom2ApplyEvent = (f) => applyEvent(f, useSession.setState, useSession.getState)
+}

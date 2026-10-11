@@ -2392,7 +2392,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** EventFrame */
-        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"];
+        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
         /** ExportRequest */
         ExportRequest: {
             /**
@@ -4866,6 +4866,34 @@ export interface components {
             split?: number | null;
             /** Steps */
             steps: number;
+        };
+        /**
+         * VramPressure
+         * @description D69: a GPU job was admitted while the engine had less free VRAM than its reserve + 1 GB — the UI releases hidden GPU stages.
+         */
+        VramPressure: {
+            /** Free Gb */
+            free_gb: number;
+            /** Job Id */
+            job_id: string;
+            /** Threshold Gb */
+            threshold_gb: number;
+        };
+        /** VramPressureEvent */
+        VramPressureEvent: {
+            data: components["schemas"]["VramPressure"];
+            /** Seq */
+            seq: number;
+            /**
+             * T
+             * @default 0
+             */
+            t: number;
+            /**
+             * Type
+             * @constant
+             */
+            type: "engine.vram_pressure";
         };
     };
     responses: never;

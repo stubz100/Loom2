@@ -4,6 +4,7 @@ import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
 import { runCommand } from './commands'
+import { preloadSuite } from './lazySuite'
 import { THEMES } from './theme'
 import { assetIds, onlyAssets, useDropTarget } from './drag'
 
@@ -32,7 +33,7 @@ function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: b
     else if (t.id === 'animate') void import('../suites/animate/animateStore').then((m) => { const a = m.useAnimate.getState(); a.setStart(ids[0], true); if (ids[1]) a.setEnd(ids[1]) })
   })
   return (
-    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}`} onClick={onOpen} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
+    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}`} onClick={onOpen} onPointerEnter={() => preloadSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
       {t.label}<kbd>Ctrl+{t.key}</kbd>
     </button>
   )

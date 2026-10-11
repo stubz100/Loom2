@@ -31,6 +31,7 @@ class FakeComfy:
         self.behaviour = behaviour
         self.color = color
         self.object_info_delay = object_info_delay
+        self.vram_free_gb = 12.0                                         # D69: tests set it low to see the engine.vram_pressure event
         self.uploads: list[tuple[str, bytes]] = []
         self.prompts: list[dict] = []
         self.histories: dict[str, dict] = {}
@@ -122,7 +123,7 @@ class FakeComfy:
         @app.get("/system_stats")
         async def system_stats():
             return {"system": {"comfyui_version": "fake-0.38.2", "python_version": "3.13"},
-                    "devices": [{"name": "fake", "vram_total": 16 * 2**30, "vram_free": 12 * 2**30}]}
+                    "devices": [{"name": "fake", "vram_total": 16 * 2**30, "vram_free": int(self.vram_free_gb * 2**30)}]}
 
         @app.get("/object_info")
         async def object_info():

@@ -25,6 +25,7 @@ import { modeFor, selectionValues, type SelectionMode } from './selectionOps'
 import { applyDrag, edgeHandles, hitTest, homographyOf, insideQuad, rectCorners, type Hit, type Quad } from './transform'
 import { assetIds, onlyAssets, registerDropTarget } from '../../frame/drag'
 import { listenFileDrop } from '../../shell/tauri'
+import { useStageActive } from '../../frame/stageKeep'
 import { DEV_HOOKS } from '../../devHooks'
 
 /** Inverts RGB (keeps alpha) and adds: red where a mask/selection is black, nothing where it is white. */
@@ -108,6 +109,7 @@ export function EditorCanvas() {
   const requestRender = () => {
     if (!appRef.current) return
     if (renderPending.current) return
+    if (!hostRef.current?.clientWidth) return                          // D69: hidden (kept alive): nothing to draw; the return renders
     const run = () => {
       renderPending.current = 0
       const t0 = performance.now()
@@ -117,6 +119,14 @@ export function EditorCanvas() {
     renderPending.current = requestAnimationFrame(run)
   }
   const cancelPendingRender = () => { if (renderPending.current) cancelAnimationFrame(renderPending.current); renderPending.current = 0 }
+  const stageActive = useStageActive()
+  useEffect(() => {                                                      // D69: back on screen — the size may have changed while hidden
+    const app = appRef.current, host = hostRef.current
+    if (!stageActive || !app || !host || !host.clientWidth) return
+    app.renderer.resize(host.clientWidth, host.clientHeight)
+    markPassesDirty()
+    requestRender()
+  }, [stageActive]) // eslint-disable-line react-hooks/exhaustive-deps
   const docState = useEditor((s) => s.doc)
   const blendPreview = useEditor((s) => s.blendPreview)
   // D55: the blend dropdown's hover preview — the scene renders the hovered mode; the document itself is untouched
@@ -228,9 +238,9 @@ export function EditorCanvas() {
     const devOverride = DEV_HOOKS ? new URLSearchParams(location.search).get('renderer') : null      // dev deep link: &renderer=webgl|webgpu
     const pref = useEditor.getState().rendererPref
     const want: 'webgpu' | 'webgl' = devOverride === 'webgl' || (devOverride !== 'webgpu' && pref === 'webgl') ? 'webgl' : 'webgpu'
-    const boot = async (preference: 'webgpu' | 'webgl') => {
+    const boot = async (preference: 'webgpu' | 'webgl') => {        // D69: sized here and by the ResizeObserver below (not resizeTo, which would follow a hidden host to 0 × 0)
       const a = new Application()
-      await a.init({ preference, background: CANVAS_COLOURS[useSession.getState().ui.theme].background, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, resizeTo: host, powerPreference: 'high-performance', autoStart: false })
+      await a.init({ preference, background: CANVAS_COLOURS[useSession.getState().ui.theme].background, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, width: host.clientWidth || 1, height: host.clientHeight || 1, powerPreference: 'high-performance', autoStart: false })
       return a
     }
     /** D3 fallback probe: draw a white 4×4 sprite and read it back through the path the exact-compare uses. A renderer
@@ -309,7 +319,7 @@ export function EditorCanvas() {
         requestRender()                                                  // the extract leaves the screen with a frame at the extract's size
         return c
       })
-      ro = new ResizeObserver(() => { app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })
+      ro = new ResizeObserver(() => { if (!host.clientWidth || !host.clientHeight) return; app.renderer.resize(host.clientWidth, host.clientHeight); requestRender() })   // D69: a hidden stage reports 0 × 0
       unsubTheme = useSession.subscribe((s, p) => {                    // Settings › Theme while a document is open
         if (s.ui.theme === p.ui.theme) return
         app.renderer.background.color = CANVAS_COLOURS[s.ui.theme].background

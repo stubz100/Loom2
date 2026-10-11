@@ -2710,6 +2710,9 @@
           },
           {
             "$ref": "#/components/schemas/HelloEvent"
+          },
+          {
+            "$ref": "#/components/schemas/VramPressureEvent"
           }
         ],
         "title": "EventFrame"
@@ -8328,6 +8331,59 @@
           "steps"
         ],
         "title": "VideoPreset",
+        "type": "object"
+      },
+      "VramPressure": {
+        "description": "D69: a GPU job was admitted while the engine had less free VRAM than its reserve + 1 GB — the UI releases hidden GPU stages.",
+        "properties": {
+          "free_gb": {
+            "title": "Free Gb",
+            "type": "number"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "threshold_gb": {
+            "title": "Threshold Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "job_id",
+          "free_gb",
+          "threshold_gb"
+        ],
+        "title": "VramPressure",
+        "type": "object"
+      },
+      "VramPressureEvent": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/VramPressure"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "t": {
+            "default": 0,
+            "title": "T",
+            "type": "number"
+          },
+          "type": {
+            "const": "engine.vram_pressure",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "t",
+          "type",
+          "data"
+        ],
+        "title": "VramPressureEvent",
         "type": "object"
       }
     }

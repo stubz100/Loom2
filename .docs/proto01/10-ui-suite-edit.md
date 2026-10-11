@@ -328,6 +328,15 @@ WebGL2 → forced WebGPU (persisted per browser); changing it remounts the canva
 renders on WebGPU without the fallback; the probe only ever trips in headless runs. A dev build also exposes
 `window.__loom2App` and `window.__loom2Editor` for DevTools and the headed check.
 
+### 11b. Kept alive while hidden (D69, 2026-10-11)
+Leaving Edit hides its stage instead of destroying the Pixi application (07 §2, stage lifecycle). While hidden the host measures 0 × 0:
+the ResizeObserver ignores that size (the renderer is sized by it and at init, not by Pixi's `resizeTo`, which would follow the host to
+0 × 0), `requestRender` draws nothing, and on return the canvas is resized and rendered once — no refit, so zoom, pan, tool and selection
+are as they were. Measured on the rig with a 6 × 4K document in headed Edge (`edit_headed_check.py keepalive`): switch-back 57–91 ms
+(median 67–88 ms over runs; was ≈ 210 ms with zoom lost); the browser holds ≈ 236 MiB more dedicated GPU memory while Edit is hidden
+and alive (386 vs 150 MiB), which the release policy frees on `engine.vram_pressure` (log line + toast) or after the keep-alive time.
+The composite budget is unchanged (p95 6.8 ms).
+
 ## 12. States
 No document (drop zone + "Open from Catalogue"); renderer fallback to WebGL2 (badge + banner once); engine busy
 (AI button queues, Dock shows); document larger than GPU budget (banner: tiles evicted, zoom responsiveness

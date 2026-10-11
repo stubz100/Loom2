@@ -1,6 +1,6 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
 // Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
-import { Brush, Eye, EyeOff, Files, Lasso, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
+import { Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
@@ -8,6 +8,7 @@ import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '..
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { command, handleKeyFor, isEnabled, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
+import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, defaultFirst, heroModel, resolveModel, segmentTool } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
@@ -1081,7 +1082,6 @@ function EmptyDrop({ children }: { children: React.ReactNode }) {
 
 export const EditSuite: SuiteDef = {
   id: 'edit',
-  rail: [{ id: 'tools', label: 'Tool options', icon: <SlidersHorizontal size={18} /> }, { id: 'brushes', label: 'Brushes', icon: <Brush size={18} /> }, { id: 'selection', label: 'Selection', icon: <Lasso size={18} /> },
-    { id: 'ai', label: 'AI', icon: <Sparkles size={18} /> }, { id: 'documents', label: 'Documents', icon: <Files size={18} /> }],
-  Panel, Strip, Stage, Inspector, PrimaryAction,
+  rail: DEFAULT_RAIL.edit,
+  Panel, Strip, Stage, Inspector, PrimaryAction, keepAlive: true,
 }

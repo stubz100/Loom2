@@ -89,6 +89,8 @@ a { color: var(--accent); }
 .insp-thumb { width: 100%; max-height: 220px; object-fit: contain; background: var(--media-bg); border-radius: var(--radius); margin-bottom: 10px; }
 .segmented button::first-letter, .tabs2 button::first-letter { text-transform: uppercase; }
 .stage { flex: 1; min-height: 0; overflow: auto; background: var(--bg0); position: relative; }
+.stage-keep { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: auto; }   /* D69: a kept-alive stage fills the stage */
+.stage-keep[hidden] { display: none; }
 .stage .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg3); text-align: center; }
 .stage .placeholder h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
 
@@ -157,3 +159,6 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .drop-over { outline: 2px solid var(--accent) !important; outline-offset: -2px; }
 
 .toast .toast-text { flex: 1; }
+/* D69: a lazy suite's part while its code loads (first visit only) */
+.suite-loading { flex: 1; min-height: 0; }
+.stage-loading { display: flex; align-items: center; justify-content: center; color: var(--fg3); font-size: 13px; }

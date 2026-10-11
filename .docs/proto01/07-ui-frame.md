@@ -52,6 +52,14 @@ and fixes what did not (02 §4b). Engine decisions: 05.
 | **Dock** | job queue: collapsed one-liner; expanded = Active (progress, preview, ETA, Cancel) · Queued (reorder, pause) · Recent (open result); in Animate it also hosts the timeline | expands to 160–320 px; `` ` `` toggles |
 | **Toasts** | bottom-right, with Undo where applicable | auto-dismiss 6 s; errors persist until dismissed |
 
+**Stage lifecycle and loading (D69, 2026-10-11).** Panel, Strip and Inspector remount on a suite switch (they are cheap). A suite with
+`keepAlive` (Edit, Animate) keeps its Stage mounted but hidden after the first visit, so switching back costs a frame, not a re-init: the
+editor keeps its Pixi application, document view, zoom, tool and selection; the player pauses. The **release policy** unmounts a hidden
+stage (re-entry then reloads, ≈ 210 ms for a 6×4K document) when it has been hidden longer than Settings › App › *Keep Edit / Animate loaded*
+(2–60 min, default 10) or at once when the orchestrator admits a GPU job while ComfyUI's free VRAM is under `reserve_vram_gb + 1 GB`
+(`engine.vram_pressure`; a toast says what was released). Edit, Animate and Models load on first use behind a skeleton (`frame/lazySuite.ts`):
+Edit's code is preloaded on the first idle moment after startup, the others on a pointer over their tab; Mediabunny loads with Animate.
+
 ## 3. Shared components
 
 ### 3a. Asset tile
@@ -138,7 +146,8 @@ Klein"). Advanced controls are behind a disclosure, remembered per suite.
 time), the pinned / running ComfyUI and custom nodes, schema versions, the state / logs / models folders with Reveal, and **Copy
 diagnostics** (versions, health, engine and queue state as JSON) for bug reports.
 Models root + mounted ComfyUI tree; HF token; VRAM budget; engine flags (attention backend, pinned memory,
-restart-every-N); GPU renderer (auto / WebGL2); **theme** (Dark / Light pastel, 2026-10-07; also in the ☰ menu); density; pen pressure curve (shown only when a pen is detected,
+restart-every-N); GPU renderer (auto / WebGL2); **theme** (Dark / Light pastel, 2026-10-07; also in the ☰ menu); density; how long a hidden Edit / Animate
+stays loaded (D69); pen pressure curve (shown only when a pen is detected,
 D19); "Apache-clean only"; **licence confirmations** (MiniMax H3 application filed, D17); project format
 defaults (target 16:9 1920×1080 @ 24 fps, default tier Draft, D18); log level.
 

@@ -995,6 +995,21 @@ def make_coded_clip(project: Path, *, frames: int, fps: int, size: tuple[int, in
     return rec.id
 
 
+def gpu_dedicated_mb(root_pid: int) -> float:
+    """D69: dedicated GPU memory of one browser's process tree (Windows `GPU Process Memory` counters), in MiB — the headed Edge only,
+    never the user's own browser or WebView2."""
+    ps = (f"$all = Get-CimInstance Win32_Process; $ids = @({root_pid}); do {{ $n = $ids.Count; "
+          "$ids += @($all | Where-Object { $ids -contains $_.ParentProcessId -and -not ($ids -contains $_.ProcessId) } | ForEach-Object { $_.ProcessId }) } "
+          "while ($ids.Count -ne $n); $s = (Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage').CounterSamples; "
+          "$m = $s | Where-Object { $ids -contains [int]($_.InstanceName -replace '^pid_(\\d+)_.*', '$1') } | Measure-Object CookedValue -Sum; "
+          "[math]::Round($m.Sum / 1MB, 1)")
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60).stdout.strip()
+    try:
+        return float(out.splitlines()[-1].replace(",", "."))
+    except (ValueError, IndexError):
+        return -1.0
+
+
 def make_4k_document(port: int) -> str:
     """Six 3840×2160 raster layers (noise + gradients, three with advanced blends) through the documents API."""
     import numpy as np
@@ -1271,6 +1286,9 @@ def main() -> int:
             clip_id = make_coded_clip(tmp / "proj", frames=24, fps=16, size=(320, 192), asset_id=asset["id"])
             clip_b = make_coded_clip(tmp / "proj", frames=48, fps=16, size=(320, 192), asset_id=asset["id"])      # the compare partner (twice the frames)
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=animate&clip={clip_id}{extra}"
+        elif mode == "keepalive":
+            ka_doc = make_4k_document(PORT)                     # D69: the 6×4K document the release policy is sized on
+            url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={ka_doc}{extra}"
         elif mode == "perf":
             perf_doc = make_4k_document(PORT)
             perf_clip = make_coded_clip(proj_dir, frames=121, fps=24, size=(1024, 576), asset_id=asset["id"])
@@ -2078,6 +2096,57 @@ def main() -> int:
             while time.time() - t < 60 and js("return s.doc.layers.some((n) => n.kind === 'group' && n.name.startsWith('AI quick remove'))") is not True: time.sleep(0.25)
             g = json.loads(js("const g = s.doc.layers.find((n) => n.kind === 'group' && n.name.startsWith('AI quick remove')); return JSON.stringify(g ? { n: g.children.length, name: g.children[0].name, mask: !!g.children[0].mask } : null)"))
             check(g is not None and g["n"] == 1 and g["mask"], f"Quick remove runs without the GPU and lands as a candidate layer with a mask ({g}, {time.time() - t:.1f} s)")
+            errs = cdp.page_errors()
+            check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
+        elif mode == "keepalive":
+            # D69 Step 0 and acceptance: switch-back time to a rendered 6×4K document, and the headed Edge's dedicated GPU memory with Edit
+            # visible, hidden (kept alive or destroyed) and back; the document state (zoom, tool, selection) must survive the round trip.
+            S = STORE
+            def edit_ready_after(t0_js: str) -> float | None:
+                return cdp.eval(f"""new Promise((ok) => {{ const t0 = {t0_js}; const tick = () => {{
+                    const st = {S}; const c = document.querySelector('.edit-canvas canvas'); const shown = c && c.getBoundingClientRect().width > 0
+                    if (performance.now() - t0 > 30000) ok(null)
+                    else if (shown && st.doc && !st.loading && window.__loom2RenderMs !== undefined) requestAnimationFrame(() => ok(performance.now() - t0))
+                    else requestAnimationFrame(tick) }}; requestAnimationFrame(tick) }})""", timeout=40)
+            t0 = time.time()
+            while time.time() - t0 < 60 and not cdp.eval(f"!!({S}.doc && {S}.doc.layers.length >= 6 && !{S}.loading)"):
+                time.sleep(0.3)
+            time.sleep(3.0)
+            cdp.eval(f"{S}.zoomTo(0.37); {S}.setTool('lasso'); window.__loom2Commands.runCommand('edit.sel.all'); 1"); time.sleep(1.0)
+            state0 = cdp.eval(f"JSON.stringify([Math.round({S}.zoom * 1000), {S}.tool, !!{S}.selection, {S}.doc.layers.length])")
+            mem_visible = gpu_dedicated_mb(edge.pid)
+            rows = []
+            for i in range(3):
+                cdp.eval("window.__loom2Session.getState().setSuite('catalogue'); 1"); time.sleep(2.5)
+                mem_hidden = gpu_dedicated_mb(edge.pid)
+                cdp.eval("window.__loom2RenderMs = undefined; window.__ka0 = performance.now(); window.__loom2Session.getState().setSuite('edit'); 1")
+                ms = edit_ready_after("window.__ka0")
+                time.sleep(1.0)
+                rows.append((ms, mem_hidden, gpu_dedicated_mb(edge.pid)))
+            state1 = cdp.eval(f"JSON.stringify([Math.round({S}.zoom * 1000), {S}.tool, !!{S}.selection, {S}.doc.layers.length])")
+            backs = sorted(r[0] for r in rows if r[0] is not None)
+            print(f"      GPU MiB (headed Edge): Edit visible {mem_visible} · hidden {[r[1] for r in rows]} · back {[r[2] for r in rows]}")
+            print(f"      switch-back ms: {[None if r[0] is None else round(r[0], 1) for r in rows]} · state {state0} → {state1}")
+            check(len(backs) == 3, f"Edit comes back with the 6×4K document rendered ({[r[0] for r in rows]})")
+            check(state0 == state1, f"zoom, tool, selection and layers survive the round trip ({state0} → {state1})")
+            budget = float(os.environ.get("LOOM2_KEEPALIVE_BUDGET_MS", "0") or 0)
+            if budget:
+                check(backs and backs[len(backs) // 2] <= budget, f"Edit switch-back median {backs[len(backs) // 2] if backs else None} ms ≤ {budget} ms")
+            # the release policy: a VRAM-pressure frame while Edit is hidden unmounts it (the GPU memory goes), and Edit reloads on return
+            cdp.eval("window.__loom2Session.getState().setSuite('catalogue'); 1"); time.sleep(2.0)
+            kept = gpu_dedicated_mb(edge.pid)
+            cdp.eval("window.__loom2ApplyEvent({ type: 'engine.vram_pressure', data: { job_id: 'headed', free_gb: 1.2, threshold_gb: 2.5 } }); 1")
+            time.sleep(3.0)
+            gone = cdp.eval("!document.querySelector('.edit-canvas canvas')")
+            released = gpu_dedicated_mb(edge.pid)
+            toast = cdp.eval("[...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | ')")
+            cdp.eval("window.__loom2RenderMs = undefined; window.__ka0 = performance.now(); window.__loom2Session.getState().setSuite('edit'); 1")
+            reload_ms = edit_ready_after("window.__ka0")
+            print(f"      release: GPU MiB hidden-kept {kept} → released {released} · reload {None if reload_ms is None else round(reload_ms, 1)} ms · toast {toast!r}")
+            check(gone, "a VRAM-pressure event unmounts the hidden editor canvas")
+            check(kept < 0 or released < 0 or kept - released > 100, f"releasing it frees GPU memory ({kept} → {released} MiB)")
+            check("editor canvas" in (toast or ""), "the release is said in a toast")
+            check(reload_ms is not None, f"Edit reloads the document after a release ({reload_ms} ms)")
             errs = cdp.page_errors()
             check(not errs, "no page errors" + "".join("\n       " + x for x in errs))
         elif mode == "aiclick":

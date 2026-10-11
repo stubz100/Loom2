@@ -84,6 +84,8 @@ and the feature list from InpaintCanvas. Budget 4–8 weeks before it feels like
   16384 as an optional limit). Krita uses 64² data tiles / 256² GL textures with a 16 px border.
 - Memory: ten 8K layers as full textures = 2.5 GB; tiles + culling + evicting far tiles to CPU/IndexedDB keep
   this bounded. Live painting happens on a ≤2K preview surface and is committed to tiles at full res.
+- The WebView's GPU memory comes out of the same 16 GB ComfyUI uses: an editor kept alive while hidden (D69) holds ≈ 240 MiB for a
+  6 × 4K document and is released when a GPU job is admitted with less than `reserve_vram_gb + 1 GB` free.
 - Blend modes: native PixiJS modes are free; the Photoshop "advanced" set costs one render pass each —
   acceptable per layer, not per brush dab.
 - Masks: single-channel textures applied in a custom filter; paint masks, rasterised lasso/polygon, and

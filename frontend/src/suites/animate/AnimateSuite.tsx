@@ -1,13 +1,15 @@
 // Animate suite (11): Panel (Inputs / Model / Length & Size / Presets / Clips), Strip (view, speed, loop, onion, counter),
 // Stage (Mediabunny player · filmstrip · compare, transport, timeline with in/out, S/E, beats and harvested pins, live
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
-import { Bookmark, Boxes, Clock, Film, Image as ImageIcon, Lock, X } from 'lucide-react'
+import { useStageActive } from '../../frame/stageKeep'
+import { Lock, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
+import { DEFAULT_RAIL } from '../../frame/railTabs'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
@@ -420,6 +422,8 @@ function Interim() {
 
 function Stage() {
   const project = useSession((s) => s.project)
+  const active = useStageActive()
+  useEffect(() => { if (!active && useAnimate.getState().playing) useAnimate.getState().togglePlay(false) }, [active])   // D69: hidden, kept alive: pause
   const clips = useAnimate((s) => s.clips)
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   const view = useAnimate((s) => s.view)
@@ -533,7 +537,6 @@ function Inspector() {
 
 export const AnimateSuite: SuiteDef = {
   id: 'animate',
-  rail: [{ id: 'inputs', label: 'Inputs', icon: <ImageIcon size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> }, { id: 'length', label: 'Length & Size', icon: <Clock size={18} /> },
-    { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }, { id: 'clips', label: 'Clips', icon: <Film size={18} /> }],
-  Panel, Strip: StripWithKeys, Stage, Inspector, PrimaryAction,
+  rail: DEFAULT_RAIL.animate,
+  Panel, Strip: StripWithKeys, Stage, Inspector, PrimaryAction, keepAlive: true,
 }

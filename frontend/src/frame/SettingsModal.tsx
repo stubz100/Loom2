@@ -50,6 +50,9 @@ export function SettingsModal() {
           <span className="hint">applies at once and is remembered on this machine, like the density</span>
           <label>Density</label>
           <select value={s.ui.density} onChange={(e) => s.setUi({ density: e.target.value as 'comfortable' | 'compact' })}><option value="comfortable">comfortable</option><option value="compact">compact</option></select>
+          <label>Keep Edit / Animate loaded</label>
+          <select value={s.ui.editKeepAliveMin ?? 10} onChange={(e) => s.setUi({ editKeepAliveMin: Number(e.target.value) })}>{[2, 5, 10, 30, 60].map((m) => <option key={m} value={m}>{m} min after you leave</option>)}</select>
+          <span className="hint">switching back is instant while loaded (D69); a GPU job short of VRAM releases them at once</span>
           <h4>Catalogue</h4>
           <label>Thumbnails</label>
           <select value={s.ui.thumbFit} onChange={(e) => s.setUi({ thumbFit: e.target.value as 'fit' | 'fill' })}><option value="fit">fit: the whole picture</option><option value="fill">fill: cropped to the tile</option></select>

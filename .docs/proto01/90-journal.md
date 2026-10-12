@@ -3134,3 +3134,15 @@ split by file so that no two hands touched the same module.
   moves by C2 (9 / 10 / 9, identity 0.56, 6 s warm, 24 s cold) — every bar of 08 §7 met by the pair. Nothing on D:.
 - Also found: `powershell -File` (Windows PowerShell 5.1) refuses the repo's scripts under the machine's execution policy; `pwsh`
   runs them. A chain that started the engine that way waited forever — start the engine with `pwsh` (or `-ExecutionPolicy Bypass`).
+
+## 2026-10-12 18:48 — D: cleared of the six duplicates; 16-ui-suite-stage.md written (D81 proposed)
+
+- The author: delete what is left on D: and continue as recommended. The six files copied to F: on D80 (A's four, the Qwen VAE,
+  `sam3.pt`) were deleted from D: after a size check against their F: copies (D: 126 → 158 GB free); the rest of the author's old
+  ComfyUI tree on D: is untouched and no longer mounted.
+- **16 · Stage UI document** written as the P13 gate (D12): layout (Rail Library · Outliner · Cameras · Poses · Shot; a gizmo bar in
+  the viewport, camera view with the framing rectangle, pass preview in the Strip), the procedural mannequin of E10 as the first figure,
+  cameras in mm on a 36 mm sensor, `stages/<id>.json` with `revision` 409, passes as `stage-pass` assets, `StageShot` with the two
+  D78 methods and their measured times, ST4 clips through D76's IC-LoRA on the depth pass, keys as registry commands, the acceptance
+  list from 08 §8, four open questions (sensor convention, the mask pass, the exact-pose method's third reference, image planes in
+  the clay pass). Recorded as **D81 (proposed)** — ST1 code starts when the author approves 16. 00-README lists it.

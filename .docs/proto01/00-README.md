@@ -24,6 +24,7 @@ author approves it; decisions and their status live in 13.
 | 13 | [Decision log and open questions](13-decision-log-and-open-questions.md) | D1–D33, Q1–Q18 (Q15 and Q18 carried as post-MVP work), the ordered post-MVP backlog |
 | 14 | [Post-MVP · Story workspace](14-post-mvp-story-workspace.md) | loom's storyboard design adopted as-is for the first post-MVP phase (D23) |
 | 15 | [MVP click-through](15-click-through.md) | the author's end-to-end pass through the four suites (M7 slice 5): what to do, what must happen, where it is measured |
+| 16 | [Suite E · Stage UI](16-ui-suite-stage.md) | 3D blocking → control passes → image / clip (P13, ST1–ST4); proposed 2026-10-12, approval gates ST1 (D81) |
 
 Companions: [`90-journal.md`](90-journal.md) (append-only implementation journal with real timestamps — the measurements live
 there), [`bench/`](../../bench/README.md) (the binding benchmark prompts and tasks from 04 §6), `scripts/m*_acceptance.py` (the

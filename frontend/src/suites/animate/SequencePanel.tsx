@@ -64,9 +64,9 @@ export function SequenceInspector() {
       <div className="kv"><span>duration</span><span>{duration(lane)} ticks · {(duration(lane) / current.fps).toFixed(2)} s · {lane.clips.length} clip{lane.clips.length === 1 ? '' : 's'}</span></div>
       <div className="verbs"><CommandRow ids={['anim.seq.rename', 'anim.seq.delete']} /></div>
       <h4>Export</h4>
-      <div className="verbs"><CommandButton id="anim.seq.exportEdl" text label="EDL" /><CommandButton id="anim.seq.exportFcpxml" text label="FCPXML" /></div>
+      <div className="verbs"><CommandButton id="anim.seq.exportEdl" text label="EDL" /><CommandButton id="anim.seq.exportFcpxml" text label="FCPXML" /><CommandButton id="anim.seq.render" text label="Render draft" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
-      <p className="hint">Resolve conforms each clip at its own rate; a draft render (frames mapped, not conformed — D27) comes with the next slice.</p>
+      <p className="hint">Resolve conforms each clip at its own rate. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed — D27).</p>
       {c && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

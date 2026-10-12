@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, Segment, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, Render, Segment, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -817,8 +817,8 @@ def _vram(model_id: str) -> float:
 
 
 def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> float:
-    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
-        return 0.0                                                    # R3 (D62): CPU only, the engine is never started
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
+        return 0.0                                                    # R3 (D62) / P17: CPU only, the engine is never started
     if isinstance(recipe, Upscale) and recipe.refine:
         return _vram(recipe.refine_model_id)
     if isinstance(recipe, Inpaint):
@@ -833,8 +833,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]
-    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
-        return []                                                     # R3 (D62): no weights at all
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
+        return []                                                     # R3 (D62) / P17: no weights at all
 
     te_over = getattr(recipe, "te_id", None)
 

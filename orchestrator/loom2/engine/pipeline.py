@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, Inpaint, Reangle, Segment, Upscale, reangle_method, reangle_model_id, warm_group
+from ..recipes import I2I, I2V, T2I, Inpaint, Reangle, Render, Segment, Upscale, reangle_method, reangle_model_id, warm_group
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -59,10 +59,12 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = isinstance(recipe, Inpaint) and recipe.mode == "quick_remove"
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render)
     needs: list[str] = []
     if getattr(recipe, "refs", None):
         needs.append("refs")
+    if isinstance(recipe, Render):
+        needs.append("timeline")
     if isinstance(recipe, DOCUMENT_KINDS):
         needs.append("document")
     if isinstance(recipe, I2V):
@@ -75,6 +77,9 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     elif isinstance(recipe, I2V):
         params = i2v_params(recipe)
         est = estimate_i2v_seconds(recipe)
+    elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
+        params = {"timeline_id": recipe.timeline_id}
+        est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
     elif isinstance(recipe, Reangle):                                 # P14 (D82): the method `auto` resolved to in this build, and its measured time
         try:
             mid = reangle_model_id(recipe, variant)
@@ -118,7 +123,7 @@ def preview_problems(recipe: AnyRecipe, roster: Roster, object_info: dict | None
     """The contract problems a submission would hit, or None before the engine has answered once (no object_info to check against)."""
     if not object_info:
         return None
-    if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
         return []
     img = _placeholder_image(object_info)
     refs = {(r.asset_id or r.blob or ""): img for r in getattr(recipe, "refs", []) or []}

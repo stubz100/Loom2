@@ -37,6 +37,7 @@ registerCommands([
   { id: 'anim.seq.zoomOut', scope: 'animate', label: 'Zoom the lane out', icon: ZoomOut, placement: ['toolbar'], when: hasSeq, run: () => sq().zoom(1 / 1.5) },
   { id: 'anim.seq.exportEdl', scope: 'animate', label: 'Export EDL (CMX 3600)', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().exportAs('edl') },
   { id: 'anim.seq.exportFcpxml', scope: 'animate', label: 'Export FCPXML 1.10', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().exportAs('fcpxml') },
+  { id: 'anim.seq.render', scope: 'animate', label: 'Render a draft clip (CPU)', icon: Clapperboard, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().render() },
   { id: 'anim.seq.openClip', scope: 'animate', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: hasSel,
     run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Clips tab)', 'info') } },
 ])
@@ -45,5 +46,5 @@ registerCommands([
 export function laneMenu(onClip: boolean): MenuItem[] {
   return onClip
     ? [{ cmd: 'anim.seq.dissolve' }, { cmd: 'anim.seq.moveLeft' }, { cmd: 'anim.seq.moveRight' }, { cmd: 'anim.seq.openClip' }, sep, { cmd: 'anim.seq.removeClip' }, sep, { cmd: 'anim.seq.undo' }, { cmd: 'anim.seq.redo' }]
-    : [{ cmd: 'anim.seq.addCurrent' }, { cmd: 'anim.seq.play' }, sep, { cmd: 'anim.seq.exportEdl' }, { cmd: 'anim.seq.exportFcpxml' }, sep, { cmd: 'anim.seq.rename' }, { cmd: 'anim.seq.delete' }, sep, { cmd: 'anim.seq.undo' }, { cmd: 'anim.seq.redo' }]
+    : [{ cmd: 'anim.seq.addCurrent' }, { cmd: 'anim.seq.play' }, sep, { cmd: 'anim.seq.exportEdl' }, { cmd: 'anim.seq.exportFcpxml' }, { cmd: 'anim.seq.render' }, sep, { cmd: 'anim.seq.rename' }, { cmd: 'anim.seq.delete' }, sep, { cmd: 'anim.seq.undo' }, { cmd: 'anim.seq.redo' }]
 }

@@ -1400,6 +1400,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines/{tl_id}/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Timeline Render
+         * @description P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane.
+         */
+        post: operations["timeline_render_timelines__tl_id__render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/version": {
         parameters: {
             query?: never;
@@ -8057,6 +8077,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineExported"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_render_timelines__tl_id__render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsSubmitted"];
                 };
             };
             /** @description Validation Error */

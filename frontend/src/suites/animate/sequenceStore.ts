@@ -52,6 +52,8 @@ interface SequenceState {
   togglePlay: (on?: boolean) => void
   zoom: (factor: number) => void
   exportAs: (format: ExportFormat) => Promise<void>
+  /** P17 slice 2: the draft render as a CPU job; the clip lands in the bin and the Catalogue when it is done. */
+  render: () => Promise<void>
 }
 
 let saveTimer: number | null = null
@@ -141,6 +143,16 @@ export const useSequence = create<SequenceState>()((set, get) => ({
       set({ lastExport: { format, path: r.path } })
       useSession.getState().toast(`${format.toUpperCase()} written: ${r.path}`, 'success')
     } catch (e) { useSession.getState().toast(`Export failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+  render: async () => {
+    const cur = get().current
+    if (!cur) return
+    const s = useSession.getState()
+    try {
+      await unwrap(http.POST('/timelines/{tl_id}/render', { params: { path: { tl_id: cur.id } } }))
+      s.toast('Draft render queued — the clip lands in the Clips bin when it is done (CPU, no engine)', 'success')
+      await s.refreshAll()
+    } catch (e) { s.toast(`Render failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
 }))
 

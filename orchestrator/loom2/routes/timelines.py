@@ -9,7 +9,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..clips import ClipStore
-from ..schemas import Deleted, TimelineExported, TimelineList
+from ..origin import JobOrigin
+from ..schemas import Deleted, JobsSubmitted, TimelineExported, TimelineList
 from ..timelines import StaleTimeline, Timeline, TimelineStore
 from .deps import Svc
 
@@ -76,6 +77,27 @@ async def timeline_delete(svc: Svc, tl_id: str):
         raise HTTPException(404, "sequence not found")
     svc.hub.broadcast("timeline.deleted", {"id": tl_id})
     return {"deleted": tl_id}
+
+
+@router.post("/timelines/{tl_id}/render", response_model=JobsSubmitted)
+async def timeline_render(svc: Svc, tl_id: str):
+    """P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane."""
+    ws, _, queue = svc.require_project()
+    store, clips = TimelineStore(ws), ClipStore(ws)
+    tl = await asyncio.to_thread(store.get, tl_id)
+    if tl is None:
+        raise HTTPException(404, "sequence not found")
+    if not tl.clips:
+        raise HTTPException(422, "the sequence is empty")
+    recs = {c.id for c in await asyncio.to_thread(clips.list)}
+    missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]
+    if missing:
+        raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
+    try:
+        jobs = queue.submit({"kind": "render", "timeline_id": tl_id}, origin=JobOrigin(suite="animate", surface="sequence", ref=tl_id))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"jobs": [j.model_dump() for j in jobs]}
 
 
 @router.post("/timelines/{tl_id}/export", response_model=TimelineExported)

@@ -18,14 +18,14 @@ from .catalogue import Catalogue
 from .config import AppState
 from .engine.client import EngineError
 from .engine.follow import EngineFollower
-from .engine.finishers import finisher_for, run_quick_remove
+from .engine.finishers import finisher_for, run_cpu
 from .engine.graphs import CompileError, estimate_vram_gb, recipe_te_id, recipe_weights
 from .models import registry
 from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, Inpaint, parse_recipe, warm_group
+from .recipes import T2I, I2V, Inpaint, Render, parse_recipe, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .mentions import resolve_mentions
@@ -358,8 +358,8 @@ class JobQueue:
             # R9: a missing native extension is refused at submission (HTTP 422), not when the job runs
             what = "Quick Remove" if recipe.mode == "quick_remove" else "the content-aware pre-fill"
             raise ValueError(f"{what} needs the native extension (uv sync --project orchestrator --extra native)")
-        if isinstance(recipe, Inpaint) and recipe.mode == "quick_remove":
-            return                       # R3: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
+        if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
+            return                       # R3 / P17: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
         for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])], *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
@@ -577,8 +577,8 @@ class JobQueue:
         self.hub.broadcast("job.updated", job.model_dump())
         try:
             recipe = parse_recipe(job.recipe)
-            if not plan(recipe, job.variant).engine:                    # D62 Quick Remove: CPU only — the engine is not started
-                await run_quick_remove(job, recipe, self)
+            if not plan(recipe, job.variant).engine:                    # D62 Quick Remove / P17 draft render: CPU only — the engine is not started
+                await run_cpu(job, recipe, self)
                 self._complete(job, engine=False)
                 return
             try:

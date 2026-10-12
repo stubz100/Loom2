@@ -13655,6 +13655,49 @@
         ]
       }
     },
+    "/timelines/{tl_id}/render": {
+      "post": {
+        "description": "P17: the draft render as a CPU job (no engine) — the result is a Catalogue clip with lineage to every clip on the lane.",
+        "operationId": "timeline_render_timelines__tl_id__render_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsSubmitted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Render",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
     "/version": {
       "get": {
         "description": "D36: app version, checkout commit, shell build, engine pin and running engine, node pins, schema versions, paths.",

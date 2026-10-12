@@ -836,9 +836,10 @@ slot by drop or "New angle…" from tiles, the Inspector and the loupe hub; a fi
 store with `revision` 409, EDL / FCPXML writers), `routes/timelines.py`, the E13 lane lifted as `suites/animate/lane.ts` (per-clip
 rates: ticks by duration, nearest-frame scrub), the **Sequence** rail tab in Animate (11 §5b: panel with sequences + clip bin, the
 lane stage with preview / transport / trims / dissolve grip / playhead, the Inspector with exports), undo stack, debounced saves;
-parity test on the EDL text between the TypeScript and Python writers; a smoke scenario on the fake engine. Left for slice 2: the
-draft render as a CPU job → a Catalogue clip (PyAV, dissolves blended, frame-mapped — RIFE stays post-MVP), reorder by drag, the
-C24 frame-thumbnail strip on the blocks, and the Resolve import check (the author's).
+parity test on the EDL text between the TypeScript and Python writers; a smoke scenario on the fake engine. **Slice 2 the same
+evening:** the draft render as a CPU job (`Render` recipe, `run_render`: PNG masters → blended dissolves → `ClipStore` → a Catalogue
+clip with `render` lineage; frame-mapped, not conformed — RIFE stays post-MVP). Left: reorder by drag, the C24 frame-thumbnail strip on
+the blocks, and the Resolve import check (the author's).
 
 ### P18 · Image → mesh props — 6 d (after E14 passes, and only after ST1)
 

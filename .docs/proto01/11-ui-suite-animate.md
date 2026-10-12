@@ -97,7 +97,10 @@ both edges (ripple), a dissolve grip at the left edge (drag; *Dissolve from the 
 `timelines/<id>/` by the server; the last path shown), the selected clip (source, frames used, ticks, dissolve) and its verbs.
 Every edit saves after 300 ms with the document's `revision`; a 409 reloads and says the last change was lost. Undo / redo are
 `Ctrl+Z` / `Ctrl+Shift+Z` in this suite. Data: `timelines/<id>.json`, `GET/POST/PUT/DELETE /timelines[/{id}]`,
-`POST /timelines/{id}/export {format}`. The draft render (a CPU job that becomes a Catalogue clip) is the next slice.
+`POST /timelines/{id}/export {format}`. **Render draft** (`POST /timelines/{id}/render`) queues a CPU job — no engine — that reads
+every lane tick from the clips' PNG masters, blends the dissolves and makes a Catalogue clip (master + proxy, `lineage_kind = render`,
+parents = every clip on the lane, `model_id = sequence`) at the first clip's size and the lane's fps; a clip at another rate is mapped
+by nearest frame, not conformed (D27). It lands in the Clips bin like any clip.
 
 ## 6. Inspector
 - **Clip**: model/format, frames/fps/size, seed, prompt, time, start/end thumbnails, Keep/Reject/Rate/Tags;

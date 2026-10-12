@@ -390,4 +390,15 @@ test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin,
   const exported = await api<{ format: string; text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'edl' })
   expect(exported.text).toContain('TITLE: Reel one')
   expect(exported.text).toContain('V     C')
+  // the draft render: a CPU job that becomes a second clip in the bin, with lineage to the first
+  await page.locator('.seq-insp button', { hasText: /^Render draft$/ }).click()
+  await expect(page.locator('.seq-clip-card')).toHaveCount(2, { timeout: 120_000 })
+  const clips = await api<{ items: { id: string; model_id: string; frames: number; fps: number; asset_id: string | null }[] }>('GET', '/clips')
+  const render = clips.items.find((c) => c.model_id === 'sequence')!
+  const source = clips.items.find((c) => c.model_id !== 'sequence')!
+  expect(render.frames).toBe(Math.round(tl.clips[0].out * 24 / source.fps))                 // a 16 fps clip takes its duration on the 24 fps lane
+  expect(render.fps).toBe(24)
+  const asset = await api<{ parents: string[]; lineage_kind: string | null }>('GET', `/assets/${render.asset_id}`)
+  expect(asset.lineage_kind).toBe('render')
+  expect(asset.parents).toHaveLength(1)
 })

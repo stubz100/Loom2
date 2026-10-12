@@ -3202,3 +3202,18 @@ split by file so that no two hands touched the same module.
 - **Left for slice 2:** the draft render as a CPU job → a Catalogue clip (PyAV, dissolves blended, frame-mapped), reorder by drag,
   the C24 frame-thumbnail strip on the blocks, and the Resolve import of an exported sequence (the author's check — E13's files and
   now any `timelines/<id>/*.edl|fcpxml`).
+
+## 2026-10-12 21:43 — P17 slice 2: the draft render as a CPU job → a Catalogue clip
+
+- `Render {timeline_id, seeds}` joins the recipes; `plan()` marks it engine-less like Quick Remove (warm group `cpu`, no weights, no
+  VRAM), the queue's CPU branch became `run_cpu` (Quick Remove or the render); `run_render` reads every lane tick from the clips'
+  PNG masters (exact, never the proxies — `timelines.at()` mirrors `lane.ts`), blends the dissolve by its weight, maps a clip at
+  another rate by nearest frame (D27: no conform), renders at the first clip's size and the lane's fps in chunks of one second with
+  cancel checks and progress, then the clip pipeline as for i2v: `ClipStore.create` + the proxy + the Catalogue asset (kind video,
+  `lineage_kind = render`, parents = every source clip's asset, `model_id = sequence`), `clip.ready`. Route
+  `POST /timelines/{id}/render` → `JobsSubmitted` (422 on an empty lane or a missing clip); the Inspector's **Render draft** and the
+  lane menu's entry (`anim.seq.render`).
+- Checks: the offline test renders two 6-frame clips with a 2-tick dissolve on the queue without the engine — 10 frames, the dissolve's
+  first tick 150 / 50 red / blue (weight 0.25), its second 50 / 150, lineage to both assets; the smoke scenario now renders the
+  fake-engine clip's lane too — a 16 fps, 81-frame Wan clip gives a 122-frame clip at 24 fps, as designed. 249 offline, 182 unit,
+  smoke 15/15, lint 100, build clean, audits clean; the route snapshot and the OpenAPI regenerated (80 paths).

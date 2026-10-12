@@ -26,7 +26,8 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
-from ..recipes import I2I, I2V, Inpaint, Reangle, Segment, Upscale
+from ..recipes import I2I, I2V, Inpaint, Reangle, Render, Segment, Upscale
+from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from .pipeline import AnyRecipe, Submission
 
@@ -267,6 +268,104 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
 
 
 # ---- D62 Quick Remove: no engine -------------------------------------------------------------------------------------------------
+async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
+    """The jobs that never start the engine (plan().engine is False): Quick Remove (D62) and the sequence draft render (P17)."""
+    if isinstance(recipe, Render):
+        return await run_render(job, recipe, q)
+    if isinstance(recipe, Inpaint):
+        return await run_quick_remove(job, recipe, q)
+    raise ValueError(f"no CPU path for recipe kind {recipe.kind!r}")
+
+
+async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:
+    """P17 (D83): the sequence as a Catalogue clip — every lane tick read from the clips' PNG masters (exact, not the proxies), two
+    frames blended through a dissolve, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no conform
+    here), at the first clip's size and the lane's fps; then the clip pipeline as for an i2v job (master, proxy, asset, lineage to
+    every source clip's asset, `clip.ready`)."""
+    store, clips = TimelineStore(q.ws), ClipStore(q.ws)
+    tl = await asyncio.to_thread(store.get, recipe.timeline_id)
+    if tl is None:
+        raise ValueError(f"sequence {recipe.timeline_id} is not in the project")
+    recs = {c.id: c for c in await asyncio.to_thread(clips.list)}
+    missing = [c.clip_id for c in tl.clips if c.clip_id not in recs]
+    if missing:
+        raise ValueError(f"clips missing from the project: {', '.join(missing)}")
+    total = duration(tl)
+    if total <= 0:
+        raise ValueError("the sequence is empty")
+    s = starts(tl)
+    first = recs[tl.clips[0].clip_id]
+    w, h = first.w, first.h
+    tmp = q.ws.temp_dir / f"render-{job.id}"
+    tmp.mkdir(parents=True, exist_ok=True)
+    cache: dict[tuple[str, int], np.ndarray] = {}
+
+    def frame(k: int, local: int) -> np.ndarray:
+        rec = recs[tl.clips[k].clip_id]
+        key = (rec.id, local)
+        arr = cache.get(key)
+        if arr is None:
+            with Image.open(clips.frame_path(rec.id, local)) as im:
+                im = im.convert("RGB")
+                if im.size != (w, h):
+                    im = im.resize((w, h), Image.LANCZOS)
+                arr = np.asarray(im, dtype=np.float32)
+            if len(cache) > 8:
+                cache.pop(next(iter(cache)))
+            cache[key] = arr
+        return arr
+
+    def chunk(f0: int, f1: int) -> list[Path]:
+        out: list[Path] = []
+        for f in range(f0, f1):
+            what = at(tl, f, s)
+            assert what is not None
+            (ka, la), b, mix = what
+            img = frame(ka, la)
+            if b is not None:
+                img = img * (1.0 - mix) + frame(b[0], b[1]) * mix
+            p = tmp / f"{f:06d}.png"
+            Image.fromarray(np.clip(img + 0.5, 0, 255).astype(np.uint8)).save(p)
+            out.append(p)
+        return out
+
+    paths: list[Path] = []
+    t0 = time.time()
+    step = max(1, tl.fps)
+    for f0 in range(0, total, step):
+        q.check_cancel(job)
+        q.progress(job, f"rendering {f0}/{total}")
+        job.progress = f0 / total
+        paths += await asyncio.to_thread(chunk, f0, min(total, f0 + step))
+    q.check_cancel(job)
+    job.log_tail.append(f"render: {total} frames at {w}×{h} @ {tl.fps} fps in {time.time() - t0:.1f} s (CPU)")
+    q.progress(job, "writing the master")
+    sources = [recs[c.clip_id] for c in tl.clips]
+    parents = list(dict.fromkeys(r.asset_id for r in sources if r.asset_id))
+    rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="sequence", preset="draft", prompt=tl.name,
+                                  seed=job.seed, fps=tl.fps, start_asset_id=parents[0] if parents else "", beats=[],
+                                  params={"recipe": recipe.model_dump(), "timeline": {"id": tl.id, "name": tl.name, "revision": tl.revision, "clips": [c.model_dump(by_alias=True) for c in tl.clips], "overlaps": tl.overlaps}},
+                                  timings={"render_s": round(time.time() - t0, 1)})
+    q.progress(job, "encoding the proxy")
+    rec = await asyncio.to_thread(clips.encode_proxy, rec)
+    asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
+                                    suite="animate", model_id="sequence", seed=job.seed, prompt_text=tl.name,
+                                    params={"clip_id": rec.id, "preset": "draft", "recipe": recipe.model_dump(), "timeline_id": tl.id, "revision": tl.revision},
+                                    timings={"wall_s": q.wall_s()}, parents=parents, lineage_kind="render", frames=rec.frames, w=rec.w, h=rec.h,
+                                    variant=job.variant, origin=job.origin)
+    asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
+    rec.asset_id = asset.id
+    rec.timings["wall_s"] = q.wall_s()
+    clips.save(rec)
+    q.hub.broadcast("asset.created", asset.model_dump())
+    job.result["asset_ids"] = [asset.id]
+    job.result["clip_id"] = rec.id
+    job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
+    q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
+                                   "origin": job.origin.model_dump() if job.origin else None})
+    return True
+
+
 async def run_quick_remove(job: JobRecord, recipe: Inpaint, q: JobQueue) -> bool:
     """PhotoCraft's content-aware fill of the selection on the CPU, pasted back like the AI modes (a candidate layer with a feathered
     layer mask, seamless optional) — seconds, and no GPU. Returns False when the job ended early (cancelled or failed)."""

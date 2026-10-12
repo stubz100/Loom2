@@ -89,6 +89,7 @@
  "POST /shutdown",
  "POST /timelines",
  "POST /timelines/{tl_id}/export",
+ "POST /timelines/{tl_id}/render",
  "PUT /blobs/{sha}",
  "PUT /documents/{doc_id}",
  "PUT /documents/{doc_id}/layers/{lid}/pixels",

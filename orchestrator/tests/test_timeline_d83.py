@@ -119,3 +119,69 @@ def test_routes(tmp_path: Path):
         assert cl.post(f"/timelines/{tl['id']}/export", json={"format": "aaf"}, headers=H).status_code == 422
         assert cl.delete(f"/timelines/{tl['id']}", headers=H).json()["deleted"] == tl["id"]
         assert cl.get(f"/timelines/{tl['id']}", headers=H).status_code == 404
+
+
+def test_render_job_makes_a_clip_without_the_engine(tmp_path: Path):
+    """P17 slice 2: two tiny clips with a 2-tick dissolve → a CPU job → a clip of `duration` frames whose dissolve frame is a blend,
+    the Catalogue asset with lineage to both source assets, the engine never started."""
+    import json
+    import time
+    import numpy as np
+    from fastapi.testclient import TestClient
+    from loom2.api import create_app
+    from loom2.config import AppState
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
+                                     "mounted_model_trees": [], "variant": "full"})
+    app = create_app(state)
+    H = {"X-Loom-Token": app.state.services.app.token}
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "R", "size_cap_gb": 10}, headers=H)
+        ws = Workspace(tmp_path / "proj")
+        cs = ClipStore(ws)
+        svc = app.state.services
+
+        def clip(tag: str, colour: tuple[int, int, int], n: int, fps: int):
+            frames = []
+            for i in range(n):
+                p = tmp_path / f"{tag}{i}.png"
+                Image.new("RGB", (32, 24), colour).save(p)
+                frames.append(p)
+            rec = cs.create(frames, model_id="wan22-i2v-high-fp8", prompt=tag, seed=1, fps=fps, start_asset_id="ast_x")
+            rec = cs.encode_proxy(rec)
+            asset = svc.catalogue.ingest_file(ws.path / rec.proxy_path, kind="video", in_place=True, suite="animate", frames=rec.frames, w=rec.w, h=rec.h)
+            rec.asset_id = asset.id
+            cs.save(rec)
+            return rec
+        a, b = clip("a", (200, 0, 0), 6, 24), clip("b", (0, 0, 200), 6, 24)
+        tl = cl.post("/timelines", json={"name": "Render me", "fps": 24, "w": 32, "h": 24}, headers=H).json()
+        body = {**tl, "clips": [{"id": "x", "clip_id": a.id, "in": 0, "out": 6}, {"id": "y", "clip_id": b.id, "in": 0, "out": 6}], "overlaps": [0, 2]}
+        assert cl.put(f"/timelines/{tl['id']}", json=body, headers=H).status_code == 200
+        r = cl.post(f"/timelines/{tl['id']}/render", headers=H)
+        assert r.status_code == 200, r.text
+        job = r.json()["jobs"][0]
+        assert job["recipe"]["kind"] == "render" and job["origin"]["surface"] == "sequence" and job["warm_group"] == "cpu"
+        cl.post("/queue/unpause", headers=H)
+        t0 = time.time()
+        while time.time() - t0 < 60:
+            j = cl.get(f"/jobs/{job['id']}", headers=H).json()
+            if j["status"] in ("done", "failed", "cancelled"):
+                break
+            time.sleep(0.2)
+        assert j["status"] == "done", j.get("error") or j.get("log_tail")
+        assert cl.get("/engine", headers=H).json().get("running") in (False, None)          # the engine was never started
+        rec = cs.get(j["result"]["clip_id"])
+        assert rec is not None and rec.frames == 10 and rec.fps == 24 and (rec.w, rec.h) == (32, 24) and rec.model_id == "sequence"
+        mid = np.asarray(Image.open(cs.frame_path(rec.id, 4)).convert("RGB"))[0, 0]          # tick 4: the dissolve's first tick (ticks 4–5), weight 0.25
+        assert abs(int(mid[0]) - 150) <= 3 and abs(int(mid[2]) - 50) <= 3, mid                 # 200 × 0.75 red, 200 × 0.25 blue
+        late = np.asarray(Image.open(cs.frame_path(rec.id, 5)).convert("RGB"))[0, 0]         # weight 0.75
+        assert abs(int(late[0]) - 50) <= 3 and abs(int(late[2]) - 150) <= 3, late
+        first = np.asarray(Image.open(cs.frame_path(rec.id, 0)).convert("RGB"))[0, 0]
+        assert int(first[0]) > 180 and int(first[2]) < 20
+        asset = cl.get(f"/assets/{j['result']['asset_ids'][0]}", headers=H).json()
+        assert asset["kind"] == "video" and sorted(asset["parents"]) == sorted([a.asset_id, b.asset_id]) and asset["lineage_kind"] == "render"
+        assert (ws.path / rec.proxy_path).is_file()
+        assert cl.post(f"/timelines/{tl['id']}/render", headers=H).status_code == 200
+        empty = cl.post("/timelines", json={"name": "Empty"}, headers=H).json()
+        assert cl.post(f"/timelines/{empty['id']}/render", headers=H).status_code == 422
+        assert json.loads(json.dumps(j["recipe"]))["timeline_id"] == tl["id"]

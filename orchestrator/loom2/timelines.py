@@ -79,6 +79,32 @@ def duration(tl: Timeline) -> int:
     return s[-1] + ticks(tl, tl.clips[-1])
 
 
+def at(tl: Timeline, f: int, s: list[int] | None = None) -> tuple[tuple[int, int], tuple[int, int] | None, float] | None:
+    """What the lane shows at tick f: ((clip index, source frame), the incoming clip mid-dissolve or None, its weight) — the mirror of
+    lane.ts `at()`; the source frame is the nearest when the clip's rate differs from the lane's."""
+    s = s if s is not None else starts(tl)
+    if f < 0 or f >= duration(tl) or not tl.clips:
+        return None
+    lo, hi = 0, len(s) - 1
+    while lo < hi:
+        mid = (lo + hi + 1) >> 1
+        if s[mid] <= f:
+            lo = mid
+        else:
+            hi = mid - 1
+    i = lo
+
+    def shown(k: int) -> tuple[int, int]:
+        c = tl.clips[k]
+        local = c.in_ + int((f - s[k]) * (c.fps or tl.fps) / tl.fps)
+        return k, min(c.out - 1, local)
+
+    if i > 0 and f < s[i - 1] + ticks(tl, tl.clips[i - 1]):
+        ov = tl.overlaps[i]
+        return shown(i - 1), shown(i), (f - s[i] + 0.5) / ov
+    return shown(i), None, 0.0
+
+
 def check(tl: Timeline, clip_frames: dict[str, int] | None = None) -> None:
     """The invariants a saved document keeps: one overlap per clip (the first 0), a dissolve shorter than both clips, in < out, and —
     when the clips are known — out within the clip's frames."""

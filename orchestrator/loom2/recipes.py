@@ -266,8 +266,17 @@ def reangle_model_id(recipe: Reangle, variant: str = "full") -> str:
     raise ValueError(f"no model this build offers implements the angles method {method!r}")
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle
+class Render(BaseModel):
+    """P17 (D83) slice 2: a draft render of a sequence — a CPU job (no engine) that becomes a Catalogue clip: every lane tick read from
+    the clips' PNG masters, dissolves blended, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no
+    conform here; RIFE at export is post-MVP). Rendered at the first clip's size, at the lane's fps."""
+    kind: Literal["render"] = "render"
+    timeline_id: str
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render
 
 
 class RecipeEnvelope(BaseModel):
@@ -301,4 +310,6 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return recipe.refine_model_id            # the big model decides the swap, not the 70 MB upscaler
     if isinstance(recipe, Reangle):
         return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
+    if isinstance(recipe, Render):
+        return "cpu"                               # P17: the draft render never touches the engine
     return recipe.model_id

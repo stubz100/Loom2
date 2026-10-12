@@ -7,7 +7,7 @@ from __future__ import annotations
 from .engine.graphs import te_alternates, te_label, te_options
 from .models import registry
 from .models.spec import ModelSpec
-from .recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES
+from .recipes import FLUX2_SCHEDULE, MOVES, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, Reangle, reangle_method
 from .roster import ROSTER_BY_ID
 from .services import Services
 from . import matting, native
@@ -64,7 +64,31 @@ def capabilities(svc: Services) -> dict:
             "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
             "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES, "te_alternates": te_alternates(),
             "advanced": advanced(), "tiers": image_tiers(), "refine_edge": matting.capabilities(),
-            "content_aware": native.capabilities()}                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
+            "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
+            "reangle": _reangle(svc, variant)}                                 # P14 (D82): the Angle tab's moves and methods
+
+
+def _reangle(svc: Services, variant: str) -> dict:
+    """The angles verb (P14): every move, the methods with the model each runs, its health, measured seconds and the moves it is good for,
+    and what `auto` picks per move — the Angle tab shows the method and its time before the job is queued."""
+    methods = {}
+    for spec in registry.reangle_specs():                             # by order: the first offered spec of a method is the one that runs
+        if not spec.recipes.reangle or not _offered(spec, variant) or spec.recipes.reangle in methods:
+            continue
+        needs = spec.weights()
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        methods[spec.recipes.reangle] = {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": spec.hint,
+                                         "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+                                         "missing": missing, "seconds": spec.estimates.base_seconds, "moves": list(spec.recipes.reangle_moves),
+                                         "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+    auto = {}
+    for move in MOVES:
+        try:
+            auto[move] = reangle_method(Reangle(asset_id="x", move=move), variant)  # type: ignore[arg-type]
+        except ValueError:
+            continue
+    return {"moves": list(MOVES), "methods": methods, "auto": auto}
 
 
 def _offered(spec: ModelSpec, variant: str) -> bool:

@@ -804,6 +804,13 @@ protect VRAM).
 
 ### P14 · Viewpoint / angles verb — 6 d (after E12 passes)
 
+**Built 2026-10-12 (D82, journal of that evening):** recipe `Reangle {asset_id, move, method, prompt_text, seeds}` with `auto` resolving to
+D77's pair per move (the angles LoRA on Qwen-Image-Edit 2509 for rotations — a new `qwen_edit.toml` spec, Apache, both variants — and
+Klein with the strict-reference prompt for top-down / close-up / wide; Klein 4B under `open`); a Generate rail tab **New angle** (source
+slot by drop or "New angle…" from tiles, the Inspector and the loupe hub; a five-button move pad; method and measured seconds from
+`/capabilities.reangle`; candidates 1–4); results next to the source with `lineage_kind = reangle`; acceptance in
+`scripts/reangle_acceptance.py`. The orbit sphere became a pad: the methods know five moves, not a continuous orbit.
+
 - **Recipe** `Reangle {asset_id, azimuth, elevation, distance, method, candidates}`.
 - **Specs and roster** for the winning method. On-disk option A: Qwen-Image-Edit 2509 fp8 (20.4 GB), the Multiple-angles LoRA (236 MB),
   Lightning 4-step (850 MB), the Qwen2.5-VL 7B fp8 encoder; all Apache.

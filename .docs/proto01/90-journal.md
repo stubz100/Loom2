@@ -3146,3 +3146,30 @@ split by file so that no two hands touched the same module.
   D78 methods and their measured times, ST4 clips through D76's IC-LoRA on the depth pass, keys as registry commands, the acceptance
   list from 08 §8, four open questions (sensor convention, the mask pass, the exact-pose method's third reference, image planes in
   the clay pass). Recorded as **D81 (proposed)** — ST1 code starts when the author approves 16. 00-README lists it.
+
+## 2026-10-12 19:30 — P14 built: the New angle tab (D82); rig acceptance 50/50 through the app
+
+- **Backend.** `Reangle {asset_id, move, method: auto | angles_lora | klein_prompt, prompt_text, seeds, te_id}`; `auto` takes the first
+  offered spec (by `order`) whose `recipes.reangle_moves` lists the move — Klein 9B for top-down / close-up / wide (Klein 4B under `open`,
+  Klein 9B being flux-nc), the new `qwen-edit-2509-fp8` spec (`specs/qwen_edit.toml`, graph `qwen_edit`; roster entries for the fp8
+  transformer, the Qwen2.5-VL encoder, the VAE, lightx2v's Lightning and dx8152's angles LoRA, all Apache → both variants) for the
+  rotations. `graphs.build_reangle` ports E12's graphs (A: `TextEncodeQwenImageEditPlus` + Lightning + the angles LoRA at 1 MP, AuraFlow
+  shift 3, CFGNorm; C2: `ReferenceLatent` + the strict-reference prompt at the source's size); `pipeline.prepare_reangle` uploads the
+  source, the plan names the resolved method and its measured seconds, the finisher stamps `lineage_kind = reangle` with the source as
+  parent; `/capabilities.reangle {moves, methods, auto}`. The object_info fixture grew the four Qwen classes. `Engine.run`-style
+  variant awareness: every job-code reader asks `reangle_model_id(recipe, variant)`.
+- **Frontend.** A Generate rail tab **New angle** (`suites/generate/AngleTab.tsx`): the source slot (drop with D71 verdicts from
+  `dropRules.angleDrop`; clips refused), a five-button move pad, a method select that names Auto's pick, one optional sentence,
+  candidates 1–4, the foot's **New angle ▶** with the method and ≈ seconds or the reason it is disabled. Entry points: `cat.start.angle`
+  in the tile menu's "Start from this image", the Inspector's card and the loupe hub; `openWith(…, {suite: 'generate', slot: 'angle'})`.
+- **Checks.** `test_reangle_d82.py` (8: auto per variant, both graphs against the engine contract, weights, lineage, plan, preview,
+  capabilities under `open`), 2 unit (recipe body, drop rule), a smoke scenario (tile → the Angle tab → Wide → job → the asset with
+  `reangle` lineage on the fake engine): 243 offline, 173 unit, smoke 14/14, lint 100, build clean, settings audit and model-literals
+  clean, OpenAPI + TS types regenerated.
+- **Rig acceptance** (`scripts/reangle_acceptance.py`: the ten E12 sources imported, 50 `Reangle` jobs through `POST /jobs`,
+  19:16–19:29): angles LoRA 20/20 done, warm median 26.4 s (bar 60), cold 39.5 s (bar 180; the engine started on that job), ArcFace
+  identity median 0.66 (14/19 ≥ 0.5), lineage 20/20; Klein 30/30, warm 6.2 s, cold 21.4 s, lineage 30/30, identity median 0.28 over the
+  21 faces ArcFace found — the framing moves are where faces are tiny (top-down, wide) or restyled (close-up), so the number is weaker
+  than E12's all-moves 0.56; on the sheets the close-ups keep the person 9/10, the wide shots 9/10 (03 loses the figures), left 7/10
+  with this seed. Sheets in `engine/spikes/out/reangle/`. The plan's orbit sphere became a pad: the methods know five moves, not a
+  continuous orbit. 09 §3f and 08 §9 P14 record the build.

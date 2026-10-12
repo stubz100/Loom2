@@ -139,3 +139,14 @@ describe('@mentions and notes', () => {
     expect(useGenerate.getState().panel.refs).toEqual([{ asset_id: 'ast_1', note: undefined }])
   })
 })
+
+// P14 (D82): the Angle tab's recipe — one random seed per candidate, the move and the method as chosen
+describe('reangleRecipe', () => {
+  it('builds the reangle body and refuses without a source', async () => {
+    const { reangleRecipe, DEFAULT_ANGLE } = await import('./generateStore')
+    const r = reangleRecipe({ ...DEFAULT_ANGLE, asset_id: 'ast_1', move: 'wide', count: 3, prompt_text: ' a harbour ' })
+    expect(r).toEqual({ kind: 'reangle', asset_id: 'ast_1', move: 'wide', method: 'auto', prompt_text: 'a harbour', seeds: [0, 0, 0] })
+    expect(reangleRecipe({ ...DEFAULT_ANGLE, asset_id: 'ast_1', count: 9 }).seeds).toHaveLength(4)
+    expect(() => reangleRecipe(DEFAULT_ANGLE)).toThrow()
+  })
+})

@@ -117,6 +117,22 @@ ROSTER: list[RosterEntry] = [
                 repo="Kijai/LTX2.3_comfy", file="vae/LTX23_audio_vae_bf16.safetensors", license="ltx-2.x community", approx_gb=0.34, note="core 0.38 needs it on LTXVEmptyLatentAudio"),
     RosterEntry(id="ltx23-upscaler-x2", name="ltx-2.3-spatial-upscaler-x2-1.1.safetensors", folder="upscale_models", family="ltx23", role="upscaler",
                 repo="Lightricks/LTX-2.3", file="ltx-2.3-spatial-upscaler-x2-1.1.safetensors", license="ltx-2.x community", approx_gb=0.93),
+    # ---- Qwen-Image-Edit 2509 (P14 / D82): E12's angles method — the fp8 transformer, its Qwen2.5-VL encoder and VAE, lightx2v's Lightning
+    #      and dx8152's Multiple-angles LoRA; all Apache-2.0, so `full` and `open` ----
+    RosterEntry(id="qwen-edit-2509-fp8", name="qwen_image_edit_2509_fp8_e4m3fn.safetensors", folder="diffusion_models", family="qwen_image", role="transformer",
+                repo="Comfy-Org/Qwen-Image-Edit_ComfyUI", file="split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=20.4, note="E12 method A (D77): a new viewpoint with the Multiple-angles LoRA; 31.6 s warm, 27 s cold from F:"),
+    RosterEntry(id="qwen25vl-7b-fp8", name="qwen_2.5_vl_7b_fp8_scaled.safetensors", folder="text_encoders", family="qwen_image", role="text_encoder",
+                repo="Comfy-Org/Qwen-Image_ComfyUI", file="split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=9.4),
+    RosterEntry(id="qwen-image-vae", name="qwen_image_vae.safetensors", folder="vae", family="qwen_image", role="vae",
+                repo="Comfy-Org/Qwen-Image_ComfyUI", file="split_files/vae/qwen_image_vae.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=0.25),
+    RosterEntry(id="qwen-edit-2509-lightning-4", name="Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors", folder="loras", family="qwen_image", role="lora",
+                repo="lightx2v/Qwen-Image-Lightning", file="Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=0.85),
+    RosterEntry(id="qwen-edit-2509-angles", name="Qwen-Edit-2509-Multiple-angles.safetensors", folder="loras", family="qwen_image", role="lora",
+                repo="dx8152/Qwen-Edit-2509-Multiple-angles", file="Qwen-Edit-2509-Multiple-angles.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA"),
     # ---- retired by spikes (D30: deleted, re-fetchable) ----
     RosterEntry(id="flux1-fill-dev", name="flux1-fill-dev.safetensors", folder="diffusion_models", family="flux1", role="transformer",
                 repo="black-forest-labs/FLUX.1-Fill-dev", file="flux1-fill-dev.safetensors", license="flux-nc (gated)", approx_gb=22.2, retired="E8 2026-10-05"),

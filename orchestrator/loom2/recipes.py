@@ -225,8 +225,49 @@ class I2V(BaseModel):
     loras: list[LoraRef] = Field(default_factory=list)
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V
+MOVES = ("left45", "right45", "topdown", "closeup", "wide")
+Move = Literal["left45", "right45", "topdown", "closeup", "wide"]
+
+
+class Reangle(BaseModel):
+    """P14 (D82): a new viewpoint of an asset. E12 (D77) decided the pair: the rotations through dx8152's angles LoRA on Qwen-Image-Edit
+    2509, the framing moves (top-down, close-up, wide) through Klein 9B with a strict-reference prompt; `auto` picks by move from the
+    specs' `recipes.reangle_moves`. The result is an asset next to the source (lineage `reangle`)."""
+    kind: Literal["reangle"] = "reangle"
+    asset_id: str
+    move: Move
+    method: Literal["auto", "angles_lora", "klein_prompt"] = "auto"
+    prompt_text: str = ""                         # an extra sentence after the move's instruction (what the scene is, what to keep)
+    seeds: list[int] = Field(default_factory=lambda: [0])
+    te_id: str | None = None                      # Klein's encoder override (D31); the angles LoRA has one encoder
+
+    @property
+    def model_id(self) -> str:
+        """The model the resolved method runs under `full`; the job code asks `reangle_model_id(recipe, variant)` (under `open` the
+        framing moves run Klein 4B — Klein 9B is flux-nc, D26)."""
+        return reangle_model_id(self)
+
+
+def reangle_method(recipe: Reangle, variant: str = "full") -> str:
+    """`auto` → the first offered spec (by `order`) whose `reangle_moves` lists the move; an explicit method runs any move."""
+    if recipe.method != "auto":
+        return recipe.method
+    for spec in registry.reangle_specs():
+        if registry.offered(spec, variant) and recipe.move in spec.recipes.reangle_moves:
+            return spec.recipes.reangle or "angles_lora"
+    return "klein_prompt"
+
+
+def reangle_model_id(recipe: Reangle, variant: str = "full") -> str:
+    method = reangle_method(recipe, variant)
+    for spec in registry.reangle_specs():
+        if spec.recipes.reangle == method and registry.offered(spec, variant):
+            return spec.id
+    raise ValueError(f"no model this build offers implements the angles method {method!r}")
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle
 
 
 class RecipeEnvelope(BaseModel):
@@ -258,4 +299,6 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return inpaint_model_id(recipe, variant)   # C10: the model that runs, not the one the panel named
     if isinstance(recipe, Upscale) and recipe.refine:
         return recipe.refine_model_id            # the big model decides the swap, not the 70 MB upscaler
+    if isinstance(recipe, Reangle):
+        return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
     return recipe.model_id

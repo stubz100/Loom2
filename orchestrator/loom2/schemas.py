@@ -214,6 +214,25 @@ class SessionInfo(Out):
     media_key: str
 
 
+class ReangleMethodCaps(Open):
+    """P14 (D82): one angles method — the model it runs, its health, measured seconds and the moves it is good for."""
+    model_id: str
+    label: str
+    short: str
+    hint: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    moves: list[str]
+    approx_gb: float
+
+
+class ReangleCaps(Open):
+    moves: list[str]
+    methods: dict[str, ReangleMethodCaps]
+    auto: dict[str, str]                           # move → the method `auto` picks
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -232,6 +251,7 @@ class Capabilities(Open):
     tiers: dict[str, dict[str, tuple[int, int]]]
     refine_edge: RefineEdgeCaps
     content_aware: ContentAwareCaps
+    reangle: ReangleCaps                           # P14 (D82)
 
 
 class MissingWeight(Open):

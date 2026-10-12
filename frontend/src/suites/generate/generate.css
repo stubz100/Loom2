@@ -80,3 +80,11 @@
 .ref-notes .n { flex: none; min-width: 18px; text-align: center; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 11px; border-radius: 4px; }
 .ref-notes input { flex: 1; min-width: 0; }
 .ref-warn { color: var(--error); font-size: 12px; margin: 6px 0 0; }
+/* P14 (D82): the Angle tab — one source slot, the move pad, the method line */
+.angle-tab { display: grid; gap: 8px; }
+.angle-tab .ref-slot.source { aspect-ratio: 16 / 9; max-width: 320px; }
+.angle-pad { display: grid; gap: 4px; justify-items: center; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg2); }
+.angle-pad .row { display: flex; gap: 4px; }
+.angle-pad button { min-width: 120px; }
+.angle-count { display: inline-flex; align-items: center; gap: 8px; }
+.angle-count span { min-width: 1.5em; text-align: center; font-weight: 600; }

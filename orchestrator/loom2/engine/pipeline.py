@@ -22,11 +22,11 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale, warm_group
+from ..recipes import I2I, I2V, T2I, Inpaint, Reangle, Segment, Upscale, reangle_method, reangle_model_id, warm_group
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
-                     estimate_vram_gb, i2v_params, recipe_weights)
+                     estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights)
 
 if TYPE_CHECKING:
     from ..queue import JobQueue, JobRecord
@@ -67,12 +67,23 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("document")
     if isinstance(recipe, I2V):
         needs.append("frames")
+    if isinstance(recipe, Reangle):
+        needs.append("source")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
         est = estimate_seconds(recipe, history)
     elif isinstance(recipe, I2V):
         params = i2v_params(recipe)
         est = estimate_i2v_seconds(recipe)
+    elif isinstance(recipe, Reangle):                                 # P14 (D82): the method `auto` resolved to in this build, and its measured time
+        try:
+            mid = reangle_model_id(recipe, variant)
+        except ValueError as e:
+            raise CompileError(str(e)) from e
+        spec = registry.get(mid)
+        params = {"move": recipe.move, "method": reangle_method(recipe, variant), "model_id": mid, "prompt": reangle_prompt(recipe, variant),
+                  "label": spec.label if spec else mid}
+        est = {"seconds": spec.estimates.base_seconds if spec else None, "source": "baseline (E12 2026-10-12, warm)"}
     else:
         keep = ("mode", "model_id", "source", "strength", "margin_pct", "min_size", "feather", "expand", "blend", "refine", "refine_model_id", "as_layer", "op", "max_size")
         params = {k: v for k, v in recipe.model_dump().items() if k in keep}
@@ -98,6 +109,8 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
         return {"start": img, "end": img if recipe.end_asset else None, "beats": {b.asset_id: img for b in recipe.beats}}
     if isinstance(recipe, DOCUMENT_KINDS):
         return {"image": img, "mask": img, "w": 1024, "h": 576, "points": [], "box": None}
+    if isinstance(recipe, Reangle):
+        return {"image": img, "w": 1024, "h": 576}
     return {}
 
 
@@ -156,6 +169,11 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     if isinstance(recipe, I2V):                                        # M6: start / end / beat frames go in through /upload/image
         q.progress(job, "uploading frames")
         inputs = await prepare_i2v(job, recipe, q)
+        object_info = await q.object_info_refresh()
+        q.check_cancel(job)
+    if isinstance(recipe, Reangle):                                    # P14: the source asset goes in through /upload/image
+        q.progress(job, "uploading source")
+        inputs = await prepare_reangle(job, recipe, q)
         object_info = await q.object_info_refresh()
         q.check_cancel(job)
     compiled = compile_recipe(recipe, q.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs or None,
@@ -282,6 +300,20 @@ async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Seg
 
 
 # ---- M6 video jobs (11 §10): the frames in ----------------------------------------------------------------------------------------
+async def prepare_reangle(job: JobRecord, recipe: Reangle, q: JobQueue) -> dict[str, Any]:
+    """Upload the source asset as PNG (≤ 2048 px, the angles graph scales to 1 MP itself) and report its size for Klein's output latent."""
+    a = q.catalogue.get(recipe.asset_id)
+    src = q.catalogue.abs_path(a) if a else None
+    if not src or not Path(src).is_file():
+        raise ValueError(f"the source image ({recipe.asset_id}) is missing from the Catalogue")
+    fitted = await asyncio.to_thread(fit_reference, q, Path(src), 2048, f"angle-{recipe.asset_id}")
+    with Image.open(fitted) as im:
+        w, h = im.size
+    name = await q.engine.client.upload_image(fitted)
+    job.log_tail.append(f"source uploaded: {w}×{h}, move {recipe.move}, method {reangle_method(recipe, q.app.settings.variant)}")
+    return {"image": name, "w": w, "h": h}
+
+
 async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any]:
     """Upload the start, end and beat frames as PNG (the graph's ImageScale fits them to the clip size)."""
     names: dict[str, Any] = {"beats": {}}

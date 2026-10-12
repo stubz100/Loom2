@@ -801,6 +801,9 @@
             "title": "Models",
             "type": "object"
           },
+          "reangle": {
+            "$ref": "#/components/schemas/ReangleCaps"
+          },
           "recipes": {
             "items": {
               "type": "string"
@@ -902,7 +905,8 @@
           "advanced",
           "tiers",
           "refine_edge",
-          "content_aware"
+          "content_aware",
+          "reangle"
         ],
         "title": "Capabilities",
         "type": "object"
@@ -6684,6 +6688,112 @@
         "title": "RasterLayer",
         "type": "object"
       },
+      "ReangleCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "auto": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Auto",
+            "type": "object"
+          },
+          "methods": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ReangleMethodCaps"
+            },
+            "title": "Methods",
+            "type": "object"
+          },
+          "moves": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Moves",
+            "type": "array"
+          }
+        },
+        "required": [
+          "moves",
+          "methods",
+          "auto"
+        ],
+        "title": "ReangleCaps",
+        "type": "object"
+      },
+      "ReangleMethodCaps": {
+        "additionalProperties": true,
+        "description": "P14 (D82): one angles method — the model it runs, its health, measured seconds and the moves it is good for.",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "moves": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Moves",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "label",
+          "short",
+          "health",
+          "missing",
+          "moves",
+          "approx_gb"
+        ],
+        "title": "ReangleMethodCaps",
+        "type": "object"
+      },
       "RebuildReply": {
         "properties": {
           "indexed": {
@@ -6813,6 +6923,25 @@
             "default": false,
             "title": "Inpaint Hero",
             "type": "boolean"
+          },
+          "reangle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reangle"
+          },
+          "reangle_moves": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reangle Moves",
+            "type": "array"
           },
           "segment": {
             "default": [],

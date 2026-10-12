@@ -65,6 +65,7 @@
  "classes": [
   "BasicGuider",
   "CFGGuider",
+  "CFGNorm",
   "CLIPLoader",
   "CLIPLoaderGGUF",
   "CLIPTextEncode",
@@ -84,6 +85,7 @@
   "ImageCrop",
   "ImagePadForOutpaint",
   "ImageScale",
+  "ImageScaleToTotalPixels",
   "ImageToMask",
   "ImageUpscaleWithModel",
   "InpaintModelConditioning",
@@ -110,6 +112,7 @@
   "LoraLoader",
   "LoraLoaderModelOnly",
   "MaskToImage",
+  "ModelSamplingAuraFlow",
   "ModelSamplingFlux",
   "ModelSamplingSD3",
   "PreviewImage",
@@ -122,6 +125,7 @@
   "SaveImage",
   "SaveVideo",
   "SolidMask",
+  "TextEncodeQwenImageEditPlus",
   "ThresholdMask",
   "UNETLoader",
   "UnetLoaderGGUF",
@@ -5793,6 +5797,280 @@
     "superres",
     "increase resolution"
    ],
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "TextEncodeQwenImageEditPlus": {
+   "input": {
+    "required": {
+     "clip": [
+      "CLIP",
+      {}
+     ],
+     "prompt": [
+      "STRING",
+      {
+       "multiline": true,
+       "dynamicPrompts": true
+      }
+     ]
+    },
+    "optional": {
+     "vae": [
+      "VAE",
+      {}
+     ],
+     "image1": [
+      "IMAGE",
+      {}
+     ],
+     "image2": [
+      "IMAGE",
+      {}
+     ],
+     "image3": [
+      "IMAGE",
+      {}
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "clip",
+     "prompt"
+    ],
+    "optional": [
+     "vae",
+     "image1",
+     "image2",
+     "image3"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "CONDITIONING"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "CONDITIONING"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "TextEncodeQwenImageEditPlus",
+   "display_name": "Text Encode Qwen Image Edit Plus",
+   "description": "",
+   "python_module": "comfy_extras.nodes_qwen",
+   "category": "model/conditioning/qwen image",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "ModelSamplingAuraFlow": {
+   "input": {
+    "required": {
+     "model": [
+      "MODEL"
+     ],
+     "shift": [
+      "FLOAT",
+      {
+       "default": 1.73,
+       "min": 0.0,
+       "max": 100.0,
+       "step": 0.01
+      }
+     ]
+    },
+    "optional": {
+     "sampling": [
+      [
+       "flow",
+       "img_to_img_velocity"
+      ],
+      {
+       "default": "flow",
+       "advanced": true
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "model",
+     "shift"
+    ],
+    "optional": [
+     "sampling"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "MODEL"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "MODEL"
+   ],
+   "name": "ModelSamplingAuraFlow",
+   "display_name": "ModelSamplingAuraFlow",
+   "description": "",
+   "python_module": "comfy_extras.nodes_model_advanced",
+   "category": "model/patch",
+   "output_node": false,
+   "has_intermediate_output": false,
+   "search_aliases": []
+  },
+  "CFGNorm": {
+   "input": {
+    "required": {
+     "model": [
+      "MODEL",
+      {}
+     ],
+     "strength": [
+      "FLOAT",
+      {
+       "default": 1.0,
+       "min": 0.0,
+       "max": 100.0,
+       "step": 0.01
+      }
+     ]
+    },
+    "optional": {
+     "pre_cfg": [
+      "BOOLEAN",
+      {
+       "tooltip": "If true, rescale the combined noise BEFORE the sampler's CFG combine, without clamping (can amplify). Matches the norm-scaled CFG used by models like Lens. Default false keeps the original post-CFG x0-space attenuate-only behavior.",
+       "default": false
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "model",
+     "strength"
+    ],
+    "optional": [
+     "pre_cfg"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "MODEL"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "patched_model"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "CFGNorm",
+   "display_name": null,
+   "description": "",
+   "python_module": "comfy_extras.nodes_cfg",
+   "category": "advanced/guidance",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": true,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "ImageScaleToTotalPixels": {
+   "input": {
+    "required": {
+     "image": [
+      "IMAGE",
+      {}
+     ],
+     "upscale_method": [
+      "COMBO",
+      {
+       "multiselect": false,
+       "options": [
+        "nearest-exact",
+        "bilinear",
+        "area",
+        "bicubic",
+        "lanczos"
+       ]
+      }
+     ],
+     "megapixels": [
+      "FLOAT",
+      {
+       "default": 1.0,
+       "min": 0.01,
+       "max": 16.0,
+       "step": 0.01
+      }
+     ],
+     "resolution_steps": [
+      "INT",
+      {
+       "advanced": true,
+       "default": 1,
+       "min": 1,
+       "max": 256
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "image",
+     "upscale_method",
+     "megapixels",
+     "resolution_steps"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "IMAGE"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "IMAGE"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "ImageScaleToTotalPixels",
+   "display_name": "Scale Image to Total Pixels",
+   "description": "",
+   "python_module": "comfy_extras.nodes_post_processing",
+   "category": "image/upscaling",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
    "essentials_category": null,
    "has_intermediate_output": false
   }

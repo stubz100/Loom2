@@ -96,6 +96,7 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span className="gap" />
         <CommandButton id="cat.edit" text label="Edit" />
         <CommandButton id="cat.reference" text label="Reference" />
+        <CommandButton id="cat.start.angle" text label="New angle" />
         <MenuButton label="Animate" icon={Film} text items={() => [{ cmd: 'cat.animate', label: 'As the start frame' }, { cmd: 'cat.animateEnd', label: 'As the end frame' }]} />
         <span className="gap secondary" />
         <span className="secondary"><CommandRow ids={['cat.rerun', 'cat.variations', 'cat.duplicate']} /></span>

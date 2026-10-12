@@ -38,7 +38,8 @@ def fake_models(root: Path) -> list[str]:
     if spec is None:
         raise SystemExit(f"no model labelled {SMOKE_MODEL_LABEL!r} in the registry")
     written = []
-    for rid in spec.weights():
+    specs = [spec, *registry.reangle_specs()]                         # P14: the Angle tab's two methods are "present" too (the fake engine answers any graph)
+    for rid in dict.fromkeys(r for s in specs for r in s.weights()):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name
         p.parent.mkdir(parents=True, exist_ok=True)

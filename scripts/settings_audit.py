@@ -41,6 +41,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "te_devices": ["recipe:T2I.te_device", "recipe:I2I.te_device", "recipe:Inpaint.te_device", "recipe:Upscale.te_device"],
     "te_alternates": ["recipe:T2I.te_id", "recipe:I2I.te_id", "recipe:Inpaint.te_id", "recipe:Upscale.te_id"],
     "advanced": ["recipe:T2I.base_shift", "recipe:T2I.max_shift", "recipe:T2I.tile_size"],
+    "reangle": ["recipe:Reangle.move", "recipe:Reangle.method", "recipe:Reangle.te_id"],   # P14 (D82): the Angle tab's moves and methods
     "tiers": ["recipe:T2I.tier"],
     "tools": ["recipe:Upscale.model_id", "recipe:Segment.model_id"],          # D65: the Edit tools from the registry
     "defaults": ["recipe:T2I.model_id", "recipe:I2I.model_id", "recipe:Inpaint.model_id", "recipe:Upscale.model_id", "recipe:Segment.model_id", "recipe:I2V.model_id"],

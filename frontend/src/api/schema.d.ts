@@ -1666,6 +1666,7 @@ export interface components {
             models: {
                 [key: string]: components["schemas"]["ImageModelCaps"];
             };
+            reangle: components["schemas"]["ReangleCaps"];
             /** Recipes */
             recipes: string[];
             refine_edge: components["schemas"]["RefineEdgeCaps"];
@@ -4089,6 +4090,47 @@ export interface components {
              */
             y: number;
         };
+        /** ReangleCaps */
+        ReangleCaps: {
+            /** Auto */
+            auto: {
+                [key: string]: string;
+            };
+            /** Methods */
+            methods: {
+                [key: string]: components["schemas"]["ReangleMethodCaps"];
+            };
+            /** Moves */
+            moves: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ReangleMethodCaps
+         * @description P14 (D82): one angles method — the model it runs, its health, measured seconds and the moves it is good for.
+         */
+        ReangleMethodCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            /** Label */
+            label: string;
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id: string;
+            /** Moves */
+            moves: string[];
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** RebuildReply */
         RebuildReply: {
             /** Indexed */
@@ -4152,6 +4194,13 @@ export interface components {
              * @default false
              */
             inpaint_hero?: boolean;
+            /** Reangle */
+            reangle?: string | null;
+            /**
+             * Reangle Moves
+             * @default []
+             */
+            reangle_moves?: string[];
             /**
              * Segment
              * @default []

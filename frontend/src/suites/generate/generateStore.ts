@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
-import { isT2IPreview, type Asset, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
+import { isDocumentPreview, isT2IPreview, type Asset, type DocumentPreview, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
 import { refDrop } from '../../frame/dropRules'
@@ -130,6 +130,23 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
 
 /** D66: a submission from the Generate panel; its results show as "this batch" in Generate's grid. */
 export const GENERATE_ORIGIN: JobOrigin = { suite: 'generate', surface: 'results' }
+
+// ---- P14 (D82): the Angle tab — a new viewpoint of one asset; the server picks E12's method per move (`auto`) and says which
+export type Move = 'left45' | 'right45' | 'topdown' | 'closeup' | 'wide'
+export type AngleMethod = 'auto' | 'angles_lora' | 'klein_prompt'
+export interface AngleState { asset_id: string | null; move: Move; method: AngleMethod; prompt_text: string; count: number }
+export const MOVES: { id: Move; label: string; hint: string }[] = [
+  { id: 'left45', label: 'Rotate left 45°', hint: 'the camera orbits to the subject\'s left' }, { id: 'right45', label: 'Rotate right 45°', hint: 'the camera orbits to the subject\'s right' },
+  { id: 'topdown', label: 'Top-down', hint: 'from above, looking straight down' }, { id: 'closeup', label: 'Close-up', hint: 'in to the face and shoulders' },
+  { id: 'wide', label: 'Wide', hint: 'back, the whole scene around the subject' },
+]
+export const DEFAULT_ANGLE: AngleState = { asset_id: null, move: 'left45', method: 'auto', prompt_text: '', count: 1 }
+export const ANGLE_ORIGIN: JobOrigin = { suite: 'generate', surface: 'angle' }
+/** The `reangle` recipe body: one seed per candidate (random), the move and the method as chosen (`auto` resolves on the server). */
+export function reangleRecipe(a: AngleState): { kind: 'reangle'; asset_id: string; move: Move; method: AngleMethod; prompt_text: string; seeds: number[] } {
+  if (!a.asset_id) throw new Error('no source')
+  return { kind: 'reangle', asset_id: a.asset_id, move: a.move, method: a.method, prompt_text: a.prompt_text.trim(), seeds: Array.from({ length: Math.max(1, Math.min(4, a.count)) }, () => 0) }
+}
 /** The batch a job belongs to, as Generate's "this batch" view names it (a single job is its own batch). */
 export const batchOf = (j: Pick<Job, 'id' | 'batch_id'>): string => j.batch_id ?? j.id
 
@@ -137,6 +154,11 @@ export interface GenerateState {
   panel: Panel; preview: Preview | null; previewError: string | null; previewing: boolean
   presets: Preset[]; lastPreset: string | null; snippets: Snippet[]
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
+  angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
+  setAngle: (patch: Partial<AngleState>) => void
+  refreshAnglePreview: () => Promise<void>
+  /** P14: queue the new angle(s) of the source; results land in Generate's batch strip with lineage `reangle`. */
+  generateAngle: (origin?: JobOrigin) => Promise<Job[] | null>
   set: (patch: Partial<Panel>) => void
   setTree: (patch: Partial<Tree>) => void
   setSubject: (i: number, patch: Partial<Subject>) => void
@@ -170,6 +192,7 @@ export interface GenerateState {
 
 let previewTimer: number | null = null
 let previewSeq = 0
+let anglePreviewSeq = 0
 
 /** D71 (P11): references from a drag (the slots, the Generate tab): images only, no duplicates, capped by the model's `max_refs`. */
 export function refDropFor(p: DragPayload) {
@@ -187,6 +210,31 @@ export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
       panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, snippets: [], show: 'batch', lastBatch: null, pinned: [],
+      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null,
+
+      setAngle: (patch) => { set({ angle: { ...get().angle, ...patch } }); void get().refreshAnglePreview() },
+      refreshAnglePreview: async () => {
+        const a = get().angle
+        if (!a.asset_id) { set({ anglePreview: null, anglePreviewError: null }); return }
+        const seq = ++anglePreviewSeq
+        try {
+          const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: reangleRecipe(a) } }))
+          if (seq === anglePreviewSeq) set({ anglePreview: isDocumentPreview(pv) ? pv : null, anglePreviewError: null })
+        } catch (e) {
+          if (seq === anglePreviewSeq) set({ anglePreview: null, anglePreviewError: (e as ApiError).detail ?? String(e) })
+        }
+      },
+      generateAngle: async (origin = ANGLE_ORIGIN) => {
+        const s = useSession.getState()
+        try {
+          const jobs = await unwrap(http.POST('/jobs', { body: { recipe: reangleRecipe(get().angle), stage: false, origin } }))
+          const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
+          set({ lastBatch: batch, show: 'batch' })
+          s.toast(`Queued ${jobs.jobs.length} new angle${jobs.jobs.length > 1 ? 's' : ''}`, 'success')
+          await s.refreshAll()
+          return jobs.jobs
+        } catch (e) { s.toast(`New angle failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
+      },
 
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); schedulePreview(get) },
       setTree: (patch) => { get().set({ tree: { ...get().panel.tree, ...patch } }) },

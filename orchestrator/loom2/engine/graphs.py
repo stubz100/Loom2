@@ -10,7 +10,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Segment, Upscale, inpaint_model_id
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, Segment, Upscale,
+                       inpaint_model_id, reangle_method, reangle_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
 from ..models.spec import ModelSpec
@@ -594,6 +595,85 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
+# ---- P14 (D82): a new viewpoint of an asset — the E12 pair (D77), ported from engine/spikes/e12_angles.py --------------------
+# The angles LoRA's own instructions (dx8152; Chinese, no trigger word) and the Klein prompt shape that kept identity in E12 (C2).
+ANGLE_INSTRUCTIONS: dict[str, str] = {
+    "left45": "将镜头向左旋转45度", "right45": "将镜头向右旋转45度", "topdown": "将镜头转为俯视", "closeup": "将镜头转为特写镜头", "wide": "将镜头转为广角镜头",
+}
+KLEIN_VIEWS: dict[str, tuple[str, str]] = {
+    "left45": ("a 45-degree front three-quarter view from the subject's left", "a front three-quarter angle 45 degrees to the left, eye-level"),
+    "right45": ("a 45-degree front three-quarter view from the subject's right", "a front three-quarter angle 45 degrees to the right, eye-level"),
+    "topdown": ("a high-angle top-down view", "directly above, looking straight down"),
+    "closeup": ("a close-up detail view of the main subject's face and shoulders", "close up"),
+    "wide": ("a wide shot showing the whole scene around the subject", "far back, a wide angle"),
+}
+KLEIN_VIEW_PROMPT = ("Using the input image as the strict visual reference, create {view} of the same subject. Preserve the exact identity, "
+                     "proportions, silhouette, materials, colours, clothing, markings and design language from the input image. Preserve the "
+                     "same expression, pose, posture, gesture and object positions; the subject stays in the same moment, only viewed from "
+                     "{angle}. Photorealistic, same subject, same pose, same setting and lighting, only the viewing angle changes.")
+
+
+def reangle_prompt(recipe: Reangle, variant: str = "full") -> str:
+    """The exact text the engine gets: the method's own instruction for the move, then the recipe's sentence (if any)."""
+    extra = recipe.prompt_text.strip()
+    if reangle_method(recipe, variant) == "angles_lora":
+        return ANGLE_INSTRUCTIONS[recipe.move] + (f"，{extra}" if extra else "")
+    view, angle = KLEIN_VIEWS[recipe.move]
+    return KLEIN_VIEW_PROMPT.format(view=view, angle=angle) + (f" {extra}" if extra else "")
+
+
+def build_reangle(recipe: Reangle, roster: Roster, seed: int, out_prefix: str, image_name: str, w: int, h: int, variant: str = "full") -> Compiled:
+    """angles_lora: Qwen-Image-Edit 2509 fp8 + Lightning 4-step + the Multiple-angles LoRA, the source through TextEncodeQwenImageEditPlus and
+    as the latent (1 MP, the LoRA's training size). klein_prompt: Klein 9B (4B under `open`), the source as ReferenceLatent, the
+    strict-reference prompt, the output at the source's size. Both measured in E12 (journal 2026-10-12)."""
+    method = reangle_method(recipe, variant)
+    try:
+        spec = registry.get(reangle_model_id(recipe, variant))
+    except ValueError as e:
+        raise CompileError(str(e)) from e
+    if spec is None or spec.recipes.reangle != method:
+        raise CompileError(f"no spec implements the angles method {method!r}")
+    prompt = reangle_prompt(recipe, variant)
+    g: dict[str, Any] = {"100": {"class_type": "LoadImage", "inputs": {"image": image_name}}}
+    if method == "angles_lora":
+        _, unet = roster.require(spec.id)
+        _, te = roster.require(spec.roles.te.default)                  # type: ignore[union-attr]
+        _, vae = roster.require(spec.roles.vae or "")
+        _, lightning = roster.require(spec.roles.extra["lightning"])
+        _, angles = roster.require(spec.roles.extra["angles"])
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": spec.sampling.weight_dtype}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "qwen_image", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lightning, "strength_model": 1.0}}
+        g["41"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["4", 0], "lora_name": angles, "strength_model": 1.0}}
+        g["5"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["41", 0], "shift": float(spec.sampling.model_shift or 3.0)}}
+        g["6"] = {"class_type": "CFGNorm", "inputs": {"model": ["5", 0], "strength": 1.0}}
+        g["20"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "megapixels": 1.0, "resolution_steps": 8}}
+        g["7"] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["2", 0], "prompt": prompt, "vae": ["3", 0], "image1": ["20", 0]}}
+        g["8"] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {"clip": ["2", 0], "prompt": "", "vae": ["3", 0], "image1": ["20", 0]}}
+        g["9"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["20", 0], "vae": ["3", 0]}}
+        g["10"] = {"class_type": "KSampler", "inputs": {"model": ["6", 0], "seed": int(seed), "steps": int(spec.sampling.steps), "cfg": float(spec.sampling.cfg),
+                                                      "sampler_name": spec.sampling.sampler, "scheduler": spec.sampling.scheduler,
+                                                      "positive": ["7", 0], "negative": ["8", 0], "latent_image": ["9", 0], "denoise": 1.0}}
+    else:
+        model_link = _flux2_loaders(g, roster, spec.id, spec, None, recipe.te_id)
+        mult = spec.geometry.size_mult
+        ow, oh = max(mult, (w // mult) * mult), max(mult, (h // mult) * mult)
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}}
+        g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
+        g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
+        g["9"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": ow, "height": oh, "batch_size": 1}}
+        g["10"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": int(spec.sampling.steps), "cfg": float(spec.sampling.cfg),
+                                                      "sampler_name": spec.sampling.sampler, "scheduler": spec.sampling.scheduler,
+                                                      "positive": ["8", 0], "negative": ["6", 0], "latent_image": ["9", 0], "denoise": 1.0}}
+    g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": spec.id, "method": method, "method_requested": recipe.method, "move": recipe.move, "steps": int(spec.sampling.steps),
+               "cfg": float(spec.sampling.cfg), "seed": int(seed), "source_size": [w, h]}                 # what was asked and what ran
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
 def upscale_factor(model_id: str) -> int:
     spec = registry.get(model_id)
     if spec is None or spec.recipes.upscale_factor is None:
@@ -718,6 +798,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
         if "start" not in i:
             raise CompileError("i2v needs the uploaded start frame (queue._prepare_i2v_inputs)")
         c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"))
+    elif isinstance(recipe, Reangle):
+        i = inputs or {}
+        if "image" not in i:
+            raise CompileError("reangle needs the uploaded source (pipeline.prepare_reangle)")
+        c = build_reangle(recipe, roster, seed, out_prefix, i["image"], int(i.get("w", 0)), int(i.get("h", 0)), variant)
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -738,6 +823,8 @@ def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, vari
         return _vram(recipe.refine_model_id)
     if isinstance(recipe, Inpaint):
         return _vram(inpaint_model_id(recipe, variant))               # C10: Fill Hero runs dev, whatever the panel named
+    if isinstance(recipe, Reangle):
+        return _vram(reangle_model_id(recipe, variant))
     return _vram(recipe.model_id)
 
 
@@ -758,6 +845,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
     ids: list[str] = []
     if isinstance(recipe, T2I):
         ids += model_ids(recipe.model_id, bool(recipe.turbo))
+    elif isinstance(recipe, Reangle):
+        ids += model_ids(reangle_model_id(recipe, variant), False)     # the spec's extras carry the Lightning and angles LoRAs
     elif isinstance(recipe, Inpaint):
         ids += model_ids(inpaint_model_id(recipe, variant), True)      # _flux2_loaders chains the spec's Turbo LoRA in the Edit graphs
     elif isinstance(recipe, I2I):

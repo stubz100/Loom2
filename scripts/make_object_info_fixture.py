@@ -33,6 +33,8 @@ CLASSES = [
     "LTXVCropGuides", "LTXVPreprocess",
     # upscale / tools
     "UpscaleModelLoader", "ImageUpscaleWithModel",
+    # P14 (D82): Qwen-Image-Edit 2509 + the angles LoRA
+    "TextEncodeQwenImageEditPlus", "ModelSamplingAuraFlow", "CFGNorm", "ImageScaleToTotalPixels",
 ]
 
 

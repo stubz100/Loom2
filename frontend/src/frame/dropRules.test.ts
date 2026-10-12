@@ -88,3 +88,14 @@ describe('resolveTarget', () => {
     expect(resolveTarget(leaf, pay(img('a')), (e) => map.get(e))).toEqual({ el: mid, verdict: null })
   })
 })
+
+// P14 (D82): the Angle tab's source slot
+describe('angleDrop', () => {
+  it('takes one image, says which when several, refuses clips', async () => {
+    const { angleDrop } = await import('./dropRules')
+    expect(angleDrop([{ kind: 'asset', id: 'a', media: 'image' }])).toEqual({ ok: true, label: 'Use as the source' })
+    expect(angleDrop([{ kind: 'asset', id: 'a' }, { kind: 'asset', id: 'b' }])).toEqual({ ok: true, label: 'Use the first image as the source' })
+    expect(angleDrop([{ kind: 'asset', id: 'v', media: 'video' }])).toEqual({ ok: false, reason: "A clip can't get a new angle" })
+    expect(angleDrop([{ kind: 'group', id: 'g' }])).toEqual({ ok: false })
+  })
+})

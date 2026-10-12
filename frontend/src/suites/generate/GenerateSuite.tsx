@@ -1,13 +1,14 @@
 // Generate suite (09): Prompt (tree / JSON / text with the exact serialisation preview, per-field preset menus,
 // optional subjects, the reference images inside the prompt), Model (with ComfyUI's advanced configuration),
 // Size & Batch, Presets; results on the Catalogue grid filtered to this suite; interim tiles with live previews.
-import { Boxes, Bookmark, Images, ListPlus, Plus, SlidersHorizontal, Trash2, Wand2, X } from 'lucide-react'
+import { ArrowDownFromLine, Boxes, Bookmark, Images, ListPlus, Orbit, Plus, RotateCcw, RotateCw, SlidersHorizontal, Trash2, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand, sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
-import type { SuiteDef } from '../../frame/suiteRegistry'
+import { useSuiteRail, type SuiteDef } from '../../frame/suiteRegistry'
+import { AnglePrimary, AngleTab } from './AngleTab'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
@@ -369,14 +370,17 @@ function Panel({ tab }: { tab: string }) {
   if (tab === 'model') return <ModelTab />
   if (tab === 'size') return <SizeTab />
   if (tab === 'presets') return <PresetsTab />
+  if (tab === 'angle') return <AngleTab />
   return <PromptTab />
 }
 
-/** The pinned primary action with its estimate and disabled reasons (09 §3 foot). */
+/** The pinned primary action with its estimate and disabled reasons (09 §3 foot); on the Angle tab it is the angle's (P14). */
 function PrimaryAction() {
   const g = useGenerate()
   const s = useSession()
+  const { active } = useSuiteRail()
   markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset')
+  if (active === 'angle') return <AnglePrimary />
   const pv = g.preview
   const missing = pv?.missing ?? []
   const reason = !s.project?.open ? 'no project' : g.previewError ? g.previewError : !pv ? 'preparing…' : !pv.serialized_prompt ? 'empty prompt'
@@ -455,6 +459,14 @@ const withResults = (C: React.ComponentType) => function Wrapped() { return <Cat
 registerCommands([
   { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(false) },
   { id: 'gen.stage', scope: 'generate', label: 'Stage (add to the queue, run later)', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(true) },
+  // P14 (D82): the Angle tab — the five moves are buttons on the pad; the verb has no key (Ctrl+Enter stays Generate's)
+  { id: 'gen.angle.generate', scope: 'generate', label: 'New angle', icon: Orbit, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id, run: () => void useGenerate.getState().generateAngle() },
+  { id: 'gen.angle.left45', scope: 'generate', label: 'Rotate left 45°', icon: RotateCcw, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'left45' }) },
+  { id: 'gen.angle.right45', scope: 'generate', label: 'Rotate right 45°', icon: RotateCw, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'right45' }) },
+  { id: 'gen.angle.topdown', scope: 'generate', label: 'Top-down', icon: ArrowDownFromLine, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'topdown' }) },
+  { id: 'gen.angle.closeup', scope: 'generate', label: 'Close-up', icon: ZoomIn, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'closeup' }) },
+  { id: 'gen.angle.wide', scope: 'generate', label: 'Wide', icon: ZoomOut, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'wide' }) },
+  { id: 'gen.angle.clear', scope: 'generate', label: 'Remove the source', icon: X, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id, run: () => useGenerate.getState().setAngle({ asset_id: null }) },
   { id: 'gen.savePreset', scope: 'generate', label: 'Save panel preset…', icon: Bookmark, keys: 'Ctrl+S', placement: ['panel'], run: () => { const g = useGenerate.getState(); void askText({ title: 'Save panel preset', text: 'Saves every field of the panel under this name; an existing preset of the same name is replaced.', initial: g.lastPreset ?? '', placeholder: 'preset name' }).then((n) => { if (n) void g.savePreset(n) }) } },
   { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
 ])
@@ -475,7 +487,7 @@ function StripWithKeys() { useGenerateKeys(); return <Strip /> }
 export const GenerateSuite: SuiteDef = {
   id: 'generate',
   rail: [{ id: 'prompt', label: 'Prompt', icon: <Wand2 size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> }, { id: 'size', label: 'Size & Batch', icon: <SlidersHorizontal size={18} /> },
-    { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }],
+    { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }, { id: 'angle', label: 'New angle', icon: <Orbit size={18} /> }],
   Panel, Strip: withResults(StripWithKeys), Stage: withResults(Stage), Inspector: withResults(CatInspector),
   PrimaryAction,
 }

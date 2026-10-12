@@ -5,7 +5,7 @@ import type { AiOp, SelMode } from '../suites/edit/aiPanelStore'
 import { TOOL_IDS, type Tool } from '../suites/edit/tools'
 import { useSession } from '../store/session'
 
-export interface OpenWith { suite: 'edit' | 'generate' | 'animate'; tool?: Tool; aiOp?: AiOp; selMode?: SelMode; slot?: 'start' | 'end' | 'ref' }
+export interface OpenWith { suite: 'edit' | 'generate' | 'animate'; tool?: Tool; aiOp?: AiOp; selMode?: SelMode; slot?: 'start' | 'end' | 'ref' | 'angle' }
 
 const AI_OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint']
 const SEL_MODES: SelMode[] = ['subject', 'text', 'points', 'box']
@@ -27,8 +27,12 @@ export async function openWith(assetId: string | null, o: OpenWith): Promise<voi
     else if (assetId) a.setStart(assetId, true)
     else s.setSuite('animate')
   } else {
-    const { useGenerate } = await import('../suites/generate/generateStore')
-    if (assetId) useGenerate.getState().addRef(assetId)
+    const [{ useGenerate }, { setRailTab }] = await Promise.all([import('../suites/generate/generateStore'), import('./suiteRegistry')])
+    if (o.slot === 'angle') {                                          // P14: the Angle tab with this image as the source
+      useGenerate.getState().setAngle({ asset_id: assetId })
+      setRailTab('generate', 'angle')
+      s.setSuite('generate')
+    } else if (assetId) useGenerate.getState().addRef(assetId)
     else s.setSuite('generate')
   }
 }

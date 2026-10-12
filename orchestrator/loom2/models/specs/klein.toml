@@ -10,7 +10,7 @@ graph = "klein"
 roles.te = { default = "qwen3-4b" }
 roles.vae = "flux2-vae"
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
-recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"] }
+recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"] }   # P14: the framing moves under `open` (9B is flux-nc); unmeasured on 4B
 inputs = { refs_max = 4 }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 8.5, base_seconds = 10.0, doc_seconds = 28.0 }
@@ -38,7 +38,7 @@ graph = "klein"
 roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
 roles.vae = "flux2-vae"
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
-recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"] }
+recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"] }   # P14 / D82: E12's framing moves (9 / 10 / 9 of 10, 6 s warm)
 inputs = { refs_max = 4, refs_suggest = { at = 2, model = "klein-9b-kv", why = "2.5× faster with several references" } }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }

@@ -339,3 +339,29 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
   await expect(page.locator('.edit-empty')).toBeVisible()                            // the code loads this time
 })
+
+test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
+  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
+  await openApp(page, { suite: 'catalogue' })
+  const src = tiles(page).nth(8)
+  await src.click()
+  const srcId = await src.getAttribute('data-id')
+  await page.locator('.insp .quick-card', { hasText: 'New angle' }).click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
+  await expect(page.locator('nav.rail button.active[title^="New angle"]')).toBeVisible()
+  await expect(page.locator('.angle-tab .ref-slot.source img')).toBeVisible()
+  await page.locator('.angle-pad button', { hasText: /^Wide$/ }).click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^New angle/ })
+  await expect(go).toBeEnabled({ timeout: 15_000 })
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/)                 // auto: a framing move runs Klein (D77)
+  await go.click()
+  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + 1)
+  const newest = (await api<{ items: (AssetLite & { parents: string[]; lineage_kind: string | null })[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
+  expect(newest.parents).toEqual([srcId])                                                               // lineage: the source …
+  expect(newest.lineage_kind).toBe('reangle')
+  const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${newest.id}`)
+  expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
+  const job = (await api<{ items: { id: string; status: string; recipe: { kind: string; move?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
+  expect(job?.status).toBe('done')
+  expect(job?.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
+})

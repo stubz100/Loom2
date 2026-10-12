@@ -107,6 +107,11 @@ def default_model(kind: str, variant: str | None = None) -> str:
     raise RegistryError(f"no spec is the default for {kind!r}")
 
 
+def reangle_specs() -> list[ModelSpec]:
+    """P14 (D82): the specs that implement an angles method, by `order` — `auto` takes the first one listing the move."""
+    return sorted((s for s in SPECS.values() if s.recipes.reangle), key=lambda s: s.order)
+
+
 def image_specs() -> list[ModelSpec]:
     return [s for s in SPECS.values() if s.graph in IMAGE_GRAPHS]
 

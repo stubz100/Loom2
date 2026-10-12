@@ -64,6 +64,14 @@ export function layerDrop(p: DragPayload | DragItem[], where?: string): { take: 
 }
 
 /** Animate's beats: every item becomes a beat. */
+/** P14: the Angle tab's source slot — one image; several drop the first; a clip is refused. */
+export function angleDrop(p: DragPayload | DragItem[]): DropVerdict {
+  const items = assets(p)
+  if (!items.length) return { ok: false }
+  if (!images(items).length) return { ok: false, reason: items.length === 1 ? "A clip can't get a new angle" : "Clips can't get a new angle" }
+  return { ok: true, label: items.length > 1 ? 'Use the first image as the source' : 'Use as the source' }
+}
+
 export function beatDrop(p: DragPayload | DragItem[]): { take: string[]; verdict: DropVerdict } {
   const take = assets(p).map((i) => i.id)
   return { take, verdict: take.length ? { ok: true, label: take.length === 1 ? 'Add a beat' : `Add ${take.length} beats` } : { ok: false } }

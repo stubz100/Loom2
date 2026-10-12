@@ -123,6 +123,17 @@ Foot: **[Generate N ▶]** (primary, `Ctrl+Enter`); **Stage** (adds to `staged.j
 batching hero jobs overnight); the button is disabled with a reason when weights are missing (offers Fetch),
 VRAM estimate is red, or the disk guard is at hard-stop.
 
+### 3f. New angle (P14, D82 — 2026-10-12)
+A fifth rail tab: a new viewpoint of one Catalogue image. **Source slot** (drop a tile — the ghost says "Use as the source", clips are
+refused — or arrive through *New angle…* on a tile's menu, the Inspector's "Start from this image" card or the loupe's hub); a **move
+pad** with five buttons (rotate left 45° · rotate right 45° · top-down · close-up · wide — the moves E12 measured, D77); **method**
+(*Auto* names what it picks: the angles LoRA on Qwen-Image-Edit 2509 for the rotations, Klein with a strict-reference prompt for the
+framing moves; either can be forced), one optional sentence (what the scene is, what must stay), **candidates** 1–4. The foot shows
+**New angle ▶** with the method that will run and its measured seconds (≈ 32 s / ≈ 6 s warm), or why not (no source, weights to
+fetch). Results land in the batch strip with `lineage_kind = reangle` and the source as parent; the Dock's *Go to origin* returns to
+this tab. Under `open` the framing moves run Klein 4B (Klein 9B is flux-nc). Data: `Reangle {asset_id, move, method, prompt_text,
+seeds}`; `/capabilities.reangle {moves, methods, auto}`; the preview is a document-style plan (`params.method`, `params.label`).
+
 ## 4. Stage
 - **Grid of this suite's results** grouped by batch (newest first); interim tiles show step progress and the
   engine's preview JPEG; finished tiles are catalogue assets (keyboard, states, verbs as in 08).

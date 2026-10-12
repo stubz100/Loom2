@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Graph = Literal["flux2", "klein", "wan22", "ltx23", "esrgan", "matte", "sam"]      # the builder: image, video, upscaler, subject matte, SAM
+Graph = Literal["flux2", "klein", "wan22", "ltx23", "esrgan", "matte", "sam", "qwen_edit"]      # the builder: image, video, upscaler, subject matte, SAM
 
 
 class Strict(BaseModel):
@@ -63,6 +63,8 @@ class Recipes(Strict):
     i2v: bool = False
     flf: bool = False                              # first + last frame
     beats: bool = False                            # keyframes in between
+    reangle: str | None = None                     # P14 (D82): the angles method this model implements — angles_lora | klein_prompt
+    reangle_moves: list[str] = []                  # the moves it is good for (E12 ≥ 7/10): auto picks the first model listing the move
 
 
 class RefsSuggest(Strict):

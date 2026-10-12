@@ -24,10 +24,37 @@ MANIFEST = [
     # ---- M5 Edit AI tools ----
     dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x2.pth", dest="upscale_models", license="bsd-3-clause"),
     dict(spike="m5", repo="ai-forever/Real-ESRGAN", file="RealESRGAN_x4.pth", dest="upscale_models", license="bsd-3-clause"),
+    # ---- E14 image → mesh (D74): ComfyUI's Pixal3D + TRELLIS.2 template (core nodes); int8 first, bf16 only if int8 fails on ROCm (08 §7).
+    #      DINOv3 ships in an MIT repo but its weights carry Meta's DINOv3 licence: `full` only until reviewed (D17 / D26). BiRefNet is already here.
+    dict(spike="e14", repo="Comfy-Org/TRELLIS.2", file="diffusion_models/trellis_2_int8_convrot.safetensors", dest="diffusion_models", license="mit",
+         retired="E14 2026-10-12: silhouette IoU 1/5 (one prop a crumpled shell) against Pixal3D's 5/5; the VAEs, DINOv3 and MoGe are shared and stay"),
+    dict(spike="e14", repo="Comfy-Org/Pixal3D", file="diffusion_models/pixal3d_int8_convrot.safetensors", dest="diffusion_models", license="mit"),
+    dict(spike="e14", repo="Comfy-Org/Pixal3D", file="vae/trellis_2_shape_vae_bf16.safetensors", dest="vae", license="mit"),
+    dict(spike="e14", repo="Comfy-Org/Pixal3D", file="vae/trellis_2_texture_vae_bf16.safetensors", dest="vae", license="mit"),
+    dict(spike="e14", repo="Comfy-Org/Pixal3D", file="clip_vision/dino_v3_L_naf_fp32.safetensors", dest="clip_vision", license="dinov3 (Meta custom; full only until reviewed)"),
+    dict(spike="e14", repo="Comfy-Org/MoGe", file="geometry_estimation/moge_2_vitl_normal_fp16.safetensors", dest="geometry_estimation", license="mit"),
+    # ---- E11 Stage → video (D74): LTX-2.3's IC-LoRA Union (canny + depth + pose) through core GetICLoRAParameters + LTXVAddGuide
+    dict(spike="e11", repo="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control", file="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", dest="loras",
+         license="ltx-2.x community (as the LTX-2.3 weights, D9)"),
+    # ---- E10 Stage → image (D74): method 2 — RefControl's pose LoRA for Klein base 9B; method 3 — Z-Image Turbo + Fun ControlNet Union 2.1
+    #      lite (core ModelPatchLoader + ZImageFunControlnet). Z-Image's encoder is the Klein 4B Qwen3-4B file already here (same sha256) and its
+    #      VAE the FLUX.1 ae in the mounted D: tree (same sha256), so neither is fetched again.
+    dict(spike="e10", repo="thedeoxen/refcontrol-FLUX.2-klein-9B-reference-pose-lora", file="refcontrol_v2_poses.safetensors", dest="loras", license="apache-2.0"),
+    dict(spike="e10", repo="Comfy-Org/z_image_turbo", file="split_files/diffusion_models/z_image_turbo_bf16.safetensors", dest="diffusion_models", license="apache-2.0",
+         retired="E10 2026-10-12: method 3 lost — PCK 0.30 depth / 0.08 pose, the figure at the wrong scale, same blocking 6/10"),
+    dict(spike="e10", repo="alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1", file="Z-Image-Turbo-Fun-Controlnet-Union-2.1-lite-2602-8steps.safetensors", dest="model_patches", license="apache-2.0",
+         retired="E10 2026-10-12: with method 3"),
+    # E10 scoring only (evaluation, never a product path): SDPose wholebody for keypoints, RT-DETR to box several people, DA3-BASE for depth
+    dict(spike="e10", repo="Comfy-Org/SDPose", file="checkpoints/sdpose_wholebody_fp16.safetensors", dest="checkpoints", license="mit"),
+    dict(spike="e10", repo="Comfy-Org/SDPose", file="diffusion_models/rt_detr_v4-x-hgnet_fp16.safetensors", dest="diffusion_models", license="mit (Comfy-Org repack; RT-DETRv4 apache-2.0)"),
+    dict(spike="e10", repo="Comfy-Org/Depth-Anything-3", file="geometry_estimation/depth_anything_3_base.safetensors", dest="geometry_estimation", license="apache-2.0"),
     # ---- E12 angles, method B (D74): Qwen-Image-Edit 2511 as a Q4_K_M GGUF + fal's 96-pose angles LoRA + lightx2v's 4-step LoRA ----
-    dict(spike="e12", repo="unsloth/Qwen-Image-Edit-2511-GGUF", file="qwen-image-edit-2511-Q4_K_M.gguf", dest="diffusion_models", license="apache-2.0"),
-    dict(spike="e12", repo="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA", file="qwen-image-edit-2511-multiple-angles-lora.safetensors", dest="loras", license="apache-2.0"),
-    dict(spike="e12", repo="lightx2v/Qwen-Image-Edit-2511-Lightning", file="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", dest="loras", license="apache-2.0"),
+    dict(spike="e12", repo="unsloth/Qwen-Image-Edit-2511-GGUF", file="qwen-image-edit-2511-Q4_K_M.gguf", dest="diffusion_models", license="apache-2.0",
+         retired="E12 2026-10-12: method B warm 154 s against the 90 s kill rule (08 §7); identity 0.72 was the best, speed killed it"),
+    dict(spike="e12", repo="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA", file="qwen-image-edit-2511-multiple-angles-lora.safetensors", dest="loras", license="apache-2.0",
+         retired="E12 2026-10-12: with method B"),
+    dict(spike="e12", repo="lightx2v/Qwen-Image-Edit-2511-Lightning", file="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", dest="loras", license="apache-2.0",
+         retired="E12 2026-10-12: with method B"),
     # ---- E8 inpaint bake-off (and M5 Klein tiers) ----
     dict(spike="e8", repo="Comfy-Org/flux2-klein-9B", file="split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors",
          dest="text_encoders", license="flux-nc (TE: Qwen3 Apache-2.0 repack)"),
@@ -95,7 +122,9 @@ def main() -> int:
     ap.add_argument("--include-retired", action="store_true", help="also fetch entries marked retired=... (deleted by policy D30)")
     a = ap.parse_args()
     root = Path(a.root)
-    tmp = root / "_incoming"
+    # one staging folder per run: two fetches at once (2026-10-11) shared `_incoming`, and one's clean-up removed the folder the other's
+    # download was being copied into
+    tmp = root / "_incoming" / f"run-{os.getpid()}"
     tmp.mkdir(parents=True, exist_ok=True)
     index_path = root / "roster.index.json"
     index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {"files": []}
@@ -118,14 +147,17 @@ def main() -> int:
         dt = time.time() - t0
         digest = None if a.no_hash else sha256_of(dest)
         print(f"[done]  {dest.name}  {size/2**30:.2f} GiB in {dt:.0f} s ({size/2**20/max(dt,1):.0f} MiB/s)  sha256={digest[:16] if digest else '-'}…")
+        index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {"files": []}   # re-read: another run may have written
         index["files"] = [f for f in index["files"] if f["path"] != str(dest)] + [dict(
             path=str(dest), folder=m["dest"], repo=m["repo"], file=m["file"], size=size, sha256=digest,
             license=m["license"], spike=m["spike"], fetched=time.strftime("%Y-%m-%d %H:%M:%S"))]
         index_path.write_text(json.dumps(index, indent=1), encoding="utf-8")
-    # clean empty incoming dirs
+    # clean this run's empty staging dirs (only its own)
     for p in sorted(tmp.rglob("*"), reverse=True):
         if p.is_dir() and not any(p.iterdir()):
             p.rmdir()
+    if tmp.is_dir() and not any(tmp.iterdir()):
+        tmp.rmdir()
     print("[fetch] complete; index:", index_path)
     return 0
 

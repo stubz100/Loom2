@@ -18,6 +18,8 @@ loom2_models:
   clip_vision: clip_vision
   embeddings: embeddings
   background_removal: background_removal
+  model_patches: model_patches                # D74 / E10: core ModelPatchLoader (Fun ControlNet patches)
+  geometry_estimation: geometry_estimation    # D74 / E10: Depth Anything 3 (scoring)
   checkpoints: |
     checkpoints
     sam3

@@ -1,0 +1,13 @@
+{
+ "made_by": "engine/spikes/e14_mesh.py sources",
+ "model": "flux-2-klein-9b",
+ "seed": 20261014,
+ "lead": "Product photograph of a single object, centred, the whole object in frame, three-quarter view, soft studio light, plain light grey background: ",
+ "props": {
+  "01": "a polished brass ship's compass with a hinged lid, open",
+  "02": "an old iron ship's lantern with a glass chimney and a ring handle",
+  "03": "a weathered wooden sea chest with iron bands and a padlock",
+  "04": "a wooden ship's steering wheel with eight spokes and brass hub",
+  "05": "a small wooden rowing boat with two oars resting inside"
+ }
+}

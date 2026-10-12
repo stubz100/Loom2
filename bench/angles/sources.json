@@ -1,0 +1,115 @@
+{
+  "made_by": "engine/spikes/e12_angles.py sources",
+  "sources": [
+    {
+      "id": "01",
+      "bench": "01-alley-rain.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 24.4
+    },
+    {
+      "id": "02",
+      "bench": "02-captain-cabin.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 40.9
+    },
+    {
+      "id": "03",
+      "bench": "03-cliff-chase.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.5
+    },
+    {
+      "id": "04",
+      "bench": "04-wanted-poster.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.4
+    },
+    {
+      "id": "05",
+      "bench": "05-rooftop-night.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.8
+    },
+    {
+      "id": "06",
+      "bench": "06-fish-market.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.0
+    },
+    {
+      "id": "07",
+      "bench": "07-portrait-grief.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 40.7
+    },
+    {
+      "id": "08",
+      "bench": "08-storm-deck.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.9
+    },
+    {
+      "id": "09",
+      "bench": "09-lighthouse-map.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 52.7
+    },
+    {
+      "id": "10",
+      "bench": "10-dawn-departure.json",
+      "model": "flux-2-klein-9b",
+      "seed": 20261011,
+      "size": [
+        1024,
+        576
+      ],
+      "exec_s": 40.7
+    }
+  ]
+}

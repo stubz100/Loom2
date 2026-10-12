@@ -3042,3 +3042,66 @@ split by file so that no two hands touched the same module.
   lightx2v's 2511 Lightning, Apache-2.0, ≈ 13.4 GB) are downloading through `scripts/fetch_weights.py --only e12`. First numbers for A:
   cold 428 s, warm 90 s (bars 180 / 60) — the 20 GB transformer and the 8 GB encoder do not fit together, so each job re-stages weights;
   sampling itself is ≈ 10 s.
+
+## 2026-10-12 16:59 — Spikes E10, E11, E12, E14 measured (D76–D79); the first chain ran Klein with the wrong encoder
+
+- **The encoder (the author's catch).** The first chain (from 2026-10-11 16:30, stopped by the author this morning) hard-coded Klein 9B's
+  fp8 Qwen3-8B encoder (8.7 GB) in the spike graphs; D31's presets run the Q4_K_M GGUF (5.0 GB). On 16 GB the fp8 encoder and a 9B
+  transformer do not fit together, so both streamed from RAM: Klein base 492–493 s a scene (30 steps at 16 s/it), `klein_clay` 68–90 s,
+  `klein_plain` 39–50 s, E12's C 15.8 s warm. The spikes now take the encoder from the registry and roster (`klein_te()` in
+  `engine/spikes/e12_angles.py` → `graphs._te_loader`, so a spike cannot drift from the app), and every Klein method was re-run on a
+  restarted engine: base 36–37 s, `klein_clay` 12.0 s, `klein_plain` 10.0 s, C 5.8 s. The first chain's rows stay in each `results.jsonl`
+  (scoring takes the latest row per key); A and B (Qwen's own encoder) and the frozen sources were unaffected and kept.
+- **E12 angles** (`engine/spikes/e12_angles.py`; 10 sources × 5 moves × 3 methods; sheets `engine/spikes/out/e12/sheet_<move>.jpg`, the
+  move counts judged on them):
+
+  | Method | warm / cold | identity (median; ≥ 0.5; face lost) | left45 | right45 | top-down | close-up | wide |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | A `qwen_angles` — 2509 fp8 + dx8152's LoRA + Lightning | 31.6 s (max 89.7) / 428 s | 0.67; 30/45; 5/50 | 8 | 7 | 9 | 9 | 5 |
+  | B `qwen2511_angles` — 2511 Q4_K_M + fal's LoRA + Lightning | 153.6 s / 118–142 s | 0.72; 31/48; 2/50 | 5 | 8 | 9 | 4 | 9 |
+  | C `klein_prompt` — Klein 9B + `ReferenceLatent` + a camera sentence | 5.8 s (max 12) / 39 s | 0.50; 21/42; 8/50 | 6 | 7 | 9 | 10 | 9 |
+
+  Bars: ≥ 7/10 per move, identity ≥ 0.5, warm ≤ 60 s, cold ≤ 180 s, kill B over 90 s warm. No method clears all five moves: A rotates
+  (the LoRA's own instruction) and frames close, C does not reliably rotate but frames (top-down, close-up, wide) from the prompt alone
+  at 5.8 s; B is the best on identity and killed on speed — its 14.4 GB deleted, manifest entries retired. A's cold 428 s is I/O: the
+  20 GB transformer and the 8 GB encoder re-staged from disk once a session. → D77 (proposed, the author's call).
+- **E10 Stage → image** (`engine/spikes/e10_stage.py`; passes from `frontend/e2e/spikes/e10.run.mjs` over the 10 blockings of
+  `bench/stage/scenes.json`; sheet `engine/spikes/out/e10/sheet.jpg`):
+
+  | Method | PCK@0.1 | depth ρ | warm | × plain | same blocking (eye) |
+  | --- | --- | --- | --- | --- | --- |
+  | `klein_clay` (1) | 0.60 | 0.78 | 12.0 s | 1.20 | 10/10 |
+  | `klein_clay_pose` (1 + the pose map as image 2) | 0.64 | 0.74 | 24.0 s | 2.40 | 10/10 |
+  | `base_refcontrol` (2) | 0.86 | 0.63 | 73.9 s | 2.00 | 9/10 |
+  | `zimage_depth` (3) | 0.30 | 0.68 | 13.0 s | 1.57 | 6/10 |
+  | `zimage_pose` (3) | 0.08 | 0.41 | 12.9 s | 1.55 | 6/10 |
+  | `zimage_depth_kr` (3, then Klein base I2I 0.5) | 0.29 | 0.68 | 54.0 s | 6.51 | 6/10 |
+
+  Plains: Klein 0.01 / 0.41 / 10.0 s, base 0.04 / 0.57 / 37.0 s, Z-Image 0.03 / 0.37 / 8.3 s. The depth metric's ceiling is 0.89 (DA3
+  on the clay renders themselves against the rendered disparity), so the 0.85 bar sits at the ceiling. Bars: PCK ≥ 0.8, ρ ≥ 0.85,
+  ≤ 1.5× plain, blind ≥ 8/10 — no method clears all four; the clay reference keeps the shot and misses the pose bar, RefControl clears
+  the pose bar at 2× and 74 s. Z-Image's Fun ControlNet renders the figure at the wrong scale (close-ups where the blocking has a full
+  figure) and leaks the mannequin; its weights go (Turbo bf16 12.3 GB + the ControlNet patch 2.0 GB deleted, manifest retired).
+  → D78 (proposed, the author's call).
+- **E11 Stage → video** (`engine/spikes/e11_video.py`; five 121-frame shots from `frontend/e2e/spikes/e11.run.mjs`, guides encoded with
+  PyAV, start frames by `klein_clay`; sheets `engine/spikes/out/e11/sheet_<method>.jpg`). PCK@0.1 on every 20th frame per shot
+  (crouch_crane, run_track, turn_orbit, walk_dolly, wave_static): `ltx_ic_depth` [—, 0.66, 0.81, 0.59, 0.94] followed 4/5 · 147.0 s =
+  1.22× plain · cold 146 s; `ltx_ic_pose` [—, 0.58, 0.88, 0.47, 0.94] 3/5 · 146.9 s; `ltx_plain` [—, 0.07, 0.50, 0.18, 0.93] 2/5 ·
+  120.0 s · cold 178 s. The crouch shot scores 0 for every method because SDPose finds no person in its frames (a crouched figure
+  beside a mannequin); on the sheet the depth clip keeps her crouched while the camera cranes up, the plain clip stands her up and
+  walks her off. Bars: no OOM, ≤ 2× plain, ≥ 4/5 followed → **pass, D76**. The IC-LoRA (Lightricks, one file) stays; the depth pass is
+  the guide, the pose pass a weaker second.
+- **E14 image → mesh** (`engine/spikes/e14_mesh.py`: ComfyUI's own `3d_pixal3d_trellis2_image_to_model` template converted to the API
+  format by `engine/spikes/ui_to_api.py`; five props in `bench/mesh/`; lit views, silhouettes and triangle counts by
+  `frontend/e2e/spikes/e14.run.mjs` (`#e14`, three.js GLTFLoader); IoU against each prop's own BiRefNet cut-out at the best of 8 yaws ×
+  3 elevations after a uniform scale and centre alignment; sheets `engine/spikes/out/e14/sheet_<method>.jpg`). Pixal3D: IoU [0.98, 0.95,
+  0.99, 0.93, 0.90] 5/5, plausible backs 5/5, 46–50k triangles, warm 243 s (221–384), cold 361 s. TRELLIS.2: IoU [0.85, 0.46, 0.86,
+  0.74, 0.70] 1/5 (the lantern comes out as a crumpled black shell), backs 4/5, 44–50k, warm 99 s, cold 146 s. No OOM at 1024 for
+  either (int8 runs on ROCm). 08's "512 then 1024" is not available: 0.39's `Trellis2UpsampleStage` floors at 1024. Bars: warm ≤ 120 s,
+  cold ≤ 300 s, ≤ 50k, IoU ≥ 0.85, backs ≥ 3/5 — Pixal3D clears every bar but time (2× warm, 1.2× cold); TRELLIS.2 clears time and
+  fails shape, its transformer deleted (5.3 GB; the VAEs, DINOv3 and MoGe are shared and stay). → D79 (proposed, the author's call).
+  Found on the way: the converter missed V3 dynamic combos (`sign_mode.qef`-style sub-inputs), `COLOR` / `LOAD_3D` widgets and inputs
+  the template predates (now the schema defaults), so the first E14 runs "succeeded" in 0.4 s with no mesh — ComfyUI runs a prompt
+  whose other outputs validate and reports the bad node only in `/prompt`'s `node_errors`; `Engine.run` now treats `node_errors` as a
+  failure.
+- Checks: 235 offline, 171 unit, lint 100 (the baseline), model-literals and agents-check clean, tsc clean.

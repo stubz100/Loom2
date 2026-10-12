@@ -3,6 +3,7 @@
  "DELETE /documents/{doc_id}",
  "DELETE /groups/{gid}",
  "DELETE /jobs/{job_id}",
+ "DELETE /timelines/{tl_id}",
  "GET /assets",
  "GET /assets/counts",
  "GET /assets/groups",
@@ -39,6 +40,8 @@
  "GET /settings",
  "GET /snippets",
  "GET /thumbs/{asset_id}/{size}",
+ "GET /timelines",
+ "GET /timelines/{tl_id}",
  "GET /version",
  "PATCH /assets/bulk",
  "PATCH /assets/{asset_id}",
@@ -84,6 +87,8 @@
  "POST /queue/unpause",
  "POST /recipes/preview",
  "POST /shutdown",
+ "POST /timelines",
+ "POST /timelines/{tl_id}/export",
  "PUT /blobs/{sha}",
  "PUT /documents/{doc_id}",
  "PUT /documents/{doc_id}/layers/{lid}/pixels",
@@ -91,5 +96,6 @@
  "PUT /project/presets",
  "PUT /settings",
  "PUT /snippets",
+ "PUT /timelines/{tl_id}",
  "WS /events"
 ]

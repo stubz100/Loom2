@@ -1343,6 +1343,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Timelines List */
+        get: operations["timelines_list_timelines_get"];
+        put?: never;
+        /** Timeline Create */
+        post: operations["timeline_create_timelines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Timeline Get */
+        get: operations["timeline_get_timelines__tl_id__get"];
+        /**
+         * Timeline Put
+         * @description Replace the document from a body based on its `revision`; every clip must be in the project and its `out` within the clip's frames.
+         */
+        put: operations["timeline_put_timelines__tl_id__put"];
+        post?: never;
+        /** Timeline Delete */
+        delete: operations["timeline_delete_timelines__tl_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timelines/{tl_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Timeline Export */
+        post: operations["timeline_export_timelines__tl_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/version": {
         parameters: {
             query?: never;
@@ -4781,6 +4838,107 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Timeline */
+        Timeline: {
+            /** Clips */
+            clips: components["schemas"]["TimelineClip"][];
+            /** Created At */
+            created_at: string;
+            /**
+             * Fps
+             * @default 24
+             */
+            fps: number;
+            /**
+             * H
+             * @default 1080
+             */
+            h: number;
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default Sequence
+             */
+            name: string;
+            /** Overlaps */
+            overlaps: number[];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * W
+             * @default 1920
+             */
+            w: number;
+        };
+        /** TimelineClip */
+        TimelineClip: {
+            /** Clip Id */
+            clip_id: string;
+            /** Fps */
+            fps: number | null;
+            /** Id */
+            id: string;
+            /**
+             * In
+             * @default 0
+             */
+            in: number;
+            /** Out */
+            out: number;
+        };
+        /** TimelineCreate */
+        TimelineCreate: {
+            /** Fps */
+            fps?: number | null;
+            /** H */
+            h?: number | null;
+            /**
+             * Name
+             * @default Sequence
+             */
+            name?: string;
+            /** W */
+            w?: number | null;
+        };
+        /** TimelineExport */
+        TimelineExport: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "edl" | "fcpxml";
+        };
+        /**
+         * TimelineExported
+         * @description P17: an export written from the sequence document — the file inside the project and its text.
+         */
+        TimelineExported: {
+            /** Format */
+            format: string;
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TimelineList
+         * @description P17 (D83): the project's sequences.
+         */
+        TimelineList: {
+            /** Items */
+            items: components["schemas"]["Timeline"][];
+        };
         /**
          * ToolCaps
          * @description D65: an Edit tool (an upscaler, an AI Select model) from the registry.
@@ -7712,6 +7870,193 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timelines_list_timelines_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineList"];
+                };
+            };
+        };
+    };
+    timeline_create_timelines_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_get_timelines__tl_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_put_timelines__tl_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_delete_timelines__tl_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_export_timelines__tl_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tl_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineExport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineExported"];
                 };
             };
             /** @description Validation Error */

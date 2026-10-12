@@ -3173,3 +3173,32 @@ split by file so that no two hands touched the same module.
   than E12's all-moves 0.56; on the sheets the close-ups keep the person 9/10, the wide shots 9/10 (03 loses the figures), left 7/10
   with this seed. Sheets in `engine/spikes/out/reangle/`. The plan's orbit sphere became a pad: the methods know five moves, not a
   continuous orbit. 09 §3f and 08 §9 P14 record the build.
+
+## 2026-10-12 21:35 — P17 slice 1: the Sequence tab (D83) — document, routes, exports, the lane lifted from E13
+
+- **D83 recorded first:** the single-lane timeline lives in Animate as a *Sequence* rail tab until Story's Episode tab exists (14 / loom
+  P5); the lane runs at the project fps, a clip at another rate (Wan 16 fps) takes its duration in ticks and is scrubbed by nearest
+  frame — no frames are made (D27: RIFE at export stays post-MVP, Q14); the exports carry each clip's native rate for Resolve to conform.
+- **Backend** (`orchestrator/loom2/timelines.py`, `routes/timelines.py`): `Timeline {schema_version, id, name, fps, w, h, clips
+  [{id, clip_id, in, out, fps?}], overlaps, revision, …}` as `timelines/<id>.json` (fsio), `check()` for the invariants (one overlap per
+  clip, the first a cut, a dissolve shorter than both clips, `out` within the clip's frames when the clips are known), `put()` with
+  the document-style 409 on a stale `revision`, EDL (CMX 3600; a dissolve as a "D nnn" event, source times at the clip's own rate)
+  and FCPXML 1.10 (a `format` per rate, an asset per clip by proxy file URL, cross dissolves in the spine) written into
+  `timelines/<id>/`; routes list / create (fps and size from the project format) / get / put / delete / export; `timeline.updated`
+  events. The route-table snapshot (D37) and the OpenAPI contract regenerated.
+- **Frontend:** `suites/animate/lane.ts` — the E13 model with `ticks()` for per-clip rates, `at()` by nearest frame, `trim`,
+  `setOverlap`, `append`, `remove`, `move`, `toEDL` (the parity fixture: the same three-clip lane gives the same EDL text in
+  `lane.test.ts` and `test_timeline_d83.py`); `sequenceStore.ts` (sequences, the open lane, selection, playhead, a 64-deep undo stack,
+  saves debounced 300 ms with the revision, 409 → reload and a toast); `SequenceStage.tsx` (Mediabunny sinks per clip, the frame at
+  the playhead with two frames mixed mid-dissolve, rAF playback at the lane fps, the lane with ruler / blocks / trim handles /
+  dissolve grip / playhead, Ctrl+wheel zoom, context menus); `SequencePanel.tsx` (sequences + the clip bin with drags through
+  `drag.ts` and D71 verdicts from `dropRules.laneDrop`, the Inspector with exports and the clip's verbs); 20 `anim.seq.*` commands
+  (Ctrl+Z / Ctrl+Shift+Z for the sequence's undo in the Animate scope); the rail tab in `railTabs.tsx`; Animate's Stage and
+  Inspector switch to the sequence while the tab is up.
+- **Checks:** 5 offline (`test_timeline_d83.py`: maths at one and mixed rates, invariants, exports, store, routes), 9 unit (`lane.test.ts`,
+  `sequenceStore.test.ts`, the drop rule), a smoke scenario (the fake engine animates a clip, it goes on a new lane from the bin, the
+  document saves at revision ≥ 1, the EDL is written) — 248 offline, 182 unit, smoke 15/15, lint 100, build clean, audits clean. The
+  e2e setup now fakes the default i2v model's weights too.
+- **Left for slice 2:** the draft render as a CPU job → a Catalogue clip (PyAV, dissolves blended, frame-mapped), reorder by drag,
+  the C24 frame-thumbnail strip on the blocks, and the Resolve import of an exported sequence (the author's check — E13's files and
+  now any `timelines/<id>/*.edl|fcpxml`).

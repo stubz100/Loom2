@@ -8169,6 +8169,226 @@
         "title": "TeOption",
         "type": "object"
       },
+      "Timeline": {
+        "properties": {
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineClip"
+            },
+            "title": "Clips",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "fps": {
+            "default": 24,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "h": {
+            "default": 1080,
+            "title": "H",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "Sequence",
+            "title": "Name",
+            "type": "string"
+          },
+          "overlaps": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Overlaps",
+            "type": "array"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "w": {
+            "default": 1920,
+            "title": "W",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "fps",
+          "w",
+          "h",
+          "clips",
+          "overlaps",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Timeline",
+        "type": "object"
+      },
+      "TimelineClip": {
+        "properties": {
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "in": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "In",
+            "type": "integer"
+          },
+          "out": {
+            "exclusiveMinimum": 0.0,
+            "title": "Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "clip_id",
+          "in",
+          "out",
+          "fps"
+        ],
+        "title": "TimelineClip",
+        "type": "object"
+      },
+      "TimelineCreate": {
+        "properties": {
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "h": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H"
+          },
+          "name": {
+            "default": "Sequence",
+            "title": "Name",
+            "type": "string"
+          },
+          "w": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W"
+          }
+        },
+        "title": "TimelineCreate",
+        "type": "object"
+      },
+      "TimelineExport": {
+        "properties": {
+          "format": {
+            "enum": [
+              "edl",
+              "fcpxml"
+            ],
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "title": "TimelineExport",
+        "type": "object"
+      },
+      "TimelineExported": {
+        "description": "P17: an export written from the sequence document — the file inside the project and its text.",
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "path",
+          "text"
+        ],
+        "title": "TimelineExported",
+        "type": "object"
+      },
+      "TimelineList": {
+        "description": "P17 (D83): the project's sequences.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Timeline"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TimelineList",
+        "type": "object"
+      },
       "ToolCaps": {
         "additionalProperties": true,
         "description": "D65: an Edit tool (an upscaler, an AI Select model) from the registry.",
@@ -13185,6 +13405,253 @@
         "summary": "Thumb",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/timelines": {
+      "get": {
+        "operationId": "timelines_list_timelines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Timelines List",
+        "tags": [
+          "timelines"
+        ]
+      },
+      "post": {
+        "operationId": "timeline_create_timelines_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelineCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Create",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}": {
+      "delete": {
+        "operationId": "timeline_delete_timelines__tl_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Delete",
+        "tags": [
+          "timelines"
+        ]
+      },
+      "get": {
+        "operationId": "timeline_get_timelines__tl_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Get",
+        "tags": [
+          "timelines"
+        ]
+      },
+      "put": {
+        "description": "Replace the document from a body based on its `revision`; every clip must be in the project and its `out` within the clip's frames.",
+        "operationId": "timeline_put_timelines__tl_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Put",
+        "tags": [
+          "timelines"
+        ]
+      }
+    },
+    "/timelines/{tl_id}/export": {
+      "post": {
+        "operationId": "timeline_export_timelines__tl_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tl_id",
+            "required": true,
+            "schema": {
+              "title": "Tl Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelineExport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineExported"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline Export",
+        "tags": [
+          "timelines"
         ]
       }
     },

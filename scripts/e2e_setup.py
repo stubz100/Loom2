@@ -39,6 +39,9 @@ def fake_models(root: Path) -> list[str]:
         raise SystemExit(f"no model labelled {SMOKE_MODEL_LABEL!r} in the registry")
     written = []
     specs = [spec, *registry.reangle_specs()]                         # P14: the Angle tab's two methods are "present" too (the fake engine answers any graph)
+    i2v = registry.get(registry.default_model("i2v"))                 # P17: the smoke run animates one clip for the sequence lane
+    if i2v is not None:
+        specs.append(i2v)
     for rid in dict.fromkeys(r for s in specs for r in s.weights()):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name

@@ -84,6 +84,21 @@ under the timeline. Keys and verbs are registry commands (`anim.*`, 36 of them) 
 Frames ruler with **S** and **E** markers (end only in FLF mode); in/out handles; keyframe "beats" for LTX
 (draggable markers with strength); extracted frames show as pins; the jobs list sits below (collapsible).
 
+### 5b. Sequence tab (P17, D83 — 2026-10-12)
+A sixth rail tab houses the single-lane timeline until the Story workspace's Episode tab exists (14, loom P5). **Panel:** the
+project's sequences (New… · open; rename and delete in the Inspector) and the **Clips bin** — every clip of the project, dragged onto
+the lane (the ghost says "Add to the end of the sequence"; images are refused) or added with its **+**. **Stage** (while the tab is
+up): the preview — the frame the lane shows at the playhead, two frames mixed mid-dissolve, through Mediabunny sinks per clip — a
+transport (start · step · play · step · end, undo / redo, zoom), and the **lane**: a timecode ruler, one block per clip (width = its
+ticks at the lane's fps; a 16 fps Wan clip takes its duration, scrubbed by nearest frame — no frames are made, D27), trim handles at
+both edges (ripple), a dissolve grip at the left edge (drag; *Dissolve from the previous clip* toggles 12 frames), the playhead
+(drag the ruler or the lane); Ctrl+wheel zooms. Right-click a clip: dissolve · move earlier / later · open in the player · remove.
+**Inspector:** the sequence (fps, size, duration, revision; rename, delete), **Export EDL / FCPXML** (written into
+`timelines/<id>/` by the server; the last path shown), the selected clip (source, frames used, ticks, dissolve) and its verbs.
+Every edit saves after 300 ms with the document's `revision`; a 409 reloads and says the last change was lost. Undo / redo are
+`Ctrl+Z` / `Ctrl+Shift+Z` in this suite. Data: `timelines/<id>.json`, `GET/POST/PUT/DELETE /timelines[/{id}]`,
+`POST /timelines/{id}/export {format}`. The draft render (a CPU job that becomes a Catalogue clip) is the next slice.
+
 ## 6. Inspector
 - **Clip**: model/format, frames/fps/size, seed, prompt, time, start/end thumbnails, Keep/Reject/Rate/Tags;
   **Variations** (new seed), **Re-run**, **Try on LTX / Wan** (same inputs, other model), **Extend** (post-MVP:

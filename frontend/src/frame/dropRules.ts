@@ -64,6 +64,15 @@ export function layerDrop(p: DragPayload | DragItem[], where?: string): { take: 
 }
 
 /** Animate's beats: every item becomes a beat. */
+/** P17: the sequence lane — clips only (by asset or clip id); each goes to the end of the lane. */
+export function laneDrop<C extends { id: string; asset_id?: string | null }>(p: DragPayload | DragItem[], clips: C[]): { take: C[]; verdict: DropVerdict } {
+  const items = assets(p)
+  if (!items.length) return { take: [], verdict: { ok: false } }
+  const take = items.map((i) => clips.find((c) => c.asset_id === i.id || c.id === i.id)).filter((c): c is C => !!c)
+  if (!take.length) return { take, verdict: { ok: false, reason: 'Only clips go on the lane' } }
+  return { take, verdict: { ok: true, label: take.length === 1 ? 'Add to the end of the sequence' : `Add ${take.length} clips to the sequence` } }
+}
+
 /** P14: the Angle tab's source slot — one image; several drop the first; a clip is refused. */
 export function angleDrop(p: DragPayload | DragItem[]): DropVerdict {
   const items = assets(p)

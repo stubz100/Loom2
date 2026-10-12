@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, WithJsonSchema
 from .catalogue import AssetRecord
 from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
+from .timelines import Timeline
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -554,6 +555,18 @@ class Closed(Out):
 # ---- clips -----------------------------------------------------------------------------------------------------------
 class ClipList(Out):
     items: list[ClipRecord]
+
+
+class TimelineList(Out):
+    """P17 (D83): the project's sequences."""
+    items: list[Timeline]
+
+
+class TimelineExported(Out):
+    """P17: an export written from the sequence document — the file inside the project and its text."""
+    format: str
+    path: str
+    text: str
 
 
 class ClipExtracted(Out):

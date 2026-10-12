@@ -1,5 +1,5 @@
 // Rail tab definitions per suite (07 §2). A leaf module: suites and the frame both import it, it imports neither.
-import { BookOpen, Bookmark, Boxes, Brush, Clock, Cpu, Film, Files, Image as ImageIcon, Lasso, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react'
+import { BookOpen, Bookmark, Boxes, Brush, Clapperboard, Clock, Cpu, Film, Files, Image as ImageIcon, Lasso, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
@@ -11,6 +11,7 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
   edit: [{ id: 'tools', label: 'Tool options', icon: <SlidersHorizontal size={18} /> }, { id: 'brushes', label: 'Brushes', icon: <Brush size={18} /> }, { id: 'selection', label: 'Selection', icon: <Lasso size={18} /> },
     { id: 'ai', label: 'AI', icon: <Sparkles size={18} /> }, { id: 'documents', label: 'Documents', icon: <Files size={18} /> }],
   animate: [{ id: 'inputs', label: 'Inputs', icon: <ImageIcon size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> }, { id: 'length', label: 'Length & Size', icon: <Clock size={18} /> },
-    { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }, { id: 'clips', label: 'Clips', icon: <Film size={18} /> }],
+    { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }, { id: 'clips', label: 'Clips', icon: <Film size={18} /> },
+    { id: 'sequence', label: 'Sequence', icon: <Clapperboard size={18} /> }],                   // P17 (D83): the single-lane timeline
   models: [{ id: 'roster', label: 'Roster', icon: <Boxes size={18} /> }, { id: 'engine', label: 'Engine', icon: <Cpu size={18} /> }],
 }

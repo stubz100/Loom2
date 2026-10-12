@@ -3105,3 +3105,32 @@ split by file so that no two hands touched the same module.
   whose other outputs validate and reports the bad node only in `/prompt`'s `node_errors`; `Engine.run` now treats `node_errors` as a
   failure.
 - Checks: 235 offline, 171 unit, lint 100 (the baseline), model-literals and agents-check clean, tsc clean.
+
+## 2026-10-12 18:07 — E12 follow-up: the cold bar was a hard disk (D80); a strict-reference prompt lifts Klein's identity; dev + angles LoRA too slow
+
+- **The author's decisions on the spike proposals:** D78 accepted (clay reference by default, RefControl as ST3's "exact pose" switch),
+  D79 accepted (Pixal3D at 1024 as P18's background job), D77 "both recommendations" plus a web search for a third angles method.
+- **The search** (forums, model cards, 2026-10-12): the Qwen-Image-Edit-2511 angles LoRA we killed is the community's standard
+  (ComfyUI's own camera node targets it); a Qwen-Image 2.1 Multiple-Angles LoRA (akhaliq, 2026-10-07, Apache) sits on a 7B unified
+  gen + edit base our engine supports — but the base is under the Qwen Research License (non-commercial), so `full` only at best under
+  D17, and it has no verified 4-step distillation: noted, not fetched. Nunchaku int4 is CUDA-only (out on ROCm); Z-Image-Edit is
+  unreleased; video-orbit tricks cost a clip per frame. Two things were worth running: lovis93's fal-trained 72-position multi-angle
+  LoRA for FLUX.2 dev (the only angles LoRA for a FLUX.2 model loom2 runs; openrail-m, 332 MB) and the prompt shape of a Civitai
+  Klein character-sheet workflow (strict visual reference, the view named twice, "only the viewing angle changes"; native nodes).
+- **The disk.** D: — where method A's 30 GB lived — is a SATA hard disk (83 MB/s measured; F: is NVMe at 1.2 GB/s). A's 428 s cold
+  load was disk time. The author: D: is a backup drive only, F: is the model repository → **D80**: the D: mount is gone from
+  `engine/extra_model_paths.yaml`, `Settings.mounted_model_trees` defaults to `[]` (the author's `.loom2_state/app.json` too), the
+  spikes and `scripts/m1_acceptance.py` scan F: alone; A's four files, `qwen_image_vae.safetensors` and `sam3.pt` (≈ 34 GB) copied to
+  F: — nothing else loom2 runs came from D: (roster check: no entry resolves only there). Nothing on D: deleted. The engine loads A
+  from F: (its log). 235 offline tests pass with the new default.
+- **E12 follow-up** (`engine/spikes/e12_angles.py` methods `klein_prompt2` = C2 and `dev_angles` = D2; sheets regenerated with five
+  columns): A's cold from F: **27.2 s** (file cache warm from the copy; a cache-cold load adds ≤ 30 s of I/O at 1.2 GB/s), warm
+  31.6 s. **C2** (Klein 9B + the strict-reference prompt): 6.0 s warm, 20–24 s cold; rotations no better than C (left 4/10, right
+  4/10 — the prompt makes Klein copy the source) but identity 0.72 on the rotations (C: 0.50) and on the framing moves the same
+  correctness as C (top-down 9/10, close-up 10/10, wide 9/10) with identity 0.56 over all 50 and the face lost 7/50 (C: 0.50, 8/50).
+  **D2** (dev fp8 + Turbo 8 steps + the LoRA at 0.9): identity 0.74, rotations 4–5/10, warm 104.7 s (68–115) against the 60 s bar —
+  killed; the LoRA deleted (332 MB), manifest retired.
+- **E12 verdict, revised (D77 accepted):** rotations by A (left 8/10, right 7/10, identity 0.67, 31.6 s warm, 27 s cold), framing
+  moves by C2 (9 / 10 / 9, identity 0.56, 6 s warm, 24 s cold) — every bar of 08 §7 met by the pair. Nothing on D:.
+- Also found: `powershell -File` (Windows PowerShell 5.1) refuses the repo's scripts under the machine's execution policy; `pwsh`
+  runs them. A chain that started the engine that way waited forever — start the engine with `pwsh` (or `-ExecutionPolicy Bypass`).

@@ -49,6 +49,10 @@ MANIFEST = [
     dict(spike="e10", repo="Comfy-Org/SDPose", file="diffusion_models/rt_detr_v4-x-hgnet_fp16.safetensors", dest="diffusion_models", license="mit (Comfy-Org repack; RT-DETRv4 apache-2.0)"),
     dict(spike="e10", repo="Comfy-Org/Depth-Anything-3", file="geometry_estimation/depth_anything_3_base.safetensors", dest="geometry_estimation", license="apache-2.0"),
     # ---- E12 angles, method B (D74): Qwen-Image-Edit 2511 as a Q4_K_M GGUF + fal's 96-pose angles LoRA + lightx2v's 4-step LoRA ----
+    # E12 method D2 (2026-10-12, the author's web-search follow-up): fal-trained multi-angle LoRA for FLUX.2 dev — dev is `full` only (flux-nc)
+    dict(spike="e12", repo="lovis93/Flux-2-Multi-Angles-LoRA-v2", file="flux-multi-angles-v2-72poses-comfy.safetensors", dest="loras",
+         license="creativeml-openrail-m (LoRA; its base FLUX.2 dev is flux-nc, so full only)",
+         retired="E12 2026-10-12: method D2 (dev + Turbo 8 steps) 105 s warm against the 60 s bar, rotations 4-5/10; identity 0.74 was good"),
     dict(spike="e12", repo="unsloth/Qwen-Image-Edit-2511-GGUF", file="qwen-image-edit-2511-Q4_K_M.gguf", dest="diffusion_models", license="apache-2.0",
          retired="E12 2026-10-12: method B warm 154 s against the 90 s kill rule (08 §7); identity 0.72 was the best, speed killed it"),
     dict(spike="e12", repo="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA", file="qwen-image-edit-2511-multiple-angles-lora.safetensors", dest="loras", license="apache-2.0",

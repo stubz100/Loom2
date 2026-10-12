@@ -148,7 +148,7 @@ def main() -> int:
         fixture = json.loads((REPO / "orchestrator" / "tests" / "fixtures" / "object_info.json").read_text(encoding="utf-8"))
         missing = [c for c in fixture["classes"] if c not in live]
         check("fixture classes exist on the live engine", not missing, str(missing))
-        roster = roster_mod.Roster(Path("F:/loom2-models"), [Path("D:/comfyui/ComfyUI/models")]).scan()
+        roster = roster_mod.Roster(Path("F:/loom2-models"), []).scan()      # D80: no mounted trees
         comp = graphs.compile_recipe(recipes.parse_recipe(recipe), roster, live, 1, "x")
         check("live contract check clean", comp.problems == [], str(comp.problems)[:200])
         # 4. hard kill mid-job → engine dies with the orchestrator (Job Object)

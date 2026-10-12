@@ -47,7 +47,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = APP_SCHEMA_VERSION
     models_root: str = os.environ.get("LOOM2_MODELS", "F:/loom2-models")
-    mounted_model_trees: list[str] = Field(default_factory=lambda: ["D:/comfyui/ComfyUI/models"])
+    mounted_model_trees: list[str] = Field(default_factory=list)       # D80: none by default — D: is a backup drive, F:/loom2-models holds everything
     vram_budget_gb: float = 16.0
     variant: Variant = os.environ.get("LOOM2_VARIANT", "full")  # type: ignore[assignment]
     hf_home: str = os.environ.get("HF_HOME", "F:/HF_HOME")

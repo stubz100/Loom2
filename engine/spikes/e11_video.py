@@ -40,7 +40,7 @@ OUT = REPO / "engine" / "spikes" / "out" / "e11"
 RESULTS = OUT / "results.jsonl"
 MODELS = Path("F:/loom2-models")
 LTX = next(i for i, s in registry.SPECS.items() if s.graph == "ltx23")
-ROSTER = Roster(MODELS, [Path("D:/comfyui/ComfyUI/models")], "full").scan()
+ROSTER = Roster(MODELS, [], "full").scan()                                # D80: F:/loom2-models only (D: is a backup drive)
 IC_LORA = "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
 SEED, FRAMES, FPS, W, H = 20261013, 121, 24, 1024, 576
 

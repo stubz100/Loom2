@@ -40,7 +40,7 @@ BENCH = REPO / "bench" / "angles"
 OUT = REPO / "engine" / "spikes" / "out" / "e12"
 RESULTS = OUT / "results.jsonl"
 MODELS_ROOT = Path("F:/loom2-models")
-ROSTER = Roster(MODELS_ROOT, [Path("D:/comfyui/ComfyUI/models")], "full").scan()
+ROSTER = Roster(MODELS_ROOT, [], "full").scan()                           # D80: F:/loom2-models only (D: is a backup drive)
 
 
 def klein_te(model_id: str = "klein-9b") -> dict:
@@ -67,7 +67,7 @@ FAL: dict[str, str] = {
     "topdown": "<sks> front view high-angle shot medium shot", "closeup": "<sks> front view eye-level shot close-up",
     "wide": "<sks> front view eye-level shot wide shot",
 }
-METHODS = ["qwen_angles", "klein_prompt", "qwen2511_angles"]
+METHODS = ["qwen_angles", "klein_prompt", "qwen2511_angles", "klein_prompt2", "dev_angles"]
 
 
 class Engine:
@@ -164,6 +164,53 @@ def klein_prompt(image_name: str, move: str, seed: int) -> dict:
     return g
 
 
+SHEET = ("Using the input image as the strict visual reference, create {view} of the same subject. Preserve the exact identity, proportions, "
+         "silhouette, materials, colours, clothing, markings and design language from the input image. Preserve the same expression, pose, "
+         "posture, gesture and object positions; the subject stays in the same moment, only viewed from {angle}. Photorealistic, same subject, "
+         "same pose, same setting and lighting, only the viewing angle changes.")
+VIEWS2: dict[str, tuple[str, str]] = {
+    "left45": ("a 45-degree front three-quarter view from the subject's left", "a front three-quarter angle 45 degrees to the left, eye-level"),
+    "right45": ("a 45-degree front three-quarter view from the subject's right", "a front three-quarter angle 45 degrees to the right, eye-level"),
+    "topdown": ("a high-angle top-down view", "directly above, looking straight down"),
+    "closeup": ("a close-up detail view of the main subject's face and shoulders", "close up"),
+    "wide": ("a wide shot showing the whole scene around the subject", "far back, a wide angle"),
+}
+
+
+def klein_prompt2(image_name: str, move: str, seed: int) -> dict:
+    """C2 · method C with the prompt shape of the Civitai "Flux Klein 4B/9B Multiple Angles" character-sheet workflow (nikhilprasanth, 2026-05;
+    native nodes, no LoRA): a strict-reference lead, the view named twice, "only the viewing angle changes" — the author's web-search follow-up."""
+    g = klein_prompt(image_name, move, seed)
+    g["5"]["inputs"]["text"] = SHEET.format(view=VIEWS2[move][0], angle=VIEWS2[move][1])
+    g["12"]["inputs"]["filename_prefix"] = f"e12/klein2_{move}"
+    return g
+
+
+def dev_angles(image_name: str, move: str, seed: int) -> dict:
+    """D2 · FLUX.2 dev fp8 + the Turbo LoRA (8 steps, the app's dev preset: euler / simple, guidance 4, CFG 1) + lovis93's fal-trained
+    Multi-Angles LoRA v2 (72 positions, the same <sks> vocabulary as fal's 2511 LoRA) at 0.9, the source as ReferenceLatent — the only angles
+    LoRA for a FLUX.2 model loom2 already runs (the author's web-search follow-up, 2026-10-12). dev is `full` only (flux-nc)."""
+    g: dict = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "flux2_dev_fp8mixed.safetensors", "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "mistral_3_small_flux2_fp8.safetensors", "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": "flux2-vae.safetensors"}},
+        "4": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": "Flux2TurboComfyv2.safetensors", "strength_model": 1.0}},
+        "41": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["4", 0], "lora_name": "flux-multi-angles-v2-72poses-comfy.safetensors", "strength_model": 0.9}},
+        "100": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+    }
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": FAL[move], "clip": ["2", 0]}}
+    g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
+    g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}
+    g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["8", 0], "guidance": 4.0}}
+    g["60"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
+    g["9"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": SRC_W, "height": SRC_H, "batch_size": 1}}
+    g["10"] = {"class_type": "KSampler", "inputs": {"model": ["41", 0], "seed": seed, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                                                    "positive": ["6", 0], "negative": ["60", 0], "latent_image": ["9", 0], "denoise": 1.0}}
+    g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+    g["12"] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": f"e12/dev_{move}"}}
+    return g
+
+
 def qwen2511_angles(image_name: str, move: str, seed: int) -> dict:
     """B · Qwen-Image-Edit 2511 Q4_K_M (ComfyUI-GGUF) + lightx2v's 4-step LoRA + fal's angles LoRA at 0.9 (its card's starting point)."""
     g = qwen_angles(image_name, move, seed)
@@ -181,7 +228,8 @@ def qwen2511_angles(image_name: str, move: str, seed: int) -> dict:
     return g
 
 
-BUILD = {"qwen_angles": (qwen_angles, "12"), "klein_prompt": (klein_prompt, "12"), "qwen2511_angles": (qwen2511_angles, "12")}
+BUILD = {"qwen_angles": (qwen_angles, "12"), "klein_prompt": (klein_prompt, "12"), "qwen2511_angles": (qwen2511_angles, "12"),
+         "klein_prompt2": (klein_prompt2, "12"), "dev_angles": (dev_angles, "12")}
 
 
 # ---------------------------------------------------------------- steps

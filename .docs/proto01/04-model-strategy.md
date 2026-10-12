@@ -23,6 +23,8 @@ convention) and evaluates the models for MVP targets a, b, c.
 folders, sourced in freshness order **Unsloth → city96 → QuantStack**, each recorded with publisher and
 sha256 in the roster. loom2 reads and writes `extra_model_paths.yaml`, so the user's existing ComfyUI tree
 is mounted rather than copied, and anything the user drops into ComfyUI is visible to loom2.
+*Revised by D80 (2026-10-12): the old tree on `D:` is a backup drive, not a model source — the engine reads
+`F:\loom2-models` only, and the few files loom2 still took from D: were copied there.*
 
 Why not Unsloth-only: it would leave Wan 2.2 (the chosen i2v model), FLUX.1 Fill, ControlNets, upscalers and
 matching VAEs/TEs outside the convention on day one, and we would still be reading GGUFs made with city96's

@@ -744,11 +744,13 @@ decision.
 
 Each result is recorded against D17 (EU-first) and D26 (variants).
 
-**Results (2026-10-11 / 12, journal 16:30 and the 2026-10-12 entry; decisions D75–D79 in 13):** E13 passed (D75); E11 passed (D76,
-IC-LoRA on the depth pass, 1.22× plain). E12, E10 and E14 each miss part of their bar and are recorded as proposals for the author:
-E12 needs two methods (A for rotations, C for framing; A's cold load 428 s; B killed and deleted); E10's clay reference keeps the
-blocking 10/10 at 12 s but PCK 0.60 (RefControl 0.86 at 2×; Z-Image deleted); E14's Pixal3D clears shape, faces and backs at 1024
-but takes 243 s warm / 361 s cold (TRELLIS.2 deleted; "512" is not a valid upsample target on 0.39). The spike drivers are
+**Results (2026-10-11 / 12, journal 16:30 and the two 2026-10-12 entries; decisions D75–D80 in 13, all accepted):** E13 passed
+(D75); E11 passed (D76, IC-LoRA on the depth pass, 1.22× plain). E12 (D77): two methods — A (Qwen-Edit 2509 + the angles LoRA) for
+rotations, Klein 9B with a strict-reference prompt (C2) for top-down / close-up / wide; every bar met once A's weights sat on the NVMe
+(its 428 s "cold" was the D: hard disk → D80: D: is a backup, the engine reads F: only); B and a dev + multi-angle LoRA attempt killed
+on time and deleted. E10 (D78): the clay reference by default (blocking 10/10 at 12 s, PCK 0.60) with RefControl (0.86 at 2×) as the
+exact-pose switch; Z-Image deleted. E14 (D79): Pixal3D at 1024 clears shape, faces and backs but takes 243 s warm / 361 s cold —
+accepted as a background job (TRELLIS.2 deleted; "512" is not a valid upsample target on 0.39). The spike drivers are
 `engine/spikes/e10_stage.py`, `e11_video.py`, `e12_angles.py`, `e14_mesh.py` (+ `ui_to_api.py`), the browser halves
 `frontend/src/spikes/e10Stage.ts`, `e11Shots.ts`, `e14Mesh.ts` with runners under `frontend/e2e/spikes/`.
 

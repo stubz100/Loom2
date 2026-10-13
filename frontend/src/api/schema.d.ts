@@ -1326,6 +1326,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stages List */
+        get: operations["stages_list_stages_get"];
+        put?: never;
+        /** Stage Create */
+        post: operations["stage_create_stages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/{st_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stage Get */
+        get: operations["stage_get_stages__st_id__get"];
+        /** Stage Put */
+        put: operations["stage_put_stages__st_id__put"];
+        post?: never;
+        /** Stage Delete */
+        delete: operations["stage_delete_stages__st_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/thumbs/{asset_id}/{size}": {
         parameters: {
             query?: never;
@@ -3468,7 +3505,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
             /** Surface */
             surface: string;
         };
@@ -3484,7 +3521,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
             /** Surface */
             surface: string;
         };
@@ -3500,7 +3537,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
             /** Surface */
             surface: string;
         };
@@ -3911,6 +3948,15 @@ export interface components {
             layer: string;
             /** W */
             w: number;
+        };
+        /** Pose */
+        Pose: {
+            /** Joints */
+            joints: {
+                [key: string]: number[];
+            };
+            /** Preset */
+            preset: string | null;
         };
         /** ProjectClosed */
         ProjectClosed: {
@@ -4576,6 +4622,147 @@ export interface components {
             /** Shutting Down */
             shutting_down: boolean;
         };
+        /** Stage */
+        Stage: {
+            /** Active Camera */
+            active_camera: string | null;
+            /** Cameras */
+            cameras: components["schemas"]["StageCamera"][];
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Keyframes */
+            keyframes: {
+                [key: string]: unknown;
+            };
+            /**
+             * Name
+             * @default Stage
+             */
+            name: string;
+            /** Objects */
+            objects: components["schemas"]["StageObject"][];
+            /** Passes */
+            passes: {
+                [key: string]: unknown;
+            }[];
+            range: components["schemas"]["StageRange"];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+            /** Updated At */
+            updated_at: string;
+        };
+        /** StageCamera */
+        StageCamera: {
+            /**
+             * Focal Mm
+             * @default 35
+             */
+            focal_mm: number;
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default Camera
+             */
+            name: string;
+            /** Pos */
+            pos: number[];
+            /**
+             * Roll
+             * @default 0
+             */
+            roll: number;
+            /**
+             * Sensor Mm
+             * @default 36
+             */
+            sensor_mm: number;
+            /** Target */
+            target: number[];
+        };
+        /** StageCreate */
+        StageCreate: {
+            /**
+             * Name
+             * @default Stage
+             */
+            name?: string;
+        };
+        /**
+         * StageList
+         * @description P13 / ST1 (D81): the project's stages.
+         */
+        StageList: {
+            /** Items */
+            items: components["schemas"]["Stage"][];
+        };
+        /** StageObject */
+        StageObject: {
+            /** Asset Id */
+            asset_id: string | null;
+            /**
+             * Billboard
+             * @default true
+             */
+            billboard: boolean;
+            /**
+             * Colour Id
+             * @default 0
+             */
+            colour_id: number;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "mannequin" | "set" | "prop" | "plane" | "mesh" | "light";
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /** Name */
+            name: string;
+            /** Parent */
+            parent: string | null;
+            pose: components["schemas"]["Pose"] | null;
+            /** Preset */
+            preset: string | null;
+            transform: components["schemas"]["Transform"];
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
+        };
+        /** StageRange */
+        StageRange: {
+            /**
+             * End
+             * @default 120
+             */
+            end: number;
+            /**
+             * Start
+             * @default 0
+             */
+            start: number;
+        };
         /** StatePaths */
         StatePaths: {
             /** Logs */
@@ -4987,6 +5174,15 @@ export interface components {
             vram_gb?: number | null;
         } & {
             [key: string]: unknown;
+        };
+        /** Transform */
+        Transform: {
+            /** Pos */
+            pos: number[];
+            /** Rot */
+            rot: number[];
+            /** Scale */
+            scale: number[];
         };
         /** Trashed */
         Trashed: {
@@ -7858,6 +8054,158 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stages_list_stages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageList"];
+                };
+            };
+        };
+    };
+    stage_create_stages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_get_stages__st_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_put_stages__st_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_delete_stages__st_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
                 };
             };
             /** @description Validation Error */

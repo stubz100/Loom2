@@ -15,6 +15,7 @@ from .catalogue import AssetRecord
 from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .timelines import Timeline
+from .stages import Stage
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -560,6 +561,11 @@ class ClipList(Out):
 class TimelineList(Out):
     """P17 (D83): the project's sequences."""
     items: list[Timeline]
+
+
+class StageList(Out):
+    """P13 / ST1 (D81): the project's stages."""
+    items: list[Stage]
 
 
 class TimelineExported(Out):

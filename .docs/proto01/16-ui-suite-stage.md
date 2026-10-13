@@ -1,6 +1,6 @@
 # 16 · Suite E — Stage (3D blocking → control passes → image / clip) — UI document
 
-Status: **proposed 2026-10-12; approval gates ST1 (D12, D81).** Plan: ArtCraft 08 §8 (P13, slices ST1–ST4, 25–30 d). Conditioning
+Status: **approved 2026-10-13 (D81) with the §14 defaults; ST1 in progress.** Proposed 2026-10-12. Plan: ArtCraft 08 §8 (P13, slices ST1–ST4, 25–30 d). Conditioning
 decided by the spikes: E10 → D78 (the clay reference by default, RefControl as the "exact pose" switch), E11 → D76 (LTX-2.3 with its
 IC-LoRA on the depth pass). Props: E14 → D79 (Pixal3D, P18, after ST1). Frame rules: 07 (D32 mouse-first, D34 drags, D69 keep-alive,
 D71 drops explain themselves, D72 remappable keys). The design takes ArtCraft's stage *as design, re-implemented* (ArtCraft 04 §2,
@@ -189,6 +189,9 @@ All are registry commands with mouse homes (D32) and remappable (D72); unmodifie
   mannequin's joint tree, the stage file's migration) are modules with Vitest tests.
 
 ## 13. Acceptance checklist (`scripts/st_acceptance.py`, rig)
+*ST1 built 2026-10-13 (D81; journal of that day): the suite tab (Ctrl+6), Library · Outliner · Cameras, the viewport with the gizmo
+bar, raycast placement and image planes by drop, cameras in mm with the letterboxed camera view and guides, `stages/<id>.json` with
+revision saves, undo / redo; the smoke scenario covers create → add → outliner → save → reload. Posing beyond presets is ST2, passes ST3.*
 - [ ] Create a stage, place two mannequins and a set plane, pose with presets (ST1) and IK (ST2), frame a 35 mm camera, export
       the five passes at Draft size; the keypoints JSON matches the pose pass (vitest on projection).
 - [ ] Generate with the clay method: the blocking is kept (the author's blind check ≥ 8/10 on a 10-shot set, as E10); with
@@ -198,11 +201,8 @@ All are registry commands with mouse homes (D32) and remappable (D72); unmodifie
 - [ ] One ST4 shot renders a clip whose camera move follows the keyframes (PCK on sampled frames as E11).
 - [ ] Suite switch away and back under D69 keeps the view; release and re-entry ≤ 300 ms; WebGL2 context loss recovers.
 
-## 14. Open questions
-- Sensor convention: 36 mm full-frame (this doc) or ArtCraft's 24 mm vertical? Affects what "50 mm" looks like; 36 mm is the
-  photographic default storyboard artists expect.
-- Whether the mask pass ships in ST3 (no E10 method uses it) or waits for a region-prompting use (LanPaint on a chosen object).
-- Which mannequin the *Exact pose* method wants: the pose pass alone (E10) or the pose pass plus the clay as a third reference — a
-  10-shot rig check during ST3.
-- Image planes in the clay pass: rendered as grey cards (consistent with the method's "clay blocking") or with their image — the
-  method's prompt says "image 1 is a grey clay blocking"; a rig check during ST1 decides.
+## 14. Open questions — decided by the author 2026-10-13 (D81)
+- Sensor convention: **36 mm full-frame** (the photographic default storyboard artists expect; ArtCraft's 24 mm vertical rejected).
+- The mask pass **ships in ST3** (no E10 method uses it yet; region prompting can take it later).
+- The *Exact pose* method takes **the pose pass alone** (as E10 measured); the clay as a third reference is not added.
+- Image planes in the clay pass render as **grey cards** (consistent with "image 1 is a grey clay blocking").

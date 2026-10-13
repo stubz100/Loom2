@@ -405,3 +405,34 @@ test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin,
   expect(asset.lineage_kind).toBe('render')
   expect(asset.parents).toHaveLength(1)
 })
+
+test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Stage/)
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Alley at night')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Alley at night')
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /^Add set · room$/ }).click()
+  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                        // the Library's figure card
+  await page.locator('nav.rail button[title^="Outliner"]').click()
+  await expect(page.locator('.outl-row .kind')).toHaveCount(2)
+  await expect(page.locator('.outl-row.active', { has: page.locator('.kind') }).locator('.name')).toHaveText('Figure 1')   // the last added is selected (the camera row is "active" in its own sense)
+  await expect(page.locator('.inspector .stage-insp h4')).toContainText('Figure 1')
+  await expect.poll(async () => (await api<{ items: { name: string; revision: number; objects: { kind: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')?.objects.length ?? 0, { timeout: 10_000 }).toBe(2)
+  const before = (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!
+  expect(before.revision).toBeGreaterThanOrEqual(1)
+  // camera view shows the framing rectangle; the free view does not
+  await page.locator('nav.rail button[title^="Cameras"]').click()
+  await page.locator('.stage-panel button', { hasText: /^Look through$/ }).click()
+  await expect(page.locator('.frame-guides')).toBeVisible()
+  await expect(page.locator('.view-tag')).toContainText('35 mm')
+  await page.screenshot({ path: 'node_modules/.e2e/stage-camera-view.png' })                     // a look for the journal: the framing rectangle over the set
+  await page.reload()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Stage/)
+  await page.locator('.stage-row', { hasText: 'Alley at night' }).click()
+  await page.locator('nav.rail button[title^="Outliner"]').click()
+  await expect(page.locator('.outl-row .kind')).toHaveCount(2)
+})

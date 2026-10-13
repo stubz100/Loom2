@@ -6,7 +6,7 @@ import { useSession } from './session'
 
 type Origin = NonNullable<Job['origin']>
 
-const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', api: 'API' }
+const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', api: 'API' }
 
 /** False for jobs without an origin (queued before D66) and for jobs submitted through the API by a script (no suite to go to). */
 export const canGoToOrigin = (j: Pick<Job, 'origin'>): boolean => !!j.origin && j.origin.suite !== 'api'

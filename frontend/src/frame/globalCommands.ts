@@ -26,6 +26,7 @@ registerCommands([
   { id: 'global.suite.edit', scope: 'global', label: 'Edit', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('edit') },
   { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('animate') },
   { id: 'global.suite.models', scope: 'global', label: 'Models', keys: 'Ctrl+5', placement: ['topbar'], run: () => s().setSuite('models') },
+  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+6', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
   // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
   { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },
   { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },

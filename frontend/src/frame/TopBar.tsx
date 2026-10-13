@@ -12,7 +12,7 @@ import { dropRefs, refDropFor } from '../suites/generate/generateStore'
 
 export const SUITES: { id: Suite; label: string; key: string }[] = [
   { id: 'catalogue', label: 'Catalogue', key: '1' }, { id: 'generate', label: 'Generate', key: '2' }, { id: 'edit', label: 'Edit', key: '3' },
-  { id: 'animate', label: 'Animate', key: '4' }, { id: 'models', label: 'Models', key: '5' },
+  { id: 'animate', label: 'Animate', key: '4' }, { id: 'stage', label: 'Stage', key: '6' }, { id: 'models', label: 'Models', key: '5' },
 ]
 
 function useOutside(onClose: () => void) {

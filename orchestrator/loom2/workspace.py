@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json, utc_now
 
 PROJECT_SCHEMA_VERSION = 1
-SUBDIRS = ("assets", "thumbs", "documents", "clips", "masks", "timelines", "jobs", "jobs/logs", "_temp")   # engine output lives under <app state>/engine_out (06 §4); timelines: P17 / D83
+SUBDIRS = ("assets", "thumbs", "documents", "clips", "masks", "timelines", "stages", "jobs", "jobs/logs", "_temp")   # engine output lives under <app state>/engine_out (06 §4); timelines: P17 / D83; stages: P13 / D81
 Tier = Literal["thumb", "draft", "hd", "full"]
 DEFAULT_SIZE_CAP_GB = 100.0
 MIN_SIZE_CAP_GB = 10.0
@@ -77,6 +77,8 @@ class Workspace:
     def masks_dir(self) -> Path: return self.path / "masks"
     @property
     def timelines_dir(self) -> Path: return self.path / "timelines"
+    @property
+    def stages_dir(self) -> Path: return self.path / "stages"
     @property
     def jobs_dir(self) -> Path: return self.path / "jobs"
     @property

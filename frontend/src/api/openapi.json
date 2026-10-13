@@ -4956,6 +4956,7 @@
               "edit",
               "animate",
               "catalogue",
+              "stage",
               "api"
             ],
             "title": "Suite",
@@ -5006,6 +5007,7 @@
               "edit",
               "animate",
               "catalogue",
+              "stage",
               "api"
             ],
             "title": "Suite",
@@ -5054,6 +5056,7 @@
               "edit",
               "animate",
               "catalogue",
+              "stage",
               "api"
             ],
             "title": "Suite",
@@ -6120,6 +6123,37 @@
           "h"
         ],
         "title": "PixelsPut",
+        "type": "object"
+      },
+      "Pose": {
+        "properties": {
+          "joints": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Joints",
+            "type": "object"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          }
+        },
+        "required": [
+          "preset",
+          "joints"
+        ],
+        "title": "Pose",
         "type": "object"
       },
       "ProjectClosed": {
@@ -7554,6 +7588,309 @@
         "title": "ShuttingDown",
         "type": "object"
       },
+      "Stage": {
+        "properties": {
+          "active_camera": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Camera"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/StageCamera"
+            },
+            "title": "Cameras",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keyframes": {
+            "additionalProperties": true,
+            "title": "Keyframes",
+            "type": "object"
+          },
+          "name": {
+            "default": "Stage",
+            "title": "Name",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/StageObject"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "passes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Passes",
+            "type": "array"
+          },
+          "range": {
+            "$ref": "#/components/schemas/StageRange"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "size",
+          "objects",
+          "cameras",
+          "active_camera",
+          "keyframes",
+          "range",
+          "passes",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Stage",
+        "type": "object"
+      },
+      "StageCamera": {
+        "properties": {
+          "focal_mm": {
+            "default": 35.0,
+            "title": "Focal Mm",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "Camera",
+            "title": "Name",
+            "type": "string"
+          },
+          "pos": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Pos",
+            "type": "array"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "sensor_mm": {
+            "default": 36.0,
+            "title": "Sensor Mm",
+            "type": "number"
+          },
+          "target": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pos",
+          "target",
+          "roll",
+          "focal_mm",
+          "sensor_mm"
+        ],
+        "title": "StageCamera",
+        "type": "object"
+      },
+      "StageCreate": {
+        "properties": {
+          "name": {
+            "default": "Stage",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "StageCreate",
+        "type": "object"
+      },
+      "StageList": {
+        "description": "P13 / ST1 (D81): the project's stages.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "StageList",
+        "type": "object"
+      },
+      "StageObject": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "billboard": {
+            "default": true,
+            "title": "Billboard",
+            "type": "boolean"
+          },
+          "colour_id": {
+            "default": 0,
+            "title": "Colour Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mannequin",
+              "set",
+              "prop",
+              "plane",
+              "mesh",
+              "light"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          },
+          "pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Pose"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform"
+          },
+          "visible": {
+            "default": true,
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "preset",
+          "asset_id",
+          "transform",
+          "parent",
+          "locked",
+          "visible",
+          "colour_id",
+          "pose",
+          "billboard"
+        ],
+        "title": "StageObject",
+        "type": "object"
+      },
+      "StageRange": {
+        "properties": {
+          "end": {
+            "default": 120,
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "default": 0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "StageRange",
+        "type": "object"
+      },
       "StatePaths": {
         "additionalProperties": true,
         "properties": {
@@ -8466,6 +8803,38 @@
           "order"
         ],
         "title": "ToolCaps",
+        "type": "object"
+      },
+      "Transform": {
+        "properties": {
+          "pos": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Pos",
+            "type": "array"
+          },
+          "rot": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Rot",
+            "type": "array"
+          },
+          "scale": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Scale",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pos",
+          "rot",
+          "scale"
+        ],
+        "title": "Transform",
         "type": "object"
       },
       "Trashed": {
@@ -13356,6 +13725,200 @@
         "summary": "Snippets Put",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/stages": {
+      "get": {
+        "operationId": "stages_list_stages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stages List",
+        "tags": [
+          "stages"
+        ]
+      },
+      "post": {
+        "operationId": "stage_create_stages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Create",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}": {
+      "delete": {
+        "operationId": "stage_delete_stages__st_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Delete",
+        "tags": [
+          "stages"
+        ]
+      },
+      "get": {
+        "operationId": "stage_get_stages__st_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Get",
+        "tags": [
+          "stages"
+        ]
+      },
+      "put": {
+        "operationId": "stage_put_stages__st_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Put",
+        "tags": [
+          "stages"
         ]
       }
     },

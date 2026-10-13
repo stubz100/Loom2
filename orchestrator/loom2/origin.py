@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 class JobOrigin(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
-    suite: Literal["generate", "edit", "animate", "catalogue", "api"]
+    suite: Literal["generate", "edit", "animate", "catalogue", "stage", "api"]
     surface: str                                   # results · ref-slot · clip · ai · group … — the panel or view that asked
     ref: str | None = None                         # what it was about: a document, clip, group or batch id
     payload: dict[str, Any] | None = None          # anything the surface needs to show the result in place (a slot number, a view)

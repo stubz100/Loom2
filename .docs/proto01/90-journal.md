@@ -3225,3 +3225,41 @@ split by file so that no two hands touched the same module.
   each swap its own undo step; a short press still selects and scrubs. The smoke scenario checks a thumbnail loads. tsc clean, lint 100,
   smoke 15/15. CI for the two P17 commits is green under both variants (the one `open` failure on 8e13865 did not recur and its
   suite passes here under `open` — treated as a runner hiccup; the log needs a token I do not have).
+
+## 2026-10-13 08:23 — 16 approved (D81): ST1 starts
+
+- The author approved `16-ui-suite-stage.md` with its four defaults (36 mm sensor; the mask pass in ST3; the exact-pose method on the
+  pose pass alone; image planes as grey cards in the clay pass). ST1 (Scene: suite registration, library with raycast placement,
+  gizmos, outliner, cameras in mm, framing guides, `StageStore` save / reopen) starts now; its plan is 08 §8 and 16 §§3–5, 12–13.
+
+## 2026-10-13 08:42 — ST1 Scene built: the Stage suite (D81)
+
+- **Backend** (`orchestrator/loom2/stages.py`, `routes/stages.py`): `Stage {schema_version, id, name, size {w, h, fps}, objects
+  [{id, kind: mannequin | set | prop | plane | mesh | light, name, preset, asset_id, transform {pos, rot, scale}, parent, locked, visible,
+  colour_id, pose {preset, joints}, billboard}], cameras [{id, name, pos, target, roll, focal_mm, sensor_mm = 36}], active_camera,
+  keyframes, range, passes, revision}` as `stages/<id>.json`; `check()` (unique ids, parents that exist and never cycle, the active
+  camera present, focal 4–1200 mm); `put()` with the document-style 409; create gives one 35 mm camera at eye level and the project's
+  size and fps. Routes list / create / get / put / delete; `stage.updated` events. 3 offline tests; route snapshot (105 rows) and the
+  OpenAPI regenerated; `JobOrigin.suite` gains `stage`.
+- **Frontend** (`frontend/src/suites/stage/`): `builders.ts` — the E10 mannequin (joint tree, COCO-18 markers kept for ST3), the three
+  E10 sets + `empty`, five primitive props, `vfovFor(focal, sensor, aspect)`; `engine.ts` — a `StageEngine` on its own WebGL2 canvas:
+  free camera with OrbitControls, the render camera from the active document camera (vertical fov from the 36 mm sensor at the
+  project aspect), the camera view letterboxed with scissor and a DOM overlay for the framing rectangle, thirds and centre,
+  TransformControls as the gizmo (translate / rotate / scale, snap 0.25 m · 15° · 0.1), raycast picking and placement (set surfaces,
+  then the floor plane), `sync(doc)` diffing objects by id (rebuild on kind / preset / asset change, transforms and visibility
+  otherwise, poses re-applied), camera glyphs, a selection box, on-demand rendering paused while hidden (D69); `stageStore.ts` —
+  stages, the open document, selection, tool / snap / view / guides, a 64-deep undo stack, saves debounced 300 ms with the
+  revision (409 → reload and a toast), object and camera edits; `StageParts.tsx` — Library (stages list + figure / set / prop cards
+  that add at the viewport's centre), Outliner (rows with visibility and lock, rename on double-click, cameras), Cameras (focal
+  presets 24 / 35 / 50 / 85 + a field, roll, Look through, Set from view, Frame all), the Strip (free / camera, guides, frame), the
+  viewport with the floating gizmo bar, image planes by dropping a Catalogue tile (placed under the pointer, D71 verdict), the
+  Inspector (transform fields, pose preset, parent, billboard; the camera; the stage); `stageCommands.ts` — 30 `stage.*` commands
+  (W / G / R / S tools, Q snap, C look through, Home / F framing, Delete, Ctrl+D, L, H, Ctrl+Z / Ctrl+Shift+Z). The suite is the
+  sixth tab (`Ctrl+6`), lazy and kept alive like Edit; the deep link and start-suite setting accept it.
+- **Checks:** smoke scenario (new stage → add a set and a figure → the Outliner lists both, the Inspector shows the figure → saved at
+  revision ≥ 1 → camera view shows the framing rectangle at 35 mm → reload keeps both) — 16/16; 252 offline, 182 unit, lint 100,
+  build clean, audits clean. The screenshot of the camera view (`frontend/node_modules/.e2e/stage-camera-view.png`) shows the room,
+  the figure in its selection box, the 16:9 frame and the guides.
+- Not in ST1 (by plan): IK and joint posing (ST2), passes and `StageShot` (ST3), keyframes and clips (ST4), meshes (P18). Known
+  rough edges to take in ST2: the gizmo bar has no Local / World toggle yet; planes drop at the pointer but stand at a fixed 1.6 m
+  width until their image loads the aspect; no rig acceptance script yet (`scripts/st_acceptance.py` comes with ST3's passes).

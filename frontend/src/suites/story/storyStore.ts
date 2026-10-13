@@ -5,8 +5,9 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, http, unwrap } from '../../api/client'
-import type { Clip, GroupPage, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
+import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
 import { useSession } from '../../store/session'
+import { startPlay, stepPlay, type PlayState } from './flow/play'
 
 export type Section = 'logline' | 'synopsis' | 'styles' | 'spine' | 'variables'
 export type Selection = { kind: 'style' | 'beat' | 'variable'; id: string } | null   // a variable's id is its name
@@ -28,6 +29,9 @@ export interface StoryState {
   // SY2 · Shots
   shots: Shot[]; shotsLoaded: boolean; shotId: string | null; shotVersionId: string | null
   clipsById: Record<string, Clip>; stagesLite: { id: string; name: string; revision: number }[]
+  // SY3 · Flow
+  flowNodes: Record<string, FlowNode>; flowGraph: FlowGraph | null; flowLoaded: boolean
+  nodeId: string | null; problems: FlowProblem[] | null; play: PlayState | null; addAt: { x: number; y: number } | null
   load: () => Promise<void>
   flush: () => Promise<void>
   setSection: (s: Section) => void
@@ -86,6 +90,27 @@ export interface StoryState {
   finalizeWhy: (v: ShotVersion) => string | null
   /** The stage moved after the version's frame / clip was taken (advisory, loom R62). */
   shotStale: (v: ShotVersion) => boolean
+  // SY3 · Flow
+  loadFlow: () => Promise<void>
+  selectNode: (id: string | null) => void
+  setAddAt: (at: { x: number; y: number } | null) => void
+  node: () => FlowNode | undefined
+  addNode: (type: FlowNode['type'], title?: string, at?: { x: number; y: number } | null, extra?: { text?: string }) => Promise<FlowNode | null>
+  patchNode: (id: string, patch: Partial<Pick<FlowNode, 'type' | 'title' | 'lines' | 'options' | 'cond' | 'set' | 'target' | 'text' | 'colour'>>) => Promise<void>
+  deleteNode: (id: string) => Promise<void>
+  duplicateNode: (id: string) => Promise<void>
+  moveNodes: (positions: { id: string; x: number; y: number }[]) => void
+  connect: (from: string, port: string, to: string) => Promise<void>
+  disconnect: (from: string, port: string) => Promise<void>
+  bindShot: (nodeId: string, shotId: string, version?: string | null) => Promise<void>
+  unbindShot: (nodeId: string) => Promise<void>
+  spawnShot: (nodeId: string, name: string) => Promise<void>
+  validate: () => Promise<void>
+  playStart: () => void
+  playNext: (option?: string) => void
+  playStop: () => void
+  /** World: a Shot node made from a beat by hand (loom R55 — never synced). */
+  nodeFromBeat: (beatId: string) => Promise<void>
 }
 
 const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
@@ -120,6 +145,12 @@ function schedule(get: () => StoryState, set: (p: Partial<StoryState>) => void):
 
 // SY1: the stub saves after a pause, with the profile's revision
 let stubTimer: number | null = null
+// SY3: graph saves (positions, edges) go one after another, each with the index's revision; node saves likewise per node, coalesced
+let graphChain: Promise<void> = Promise.resolve()
+let graphPending = 0                                   // saves queued or running: no reload from the socket while one is pending
+const nodeChains: Record<string, Promise<void>> = {}
+const nodeQueued = new Set<string>()
+let nodeSaving = 0
 
 export const useStory = create<StoryState>()((set, get) => {
   const edit: StoryState['edit'] = (patch) => { const w = get().world ?? EMPTY; set({ world: { ...w, ...patch } }); schedule(get, set) }
@@ -142,6 +173,7 @@ export const useStory = create<StoryState>()((set, get) => {
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
+    flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null,
     load: async () => {
       set({ loading: true })
       try { set({ world: await unwrap(http.GET('/story/world')) }) }
@@ -216,6 +248,7 @@ export const useStory = create<StoryState>()((set, get) => {
         return
       }
       if (data?.kind === 'shot') { void get().loadShots(); return }          // SY2: a take arrived, a finalize, a copy
+      if (data?.kind === 'flow') { if (graphPending === 0 && nodeSaving === 0) void get().loadFlow(); return }   // SY3: a node or the index moved on the server (not while ours are pending)
       if (data?.kind && data.kind !== 'world') return
       const w = get().world
       if (!w || saveTimer !== null || get().saving) return
@@ -410,8 +443,133 @@ export const useStory = create<StoryState>()((set, get) => {
       const st = get().stagesLite.find((x) => x.id === v.stage_id)
       return !!st && st.revision > v.stage_revision
     },
+    // ---- SY3 · Flow
+    loadFlow: async () => {
+      try {
+        const r = await unwrap(http.GET('/story/flow'))
+        const flowNodes: Record<string, FlowNode> = {}
+        for (const n of r.nodes) flowNodes[n.id] = n
+        set({ flowNodes, flowGraph: r.graph, flowLoaded: true, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}) })
+      } catch (e) { if ((e as ApiError).status !== 409) toast(`Flow: ${detail(e)}`) }
+    },
+    selectNode: (nodeId) => set({ nodeId }),
+    setAddAt: (addAt) => set({ addAt }),
+    node: () => { const id = get().nodeId; return id ? get().flowNodes[id] : undefined },
+    addNode: async (type, title, at, extra) => {
+      const g = get().flowGraph
+      const n0 = g?.nodes.length ?? 0
+      const c = (await import('./storyCommands')).flowView.centre?.()
+      const pos = at ?? get().addAt ?? (c ? { x: c.x - 110 + (n0 % 4) * 40, y: c.y - 40 + (n0 % 4) * 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 })   // the view's centre, stepped so new nodes do not stack
+      set({ addAt: null })
+      try {
+        const n = await unwrap(http.POST('/story/flow/nodes', { body: { type, title: title ?? '', x: pos.x, y: pos.y, text: extra?.text ?? '', target: null } }))
+        await get().loadFlow()
+        set({ nodeId: n.id })
+        return n
+      } catch (e) { toast(`Node: ${detail(e)}`); return null }
+    },
+    patchNode: async (id, patch) => {
+      const n = get().flowNodes[id]; if (!n) return
+      set({ flowNodes: { ...get().flowNodes, [id]: { ...n, ...patch } as FlowNode } })               // at once; the save follows (one at a time per node, the latest state)
+      await saveNode(get, set, id, !!(patch.type || patch.options))
+    },
+    deleteNode: async (id) => {
+      try { await unwrap(http.DELETE('/story/flow/nodes/{nid}', { params: { path: { nid: id } } })); if (get().nodeId === id) set({ nodeId: null }); await get().loadFlow(); void get().loadShots() }
+      catch (e) { toast(`Delete: ${detail(e)}`) }
+    },
+    duplicateNode: async (id) => {
+      const n = get().flowNodes[id]; const p = get().flowGraph?.nodes.find((x) => x.id === id); if (!n) return
+      const made = await get().addNode(n.type, n.title ? `${n.title} copy` : '', { x: (p?.x ?? 0) + 40, y: (p?.y ?? 0) + 40 }, { text: n.text })
+      if (made) await get().patchNode(made.id, { lines: n.lines, options: n.options.map((o) => ({ ...o, id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}` })), cond: n.cond, set: n.set, target: n.target, colour: n.colour })
+    },
+    moveNodes: (positions) => {
+      const g = get().flowGraph; if (!g) return
+      const byId = new Map(positions.map((p) => [p.id, p]))
+      const nodes = g.nodes.map((p) => (byId.has(p.id) ? { ...p, x: byId.get(p.id)!.x, y: byId.get(p.id)!.y } : p))
+      set({ flowGraph: { ...g, nodes } })
+      saveGraph(get, set, { nodes })
+    },
+    connect: async (from, port, to) => {
+      const g = get().flowGraph; if (!g) return
+      const edges = [...g.edges.filter((e) => !(e.from === from && e.port === port)), { from, port, to }]
+      set({ flowGraph: { ...g, edges } })
+      saveGraph(get, set, { edges })
+    },
+    disconnect: async (from, port) => {
+      const g = get().flowGraph; if (!g) return
+      const edges = g.edges.filter((e) => !(e.from === from && e.port === port))
+      set({ flowGraph: { ...g, edges } })
+      saveGraph(get, set, { edges })
+    },
+    bindShot: async (nodeId, shotId, version) => {
+      try { await unwrap(http.POST('/story/flow/nodes/{nid}/bind', { params: { path: { nid: nodeId } }, body: { shot_id: shotId, version: version ?? null } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
+      catch (e) { toast(`Bind: ${detail(e)}`) }
+    },
+    unbindShot: async (nodeId) => {
+      try { await unwrap(http.POST('/story/flow/nodes/{nid}/unbind', { params: { path: { nid: nodeId } } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
+      catch (e) { toast(`Unbind: ${detail(e)}`) }
+    },
+    spawnShot: async (nodeId, name) => {
+      try { await unwrap(http.POST('/story/flow/nodes/{nid}/shot', { params: { path: { nid: nodeId } }, body: { name } })); await Promise.all([get().loadFlow(), get().loadShots()]) }
+      catch (e) { toast(`New shot: ${detail(e)}`) }
+    },
+    validate: async () => {
+      try { const r = await unwrap(http.POST('/story/flow/validate')); set({ problems: r.problems }) }
+      catch (e) { toast(`Validate: ${detail(e)}`) }
+    },
+    playStart: () => {
+      const g = get().flowGraph; if (!g) return
+      set({ play: startPlay(g, get().flowNodes, get().world?.variables ?? []) })
+    },
+    playNext: (option) => { const g = get().flowGraph; const p = get().play; if (!g || !p) return; set({ play: stepPlay(p, g, get().flowNodes, option) }) },
+    playStop: () => set({ play: null }),
+    nodeFromBeat: async (beatId) => {
+      const b = get().world?.spine.find((x) => x.id === beatId); if (!b) return
+      const made = await get().addNode('shot', b.title, null, { text: b.line })
+      if (made) { const { setRailTab } = await import('../../frame/suiteRegistry'); setRailTab('story', 'flow') }
+    },
   }
 })
+
+/** SY3: a node saved with its revision, one save at a time per node and never two queued — the save sends the node's latest local state, so
+ *  keystrokes coalesce; a 409 reloads (the last change lost and said so). `ports`: the index is refreshed after, an edge may have gone. */
+function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, id: string, ports: boolean): Promise<void> {
+  if (nodeQueued.has(id)) return nodeChains[id]
+  nodeQueued.add(id)
+  nodeChains[id] = (nodeChains[id] ?? Promise.resolve()).then(async () => {
+    nodeQueued.delete(id)
+    const n = get().flowNodes[id]; if (!n) return
+    nodeSaving += 1
+    try {
+      const { type, title, lines, options, cond, set: sets, target, text, colour } = n
+      const next = await unwrap(http.PATCH('/story/flow/nodes/{nid}', { params: { path: { nid: id } }, body: { revision: n.revision, type, title, lines, options, cond, set: sets, target, text, colour } as never }))
+      const cur = get().flowNodes[id]
+      if (cur) set({ flowNodes: { ...get().flowNodes, [id]: { ...cur, revision: next.revision, updated_at: next.updated_at } } })
+      if (ports) { const r = await unwrap(http.GET('/story/flow')); set({ flowGraph: r.graph }) }
+    } catch (e) {
+      if ((e as ApiError).status === 409) { toast('The node changed elsewhere — reloaded; your last change was not saved'); await get().loadFlow() }
+      else toast(`Node not saved: ${detail(e)}`)
+    } finally { nodeSaving -= 1 }
+  })
+  return nodeChains[id]
+}
+
+/** SY3: the index saved with its revision, one save at a time; a 409 reloads (the last change lost and said so). */
+function saveGraph(get: () => StoryState, set: (p: Partial<StoryState>) => void, patch: { nodes?: FlowGraph['nodes']; edges?: FlowGraph['edges']; start?: string | null }): void {
+  graphPending += 1
+  graphChain = graphChain.then(async () => {
+    const g = get().flowGraph; if (!g) { graphPending -= 1; return }
+    try {
+      void patch                                                                                   // the local index is the truth of what to send: later edits ride along
+      const next = await unwrap(http.PUT('/story/flow/graph', { body: { revision: g.revision, nodes: g.nodes, edges: g.edges, start: g.start } as never }))
+      const cur = get().flowGraph
+      if (cur) set({ flowGraph: { ...cur, revision: next.revision, updated_at: next.updated_at, start: next.start } })     // only the revision moves: edits made meanwhile stay
+    } catch (e) {
+      if ((e as ApiError).status === 409) { toast('The flow changed elsewhere — reloaded; your last change was not saved'); await get().loadFlow() }
+      else toast(`Flow not saved: ${detail(e)}`)
+    } finally { graphPending -= 1 }
+  })
+}
 
 /** Other suites' way in (Stage's "New shot from this camera", Animate's "Make a shot from this clip"): the shot is made, Story opens on it. */
 export async function makeShotAndOpen(name: string, src: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }): Promise<void> {

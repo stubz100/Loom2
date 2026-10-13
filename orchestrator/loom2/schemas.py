@@ -16,7 +16,7 @@ from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .timelines import Timeline
 from .stages import Stage
-from .story import Profile, Shot
+from .story import FlowGraph, FlowNode, Profile, Shot
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -648,6 +648,28 @@ class ProfileList(Out):
 
 class ShotList(Out):
     items: list[Shot]
+
+
+class FlowOut(Out):
+    """17 §3d: the index and every node."""
+    graph: FlowGraph
+    nodes: list[FlowNode]
+
+
+class FlowProblem(Out):
+    code: str
+    node_id: str | None = None
+    message: str
+
+
+class FlowProblems(Out):
+    problems: list[FlowProblem]
+
+
+class NodeShot(Out):
+    """A bind / unbind / spawn: the node and the shot it now owns (or released)."""
+    node: FlowNode
+    shot: Shot | None = None
 
 
 class Expanded(Out):

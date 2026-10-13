@@ -720,6 +720,30 @@
         "title": "Beat",
         "type": "object"
       },
+      "BindBody": {
+        "properties": {
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "BindBody",
+        "type": "object"
+      },
       "BlobPut": {
         "properties": {
           "bytes": {
@@ -3108,6 +3132,431 @@
           "path"
         ],
         "title": "FlattenedToFile",
+        "type": "object"
+      },
+      "FlowCondition": {
+        "properties": {
+          "op": {
+            "default": "eq",
+            "enum": [
+              "eq",
+              "ne"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": true,
+            "title": "Value"
+          },
+          "var": {
+            "default": "",
+            "title": "Var",
+            "type": "string"
+          }
+        },
+        "required": [
+          "var",
+          "op",
+          "value"
+        ],
+        "title": "FlowCondition",
+        "type": "object"
+      },
+      "FlowEdge": {
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "port": {
+            "default": "out",
+            "title": "Port",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "port",
+          "to"
+        ],
+        "title": "FlowEdge",
+        "type": "object"
+      },
+      "FlowGraph": {
+        "description": "The thin index (loom R139): where the nodes sit, the edges, the start — rebuilt from the node files when missing or disagreeing.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/FlowEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FlowPlacement"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "nodes",
+          "edges",
+          "start",
+          "revision",
+          "updated_at"
+        ],
+        "title": "FlowGraph",
+        "type": "object"
+      },
+      "FlowLine": {
+        "description": "One line of a Dialogue node: the speaker is a profile (its mention), the text the line (loom R152: the subtitles come from these).",
+        "properties": {
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text"
+        ],
+        "title": "FlowLine",
+        "type": "object"
+      },
+      "FlowNode": {
+        "description": "One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice\n`options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`\nare set by binding only (loom R146: sole ownership).",
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "cond": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/FlowLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/FlowOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "set": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Set",
+            "type": "array"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "dialogue",
+            "enum": [
+              "start",
+              "hub",
+              "dialogue",
+              "choice",
+              "condition",
+              "action",
+              "shot",
+              "jump",
+              "comment"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "type",
+          "title",
+          "lines",
+          "options",
+          "cond",
+          "set",
+          "target",
+          "text",
+          "shot_id",
+          "shot_version",
+          "colour",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FlowNode",
+        "type": "object"
+      },
+      "FlowOption": {
+        "description": "A Choice's option: its own out-port (`opt:<id>`), an optional requirement on a variable, the variables it sets (loom R135).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "require": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require"
+          },
+          "set": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Set",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "require",
+          "set"
+        ],
+        "title": "FlowOption",
+        "type": "object"
+      },
+      "FlowOut": {
+        "description": "17 §3d: the index and every node.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/FlowGraph"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FlowNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "graph",
+          "nodes"
+        ],
+        "title": "FlowOut",
+        "type": "object"
+      },
+      "FlowPlacement": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "x": {
+            "default": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y"
+        ],
+        "title": "FlowPlacement",
+        "type": "object"
+      },
+      "FlowProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          }
+        },
+        "required": [
+          "code",
+          "node_id",
+          "message"
+        ],
+        "title": "FlowProblem",
+        "type": "object"
+      },
+      "FlowProblems": {
+        "properties": {
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/FlowProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "problems"
+        ],
+        "title": "FlowProblems",
         "type": "object"
       },
       "Freed": {
@@ -6520,6 +6969,48 @@
         "title": "ModelVerify",
         "type": "object"
       },
+      "NodeCreate": {
+        "properties": {
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "dialogue",
+            "title": "Type",
+            "type": "string"
+          },
+          "x": {
+            "default": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "title": "NodeCreate",
+        "type": "object"
+      },
       "NodePin": {
         "additionalProperties": true,
         "properties": {
@@ -6547,6 +7038,30 @@
           "date"
         ],
         "title": "NodePin",
+        "type": "object"
+      },
+      "NodeShot": {
+        "description": "A bind / unbind / spawn: the node and the shot it now owns (or released).",
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/FlowNode"
+          },
+          "shot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Shot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "node",
+          "shot"
+        ],
+        "title": "NodeShot",
         "type": "object"
       },
       "PassesUpload": {
@@ -8723,6 +9238,17 @@
           "shutting_down"
         ],
         "title": "ShuttingDown",
+        "type": "object"
+      },
+      "SpawnBody": {
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "SpawnBody",
         "type": "object"
       },
       "Stage": {
@@ -15935,6 +16461,374 @@
         "summary": "Stage Passes",
         "tags": [
           "stages"
+        ]
+      }
+    },
+    "/story/flow": {
+      "get": {
+        "operationId": "flow_get_story_flow_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Flow Get",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/graph": {
+      "put": {
+        "operationId": "flow_graph_put_story_flow_graph_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowGraph"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Graph Put",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes": {
+      "post": {
+        "operationId": "flow_node_create_story_flow_nodes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Node Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes/{nid}": {
+      "delete": {
+        "operationId": "flow_node_delete_story_flow_nodes__nid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Node Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "flow_node_patch_story_flow_nodes__nid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowNode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Node Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes/{nid}/bind": {
+      "post": {
+        "description": "The node takes the shot as its sole owner (an unbound shot, or a version of its own); 422 when another node owns it.",
+        "operationId": "flow_bind_story_flow_nodes__nid__bind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeShot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Bind",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes/{nid}/shot": {
+      "post": {
+        "description": "A new, empty shot owned by the node (the handoff to the Shots tab, loom R134).",
+        "operationId": "flow_spawn_story_flow_nodes__nid__shot_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpawnBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeShot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Spawn",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes/{nid}/unbind": {
+      "post": {
+        "operationId": "flow_unbind_story_flow_nodes__nid__unbind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeShot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flow Unbind",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/validate": {
+      "post": {
+        "operationId": "flow_validate_story_flow_validate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowProblems"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Flow Validate",
+        "tags": [
+          "story"
         ]
       }
     },

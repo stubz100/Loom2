@@ -1,7 +1,8 @@
 """Story (17 §7, D85): the workspace's records — SY0: the world (read, replace with a revision guard); SY1: profiles with versions (create
 from a hero image, patch, copy, lock, delete), curation (keep → the reference set, reject) and Expand (one T2I job per coverage cell in one
 batch, the results placed on the version's candidates page); SY2: shots with versions (from a stage camera and / or a clip; takes; the
-finalize gate = the project format's size). The flow joins here."""
+finalize gate = the project format's size); SY3: the flow (one file per node, the index of positions, edges and the start; bind /
+spawn a shot as a node's sole property; validation as a list)."""
 from __future__ import annotations
 
 import asyncio
@@ -13,9 +14,9 @@ from pydantic import BaseModel, Field
 from ..fsio import new_id
 from ..origin import JobOrigin
 from ..clips import ClipStore
-from ..schemas import Curated, Deleted, Expanded, ProfileList, ShotList
+from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, NodeShot, ProfileList, ShotList
 from ..stages import StageStore
-from ..story import PRESETS, Profile, ProfileClass, Shot, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand
+from ..story import NODE_TYPES, PRESETS, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from .deps import Svc
 
 router = APIRouter(tags=["story"])
@@ -382,3 +383,143 @@ async def shot_finalize(svc: Svc, sid: str, vid: str):
     s = await asyncio.to_thread(store.finalize_shot, sid, vid, (clip.w, clip.h) if clip else None, (fmt.width, fmt.height))
     _shot_changed(svc, s)
     return s.model_dump()
+
+
+# ---- the flow (SY3, 17 §3d) ---------------------------------------------------------------------------------------------------------
+class NodeCreate(BaseModel):
+    type: str = "dialogue"
+    title: str = ""
+    x: float = 0.0
+    y: float = 0.0
+    text: str = ""
+    target: str | None = None
+
+
+class BindBody(BaseModel):
+    shot_id: str
+    version: str | None = None                    # the current one when absent
+
+
+class SpawnBody(BaseModel):
+    name: str = ""
+
+
+def _flow_changed(svc, nid: str | None = None) -> None:
+    svc.hub.broadcast("story.changed", {"kind": "flow", "id": nid, "revision": 0})
+
+
+@router.get("/story/flow", response_model=FlowOut)
+async def flow_get(svc: Svc):
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    nodes = await asyncio.to_thread(store.flow_nodes)
+    g = await asyncio.to_thread(store.flow_graph, nodes)
+    return {"graph": g.model_dump(by_alias=True), "nodes": [n.model_dump() for n in nodes.values()]}
+
+
+@router.post("/story/flow/nodes", response_model=FlowNode)
+async def flow_node_create(svc: Svc, body: NodeCreate):
+    ws, _, _ = svc.require_project()
+    if body.type not in NODE_TYPES:
+        raise HTTPException(422, f"unknown node type {body.type!r}; one of {', '.join(NODE_TYPES)}")
+    n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, text=body.text, target=body.target)
+    _flow_changed(svc, n.id)
+    return n.model_dump()
+
+
+@router.patch("/story/flow/nodes/{nid}", response_model=FlowNode)
+async def flow_node_patch(svc: Svc, nid: str, body: dict):
+    ws, _, _ = svc.require_project()
+    try:
+        n = await asyncio.to_thread(StoryStore(ws).patch_node, nid, body)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    except StaleFlow as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _flow_changed(svc, nid)
+    return n.model_dump()
+
+
+@router.delete("/story/flow/nodes/{nid}", response_model=Deleted)
+async def flow_node_delete(svc: Svc, nid: str):
+    ws, _, _ = svc.require_project()
+    try:
+        released = await asyncio.to_thread(StoryStore(ws).delete_node, nid)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    if released is not None:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": released.id, "revision": released.revision})
+    _flow_changed(svc, nid)
+    return {"deleted": nid}
+
+
+@router.put("/story/flow/graph", response_model=FlowGraph)
+async def flow_graph_put(svc: Svc, body: dict):
+    ws, _, _ = svc.require_project()
+    try:
+        g = await asyncio.to_thread(StoryStore(ws).put_graph, body)
+    except StaleFlow as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _flow_changed(svc, None)
+    return g.model_dump(by_alias=True)
+
+
+@router.post("/story/flow/nodes/{nid}/bind", response_model=NodeShot)
+async def flow_bind(svc: Svc, nid: str, body: BindBody):
+    """The node takes the shot as its sole owner (an unbound shot, or a version of its own); 422 when another node owns it."""
+    ws, _, _ = svc.require_project()
+    try:
+        n, sh = await asyncio.to_thread(StoryStore(ws).bind_shot, nid, body.shot_id, body.version)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})
+    _flow_changed(svc, nid)
+    return {"node": n.model_dump(), "shot": sh.model_dump()}
+
+
+@router.post("/story/flow/nodes/{nid}/unbind", response_model=NodeShot)
+async def flow_unbind(svc: Svc, nid: str):
+    ws, _, _ = svc.require_project()
+    try:
+        n, sh = await asyncio.to_thread(StoryStore(ws).unbind_shot, nid)
+    except KeyError:
+        raise HTTPException(404, "node not found")
+    if sh is not None:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})
+    _flow_changed(svc, nid)
+    return {"node": n.model_dump(), "shot": sh.model_dump() if sh else None}
+
+
+@router.post("/story/flow/nodes/{nid}/shot", response_model=NodeShot)
+async def flow_spawn(svc: Svc, nid: str, body: SpawnBody):
+    """A new, empty shot owned by the node (the handoff to the Shots tab, loom R134)."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    n = await asyncio.to_thread(store.flow_node, nid)
+    if n is None:
+        raise HTTPException(404, "node not found")
+    try:
+        sh = await asyncio.to_thread(store.create_shot, body.name.strip() or n.title or n.type)
+        n, sh = await asyncio.to_thread(store.bind_shot, nid, sh.id, None)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})
+    _flow_changed(svc, nid)
+    return {"node": n.model_dump(), "shot": sh.model_dump()}
+
+
+@router.post("/story/flow/validate", response_model=FlowProblems)
+async def flow_validate(svc: Svc):
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    nodes = await asyncio.to_thread(store.flow_nodes)
+    g = await asyncio.to_thread(store.flow_graph, nodes)
+    world = await asyncio.to_thread(store.world)
+    shots = {s.id: s for s in await asyncio.to_thread(store.shots)}
+    return {"problems": validate_flow(g, nodes, [v.name for v in world.variables], shots)}

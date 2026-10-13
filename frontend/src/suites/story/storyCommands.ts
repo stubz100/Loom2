@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowUp, Check, Clapperboard, Copy, Film, FolderOpen, ImageUp, ListPlus, Lock, Palette, Shapes, Sparkles, Star, ToggleLeft, Trash2, Unlink, UserPlus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Palette, Play, Plus, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, X, Zap } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { CLASS_LABEL, sy, useStory, type ProfileClass } from './storyStore'
@@ -15,6 +15,12 @@ const openVersion = () => version()?.state === 'open'
 const picked = () => sy().picked
 const shot = () => sy().shot()
 const shotVersion = () => sy().shotVersion()
+const node = () => sy().node()
+const visual = () => { const n = node(); return !!n && (n.type === 'dialogue' || n.type === 'shot') }
+const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
+const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
+/** The viewport registers its fit and its centre in flow coordinates (the canvas is not a store). */
+export const flowView: { fit?: () => void; centre?: () => { x: number; y: number } | null } = {}
 
 /** The Cast tab's Expand: the cost said first (D79's pattern), then one queued job per cell of the preset. */
 export async function askExpand(preset: string, seeds: number, tier: 'draft' | 'full'): Promise<void> {
@@ -88,6 +94,27 @@ const cmds: Command[] = [
   { id: 'story.shot.delete', scope: 'story', label: 'Delete shot', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!shot(),
     run: () => { const s = shot(); if (!s) return
       void askConfirm({ title: `Delete ${s.name}?`, okLabel: 'Delete', danger: true, text: 'The shot record goes; its frames and clips stay in the Catalogue. A Flow node bound to it loses its shot.' }).then((ok) => { if (ok) void sy().deleteShot() }) } },
+  // SY3 · Flow
+  ...(Object.keys(NODE_ICON) as (keyof typeof NODE_ICON)[]).map((t): Command => ({
+    id: `story.flow.add.${t}`, scope: 'story', label: `Add ${NODE_LABEL[t]}`, icon: NODE_ICON[t], placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open && !sy().play,
+    run: () => { void sy().addNode(t) },
+  })),
+  { id: 'story.flow.delete', scope: 'story', label: 'Delete node', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!node() && !sy().play,
+    run: () => { const n = node(); if (!n) return
+      void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: n.shot_id ? 'Its edges go with it; its shot is released (not deleted).' : 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }) } },
+  { id: 'story.flow.duplicate', scope: 'story', label: 'Duplicate node', icon: Copy, placement: ['inspector', 'context'], when: () => !!node() && !sy().play, run: () => { const n = node(); if (n) void sy().duplicateNode(n.id) } },
+  { id: 'story.flow.newShot', scope: 'story', label: 'New shot for this node…', icon: Plus, placement: ['inspector', 'context'], when: () => visual() && !sy().play,
+    run: () => { const n = node(); if (!n) return
+      void askText({ title: 'New shot for this node', text: 'An empty shot owned by this node (loom R146: one node, one shot); fill it in Shots, Stage or Animate.', initial: n.title || NODE_LABEL[n.type], placeholder: 'shot name' }).then((name) => { if (name?.trim()) void sy().spawnShot(n.id, name.trim()) }) } },
+  { id: 'story.flow.unbind', scope: 'story', label: 'Release the shot', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
+  { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
+    run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
+  { id: 'story.flow.validate', scope: 'story', label: 'Validate', icon: ListChecks, placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open, run: () => void sy().validate() },
+  { id: 'story.flow.play', scope: 'story', label: 'Play', icon: Play, keys: 'P', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => sy().playStart() },
+  { id: 'story.flow.stop', scope: 'story', label: 'Stop playing', icon: Square, placement: ['strip'], when: () => !!sy().play, run: () => sy().playStop() },
+  { id: 'story.flow.fit', scope: 'story', label: 'Fit the graph', icon: Maximize, keys: 'F', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => flowView.fit?.() },
+  { id: 'story.world.beatToNode', scope: 'story', label: 'Make a Flow node from this beat', icon: GitBranch, placement: ['inspector', 'context'], when: selBeat,
+    run: () => { const s = selected(); if (s?.kind === 'beat') void sy().nodeFromBeat(s.id) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (unlocked). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },
@@ -99,7 +126,13 @@ export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], 
   useStory.getState().select({ kind, id })
   const items: ({ cmd: string } | 'sep')[] = []
   if (kind === 'style') items.push({ cmd: 'story.world.defaultStyle' })
-  if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' })
+  if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' })
   items.push({ cmd: 'story.world.remove' })
   return items
 }
+
+/** The right-click menu of a Flow node (the node is selected first). */
+export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
+  return [{ cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
+}
+const sepItem = { sep: true } as const

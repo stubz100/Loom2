@@ -3589,3 +3589,48 @@ split by file so that no two hands touched the same module.
   `engine/spikes/out/sy/results.jsonl` holds the clip ids and walls.
 - Not in SY2: *Use as the shot's frame / clip* on Stage's and Animate's own results strips (the takes strip on the board covers it, and
   a stage camera's results arrive by themselves); the owner node (SY3). Next: SY3 Flow.
+
+## 2026-10-13 22:35 — SY3 · Flow: the narrative graph on React Flow, one file per node, binding, validation, play (17 §3d / §10, D85)
+- **Backend:** `story.py` — `FlowNode` (one file per node under `story/flow/nodes/`, loom R139: `type` start | hub | dialogue | choice |
+  condition | action | shot | jump | comment, `title`, Dialogue `lines[{speaker (a profile), text}]`, Choice `options[{id, label, require,
+  set}]` each an out-port `opt:<id>`, Condition `cond {var, op eq | ne, value}` with *then* / *else*, Action `set[]`, Jump `target`, Comment
+  `text`, the bound `shot_id` / `shot_version`, `revision`), `FlowGraph` (the thin index `story/flow/graph.json`: placements, edges
+  `{from, port, to}`, the start; **rebuilt from the node files** whenever it is missing or disagrees — gone nodes' placements and edges
+  dropped, missing placements laid out, the start the first Start node), `node_ports`, `validate_flow` (no / several Starts, a Choice
+  without options, a dangling edge or Jump, an edge from a port the node lacks, an unreachable node, a visual node without a shot or with
+  a non-final version, an undeclared variable — advisory rows with the node), the store's `create_node` / `patch_node` (the revision
+  guard; an option removed takes its edge with it) / `delete_node` (edges go, the shot is released) / `put_graph` (positions, edges —
+  one per out-port, ports checked — and the start, with the revision guard) / `bind_shot` (loom R146: an unbound shot or a version of
+  its own; another node's → 422, "duplicate it into a new shot") / `unbind_shot`. `routes/story.py`: `GET /story/flow`, `POST / PATCH /
+  DELETE /story/flow/nodes[/{nid}]`, `PUT /story/flow/graph`, `…/{nid}/bind`, `…/unbind`, `…/shot` (spawn an empty shot owned by the
+  node), `POST /story/flow/validate`. Route snapshot 138; 225 schemas.
+- **Frontend:** `@xyflow/react` 12.12.0 (MIT, released 2026-09-24; `scripts/csp_check.py` gained the `story-flow` page — clean).
+  `suites/story/flow/FlowCanvas.tsx`: the node cards (type, title, the speaker and first line, the bound shot's thumbnail and state, a
+  tinted border for a validation problem) with one target handle and the out-ports as source handles (a Choice one per option, a
+  Condition then / else), edges labelled by option or branch, pan / zoom / minimap / fit, a drag saves on drop, a handle-to-handle drag
+  connects (one edge per port), right-click the pane → *Add a node here* (nine types), right-click a node → its verbs; new nodes land at
+  the view's centre stepped 40 px. `flow/play.ts` (pure, 3 unit tests): the walker — Start → the first waiting node; Dialogue and Shot wait
+  for *Next*, a Choice for an option (its requirement read, its sets applied), a Condition branches, an Action sets, a Hub passes, a Jump
+  goes to its target, no edge or a Comment = the end; a loop of pass-through nodes ends at 1 000 steps; **no model is ever invoked**
+  (loom R143). The Flow rail tab: Panel — the outline by type with search and the variables (with their play values); Strip — the
+  palette (nine ✚ buttons), the problem count, Validate, Play / Stop, Fit; Stage — the canvas, or the play view (the node's clip proxy
+  or frame, the lines with the speakers' names, *Next* / the options / *Restart* / *Stop*, the trail and the variables); Inspector — the
+  node's type and title, the lines editor (speaker from the cast, text), the options editor (label, *always* or a variable's value),
+  the condition and the sets editors, the shot binding (an unbound shot from a select, the version, *New shot for this node…*, *Open the
+  shot*, *Release the shot*), the node's problems; the panel foot *Play ▶* / *Stop* with where the play is. Commands `story.flow.*`
+  (add × 9, delete, duplicate, newShot, unbind, openShot, validate, play P, stop, fit F) and `story.world.beatToNode` (*Make a Flow node
+  from this beat* on a beat: a Shot node titled by the beat, its line as the text). Node saves are serialised per node and coalesce
+  keystrokes (the latest local state, the latest revision); graph saves likewise, and the socket's `story.changed` never reloads while
+  a save is pending (the earlier races lost edges and raised 409 toasts).
+- **Checks:** `tests/test_story_flow_d85.py` (+3: ports and validation codes, the store end to end — index rebuilds, edge checks, the
+  revision guards, bind / unbind / delete releasing, an option's edge pruned — the routes with 422 / 409 / 404); `play.test.ts` (+3);
+  the smoke scenario "a flow": the Strip adds Start, Dialogue and Choice, the mouse spreads them and Fit frames them, the Inspector
+  edits the title, a line and two options, three handle drags connect Start → Hello → Pick and Go → Hello (the API shows the three
+  edges and the start), *New shot for this node…* spawns an owned shot, Validate lists the one advisory problem (the shot is not
+  final), Play shows the line, offers Go and Stay, loops on Go and ends on Stay — the job count unchanged — and a reload brings the
+  nodes, edges and the bound shot back — 24/24 under `full` and `open`. 290 offline, 203 unit, lint 100, tsc and build clean, CSP
+  clean on six pages, audits clean. Two zustand lessons again: a selector returning `?? []` (a fresh array) looped React (error #185)
+  and hid the Inspector behind the quiet boundary; the fix is deriving in render.
+- No rig run: SY3 queues no job (the acceptance is the smoke and the unit tests; 17 §12 item 4 is covered by the scenario).
+- Not in SY3: node colours in the Inspector (the field exists), a Choice option's `set` editor (the model has it; the Action node sets),
+  centring the canvas on an outline click. Next: SY4 Episode (the Sequence tab moves to Story).

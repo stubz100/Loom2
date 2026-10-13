@@ -4,7 +4,7 @@
 // version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, Lock, Star } from 'lucide-react'
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
@@ -16,6 +16,11 @@ import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, World
 import { coverageGrid, rowsCovered } from './coverage'
 import { askExpand, rowMenu } from './storyCommands'
 import { CLASS_LABEL, SECTIONS, sy, useStory, type ProfileClass, type Section } from './storyStore'
+import { FlowCanvas } from './flow/FlowCanvas'
+import { NODE_LABEL } from './flow/types'
+import { optionsAvailable } from './flow/play'
+import type { FlowNode, FlowOption } from '../../api/types'
+import { CommandRow } from '../../frame/CommandButton'
 import './story.css'
 
 /** Dev hook (`window.__loom2Story`, DEV_HOOKS only): the smoke test and scripts/sy_acceptance.py drive the suite through the store. */
@@ -33,6 +38,11 @@ function devHook(): Record<string, unknown> {
     loadShots: () => sy().loadShots(), selectShot: (id: string | null, v?: string | null) => sy().selectShot(id, v), shots: () => ({ shots: sy().shots, shotId: sy().shotId, shotVersionId: sy().shotVersionId }),
     createShot: (name: string, src?: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }) => sy().createShot(name, src), useTake: (kind: 'image' | 'clip', id: string) => sy().useTake(kind, id),
     finalizeShot: () => sy().finalizeShot(), newShotVersion: () => sy().newShotVersion(),
+    // SY3
+    loadFlow: () => sy().loadFlow(), flow: () => ({ nodes: sy().flowNodes, graph: sy().flowGraph, nodeId: sy().nodeId, problems: sy().problems, play: sy().play }),
+    addNode: (t: FlowNode['type'], title?: string, at?: { x: number; y: number }) => sy().addNode(t, title, at), connect: (a: string, port: string, b: string) => sy().connect(a, port, b),
+    patchNode: (id: string, patch: Record<string, unknown>) => sy().patchNode(id, patch as never), selectNode: (id: string | null) => sy().selectNode(id), validate: () => sy().validate(),
+    playStart: () => sy().playStart(), playNext: (o?: string) => sy().playNext(o), playStop: () => sy().playStop(),
     openShots: (id: string | null) => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); useSession.getState().setSuite('story'); sy().selectShot(id) }) } }
   return w.__loom2Story
 }
@@ -139,12 +149,48 @@ function ShotsTab() {
   )
 }
 
+// ------------------------------------------------------------------ Panel · Flow
+function FlowTab() {
+  const flowNodes = useStory((s) => s.flowNodes)
+  const nodeId = useStory((s) => s.nodeId)
+  const world = useStory((s) => s.world)
+  const play = useStory((s) => s.play)
+  const [q, setQ] = useState('')
+  const list = Object.values(flowNodes).filter((n) => !q.trim() || (n.title || NODE_LABEL[n.type]).toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const types = [...new Set(list.map((n) => n.type))]
+  return (
+    <div className="story-panel flow-panel">
+      <input type="search" value={q} aria-label="search nodes" placeholder="search nodes" onChange={(e) => setQ(e.target.value)} />
+      <div className="story-list" role="list">
+        {types.map((t) => (
+          <div key={t} className="shot-group">
+            <h4>{NODE_LABEL[t]}<span className="n"> · {list.filter((n) => n.type === t).length}</span></h4>
+            {list.filter((n) => n.type === t).map((n) => (
+              <button key={n.id} className={`story-row node-row${nodeId === n.id ? ' active' : ''}${play?.node === n.id ? ' playing' : ''}`} role="listitem" data-id={n.id} onClick={() => sy().selectNode(n.id)}>
+                <span className="pname">{n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 30) : NODE_LABEL[n.type]) || NODE_LABEL[n.type]}</span>
+                {(n.type === 'dialogue' || n.type === 'shot') && <span className="n">{n.shot_id ? 'shot' : '—'}</span>}
+              </button>
+            ))}
+          </div>
+        ))}
+        {!list.length && <div className="empty hint">No nodes yet — the Strip's ✚ buttons add them; right-click the canvas to add one where you point.</div>}
+      </div>
+      <h4>Variables<span className="n"> · {world?.variables.length ?? 0}</span></h4>
+      <div className="vars">
+        {(world?.variables ?? []).map((v) => <div key={v.name} className="kv"><span>{v.name}</span><span>{play ? String(play.vars[v.name]) : `${v.type} · ${String(v.default)}`}</span></div>)}
+        {!world?.variables.length && <span className="hint">none — declare them in World</span>}
+      </div>
+    </div>
+  )
+}
+
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'cast') return <CastTab />
   if (tab === 'shots') return <ShotsTab />
+  if (tab === 'flow') return <FlowTab />
   return <WorldTab />
 }
 
@@ -161,7 +207,20 @@ export function PrimaryAction() {
   const shotVersionId = useStory((s) => s.shotVersionId)
   const clipsById = useStory((s) => s.clipsById)
   const { active: tab } = useSuiteRail()
-  markUsed('story.cast.expand'); markUsed('story.shot.new')
+  const play = useStory((s) => s.play)
+  const flowGraph = useStory((s) => s.flowGraph)
+  const flowNodes = useStory((s) => s.flowNodes)
+  markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop')
+  if (tab === 'flow') {
+    const n = Object.keys(flowNodes).length
+    return (
+      <div>
+        {play ? <button className="primary" onClick={() => runCommand('story.flow.stop')}>Stop</button>
+          : <button className="primary" disabled={!flowGraph?.start} onClick={() => runCommand('story.flow.play')} title="Walk the graph from the Start: authored clips and lines, never a model (P)">Play ▶</button>}
+        <div className="estimate">{play ? (play.ended ? 'the end' : `at ${flowNodes[play.node ?? '']?.title || play.node}`) : flowGraph?.start ? `${n} node${n === 1 ? '' : 's'} · from the Start` : <span style={{ color: 'var(--fg3)' }}>no Start node yet</span>}</div>
+      </div>
+    )
+  }
   if (tab === 'shots') {
     const s = shots.find((x) => x.id === shotId); const v = s?.versions.find((x) => x.id === (shotVersionId ?? s.current))
     void clipsById
@@ -227,7 +286,21 @@ export function Strip() {
   const shotVersionId = useStory((s) => s.shotVersionId)
   const stagesLite = useStory((s) => s.stagesLite)
   const { active: tab } = useSuiteRail()
+  const play = useStory((s) => s.play)
+  const problems = useStory((s) => s.problems)
   markUsed('story.cast.lock'); markUsed('story.cast.newVersion'); markUsed('story.shot.finalize'); markUsed('story.shot.newVersion'); markUsed('story.shot.openStage'); markUsed('story.shot.openAnimate')
+  if (tab === 'flow') {
+    return (
+      <div className="story-strip flow-strip">
+        <CommandRow ids={['story.flow.add.start', 'story.flow.add.hub', 'story.flow.add.dialogue', 'story.flow.add.choice', 'story.flow.add.condition', 'story.flow.add.action', 'story.flow.add.shot', 'story.flow.add.jump', 'story.flow.add.comment']} />
+        <span className="spacer" />
+        {problems && <span className={`hint${problems.length ? ' warn' : ''}`}>{problems.length ? `${problems.length} problem${problems.length === 1 ? '' : 's'}` : 'valid'}</span>}
+        <CommandButton id="story.flow.validate" />
+        {play ? <CommandButton id="story.flow.stop" /> : <CommandButton id="story.flow.play" />}
+        <CommandButton id="story.flow.fit" />
+      </div>
+    )
+  }
   if (tab === 'shots') {
     const s = shots.find((x) => x.id === shotId)
     if (!s) return <div className="story-strip"><span>Shots</span><span className="spacer" /><span className="hint">pick a shot, or make one from a Stage camera or an Animate clip</span></div>
@@ -500,13 +573,47 @@ function ShotBoard() {
   )
 }
 
+// ------------------------------------------------------------------ Stage: play mode (no model is ever invoked — loom R143)
+function PlayView() {
+  const play = useStory((s) => s.play)
+  const flowNodes = useStory((s) => s.flowNodes)
+  const shots = useStory((s) => s.shots)
+  const clipsById = useStory((s) => s.clipsById)
+  const profiles = useStory((s) => s.profiles)
+  if (!play) return null
+  const n = play.node ? flowNodes[play.node] : undefined
+  const sh = n?.shot_id ? shots.find((s) => s.id === n.shot_id) : undefined
+  const v = sh?.versions.find((x) => x.id === (n?.shot_version ?? sh.current))
+  const clip = v?.clip_id ? clipsById[v.clip_id] : undefined
+  const speaker = (id: string | null | undefined) => (id ? profiles.find((p) => p.id === id)?.name ?? id : null)
+  return (
+    <div className="play-view" data-testid="play-view">
+      <div className="play-stage">
+        {n && clip ? <video key={clip.id} autoPlay controls src={api.fileUrl(`/clips/${clip.id}/proxy.mp4`)} aria-label="the node's clip" />
+          : n && v?.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the node's frame" />
+          : <div className="play-card">{play.ended ? 'The end.' : n ? `${NODE_LABEL[n.type]} · ${n.title || ''}${n.shot_id ? '' : ' (no shot bound)'}` : ''}</div>}
+      </div>
+      {n?.type === 'dialogue' && n.lines.length > 0 && <div className="play-lines">{n.lines.map((l, i) => <p key={i}>{speaker(l.speaker) && <b>{speaker(l.speaker)}: </b>}{l.text}</p>)}</div>}
+      <div className="play-controls">
+        {play.ended ? <button className="primary restart" onClick={() => sy().playStart()}>Restart</button>
+          : n?.type === 'choice' ? optionsAvailable(n, play.vars).map((o: FlowOption) => <button key={o.id} className="option primary" onClick={() => sy().playNext(o.id)}>{o.label || '…'}</button>)
+          : <button className="primary next" onClick={() => sy().playNext()}>Next ▸</button>}
+        <button onClick={() => sy().playStop()}>Stop</button>
+        <span className="hint">{play.trail.length} step{play.trail.length === 1 ? '' : 's'} · {Object.entries(play.vars).map(([k, val]) => `${k} = ${String(val)}`).join(' · ') || 'no variables'}</span>
+      </div>
+    </div>
+  )
+}
+
 export function Stage() {
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
+  const play = useStory((s) => s.play)
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
   if (tab === 'cast') return <CastPage />
   if (tab === 'shots') return <ShotBoard />
+  if (tab === 'flow') return play ? <PlayView /> : <FlowCanvas />
   return <WorldEditor />
 }
 
@@ -597,6 +704,116 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
   )
 }
 
+function LinesEditor({ n }: { n: FlowNode }) {
+  const profiles = useStory((s) => s.profiles)
+  const setLines = (lines: FlowNode['lines']) => void sy().patchNode(n.id, { lines })
+  return (
+    <div className="lines-editor">
+      {n.lines.map((l, i) => (
+        <div key={i} className="line-row">
+          <select value={l.speaker ?? ''} aria-label={`speaker ${i + 1}`} onChange={(e) => setLines(n.lines.map((x, k) => (k === i ? { ...x, speaker: e.target.value || null } : x)))}>
+            <option value="">(no speaker)</option>{profiles.filter((p) => p.cls === 'character').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input type="text" value={l.text} aria-label={`line ${i + 1}`} placeholder="the line" onChange={(e) => setLines(n.lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} />
+          <button className="quiet" title="Remove the line" aria-label={`remove line ${i + 1}`} onClick={() => setLines(n.lines.filter((_, k) => k !== i))}>✕</button>
+        </div>
+      ))}
+      <button className="quiet" onClick={() => setLines([...n.lines, { speaker: null, text: '' }])} title="Add a line">+ line</button>
+    </div>
+  )
+}
+
+function OptionsEditor({ n }: { n: FlowNode }) {
+  const world = useStory((s) => s.world)
+  const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
+  const setOptions = (options: FlowNode['options']) => void sy().patchNode(n.id, { options })
+  return (
+    <div className="lines-editor">
+      {n.options.map((o, i) => (
+        <div key={o.id} className="line-row option-row">
+          <input type="text" value={o.label} aria-label={`option ${i + 1}`} placeholder="the option's label" onChange={(e) => setOptions(n.options.map((x) => (x.id === o.id ? { ...x, label: e.target.value } : x)))} />
+          <select value={o.require?.var ? `${String(o.require.var)}=${String(o.require.value)}` : ''} aria-label={`option ${i + 1} requires`} title="Offered only when this holds" onChange={(e) => { const [vv, val] = e.target.value.split('='); setOptions(n.options.map((x) => (x.id === o.id ? { ...x, require: vv ? { var: vv, value: val === 'true' ? true : val === 'false' ? false : val } : null } : x))) }}>
+            <option value="">always</option>{vars.flatMap((v) => (v.type === 'bool' ? ['true', 'false'] : v.values).map((val) => <option key={`${v.name}=${val}`} value={`${v.name}=${val}`}>{v.name} = {val}</option>))}
+          </select>
+          <button className="quiet" title="Remove the option" aria-label={`remove option ${i + 1}`} onClick={() => setOptions(n.options.filter((x) => x.id !== o.id))}>✕</button>
+        </div>
+      ))}
+      <button className="quiet" onClick={() => setOptions([...n.options, { id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`, label: '', require: null, set: [] }])} title="Add an option">+ option</button>
+    </div>
+  )
+}
+
+function SetsEditor({ n, sets, onChange }: { n: FlowNode; sets: Record<string, unknown>[]; onChange: (s: Record<string, unknown>[]) => void }) {
+  const world = useStory((s) => s.world)
+  const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
+  void n
+  return (
+    <div className="lines-editor">
+      {sets.map((s, i) => (
+        <div key={i} className="line-row set-row">
+          <select value={String(s.var ?? '')} aria-label={`set ${i + 1} variable`} onChange={(e) => onChange(sets.map((x, k) => (k === i ? { ...x, var: e.target.value } : x)))}><option value="">variable</option>{vars.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select>
+          {(() => { const v = vars.find((x) => x.name === s.var); const vals = v ? (v.type === 'bool' ? ['true', 'false'] : v.values) : []
+            return <select value={String(s.value ?? '')} aria-label={`set ${i + 1} value`} onChange={(e) => onChange(sets.map((x, k) => (k === i ? { ...x, value: e.target.value === 'true' ? true : e.target.value === 'false' ? false : e.target.value } : x)))}>{vals.map((val) => <option key={val} value={val}>{val}</option>)}</select> })()}
+          <button className="quiet" aria-label={`remove set ${i + 1}`} onClick={() => onChange(sets.filter((_, k) => k !== i))}>✕</button>
+        </div>
+      ))}
+      <button className="quiet" onClick={() => onChange([...sets, { var: vars[0]?.name ?? '', value: vars[0] ? (vars[0].type === 'bool' ? true : vars[0].values[0]) : '' }])} title="Set a variable">+ set</button>
+    </div>
+  )
+}
+
+function NodeInspector() {
+  const nodeId = useStory((s) => s.nodeId)
+  const flowNodes = useStory((s) => s.flowNodes)
+  const shots = useStory((s) => s.shots)
+  const problems = useStory((s) => s.problems)
+  const world = useStory((s) => s.world)
+  const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
+  markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.unbind'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit')
+  for (const t of ['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
+  const n = nodeId ? flowNodes[nodeId] : undefined
+  const mine = problems?.filter((p) => !n || p.node_id === n.id || (!p.node_id && !n)) ?? []
+  if (!n) return (
+    <div className="story-insp">
+      {problems && <><h4>Validation</h4><ul className="flow-problems">{problems.map((p, i) => <li key={i} className={p.code}><button className="link" onClick={() => sy().selectNode(p.node_id)}>{p.message}</button></li>)}{!problems.length && <li className="ok">No problems.</li>}</ul></>}
+      <span className="hint">Select a node on the canvas or in the outline.</span>
+    </div>
+  )
+  const sh = n.shot_id ? shots.find((s) => s.id === n.shot_id) : undefined
+  const unbound = shots.filter((s) => !s.owner_node || s.owner_node === n.id)
+  const visual = n.type === 'dialogue' || n.type === 'shot'
+  return (
+    <div className="story-insp node-insp">
+      <h4>{NODE_LABEL[n.type]} · {n.title || n.id}</h4>
+      <div className="kv">
+        <span>type</span>
+        <select value={n.type} aria-label="node type" onChange={(e) => void sy().patchNode(n.id, { type: e.target.value as FlowNode['type'] })}>{(Object.keys(NODE_LABEL) as FlowNode['type'][]).map((t) => <option key={t} value={t}>{NODE_LABEL[t]}</option>)}</select>
+        <span>title</span><input type="text" value={n.title} aria-label="node title" onChange={(e) => void sy().patchNode(n.id, { title: e.target.value })} />
+        {n.type === 'comment' && <><span>text</span><textarea rows={3} value={n.text} aria-label="note text" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
+        {n.type === 'jump' && <><span>target</span><select value={n.target ?? ''} aria-label="jump target" onChange={(e) => void sy().patchNode(n.id, { target: e.target.value || null })}><option value="">(none)</option>{Object.values(flowNodes).filter((x) => x.id !== n.id && x.type !== 'comment').map((x) => <option key={x.id} value={x.id}>{x.title || NODE_LABEL[x.type]}</option>)}</select></>}
+        {n.type === 'condition' && <><span>condition</span><div className="cond-row">
+          <select value={n.cond?.var ?? ''} aria-label="condition variable" onChange={(e) => void sy().patchNode(n.id, { cond: { var: e.target.value, op: n.cond?.op ?? 'eq', value: n.cond?.value ?? true } })}><option value="">variable</option>{vars.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select>
+          <select value={n.cond?.op ?? 'eq'} aria-label="condition operator" onChange={(e) => void sy().patchNode(n.id, { cond: { var: n.cond?.var ?? '', op: e.target.value as 'eq' | 'ne', value: n.cond?.value ?? true } })}><option value="eq">=</option><option value="ne">≠</option></select>
+          {(() => { const v = vars.find((x) => x.name === n.cond?.var); const vals = v ? (v.type === 'bool' ? ['true', 'false'] : v.values) : ['true', 'false']
+            return <select value={String(n.cond?.value ?? 'true')} aria-label="condition value" onChange={(e) => void sy().patchNode(n.id, { cond: { var: n.cond?.var ?? '', op: n.cond?.op ?? 'eq', value: e.target.value === 'true' ? true : e.target.value === 'false' ? false : e.target.value } })}>{vals.map((val) => <option key={val} value={val}>{val}</option>)}</select> })()}
+        </div></>}
+      </div>
+      {n.type === 'dialogue' && <><h4>Lines</h4><LinesEditor n={n} /></>}
+      {n.type === 'choice' && <><h4>Options <span className="hint">each is an out-port</span></h4><OptionsEditor n={n} /></>}
+      {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
+      {visual && <>
+        <h4>Shot</h4>
+        {sh ? <div className="kv"><span>bound</span><span>{sh.name} · {n.shot_version ?? sh.current} · {sh.versions.find((v) => v.id === (n.shot_version ?? sh.current))?.state ?? '?'}</span>
+          <span>version</span><select value={n.shot_version ?? sh.current} aria-label="bound version" onChange={(e) => void sy().bindShot(n.id, sh.id, e.target.value)}>{sh.versions.map((v) => <option key={v.id} value={v.id}>{v.id}{v.state === 'final' ? ' · final' : ''}</option>)}</select></div>
+          : <div className="kv"><span>bind</span><select value="" aria-label="bind shot" onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">an unbound shot…</option>{unbound.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+        <div className="verbs"><CommandButton id="story.flow.newShot" text /><CommandButton id="story.flow.openShot" text /><CommandButton id="story.flow.unbind" text /></div>
+      </>}
+      {mine.length > 0 && <><h4>Problems</h4><ul className="flow-problems">{mine.map((p, i) => <li key={i} className={p.code}>{p.message}</li>)}</ul></>}
+      <div className="verbs"><CommandButton id="story.flow.duplicate" text /><CommandButton id="story.flow.delete" text /></div>
+    </div>
+  )
+}
+
 export function Inspector() {
   const world = useStory((s) => s.world)
   const selected = useStory((s) => s.selected)
@@ -605,6 +822,7 @@ export function Inspector() {
   if (!project?.open) return <span className="hint">Nothing selected.</span>
   if (tab === 'cast') return <CastInspector />
   if (tab === 'shots') return <ShotInspector />
+  if (tab === 'flow') return <NodeInspector />
   if (!world) return <span className="hint">Nothing selected.</span>
   const fmt = project.format
   const style = selected?.kind === 'style' ? world.styles.find((s) => s.id === selected.id) : undefined
@@ -639,7 +857,7 @@ export function Inspector() {
           <span>title</span><input type="text" value={beat.title} aria-label="selected beat title" onChange={(e) => sy().setBeat(beat.id, { title: e.target.value })} />
           <span>line</span><textarea rows={3} value={beat.line} aria-label="selected beat line" onChange={(e) => sy().setBeat(beat.id, { line: e.target.value })} />
         </div>
-        <div className="verbs"><CommandButton id="story.world.beatUp" text /><CommandButton id="story.world.beatDown" text /><CommandButton id="story.world.remove" text /></div>
+        <div className="verbs"><CommandButton id="story.world.beatUp" text /><CommandButton id="story.world.beatDown" text /><CommandButton id="story.world.beatToNode" text /><CommandButton id="story.world.remove" text /></div>
       </>}
       {variable && <>
         <h4>Variable · {variable.name}</h4>

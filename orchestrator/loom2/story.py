@@ -4,7 +4,9 @@ SY0 — the world (L1: logline, synopsis, styles, the spine's beats, the Flow's 
 SY1 — profiles (L2: a character, place or prop with versions; a version's reference set *is* an album group, its candidates another),
       the coverage vocabulary and presets that `Expand` plans into one T2I job per cell, and the profile mentions behind `@name`.
 SY2 — shots (L3: a shot with versions; a version points at a stage camera and / or a clip, records its takes and owns one finalized clip —
-      the gate is the project format's size; loom R62 / R166). The flow (SY3) joins here.
+      the gate is the project format's size; loom R62 / R166).
+SY3 — the flow (L4: one flat graph of nodes — one file per node, a rebuildable `graph.json` index of positions, edges and the start
+      (loom R74 / R139); a Dialogue or Shot node binds a shot as its sole owner (loom R146); validation is a list, play is the client's).
 
 A record is one JSON file written through fsio (temp → fsync → replace) with a `schema_version` and a `revision` the client sends back
 on every replace (409 when stale, like documents and stages). Records are read on demand (small files), never cached across requests.
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
 WORLD_SCHEMA_VERSION = 1
 PROFILE_SCHEMA_VERSION = 1
 SHOT_SCHEMA_VERSION = 1
+FLOW_SCHEMA_VERSION = 1
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 ProfileClass = Literal["character", "place", "prop"]
@@ -47,6 +50,10 @@ class StaleProfile(ValueError):
 
 
 class StaleShot(ValueError):
+    """The client's change is based on an older revision (→ 409)."""
+
+
+class StaleFlow(ValueError):
     """The client's change is based on an older revision (→ 409)."""
 
 
@@ -245,6 +252,160 @@ def finalize_reason(v: ShotVersion, clip_w: int | None, clip_h: int | None, fmt_
     if abs(clip_w - fmt_w) > FORMAT_GRID or abs(clip_h - fmt_h) > FORMAT_GRID:
         return f"Draft {clip_w}×{clip_h} — the format is {fmt_w}×{fmt_h}; render Full in Animate"
     return None
+
+
+# ---- the flow (SY3, 17 §3d) ----------------------------------------------------------------------------------------------------------
+NodeType = Literal["start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment"]
+NODE_TYPES: tuple[str, ...] = ("start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment")
+VISUAL_TYPES = ("dialogue", "shot")                # the nodes that bind a shot (loom R134)
+FLOW_PORTS = ("out", "then", "else")               # plus "opt:<option id>" on a Choice
+
+
+class FlowLine(BaseModel):
+    """One line of a Dialogue node: the speaker is a profile (its mention), the text the line (loom R152: the subtitles come from these)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    speaker: str | None = None
+    text: str = ""
+
+
+class FlowOption(BaseModel):
+    """A Choice's option: its own out-port (`opt:<id>`), an optional requirement on a variable, the variables it sets (loom R135)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str = Field(default_factory=lambda: new_id("opt"))
+    label: str = ""
+    require: dict[str, Any] | None = None          # {var, value}
+    set: list[dict[str, Any]] = Field(default_factory=list)   # [{var, value}]
+
+
+class FlowCondition(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    var: str = ""
+    op: Literal["eq", "ne"] = "eq"
+    value: bool | str = True
+
+
+class FlowNode(BaseModel):
+    """One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice
+    `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`
+    are set by binding only (loom R146: sole ownership)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = FLOW_SCHEMA_VERSION
+    id: str = Field(default_factory=lambda: new_id("node"))
+    type: NodeType = "dialogue"
+    title: str = ""
+    lines: list[FlowLine] = Field(default_factory=list)
+    options: list[FlowOption] = Field(default_factory=list)
+    cond: FlowCondition | None = None
+    set: list[dict[str, Any]] = Field(default_factory=list)
+    target: str | None = None
+    text: str = ""
+    shot_id: str | None = None
+    shot_version: str | None = None
+    colour: str | None = None
+    revision: int = 0
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+
+
+class FlowEdge(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, populate_by_name=True)
+    from_: str = Field(alias="from")
+    port: str = "out"
+    to: str
+
+
+class FlowPlacement(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    x: float = 0.0
+    y: float = 0.0
+
+
+class FlowGraph(BaseModel):
+    """The thin index (loom R139): where the nodes sit, the edges, the start — rebuilt from the node files when missing or disagreeing."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = FLOW_SCHEMA_VERSION
+    nodes: list[FlowPlacement] = Field(default_factory=list)
+    edges: list[FlowEdge] = Field(default_factory=list)
+    start: str | None = None
+    revision: int = 0
+    updated_at: str = Field(default_factory=utc_now)
+
+
+def node_ports(n: FlowNode) -> list[str]:
+    """The out-ports a node offers: a Choice one per option, a Condition then / else, a Jump and a Comment none, the rest one."""
+    if n.type == "choice":
+        return [f"opt:{o.id}" for o in n.options]
+    if n.type == "condition":
+        return ["then", "else"]
+    if n.type in ("jump", "comment"):
+        return []
+    return ["out"]
+
+
+def validate_flow(graph: FlowGraph, nodes: dict[str, FlowNode], variables: list[str], shots: dict[str, Shot] | None = None) -> list[dict[str, Any]]:
+    """Advisory problems (17 §3d): no Start / several, a Choice without options, a dangling edge or Jump, an edge from a port the node
+    does not have, an unreachable node, a visual node without a shot or with a non-final version, a variable nobody declared."""
+    out: list[dict[str, Any]] = []
+    starts = [n for n in nodes.values() if n.type == "start"]
+    if not starts:
+        out.append({"code": "no_start", "node_id": None, "message": "no Start node — the play has nowhere to begin"})
+    elif len(starts) > 1:
+        for n in starts[1:]:
+            out.append({"code": "many_starts", "node_id": n.id, "message": "a second Start — one flow has one entry"})
+    for e in graph.edges:
+        if e.from_ not in nodes or e.to not in nodes:
+            out.append({"code": "dangling_edge", "node_id": e.from_ if e.from_ in nodes else None, "message": f"an edge to or from a node that is gone ({e.from_} → {e.to})"})
+        elif e.port not in node_ports(nodes[e.from_]):
+            out.append({"code": "bad_port", "node_id": e.from_, "message": f"{nodes[e.from_].title or e.from_}: no port {e.port!r}"})
+    for n in nodes.values():
+        if n.type == "choice" and not n.options:
+            out.append({"code": "no_options", "node_id": n.id, "message": f"{n.title or 'a Choice'} has no options"})
+        if n.type == "jump" and (not n.target or n.target not in nodes):
+            out.append({"code": "dangling_jump", "node_id": n.id, "message": f"{n.title or 'a Jump'} points at nothing"})
+        if n.type == "condition" and n.cond and n.cond.var and n.cond.var not in variables:
+            out.append({"code": "unknown_var", "node_id": n.id, "message": f"{n.title or 'a Condition'} reads {n.cond.var!r}, not a World variable"})
+        for s in n.set:
+            if s.get("var") and s["var"] not in variables:
+                out.append({"code": "unknown_var", "node_id": n.id, "message": f"{n.title or n.type} sets {s['var']!r}, not a World variable"})
+        for o in n.options:
+            if o.require and o.require.get("var") and o.require["var"] not in variables:
+                out.append({"code": "unknown_var", "node_id": n.id, "message": f"option {o.label!r} requires {o.require['var']!r}, not a World variable"})
+            for s in o.set:
+                if s.get("var") and s["var"] not in variables:
+                    out.append({"code": "unknown_var", "node_id": n.id, "message": f"option {o.label!r} sets {s['var']!r}, not a World variable"})
+        if n.type in VISUAL_TYPES:
+            if not n.shot_id:
+                out.append({"code": "no_shot", "node_id": n.id, "message": f"{n.title or n.type} has no shot — bind or spawn one"})
+            elif shots is not None:
+                sh = shots.get(n.shot_id)
+                if sh is None:
+                    out.append({"code": "shot_gone", "node_id": n.id, "message": f"{n.title or n.type}: its shot {n.shot_id} is gone"})
+                else:
+                    try:
+                        v = sh.version(n.shot_version)
+                        if v.state != "final":
+                            out.append({"code": "shot_open", "node_id": n.id, "message": f"{n.title or n.type}: {sh.name} {v.id} is not final yet (advisory)"})
+                    except KeyError:
+                        out.append({"code": "shot_gone", "node_id": n.id, "message": f"{n.title or n.type}: {sh.name} has no version {n.shot_version}"})
+    # reachability from the start (Jumps count as edges; Comments are never reached and never flagged)
+    if starts:
+        seen: set[str] = set()
+        todo = [starts[0].id]
+        while todo:
+            cur = todo.pop()
+            if cur in seen or cur not in nodes:
+                continue
+            seen.add(cur)
+            for e in graph.edges:
+                if e.from_ == cur and e.to in nodes:
+                    todo.append(e.to)
+            if nodes[cur].type == "jump" and nodes[cur].target in nodes:
+                todo.append(nodes[cur].target)   # type: ignore[arg-type]
+        for n in nodes.values():
+            if n.id not in seen and n.type != "comment":
+                out.append({"code": "unreachable", "node_id": n.id, "message": f"{n.title or n.type} cannot be reached from the Start"})
+    return out
 
 
 # ---- coverage (loom kb-loom-p1 §7.1) ---------------------------------------------------------------------------------------------
@@ -467,7 +628,179 @@ class _ShotMixin:
 
 
 # ---- the store ---------------------------------------------------------------------------------------------------------------------
-class StoryStore(_ShotMixin):
+class _FlowMixin:
+    """StoryStore's flow records: one file per node under `story/flow/nodes/`, the index `story/flow/graph.json`."""
+
+    dir: Path
+
+    @property
+    def flow_dir(self) -> Path:
+        return self.dir / "flow"
+
+    def node_path(self, nid: str) -> Path:
+        return self.flow_dir / "nodes" / f"{nid}.json"
+
+    def flow_node(self, nid: str) -> FlowNode | None:
+        p = self.node_path(nid)
+        return FlowNode.model_validate(read_json(p)) if p.is_file() else None
+
+    def flow_nodes(self) -> dict[str, FlowNode]:
+        d = self.flow_dir / "nodes"
+        if not d.is_dir():
+            return {}
+        out = {}
+        for p in d.glob("node_*.json"):
+            n = FlowNode.model_validate(read_json(p))
+            out[n.id] = n
+        return out
+
+    def save_node(self, n: FlowNode) -> None:
+        (self.flow_dir / "nodes").mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.node_path(n.id), n.model_dump())
+
+    def save_graph(self, g: FlowGraph) -> None:
+        self.flow_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.flow_dir / "graph.json", g.model_dump(by_alias=True))
+
+    def flow_graph(self, nodes: dict[str, FlowNode] | None = None) -> FlowGraph:
+        """The index, made to agree with the node files: a node without a placement gets one (laid out in a row after the others), a
+        placement or edge of a gone node is dropped, the start is the first Start node when the index names none that exists."""
+        nodes = self.flow_nodes() if nodes is None else nodes
+        p = self.flow_dir / "graph.json"
+        g = FlowGraph.model_validate(read_json_or(p, {}))
+        known = {pl.id for pl in g.nodes}
+        placements = [pl for pl in g.nodes if pl.id in nodes]
+        changed = len(placements) != len(g.nodes)
+        for i, nid in enumerate(sorted(n for n in nodes if n not in known)):
+            placements.append(FlowPlacement(id=nid, x=40.0 + 220.0 * (len(placements) % 6), y=40.0 + 140.0 * (len(placements) // 6)))
+            changed = True
+        edges = [e for e in g.edges if e.from_ in nodes and e.to in nodes]
+        changed = changed or len(edges) != len(g.edges)
+        start = g.start if g.start in nodes and nodes[g.start].type == "start" else next((n.id for n in sorted(nodes.values(), key=lambda n: n.created_at) if n.type == "start"), None)
+        changed = changed or start != g.start
+        if changed:
+            g = g.model_copy(update={"nodes": placements, "edges": edges, "start": start, "revision": g.revision + (1 if p.is_file() else 0), "updated_at": utc_now()})
+            self.save_graph(g)
+        return g
+
+    def create_node(self, type_: str, title: str = "", x: float = 0.0, y: float = 0.0, **fields: Any) -> FlowNode:
+        if type_ not in NODE_TYPES:
+            raise ValueError(f"unknown node type {type_!r}; one of {', '.join(NODE_TYPES)}")
+        fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour")}
+        n = FlowNode(type=type_, title=title.strip() or {"start": "Start", "hub": "Hub", "comment": "Note"}.get(type_, ""), **fields)
+        g = self.flow_graph()                                        # before the file exists, so the index does not place it twice
+        self.save_node(n)
+        g = g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != n.id], FlowPlacement(id=n.id, x=x, y=y)], "start": g.start or (n.id if type_ == "start" else None),
+                                 "revision": g.revision + 1, "updated_at": utc_now()})
+        self.save_graph(g)
+        return n
+
+    def patch_node(self, nid: str, data: dict[str, Any]) -> FlowNode:
+        """A node's own fields from a client body based on `revision` (409 when stale); the bound shot changes through bind / unbind only."""
+        cur = self.flow_node(nid)
+        if cur is None:
+            raise KeyError(nid)
+        base = data.get("revision")
+        if base is not None and int(base) != cur.revision:
+            raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
+        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour")
+        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
+                  "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+        n = FlowNode.model_validate(merged)
+        if n.type not in NODE_TYPES:
+            raise ValueError(f"unknown node type {n.type!r}")
+        self.save_node(n)
+        g = self.flow_graph()                                        # the start may move with the type; an edge from a port that is gone goes too
+        edges = [e for e in g.edges if e.from_ != nid or e.port in node_ports(n)]
+        if len(edges) != len(g.edges):
+            self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
+        return n
+
+    def delete_node(self, nid: str) -> Shot | None:
+        """The node file goes, its placement and edges with it; its shot is released (not deleted) and returned."""
+        cur = self.flow_node(nid)
+        if cur is None:
+            raise KeyError(nid)
+        released = None
+        if cur.shot_id:
+            sh = self.shot(cur.shot_id)                           # type: ignore[attr-defined]
+            if sh is not None and sh.owner_node == nid:
+                released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
+        self.node_path(nid).unlink()
+        self.flow_graph()
+        return released
+
+    def put_graph(self, data: dict[str, Any]) -> FlowGraph:
+        """Positions, edges and the start from a client body based on `revision` (409 when stale); edges must join existing nodes on
+        ports they offer."""
+        nodes = self.flow_nodes()
+        cur = self.flow_graph(nodes)
+        base = data.get("revision")
+        if base is not None and int(base) != cur.revision:
+            raise StaleFlow(f"the graph is at revision {cur.revision}, the change is based on {base} — reload it first")
+        placements = [FlowPlacement.model_validate(p) for p in data.get("nodes", [pl.model_dump() for pl in cur.nodes])]
+        placements = [p for p in placements if p.id in nodes]
+        for nid in nodes:
+            if not any(p.id == nid for p in placements):
+                placements.append(next((p for p in cur.nodes if p.id == nid), FlowPlacement(id=nid)))
+        edges = [FlowEdge.model_validate(e) for e in data.get("edges", [e.model_dump(by_alias=True) for e in cur.edges])]
+        for e in edges:
+            if e.from_ not in nodes or e.to not in nodes:
+                raise ValueError(f"edge {e.from_} → {e.to}: a node is missing")
+            if e.port not in node_ports(nodes[e.from_]):
+                raise ValueError(f"edge from {e.from_}: no port {e.port!r}")
+        seen: set[tuple[str, str]] = set()
+        kept: list[FlowEdge] = []
+        for e in edges:                                           # one edge per out-port (a port leads to one node)
+            if (e.from_, e.port) in seen:
+                continue
+            seen.add((e.from_, e.port))
+            kept.append(e)
+        start = data.get("start", cur.start)
+        if start is not None and (start not in nodes or nodes[start].type != "start"):
+            raise ValueError("the start must be a Start node")
+        g = cur.model_copy(update={"nodes": placements, "edges": kept, "start": start, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_graph(g)
+        return g
+
+    def bind_shot(self, nid: str, shot_id: str, version: str | None = None) -> tuple[FlowNode, Shot]:
+        """A visual node takes a shot as its sole owner (loom R146): an unbound shot, or re-selecting a version of its own."""
+        n = self.flow_node(nid)
+        if n is None:
+            raise KeyError(nid)
+        if n.type not in VISUAL_TYPES:
+            raise ValueError(f"a {n.type} node does not bind a shot")
+        sh = self.shot(shot_id)                                   # type: ignore[attr-defined]
+        if sh is None:
+            raise KeyError(shot_id)
+        if sh.owner_node and sh.owner_node != nid:
+            raise ValueError(f"{sh.name} is owned by another node — duplicate it into a new shot (loom R23 / R146)")
+        v = sh.version(version)
+        if n.shot_id and n.shot_id != shot_id:
+            old = self.shot(n.shot_id)                            # type: ignore[attr-defined]
+            if old is not None and old.owner_node == nid:
+                self.patch_shot(old.id, {"owner_node": None})     # type: ignore[attr-defined]
+        if sh.owner_node != nid:
+            sh = self.patch_shot(sh.id, {"owner_node": nid})      # type: ignore[attr-defined]
+        n = n.model_copy(update={"shot_id": shot_id, "shot_version": v.id, "revision": n.revision + 1, "updated_at": utc_now()})
+        self.save_node(n)
+        return n, sh
+
+    def unbind_shot(self, nid: str) -> tuple[FlowNode, Shot | None]:
+        n = self.flow_node(nid)
+        if n is None:
+            raise KeyError(nid)
+        released = None
+        if n.shot_id:
+            sh = self.shot(n.shot_id)                             # type: ignore[attr-defined]
+            if sh is not None and sh.owner_node == nid:
+                released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
+        n = n.model_copy(update={"shot_id": None, "shot_version": None, "revision": n.revision + 1, "updated_at": utc_now()})
+        self.save_node(n)
+        return n, released
+
+
+class StoryStore(_ShotMixin, _FlowMixin):
     def __init__(self, ws: Workspace) -> None:
         self.ws = ws
         self.dir = ws.story_dir

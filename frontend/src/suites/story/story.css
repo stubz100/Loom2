@@ -101,3 +101,52 @@
 .take-card .tools { position: absolute; right: 4px; top: 4px; display: none; }
 .take-card:hover .tools { display: inline-flex; }
 .take-card .tools .quiet { background: color-mix(in srgb, var(--bg1) 85%, transparent); min-height: 20px; padding: 0 5px; font-size: 11px; }
+
+/* SY3: the Flow tab — the canvas with its node cards, the outline, the play view */
+.flow-host { position: relative; width: 100%; height: 100%; min-height: 240px; background: var(--bg0); }
+.flow-host .react-flow { background: var(--bg0); }
+.flow-host .react-flow__minimap { background: var(--bg1); }
+.flow-host .react-flow__controls button { background: var(--bg2); color: var(--fg); border-color: var(--line2); fill: var(--fg); }
+.flow-host .react-flow__edge-path { stroke: var(--fg3); stroke-width: 1.5; }
+.flow-host .react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); }
+.flow-host .react-flow__edge-textbg { fill: var(--bg1); }
+.flow-host .react-flow__edge-text { fill: var(--fg2); font-size: 10px; }
+.flow-host .react-flow__handle { width: 10px; height: 10px; background: var(--fg3); border: 1px solid var(--bg0); }
+.flow-host .react-flow__handle.connectionindicator:hover { background: var(--accent); }
+.flow-node { position: relative; background: var(--bg1); border: 1px solid var(--line2); border-radius: var(--radius); font-size: 12px; color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.flow-node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.flow-node.problem { border-color: var(--warn, #c7a23a); }
+.flow-node .head { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--line2); }
+.flow-node .type { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg3); }
+.flow-node .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.flow-node .line { padding: 4px 8px; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-node .shot { position: relative; margin: 4px 8px 6px; height: 56px; background: var(--bg3); border-radius: 4px; overflow: hidden; display: grid; place-items: center; color: var(--fg3); font-size: 11px; }
+.flow-node .shot img { width: 100%; height: 100%; object-fit: cover; }
+.flow-node .shot .dot { position: absolute; right: 4px; top: 4px; }
+.flow-node .port { position: absolute; right: 0; transform: translateY(-50%); display: flex; align-items: center; gap: 4px; pointer-events: none; }
+.flow-node .port .plabel { font-size: 10px; color: var(--fg3); background: var(--bg1); padding: 0 4px; transform: translateX(-10px); }
+.flow-node.t-start .head .type { color: var(--ok, #4caf50); }
+.flow-node.t-choice .head .type { color: var(--accent); }
+.flow-node.t-condition .head .type, .flow-node.t-action .head .type { color: var(--warn, #c7a23a); }
+.flow-node.t-comment { background: color-mix(in srgb, var(--warn, #c7a23a) 12%, var(--bg1)); }
+.flow-panel .node-row.playing { border-color: var(--ok, #4caf50); }
+.flow-panel .vars .kv { grid-template-columns: 1fr auto; }
+.flow-strip { gap: 6px; }
+.flow-strip .hint.warn { color: var(--warn, #c7a23a); }
+.flow-problems { margin: 4px 0; padding-left: 16px; font-size: 12px; color: var(--fg2); }
+.flow-problems li.ok { color: var(--ok, #4caf50); list-style: none; margin-left: -16px; }
+.flow-problems li.no_shot, .flow-problems li.shot_open { color: var(--warn, #c7a23a); }
+.lines-editor { display: grid; gap: 4px; }
+.lines-editor .line-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 4px; align-items: center; }
+.lines-editor .line-row input, .lines-editor .line-row select { width: 100%; min-width: 0; box-sizing: border-box; }
+.lines-editor .option-row { grid-template-columns: 1fr 120px auto; }
+.lines-editor .set-row { grid-template-columns: 1fr 1fr auto; }
+.node-insp .cond-row { display: flex; gap: 4px; }
+.node-insp .cond-row select { min-width: 0; flex: 1; }
+.play-view { height: 100%; overflow: auto; padding: 16px 22px; box-sizing: border-box; background: var(--bg0); display: grid; gap: 12px; align-content: start; justify-items: center; }
+.play-stage { width: min(960px, 100%); aspect-ratio: 16 / 9; background: var(--deep, #000); border: 1px solid var(--line2); border-radius: var(--radius); display: grid; place-items: center; overflow: hidden; }
+.play-stage video, .play-stage img { width: 100%; height: 100%; object-fit: contain; }
+.play-stage .play-card { color: var(--fg2); font-size: 16px; padding: 24px; text-align: center; }
+.play-lines { width: min(960px, 100%); font-size: 15px; }
+.play-lines p { margin: 4px 0; }
+.play-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: min(960px, 100%); }

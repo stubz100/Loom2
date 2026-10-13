@@ -86,7 +86,8 @@ def main() -> int:
         base = f"http://127.0.0.1:{sport}/?token={TOKEN}&port={ORCH_PORT}"
         pages = {"catalogue": base + "&suite=catalogue", "edit": base + f"&suite=edit&doc={doc['id']}", "generate": base + "&suite=generate",
                  "generate-model": base + "&suite=generate&tab=model", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai",
-                 "edit-wasm": base + f"&suite=edit&doc={doc['id']}&wasmprobe=1"}             # D59: the smart-select Worker's WebAssembly
+                 "edit-wasm": base + f"&suite=edit&doc={doc['id']}&wasmprobe=1",            # D59: the smart-select Worker's WebAssembly
+                 "story-flow": base + "&suite=story&tab=flow"}                                   # 17 SY3 (D85): React Flow's styles and scripts
         violations: dict[str, list[str]] = {}
         for name, url in pages.items():
             OUT.mkdir(parents=True, exist_ok=True)

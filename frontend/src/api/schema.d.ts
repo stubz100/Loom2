@@ -1446,6 +1446,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Flow Get */
+        get: operations["flow_get_story_flow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Flow Graph Put */
+        put: operations["flow_graph_put_story_flow_graph_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flow Node Create */
+        post: operations["flow_node_create_story_flow_nodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/nodes/{nid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Flow Node Delete */
+        delete: operations["flow_node_delete_story_flow_nodes__nid__delete"];
+        options?: never;
+        head?: never;
+        /** Flow Node Patch */
+        patch: operations["flow_node_patch_story_flow_nodes__nid__patch"];
+        trace?: never;
+    };
+    "/story/flow/nodes/{nid}/bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Bind
+         * @description The node takes the shot as its sole owner (an unbound shot, or a version of its own); 422 when another node owns it.
+         */
+        post: operations["flow_bind_story_flow_nodes__nid__bind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/nodes/{nid}/shot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flow Spawn
+         * @description A new, empty shot owned by the node (the handoff to the Shots tab, loom R134).
+         */
+        post: operations["flow_spawn_story_flow_nodes__nid__shot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/nodes/{nid}/unbind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flow Unbind */
+        post: operations["flow_unbind_story_flow_nodes__nid__unbind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flow Validate */
+        post: operations["flow_validate_story_flow_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles": {
         parameters: {
             query?: never;
@@ -2054,6 +2197,13 @@ export interface components {
              * @default 1
              */
             strength?: number;
+        };
+        /** BindBody */
+        BindBody: {
+            /** Shot Id */
+            shot_id: string;
+            /** Version */
+            version?: string | null;
         };
         /** BlobPut */
         BlobPut: {
@@ -2985,6 +3135,190 @@ export interface components {
         FlattenedToFile: {
             /** Path */
             path: string;
+        };
+        /** FlowCondition */
+        FlowCondition: {
+            /**
+             * Op
+             * @default eq
+             * @enum {string}
+             */
+            op: "eq" | "ne";
+            /**
+             * Value
+             * @default true
+             */
+            value: boolean | string;
+            /**
+             * Var
+             * @default
+             */
+            var: string;
+        };
+        /** FlowEdge */
+        FlowEdge: {
+            /** From */
+            from: string;
+            /**
+             * Port
+             * @default out
+             */
+            port: string;
+            /** To */
+            to: string;
+        };
+        /**
+         * FlowGraph
+         * @description The thin index (loom R139): where the nodes sit, the edges, the start — rebuilt from the node files when missing or disagreeing.
+         */
+        FlowGraph: {
+            /** Edges */
+            edges: components["schemas"]["FlowEdge"][];
+            /** Nodes */
+            nodes: components["schemas"]["FlowPlacement"][];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Start */
+            start: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * FlowLine
+         * @description One line of a Dialogue node: the speaker is a profile (its mention), the text the line (loom R152: the subtitles come from these).
+         */
+        FlowLine: {
+            /** Speaker */
+            speaker: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
+         * FlowNode
+         * @description One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice
+         *     `options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`
+         *     are set by binding only (loom R146: sole ownership).
+         */
+        FlowNode: {
+            /** Colour */
+            colour: string | null;
+            cond: components["schemas"]["FlowCondition"] | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Lines */
+            lines: components["schemas"]["FlowLine"][];
+            /** Options */
+            options: components["schemas"]["FlowOption"][];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Set */
+            set: {
+                [key: string]: unknown;
+            }[];
+            /** Shot Id */
+            shot_id: string | null;
+            /** Shot Version */
+            shot_version: string | null;
+            /** Target */
+            target: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Type
+             * @default dialogue
+             * @enum {string}
+             */
+            type: "start" | "hub" | "dialogue" | "choice" | "condition" | "action" | "shot" | "jump" | "comment";
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * FlowOption
+         * @description A Choice's option: its own out-port (`opt:<id>`), an optional requirement on a variable, the variables it sets (loom R135).
+         */
+        FlowOption: {
+            /** Id */
+            id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Require */
+            require: {
+                [key: string]: unknown;
+            } | null;
+            /** Set */
+            set: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * FlowOut
+         * @description 17 §3d: the index and every node.
+         */
+        FlowOut: {
+            graph: components["schemas"]["FlowGraph"];
+            /** Nodes */
+            nodes: components["schemas"]["FlowNode"][];
+        };
+        /** FlowPlacement */
+        FlowPlacement: {
+            /** Id */
+            id: string;
+            /**
+             * X
+             * @default 0
+             */
+            x: number;
+            /**
+             * Y
+             * @default 0
+             */
+            y: number;
+        };
+        /** FlowProblem */
+        FlowProblem: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Node Id */
+            node_id: string | null;
+        };
+        /** FlowProblems */
+        FlowProblems: {
+            /** Problems */
+            problems: components["schemas"]["FlowProblem"][];
         };
         /** Freed */
         Freed: {
@@ -4411,6 +4745,36 @@ export interface components {
             /** Sha256 */
             sha256: string;
         };
+        /** NodeCreate */
+        NodeCreate: {
+            /** Target */
+            target?: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text?: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+            /**
+             * Type
+             * @default dialogue
+             */
+            type?: string;
+            /**
+             * X
+             * @default 0
+             */
+            x?: number;
+            /**
+             * Y
+             * @default 0
+             */
+            y?: number;
+        };
         /** NodePin */
         NodePin: {
             /** Commit */
@@ -4423,6 +4787,14 @@ export interface components {
             repo: string;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * NodeShot
+         * @description A bind / unbind / spawn: the node and the shot it now owns (or released).
+         */
+        NodeShot: {
+            node: components["schemas"]["FlowNode"];
+            shot: components["schemas"]["Shot"] | null;
         };
         /**
          * PassesUpload
@@ -5367,6 +5739,14 @@ export interface components {
         ShuttingDown: {
             /** Shutting Down */
             shutting_down: boolean;
+        };
+        /** SpawnBody */
+        SpawnBody: {
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
         };
         /** Stage */
         Stage: {
@@ -9376,6 +9756,283 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_get_story_flow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowOut"];
+                };
+            };
+        };
+    };
+    flow_graph_put_story_flow_graph_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowGraph"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_node_create_story_flow_nodes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_node_delete_story_flow_nodes__nid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_node_patch_story_flow_nodes__nid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_bind_story_flow_nodes__nid__bind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeShot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_spawn_story_flow_nodes__nid__shot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpawnBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeShot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_unbind_story_flow_nodes__nid__unbind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeShot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flow_validate_story_flow_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowProblems"];
                 };
             };
         };

@@ -36,7 +36,7 @@ export function RefExtras() {
           {ms.map((m) => {
             const got = pv?.mentions?.find((x) => x.group_id === m.group_id)?.asset_ids?.length
             return (
-              <span key={m.group_id} className="mchip" title="the group's cover, then its page in order — as many as the model has room for">
+              <span key={m.group_id} className={`mchip${m.profile_id ? ' profile' : ''}`} title={m.profile_id ? "the profile's current version: its hero, then its reference set in order — as many as the model has room for; its stub rides on the note" : "the group's cover, then its page in order — as many as the model has room for"}>
                 @{m.name}<span className="muted"> · {got === undefined ? '…' : `${got} image${got === 1 ? '' : 's'}`}</span>
                 <button className="quiet" aria-label={`Stop mentioning ${m.name}`} title="Stop mentioning it (the name stays as plain text)" onClick={() => g.removeMention(m.group_id)}><X size={12} /></button>
               </span>

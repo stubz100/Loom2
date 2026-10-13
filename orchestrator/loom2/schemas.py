@@ -16,6 +16,7 @@ from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .timelines import Timeline
 from .stages import Stage
+from .story import Profile
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -271,6 +272,24 @@ class StageCaps(Open):
     clip: StageClipCaps | None = None
 
 
+class StoryPresetCaps(Out):
+    label: str
+    hint: str
+    cells: int
+
+
+class StoryCaps(Open):
+    """17 §3b (D85): the model Expand runs on in this build, its health and warm seconds, the presets with their cell counts, the coverage vocabulary."""
+    model_id: str | None = None
+    label: str | None = None
+    short: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    presets: dict[str, StoryPresetCaps]
+    coverage: dict[str, list[str]]
+
+
 class MeshCaps(Open):
     """P18 (D84): the image → mesh model of this build, or why there is none."""
     model_id: str | None = None
@@ -309,6 +328,7 @@ class Capabilities(Open):
     reangle: ReangleCaps                           # P14 (D82)
     stage: StageCaps                               # P13 ST3 (D78)
     mesh: MeshCaps                                 # P18 (D84)
+    story: StoryCaps | None = None                # 17 (D85): the Cast tab's Expand model and presets
 
 
 class MissingWeight(Open):
@@ -337,6 +357,8 @@ class MentionOut(Out):
     name: str | None = None
     revision: int | None = None
     asset_ids: list[str] = []
+    profile_id: str | None = None                 # D85: a Story profile mention — the version's group was swapped in
+    version: str | None = None
 
 
 class T2IPreview(Open):
@@ -618,6 +640,24 @@ class ClipList(Out):
 class TimelineList(Out):
     """P17 (D83): the project's sequences."""
     items: list[Timeline]
+
+
+class ProfileList(Out):
+    items: list[Profile]
+
+
+class Expanded(Out):
+    """17 §3b: the jobs an Expand queued — one per cell, one batch — and the candidates page they land on."""
+    batch_id: str
+    job_ids: list[str]
+    cells: int
+    group_id: str
+    model_id: str
+
+
+class Curated(Out):
+    kept: list[str]
+    rejected: list[str]
 
 
 class StageList(Out):

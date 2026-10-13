@@ -323,6 +323,7 @@ test('@mentions (D73): "@hero walks into @tavern" — both groups give reference
 })
 
 test('a suite whose code fails to load says so and recovers (no blank window): the Edit chunk refused, then a reload', async ({ page }) => {
+  test.setTimeout(150_000)                                                             // the reload + WebGL boot takes long on the CI runners
   await page.route(/EditSuite-[\w-]+\.js$/, (r) => r.abort('failed'))               // the network refuses Edit's code (the idle preload hits it too)
   await openApp(page, { suite: 'catalogue' })
   await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
@@ -337,7 +338,7 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await page.locator('.stage .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
   await expect(page.locator('.frame')).toBeVisible()
   await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
-  await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 45_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot)
+  await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 90_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot; 45 s failed once on the open runner, 2026-10-13)
 })
 
 test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
@@ -680,4 +681,82 @@ test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a l
   expect(newest.params.style_id).toBe(style.id)
   expect(newest.params.style_text).toBe('ink and wash storyboard, loose brush')
   expect(newest.prompt_text).toContain('a courier on a rooftop at dawn. ink and wash storyboard, loose brush')
+})
+
+test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cast with the image as the hero; Expand says its cost and queues one fake-engine job per cell onto the candidates page; keep fills the coverage grid; Lock makes the album refuse; @name resolves to the version', async ({ page }) => {
+  test.setTimeout(150_000)                                                             // ~18 fake-engine jobs on the CI runners
+  const name = `Mara ${Date.now().toString(36)}`                                       // unique: the project is reused between runs
+  await openApp(page, { suite: 'catalogue' })
+  const heroId = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0].id   // the newest image (a clip may sit first)
+  await page.locator('.place-row', { hasText: 'Unprocessed' }).locator('button.place-open').click()
+  const tile = page.locator(`.cat-grid .tile[data-id="${heroId}"]`)
+  await tile.click()
+  await page.locator('.insp .quick-card', { hasText: 'Character' }).click()           // the Inspector's quick card (D32: a mouse home)
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/Make a character/)
+  await dialog.locator('input').fill(name)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+  await expect(page.locator('.hero-card img')).toBeVisible()
+  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null }
+  type ProfileLite = { id: string; name: string; current: string; versions: Version[] }
+  const profile = (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.name === name)!
+  expect(profile.versions[0].hero_asset_id).toBe(heroId)
+  const gid = profile.versions[0].group_id
+  expect((await api<{ group: { cover_id: string | null } }>('GET', `/groups/${gid}`)).group.cover_id).toBe(heroId)   // the hero moved onto the reference page as its cover
+  // Expand ▶ on the panel foot says the cost before anything is queued (the full preset); the scenario cancels and queues the small one through the hook
+  await page.locator('.panel .foot button.primary', { hasText: /^Expand/ }).click()
+  await expect(dialog).toContainText(/Queue \d+ jobs/)
+  await expect(dialog).toContainText(/min/)
+  await dialog.locator('button', { hasText: /^Cancel$/ }).click()
+  type Hook = { expand: (preset: string, seeds: number, tier: string) => Promise<{ batch_id: string; job_ids: string[]; cells: number; group_id: string } | null> }
+  const r = (await page.evaluate(() => (window as unknown as { __loom2Story: Hook }).__loom2Story.expand('npc', 1, 'draft')))!
+  expect(r.cells).toBeGreaterThanOrEqual(15)
+  expect(r.job_ids).toHaveLength(r.cells)
+  const jobs = await api<{ items: { id: string; batch_id: string | null; origin?: { suite: string; surface: string; payload?: { cell?: { shot: string } } } }[] }>('GET', '/jobs')
+  const mine = jobs.items.filter((j) => r.job_ids.includes(j.id))
+  expect(mine.every((j) => j.batch_id === r.batch_id && j.origin?.suite === 'story' && j.origin.surface === 'expand' && !!j.origin.payload?.cell?.shot)).toBe(true)
+  type Page = { assets: Record<string, { id: string; state: string; suite: string; params: { coverage_cell?: { shot: string; angle: string } } }> }
+  await expect.poll(async () => Object.keys((await api<Page>('GET', `/groups/${r.group_id}`)).assets).length, { timeout: 120_000 }).toBe(r.cells)
+  const cands = Object.values((await api<Page>('GET', `/groups/${r.group_id}`)).assets)
+  expect(cands.every((a) => a.suite === 'story' && !!a.params.coverage_cell?.shot)).toBe(true)
+  await expect(page.locator('.cand-card')).toHaveCount(r.cells)                       // the page followed the group.changed events
+  // keep one with the mouse (the card's ✓), reject one through the context menu: the grid gains a cell, the card dims
+  const first = page.locator('.cand-card').first()
+  const keptId = (await first.getAttribute('data-id'))!
+  await first.hover()
+  await first.locator('button[aria-label="keep"]').click()
+  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 1)
+  await expect(page.locator('.cov-grid td.one, .cov-grid td.full')).toHaveCount(1)
+  expect((await api<{ group: { items: { id: string }[] } }>('GET', `/groups/${gid}`)).group.items.map((i) => i.id)).toContain(keptId)
+  const second = page.locator('.cand-card').first()
+  await contextChoose(page, second, 'Reject')
+  await expect(second).toHaveClass(/\breject\b/)
+  // the bootstrap strip and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
+  await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(2)  // Cast ✓ · Expand ✓
+  await page.locator('.story-strip button[title^="Lock the version"]').click()
+  await expect(dialog).toContainText(/Lock/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.story-strip .lock-badge')).toBeVisible()
+  await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)?.versions[0].state).toBe('final')
+  await expect(api('POST', '/groups/move', { items: [{ kind: 'asset', id: keptId }], to: null })).rejects.toThrow(/423/)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/locked/)
+  // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await page.locator('.panel textarea').fill('at the gate')
+  await page.locator('.text-prompt button[aria-label^="Mention a group"]').click()
+  await page.locator('.ctx-menu button.item').filter({ hasText: `${name} · character` }).click()   // the profile's entry (its groups are named after it too)
+  await expect(page.locator('.panel .mention-chips .mchip.profile')).toContainText(`@${name}`)
+  await expect(page.locator('.panel textarea')).toHaveValue(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\$&')}`))
+  type Preview = { mentions: { profile_id: string | null; version: string | null; group_id: string; asset_ids: string[] }[]; ref_list: { asset_id: string | null; note: string | null }[] }
+  await expect.poll(async () => {
+    const caps = await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')
+    const klein4b = Object.entries(caps.models).find(([, m]) => m.label === 'Klein 4B')![0]
+    const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4b, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
+    return `${pv.mentions[0]?.profile_id}/${pv.mentions[0]?.version}/${pv.mentions[0]?.group_id}/${pv.ref_list[0]?.asset_id}`
+  }).toBe(`${profile.id}/v1/${gid}/${heroId}`)
 })

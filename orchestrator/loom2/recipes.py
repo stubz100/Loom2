@@ -51,11 +51,15 @@ class RefImage(BaseModel):
 
 class Mention(BaseModel):
     """D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and
-    stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again."""
-    group_id: str
+    stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again. D85: a Story profile mention names
+    the profile (and a version, or its current one); the server swaps the version's reference group in and stamps both — the
+    `asset@version` pin of loom R98."""
+    group_id: str = ""
     name: str | None = None
     revision: int | None = None
     asset_ids: list[str] = Field(default_factory=list)
+    profile_id: str | None = None
+    version: str | None = None
 
 
 class T2I(BaseModel):

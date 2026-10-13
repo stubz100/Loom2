@@ -237,6 +237,9 @@ function One({ a }: { a: Asset }) {
           <CommandCard id="cat.start.upscale" label="Upscale" hint="Edit · AI Upscale" />
           <CommandCard id="cat.start.angle" label="New angle" hint="Generate · Angle" />
           <CommandCard id="cat.start.mesh" label="3D prop" hint="Pixal3D · a background job" />
+          <CommandCard id="cat.start.character" label="Character" hint="Story · Cast — the hero of a profile" />
+          <CommandCard id="cat.start.place" label="Place" hint="Story · Cast" />
+          <CommandCard id="cat.start.prop" label="Prop" hint="Story · Cast" />
           <CommandCard id="cat.animate" label="Animate from here" hint="the start frame" />
           <CommandCard id="cat.variations" label="Variations" hint="new seeds" />
         </div>

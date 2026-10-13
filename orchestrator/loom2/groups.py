@@ -37,6 +37,10 @@ class StaleGroup(StateError):
     """A layout edit based on an older revision of the group than the file's (the API answers 409; the page reloads)."""
 
 
+class GroupLocked(StateError):
+    """17 (D85): the group is a final profile version's reference set — read-only until the profile is deleted (→ 423)."""
+
+
 class GroupNotFound(StateError):
     """No group with that id (404)."""
 
@@ -61,6 +65,7 @@ class GroupRecord(BaseModel):
     updated_at: str = Field(default_factory=utc_now)
     revision: int = 0
     items: list[GroupItem] = Field(default_factory=list)
+    locked: bool = False                    # 17 (D85): a final profile version's reference set — no mutation route touches it
 
 
 Key = tuple[str, str]                         # (kind, id)
@@ -167,6 +172,21 @@ class GroupStore:
             g.revision += 1
             g.updated_at = utc_now()
         atomic_write_json(self._path(g.id), g.model_dump())
+
+    def _unlocked(self, gid: str | None) -> None:
+        """17 (D85): a locked group (a final profile version's reference set) refuses the change."""
+        if gid and gid in self.groups and self.groups[gid].locked:
+            raise GroupLocked(f"{self.groups[gid].name!r} belongs to a final profile version and is locked")
+
+    def set_locked(self, gid: str, locked: bool) -> GroupRecord:
+        with self._lock:
+            g = self._get(gid)
+            if gid == ROOT_ID:
+                raise StateError("the album cannot be locked")
+            if g.locked != locked:
+                g.locked = locked
+                self._write(g, bump=True)
+            return g
 
     def _get(self, gid: str) -> GroupRecord:
         g = self.groups.get(gid)
@@ -308,6 +328,7 @@ class GroupStore:
 
     def update(self, gid: str, name: str | None = None, cover_id: str | None = None) -> GroupRecord:
         with self._lock:
+            self._unlocked(gid)
             g = self._get(gid)
             if name is not None:
                 g.name = name.strip() or g.name
@@ -319,6 +340,7 @@ class GroupStore:
     def layout(self, gid: str, items: list[dict], revision: int | None = None) -> GroupRecord:
         """Positions, sizes and stacking of items already on the page (one call per drag end)."""
         with self._lock:
+            self._unlocked(gid)
             g = self._get(gid)
             if revision is not None and revision != g.revision:
                 raise StaleGroup(f"the page is based on revision {revision}; the group is at revision {g.revision}")
@@ -337,6 +359,8 @@ class GroupStore:
         """Move items onto a page (`to`), or assets back to Unprocessed (`to` = None)."""
         with self._lock:
             changed = {self.parent[k] for k in keys if k in self.parent}
+            for gid in [*changed, to]:
+                self._unlocked(gid)
             if to is None:
                 if any(k[0] == "group" for k in keys):
                     raise StateError("a group cannot go to Unprocessed; move it onto a page or delete it")
@@ -362,6 +386,7 @@ class GroupStore:
     def group_items(self, gid: str, keys: list[Key], name: str) -> GroupRecord:
         """Make a group of items on a page: they keep their relative layout on the new page; its card takes their place."""
         with self._lock:
+            self._unlocked(gid)
             parent = self._get(gid)
             by = {(it.kind, it.id): it for it in parent.items}
             picked = [by[k] for k in keys if k in by]
@@ -384,6 +409,8 @@ class GroupStore:
     def ungroup(self, gid: str) -> str:
         """Dissolve a group: its items land on the parent page where its card was, keeping their layout."""
         with self._lock:
+            self._unlocked(gid)
+            self._unlocked(self.parent.get(("group", gid)))
             if gid == ROOT_ID:
                 raise StateError("the album cannot be ungrouped")
             g = self._get(gid)
@@ -408,6 +435,7 @@ class GroupStore:
     def delete(self, gid: str) -> list[str]:
         """Delete a group and the groups inside it; every asset in them returns to Unprocessed (nothing is trashed)."""
         with self._lock:
+            self._unlocked(gid)
             if gid == ROOT_ID:
                 raise StateError("the album cannot be deleted")
             self._get(gid)

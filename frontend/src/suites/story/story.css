@@ -36,3 +36,48 @@
 .story-insp .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .story-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg2); font-size: 13px; text-align: center; }
 .story-empty > div { max-width: 380px; }
+
+/* SY1: the Cast tab — the profiles list, the version strip with the bootstrap steps, the version page (hero, stub, coverage grid, candidates) */
+.cast-panel input[type=search] { width: 100%; box-sizing: border-box; }
+.profile-row { align-items: center; }
+.profile-row .pthumb { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; flex: none; background: var(--bg3); display: inline-block; }
+.profile-row .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.profile-row .muted, .cast-page .muted { color: var(--fg3); font-weight: normal; }
+.story-strip select { max-width: 160px; }
+.story-strip .lock-badge { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); font-size: 12px; }
+.bootstrap { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--fg3); }
+.bootstrap .bs-step { display: inline-flex; align-items: center; gap: 2px; }
+.bootstrap .bs-step.done { color: var(--fg); }
+.bootstrap .bs-step.off { opacity: .55; }
+.bootstrap .bs-step .quiet { padding: 0 4px; min-height: 20px; font-size: 12px; color: inherit; }
+.bootstrap .sep { color: var(--fg3); margin: 0 2px; }
+.cast-page { height: 100%; overflow: auto; padding: 14px 22px 40px; box-sizing: border-box; background: var(--bg0); }
+.cast-page > section, .cast-page .cast-head { max-width: 1100px; margin: 0 auto 22px; }
+.cast-page h2 { margin: 0 0 8px; font-size: 16px; }
+.cast-page h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg2); text-transform: uppercase; letter-spacing: .04em; }
+.cast-page h3 .hint { text-transform: none; letter-spacing: 0; font-weight: normal; margin-left: 8px; }
+.cast-head { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; }
+.hero-card { width: 200px; height: 200px; display: grid; place-items: center; background: var(--media-bg, var(--bg1)); border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; }
+.hero-card img { width: 100%; height: 100%; object-fit: contain; }
+.cast-fields .stub { display: grid; gap: 4px; font-size: 12px; color: var(--fg2); }
+.cast-fields .stub textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+.cast-fields .counts { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--fg2); }
+.cov-grid { border-collapse: collapse; font-size: 12px; }
+.cov-grid th { color: var(--fg3); font-weight: normal; padding: 3px 8px; text-align: left; white-space: nowrap; }
+.cov-grid td { text-align: center; padding: 3px 8px; min-width: 44px; border: 1px solid var(--line2); }
+.cov-grid td.thin { color: var(--fg3); background: color-mix(in srgb, var(--warn, #c7a23a) 12%, transparent); }
+.cov-grid td.one { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.cov-grid td.full { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--fg); }
+.cand-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.cand-card { position: relative; width: 132px; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: var(--bg1); cursor: pointer; }
+.cand-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.cand-card .cell { display: block; padding: 2px 6px; font-size: 10px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cand-card .tools { position: absolute; right: 4px; top: 4px; display: none; gap: 2px; }
+.cand-card:hover .tools { display: inline-flex; }
+.cand-card .tools .quiet { background: color-mix(in srgb, var(--bg1) 85%, transparent); min-height: 20px; padding: 0 5px; }
+.cand-card.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cand-card.reject { opacity: .45; }
+.cand-card.keep { border-color: var(--ok, #4caf50); }
+.cast-page .empty { color: var(--fg3); font-size: 12px; padding: 6px 0; }
+.story-insp .mono { font-family: var(--mono, monospace); font-size: 11px; color: var(--fg3); }
+.story-insp .insp-thumb.small { max-height: 96px; width: auto; }

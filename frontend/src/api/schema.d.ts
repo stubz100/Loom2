@@ -1446,6 +1446,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profiles List */
+        get: operations["profiles_list_story_profiles_get"];
+        put?: never;
+        /** Profile Create */
+        post: operations["profile_create_story_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profile Get */
+        get: operations["profile_get_story_profiles__pid__get"];
+        put?: never;
+        post?: never;
+        /** Profile Delete */
+        delete: operations["profile_delete_story_profiles__pid__delete"];
+        options?: never;
+        head?: never;
+        /** Profile Patch */
+        patch: operations["profile_patch_story_profiles__pid__patch"];
+        trace?: never;
+    };
+    "/story/profiles/{pid}/expand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Expand
+         * @description One queued T2I job per coverage cell of the preset (× seeds), in one batch, each with the hero as reference 1 and the cell's sentence
+         *     after the stub; the results land on the version's candidates page (made on the first Expand) with `params.coverage_cell`.
+         */
+        post: operations["profile_expand_story_profiles__pid__expand_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile New Version
+         * @description A full copy of the current version (its reference set duplicated), open, now the current one.
+         */
+        post: operations["profile_new_version_story_profiles__pid__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/curate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Curate
+         * @description Keep: the assets are marked keep and move onto the version's reference page; reject: marked reject, left where they are.
+         */
+        post: operations["profile_curate_story_profiles__pid__versions__vid__curate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Profile Lock */
+        post: operations["profile_lock_story_profiles__pid__versions__vid__lock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/world": {
         parameters: {
             query?: never;
@@ -1891,6 +2006,7 @@ export interface components {
             /** Schedulers */
             schedulers: string[];
             stage: components["schemas"]["StageCaps"];
+            story?: components["schemas"]["StoryCaps"] | null;
             /** Te Alternates */
             te_alternates: {
                 [key: string]: string[];
@@ -2173,6 +2289,23 @@ export interface components {
             modes: string[];
         } & {
             [key: string]: unknown;
+        };
+        /** CurateBody */
+        CurateBody: {
+            /** Asset Ids */
+            asset_ids: string[];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "keep" | "reject";
+        };
+        /** Curated */
+        Curated: {
+            /** Kept */
+            kept: string[];
+            /** Rejected */
+            rejected: string[];
         };
         /** Deleted */
         Deleted: {
@@ -2611,6 +2744,41 @@ export interface components {
         };
         /** EventFrame */
         EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
+        /** ExpandBody */
+        ExpandBody: {
+            /**
+             * Preset
+             * @default full
+             */
+            preset?: string;
+            /**
+             * Seeds Per Cell
+             * @default 1
+             */
+            seeds_per_cell?: number;
+            /** Style Id */
+            style_id?: string | null;
+            /** Tier */
+            tier?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * Expanded
+         * @description 17 §3b: the jobs an Expand queued — one per cell, one batch — and the candidates page they land on.
+         */
+        Expanded: {
+            /** Batch Id */
+            batch_id: string;
+            /** Cells */
+            cells: number;
+            /** Group Id */
+            group_id: string;
+            /** Job Ids */
+            job_ids: string[];
+            /** Model Id */
+            model_id: string;
+        };
         /** ExportRequest */
         ExportRequest: {
             /**
@@ -2964,6 +3132,11 @@ export interface components {
             id: string;
             /** Items */
             items: components["schemas"]["GroupItem"][];
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
             /** Name */
             name: string;
             /**
@@ -3955,23 +4128,38 @@ export interface components {
         /**
          * Mention
          * @description D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and
-         *     stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again.
+         *     stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again. D85: a Story profile mention names
+         *     the profile (and a version, or its current one); the server swaps the version's reference group in and stamps both — the
+         *     `asset@version` pin of loom R98.
          */
         Mention: {
             /** Asset Ids */
             asset_ids?: string[];
-            /** Group Id */
-            group_id: string;
+            /**
+             * Group Id
+             * @default
+             */
+            group_id?: string;
             /**
              * Name
              * @default null
              */
             name?: string | null;
             /**
+             * Profile Id
+             * @default null
+             */
+            profile_id?: string | null;
+            /**
              * Revision
              * @default null
              */
             revision?: number | null;
+            /**
+             * Version
+             * @default null
+             */
+            version?: string | null;
         };
         /** MentionOut */
         MentionOut: {
@@ -3984,8 +4172,12 @@ export interface components {
             group_id: string;
             /** Name */
             name: string | null;
+            /** Profile Id */
+            profile_id: string | null;
             /** Revision */
             revision: number | null;
+            /** Version */
+            version: string | null;
         };
         /**
          * MeshCaps
@@ -4213,6 +4405,97 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        /** Profile */
+        Profile: {
+            /**
+             * Cls
+             * @default character
+             * @enum {string}
+             */
+            cls: "character" | "place" | "prop";
+            /** Created At */
+            created_at: string;
+            /** Current */
+            current: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Updated At */
+            updated_at: string;
+            /** Versions */
+            versions: components["schemas"]["ProfileVersion"][];
+        };
+        /** ProfileCreate */
+        ProfileCreate: {
+            /**
+             * Cls
+             * @default character
+             * @enum {string}
+             */
+            cls?: "character" | "place" | "prop";
+            /** Hero Asset Id */
+            hero_asset_id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Stub
+             * @default
+             */
+            stub?: string;
+        };
+        /** ProfileList */
+        ProfileList: {
+            /** Items */
+            items: components["schemas"]["Profile"][];
+        };
+        /**
+         * ProfileVersion
+         * @description One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`
+         *     is editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the
+         *     LoRA wave (D25).
+         */
+        ProfileVersion: {
+            /** Candidates Group Id */
+            candidates_group_id: string | null;
+            /** Created At */
+            created_at: string;
+            /** Derived From */
+            derived_from: string | null;
+            /** Group Id */
+            group_id: string;
+            /** Hero Asset Id */
+            hero_asset_id: string | null;
+            /** Id */
+            id: string;
+            /** Locked At */
+            locked_at: string | null;
+            /** Lora */
+            lora: string | null;
+            /**
+             * State
+             * @default open
+             * @enum {string}
+             */
+            state: "open" | "final";
+            /**
+             * Stub
+             * @default
+             */
+            stub: string;
+            /** Trigger */
+            trigger: string | null;
         };
         /** ProjectClosed */
         ProjectClosed: {
@@ -5139,6 +5422,34 @@ export interface components {
             title: string;
         };
         /**
+         * StoryCaps
+         * @description 17 §3b (D85): the model Expand runs on in this build, its health and warm seconds, the presets with their cell counts, the coverage vocabulary.
+         */
+        StoryCaps: {
+            /** Coverage */
+            coverage: {
+                [key: string]: string[];
+            };
+            /** Health */
+            health: string;
+            /** Label */
+            label?: string | null;
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id?: string | null;
+            /** Presets */
+            presets: {
+                [key: string]: components["schemas"]["StoryPresetCaps"];
+            };
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * StoryChanged
          * @description 17 (D85): a Story record moved on the server (`kind`: world; later profile, shot, node) — open tabs reload it.
          */
@@ -5168,6 +5479,15 @@ export interface components {
              * @constant
              */
             type: "story.changed";
+        };
+        /** StoryPresetCaps */
+        StoryPresetCaps: {
+            /** Cells */
+            cells: number;
+            /** Hint */
+            hint: string;
+            /** Label */
+            label: string;
         };
         /**
          * StoryStyle
@@ -8847,6 +9167,292 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profiles_list_story_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileList"];
+                };
+            };
+        };
+    };
+    profile_create_story_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_get_story_profiles__pid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_delete_story_profiles__pid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_patch_story_profiles__pid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_expand_story_profiles__pid__expand_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpandBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Expanded"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_new_version_story_profiles__pid__versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_curate_story_profiles__pid__versions__vid__curate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Curated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_lock_story_profiles__pid__versions__vid__lock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
                 };
             };
             /** @description Validation Error */

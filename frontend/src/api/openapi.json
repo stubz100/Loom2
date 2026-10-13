@@ -835,6 +835,16 @@
           "stage": {
             "$ref": "#/components/schemas/StageCaps"
           },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "te_alternates": {
             "additionalProperties": {
               "items": {
@@ -1583,6 +1593,55 @@
           "modes"
         ],
         "title": "ContentAwareCaps",
+        "type": "object"
+      },
+      "CurateBody": {
+        "properties": {
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "verdict": {
+            "enum": [
+              "keep",
+              "reject"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_ids",
+          "verdict"
+        ],
+        "title": "CurateBody",
+        "type": "object"
+      },
+      "Curated": {
+        "properties": {
+          "kept": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kept",
+            "type": "array"
+          },
+          "rejected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kept",
+          "rejected"
+        ],
+        "title": "Curated",
         "type": "object"
       },
       "Deleted": {
@@ -2733,6 +2792,94 @@
         ],
         "title": "EventFrame"
       },
+      "ExpandBody": {
+        "properties": {
+          "preset": {
+            "default": "full",
+            "title": "Preset",
+            "type": "string"
+          },
+          "seeds_per_cell": {
+            "default": 1,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Seeds Per Cell",
+            "type": "integer"
+          },
+          "style_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style Id"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "ExpandBody",
+        "type": "object"
+      },
+      "Expanded": {
+        "description": "17 §3b: the jobs an Expand queued — one per cell, one batch — and the candidates page they land on.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "cells": {
+            "title": "Cells",
+            "type": "integer"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "job_ids",
+          "cells",
+          "group_id",
+          "model_id"
+        ],
+        "title": "Expanded",
+        "type": "object"
+      },
       "ExportRequest": {
         "properties": {
           "format": {
@@ -3567,6 +3714,11 @@
             "title": "Items",
             "type": "array"
           },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -3594,7 +3746,8 @@
           "created_at",
           "updated_at",
           "revision",
-          "items"
+          "items",
+          "locked"
         ],
         "title": "GroupRecord",
         "type": "object"
@@ -5771,7 +5924,7 @@
         "type": "object"
       },
       "Mention": {
-        "description": "D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and\nstamps the group's revision and the asset ids it gave — a stamped mention is not resolved again.",
+        "description": "D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and\nstamps the group's revision and the asset ids it gave — a stamped mention is not resolved again. D85: a Story profile mention names\nthe profile (and a version, or its current one); the server swaps the version's reference group in and stamps both — the\n`asset@version` pin of loom R98.",
         "properties": {
           "asset_ids": {
             "items": {
@@ -5781,6 +5934,7 @@
             "type": "array"
           },
           "group_id": {
+            "default": "",
             "title": "Group Id",
             "type": "string"
           },
@@ -5796,6 +5950,18 @@
             "default": null,
             "title": "Name"
           },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Id"
+          },
           "revision": {
             "anyOf": [
               {
@@ -5807,11 +5973,20 @@
             ],
             "default": null,
             "title": "Revision"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
           }
         },
-        "required": [
-          "group_id"
-        ],
         "title": "Mention",
         "type": "object"
       },
@@ -5840,6 +6015,17 @@
             ],
             "title": "Name"
           },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
           "revision": {
             "anyOf": [
               {
@@ -5850,13 +6036,26 @@
               }
             ],
             "title": "Revision"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
           "group_id",
           "name",
           "revision",
-          "asset_ids"
+          "asset_ids",
+          "profile_id",
+          "version"
         ],
         "title": "MentionOut",
         "type": "object"
@@ -6492,6 +6691,237 @@
           }
         },
         "title": "PoseLibrary",
+        "type": "object"
+      },
+      "Profile": {
+        "properties": {
+          "cls": {
+            "default": "character",
+            "enum": [
+              "character",
+              "place",
+              "prop"
+            ],
+            "title": "Cls",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "cls",
+          "current",
+          "versions",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Profile",
+        "type": "object"
+      },
+      "ProfileCreate": {
+        "properties": {
+          "cls": {
+            "default": "character",
+            "enum": [
+              "character",
+              "place",
+              "prop"
+            ],
+            "title": "Cls",
+            "type": "string"
+          },
+          "hero_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hero Asset Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stub": {
+            "default": "",
+            "title": "Stub",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProfileCreate",
+        "type": "object"
+      },
+      "ProfileList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProfileList",
+        "type": "object"
+      },
+      "ProfileVersion": {
+        "description": "One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`\nis editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the\nLoRA wave (D25).",
+        "properties": {
+          "candidates_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidates Group Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "hero_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hero Asset Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked At"
+          },
+          "lora": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lora"
+          },
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "final"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stub": {
+            "default": "",
+            "title": "Stub",
+            "type": "string"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "group_id",
+          "candidates_group_id",
+          "hero_asset_id",
+          "stub",
+          "trigger",
+          "lora",
+          "derived_from",
+          "created_at",
+          "locked_at"
+        ],
+        "title": "ProfileVersion",
         "type": "object"
       },
       "ProjectClosed": {
@@ -8585,6 +9015,92 @@
         "title": "StoryBeat",
         "type": "object"
       },
+      "StoryCaps": {
+        "additionalProperties": true,
+        "description": "17 §3b (D85): the model Expand runs on in this build, its health and warm seconds, the presets with their cell counts, the coverage vocabulary.",
+        "properties": {
+          "coverage": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Coverage",
+            "type": "object"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "presets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StoryPresetCaps"
+            },
+            "title": "Presets",
+            "type": "object"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short"
+          }
+        },
+        "required": [
+          "health",
+          "missing",
+          "presets",
+          "coverage"
+        ],
+        "title": "StoryCaps",
+        "type": "object"
+      },
       "StoryChanged": {
         "description": "17 (D85): a Story record moved on the server (`kind`: world; later profile, shot, node) — open tabs reload it.",
         "properties": {
@@ -8644,6 +9160,29 @@
           "data"
         ],
         "title": "StoryChangedEvent",
+        "type": "object"
+      },
+      "StoryPresetCaps": {
+        "properties": {
+          "cells": {
+            "title": "Cells",
+            "type": "integer"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "hint",
+          "cells"
+        ],
+        "title": "StoryPresetCaps",
         "type": "object"
       },
       "StoryStyle": {
@@ -15076,6 +15615,409 @@
         "summary": "Stage Passes",
         "tags": [
           "stages"
+        ]
+      }
+    },
+    "/story/profiles": {
+      "get": {
+        "operationId": "profiles_list_story_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Profiles List",
+        "tags": [
+          "story"
+        ]
+      },
+      "post": {
+        "operationId": "profile_create_story_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}": {
+      "delete": {
+        "operationId": "profile_delete_story_profiles__pid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "get": {
+        "operationId": "profile_get_story_profiles__pid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Get",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "profile_patch_story_profiles__pid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/expand": {
+      "post": {
+        "description": "One queued T2I job per coverage cell of the preset (× seeds), in one batch, each with the hero as reference 1 and the cell's sentence\nafter the stub; the results land on the version's candidates page (made on the first Expand) with `params.coverage_cell`.",
+        "operationId": "profile_expand_story_profiles__pid__expand_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Expanded"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Expand",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions": {
+      "post": {
+        "description": "A full copy of the current version (its reference set duplicated), open, now the current one.",
+        "operationId": "profile_new_version_story_profiles__pid__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile New Version",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/curate": {
+      "post": {
+        "description": "Keep: the assets are marked keep and move onto the version's reference page; reject: marked reject, left where they are.",
+        "operationId": "profile_curate_story_profiles__pid__versions__vid__curate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Curated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Curate",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/lock": {
+      "post": {
+        "operationId": "profile_lock_story_profiles__pid__versions__vid__lock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Lock",
+        "tags": [
+          "story"
         ]
       }
     },

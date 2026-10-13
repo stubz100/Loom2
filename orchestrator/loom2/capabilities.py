@@ -67,7 +67,7 @@ def capabilities(svc: Services) -> dict:
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
-            "mesh": _mesh(svc, variant)}                                       # P18 (D84): image → mesh props
+            "mesh": _mesh(svc, variant), "story": _story(svc, variant)}                                       # P18 (D84): image → mesh props
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -121,6 +121,24 @@ def _stage(svc: Services, variant: str) -> dict:
                 "size": list(spec.geometry.size or []), "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
         break
     return {"methods": methods, "passes": list(STAGE_PASSES), "default": "clay" if "clay" in methods else (next(iter(methods)) if methods else None), "clip": clip}
+
+
+def _story(svc: Services, variant: str) -> dict:
+    """Story (17 §3b, D85): the model Expand runs on in this build (D78's clay model: it takes the hero as a reference), its health and warm
+    seconds — the Cast tab says the cost before the jobs are queued — the presets with their cell counts and the coverage vocabulary."""
+    from .story import ANGLES, EXPRESSIONS, PRESETS, SHOTS, expand_spec, preset_cells
+    presets = {k: {"label": v["label"], "hint": v["hint"], "cells": len(preset_cells(k))} for k, v in PRESETS.items()}
+    coverage = {"shots": [s for s, _ in SHOTS], "angles": [a for a, _ in ANGLES], "expressions": EXPRESSIONS}
+    spec = expand_spec(variant)
+    if spec is None:
+        return {"model_id": None, "label": None, "short": None, "health": "unavailable", "missing": [], "seconds": None, "presets": presets, "coverage": coverage}
+    needs = spec.weights()
+    healths = {x: svc.roster.resolve(x).health for x in needs}
+    missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+    return {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label,
+            "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"), "missing": missing,
+            "seconds": spec.recipes.stage_seconds if spec.recipes.stage_seconds is not None else spec.estimates.base_seconds,
+            "presets": presets, "coverage": coverage}
 
 
 def _mesh(svc: Services, variant: str) -> dict:

@@ -43,6 +43,8 @@ export type World = S['World']                                // 17 (D85): the S
 export type WorldStyle = S['StoryStyle']
 export type StoryBeat = S['StoryBeat']
 export type StoryVariable = S['StoryVariable']
+export type Profile = S['Profile']                            // 17 (D85) SY1: a character, place or prop with versions
+export type ProfileVersion = S['ProfileVersion']
 export type JobStatus = Job['status']
 export type Health = ModelEntry['health']
 

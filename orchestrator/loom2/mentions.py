@@ -17,6 +17,7 @@ from .recipes import Mention, RefImage, T2I
 if TYPE_CHECKING:
     from .catalogue import Catalogue
     from .groups import GroupStore
+    from .story import StoryStore
 
 
 def candidates(groups: GroupStore, catalogue: Catalogue, gid: str) -> list[str]:
@@ -32,13 +33,37 @@ def candidates(groups: GroupStore, catalogue: Catalogue, gid: str) -> list[str]:
     return out
 
 
-def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogue | None, refs_max: int) -> T2I:
-    """The recipe with its unresolved mentions turned into references and stamped. Without mentions it is returned unchanged."""
+def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogue | None, refs_max: int, story: StoryStore | None = None) -> T2I:
+    """The recipe with its unresolved mentions turned into references and stamped. Without mentions it is returned unchanged. D85: a
+    profile mention is first pointed at its version's reference group (the current one unless pinned), and its note carries the
+    version's prompt stub ('Image 2 shows Mara, a wiry courier in a grey coat')."""
     todo = [m for m in recipe.mentions if m.revision is None]
     if not todo:
         return recipe
     if groups is None or catalogue is None:
         raise ValueError("mentions need an open project")
+    stubs: dict[str, str] = {}
+    pinned: dict[int, Mention] = {}
+    for i, m in enumerate(recipe.mentions):
+        if m.revision is not None or not m.profile_id:
+            continue
+        if story is None:
+            raise ValueError("profile mentions need an open project")
+        p = story.profile(m.profile_id)
+        if p is None:
+            raise ValueError(f"mentioned profile {m.profile_id} does not exist")
+        try:
+            v = p.version(m.version)
+        except KeyError as e:
+            raise ValueError(str(e)) from e
+        pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id)
+        if v.stub.strip() and v.stub.strip().lower() != (m.name or p.name).strip().lower():
+            stubs[v.group_id] = v.stub.strip().rstrip(".")
+    if pinned:
+        recipe = recipe.model_copy(update={"mentions": [pinned.get(i, m) for i, m in enumerate(recipe.mentions)]})
+        todo = [m for m in recipe.mentions if m.revision is None]
+    if any(not m.group_id for m in todo):
+        raise ValueError("a mention names a group or a profile")
     refs = [r for r in recipe.refs if not (r.mention and any(m.group_id == r.mention for m in todo))]   # a re-resolve replaces its own
     taken = {r.asset_id for r in refs if r.asset_id}
     queues = {m.group_id: [a for a in candidates(groups, catalogue, m.group_id)] for m in todo}
@@ -55,8 +80,10 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
             aid = q.pop(0)
             taken.add(aid)
             given[m.group_id].append(aid)
-            refs.append(RefImage(asset_id=aid, note=names[m.group_id], mention=m.group_id))
+            stub = stubs.get(m.group_id)                                        # D85: the stub is the clause ('Mara, a wiry courier…'); it leads with the name or gets it
+            note = names[m.group_id] if not stub else stub if stub.lower().startswith(names[m.group_id].lower()) else f"{names[m.group_id]}, {stub}"
+            refs.append(RefImage(asset_id=aid, note=note, mention=m.group_id))
             room -= 1
     stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
-                                                        asset_ids=given[m.group_id]) for m in recipe.mentions]
+                                                        asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version) for m in recipe.mentions]
     return recipe.model_copy(update={"refs": refs, "mentions": stamped})

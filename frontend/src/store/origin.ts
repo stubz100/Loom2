@@ -49,8 +49,10 @@ export function goToOrigin(j: Job): void {
       if (o.ref) { const ref = o.ref; const cam = typeof o.payload?.camera_id === 'string' ? o.payload.camera_id : null
         void import('../suites/stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === ref ? Promise.resolve() : st.open(ref); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) }
       break
-    case 'story':                                                 // 17 (D85): the Story suite (SY1+: the profile, shot or node the job was about)
+    case 'story':                                                 // 17 (D85): the profile an Expand was about, on the Cast tab at that version
       s.setSuite('story')
+      if (o.surface === 'expand' && o.ref) { const ref = o.ref; const ver = typeof o.payload?.version === 'string' ? o.payload.version : null
+        void Promise.all([import('../suites/story/storyStore'), import('../frame/suiteRegistry')]).then(([m, reg]) => { reg.setRailTab('story', 'cast'); const st = m.useStory.getState(); const go = st.profilesLoaded ? Promise.resolve() : st.loadProfiles(); void go.then(() => m.useStory.getState().selectProfile(ref, ver)) }) }
       break
     default: break
   }

@@ -3477,3 +3477,64 @@ split by file so that no two hands touched the same module.
 - Lesson for the scenarios: a click on the rail tab that is already active folds the panel (`Rail.tsx`); switch tabs, never re-click.
 - Not in SY0: the World's styles as reference groups (`group_id` is stored, nothing reads it yet — SY1's mentions), the beat → Flow
   node verb (SY3). Next: SY1 Cast.
+
+## 2026-10-13 21:21 — SY1 · Cast: profiles with versions, Expand by coverage cell, curation, locks, profile mentions (17 §3b / §10, D85)
+- **Backend:** `story.py` — `Profile` (`name`, `cls` character | place | prop, `current`, `versions[]`, `revision`) and `ProfileVersion` (`state`
+  open | final, `group_id` = the reference set as an album group, `candidates_group_id`, `hero_asset_id`, `stub`, the `trigger` / `lora`
+  slots for the LoRA wave, `derived_from`); `StoryStore.create_profile` (a group "Name · v1", the hero moved onto it as its cover),
+  `patch_profile` (revision guard; a locked version's stub and hero are read-only), `new_version` (the group store's deep `duplicate` —
+  an asset lives on one page (D34), so the copy's images are duplicates with `duplicate_of`; the copy becomes current, open),
+  `lock_version` (→ `GroupStore.set_locked`), `delete_profile` (the record goes, the groups stay, unlocked). The coverage vocabulary
+  (loom `kb-loom-p1` §7.1: 4 shot sizes × 6 angles × 5 expressions) and five presets as rows of (shot, angles, expressions, seeds):
+  comprehensive 89 · full 36 · portrait 29 · fullbody 42 · npc 18 cells; `plan_expand` → one T2I per cell (× seeds): Klein prose, the
+  stub then the cell's sentence ("Mara, a wiry courier. a waist-up medium shot, a three-quarter view from the left, neutral
+  expression."), the hero as reference 1, the project aspect at the tier's height, the origin `{suite: story, surface: expand,
+  ref: profile, payload: {version, cell, group_id, preset}}`; `expand_spec` = D78's clay model (Klein 9B under full, 4B under open — it
+  takes the hero as a reference and renders the same person; 12 s warm). `groups.py`: `GroupRecord.locked`, `GroupLocked` → 423 on
+  update / layout / move (source pages and the target) / group / ungroup / delete. `mentions.py`: `Mention.profile_id` / `version` —
+  a profile mention is pointed at its version's group (the current one unless pinned) before the turns, the stub rides on the note
+  ("Image 1 shows Mara, a wiry courier in a grey coat"), the stamp keeps both (loom R98's `asset@version`). `queue.submit(batch_id=…)`
+  joins a batch; the `AssetFinisher` places results on the origin's `group_id`, records `params.coverage_cell` and suite `story`.
+  `routes/story.py`: `GET / POST /story/profiles`, `GET / PATCH / DELETE /story/profiles/{pid}`, `POST …/versions` (copy),
+  `…/versions/{vid}/lock`, `…/curate {asset_ids, verdict}` (keep: state keep + moved onto the reference page; reject: marked, left),
+  `…/expand {version?, preset, seeds_per_cell, tier, style_id}` → one batch; `/capabilities.story` (model, health, seconds, the presets'
+  cell counts, the vocabulary). Route snapshot 121; 205 schemas; `MentionOut` gains the two fields.
+- **Frontend:** the Cast rail tab — Panel: profiles by class chips with search, *New profile / place / prop…*; Strip: the version
+  selector, *New version*, *Lock* / the lock badge, the bootstrap strip Cast › Expand › Curate › Train (greyed: the LoRA wave) › Lock
+  with ✓ from the evidence; Stage: the version page (hero, name · class · state, the prompt stub saved after a pause with the revision,
+  counts, the coverage grid from `coverage.ts` — thin cells tinted, advisory — and the candidates newest first with ✓ / ✕ on hover,
+  click / Ctrl-click to pick, a right-click menu); Inspector: the profile (name, class, current, `@name`) and the version (hero,
+  pages, trigger / LoRA slots, from, created) with the verbs; the panel foot **Expand ▶** with the cells and minutes; `askExpand`
+  says the cost (D79's pattern) before one job per cell is queued. Commands `story.cast.*` (new ×3, expand Ctrl+Enter, keep K, reject X,
+  setHero, lock, newVersion, openGroup, openCandidates, delete). The Catalogue's *Make a character / place / prop…* (tile menu under
+  *Start from this image*, Inspector quick cards): `askText` for the name → the profile with the image as hero → Story · Cast opens on it.
+  Generate's @ picker lists the cast first (`name · class · version`), the chip wears `.profile`, `recipeFromPanel` sends `profile_id`;
+  an Expand job's *Go to origin* opens the profile at its version. `story.changed {kind: profile}` reloads the profiles,
+  `group.changed` the selected version's pages.
+- **Checks:** `tests/test_story_cast_d85.py` (+7: create / patch / copy / lock / delete, lock needs a hero, presets and cells,
+  `plan_expand`, profile mentions incl. pinned versions and the stub, the routes end to end with 423 / 409 / 422 and the preview, Expand on
+  the fake engine — one batch, the candidates placed with their cells, suite story, the hero as parent); `coverage.test.ts` (+3);
+  `test_mentions_d73` compares without the two new fields; the smoke scenario "a cast": the quick card → the dialog → Story · Cast with
+  the hero as cover, Expand ▶ says "Queue 36 jobs … min" (cancelled; the npc preset queued through the hook: 18 jobs in one batch, every
+  candidate on the page with its cell), keep with the card's ✓ (the grid gains a cell, the reference page the asset), reject through the
+  context menu, Lock through the strip (the badge, v1 final, `POST /groups/move` → 423, the foot says locked), the @ picker's entry
+  `Mara · character · v1` → the chip and the text, the preview resolves to v1 with the hero first — 22/22 under `full` and `open` (the
+  open run's hero is picked by the API: the newest image, a clip may sit first). 283 offline, 200 unit, lint 100, tsc and build clean,
+  audits clean. The flaky "a suite whose code fails to load" scenario (the open runner's CI failure on cb1253b) gets a 150 s budget
+  and a 90 s wait.
+- **Rig (`scripts/sy_acceptance.py`, its own orchestrator + engine, Edge via CDP on the dev server, 21:12–21:20):** E12's source 07 imported as
+  the hero → *Mara v1* (the hero on its page as cover) → Expand Full coverage: 36 Klein 9B jobs in one batch, 36/36 done with an asset in
+  414 s — the first (cold) 33.8 s, then warm 7.5 / 10.9 / 11.0 s (min / median / max; bar ≤ 45 s) — every candidate on "Mara · v1 ·
+  candidates" with its cell, suite story, the hero as its parent and the expand origin; the Cast page listed all 36; curate: 30 kept into
+  the reference set (every shot-size row first, then by cell order; bar ≥ 25), all four rows covered, the kept marked keep, 3 rejected
+  staying on the candidates page marked reject, the grid showing the cells; Lock → v1 final, `POST /groups/move` off the page 423, the
+  locked stub 422, the strip's badge; `@Mara` → v1's reference set with the hero first (4 references on Klein), the note "Image 1 shows
+  Mara, a wiry courier in a long grey coat with a red scarf"; a Generate job with the mention done in 39 s, its manifest stamping profile,
+  version and the images, the hero a parent — the result is a two-panel image (a wide and a close view of Mara at the gate: Klein with
+  four references of one person tends to a diptych; one reference or a composition sentence is the author's call, D73). 27 checks ok; sheets `engine/spikes/out/sy/candidates.jpg` (the same woman across the cells,
+  the angle cells not all turned — Klein's rotations are 6–7/10, E12) and `kept.jpg`, `mention_result.jpg`, `results.jsonl`. A first run
+  died on printing ≤ to a cp1252 console after the expand (36/36 in 419 s); the script now forces UTF-8 on its streams.
+- Not measured: the curation quality (the script keeps by cell order; the author's eye decides) and the comprehensive preset (89 cells,
+  ≈ 17 min warm by the same rate).
+- Not in SY1: a hero drop slot (the Catalogue verb and *Make it the hero* on a candidate cover it); re-rolling one thin cell from the
+  grid (P14's *New angle* on a tile lands in Unprocessed, not the candidates page); the style's reference group. Next: SY2 Shots.

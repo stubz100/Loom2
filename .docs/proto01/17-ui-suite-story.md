@@ -1,6 +1,6 @@
 # 17 · Suite F — Story (bible → cast → shots → flow → episode) — UI document and plan
 
-Status: **approved 2026-10-13 (D85) with the §14 defaults; SY0 built 2026-10-13, SY1 next.** Proposed the same day as the output of the refining session
+Status: **approved 2026-10-13 (D85) with the §14 defaults; SY0 and SY1 built 2026-10-13, SY2 next.** Proposed the same day as the output of the refining session
 14 §4 asked for, held after every ArtCraft proposal (P1–P19) was built (08 §1). Source: loom's storyboard design (14 §1:
 `kb-storyboard01.md` L1–L4 and R1–R170, `kb-loom-p1..p6.md`, `kb-loom-ui.md`), adopted as-is by D23 and now **re-planned on
 loom2's shipped foundation** — nothing of loom's intent is dropped, but every piece is mapped onto what already runs: groups and
@@ -86,8 +86,8 @@ ref set, waiting for a hero; the usual way in is the **Catalogue verb** *Make a 
 image tile (also in the Inspector's quick card), which creates the profile, version 1 and its ref-set group with the image as hero and
 cover, and opens the Cast tab on it.
 **Strip:** the version selector (v1, v2, …), **New version** (a full copy of the current one — loom R53: the ref-set group is
-duplicated through `POST /groups/{gid}/duplicate`, the fields copied, `derived_from` stamped; assets are immutable, so the copy
-shares their files), the lock state, and the **bootstrap strip** *Cast ✓ › Expand › Curate › Train ○ › Lock*: each step a button
+duplicated through the group store's deep copy, the fields copied, `derived_from` stamped; an asset lives on one page (D34), so the
+copy's images are duplicates with `duplicate_of`, as the album's own Duplicate makes them), the lock state, and the **bootstrap strip** *Cast ✓ › Expand › Curate › Train ○ › Lock*: each step a button
 that is ✓ when its evidence exists (a hero; candidates; ≥ 1 kept ref per shot-size row; a LoRA — greyed with "LoRA training comes
 with the next wave (03 §5)"; locked).
 **Stage (the version page):** the hero, the name, class and state; the **prompt stub** (loom R112: the clause a mention of this
@@ -232,7 +232,7 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 
 | loom (`kb-storyboard01` / P1–P5) | loom2 as shipped | Story does |
 | --- | --- | --- |
-| Story Bundle with a directory per layer, refs copied per version | `groups/`, `clips/`, `stages/`, `timelines/`, `documents/`; assets immutable by id | `story/` records; a version's ref set **is a group**; copy-on-create = `duplicate` (no file copies) |
+| Story Bundle with a directory per layer, refs copied per version | `groups/`, `clips/`, `stages/`, `timelines/`, `documents/`; an asset lives on one page (D34) | `story/` records; a version's ref set **is a group**; copy-on-create = the album's deep `duplicate` (the images copied with `duplicate_of`, as loom R53 wanted) |
 | Unsaved · Saved · Finalized (R69 / R119) | every edit saves (`revision`, 409) | `open` · `final`; `final` locks the group (`locked`, 423) |
 | `asset@version` pins (R98) | mention stamps `{group_id, revision, asset_ids}` (D73) | + `profile_id`, `version` — the stamp is the pin |
 | L3 compositor (Konva layers) + segments + take timeline | Edit (layers, cut-outs D33), Stage (blocking → passes → image → guided clip), Animate (i2v, FLF, extract) | a shot version points at a stage camera and / or a clip; takes recorded; no new compositor |
@@ -252,7 +252,7 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 | Slice | Content | Effort |
 | --- | --- | --- |
 | **SY0 Shell + World** | suite registration (lazy, rail, `Ctrl+7`, `JobOrigin` / `AssetRecord` `story`), `story/world.json` + routes, the World editor (sections, styles, spine, variables), **the Style picker in Generate** (appended, `style_id` stamped, in the manifest), origin case `story` — **built 2026-10-13** (journal of that day): `orchestrator/loom2/story.py` (`World`, `StoryStore`, `resolve_style`) + `routes/story.py`, `T2I.style_id` / `style_text` appended in `serialize_prompt` per family, `frontend/src/suites/story/` (store, parts, commands), `suites/generate/StylePicker.tsx`; the smoke scenario adds a style in World and finds its fragment in the job's manifest | 3 d |
-| **SY1 Cast** | profiles + versions (copy, lock → `GroupRecord.locked` and 423), the Catalogue verb, mentions resolving profiles (picker, stamps), the Cast tab (version strip, bootstrap strip, grid, candidates strip, Inspector), `Expand` (planner → one job per cell, placement into the candidates group, `/capabilities.story`); **rig:** one character Full-coverage (40) → curated ≥ 25 with every shot-size row ≥ 1, `@mara` in a Generate prompt carries her stub and references | 6 d |
+| **SY1 Cast** | profiles + versions (copy, lock → `GroupRecord.locked` and 423), the Catalogue verb, mentions resolving profiles (picker, stamps), the Cast tab (version strip, bootstrap strip, grid, candidates strip, Inspector), `Expand` (planner → one job per cell, placement into the candidates group, `/capabilities.story`); **rig:** one character Full-coverage (40) → curated ≥ 25 with every shot-size row ≥ 1, `@mara` in a Generate prompt carries her stub and references — **built 2026-10-13** (journal of that day): `story.py` (`Profile` / `ProfileVersion`, the coverage vocabulary and presets, `plan_expand`, `expand_spec` = D78's clay model), `routes/story.py` (profiles, versions, lock, curate, expand), `GroupRecord.locked` → 423, `Mention.profile_id` / `version` in `mentions.py`, the finisher's placement on the origin's page with `params.coverage_cell`, `/capabilities.story`; `suites/story/` Cast parts + `coverage.ts`, the Catalogue's *Make a character / place / prop…*, profiles first in the @ picker; `scripts/sy_acceptance.py` | 6 d |
 | **SY2 Shots** | shot records, versions, takes, finalize gate (format), stale mark, the Shots board + player + Inspector, the verbs in Stage (camera → shot; ST3 / ST4 results fill the version), Animate (clip → shot, use as clip / frame) and the Catalogue; `story.changed` events; **rig:** a stage camera → frame + guided clip on one version, finalized at 1920×1080 | 5 d |
 | **SY3 Flow** | `@xyflow/react`, node files + index, the eight node types, ports and edges, bind / spawn / release (R146), variables and conditions, `play.ts` + the play Stage (no AI), Validate; unit tests on the walker and the index rebuild | 7 d |
 | **SY4 Episode** | the Sequence tab moved (redirect), shot stamps, the Shots bin, the checklist + `askConfirm`, `.srt`, markers in FCPXML + sidecar; parity tests; **author:** Resolve import with markers and subtitles | 4 d |

@@ -244,20 +244,21 @@ class JobQueue:
             return recipe
         if recipe.mentions:
             spec = registry.get(recipe.model_id)
-            recipe = resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0)
+            recipe = resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0, StoryStore(self.ws))
         if recipe.style_id:
             recipe = resolve_style(recipe, StoryStore(self.ws))
         return recipe
 
     # ---- API --------------------------------------------------------------------------------------
-    def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None) -> list[JobRecord]:
+    def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None, batch_id: str | None = None) -> list[JobRecord]:
+        """`batch_id`: join an existing batch (17 §3b Expand: one job per coverage cell, one batch) instead of making one per multi-seed submit."""
         recipe = parse_recipe(recipe_data)
         self._validate_models(recipe)
         recipe = self.resolve_mentions(recipe)                # D73: @mentions → references, stamped before the job record is written
         plan(recipe, self.app.settings.variant)          # D65: a size off the grid (size_policy error), a bad sampler … → 422 here
         self._disk_guard()
         seeds = recipe.seeds or [0]
-        batch_id = new_id("bat") if len(seeds) > 1 else None
+        batch_id = batch_id or (new_id("bat") if len(seeds) > 1 else None)
         out: list[JobRecord] = []
         for seed in seeds:
             seed = int(seed) if int(seed) > 0 else int(time.time_ns() % (2**32))

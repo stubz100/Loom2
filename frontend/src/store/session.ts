@@ -277,6 +277,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
       void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
+      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onGroupChanged(((f.data as { ids?: string[] } | null)?.ids) ?? []))   // 17 SY1: a version's pages
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':

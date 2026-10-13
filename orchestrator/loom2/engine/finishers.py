@@ -75,11 +75,14 @@ class AssetFinisher:
             if not src.is_file():
                 job.log_tail.append(f"missing output {src}")
                 continue
+            payload = (job.origin.payload or {}) if job.origin else {}
+            extra = {"coverage_cell": payload["cell"]} if isinstance(payload.get("cell"), dict) else {}        # 17 §3b: the cell an Expand job filled
             rec = await asyncio.to_thread(
                 q.catalogue.ingest_file, src, kind="video" if src.suffix.lower() in (".mp4", ".webm", ".mov") else "image", move=True,
-                job_id=job.id, batch_id=job.batch_id, suite="stage" if isinstance(recipe, StageShot) else "generate", model_id=compiled.summary.get("model_id", getattr(recipe, "model_id", None)), seed=job.seed,
+                job_id=job.id, batch_id=job.batch_id, suite="stage" if isinstance(recipe, StageShot) else "story" if job.origin and job.origin.suite == "story" else "generate",
+                model_id=compiled.summary.get("model_id", getattr(recipe, "model_id", None)), seed=job.seed,
                 prompt_text=compiled.serialized_prompt or getattr(recipe, "prompt_text", None), prompt_json=getattr(recipe, "prompt_json", None),
-                params=compiled.summary | {"recipe": recipe.model_dump()}, timings={"wall_s": q.wall_s(), "node_s": job.node_times},
+                params=compiled.summary | {"recipe": recipe.model_dump()} | extra, timings={"wall_s": q.wall_s(), "node_s": job.node_times},
                 compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=_parents(recipe),
                 origin=job.origin, **({"lineage_kind": "reangle"} if isinstance(recipe, Reangle) else {"lineage_kind": "stage-shot"} if isinstance(recipe, StageShot) else {}))
             assets.append(rec)
@@ -89,6 +92,13 @@ class AssetFinisher:
             assets[i] = await asyncio.to_thread(q.catalogue.make_thumbs, rec)
             q.hub.broadcast("asset.updated", assets[i].model_dump())
         job.result["asset_ids"] = [a.id for a in assets]
+        place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
+        if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
+            try:
+                await asyncio.to_thread(q.groups.move, [("asset", a.id) for a in assets], place)
+                q.hub.broadcast("group.changed", {"ids": [place]})
+            except Exception as e:                                                          # a locked or deleted page: the results stay in Unprocessed
+                job.log_tail.append(f"results not placed on {place}: {e}")
 
 
 class SelectionFinisher:

@@ -21,7 +21,7 @@ from pydantic.json_schema import models_json_schema
 from . import __version__
 from .documents import DocumentTooNew, StaleStack
 from .fsio import StateError
-from .groups import GroupNotFound, StaleGroup
+from .groups import GroupLocked, GroupNotFound, StaleGroup
 from .recipes import I2I, I2V, T2I, Inpaint, Segment, Upscale
 from .routes import ROUTERS
 from .schemas import EVENT_FRAMES
@@ -40,6 +40,7 @@ ERROR_STATUS = {StaleStack: 409,       # C1: the editor merges the newer server 
                 StaleGroup: 409,       # D34: the page reloads the group and redoes the drag
                 DocumentTooNew: 409,   # R10: saved by a newer loom2 — refused, never opened and downgraded
                 GroupNotFound: 404,
+                GroupLocked: 423,      # 17 (D85): a final profile version's reference set
                 StateError: 400}
 
 

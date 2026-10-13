@@ -1,5 +1,5 @@
 // Rail tab definitions per suite (07 §2). A leaf module: suites and the frame both import it, it imports neither.
-import { Aperture, BookOpen, Bookmark, Boxes, Brush, Camera, Clapperboard, Clock, Cpu, Film, Files, Globe, Image as ImageIcon, Lasso, ListTree, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react'
+import { Aperture, BookOpen, Bookmark, Boxes, Brush, Camera, Clapperboard, Clock, Cpu, Film, Files, Globe, Image as ImageIcon, Lasso, ListTree, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Users, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
@@ -17,6 +17,6 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
   // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses came with ST2, Shot with ST3
   stage: [{ id: 'library', label: 'Library', icon: <Shapes size={18} /> }, { id: 'outliner', label: 'Outliner', icon: <ListTree size={18} /> }, { id: 'cameras', label: 'Cameras', icon: <Camera size={18} /> },
     { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }, { id: 'shot', label: 'Shot', icon: <Aperture size={18} /> }],
-  // 17 (D85): the Story suite loads lazily; World came with SY0, Cast · Shots · Flow · Episode come with SY1–SY4
-  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }],
+  // 17 (D85): the Story suite loads lazily; World came with SY0, Cast with SY1; Shots · Flow · Episode come with SY2–SY4
+  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }],
 }

@@ -6,6 +6,7 @@ import { MenuButton } from '../../frame/CommandButton'
 import type { MenuItem } from '../../frame/commands'
 import { openPressMenu } from '../../frame/ContextMenu'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
+import { profilesForMentions } from '../story/storyStore'
 import { useGenerate, type MentionRef } from './generateStore'
 
 /** The album's groups as menu entries; picking one mentions it. */
@@ -13,8 +14,11 @@ export function groupItems(pick: (m: MentionRef) => void): MenuItem[] {
   const al = useAlbum.getState()
   if (!al.tree) { void al.load(); return [{ label: 'Loading the album… open the menu again', run: () => undefined, disabled: true }] }
   const groups = flatGroups(al.tree)
-  if (!groups.length) return [{ label: 'No groups yet — make one on the Album page', run: () => undefined, disabled: true }]
-  return [{ heading: 'Mention a group — its images become references' },
+  const profiles = profilesForMentions()                                   // D85: the Story's cast first — a profile's current version's reference set
+  const cast: MenuItem[] = profiles.length ? [{ heading: 'Mention a character, place or prop — its reference set becomes references' },
+    ...profiles.map((p) => { const v = p.versions.find((x) => x.id === p.current); return { label: `${p.name} · ${p.cls} · ${p.current}`, run: () => pick({ group_id: v?.group_id ?? '', name: p.name, profile_id: p.id }) } })] : []
+  if (!groups.length && !cast.length) return [{ label: 'No groups yet — make one on the Album page', run: () => undefined, disabled: true }]
+  return [...cast, { heading: 'Mention a group — its images become references' },
     ...groups.map(({ node, depth }) => ({ label: `${'  '.repeat(depth)}${node.name}`, run: () => pick({ group_id: node.id, name: node.name }) }))]
 }
 

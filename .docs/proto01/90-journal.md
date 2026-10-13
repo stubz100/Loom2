@@ -3429,3 +3429,21 @@ split by file so that no two hands touched the same module.
 - Not in P18: a texture-size knob (the template bakes 4096², 20–27 MB per prop); a client thumbnail without placing the prop; TRELLIS.2
   (deleted by D79). Every ArtCraft proposal P1–P19 is now built; next the Story workspace (14) and the author's own checks (the
   Resolve import, the clay blind check, the licence review of DINOv3).
+
+## 2026-10-13 17:45 — Story workspace: the refining session (14 §4) → `17-ui-suite-story.md`, D85 proposed
+- Read against the shipped model: `kb-storyboard01.md` §2–§9 and R1–R170, `kb-loom-p1` §1–§4 / §7.1 / §13, `kb-loom-p2` §1–§9,
+  `kb-loom-p3` §1–§8 / §16, `kb-loom-p4` §1–§10, `kb-loom-p5` §1–§9 / §14, `kb-loom-p6` §1–§3 / §6, `kb-loom-ui` §4–§7; loom2's 02 §2 /
+  §7, 03 §5, 06 §5, 07 §2, 11 §5b, 14, and the code (`groups.py`, `catalogue.py`, `recipes.py` + `mentions.py`, `clips.py`,
+  `timelines.py`, `stages.py`, `workspace.py`, `railTabs.tsx`, `suiteRegistry.tsx`, the video specs).
+- Answers (17 §0): (1) deltas in 17 §9 — a `story/` directory of records beside groups / clips / stages / timelines; a profile version
+  *is* a group (copy by `duplicate`, `final` = `locked` → 423), a shot version points at a stage camera and / or a clip, the flow is
+  one node per file + a rebuildable index, the episode is a P17 timeline with shot stamps, `asset@version` = the D73 mention stamp
+  plus `profile_id` / `version`; (2) Cast → Expand → Curate are Catalogue / Generate verbs reached from the Cast tab (Expand = one
+  queued T2I per coverage cell with the hero as reference, cost confirmed first); (3) tiers = the Animate presets as measured (LTX
+  draft 141 s, guided 147 s, Wan draft 236 s, quality 210 / 900 s, RIFE at export) — loom's drive tier is not built; (4) Muse deferred
+  behind spike E15 to a wave after the alpha; v1 ships without any AI assistance.
+- Plan: SY0 shell + World + the Style picker (3 d) · SY1 Cast (6 d) · SY2 Shots (5 d) · SY3 Flow on `@xyflow/react` (7 d) · SY4
+  Episode (the Sequence tab moved, `.srt`, markers, checklist; 4 d) · SY5 alpha acceptance `scripts/sy_acceptance.py` (3 d) ≈ 28 d.
+- Recorded: D85 (proposed, awaiting the author's answer on 17 §14), 14 §4 item 5 and §5, 00-README row 17, 12 §8d. Next: the
+  author's answer, then SY0.
+- 17:52 — the author approved 17 §14 as proposed (D85 accepted; the Sequence tab moves to Episode). SY0 starts.

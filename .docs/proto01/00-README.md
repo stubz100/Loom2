@@ -25,6 +25,7 @@ author approves it; decisions and their status live in 13.
 | 14 | [Post-MVP · Story workspace](14-post-mvp-story-workspace.md) | loom's storyboard design adopted as-is for the first post-MVP phase (D23) |
 | 15 | [MVP click-through](15-click-through.md) | the author's end-to-end pass through the four suites (M7 slice 5): what to do, what must happen, where it is measured |
 | 16 | [Suite E · Stage UI](16-ui-suite-stage.md) | 3D blocking → control passes → image / clip (P13, ST1–ST4); proposed 2026-10-12, approval gates ST1 (D81) |
+| 17 | [Suite F · Story UI and plan](17-ui-suite-story.md) | bible → cast → shots → flow → episode on loom2's foundation (the refining session of 14 §4, slices SY0–SY5); proposed 2026-10-13, approval gates SY0 (D85) |
 
 Companions: [`90-journal.md`](90-journal.md) (append-only implementation journal with real timestamps — the measurements live
 there), [`bench/`](../../bench/README.md) (the binding benchmark prompts and tasks from 04 §6), `scripts/m*_acceptance.py` (the

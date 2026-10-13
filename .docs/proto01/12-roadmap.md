@@ -342,6 +342,12 @@ over the spike's no-go. Order: PC24, PC25, PC26, then PC14 / PC15. **PC24 landed
 
 **PE6 status 2026-10-10: closed.** Every PhotoCraft proposal (PC1–PC26) is now decided and delivered or rejected; the Edit waves are done.
 
+## 8d. Story workspace SY0–SY5 (from `17-ui-suite-story.md`, D85)
+
+The first post-MVP phase (03 §5 item 1, D23) re-planned on the shipped foundation after every ArtCraft and PhotoCraft wave: SY0 shell +
+World (3 d) → SY1 Cast (6 d) → SY2 Shots (5 d) → SY3 Flow (7 d) → SY4 Episode (4 d) → SY5 alpha acceptance on the rig (3 d), ≈ 28 d;
+SY1 ∥ SY3 after SY0. Gate: 17 §14 approved. Later waves in 17 §13: LoRA training, voice, Muse (spike E15 first).
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

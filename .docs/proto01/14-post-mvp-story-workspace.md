@@ -41,4 +41,11 @@ advisory; provenance must be stamped at write time; verify on the rig, not in CI
 2. Decide which loom P1 flows (Cast → Expand → Curate) become Catalogue/Generate verbs vs a separate workspace.
 3. Re-plan P3 video tiers against the measured Wan / LTX / H3 results and E9.
 4. Re-scope Muse (P4) against current local VLMs and the queue-only rule.
-5. Produce `15-story-workspace-plan.md` with milestones; until then this pointer stands.
+5. Produce the plan with milestones — **done 2026-10-13: `17-ui-suite-story.md`** (15 was taken by the click-through); this
+   pointer stays as the adoption record.
+
+## 5. Refining session held 2026-10-13 (→ 17, D85)
+
+Agenda items 1–4 are answered in 17 §0 and §9: a `story/` directory of records beside the shipped groups, clips, stages and timelines;
+Cast → Expand → Curate as Catalogue / Generate verbs; the Animate presets as the video tiers (no drive tier); Muse deferred behind a
+spike (E15) to a wave after the Story alpha. Slices SY0–SY5 in 17 §10; defaults to approve in 17 §14.

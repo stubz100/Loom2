@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, http, unwrap } from '../../api/client'
-import type { GroupPage, Profile, ProfileVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
+import type { Clip, GroupPage, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export type Section = 'logline' | 'synopsis' | 'styles' | 'spine' | 'variables'
@@ -25,6 +25,9 @@ export interface StoryState {
   refPage: GroupPage | null; candPage: GroupPage | null; pagesFor: string | null
   castFilter: ProfileClass | 'all'; castSearch: string
   picked: string[]; expanding: boolean; busy: boolean
+  // SY2 · Shots
+  shots: Shot[]; shotsLoaded: boolean; shotId: string | null; shotVersionId: string | null
+  clipsById: Record<string, Clip>; stagesLite: { id: string; name: string; revision: number }[]
   load: () => Promise<void>
   flush: () => Promise<void>
   setSection: (s: Section) => void
@@ -66,6 +69,23 @@ export interface StoryState {
   pick: (id: string | null, additive?: boolean) => void
   setCastFilter: (f: ProfileClass | 'all') => void
   setCastSearch: (s: string) => void
+  // SY2 · Shots
+  loadShots: () => Promise<void>
+  selectShot: (id: string | null, version?: string | null) => void
+  /** The clips the selected shot's versions and takes point at, and the stages' revisions (for the stale mark). */
+  loadShotDetails: () => Promise<void>
+  shot: () => Shot | undefined
+  shotVersion: () => ShotVersion | undefined
+  createShot: (name: string, src?: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }) => Promise<Shot | null>
+  patchShot: (patch: { name?: string; current?: string; owner_node?: string | null }) => Promise<void>
+  newShotVersion: () => Promise<void>
+  finalizeShot: () => Promise<boolean>
+  useTake: (kind: 'image' | 'clip', id: string) => Promise<void>
+  deleteShot: () => Promise<void>
+  /** Why the version cannot be finalized, or null (mirrors the server's gate: a clip at the project format's size). */
+  finalizeWhy: (v: ShotVersion) => string | null
+  /** The stage moved after the version's frame / clip was taken (advisory, loom R62). */
+  shotStale: (v: ShotVersion) => boolean
 }
 
 const uid = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
@@ -121,6 +141,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
+    shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     load: async () => {
       set({ loading: true })
       try { set({ world: await unwrap(http.GET('/story/world')) }) }
@@ -194,6 +215,7 @@ export const useStory = create<StoryState>()((set, get) => {
         void get().loadProfiles()
         return
       }
+      if (data?.kind === 'shot') { void get().loadShots(); return }          // SY2: a take arrived, a finalize, a copy
       if (data?.kind && data.kind !== 'world') return
       const w = get().world
       if (!w || saveTimer !== null || get().saving) return
@@ -297,8 +319,110 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     setCastFilter: (castFilter) => set({ castFilter }),
     setCastSearch: (castSearch) => set({ castSearch }),
+    // ---- SY2 · Shots
+    loadShots: async () => {
+      try {
+        const r = await unwrap(http.GET('/story/shots'))
+        set({ shots: r.items, shotsLoaded: true })
+        const cur = get().shotId
+        if (cur && !r.items.some((s) => s.id === cur)) set({ shotId: null, shotVersionId: null })
+        else if (cur) { const s = r.items.find((x) => x.id === cur)!; if (!s.versions.some((v) => v.id === get().shotVersionId)) set({ shotVersionId: s.current }) }
+        void get().loadShotDetails()
+      } catch (e) { if ((e as ApiError).status !== 409) toast(`Shots: ${detail(e)}`) }
+    },
+    selectShot: (id, version) => {
+      const s = id ? get().shots.find((x) => x.id === id) : undefined
+      set({ shotId: s ? id : null, shotVersionId: s ? (version && s.versions.some((v) => v.id === version) ? version : s.current) : null })
+      void get().loadShotDetails()
+    },
+    loadShotDetails: async () => {
+      const s = get().shot()
+      const want = new Set<string>()
+      for (const v of s?.versions ?? []) { if (v.clip_id) want.add(v.clip_id); for (const t of v.takes) if (t.kind === 'clip') want.add(t.id) }
+      const have = get().clipsById
+      const missing = [...want].filter((id) => !have[id])
+      try {
+        const got = await Promise.all(missing.map((id) => unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: id } } })).catch(() => null)))
+        const next = { ...get().clipsById }
+        got.forEach((c, i) => { if (c) next[missing[i]] = c })
+        const stages = await unwrap(http.GET('/stages')).catch(() => null)
+        set({ clipsById: next, ...(stages ? { stagesLite: stages.items.map((x) => ({ id: x.id, name: x.name, revision: x.revision })) } : {}) })
+      } catch { /* the board shows what it has */ }
+    },
+    shot: () => get().shots.find((s) => s.id === get().shotId),
+    shotVersion: () => { const s = get().shot(); return s?.versions.find((v) => v.id === (get().shotVersionId ?? s.current)) },
+    createShot: async (name, src) => {
+      try {
+        const s = await unwrap(http.POST('/story/shots', { body: { name, stage_id: src?.stage_id ?? null, camera_id: src?.camera_id ?? null, clip_id: src?.clip_id ?? null, frame_asset_id: src?.frame_asset_id ?? null } }))
+        set({ shots: [s, ...get().shots.filter((x) => x.id !== s.id)] })
+        get().selectShot(s.id)
+        return s
+      } catch (e) { toast(`Shot: ${detail(e)}`); return null }
+    },
+    patchShot: async (patch) => {
+      const s = get().shot(); if (!s) return
+      try {
+        const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, ...patch } as never }))
+        set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
+      } catch (e) {
+        if ((e as ApiError).status === 409) { toast('The shot changed elsewhere — reloaded; your last change was not saved'); await get().loadShots() }
+        else toast(`Shot not saved: ${detail(e)}`)
+      }
+    },
+    newShotVersion: async () => {
+      const s = get().shot(); if (!s) return
+      try { const next = await unwrap(http.POST('/story/shots/{sid}/versions', { params: { path: { sid: s.id } } })); set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) }); get().selectShot(next.id, next.current) }
+      catch (e) { toast(`New version: ${detail(e)}`) }
+    },
+    finalizeShot: async () => {
+      const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return false
+      try {
+        const next = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/finalize', { params: { path: { sid: s.id, vid: v.id } } }))
+        set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
+        toast(`${s.name} ${v.id} finalized`, 'info')
+        return true
+      } catch (e) { toast(`Finalize: ${detail(e)}`); return false }
+    },
+    useTake: async (kind, id) => {
+      const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return
+      try {
+        const next = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/take', { params: { path: { sid: s.id, vid: v.id } }, body: { kind, id, use: true } }))
+        set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
+        void get().loadShotDetails()
+      } catch (e) { toast(`Take: ${detail(e)}`) }
+    },
+    deleteShot: async () => {
+      const s = get().shot(); if (!s) return
+      try { await unwrap(http.DELETE('/story/shots/{sid}', { params: { path: { sid: s.id } } })); set({ shots: get().shots.filter((x) => x.id !== s.id) }); get().selectShot(null) }
+      catch (e) { toast(`Delete: ${detail(e)}`) }
+    },
+    finalizeWhy: (v) => {
+      if (v.state === 'final') return null
+      if (!v.clip_id) return 'no clip yet — animate the shot (Stage · Shot or Animate) and use the result as its clip'
+      const c = get().clipsById[v.clip_id]
+      const fmt = useSession.getState().project?.format
+      if (!c) return `clip ${v.clip_id} is not loaded`
+      if (fmt && (Math.abs(c.w - fmt.width) > 32 || Math.abs(c.h - fmt.height) > 32)) return `Draft ${c.w}×${c.h} — the format is ${fmt.width}×${fmt.height}; render Full in Animate`   // within the video grids (11 §3c)
+      return null
+    },
+    shotStale: (v) => {
+      if (!v.stage_id || v.stage_revision === null || v.stage_revision === undefined) return false
+      const st = get().stagesLite.find((x) => x.id === v.stage_id)
+      return !!st && st.revision > v.stage_revision
+    },
   }
 })
+
+/** Other suites' way in (Stage's "New shot from this camera", Animate's "Make a shot from this clip"): the shot is made, Story opens on it. */
+export async function makeShotAndOpen(name: string, src: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }): Promise<void> {
+  const [{ setRailTab }] = await Promise.all([import('../../frame/suiteRegistry')])
+  const st = useStory.getState()
+  if (!st.shotsLoaded) await st.loadShots()
+  const s = await st.createShot(name, src)
+  if (!s) return
+  setRailTab('story', 'shots')
+  useSession.getState().setSuite('story')
+}
 
 export const sy = () => useStory.getState()
 

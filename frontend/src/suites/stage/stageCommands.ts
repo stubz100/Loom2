@@ -46,6 +46,11 @@ registerCommands([
   { id: 'stage.camera.add', scope: 'stage', label: 'Add camera', icon: Camera, placement: ['panel', 'context'], when: hasStage, run: () => st().addCamera() },
   { id: 'stage.camera.setFromView', scope: 'stage', label: 'Set the camera from the view', icon: Video, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera() && st().view === 'free',
     run: () => { const c = st().activeCamera(); const p = viewport.freePose?.(); if (c && p) st().updateCamera(c.id, { pos: p.pos, target: p.target }) } },
+  // 17 SY2 (D85): the camera becomes a Story shot's source — its ST3 frame and ST4 clip arrive on the shot as takes
+  { id: 'stage.camera.toShot', scope: 'stage', label: 'New shot from this camera…', icon: Clapperboard, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera(),
+    run: () => { const cur = st().current; const cam = st().activeCamera(); if (!cur || !cam) return
+      void askText({ title: 'New shot from this camera', text: 'A Story shot pointing at this camera: the frames and clips you generate here become its takes; the first fills the slot.', initial: `${cur.name} · ${cam.name}`, placeholder: 'shot name' })
+        .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { stage_id: cur.id, camera_id: cam.id })) }) } },
   { id: 'stage.camera.delete', scope: 'stage', label: 'Delete camera', icon: Trash2, placement: ['panel', 'inspector'], when: () => (st().current?.cameras.length ?? 0) > 1, run: () => { const c = st().activeCamera(); if (c) st().removeCamera(c.id) } },
   // ST2: posing
   { id: 'stage.pose.mirror', scope: 'stage', label: 'Mirror the pose', icon: Copy, keys: 'M', placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().mirrorPose(st().selected!) },

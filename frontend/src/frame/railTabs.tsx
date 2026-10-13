@@ -17,6 +17,6 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
   // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses came with ST2, Shot with ST3
   stage: [{ id: 'library', label: 'Library', icon: <Shapes size={18} /> }, { id: 'outliner', label: 'Outliner', icon: <ListTree size={18} /> }, { id: 'cameras', label: 'Cameras', icon: <Camera size={18} /> },
     { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }, { id: 'shot', label: 'Shot', icon: <Aperture size={18} /> }],
-  // 17 (D85): the Story suite loads lazily; World came with SY0, Cast with SY1; Shots · Flow · Episode come with SY2–SY4
-  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }],
+  // 17 (D85): the Story suite loads lazily; World came with SY0, Cast with SY1, Shots with SY2; Flow · Episode come with SY3–SY4
+  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }, { id: 'shots', label: 'Shots', icon: <Clapperboard size={18} /> }],
 }

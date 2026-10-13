@@ -1561,6 +1561,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shots List */
+        get: operations["shots_list_story_shots_get"];
+        put?: never;
+        /** Shot Create */
+        post: operations["shot_create_story_shots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shots/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shot Get */
+        get: operations["shot_get_story_shots__sid__get"];
+        put?: never;
+        post?: never;
+        /** Shot Delete */
+        delete: operations["shot_delete_story_shots__sid__delete"];
+        options?: never;
+        head?: never;
+        /** Shot Patch */
+        patch: operations["shot_patch_story_shots__sid__patch"];
+        trace?: never;
+    };
+    "/story/shots/{sid}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shot New Version */
+        post: operations["shot_new_version_story_shots__sid__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shots/{sid}/versions/{vid}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Finalize
+         * @description The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not.
+         */
+        post: operations["shot_finalize_story_shots__sid__versions__vid__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shots/{sid}/versions/{vid}/take": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Take
+         * @description Record a take (an image or a clip) on an open version; `use` makes it the frame / clip.
+         */
+        post: operations["shot_take_story_shots__sid__versions__vid__take_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/world": {
         parameters: {
             query?: never;
@@ -5175,6 +5269,100 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Shot */
+        Shot: {
+            /** Created At */
+            created_at: string;
+            /** Current */
+            current: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner Node */
+            owner_node: string | null;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Updated At */
+            updated_at: string;
+            /** Versions */
+            versions: components["schemas"]["ShotVersion"][];
+        };
+        /** ShotCreate */
+        ShotCreate: {
+            /** Camera Id */
+            camera_id?: string | null;
+            /** Clip Id */
+            clip_id?: string | null;
+            /** Frame Asset Id */
+            frame_asset_id?: string | null;
+            /** Name */
+            name: string;
+            /** Stage Id */
+            stage_id?: string | null;
+        };
+        /** ShotList */
+        ShotList: {
+            /** Items */
+            items: components["schemas"]["Shot"][];
+        };
+        /**
+         * ShotTake
+         * @description Something tried for a shot version: an image (a stage-shot result, a Catalogue image) or a clip; the version picks one of each.
+         */
+        ShotTake: {
+            /** At */
+            at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "clip";
+        };
+        /**
+         * ShotVersion
+         * @description One version of a shot (loom R62): where it is made (a stage camera, or nothing — a clip from Animate), the frame and the one clip it
+         *     owns, every take tried; `final` fixes the clip the Flow and the Episode bind (one per version, loom R166). `stage_revision` is the
+         *     stage's revision when the frame or clip was taken — a later edit of the stage makes the version stale (advisory).
+         */
+        ShotVersion: {
+            /** Camera Id */
+            camera_id: string | null;
+            /** Clip Id */
+            clip_id: string | null;
+            /** Created At */
+            created_at: string;
+            /** Derived From */
+            derived_from: string | null;
+            /** Finalized At */
+            finalized_at: string | null;
+            /** Frame Asset Id */
+            frame_asset_id: string | null;
+            /** Id */
+            id: string;
+            /** Stage Id */
+            stage_id: string | null;
+            /** Stage Revision */
+            stage_revision: number | null;
+            /**
+             * State
+             * @default open
+             * @enum {string}
+             */
+            state: "open" | "final";
+            /** Takes */
+            takes: components["schemas"]["ShotTake"][];
+        };
         /** ShuttingDown */
         ShuttingDown: {
             /** Shutting Down */
@@ -5792,6 +5980,18 @@ export interface components {
         TagList: {
             /** Items */
             items: components["schemas"]["TagCount"][];
+        };
+        /** TakeBody */
+        TakeBody: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "clip";
+            /** Use */
+            use?: boolean | null;
         };
         /** TeOption */
         TeOption: {
@@ -9453,6 +9653,257 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shots_list_story_shots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShotList"];
+                };
+            };
+        };
+    };
+    shot_create_story_shots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShotCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_get_story_shots__sid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_delete_story_shots__sid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_patch_story_shots__sid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_new_version_story_shots__sid__versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_finalize_story_shots__sid__versions__vid__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_take_story_shots__sid__versions__vid__take_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
                 };
             };
             /** @description Validation Error */

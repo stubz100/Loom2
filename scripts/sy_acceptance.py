@@ -1,7 +1,9 @@
 """17 §12 (D85) acceptance of the Story workspace on the rig, through the app. SY1 (item 2): a hero → a character profile → Expand (one job per
 coverage cell on D78's clay model, Klein 9B) → the candidates on the version's page with their cells → curate ≥ 25 into the reference set
 with every shot-size row covered → Lock (the album refuses) → `@Mara` resolves to the locked version with the hero first, and a Generate
-job with the mention records the stamp. Later slices add their items here.
+job with the mention records the stamp. SY2 (item 3): a stage with a camera → "New shot from this camera" → the camera's clay frame
+arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is refused by the gate with the reason, a Full-size LTX clip
+(1920×1080 → the model's grid) used as the clip is accepted → final → the stage moved → stale. `--part sy1,sy2` picks.
 
 Needs the frontend dev server on 1420 (`npx vite --host 127.0.0.1 --port 1420 --strictPort` in frontend/), a visible Edge, and port 8188
 free: the orchestrator it starts launches the engine itself (a standalone engine writes its outputs elsewhere — stop it first,
@@ -95,6 +97,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="full")
     ap.add_argument("--keep", type=int, default=30, help="how many candidates to keep (by cell order, every shot-size row first)")
+    ap.add_argument("--part", default="sy1,sy2", help="which slices to run")
     a = ap.parse_args()
     if not EDGE:
         print("Edge not found"); return 2
@@ -134,6 +137,7 @@ def main() -> int:
                 time.sleep(0.3)
         api("POST", "/project", {"path": str(tmp / "proj"), "name": "SY1", "size_cap_gb": 40})
         hero = api("POST", "/assets/import", {"paths": [str(HERO)]})["items"][0]["id"]
+        parts = [x for x in a.part.split(",") if x]
         caps = api("GET", "/capabilities")["story"]
         print("story caps:", {k: caps[k] for k in ("model_id", "health", "seconds")}, {k: v["cells"] for k, v in caps["presets"].items()})
         check(caps["model_id"] and caps["health"] != "missing", f"Expand's model {caps['model_id']} offered with its weights present")
@@ -160,6 +164,17 @@ def main() -> int:
             check(False, f"the Story suite loaded (dev hook present) — page errors: {cdp.page_errors()[:3]}")
             return 1
         check(True, "the Story suite loaded (dev hook present)")
+        if "sy1" in parts:
+            sy1(cdp, hero, caps, a, check, rows, failures)
+        if "sy2" in parts:
+            sy2(cdp, hero, check, rows, failures)
+    finally:
+        code = finish(edge, orch, orch_log, failures)                                     # every path, the early returns included
+    return code
+
+
+def sy1(cdp, hero, caps, a, check, rows, failures) -> None:
+    if True:
         # 1. the profile from the hero
         p = cdp.eval(f"window.__loom2Story.createProfile('Mara', 'character', {json.dumps(hero)}, {json.dumps(STUB)})", timeout=30)
         check(bool(p) and p["versions"][0]["hero_asset_id"] == hero, "the profile Mara v1 made with the hero")
@@ -246,18 +261,92 @@ def main() -> int:
                      "model_id": caps["model_id"], "t2i_default": t2i, "mention_job_s": round(wall, 1), "failures": failures})
         (OUT / "results.jsonl").open("a", encoding="utf-8").write(json.dumps(rows[-1]) + "\n")
         print(json.dumps({k: v for k, v in rows[-1].items() if k != "walls"}, indent=1))
-    finally:
-        if edge:
-            edge.terminate()
-        try:
-            api("POST", "/shutdown")
-        except Exception:
-            pass
-        try:
-            orch.wait(timeout=30)
-        except Exception:
-            orch.kill()
-        orch_log.close()
+
+
+def sy2(cdp, hero, check, rows, failures) -> None:
+    """17 §12 item 3: a stage camera → a shot; the clay frame lands on it; the gate refuses a draft clip and accepts a Full one; stale after a move."""
+    fmt = api("GET", "/project")["format"]
+    st = api("POST", "/stages", {"name": "SY2 gate"})
+    cam = {**st["cameras"][0], "name": "Camera 1", "pos": [0.4, 1.5, 4.2], "target": [0.0, 1.0, 0.0], "focal_mm": 35}
+    objs = [
+        {"id": "set_room", "kind": "set", "name": "Set 1", "preset": "room", "asset_id": None, "transform": {"pos": [0, 0, 0], "rot": [0, 0, 0], "scale": [1, 1, 1]}, "parent": None, "locked": True, "visible": True, "colour_id": 1, "pose": None, "billboard": True},
+        {"id": "fig_a", "kind": "mannequin", "name": "Figure 1", "preset": "adult", "asset_id": None, "transform": {"pos": [-0.3, 0, 0.3], "rot": [0, 20, 0], "scale": [1, 1, 1]}, "parent": None, "locked": False, "visible": True, "colour_id": 2, "pose": {"preset": "stand", "joints": {}}, "billboard": True},
+    ]
+    st = api("PUT", f"/stages/{st['id']}", {**st, "objects": objs, "cameras": [cam], "active_camera": cam["id"]})
+    cdp.eval("window.__loom2Story.loadShots().then(() => true)", timeout=30)
+    shot = cdp.eval(f"window.__loom2Story.createShot('Gate', {json.dumps({'stage_id': st['id'], 'camera_id': cam['id']})})", timeout=30)
+    check(bool(shot) and shot["versions"][0]["stage_id"] == st["id"] and shot["versions"][0]["stage_revision"] == st["revision"], "the shot Gate v1 points at the stage camera")
+    # the Stage suite: open the stage, render the passes, generate the clay frame → the finisher records it on the shot
+    cdp.eval("window.__loom2Session.getState().setSuite('stage')")
+    check(cdp.wait_for("!!window.__loom2Stage", timeout=60, settle=0.5), "the Stage suite loaded")
+    cdp.eval(f"window.__loom2Stage.open({json.dumps(st['id'])})")
+    check(cdp.wait_for("!!document.querySelector('canvas.stage-canvas') && window.__loom2Stage.state().current?.objects.length === 2", timeout=30, settle=2.0), "the stage opened")
+    ok = cdp.eval("window.__loom2Stage.renderPasses()", timeout=120)
+    check(bool(ok), "the passes rendered")
+    cdp.eval(f"window.__loom2Stage.setShot({json.dumps({'method': 'clay', 'refs': [{'asset_id': hero, 'note': 'the woman in the grey coat'}], 'prompt_text': 'a courier at a stone gate at dawn, cinematic film still', 'count': 1, 'use_as_is': True})})")
+    time.sleep(0.5)
+    jobs = cdp.eval("window.__loom2Stage.generateShot()", timeout=60)
+    check(bool(jobs), "the clay shot queued")
+    t0 = time.time()
+    j = wait_jobs([jobs[0]["id"]])[jobs[0]["id"]]
+    check(j["status"] == "done" and bool(j.get("result", {}).get("asset_ids")), f"the clay shot done in {time.time() - t0:.0f} s")
+    frame = j["result"]["asset_ids"][0]
+    s2 = api("GET", f"/story/shots/{shot['id']}")
+    check(s2["versions"][0]["frame_asset_id"] == frame and [t["id"] for t in s2["versions"][0]["takes"]] == [frame], "the frame landed on the shot's v1 as its frame and first take (the finisher's link)")
+    # a draft clip → used as the clip → the gate refuses with the reason; a Full-size LTX clip → accepted
+    i2v = api("GET", "/capabilities")["defaults"]["i2v"]
+    rows_local: dict = {"shot": shot["id"], "frame": frame}
+    for label, (w, h), frames in (("draft", (1024, 576), 25), ("full", (fmt["width"], fmt["height"]), 25)):
+        t0 = time.time()
+        jb = api("POST", "/jobs", {"recipe": {"kind": "i2v", "model_id": i2v, "start_asset": frame, "width": w, "height": h, "frames": frames, "fps": 24, "prompt_text": "the courier turns her head, slow dolly in"},
+                                   "stage": False, "origin": {"suite": "animate", "surface": "clip"}})["jobs"][0]
+        j = wait_jobs([jb["id"]])[jb["id"]]
+        wall = time.time() - t0
+        ok = j["status"] == "done" and bool(j.get("result", {}).get("clip_id"))
+        check(ok, f"the {label} clip ({w}×{h} asked, {frames} f) done in {wall:.0f} s" + (f" — {j.get('error')}" if j.get("error") else ""))
+        if not ok:
+            continue
+        clip = api("GET", f"/clips/{j['result']['clip_id']}")
+        rows_local[label] = {"clip": clip["id"], "w": clip["w"], "h": clip["h"], "frames": clip["frames"], "wall_s": round(wall, 1)}
+        cdp.eval(f"window.__loom2Story.openShots({json.dumps(shot['id'])})")                     # the Shots tab with the shot selected (the strip's badges)
+        cdp.eval(f"window.__loom2Story.useTake('clip', {json.dumps(clip['id'])}).then(() => true)", timeout=30)
+        s3 = api("GET", f"/story/shots/{shot['id']}")
+        check(s3["versions"][0]["clip_id"] == clip["id"], f"the {label} clip is the version's clip")
+        code = status_of("POST", f"/story/shots/{shot['id']}/versions/v1/finalize")
+        if label == "draft":
+            check(code == 422, f"finalize refused at {clip['w']}×{clip['h']} (422)")
+            try:
+                api("POST", f"/story/shots/{shot['id']}/versions/v1/finalize")
+            except urllib.error.HTTPError as e:
+                msg = e.read().decode("utf-8")
+                check("render Full" in msg and f"{fmt['width']}×{fmt['height']}" in msg, f"the reason names the format: {msg[:120]}")
+        else:
+            check(code == 200, f"finalize accepted at {clip['w']}×{clip['h']} (the format {fmt['width']}×{fmt['height']} within the model's grid)")
+            s4 = api("GET", f"/story/shots/{shot['id']}")
+            check(s4["versions"][0]["state"] == "final" and s4["versions"][0]["clip_id"] == clip["id"], "v1 final with the Full clip")
+            check(cdp.wait_for("!!document.querySelector('.story-strip .lock-badge')", timeout=20, settle=0.5), "the strip shows final")
+    # stale: a camera move bumps the stage's revision past the version's
+    st2 = api("GET", f"/stages/{st['id']}")
+    api("PUT", f"/stages/{st['id']}", {**st2, "cameras": [{**st2["cameras"][0], "focal_mm": 50}]})
+    cdp.eval("window.__loom2Story.loadShots().then(() => true)", timeout=30)
+    check(cdp.wait_for("!!document.querySelector('.story-strip .stale-badge')", timeout=20, settle=0.5), "the version is marked stale after the stage moved (advisory)")
+    rows.append({"part": "sy2", **rows_local, "failures": list(failures)})
+    (OUT / "results.jsonl").open("a", encoding="utf-8").write(json.dumps(rows[-1]) + "\n")
+    print(json.dumps(rows[-1], indent=1))
+
+
+def finish(edge, orch, orch_log, failures) -> int:
+    if edge:
+        edge.terminate()
+    try:
+        api("POST", "/shutdown")
+    except Exception:
+        pass
+    try:
+        orch.wait(timeout=30)
+    except Exception:
+        orch.kill()
+    orch_log.close()
     print(f"{len(failures)} failure(s)" if failures else "all checks ok")
     return 1 if failures else 0
 

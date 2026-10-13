@@ -751,7 +751,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await page.locator('.text-prompt button[aria-label^="Mention a group"]').click()
   await page.locator('.ctx-menu button.item').filter({ hasText: `${name} · character` }).click()   // the profile's entry (its groups are named after it too)
   await expect(page.locator('.panel .mention-chips .mchip.profile')).toContainText(`@${name}`)
-  await expect(page.locator('.panel textarea')).toHaveValue(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\$&')}`))
+  await expect(page.locator('.panel textarea')).toHaveValue(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   type Preview = { mentions: { profile_id: string | null; version: string | null; group_id: string; asset_ids: string[] }[]; ref_list: { asset_id: string | null; note: string | null }[] }
   await expect.poll(async () => {
     const caps = await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')
@@ -759,4 +759,99 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
     const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4b, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
     return `${pv.mentions[0]?.profile_id}/${pv.mentions[0]?.version}/${pv.mentions[0]?.group_id}/${pv.ref_list[0]?.asset_id}`
   }).toBe(`${profile.id}/v1/${gid}/${heroId}`)
+})
+
+test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story shot whose frame arrives from the camera\'s generate; "Make a shot from this clip" in Animate makes another; Finalize is refused at draft size with the reason and accepted at the format', async ({ page }) => {
+  test.setTimeout(150_000)
+  const name = `Gate ${Date.now().toString(36)}`
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(`Gatehouse ${name.slice(-5)}`)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
+  await page.locator('.lib-grid button', { hasText: /Adult/ }).click()
+  await page.locator('nav.rail button[title^="Cameras"]').click()
+  await page.locator('.stage-panel button[aria-label^="New shot from this camera"]').click()           // the Cameras tab's verb (D32)
+  await expect(dialog).toContainText(/New shot from this camera/)
+  await dialog.locator('input').fill(name)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('.story-strip b')).toHaveText(name)
+  type Version = { id: string; state: string; stage_id: string | null; camera_id: string | null; frame_asset_id: string | null; clip_id: string | null; takes: { kind: string; id: string }[] }
+  type Shot = { id: string; name: string; current: string; owner_node: string | null; versions: Version[] }
+  const shot = (await api<{ items: Shot[] }>('GET', '/story/shots')).items.find((s) => s.name === name)!
+  expect(shot.versions[0].stage_id).toBeTruthy()
+  expect(shot.versions[0].camera_id).toBeTruthy()
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/no clip yet/)
+  // back in Stage: the Shot tab renders the passes and generates (the fake engine answers) → the result lands on the shot as its frame
+  await page.locator('nav.tabs button.tab', { hasText: 'Stage' }).click()
+  await page.locator('nav.rail button[title^="Shot"]').click()
+  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
+  await page.locator('.shot-tab .shot-prompt').fill('a gatehouse at dawn')
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  const shotOf = async () => (await api<Shot>('GET', `/story/shots/${shot.id}`))
+  await expect.poll(async () => (await shotOf()).versions[0].frame_asset_id, { timeout: 60_000 }).toBeTruthy()
+  expect((await shotOf()).versions[0].takes.map((t) => t.kind)).toEqual(['image'])
+  // the board shows the frame (Story · Shots was left on the Shots tab, so the rail is not clicked — that would fold the panel)
+  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()
+  await expect(page.locator('.shot-board .shot-player img')).toBeVisible()
+  await expect(page.locator('.shot-board .take-card.current')).toHaveCount(1)
+  // Animate: a draft clip (the fake engine, nine frames) opened in the player → a second shot; its draft size is refused by the gate, with the reason
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  const start = (await shotOf()).versions[0].frame_asset_id!
+  type JobLite = { id: string; status: string; error: string | null; result: { clip_id?: string } }
+  const submit = async (w: number, h: number) => {
+    const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: start, width: w, height: h, frames: 9, fps: 16, prompt_text: `${w}×${h}` }, stage: false, origin: { suite: 'animate', surface: 'clip' } })).jobs[0]
+    await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+    return (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  }
+  const draftClip = await submit(1024, 576)
+  await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
+  type AnimateHook = { getState: () => { loadClips: () => Promise<void>; select: (id: string) => void } }
+  await page.evaluate(async (id) => { const an = (window as unknown as { __loom2Animate: AnimateHook }).__loom2Animate.getState(); await an.loadClips(); an.select(id) }, draftClip)
+  await page.locator('.transport button[aria-label^="Make a shot from this clip"]').click()
+  await expect(dialog).toContainText(/Make a shot from this clip/)
+  const name2 = `${name} clip`
+  await dialog.locator('input').fill(name2)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.story-strip b')).toHaveText(name2)
+  const shot2 = (await api<{ items: Shot[] }>('GET', '/story/shots')).items.find((s) => s.name === name2)!
+  const clipId = shot2.versions[0].clip_id!
+  expect(clipId).toBe(draftClip)
+  const clip = await api<{ id: string; w: number; h: number; frames: number }>('GET', `/clips/${clipId}`)
+  const fmt = (await api<{ format: { width: number; height: number } }>('GET', '/project')).format
+  await expect(page.locator('.shot-board .shot-player video')).toBeVisible()
+  await expect(page.locator('.panel .foot .estimate')).toContainText(`Draft ${clip.w}×${clip.h} — the format is ${fmt.width}×${fmt.height}`)
+  await expect(page.locator('.story-strip button[aria-label^="Finalize"]')).toBeDisabled()
+  await expect(api('POST', `/story/shots/${shot2.id}/versions/v1/finalize`)).rejects.toThrow(/422/)
+  // a clip at the format (the fake engine, nine frames) used as the clip → Finalize through the strip → final
+  const fullClip = await submit(fmt.width, fmt.height)
+  type Hook = { useTake: (kind: 'image' | 'clip', id: string) => Promise<void> }
+  await page.evaluate((id) => (window as unknown as { __loom2Story: Hook }).__loom2Story.useTake('clip', id), fullClip)
+  await expect(page.locator('.shot-board .take-card')).toHaveCount(2)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to finalize/)
+  await page.locator('.story-strip button[aria-label^="Finalize"]').click()
+  await expect(dialog).toContainText(/Finalize/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.story-strip .lock-badge')).toContainText('final')
+  await expect.poll(async () => (await api<Shot>('GET', `/story/shots/${shot2.id}`)).versions[0].state).toBe('final')
+  expect((await api<Shot>('GET', `/story/shots/${shot2.id}`)).versions[0].clip_id).toBe(fullClip)
+  await expect(api('POST', `/story/shots/${shot2.id}/versions/v1/take`, { kind: 'clip', id: clipId })).rejects.toThrow(/422/)   // final: fixed
+  // a new version is a retake: open, the pointers copied
+  await page.locator('.story-strip button[aria-label^="New version"]').click()
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.story-strip select[aria-label="shot version"]')).toHaveValue('v2')
+  await expect.poll(async () => (await api<Shot>('GET', `/story/shots/${shot2.id}`)).versions.length).toBe(2)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to finalize/)
+  // the stage moves (a focal change through the API) → the version is marked stale on the strip (advisory, loom R62)
+  const stg = (await api<{ items: { id: string; revision: number; cameras: { id: string; focal_mm: number }[] }[] }>('GET', '/stages')).items.find((x) => x.id === shot.versions[0].stage_id)!
+  await api('PUT', `/stages/${stg.id}`, { ...stg, cameras: [{ ...stg.cameras[0], focal_mm: 50 }] })
+  type Hook2 = { openShots: (id: string | null) => void; loadShots: () => Promise<void> }
+  await page.evaluate(async (id) => { const h = (window as unknown as { __loom2Story: Hook2 }).__loom2Story; await h.loadShots(); h.openShots(id) }, shot.id)
+  await expect(page.locator('.story-strip b')).toHaveText(name)
+  await expect(page.locator('.story-strip .stale-badge')).toBeVisible()
 })

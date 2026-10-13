@@ -2,7 +2,7 @@
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
 import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, X } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
-import { useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 
 const an = () => useAnimate.getState()
@@ -47,6 +47,11 @@ registerCommands([
   { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },
   { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: hasClip, run: () => void an().tryOther() },
   { id: 'anim.identity', scope: 'animate', label: 'Measure identity (FaceSim)', icon: Eye, placement: ['inspector', 'context'], when: () => hasClip() && !!useSession.getState().capabilities?.facesim?.available, run: () => void an().measureIdentity() },
+  // 17 SY2 (D85): the clip becomes a Story shot's clip (version 1)
+  { id: 'anim.toShot', scope: 'animate', label: 'Make a shot from this clip…', icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], when: hasClip,
+    run: () => { const c = an().clip(); if (!c) return
+      void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip; finalize it there once it is at the project format.', initial: (c.prompt || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
+        .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
   { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
 

@@ -81,3 +81,23 @@
 .cast-page .empty { color: var(--fg3); font-size: 12px; padding: 6px 0; }
 .story-insp .mono { font-family: var(--mono, monospace); font-size: 11px; color: var(--fg3); }
 .story-insp .insp-thumb.small { max-height: 96px; width: auto; }
+
+/* SY2: the Shots tab — the list by owner, the version strip, the board (version cards, the player, the takes) */
+.shots-panel .shot-group h4 { margin: 8px 0 2px; }
+.shots-panel .shot-group h4 .n { color: var(--fg3); font-weight: normal; }
+.story-strip .stale-badge { color: var(--warn, #c7a23a); font-size: 11px; border: 1px solid currentColor; border-radius: 10px; padding: 0 6px; }
+.version-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.version-card { width: 160px; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: var(--bg1); cursor: pointer; }
+.version-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.version-card .empty, .take-card .empty { display: grid; place-items: center; aspect-ratio: 16 / 9; color: var(--fg3); font-size: 11px; }
+.version-card .cell, .take-card .cell { display: flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 10px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.version-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.shot-player { max-width: 960px; background: var(--deep, #000); border: 1px solid var(--line2); border-radius: var(--radius); display: grid; place-items: center; min-height: 180px; overflow: hidden; }
+.shot-player video, .shot-player img { display: block; width: 100%; max-height: 540px; object-fit: contain; }
+.shot-player .hint { padding: 24px; }
+.take-card { position: relative; width: 160px; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: var(--bg1); }
+.take-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.take-card.current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.take-card .tools { position: absolute; right: 4px; top: 4px; display: none; }
+.take-card:hover .tools { display: inline-flex; }
+.take-card .tools .quiet { background: color-mix(in srgb, var(--bg1) 85%, transparent); min-height: 20px; padding: 0 5px; font-size: 11px; }

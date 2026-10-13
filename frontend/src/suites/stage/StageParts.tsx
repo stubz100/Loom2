@@ -131,6 +131,7 @@ function CamerasTab() {
           <CommandButton id="stage.frameAll" text label="Frame all" />
           <CommandButton id="stage.camera.delete" />
         </div>
+        <div className="verbs"><CommandButton id="stage.camera.toShot" text /></div>
       </>}
     </div>
   )
@@ -197,7 +198,7 @@ function ShotTab() {
   const passId = entry?.assets[image1]
   return (
     <div className="stage-panel shot-tab">
-      <div className="head"><b>Shot</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span></div>
+      <div className="head"><b>Shot</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" /></div>
       <h4>Method</h4>
       <div className="method-list">
         {caps && Object.entries(caps.methods).map(([id, m]) => (

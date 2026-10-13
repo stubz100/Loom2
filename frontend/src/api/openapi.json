@@ -8425,6 +8425,293 @@
         "title": "ShellBuild",
         "type": "object"
       },
+      "Shot": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Node"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ShotVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "owner_node",
+          "current",
+          "versions",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Shot",
+        "type": "object"
+      },
+      "ShotCreate": {
+        "properties": {
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "frame_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Asset Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ShotCreate",
+        "type": "object"
+      },
+      "ShotList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Shot"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ShotList",
+        "type": "object"
+      },
+      "ShotTake": {
+        "description": "Something tried for a shot version: an image (a stage-shot result, a Catalogue image) or a clip; the version picks one of each.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "image",
+              "clip"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "at"
+        ],
+        "title": "ShotTake",
+        "type": "object"
+      },
+      "ShotVersion": {
+        "description": "One version of a shot (loom R62): where it is made (a stage camera, or nothing — a clip from Animate), the frame and the one clip it\nowns, every take tried; `final` fixes the clip the Flow and the Episode bind (one per version, loom R166). `stage_revision` is the\nstage's revision when the frame or clip was taken — a later edit of the stage makes the version stale (advisory).",
+        "properties": {
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From"
+          },
+          "finalized_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalized At"
+          },
+          "frame_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Asset Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
+          "stage_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Revision"
+          },
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "final"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "takes": {
+            "items": {
+              "$ref": "#/components/schemas/ShotTake"
+            },
+            "title": "Takes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "stage_id",
+          "camera_id",
+          "stage_revision",
+          "frame_asset_id",
+          "clip_id",
+          "takes",
+          "derived_from",
+          "created_at",
+          "finalized_at"
+        ],
+        "title": "ShotVersion",
+        "type": "object"
+      },
       "ShuttingDown": {
         "properties": {
           "shutting_down": {
@@ -9852,6 +10139,39 @@
           "items"
         ],
         "title": "TagList",
+        "type": "object"
+      },
+      "TakeBody": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "image",
+              "clip"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "use": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "TakeBody",
         "type": "object"
       },
       "TeOption": {
@@ -16016,6 +16336,356 @@
           }
         },
         "summary": "Profile Lock",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots": {
+      "get": {
+        "operationId": "shots_list_story_shots_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Shots List",
+        "tags": [
+          "story"
+        ]
+      },
+      "post": {
+        "operationId": "shot_create_story_shots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShotCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}": {
+      "delete": {
+        "operationId": "shot_delete_story_shots__sid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "get": {
+        "operationId": "shot_get_story_shots__sid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Get",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "shot_patch_story_shots__sid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions": {
+      "post": {
+        "operationId": "shot_new_version_story_shots__sid__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot New Version",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/finalize": {
+      "post": {
+        "description": "The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not.",
+        "operationId": "shot_finalize_story_shots__sid__versions__vid__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Finalize",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/take": {
+      "post": {
+        "description": "Record a take (an image or a clip) on an open version; `use` makes it the frame / clip.",
+        "operationId": "shot_take_story_shots__sid__versions__vid__take_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Take",
         "tags": [
           "story"
         ]

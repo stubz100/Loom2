@@ -3,7 +3,8 @@
 SY0 — the world (L1: logline, synopsis, styles, the spine's beats, the Flow's variables) and the style a generation carries.
 SY1 — profiles (L2: a character, place or prop with versions; a version's reference set *is* an album group, its candidates another),
       the coverage vocabulary and presets that `Expand` plans into one T2I job per cell, and the profile mentions behind `@name`.
-Shots (SY2) and the flow (SY3) join here.
+SY2 — shots (L3: a shot with versions; a version points at a stage camera and / or a clip, records its takes and owns one finalized clip —
+      the gate is the project format's size; loom R62 / R166). The flow (SY3) joins here.
 
 A record is one JSON file written through fsio (temp → fsync → replace) with a `schema_version` and a `revision` the client sends back
 on every replace (409 when stale, like documents and stages). Records are read on demand (small files), never cached across requests.
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 
 WORLD_SCHEMA_VERSION = 1
 PROFILE_SCHEMA_VERSION = 1
+SHOT_SCHEMA_VERSION = 1
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 ProfileClass = Literal["character", "place", "prop"]
@@ -41,6 +43,10 @@ class StaleWorld(ValueError):
 
 
 class StaleProfile(ValueError):
+    """The client's change is based on an older revision (→ 409)."""
+
+
+class StaleShot(ValueError):
     """The client's change is based on an older revision (→ 409)."""
 
 
@@ -164,6 +170,83 @@ def check_profile(p: Profile) -> None:
         raise ValueError(f"current version {p.current} is not one of the versions")
 
 
+# ---- shots (SY2, 17 §3c) ------------------------------------------------------------------------------------------------------------
+class ShotTake(BaseModel):
+    """Something tried for a shot version: an image (a stage-shot result, a Catalogue image) or a clip; the version picks one of each."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    kind: Literal["image", "clip"]
+    id: str
+    at: str = Field(default_factory=utc_now)
+
+
+class ShotVersion(BaseModel):
+    """One version of a shot (loom R62): where it is made (a stage camera, or nothing — a clip from Animate), the frame and the one clip it
+    owns, every take tried; `final` fixes the clip the Flow and the Episode bind (one per version, loom R166). `stage_revision` is the
+    stage's revision when the frame or clip was taken — a later edit of the stage makes the version stale (advisory)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str
+    state: VersionState = "open"
+    stage_id: str | None = None
+    camera_id: str | None = None
+    stage_revision: int | None = None
+    frame_asset_id: str | None = None
+    clip_id: str | None = None
+    takes: list[ShotTake] = Field(default_factory=list)
+    derived_from: str | None = None
+    created_at: str = Field(default_factory=utc_now)
+    finalized_at: str | None = None
+
+
+class Shot(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = SHOT_SCHEMA_VERSION
+    id: str = Field(default_factory=lambda: new_id("sht"))
+    name: str
+    owner_node: str | None = None                 # loom R146: exactly one Flow node owns a shot; None = unbound (SY3 binds)
+    current: str
+    versions: list[ShotVersion] = Field(default_factory=list)
+    revision: int = 0
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+
+    def version(self, vid: str | None = None) -> ShotVersion:
+        want = vid or self.current
+        v = next((x for x in self.versions if x.id == want), None)
+        if v is None:
+            raise KeyError(f"shot {self.id} has no version {want}")
+        return v
+
+
+def check_shot(s: Shot) -> None:
+    if not s.name.strip():
+        raise ValueError("a shot needs a name")
+    ids = [v.id for v in s.versions]
+    if not ids or len(set(ids)) != len(ids):
+        raise ValueError("a shot has at least one version and their ids are unique")
+    if s.current not in ids:
+        raise ValueError(f"current version {s.current} is not one of the versions")
+    for v in s.versions:
+        if (v.stage_id is None) != (v.camera_id is None):
+            raise ValueError(f"version {v.id}: a stage source names both the stage and the camera")
+
+
+FORMAT_GRID = 32                                  # the video models' size grids (Wan ×16, LTX ×32, 11 §3c): a Full clip is 1920×1088 or 1920×1056
+
+
+def finalize_reason(v: ShotVersion, clip_w: int | None, clip_h: int | None, fmt_w: int, fmt_h: int) -> str | None:
+    """Why the version cannot be finalized, or None (17 §3c: a clip at the project format's size — within the video models' grid, the
+    export crops or scales the last pixels (11 §3c: LTX Full is 1920×1088 → 1080); fps is conformed at export, D27)."""
+    if v.state == "final":
+        return None
+    if not v.clip_id:
+        return "no clip yet — animate the shot (Stage · Shot or Animate) and use the result as its clip"
+    if clip_w is None or clip_h is None:
+        return f"clip {v.clip_id} is gone"
+    if abs(clip_w - fmt_w) > FORMAT_GRID or abs(clip_h - fmt_h) > FORMAT_GRID:
+        return f"Draft {clip_w}×{clip_h} — the format is {fmt_w}×{fmt_h}; render Full in Animate"
+    return None
+
+
 # ---- coverage (loom kb-loom-p1 §7.1) ---------------------------------------------------------------------------------------------
 SHOTS: list[tuple[str, str]] = [("close-up", "a close-up of the face"), ("portrait", "a head-and-shoulders portrait"),
                                 ("waist-up", "a waist-up medium shot"), ("full-body", "a full-body shot")]
@@ -250,8 +333,141 @@ def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant:
     return out
 
 
+# ---- the store · shots (SY2) ----------------------------------------------------------------------------------------------------------
+class _ShotMixin:
+    """StoryStore's shot records (kept beside the profiles; one file per shot)."""
+
+    dir: Path
+
+    def shot_path(self, sid: str) -> Path:
+        return self.dir / "shots" / f"{sid}.json"
+
+    def shot(self, sid: str) -> Shot | None:
+        p = self.shot_path(sid)
+        return Shot.model_validate(read_json(p)) if p.is_file() else None
+
+    def shots(self) -> list[Shot]:
+        d = self.dir / "shots"
+        if not d.is_dir():
+            return []
+        out = [Shot.model_validate(read_json(p)) for p in d.glob("sht_*.json")]
+        return sorted(out, key=lambda s: s.updated_at, reverse=True)
+
+    def save_shot(self, s: Shot) -> None:
+        (self.dir / "shots").mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.shot_path(s.id), s.model_dump())
+
+    def create_shot(self, name: str, *, stage_id: str | None = None, camera_id: str | None = None, stage_revision: int | None = None,
+                    clip_id: str | None = None, frame_asset_id: str | None = None) -> Shot:
+        """A shot with version 1 pointing at a stage camera and / or holding a clip or a frame (each given one is also its first take)."""
+        name = name.strip()
+        if not name:
+            raise ValueError("a shot needs a name")
+        takes = [ShotTake(kind="image", id=frame_asset_id)] if frame_asset_id else []
+        if clip_id:
+            takes.append(ShotTake(kind="clip", id=clip_id))
+        v = ShotVersion(id="v1", stage_id=stage_id, camera_id=camera_id, stage_revision=stage_revision if stage_id else None, frame_asset_id=frame_asset_id, clip_id=clip_id, takes=takes)
+        s = Shot(name=name, current="v1", versions=[v])
+        check_shot(s)
+        self.save_shot(s)
+        return s
+
+    def patch_shot(self, sid: str, data: dict[str, Any]) -> Shot:
+        """Name, owner node, the current version, and an open version's frame / clip from a client body based on `revision` (409 when stale)."""
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        base = data.get("revision")
+        if base is not None and int(base) != cur.revision:
+            raise StaleShot(f"the shot is at revision {cur.revision}, the change is based on {base} — reload it first")
+        versions = [v.model_copy() for v in cur.versions]
+        for patch in data.get("versions") or []:
+            v = next((x for x in versions if x.id == patch.get("id")), None)
+            if v is None:
+                raise ValueError(f"no version {patch.get('id')!r}")
+            if v.state != "open" and any(k in patch for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id")):
+                raise ValueError(f"version {v.id} is final — its frame and clip are fixed; make a new version")
+            for k in ("frame_asset_id", "clip_id", "stage_id", "camera_id", "stage_revision"):
+                if k in patch:
+                    setattr(v, k, patch[k])
+        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "current", "owner_node")}, "versions": [v.model_dump() for v in versions],
+                  "id": sid, "schema_version": SHOT_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
+        s = Shot.model_validate(merged)
+        check_shot(s)
+        self.save_shot(s)
+        return s
+
+    def new_shot_version(self, sid: str) -> Shot:
+        """A copy of the current version's pointers (the source, the frame and the clip — no files, no takes), open, now the current one."""
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        src = cur.version()
+        n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
+        v = ShotVersion(id=f"v{n}", stage_id=src.stage_id, camera_id=src.camera_id, stage_revision=src.stage_revision, frame_asset_id=src.frame_asset_id,
+                        clip_id=src.clip_id, derived_from=src.id)
+        s = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
+        check_shot(s)
+        self.save_shot(s)
+        return s
+
+    def add_take(self, sid: str, vid: str, kind: str, ref_id: str, *, use: bool | None = None, stage_revision: int | None = None) -> Shot:
+        """Record a take on an open version; `use` makes it the frame or the clip (None: only when that slot is still empty)."""
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        if v.state != "open":
+            raise ValueError(f"version {vid} is final")
+        if kind not in ("image", "clip"):
+            raise ValueError("a take is an image or a clip")
+        takes = [t for t in v.takes if not (t.kind == kind and t.id == ref_id)] + [ShotTake(kind=kind, id=ref_id)]   # type: ignore[arg-type]
+        upd: dict[str, Any] = {"takes": takes}
+        slot = "frame_asset_id" if kind == "image" else "clip_id"
+        if use or (use is None and getattr(v, slot) is None):
+            upd[slot] = ref_id
+            if stage_revision is not None:
+                upd["stage_revision"] = stage_revision
+        versions = [x.model_copy(update=upd) if x.id == vid else x for x in cur.versions]
+        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_shot(s)
+        return s
+
+    def finalize_shot(self, sid: str, vid: str, clip_size: tuple[int, int] | None, fmt: tuple[int, int]) -> Shot:
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        if v.state == "final":
+            return cur
+        why = finalize_reason(v, clip_size[0] if clip_size else None, clip_size[1] if clip_size else None, fmt[0], fmt[1])
+        if why:
+            raise ValueError(why)
+        versions = [x.model_copy(update={"state": "final", "finalized_at": utc_now()}) if x.id == vid else x for x in cur.versions]
+        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_shot(s)
+        return s
+
+    def delete_shot(self, sid: str) -> bool:
+        p = self.shot_path(sid)
+        if not p.is_file():
+            return False
+        p.unlink()
+        return True
+
+    def record_stage_result(self, stage_id: str, camera_id: str, kind: str, ref_id: str, stage_revision: int | None) -> list[Shot]:
+        """A stage camera's result (ST3's frame, ST4's clip) becomes a take of every shot whose current open version points at that
+        camera — and its frame / clip when that slot is still empty (17 §3c: ST4's "Story L3 link")."""
+        out = []
+        for s in self.shots():
+            v = s.version()
+            if v.state == "open" and v.stage_id == stage_id and v.camera_id == camera_id:
+                out.append(self.add_take(s.id, v.id, kind, ref_id, use=None, stage_revision=stage_revision))
+        return out
+
+
 # ---- the store ---------------------------------------------------------------------------------------------------------------------
-class StoryStore:
+class StoryStore(_ShotMixin):
     def __init__(self, ws: Workspace) -> None:
         self.ws = ws
         self.dir = ws.story_dir

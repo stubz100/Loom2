@@ -92,6 +92,8 @@ class AssetFinisher:
             assets[i] = await asyncio.to_thread(q.catalogue.make_thumbs, rec)
             q.hub.broadcast("asset.updated", assets[i].model_dump())
         job.result["asset_ids"] = [a.id for a in assets]
+        if isinstance(recipe, StageShot) and assets:                                            # 17 §3c: the frame of every shot pointing at this camera
+            await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -253,8 +255,23 @@ class ClipFinisher:
         job.log_tail.append(f"clip {rec.id}: {rec.frames} frames @ {rec.fps} fps, {rec.w}×{rec.h}, proxy {rec.proxy_bytes / 2**20:.1f} MiB")
         q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
                                        "origin": job.origin.model_dump() if job.origin else None})
+        cam = (job.origin.payload or {}).get("camera_id") if job.origin else None
+        if from_stage and recipe.guide and job.origin and job.origin.ref and isinstance(cam, str):      # 17 §3c: the clip of every shot pointing at this camera
+            await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id)
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
+
+
+def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:
+    """17 §3c: a stage camera's frame or clip is recorded as a take of the shots that point at the camera (their slot filled when empty)."""
+    from ..stages import StageStore
+    from ..story import StoryStore
+    try:
+        st = StageStore(q.ws).get(stage_id)
+        for s in StoryStore(q.ws).record_stage_result(stage_id, camera_id, kind, ref_id, st.revision if st else None):
+            q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
+    except Exception as e:                                                                      # never the job's failure
+        q.hub.broadcast("story.changed", {"kind": "shot", "id": None, "revision": 0, "error": str(e)})
 
 
 async def identity_task(q: JobQueue, clip_id: str) -> None:

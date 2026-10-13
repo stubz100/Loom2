@@ -372,7 +372,7 @@ function Transport({ clip }: { clip: Clip }) {
       <CommandRow ids={['anim.setIn', 'anim.setOut', 'anim.clearInOut']} />
       <span>{inPoint !== null || outPoint !== null ? `in ${inPoint ?? 0} · out ${outPoint ?? clip.frames - 1}` : 'whole clip'}</span>
       <span className="spacer" />
-      <CommandRow ids={['anim.extractFrame', 'anim.sendToEdit']} />
+      <CommandRow ids={['anim.extractFrame', 'anim.sendToEdit', 'anim.toShot']} />
       {busy && <span>{busy}…</span>}
     </div>
   )

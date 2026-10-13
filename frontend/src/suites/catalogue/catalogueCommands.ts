@@ -1,7 +1,7 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Box, Check, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftRight, Box, Check, Clapperboard, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
@@ -84,6 +84,12 @@ registerCommands([
   // P14 (D82): a new viewpoint of the image — Generate's Angle tab with this asset as the source
   { id: 'cat.start.angle', scope: 'catalogue', label: 'New angle…', icon: Orbit, placement: ['inspector', 'context', 'toolbar'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'generate', slot: 'angle' }) } },
+  // 17 SY2 (D85): a clip's tile → a Story shot with the clip
+  { id: 'cat.start.shot', scope: 'catalogue', label: 'Make a shot from this clip…', icon: Clapperboard, placement: ['inspector', 'context'],
+    when: () => { const a = primary(); return !!a && a.kind === 'video' && !!(a.params as { clip_id?: string }).clip_id },
+    run: () => { const a = primary(); const cid = (a?.params as { clip_id?: string } | undefined)?.clip_id; if (!a || !cid) return
+      void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip.', initial: (a.prompt_text || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
+        .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: cid })) }) } },
   // 17 SY1 (D85): the image becomes the hero of a new Story profile (its reference set a group with the image as cover); Story opens on it
   ...(['character', 'place', 'prop'] as const).map((cls) => ({
     id: `cat.start.${cls}`, scope: 'catalogue' as const, label: `Make a ${cls}…`, icon: cls === 'character' ? UserRound : cls === 'place' ? MapPin : Package, placement: ['inspector', 'context'] as ['inspector', 'context'],
@@ -145,7 +151,7 @@ export function tileMenu(): MenuItem[] {
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
     { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, sep,
-    { label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, { cmd: 'cat.animate' }, { cmd: 'cat.variations' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }] }, sep,
+    { label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, { cmd: 'cat.animate' }, { cmd: 'cat.variations' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }, { cmd: 'cat.start.shot' }] }, sep,
     { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin from compare' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,
     ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),

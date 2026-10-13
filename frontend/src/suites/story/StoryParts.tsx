@@ -3,7 +3,7 @@
 // finalize gate), counts, the default style, the selected item's fields. SY1: the Cast tab — Panel: the profiles by class; Strip: the
 // version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
-import { Lock, Star } from 'lucide-react'
+import { Film, Lock, Star } from 'lucide-react'
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
@@ -12,7 +12,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
-import type { Asset, Profile, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
+import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
 import { coverageGrid, rowsCovered } from './coverage'
 import { askExpand, rowMenu } from './storyCommands'
 import { CLASS_LABEL, SECTIONS, sy, useStory, type ProfileClass, type Section } from './storyStore'
@@ -28,7 +28,12 @@ function devHook(): Record<string, unknown> {
     loadProfiles: () => sy().loadProfiles(), selectProfile: (id: string | null, v?: string | null) => sy().selectProfile(id, v), loadPages: () => sy().loadPages(),
     createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => sy().createProfile(name, cls, hero, stub),
     expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), curate: (ids: string[], verdict: 'keep' | 'reject') => sy().curate(ids, verdict),
-    lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setStub(s) }
+    lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setStub(s),
+    // SY2
+    loadShots: () => sy().loadShots(), selectShot: (id: string | null, v?: string | null) => sy().selectShot(id, v), shots: () => ({ shots: sy().shots, shotId: sy().shotId, shotVersionId: sy().shotVersionId }),
+    createShot: (name: string, src?: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }) => sy().createShot(name, src), useTake: (kind: 'image' | 'clip', id: string) => sy().useTake(kind, id),
+    finalizeShot: () => sy().finalizeShot(), newShotVersion: () => sy().newShotVersion(),
+    openShots: (id: string | null) => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); useSession.getState().setSuite('story'); sy().selectShot(id) }) } }
   return w.__loom2Story
 }
 if (DEV_HOOKS) devHook()
@@ -91,11 +96,55 @@ function CastTab() {
   )
 }
 
+// ------------------------------------------------------------------ Panel · Shots
+const shotThumb = (s: Shot, clipsById: Record<string, { asset_id: string | null }>): string | null => {
+  const v = s.versions.find((x) => x.id === s.current)
+  if (!v) return null
+  if (v.frame_asset_id) return v.frame_asset_id
+  const c = v.clip_id ? clipsById[v.clip_id] : undefined
+  return c?.asset_id ?? null
+}
+
+function ShotsTab() {
+  const shots = useStory((s) => s.shots)
+  const shotId = useStory((s) => s.shotId)
+  const clipsById = useStory((s) => s.clipsById)
+  const groups = new Map<string, Shot[]>()
+  for (const s of shots) { const k = s.owner_node ?? ''; groups.set(k, [...(groups.get(k) ?? []), s]) }
+  const keys = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
+  return (
+    <div className="story-panel shots-panel">
+      <div className="story-list" role="list">
+        {keys.map((k) => (
+          <div key={k || 'unbound'} className="shot-group">
+            <h4>{k ? `node ${k}` : 'Unbound'}<span className="n"> · {groups.get(k)!.length}</span></h4>
+            {groups.get(k)!.map((s) => {
+              const v = s.versions.find((x) => x.id === s.current)
+              const thumb = shotThumb(s, clipsById)
+              return (
+                <button key={s.id} className={`story-row shot-row${shotId === s.id ? ' active' : ''}`} role="listitem" data-id={s.id} onClick={() => sy().selectShot(s.id)}
+                  onContextMenu={(e) => { sy().selectShot(s.id); showMenu(e, [{ cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }]) }}>
+                  {thumb ? <img className="pthumb" src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="pthumb empty" />}
+                  <span className="pname">{s.name}<span className="muted"> · {v?.stage_id ? 'stage' : v?.clip_id ? 'clip' : 'empty'}</span></span>
+                  <span className="n">{s.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'final' : 'open'} /></span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
+        {!shots.length && <div className="empty hint">No shots yet — "New shot from this camera" in Stage, "Make a shot from this clip" in Animate, or New shot…</div>}
+      </div>
+      <div className="verbs"><CommandButton id="story.shot.new" text /></div>
+    </div>
+  )
+}
+
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'cast') return <CastTab />
+  if (tab === 'shots') return <ShotsTab />
   return <WorldTab />
 }
 
@@ -107,8 +156,23 @@ export function PrimaryAction() {
   const versionId = useStory((s) => s.versionId)
   const expanding = useStory((s) => s.expanding)
   const caps = useSession((s) => s.capabilities?.story)
+  const shots = useStory((s) => s.shots)
+  const shotId = useStory((s) => s.shotId)
+  const shotVersionId = useStory((s) => s.shotVersionId)
+  const clipsById = useStory((s) => s.clipsById)
   const { active: tab } = useSuiteRail()
-  markUsed('story.cast.expand')
+  markUsed('story.cast.expand'); markUsed('story.shot.new')
+  if (tab === 'shots') {
+    const s = shots.find((x) => x.id === shotId); const v = s?.versions.find((x) => x.id === (shotVersionId ?? s.current))
+    void clipsById
+    const why = v ? sy().finalizeWhy(v) : null
+    return (
+      <div>
+        <button className="primary" onClick={() => runCommand('story.shot.new')} title="An empty shot; its takes come from Stage, Animate or the board">New shot…</button>
+        <div className="estimate">{!s || !v ? <span style={{ color: 'var(--fg3)' }}>pick a shot</span> : v.state === 'final' ? <><span className="dot ok" />{v.id} final</> : why ? <span style={{ color: 'var(--fg3)' }}>{why}</span> : <><span className="dot ok" />{v.id} ready to finalize</>}</div>
+      </div>
+    )
+  }
   if (tab === 'cast') {
     const p = profiles.find((x) => x.id === profileId); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
     const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is locked — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
@@ -158,8 +222,33 @@ export function Strip() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)
+  const shots = useStory((s) => s.shots)
+  const shotId = useStory((s) => s.shotId)
+  const shotVersionId = useStory((s) => s.shotVersionId)
+  const stagesLite = useStory((s) => s.stagesLite)
   const { active: tab } = useSuiteRail()
-  markUsed('story.cast.lock'); markUsed('story.cast.newVersion')
+  markUsed('story.cast.lock'); markUsed('story.cast.newVersion'); markUsed('story.shot.finalize'); markUsed('story.shot.newVersion'); markUsed('story.shot.openStage'); markUsed('story.shot.openAnimate')
+  if (tab === 'shots') {
+    const s = shots.find((x) => x.id === shotId)
+    if (!s) return <div className="story-strip"><span>Shots</span><span className="spacer" /><span className="hint">pick a shot, or make one from a Stage camera or an Animate clip</span></div>
+    const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
+    const stale = v ? sy().shotStale(v) : false
+    const stageName = v?.stage_id ? (stagesLite.find((x) => x.id === v.stage_id)?.name ?? v.stage_id) : null
+    return (
+      <div className="story-strip">
+        <b>{s.name}</b>
+        <select aria-label="shot version" value={v?.id ?? s.current} onChange={(e) => sy().selectShot(s.id, e.target.value)} title="The version shown (the Flow pins one; the current one by default)">
+          {s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.id === s.current ? ' · current' : ''}{x.state === 'final' ? ' · final' : ''}</option>)}
+        </select>
+        <CommandButton id="story.shot.newVersion" />
+        {v?.state === 'final' ? <span className="lock-badge" title={`finalized ${v.finalized_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.shot.finalize" />}
+        {stale && <span className="stale-badge" title="The stage moved after this version's frame / clip was taken — still usable (advisory)">stale</span>}
+        <span className="spacer" />
+        {stageName && <span className="hint">{stageName}</span>}
+        <CommandButton id="story.shot.openStage" /><CommandButton id="story.shot.openAnimate" />
+      </div>
+    )
+  }
   if (tab === 'cast') {
     const p = profiles.find((x) => x.id === profileId)
     if (!p) return <div className="story-strip"><span>Cast</span><span className="spacer" /><span className="hint">pick a profile, or make one from a Catalogue tile</span></div>
@@ -349,12 +438,75 @@ function CastPage() {
   )
 }
 
+// ------------------------------------------------------------------ Stage: the shot board
+function Take({ kind, id, current, clipsById }: { kind: 'image' | 'clip'; id: string; current: boolean; clipsById: Record<string, { asset_id: string | null; frames: number; w: number; h: number }> }) {
+  const c = kind === 'clip' ? clipsById[id] : undefined
+  const thumb = kind === 'image' ? id : c?.asset_id ?? null
+  return (
+    <div className={`take-card${current ? ' current' : ''}`} data-kind={kind} data-id={id} title={kind === 'clip' ? (c ? `${c.frames} f · ${c.w}×${c.h}` : id) : id}>
+      {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="empty">{kind}</span>}
+      <span className="cell">{kind === 'clip' ? <><Film size={10} /> {c ? `${c.frames} f · ${c.w}×${c.h}` : 'clip'}</> : 'frame'}{current ? ' · in use' : ''}</span>
+      {!current && <span className="tools"><button className="quiet" title={kind === 'clip' ? 'Use as the clip' : 'Use as the frame'} aria-label={`use ${kind}`} onClick={() => void sy().useTake(kind, id)}>✓ use</button></span>}
+    </div>
+  )
+}
+
+function ShotBoard() {
+  const shots = useStory((s) => s.shots)
+  const shotId = useStory((s) => s.shotId)
+  const shotVersionId = useStory((s) => s.shotVersionId)
+  const clipsById = useStory((s) => s.clipsById)
+  markUsed('story.shot.release'); markUsed('story.shot.delete')
+  const s = shots.find((x) => x.id === shotId)
+  if (!s) return <div className="story-empty"><div>Pick a shot on the left, or make one: <b>New shot from this camera</b> on a Stage camera, <b>Make a shot from this clip</b> in Animate.<div className="quick-cards"><CommandButton id="story.shot.new" text /></div></div></div>
+  const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
+  if (!v) return null
+  const clip = v.clip_id ? clipsById[v.clip_id] : undefined
+  const why = sy().finalizeWhy(v)
+  return (
+    <div className="cast-page shot-board" tabIndex={0} onKeyDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && handleKeyFor('story', e.nativeEvent)) e.preventDefault() }}>
+      <section>
+        <h3>Versions <span className="hint">each owns one clip; the Flow pins one, the Episode takes the final one</span></h3>
+        <div className="version-cards">
+          {s.versions.map((x) => {
+            const c = x.clip_id ? clipsById[x.clip_id] : undefined
+            const thumb = x.frame_asset_id ?? c?.asset_id ?? null
+            return (
+              <div key={x.id} className={`version-card${x.id === v.id ? ' active' : ''}`} data-id={x.id} onClick={() => sy().selectShot(s.id, x.id)}>
+                {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="empty">no frame</span>}
+                <span className="cell">{x.id} · {x.state}{sy().shotStale(x) ? ' · stale' : ''}{c ? ` · ${c.frames} f ${c.w}×${c.h}` : x.clip_id ? ' · clip' : ' · no clip'}</span>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+      <section>
+        <h3>{s.name} <span className="muted">— {v.id} ({v.state})</span></h3>
+        <div className="shot-player">
+          {clip ? <video controls src={api.fileUrl(`/clips/${clip.id}/proxy.mp4`)} aria-label="the version's clip" />
+            : v.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the version's frame" />
+            : <span className="hint">No frame or clip yet — generate from the stage camera, animate in Animate, or use a take below.</span>}
+        </div>
+        <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to finalize</span>}</div>
+      </section>
+      <section>
+        <h3>Takes <span className="hint">everything tried for this version · ✓ use makes one the frame or the clip</span></h3>
+        {!v.takes.length && <div className="empty">No takes yet.</div>}
+        <div className="cand-strip" role="list">
+          {[...v.takes].reverse().map((t) => <Take key={`${t.kind}:${t.id}`} kind={t.kind} id={t.id} current={(t.kind === 'image' ? v.frame_asset_id : v.clip_id) === t.id} clipsById={clipsById} />)}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function Stage() {
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
   if (tab === 'cast') return <CastPage />
+  if (tab === 'shots') return <ShotBoard />
   return <WorldEditor />
 }
 
@@ -399,6 +551,52 @@ function CastInspector() {
   )
 }
 
+function ShotInspector() {
+  const shots = useStory((s) => s.shots)
+  const shotId = useStory((s) => s.shotId)
+  const shotVersionId = useStory((s) => s.shotVersionId)
+  const clipsById = useStory((s) => s.clipsById)
+  const stagesLite = useStory((s) => s.stagesLite)
+  const s = shots.find((x) => x.id === shotId)
+  if (!s) return <span className="hint">Nothing selected.</span>
+  const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
+  const clip = v?.clip_id ? clipsById[v.clip_id] : undefined
+  const stage = v?.stage_id ? stagesLite.find((x) => x.id === v.stage_id) : undefined
+  return (
+    <div className="story-insp">
+      <h4>{s.name}</h4>
+      <div className="kv">
+        <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => void sy().patchShot({ name: e.target.value })} />
+        <span>owner</span><span>{s.owner_node ? `node ${s.owner_node}` : 'unbound (the Flow binds, SY3)'}</span>
+        <span>current</span>
+        <select value={s.current} aria-label="current shot version" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
+        <span>versions</span><span>{s.versions.length}</span>
+      </div>
+      {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
+      <div className="verbs"><CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
+    </div>
+  )
+}
+
+function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames: number; fps: number; w: number; h: number }; stage?: { name: string; revision: number } }) {
+  return (
+    <>
+      <h4>Version {v.id} · {v.state}{sy().shotStale(v) ? ' · stale' : ''}</h4>
+      <div className="kv">
+        <span>source</span><span>{v.stage_id ? `${stage?.name ?? v.stage_id} · camera ${v.camera_id}${v.stage_revision !== null && v.stage_revision !== undefined ? ` · rev ${v.stage_revision}` : ''}` : 'none (a clip or takes)'}</span>
+        <span>frame</span><span>{v.frame_asset_id ? <img className="insp-thumb small" src={api.thumbUrl(v.frame_asset_id, 256)} alt="" /> : '—'}</span>
+        <span>clip</span><span>{clip ? `${clip.frames} f @ ${clip.fps} · ${clip.w}×${clip.h}` : v.clip_id ?? '—'}</span>
+        <span>takes</span><span>{v.takes.length}</span>
+        <span>from</span><span>{v.derived_from ?? '—'}</span>
+        <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
+        {v.finalized_at && <><span>finalized</span><span>{v.finalized_at.slice(0, 16).replace('T', ' ')}</span></>}
+      </div>
+      <div className="verbs"><CommandButton id="story.shot.finalize" text /><CommandButton id="story.shot.newVersion" text /></div>
+      <div className="verbs"><CommandButton id="story.shot.openStage" text /><CommandButton id="story.shot.openAnimate" text /></div>
+    </>
+  )
+}
+
 export function Inspector() {
   const world = useStory((s) => s.world)
   const selected = useStory((s) => s.selected)
@@ -406,6 +604,7 @@ export function Inspector() {
   const { active: tab } = useSuiteRail()
   if (!project?.open) return <span className="hint">Nothing selected.</span>
   if (tab === 'cast') return <CastInspector />
+  if (tab === 'shots') return <ShotInspector />
   if (!world) return <span className="hint">Nothing selected.</span>
   const fmt = project.format
   const style = selected?.kind === 'style' ? world.styles.find((s) => s.id === selected.id) : undefined

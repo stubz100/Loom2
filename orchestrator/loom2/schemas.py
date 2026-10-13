@@ -16,7 +16,7 @@ from .clips import IDENTITY_SCHEMA, ClipRecord
 from .documents import Document
 from .timelines import Timeline
 from .stages import Stage
-from .story import Profile
+from .story import Profile, Shot
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -644,6 +644,10 @@ class TimelineList(Out):
 
 class ProfileList(Out):
     items: list[Profile]
+
+
+class ShotList(Out):
+    items: list[Shot]
 
 
 class Expanded(Out):

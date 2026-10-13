@@ -3538,3 +3538,54 @@ split by file so that no two hands touched the same module.
   ≈ 17 min warm by the same rate).
 - Not in SY1: a hero drop slot (the Catalogue verb and *Make it the hero* on a candidate cover it); re-rolling one thin cell from the
   grid (P14's *New angle* on a tile lands in Unprocessed, not the candidates page); the style's reference group. Next: SY2 Shots.
+
+## 2026-10-13 22:01 — SY2 · Shots: shot records with versions and takes, the finalize gate, the stage link (17 §3c / §10, D85)
+- **Backend:** `story.py` — `Shot` (`name`, `owner_node` for the Flow's sole ownership (loom R146; SY3 binds), `current`, `versions[]`,
+  `revision`), `ShotVersion` (`state` open | final, the source `stage_id` + `camera_id` + `stage_revision`, `frame_asset_id`, the one
+  `clip_id`, `takes[]` of images and clips, `derived_from`, `finalized_at`), `ShotTake`; `create_shot` (a stage camera and / or a clip or a
+  frame — each given one is also the first take), `patch_shot` (revision guard; a final version's frame and clip are fixed, `owner_node`
+  always patchable), `new_shot_version` (the pointers copied, no takes, open and current — a retake, loom R62), `add_take` (dedupes;
+  `use` or an empty slot fills the frame / clip and stamps the stage's revision), `finalize_shot` + `finalize_reason` (loom R166: one
+  clip per version; the gate = the project format's size **within the video models' 32 px grid** — LTX Full is 1920×1088, Wan 1920×1072,
+  the export crops the last rows (11 §3c); the refusal says "Draft 1024×576 — the format is 1920×1080; render Full in Animate"),
+  `delete_shot`, `record_stage_result` (a camera's frame or clip becomes a take of every shot whose current open version points at
+  that camera, the empty slot filled — ST4's "Story L3 link", 08 §8). The asset finisher calls it for a `StageShot` result, the clip
+  finisher for a guided clip from a stage (`_stage_result`, never the job's failure; `story.changed {kind: shot}` per shot).
+  `routes/story.py`: `GET / POST /story/shots` (the source checked: a stage names its camera, the clip and the frame exist),
+  `GET / PATCH / DELETE /story/shots/{sid}`, `POST …/versions` (copy), `…/versions/{vid}/take {kind, id, use}`, `…/finalize` (422 with the
+  reason). Route snapshot 129; 211 schemas.
+- **Frontend:** the Shots rail tab — Panel: the shots grouped by owner (*Unbound* first; SY3 names the nodes), each with its frame or
+  clip thumbnail, source and state, *New shot…*; Strip: the version selector, *New version*, *Finalize* or the *final* badge, the
+  *stale* badge (the stage's revision past the version's, from `GET /stages`), the stage's name, *Open in Stage* / *Open in Animate*;
+  Stage (the board): the version cards (frame, state, stale, the clip's frames and size), the current version's player (`<video>` on the
+  clip's proxy, else the frame), the takes newest first with *✓ use* on the ones not in use; Inspector: the shot (name, owner, current,
+  versions) and the version (source with the stage's name and camera, frame, clip with frames · fps · size, takes, from, created,
+  finalized) with the verbs; the panel foot *New shot…* with the version's gate reason or "ready to finalize". Commands `story.shot.*`
+  (new, newVersion, finalize — `when` mirrors the gate, openStage, openAnimate, release, delete). The ways in: *New shot from this
+  camera…* on Stage's Cameras tab (and the Shot tab's head) → `askText` with "Stage · Camera" as the name → Story · Shots opens on it;
+  *Make a shot from this clip…* on Animate's transport (and a clip tile's menu, `cat.start.shot`). `story.changed {kind: shot}` reloads
+  the shots and their clips.
+- **Checks:** `tests/test_story_shots_d85.py` (+4: invariants and the gate's reasons incl. the grid, the store end to end — takes, use,
+  dedupe, patch and the revision guard, finalize twice, a final version refuses takes, copy, the stage link to the shots pointing at a
+  camera, delete — the routes with 422s and the 409, the finisher hook: a StageShot result on the fake engine lands as the frame of the
+  shot made from its camera with the stage's revision); the smoke scenario "a shot": Stage → *New shot from this camera…* on the
+  Cameras tab → Story · Shots on the shot (the foot says "no clip yet"), back in Stage the passes render and Generate ▶ runs — the
+  frame arrives on the shot's v1 as its frame and first take, the board shows it; a draft clip (the fake engine, 1024×576, nine frames)
+  opened in Animate → *Make a shot from this clip…* on the transport → the second shot with the clip, the player shows the proxy, the
+  foot and the API refuse the finalize with "Draft 1024×576 — the format is 1920×1080", the strip's Finalize is disabled; a clip at the
+  format used as the clip through the hook → "ready to finalize" → Finalize through the strip → final (a further take refused, 422) →
+  *New version* → v2 open with the pointers, ready — 23/23 under `full` and `open`. 287 offline, 200 unit, lint 100 (a stray escape in
+  the Cast scenario's regex fixed), tsc and build clean, audits clean.
+- **Rig (`scripts/sy_acceptance.py --part sy2`, its own orchestrator + engine, Edge via CDP on the dev server, 21:46–21:59):** a stage (the
+  room, one figure, a 35 mm camera) → `createShot` from the camera (v1 at the stage's revision) → the Stage suite opened it, rendered the
+  passes and queued the clay shot with the heroine as the reference: done in 43 s (Klein 9B cold), the result **landed on the shot's v1 as
+  its frame and first take** through the finisher's link; a draft clip (the default i2v under `full` is Wan 2.2: 1024×576, 25 frames,
+  108 s) used as the clip → finalize refused with "Draft 1024×576 — the format is 1920×1080; render Full in Animate" (422); a Full clip
+  (asked 1920×1080 → Wan's grid 1920×1072, 25 frames, **644 s** — Wan at FHD is slow, 11 §3c's LTX two-stage Full is the intended
+  path) used as the clip → **finalize accepted** within the grid, v1 final with it. 17 of 19 checks: the two UI checks (the strip's
+  *final* badge, the *stale* badge after a focal change) failed because the script had left the suite on the World tab — the state was
+  right (v1 final; the stage's revision past the version's); the hook gained `openShots` and the script uses it, and the smoke scenario
+  now covers both badges on the fake engine (the strip shows *final*, then *stale* after a camera change through the API).
+  `engine/spikes/out/sy/results.jsonl` holds the clip ids and walls.
+- Not in SY2: *Use as the shot's frame / clip* on Stage's and Animate's own results strips (the takes strip on the board covers it, and
+  a stage camera's results arrive by themselves); the owner node (SY3). Next: SY3 Flow.

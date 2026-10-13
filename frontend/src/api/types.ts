@@ -45,6 +45,8 @@ export type StoryBeat = S['StoryBeat']
 export type StoryVariable = S['StoryVariable']
 export type Profile = S['Profile']                            // 17 (D85) SY1: a character, place or prop with versions
 export type ProfileVersion = S['ProfileVersion']
+export type Shot = S['Shot']                                  // 17 (D85) SY2: a shot with versions
+export type ShotVersion = S['ShotVersion']
 export type JobStatus = Job['status']
 export type Health = ModelEntry['health']
 

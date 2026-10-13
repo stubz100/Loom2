@@ -1,6 +1,7 @@
 """Story (17 §7, D85): the workspace's records — SY0: the world (read, replace with a revision guard); SY1: profiles with versions (create
 from a hero image, patch, copy, lock, delete), curation (keep → the reference set, reject) and Expand (one T2I job per coverage cell in one
-batch, the results placed on the version's candidates page). Shots and the flow join here."""
+batch, the results placed on the version's candidates page); SY2: shots with versions (from a stage camera and / or a clip; takes; the
+finalize gate = the project format's size). The flow joins here."""
 from __future__ import annotations
 
 import asyncio
@@ -11,8 +12,10 @@ from pydantic import BaseModel, Field
 
 from ..fsio import new_id
 from ..origin import JobOrigin
-from ..schemas import Curated, Deleted, Expanded, ProfileList
-from ..story import PRESETS, Profile, ProfileClass, StaleProfile, StaleWorld, StoryStore, World, expand_spec, plan_expand
+from ..clips import ClipStore
+from ..schemas import Curated, Deleted, Expanded, ProfileList, ShotList
+from ..stages import StageStore
+from ..story import PRESETS, Profile, ProfileClass, Shot, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand
 from .deps import Svc
 
 router = APIRouter(tags=["story"])
@@ -226,3 +229,156 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
         raise HTTPException(422, str(e))
     _changed(svc, p)
     return {"batch_id": batch, "job_ids": [j.id for j in jobs], "cells": len(planned), "group_id": gid, "model_id": spec.id}
+
+
+# ---- shots (SY2, 17 §3c) --------------------------------------------------------------------------------------------------------------
+class ShotCreate(BaseModel):
+    name: str
+    stage_id: str | None = None                   # with camera_id: the version is made from this camera (its frame and clip arrive as takes)
+    camera_id: str | None = None
+    clip_id: str | None = None                    # a clip to start from (Animate's "Make a shot from this clip")
+    frame_asset_id: str | None = None
+
+
+class TakeBody(BaseModel):
+    kind: Literal["image", "clip"]
+    id: str
+    use: bool | None = None                       # make it the frame / clip; None: only when the slot is empty
+
+
+def _shot_changed(svc, s: Shot) -> None:
+    svc.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
+
+
+def _check_source(ws, cat, body: ShotCreate) -> int | None:
+    """The stage and camera exist (→ the stage's revision), the clip exists, the frame is an image."""
+    rev = None
+    if (body.stage_id is None) != (body.camera_id is None):
+        raise HTTPException(422, "a stage source names both the stage and the camera")
+    if body.stage_id:
+        st = StageStore(ws).get(body.stage_id)
+        if st is None or not any(c.id == body.camera_id for c in st.cameras):
+            raise HTTPException(422, "the stage or its camera does not exist")
+        rev = st.revision
+    if body.clip_id and ClipStore(ws).get(body.clip_id) is None:
+        raise HTTPException(422, "the clip does not exist")
+    if body.frame_asset_id:
+        rec = cat.get(body.frame_asset_id)
+        if rec is None or rec.trashed_at is not None or rec.kind != "image":
+            raise HTTPException(422, "the frame must be an image in the Catalogue")
+    return rev
+
+
+@router.get("/story/shots", response_model=ShotList)
+async def shots_list(svc: Svc):
+    ws, _, _ = svc.require_project()
+    return {"items": [s.model_dump() for s in await asyncio.to_thread(StoryStore(ws).shots)]}
+
+
+@router.post("/story/shots", response_model=Shot)
+async def shot_create(svc: Svc, body: ShotCreate):
+    ws, cat, _ = svc.require_project()
+    rev = await asyncio.to_thread(_check_source, ws, cat, body)
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).create_shot, body.name, stage_id=body.stage_id, camera_id=body.camera_id, stage_revision=rev,
+                                    clip_id=body.clip_id, frame_asset_id=body.frame_asset_id)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+@router.get("/story/shots/{sid}", response_model=Shot)
+async def shot_get(svc: Svc, sid: str):
+    ws, _, _ = svc.require_project()
+    s = await asyncio.to_thread(StoryStore(ws).shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    return s.model_dump()
+
+
+@router.patch("/story/shots/{sid}", response_model=Shot)
+async def shot_patch(svc: Svc, sid: str, body: dict):
+    ws, _, _ = svc.require_project()
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).patch_shot, sid, body)
+    except KeyError:
+        raise HTTPException(404, "shot not found")
+    except StaleShot as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+@router.delete("/story/shots/{sid}", response_model=Deleted)
+async def shot_delete(svc: Svc, sid: str):
+    ws, _, _ = svc.require_project()
+    if not await asyncio.to_thread(StoryStore(ws).delete_shot, sid):
+        raise HTTPException(404, "shot not found")
+    svc.hub.broadcast("story.changed", {"kind": "shot", "id": sid, "revision": 0, "deleted": True})
+    return {"deleted": sid}
+
+
+@router.post("/story/shots/{sid}/versions", response_model=Shot)
+async def shot_new_version(svc: Svc, sid: str):
+    ws, _, _ = svc.require_project()
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).new_shot_version, sid)
+    except KeyError:
+        raise HTTPException(404, "shot not found")
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/take", response_model=Shot)
+async def shot_take(svc: Svc, sid: str, vid: str, body: TakeBody):
+    """Record a take (an image or a clip) on an open version; `use` makes it the frame / clip."""
+    ws, cat, _ = svc.require_project()
+    if body.kind == "clip":
+        if await asyncio.to_thread(ClipStore(ws).get, body.id) is None:
+            raise HTTPException(422, "the clip does not exist")
+    else:
+        rec = await asyncio.to_thread(cat.get, body.id)
+        if rec is None or rec.trashed_at is not None or rec.kind != "image":
+            raise HTTPException(422, "the frame must be an image in the Catalogue")
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(vid)
+        rev = None
+        if v.stage_id:
+            st = await asyncio.to_thread(StageStore(ws).get, v.stage_id)
+            rev = st.revision if st else None
+        s = await asyncio.to_thread(store.add_take, sid, vid, body.kind, body.id, use=body.use, stage_revision=rev)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/finalize", response_model=Shot)
+async def shot_finalize(svc: Svc, sid: str, vid: str):
+    """The version becomes final when its clip is at the project format's size (fps is conformed at export, D27); 422 says why not."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    fmt = ws.load().format
+    clip = await asyncio.to_thread(ClipStore(ws).get, v.clip_id) if v.clip_id else None
+    why = finalize_reason(v, clip.w if clip else None, clip.h if clip else None, fmt.width, fmt.height)
+    if why:
+        raise HTTPException(422, why)
+    s = await asyncio.to_thread(store.finalize_shot, sid, vid, (clip.w, clip.h) if clip else None, (fmt.width, fmt.height))
+    _shot_changed(svc, s)
+    return s.model_dump()

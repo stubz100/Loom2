@@ -1446,6 +1446,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/world": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** World Get */
+        get: operations["world_get_story_world_get"];
+        /** World Put */
+        put: operations["world_put_story_world_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/thumbs/{asset_id}/{size}": {
         parameters: {
             query?: never;
@@ -2592,7 +2610,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** EventFrame */
-        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
+        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
         /** ExportRequest */
         ExportRequest: {
             /**
@@ -3661,7 +3679,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "story" | "api";
             /** Surface */
             surface: string;
         };
@@ -3677,7 +3695,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "story" | "api";
             /** Surface */
             surface: string;
         };
@@ -3693,7 +3711,7 @@ export interface components {
              * Suite
              * @enum {string}
              */
-            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "api";
+            suite: "generate" | "edit" | "animate" | "catalogue" | "stage" | "story" | "api";
             /** Surface */
             surface: string;
         };
@@ -5105,6 +5123,90 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * StoryBeat
+         * @description One line of the spine (loom L1 "story spine"): a Flow node is made from it by hand, never synced (loom R55).
+         */
+        StoryBeat: {
+            /** Id */
+            id: string;
+            /**
+             * Line
+             * @default
+             */
+            line: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * StoryChanged
+         * @description 17 (D85): a Story record moved on the server (`kind`: world; later profile, shot, node) — open tabs reload it.
+         */
+        StoryChanged: {
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /** Kind */
+            kind: string;
+            /** Revision */
+            revision: number;
+        };
+        /** StoryChangedEvent */
+        StoryChangedEvent: {
+            data: components["schemas"]["StoryChanged"];
+            /** Seq */
+            seq: number;
+            /**
+             * T
+             * @default 0
+             */
+            t: number;
+            /**
+             * Type
+             * @constant
+             */
+            type: "story.changed";
+        };
+        /**
+         * StoryStyle
+         * @description One style of the world: the fragment a generation appends (17 §3a); `group_id` is a reference album (a later slice).
+         */
+        StoryStyle: {
+            /**
+             * Fragment
+             * @default
+             */
+            fragment: string;
+            /** Group Id */
+            group_id: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * StoryVariable
+         * @description A Flow variable (loom R135: bool or enum flags, nothing more in v1); conditions and actions read them by name.
+         */
+        StoryVariable: {
+            /**
+             * Default
+             * @default false
+             */
+            default: boolean | string;
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @default bool
+             * @enum {string}
+             */
+            type: "bool" | "enum";
+            /** Values */
+            values: string[];
+        };
         /** T2I */
         T2I: {
             /**
@@ -5200,6 +5302,16 @@ export interface components {
              * @default null
              */
             steps?: number | null;
+            /**
+             * Style Id
+             * @default null
+             */
+            style_id?: string | null;
+            /**
+             * Style Text
+             * @default null
+             */
+            style_text?: string | null;
             /**
              * Te Device
              * @default null
@@ -5315,6 +5427,10 @@ export interface components {
             serialized_prompt: string;
             /** Steps */
             steps: number;
+            /** Style Id */
+            style_id?: string | null;
+            /** Style Text */
+            style_text?: string | null;
             /** Te Device */
             te_device: string;
             /** Te Id */
@@ -5726,6 +5842,41 @@ export interface components {
              * @constant
              */
             type: "engine.vram_pressure";
+        };
+        /** World */
+        World: {
+            /** Created At */
+            created_at: string;
+            /** Default Style */
+            default_style: string | null;
+            /**
+             * Logline
+             * @default
+             */
+            logline: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Spine */
+            spine: components["schemas"]["StoryBeat"][];
+            /** Styles */
+            styles: components["schemas"]["StoryStyle"][];
+            /**
+             * Synopsis
+             * @default
+             */
+            synopsis: string;
+            /** Updated At */
+            updated_at: string;
+            /** Variables */
+            variables: components["schemas"]["StoryVariable"][];
         };
     };
     responses: never;
@@ -8696,6 +8847,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    world_get_story_world_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["World"];
+                };
+            };
+        };
+    };
+    world_put_story_world_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["World"];
                 };
             };
             /** @description Validation Error */

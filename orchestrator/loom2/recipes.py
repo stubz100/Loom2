@@ -88,6 +88,8 @@ class T2I(BaseModel):
     refs: list[RefImage] = Field(default_factory=list)   # reference images (FLUX.2 unified editing)
     ref_max_px: int = 1024                        # references are downscaled to fit this square by default
     mentions: list[Mention] = Field(default_factory=list)   # D73: @mentioned groups ("@hero walks into @tavern")
+    style_id: str | None = None                   # D85: the Story world's style this generation carries (one; None = no style)
+    style_text: str | None = None                 # D85: its fragment, stamped at submit by story.resolve_style and appended after the prompt; None = unresolved
     tier: str | None = None
 
 

@@ -43,6 +43,7 @@
  "GET /stages",
  "GET /stages/poses",
  "GET /stages/{st_id}",
+ "GET /story/world",
  "GET /thumbs/{asset_id}/{size}",
  "GET /timelines",
  "GET /timelines/{tl_id}",
@@ -107,6 +108,7 @@
  "PUT /snippets",
  "PUT /stages/poses",
  "PUT /stages/{st_id}",
+ "PUT /story/world",
  "PUT /timelines/{tl_id}",
  "WS /events"
 ]

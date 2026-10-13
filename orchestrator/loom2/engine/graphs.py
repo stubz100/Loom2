@@ -363,9 +363,13 @@ def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, s
     names = sorted((m.name for m in recipe.mentions if m.name), key=len, reverse=True)
     notes = ref_notes(recipe, spec)
     sentences = " ".join(f"Image {i} shows {n.rstrip('.')}." for i, n in notes)
+    style = (recipe.style_text or "").strip()                                   # D85: the Story style's fragment, appended after the prompt (loom R104)
     prompt_text = _unmention(recipe.prompt_text.strip(), names)
     if recipe.prompt_mode in ("tree", "json") and recipe.prompt_json:
         tree = {k: v for k, v in _unmention(recipe.prompt_json, names).items() if v not in (None, "", [], {})}
+        if style:                                                               # the tree's own style slot (04 §3c) takes the fragment, after what is there
+            cur = tree.get("style")
+            tree["style"] = f"{cur}, {style}" if isinstance(cur, str) and cur.strip() else style
         if spec.sampling.json_prompt:
             if notes:
                 tree["references"] = [{"index": i, "note": n} for i, n in notes]
@@ -373,7 +377,7 @@ def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, s
         prose = flatten_json_prompt(tree)
         text = f"{prompt_text}. {prose}" if prompt_text else prose
         return _then(text, sentences), "prose"
-    return _then(prompt_text, sentences), "text"
+    return _then(_then(prompt_text, style), sentences), "text"
 
 
 def word_count(text: str) -> int:
@@ -445,7 +449,8 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
             "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
             "refs": min(len(recipe.refs), refs_max), "max_refs": refs_max, "refs_dropped": max(0, len(recipe.refs) - refs_max),
-            "ref_notes": len(ref_notes(recipe, spec)), "loras": [l.model_dump() for l in recipe.loras]}
+            "ref_notes": len(ref_notes(recipe, spec)), "loras": [l.model_dump() for l in recipe.loras],
+            "style_id": recipe.style_id, "style_text": recipe.style_text}                                   # D85: what the Story style added (the manifest keeps both)
 
 
 def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files: dict[str, str] | None = None) -> Compiled:

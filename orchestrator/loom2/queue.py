@@ -29,6 +29,7 @@ from .recipes import T2I, I2V, Inpaint, Render, parse_recipe, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .mentions import resolve_mentions
+from .story import StoryStore, resolve_style
 from . import native
 from .origin import JobOrigin
 from .roster import ROSTER_BY_ID, Roster
@@ -237,11 +238,16 @@ class JobQueue:
         self.persist(clean_shutdown=True)
 
     def resolve_mentions(self, recipe: Any) -> Any:
-        """D73: a T2I recipe's unresolved @mentions turned into references (mentions.py); other recipes unchanged."""
-        if not isinstance(recipe, T2I) or not recipe.mentions:
+        """D73: a T2I recipe's unresolved @mentions turned into references (mentions.py) and, D85, its Story style stamped (story.py);
+        other recipes unchanged. The same resolution runs for a preview and a submit (T8: display == reality)."""
+        if not isinstance(recipe, T2I):
             return recipe
-        spec = registry.get(recipe.model_id)
-        return resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0)
+        if recipe.mentions:
+            spec = registry.get(recipe.model_id)
+            recipe = resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0)
+        if recipe.style_id:
+            recipe = resolve_style(recipe, StoryStore(self.ws))
+        return recipe
 
     # ---- API --------------------------------------------------------------------------------------
     def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None) -> list[JobRecord]:

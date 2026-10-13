@@ -642,3 +642,42 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
 })
+
+test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {
+  await openApp(page, { suite: 'story' })
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('.world-editor')).toBeVisible()
+  await page.locator('.world-editor textarea[aria-label="logline"]').fill('A courier must cross the city before dawn.')
+  await page.locator('.story-panel button', { hasText: 'Add style' }).click()                                 // the panel's verb (D32)
+  const row = page.locator('.world-editor .style-row').last()
+  await row.locator('input[aria-label="style name"]').fill('Ink wash')
+  await row.locator('input[aria-label="style fragment"]').fill('ink and wash storyboard, loose brush')
+  await expect(page.locator('.inspector .story-insp h4', { hasText: 'Style' })).toContainText('Ink wash')     // the new row is selected
+  type WorldLite = { revision: number; logline: string; default_style: string | null; styles: { id: string; name: string; fragment: string }[] }
+  await expect.poll(async () => (await api<WorldLite>('GET', '/story/world')).styles.find((s) => s.name === 'Ink wash')?.fragment, { timeout: 10_000 }).toBe('ink and wash storyboard, loose brush')
+  const w = await api<WorldLite>('GET', '/story/world')
+  expect(w.logline).toBe('A courier must cross the city before dawn.')
+  expect(w.revision).toBeGreaterThanOrEqual(1)
+  const style = w.styles.find((s) => s.name === 'Ink wash')!
+  expect(w.default_style).toBe(w.styles[0].id)                                                               // the first style made is the default
+  // Generate: the picker lists it and says what it appends; the job records the style and the text that ran
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await page.locator('nav.rail button[title^="Model"]').click()                                               // Klein 4B: the one model the e2e tree holds in both variants
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await page.locator('nav.rail button[title^="Prompt"]').click()                                              // switches the tab (a click on the active tab would fold the panel)
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await page.locator('.panel select[aria-label="style"]').selectOption(style.id)
+  await expect(page.locator('.panel .style-pick .hint')).toContainText('appended: ink and wash storyboard, loose brush')
+  await page.locator('.panel textarea').fill('a courier on a rooftop at dawn')
+  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled()
+  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
+  await go.click()
+  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + count)
+  type Made = AssetLite & { prompt_text: string | null; params: { style_id?: string | null; style_text?: string | null } }
+  const newest = (await api<{ items: Made[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
+  expect(newest.params.style_id).toBe(style.id)
+  expect(newest.params.style_text).toBe('ink and wash storyboard, loose brush')
+  expect(newest.prompt_text).toContain('a courier on a rooftop at dawn. ink and wash storyboard, loose brush')
+})

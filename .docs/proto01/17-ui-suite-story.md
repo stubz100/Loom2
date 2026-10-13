@@ -1,6 +1,6 @@
 # 17 · Suite F — Story (bible → cast → shots → flow → episode) — UI document and plan
 
-Status: **approved 2026-10-13 (D85) with the §14 defaults; SY0 in progress.** Proposed the same day as the output of the refining session
+Status: **approved 2026-10-13 (D85) with the §14 defaults; SY0 built 2026-10-13, SY1 next.** Proposed the same day as the output of the refining session
 14 §4 asked for, held after every ArtCraft proposal (P1–P19) was built (08 §1). Source: loom's storyboard design (14 §1:
 `kb-storyboard01.md` L1–L4 and R1–R170, `kb-loom-p1..p6.md`, `kb-loom-ui.md`), adopted as-is by D23 and now **re-planned on
 loom2's shipped foundation** — nothing of loom's intent is dropped, but every piece is mapped onto what already runs: groups and
@@ -251,7 +251,7 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 
 | Slice | Content | Effort |
 | --- | --- | --- |
-| **SY0 Shell + World** | suite registration (lazy, rail, `Ctrl+7`, `JobOrigin` / `AssetRecord` `story`), `story/world.json` + routes, the World editor (sections, styles, spine, variables), **the Style picker in Generate** (appended, `style_id` stamped, in the manifest), origin case `story` | 3 d |
+| **SY0 Shell + World** | suite registration (lazy, rail, `Ctrl+7`, `JobOrigin` / `AssetRecord` `story`), `story/world.json` + routes, the World editor (sections, styles, spine, variables), **the Style picker in Generate** (appended, `style_id` stamped, in the manifest), origin case `story` — **built 2026-10-13** (journal of that day): `orchestrator/loom2/story.py` (`World`, `StoryStore`, `resolve_style`) + `routes/story.py`, `T2I.style_id` / `style_text` appended in `serialize_prompt` per family, `frontend/src/suites/story/` (store, parts, commands), `suites/generate/StylePicker.tsx`; the smoke scenario adds a style in World and finds its fragment in the job's manifest | 3 d |
 | **SY1 Cast** | profiles + versions (copy, lock → `GroupRecord.locked` and 423), the Catalogue verb, mentions resolving profiles (picker, stamps), the Cast tab (version strip, bootstrap strip, grid, candidates strip, Inspector), `Expand` (planner → one job per cell, placement into the candidates group, `/capabilities.story`); **rig:** one character Full-coverage (40) → curated ≥ 25 with every shot-size row ≥ 1, `@mara` in a Generate prompt carries her stub and references | 6 d |
 | **SY2 Shots** | shot records, versions, takes, finalize gate (format), stale mark, the Shots board + player + Inspector, the verbs in Stage (camera → shot; ST3 / ST4 results fill the version), Animate (clip → shot, use as clip / frame) and the Catalogue; `story.changed` events; **rig:** a stage camera → frame + guided clip on one version, finalized at 1920×1080 | 5 d |
 | **SY3 Flow** | `@xyflow/react`, node files + index, the eight node types, ports and edges, bind / spawn / release (R146), variables and conditions, `play.ts` + the play Stage (no AI), Validate; unit tests on the walker and the index rebuild | 7 d |

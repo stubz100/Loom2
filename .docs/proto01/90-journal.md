@@ -3447,3 +3447,33 @@ split by file so that no two hands touched the same module.
 - Recorded: D85 (proposed, awaiting the author's answer on 17 §14), 14 §4 item 5 and §5, 00-README row 17, 12 §8d. Next: the
   author's answer, then SY0.
 - 17:52 — the author approved 17 §14 as proposed (D85 accepted; the Sequence tab moves to Episode). SY0 starts.
+
+## 2026-10-13 20:40 — SY0 · the Story suite's shell and World tab, the Style picker in Generate (17 §10, D85)
+- **Backend:** `orchestrator/loom2/story.py` — `World` (logline, synopsis, `styles[]`, `default_style`, the spine's `beats[]`, the Flow's
+  `variables[]` as bool / enum; `schema_version`, `revision`), `check_world` invariants, `StoryStore` (`story/world.json` through fsio;
+  a read writes nothing; `put_world` with the revision guard → `StaleWorld`), `resolve_style` (the style's fragment stamped on the recipe
+  as `style_text` at submit and preview; a stamped recipe is not resolved again). `routes/story.py`: `GET` / `PUT /story/world` (409 /
+  422), the `story.changed` event frame. `T2I.style_id` / `style_text`; `serialize_prompt` appends the fragment after the prompt and
+  before the reference sentences (text), into the tree's own `style` slot after what is there (prose and dev JSON); `effective_params`
+  carries both into the preview and the manifest (`params.style_id` / `style_text` beside the recipe). `queue.resolve_mentions` resolves
+  the style with the mentions, so a preview shows exactly what a submit runs (T8). `Workspace.story_dir`; `JobOrigin.suite` gains
+  `story`; the audit allows `T2I.style_id` as provenance. Route snapshot 112; the OpenAPI document 195 schemas (`StoryStyle`,
+  `StoryBeat`, `StoryVariable`, `World`, `StoryChanged` — a `Beat` already names the LTX beats).
+- **Frontend:** the suite `story` (lazy, no keep-alive) with the rail tab World, `Ctrl+7`, the top-bar tab; `suites/story/storyStore.ts`
+  (debounced saves with the revision, 409 → reload and a toast; `styleFor` for Generate), `StoryParts.tsx` (Panel: the sections with
+  counts and the adders; Stage: the editor — logline, synopsis, style rows with the ★ default, beat rows with ▲ ▼, variable rows with
+  type / values / default; Inspector: the format as the finalize gate, counts, the default style, the selected item's fields),
+  `storyCommands.ts` (`story.world.*` — add style / beat / variable, make default, beat earlier / later, remove on Delete; every one a
+  button or a menu entry), `story.css`, the `__loom2Story` dev hook; `store/origin.ts` case `story`; `session.ts` applies
+  `story.changed`. Generate: `suites/generate/StylePicker.tsx` on the Prompt tab (default · the world's ★ style, none, or one by name;
+  the hint says what is appended), `Panel.style_id` (absent = the world's default, null = none), `recipeFromPanel` / `panelFromRecipe`.
+- **Checks:** `tests/test_story_d85.py` (+7: invariants, the store's guard, the routes, `resolve_style`, the serialisation per family,
+  the preview, the asset's manifest on the fake engine — the text that ran, not today's fragment); the graph parity fixture rewritten
+  for the two summary keys (`--parity-update`, nothing else changed); the smoke scenario "a world": World adds a style and a logline,
+  the API has them at revision ≥ 1 with the first style as the default, Generate's picker names the fragment and the job's asset carries
+  `style_id`, `style_text` and the appended prompt — 21/21 under `full` and `open` (one unreproduced failure of the new scenario in a
+  full-variant run before the open run; alone and in the next full run it passed; to watch on CI). 276 offline, 197 unit, lint 100
+  (the picker in its own file keeps the Fast Refresh warning count), tsc clean, settings audit / model literals / contract clean.
+- Lesson for the scenarios: a click on the rail tab that is already active folds the panel (`Rail.tsx`); switch tabs, never re-click.
+- Not in SY0: the World's styles as reference groups (`group_id` is stored, nothing reads it yet — SY1's mentions), the beat → Flow
+  node verb (SY3). Next: SY1 Cast.

@@ -2707,6 +2707,9 @@
             "$ref": "#/components/schemas/DocumentChangedEvent"
           },
           {
+            "$ref": "#/components/schemas/StoryChangedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ClipReadyEvent"
           },
           {
@@ -5099,6 +5102,7 @@
               "animate",
               "catalogue",
               "stage",
+              "story",
               "api"
             ],
             "title": "Suite",
@@ -5150,6 +5154,7 @@
               "animate",
               "catalogue",
               "stage",
+              "story",
               "api"
             ],
             "title": "Suite",
@@ -5199,6 +5204,7 @@
               "animate",
               "catalogue",
               "stage",
+              "story",
               "api"
             ],
             "title": "Suite",
@@ -8554,6 +8560,174 @@
         "title": "StatePaths",
         "type": "object"
       },
+      "StoryBeat": {
+        "description": "One line of the spine (loom L1 \"story spine\"): a Flow node is made from it by hand, never synced (loom R55).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "default": "",
+            "title": "Line",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "line"
+        ],
+        "title": "StoryBeat",
+        "type": "object"
+      },
+      "StoryChanged": {
+        "description": "17 (D85): a Story record moved on the server (`kind`: world; later profile, shot, node) — open tabs reload it.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "revision",
+          "id"
+        ],
+        "title": "StoryChanged",
+        "type": "object"
+      },
+      "StoryChangedEvent": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StoryChanged"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "t": {
+            "default": 0,
+            "title": "T",
+            "type": "number"
+          },
+          "type": {
+            "const": "story.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "t",
+          "type",
+          "data"
+        ],
+        "title": "StoryChangedEvent",
+        "type": "object"
+      },
+      "StoryStyle": {
+        "description": "One style of the world: the fragment a generation appends (17 §3a); `group_id` is a reference album (a later slice).",
+        "properties": {
+          "fragment": {
+            "default": "",
+            "title": "Fragment",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "fragment",
+          "group_id"
+        ],
+        "title": "StoryStyle",
+        "type": "object"
+      },
+      "StoryVariable": {
+        "description": "A Flow variable (loom R135: bool or enum flags, nothing more in v1); conditions and actions read them by name.",
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": false,
+            "title": "Default"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "default": "bool",
+            "enum": [
+              "bool",
+              "enum"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "values",
+          "default"
+        ],
+        "title": "StoryVariable",
+        "type": "object"
+      },
       "T2I": {
         "properties": {
           "base_shift": {
@@ -8735,6 +8909,30 @@
             ],
             "default": null,
             "title": "Steps"
+          },
+          "style_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Style Id"
+          },
+          "style_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Style Text"
           },
           "te_device": {
             "anyOf": [
@@ -8957,6 +9155,28 @@
           "steps": {
             "title": "Steps",
             "type": "integer"
+          },
+          "style_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style Id"
+          },
+          "style_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style Text"
           },
           "te_device": {
             "title": "Te Device",
@@ -9942,6 +10162,84 @@
           "data"
         ],
         "title": "VramPressureEvent",
+        "type": "object"
+      },
+      "World": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Style"
+          },
+          "logline": {
+            "default": "",
+            "title": "Logline",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "spine": {
+            "items": {
+              "$ref": "#/components/schemas/StoryBeat"
+            },
+            "title": "Spine",
+            "type": "array"
+          },
+          "styles": {
+            "items": {
+              "$ref": "#/components/schemas/StoryStyle"
+            },
+            "title": "Styles",
+            "type": "array"
+          },
+          "synopsis": {
+            "default": "",
+            "title": "Synopsis",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/components/schemas/StoryVariable"
+            },
+            "title": "Variables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "logline",
+          "synopsis",
+          "styles",
+          "default_style",
+          "spine",
+          "variables",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "World",
         "type": "object"
       }
     }
@@ -14778,6 +15076,68 @@
         "summary": "Stage Passes",
         "tags": [
           "stages"
+        ]
+      }
+    },
+    "/story/world": {
+      "get": {
+        "operationId": "world_get_story_world_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/World"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "World Get",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "operationId": "world_put_story_world_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/World"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "World Put",
+        "tags": [
+          "story"
         ]
       }
     },

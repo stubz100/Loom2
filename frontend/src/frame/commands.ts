@@ -6,7 +6,7 @@ import type { ComponentType } from 'react'
 import { DEV_HOOKS } from '../devHooks'
 import { loadOverrides, type Overrides } from './keyStore'
 
-export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'models'
+export type Scope = 'global' | 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'story' | 'models'
 /** Where the command is reachable with the mouse. */
 export type Placement = 'context' | 'toolbar' | 'strip' | 'panel' | 'inspector' | 'topbar' | 'rail' | 'dock'
 export type IconType = ComponentType<{ size?: number | string; className?: string }>

@@ -54,6 +54,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
 # fields that are not read by the job code on purpose — each with its reason
 ALLOW: dict[str, str] = {
     "*.kind": "the recipe union's discriminator (pydantic picks the model with it)",
+    "T2I.style_id": "provenance (D85): the Story style's id, resolved into style_text at submit by story.resolve_style (the job reads the text) — read by people and the Story suite",
     "Mention.asset_ids": "provenance (D73): the images a mention gave, stamped at submit by mentions.py and kept with the recipe in the manifest — read by people, not by the job",
     "Inpaint.image_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",
     "Inpaint.mask_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",

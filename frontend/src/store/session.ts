@@ -85,7 +85,7 @@ export const useSession = create<SessionState>()(
           return
         }
         const deep = new URLSearchParams(location.search).get('suite')
-        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
+        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
         try {
           await get().refreshAll()
         } catch (e) {                                                   // B21: a failing first fetch shows the Retry banner, not the crash overlay
@@ -93,7 +93,7 @@ export const useSession = create<SessionState>()(
           return
         }
         const start = get().health?.start_suite
-        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'models'].includes(start)) set({ ui: { ...get().ui, suite: start as Suite } })
+        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(start)) set({ ui: { ...get().ui, suite: start as Suite } })
         socket?.close()
         let everOpen = false
         socket = new EventsSocket(
@@ -292,6 +292,9 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'document.changed':
       void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().onDocumentChanged(f.data))
+      break
+    case 'story.changed':                                         // 17 (D85): the world (later profiles, shots, the flow) moved on the server
+      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
       break
     default: break
   }

@@ -18,6 +18,8 @@ import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPres
 import { batchOf, dropRefs, refDropFor, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import { RefExtras, TextPrompt } from './RefExtras'
 import { useMentions } from './useMentions'
+import { useStory } from '../story/storyStore'
+import { StylePicker } from './StylePicker'
 import './generate.css'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 
@@ -141,6 +143,7 @@ function PromptTab() {
         {(['tree', 'json', 'text'] as const).map((m) => <button key={m} className={p.prompt_mode === m ? 'active' : ''} onClick={() => { if (m === 'json' && p.prompt_mode === 'tree') g.treeToJson(); else g.set({ prompt_mode: m }) }}>{m === 'tree' ? 'Tree' : m === 'json' ? 'JSON' : 'Text'}</button>)}
         <span className={`counter ${counterClass}`} style={{ padding: '4px 8px' }}>{wc} words · ≈{pv?.token_estimate ?? 0} tokens {wc > 120 ? '· over the 512-token comfort zone' : wc && (wc < 30 || wc > 80) ? '· ideal 30–80' : ''}</span>
       </div>
+      <StylePicker />
       {p.prompt_mode === 'tree' && (
         <div className="gen-form gen-tree">
           <Field field="scene" multiline rows={2} value={t.scene ?? ''} onChange={(v) => g.setTree({ scene: v })} placeholder="overall scene description" />
@@ -358,7 +361,7 @@ function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities)
   const refresh = useGenerate((g) => g.refreshPreview)
-  useEffect(() => { if (project?.open) { void refresh(); void useGenerate.getState().loadSnippets() } }, [project?.path, refresh])   // C23: the ✦ menus need the field presets
+  useEffect(() => { if (project?.open) { void refresh(); void useGenerate.getState().loadSnippets(); void useStory.getState().load() } }, [project?.path, refresh])   // C23: the ✦ menus need the field presets; D85: the Style picker needs the world
   // C3 (D26) / D65: no model yet, or a persisted one this build does not offer (dev under `open`) → the variant's t2i default, else the first listed
   useEffect(() => {
     const g = useGenerate.getState()

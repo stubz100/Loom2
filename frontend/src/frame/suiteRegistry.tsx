@@ -31,6 +31,7 @@ export const SUITE_DEFS: Record<string, SuiteDef> = {
   animate: lazySuite({ id: 'animate', rail: DEFAULT_RAIL.animate, keepAlive: true }, () => import('../suites/animate/AnimateSuite').then((m) => m.AnimateSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
   models: lazySuite({ id: 'models', rail: DEFAULT_RAIL.models }, () => import('../suites/models/ModelsSuite').then((m) => m.ModelsSuite), ['Panel', 'Strip', 'Stage', 'Inspector']),
   stage: lazySuite({ id: 'stage', rail: DEFAULT_RAIL.stage, keepAlive: true }, () => import('../suites/stage/StageSuite').then((m) => m.StageSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),   // P13 / ST1 (D81): three.js, its own WebGL2 canvas
+  story: lazySuite({ id: 'story', rail: DEFAULT_RAIL.story }, () => import('../suites/story/StorySuite').then((m) => m.StorySuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),   // 17 (D85): no GPU stage, nothing kept alive
 }
 
 // Edit's code (and with it its commands) loads on the first idle moment after startup — after the Catalogue's first paint, before the usual

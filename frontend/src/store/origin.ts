@@ -6,7 +6,7 @@ import { useSession } from './session'
 
 type Origin = NonNullable<Job['origin']>
 
-const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', api: 'API' }
+const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', story: 'Story', api: 'API' }
 
 /** False for jobs without an origin (queued before D66) and for jobs submitted through the API by a script (no suite to go to). */
 export const canGoToOrigin = (j: Pick<Job, 'origin'>): boolean => !!j.origin && j.origin.suite !== 'api'
@@ -48,6 +48,9 @@ export function goToOrigin(j: Job): void {
       s.setSuite('stage')
       if (o.ref) { const ref = o.ref; const cam = typeof o.payload?.camera_id === 'string' ? o.payload.camera_id : null
         void import('../suites/stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === ref ? Promise.resolve() : st.open(ref); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) }
+      break
+    case 'story':                                                 // 17 (D85): the Story suite (SY1+: the profile, shot or node the job was about)
+      s.setSuite('story')
       break
     default: break
   }

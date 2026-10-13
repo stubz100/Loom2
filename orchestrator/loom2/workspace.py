@@ -80,6 +80,8 @@ class Workspace:
     @property
     def stages_dir(self) -> Path: return self.path / "stages"
     @property
+    def story_dir(self) -> Path: return self.path / "story"          # 17 (D85): world, profiles, shots, flow
+    @property
     def jobs_dir(self) -> Path: return self.path / "jobs"
     @property
     def logs_dir(self) -> Path: return self.path / "jobs" / "logs"

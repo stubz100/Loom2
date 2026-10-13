@@ -360,6 +360,8 @@ class T2IPreview(Open):
     ref_notes: int = 0                            # D73: kept references whose note went into the prompt
     ref_list: list[RefOut] = []                   # D73: the kept references in order (explicit, then those the mentions gave)
     mentions: list[MentionOut] = []               # D73: the mentions, resolved and stamped
+    style_id: str | None = None                   # D85: the Story style carried, and the fragment appended after the prompt
+    style_text: str | None = None
     model_id: str
     te_id: str
     negative_used: bool
@@ -882,6 +884,18 @@ class DocumentChangedEvent(_Frame):
     data: DocumentChanged
 
 
+class StoryChanged(Out):
+    """17 (D85): a Story record moved on the server (`kind`: world; later profile, shot, node) — open tabs reload it."""
+    kind: str
+    revision: int
+    id: str | None = None
+
+
+class StoryChangedEvent(_Frame):
+    type: Literal["story.changed"]
+    data: StoryChanged
+
+
 class ClipReadyEvent(_Frame):
     type: Literal["clip.ready"]
     data: ClipReady
@@ -913,6 +927,6 @@ class HelloEvent(_Frame):
 
 
 EVENT_FRAMES = (JobEvent, JobProgressEvent, JobDeletedEvent, QueueStateEvent, EngineStateEvent, AssetEvent, AssetDeletedEvent,
-                CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
+                CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, StoryChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
                 ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent)
 EVENT_TYPES = sorted({t for frame in EVENT_FRAMES for t in frame.model_fields["type"].annotation.__args__})

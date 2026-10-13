@@ -1,0 +1,38 @@
+/* 17 (D85): the Story suite — SY0: the World tab's section list, the editor on the Stage and its Inspector */
+.story-panel { display: grid; gap: 6px; align-content: start; }
+.story-panel .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.story-panel h4 { margin: 10px 0 2px; font-size: 12px; color: var(--fg2); }
+.story-list { display: grid; gap: 4px; }
+.story-row { display: flex; justify-content: space-between; gap: 8px; text-align: left; padding: 6px 8px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); color: var(--fg); cursor: pointer; }
+.story-row:hover { background: var(--bg2); }
+.story-row.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.story-row .n { color: var(--fg3); font-size: 11px; }
+.story-panel .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.story-strip { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg2); }
+.story-strip .spacer { flex: 1; }
+
+.world-editor { height: 100%; overflow: auto; padding: 14px 22px 40px; box-sizing: border-box; background: var(--bg0); }
+.world-editor > section { max-width: 820px; margin: 0 auto 22px; scroll-margin-top: 10px; }
+.world-editor h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg2); text-transform: uppercase; letter-spacing: .04em; }
+.world-editor h3 .hint { text-transform: none; letter-spacing: 0; font-weight: normal; margin-left: 8px; }
+.world-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 44px; font: inherit; }
+.world-editor .rows { display: grid; gap: 4px; }
+.world-editor .row-item { display: grid; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg1); }
+.world-editor .row-item:hover { background: var(--bg2); }
+.world-editor .row-item.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.world-editor .row-item input[type=text], .world-editor .row-item select { width: 100%; min-width: 0; box-sizing: border-box; }
+.world-editor .style-row { grid-template-columns: 22px 180px 1fr auto; }
+.world-editor .beat-row { grid-template-columns: 28px 200px 1fr auto; }
+.world-editor .var-row { grid-template-columns: 180px 90px 1fr 110px auto; }
+.world-editor .row-item .k { color: var(--fg3); font-size: 11px; text-align: right; }
+.world-editor .row-item .tools { display: flex; gap: 2px; }
+.world-editor .row-item .quiet { padding: 0 4px; min-height: 20px; }
+.world-editor .empty { color: var(--fg3); font-size: 12px; padding: 6px 0; }
+.world-editor .adder { margin-top: 6px; }
+
+.story-insp h4 { margin: 10px 0 4px; font-size: 12px; }
+.story-insp .kv { display: grid; grid-template-columns: 84px 1fr; gap: 6px; align-items: center; font-size: 12px; color: var(--fg2); margin: 2px 0; }
+.story-insp .kv input[type=text], .story-insp .kv select, .story-insp .kv textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.story-insp .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.story-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg2); font-size: 13px; text-align: center; }
+.story-empty > div { max-width: 380px; }

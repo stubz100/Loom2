@@ -8,6 +8,7 @@ import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
 import { refDrop } from '../../frame/dropRules'
 import { useSession } from '../../store/session'
+import { styleFor } from '../story/storyStore'
 
 export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string }
 export interface Camera { angle?: string; lens?: string; depth_of_field?: string; 'f-number'?: string; distance?: string }
@@ -29,6 +30,7 @@ export interface Panel {
   refs: RefSlot[]; ref_max_px: number
   mentions?: MentionRef[]
   loras: { model_id: string; strength: number }[]
+  style_id?: string | null                                  // D85: a Story style id; null = none; absent = the world's default style
 }
 
 /** Every prompt string of the panel (the Text field, the tree's fields, the JSON text) — where an @mention can be written. */
@@ -107,6 +109,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
     mentions: mentionsInUse(p).map((m) => ({ group_id: m.group_id, name: m.name })),
+    style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
 }
 
@@ -122,6 +125,7 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string; mention?: string | null }[]).filter((x) => x.asset_id && !x.mention).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
     mentions: Array.isArray(r.mentions) ? (r.mentions as { group_id: string; name?: string | null }[]).filter((m) => m.group_id && m.name).map((m) => ({ group_id: m.group_id, name: m.name! })) : [],
     ref_max_px: Number(r.ref_max_px ?? 1024), loras: (r.loras as Panel['loras']) ?? [],
+    style_id: (r.style_id as string | null | undefined) ?? null,                                     // D85: a stored recipe's style (null = it ran without one)
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }
   if (keepSeeds && Array.isArray(r.seeds) && r.seeds.length) { out.seed_mode = 'fixed'; out.seed = Number(r.seeds[0]); out.count = 1 }

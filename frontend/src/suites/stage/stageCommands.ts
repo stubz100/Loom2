@@ -46,6 +46,11 @@ registerCommands([
   { id: 'stage.camera.setFromView', scope: 'stage', label: 'Set the camera from the view', icon: Video, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera() && st().view === 'free',
     run: () => { const c = st().activeCamera(); const p = viewport.freePose?.(); if (c && p) st().updateCamera(c.id, { pos: p.pos, target: p.target }) } },
   { id: 'stage.camera.delete', scope: 'stage', label: 'Delete camera', icon: Trash2, placement: ['panel', 'inspector'], when: () => (st().current?.cameras.length ?? 0) > 1, run: () => { const c = st().activeCamera(); if (c) st().removeCamera(c.id) } },
+  // ST2: posing
+  { id: 'stage.pose.mirror', scope: 'stage', label: 'Mirror the pose', icon: Copy, keys: 'M', placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().mirrorPose(st().selected!) },
+  { id: 'stage.pose.reset', scope: 'stage', label: 'Reset the pose (stand)', icon: LockOpen, placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().resetPose(st().selected!) },
+  { id: 'stage.pose.save', scope: 'stage', label: 'Save pose…', icon: Plus, placement: ['panel', 'context'], when: () => sel()?.kind === 'mannequin',
+    run: () => void askText({ title: 'Save pose', text: "The figure's joints, as a preset of this project.", placeholder: 'pose name' }).then((n) => { if (n?.trim()) void st().savePose(n.trim(), st().selected!) }) },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])
@@ -59,7 +64,9 @@ export const addMenu = (): MenuItem => ({ label: 'Add', icon: Plus, items: [
 /** Right-click on an object (selected by the caller) or on empty space. */
 export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
-    ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
+    ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
+      ...(sel()?.kind === 'mannequin' ? [{ cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, sep] : []),
+      { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
 }
 

@@ -6,7 +6,17 @@ import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
-import { MANNEQUIN_PRESETS } from './builders'
+import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
+import { mirrorJoints } from './ik'
+
+export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
+/** The full joint map a figure shows: the preset's angles under the figure's own edits (ST2). */
+export function effectiveJoints(o: StageObject): Record<string, number[]> {
+  const preset = POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand
+  const out: Record<string, number[]> = {}
+  for (const j of JOINTS) out[j] = [...(o.pose?.joints?.[j] ?? preset.j[j] ?? [0, 0, 0])]
+  return out
+}
 
 export type Tool = 'select' | 'move' | 'rotate' | 'scale'
 export type View = 'free' | 'camera'
@@ -27,6 +37,16 @@ interface StageState {
   undo: StageDoc[]; redo: StageDoc[]
   saving: boolean
   frameRequest: { ids: string[] | null; n: number }         // the viewport frames these (null = everything) when n changes
+  selectedJoint: string | null                              // ST2: the joint the rotate gizmo is on
+  userPoses: Record<string, PoseDef>                        // ST2: the project's saved poses (stages/poses.json)
+  selectJoint: (j: string | null) => void
+  setJoints: (id: string, joints: Record<string, number[]>) => void
+  applyPose: (id: string, preset: string | null, joints?: Record<string, number[]>) => void
+  mirrorPose: (id: string) => void
+  resetPose: (id: string) => void
+  loadPoses: () => Promise<void>
+  savePose: (name: string, id: string) => Promise<void>
+  deletePose: (name: string) => Promise<void>
   load: () => Promise<void>
   create: (name: string) => Promise<StageDoc | null>
   open: (id: string | null) => Promise<void>
@@ -84,7 +104,31 @@ function schedule(get: () => StageState, set: (p: Partial<StageState>) => void):
 
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
-  frameRequest: { ids: null, n: 0 },
+  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
+
+  selectJoint: (j) => set({ selectedJoint: j }),
+  setJoints: (id, joints) => {
+    const o = get().object(id)
+    if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: { preset: x.pose?.preset ?? 'stand', joints } } : x)) }), 'pose')
+  },
+  applyPose: (id, preset, joints = {}) => { get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, pose: { preset: preset ?? 'stand', joints } } : o)) }), 'pose preset'); set({ selectedJoint: null }) },
+  mirrorPose: (id) => { const o = get().object(id); if (o) get().setJoints(id, mirrorJoints(effectiveJoints(o))) },
+  resetPose: (id) => get().applyPose(id, 'stand', {}),
+  loadPoses: async () => { try { set({ userPoses: (await unwrap(http.GET('/stages/poses'))).poses as unknown as Record<string, PoseDef> }) } catch { set({ userPoses: {} }) } },
+  savePose: async (name, id) => {
+    const o = get().object(id)
+    if (!o || !name.trim()) return
+    const poses = { ...get().userPoses, [name.trim()]: { preset: o.pose?.preset ?? 'stand', joints: effectiveJoints(o) } }
+    try { set({ userPoses: (await unwrap(http.PUT('/stages/poses', { body: { poses: poses as never } }))).poses as unknown as Record<string, PoseDef> }); useSession.getState().toast(`Pose "${name.trim()}" saved to the project`, 'success') }
+    catch (e) { useSession.getState().toast(`Save pose failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+  deletePose: async (name) => {
+    const poses = { ...get().userPoses }
+    delete poses[name]
+    try { set({ userPoses: (await unwrap(http.PUT('/stages/poses', { body: { poses: poses as never } }))).poses as unknown as Record<string, PoseDef> }) }
+    catch (e) { useSession.getState().toast(`Delete pose failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
 
   load: async () => { try { set({ stages: (await unwrap(http.GET('/stages'))).items }) } catch { set({ stages: [] }) } },
   create: async (name) => {
@@ -124,7 +168,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; set({ current: { ...u[u.length - 1], revision: cur.revision }, undo: u.slice(0, -1), redo: [...get().redo, cur] }); schedule(get, set) },
   redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; set({ current: { ...r[r.length - 1], revision: cur.revision }, redo: r.slice(0, -1), undo: [...get().undo, cur] }); schedule(get, set) },
-  select: (id) => set({ selected: id }),
+  select: (id) => set({ selected: id, selectedJoint: null }),
   setTool: (tool) => set({ tool }),
   setSnap: (snap) => set({ snap }),
   setView: (view) => set({ view }),

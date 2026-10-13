@@ -8,16 +8,20 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
-import { applyPose, clay, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Mannequin } from './builders'
+import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Joint, type Mannequin } from './builders'
+import { CHAINS, eulerDeg, solveTwoBone, type Chain } from './ik'
 import type { Tool, Transform, View } from './stageStore'
 
 export interface EngineHooks {
   onPick: (id: string | null) => void
   onTransformed: (id: string, t: Transform) => void
+  /** ST2: a joint was rotated or a hand / foot dragged — the figure's full joint map in degrees (YXZ). */
+  onPosed: (id: string, joints: Record<string, number[]>) => void
   onFreeCameraMoved?: () => void
 }
+export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
 
-interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin }
+interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[] }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 
@@ -45,6 +49,12 @@ export class StageEngine {
   private texLoader = new THREE.TextureLoader()
   private disposed = false
   activeCam: StageCamera | null = null
+  // ST2: posing — pickers show on the selected figure in pose mode; a joint takes the rotate gizmo, a hand / foot a translate proxy
+  private poseMode = false
+  private posing: { id: string; joint: Joint } | null = null
+  private ik: { id: string; chain: Chain; proxy: THREE.Object3D } | null = null
+  private pickerMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, depthTest: false, transparent: true, opacity: 0.9 })
+  private ikMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff, depthTest: false, transparent: true, opacity: 0.95 })
   readonly canvas: HTMLCanvasElement
   private hooks: EngineHooks
 
@@ -66,7 +76,7 @@ export class StageEngine {
     this.orbit.addEventListener('change', () => { this.dirty = true; this.hooks.onFreeCameraMoved?.() })
     this.gizmo = new TransformControls(this.free, canvas)
     this.gizmo.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !(e as unknown as { value: boolean }).value; this.dirty = true })
-    this.gizmo.addEventListener('objectChange', () => { this.dirty = true })
+    this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); this.dirty = true })
     this.gizmo.addEventListener('mouseUp', () => this.commitGizmo())
     this.scene.add(this.gizmo.getHelper())
     this.gizmo.enabled = false
@@ -158,18 +168,21 @@ export class StageEngine {
   }
   private selectedId: string | null = null
   select(id: string | null): void {
+    if (this.selectedId !== id || this.ik) this.endPosing()
     this.selectedId = id
     const e = id ? this.entries.get(id) : undefined
-    if (e && this.gizmo.enabled && !e.doc.locked) this.attach(id!); else this.gizmo.detach()
+    if (e && this.gizmo.enabled && !e.doc.locked && !this.posing) this.attach(id!); else if (!this.posing) this.gizmo.detach()
     this.selection.visible = !!e
     if (e) { this.selection.setFromObject(e.holder) }
+    this.showPickers()
     this.dirty = true
   }
   private attach(id: string): void {
     const e = this.entries.get(id)
-    if (e && !e.doc.locked) this.gizmo.attach(e.holder)
+    if (e && !e.doc.locked) { this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(e.holder) }
   }
   private commitGizmo(): void {
+    if (this.posing || this.ik) { this.commitPose(); return }
     const o = this.gizmo.object as THREE.Group | undefined
     if (!o) return
     const id = [...this.entries.entries()].find(([, e]) => e.holder === o)?.[0]
@@ -178,21 +191,111 @@ export class StageEngine {
     this.hooks.onTransformed(id, { pos: [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4)), rot: [deg(r.x), deg(r.y), deg(r.z)].map((v) => +v.toFixed(2)), scale: [o.scale.x, o.scale.y, o.scale.z].map((v) => +v.toFixed(4)) })
   }
 
+  // ---- ST2: posing ----------------------------------------------------------------------------------------------------------------
+  setPoseMode(on: boolean): void { this.poseMode = on; if (!on) this.endPosing(); this.showPickers(); this.dirty = true }
+  private showPickers(): void {
+    for (const [id, e] of this.entries) e.pickers?.forEach((p) => { p.visible = this.poseMode && id === this.selectedId && e.doc.visible })
+  }
+  /** The rotate gizmo on one joint (local space): dragging it is FK; the commit writes every joint back. */
+  selectJoint(id: string, joint: Joint | null): void {
+    if (!joint && this.ik?.id === id) return                       // clearing the joint while a hand / foot handle is live keeps that handle
+    this.endIk()
+    const e = this.entries.get(id)
+    if (!e?.figure || !joint) { this.posing = null; if (this.gizmo.enabled && e && !e.doc.locked) this.attach(id); else this.gizmo.detach(); this.dirty = true; return }
+    this.posing = { id, joint }
+    this.gizmo.setMode('rotate')
+    this.gizmo.setSpace('local')
+    this.gizmo.showXYZE = false                                    // no free-rotate ball: it would cover the neighbouring pickers (a joint is ~30 px from the next)
+    this.gizmo.enabled = true
+    this.gizmo.attach(e.figure.joints[joint])
+    this.dirty = true
+  }
+  /** A hand or a foot: a translate proxy at the end, the two bones follow while it moves. */
+  startIk(id: string, chain: Chain): void {
+    const e = this.entries.get(id)
+    if (!e?.figure) return
+    this.endPosing()
+    const c = CHAINS[chain]
+    const lower = e.figure.joints[c.lower]
+    const proxy = new THREE.Object3D()
+    proxy.position.copy(lower.localToWorld(new THREE.Vector3(0, -c.b, 0)))
+    this.scene.add(proxy)
+    this.ik = { id, chain, proxy }
+    this.gizmo.setMode('translate')
+    this.gizmo.setSpace('world')
+    this.gizmo.enabled = true
+    this.gizmo.attach(proxy)
+    this.dirty = true
+  }
+  private solveIk(): void {
+    if (!this.ik) return
+    const e = this.entries.get(this.ik.id)
+    if (!e?.figure) return
+    const c = CHAINS[this.ik.chain]
+    const upper = e.figure.joints[c.upper], lower = e.figure.joints[c.lower]
+    const parent = upper.parent!
+    parent.updateWorldMatrix(true, false)
+    const target = parent.worldToLocal(this.ik.proxy.getWorldPosition(new THREE.Vector3()))
+    const s = solveTwoBone(upper.position, target, c.a, c.b, new THREE.Vector3(...c.bend))
+    upper.rotation.set(rad(s.upper[0]), rad(s.upper[1]), rad(s.upper[2]), 'YXZ')
+    lower.rotation.set(rad(s.lower[0]), rad(s.lower[1]), rad(s.lower[2]), 'YXZ')
+    this.selection.setFromObject(e.holder)
+  }
+  /** Every joint of the figure, degrees YXZ — what the document stores. */
+  jointsOf(id: string): Record<string, number[]> | null {
+    const e = this.entries.get(id)
+    if (!e?.figure) return null
+    const out: Record<string, number[]> = {}
+    for (const j of JOINTS) out[j] = eulerDeg(e.figure.joints[j].quaternion)
+    return out
+  }
+  private commitPose(): void {
+    const id = this.posing?.id ?? this.ik?.id
+    if (!id) return
+    const joints = this.jointsOf(id)
+    if (joints) this.hooks.onPosed(id, joints)
+    if (this.ik) this.endIk()
+  }
+  private endIk(): void { if (this.ik) { this.scene.remove(this.ik.proxy); this.ik = null; this.gizmo.detach(); this.gizmo.enabled = false } }
+  private endPosing(): void { this.endIk(); if (this.posing) { this.posing = null; this.gizmo.detach() } }
+
   // ---- picking and placement ----------------------------------------------------------------------------------------------------
+  /** Client → NDC of the camera being looked through: the whole canvas in the free view, the letterboxed frame in the camera view. */
   private ndc(x: number, y: number): THREE.Vector2 {
     const r = this.canvas.getBoundingClientRect()
-    return new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
+    const f = this.view === 'camera' ? this.frameRect() : { x: 0, y: 0, w: this.w, h: this.h }
+    return new THREE.Vector2(((x - r.left - f.x) / f.w) * 2 - 1, -((y - r.top - f.y) / f.h) * 2 + 1)
+  }
+  /** Client-space position of a joint or an IK handle of the selected figure (the dev hook and the smoke test drive the mouse with it). */
+  screenOf(at: Joint | Chain): { x: number; y: number } | null {
+    const e = this.selectedId ? this.entries.get(this.selectedId) : undefined
+    if (!e?.figure) return null
+    e.holder.updateWorldMatrix(true, true)
+    const c = (CHAINS as Record<string, (typeof CHAINS)[Chain] | undefined>)[at]
+    const p = c ? e.figure.joints[c.lower].localToWorld(new THREE.Vector3(0, -c.b, 0)) : e.figure.joints[at as Joint].getWorldPosition(new THREE.Vector3())
+    p.project(this.camera())
+    const r = this.canvas.getBoundingClientRect()
+    const f = this.view === 'camera' ? this.frameRect() : { x: 0, y: 0, w: this.w, h: this.h }
+    return { x: r.left + f.x + ((p.x + 1) / 2) * f.w, y: r.top + f.y + ((1 - p.y) / 2) * f.h }
   }
   private camera(): THREE.Camera { return this.view === 'camera' ? this.shot : this.free }
-  /** The object under a client-space point, or null. */
-  pick(x: number, y: number): string | null {
+  /** What is under a client-space point: an object, a joint picker or an IK handle of the selected figure, or nothing. */
+  pick(x: number, y: number): Pick {
     this.ray.setFromCamera(this.ndc(x, y), this.camera())
+    // pose mode: the selected figure's pickers first — a joint sphere sits inside its limb, so the body would always win on distance
+    const sel = this.selectedId ? this.entries.get(this.selectedId) : undefined
+    if (this.poseMode && sel?.pickers && sel.doc.visible) {
+      const hit = this.ray.intersectObjects(sel.pickers.filter((p) => p.visible), false)[0]
+      if (hit) return hit.object.userData.joint ? { id: this.selectedId, joint: hit.object.userData.joint as Joint } : { id: this.selectedId, ik: hit.object.userData.ik as Chain }
+    }
     const hits = this.ray.intersectObjects([...this.entries.values()].map((e) => e.body), true)
     for (const h of hits) {
-      let o: THREE.Object3D | null = h.object
-      while (o) { const id = o.userData.stageId as string | undefined; if (id) return id; o = o.parent }
+      let hidden = false
+      for (let p: THREE.Object3D | null = h.object; p; p = p.parent) if (!p.visible) { hidden = true; break }
+      if (hidden || h.object.userData.joint || h.object.userData.ik) continue
+      for (let o: THREE.Object3D | null = h.object; o; o = o.parent) { const id = o.userData.stageId as string | undefined; if (id) return { id } }
     }
-    return null
+    return { id: null }
   }
   /** Where a client-space point lands: the first object surface hit, else the floor; null when the ray misses the floor too. */
   place(x: number, y: number): number[] | null {
@@ -223,7 +326,7 @@ export class StageEngine {
       e.holder.rotation.set(rad(t.rot[0]), rad(t.rot[1]), rad(t.rot[2]))
       e.holder.scale.set(t.scale[0], t.scale[1], t.scale[2])
       e.holder.visible = o.visible
-      if (e.figure && o.pose && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints))) {
+      if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints))) {
         applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints)
       }
       e.doc = o
@@ -256,9 +359,22 @@ export class StageEngine {
     holder.userData.stageId = o.id
     let body: THREE.Object3D
     let figure: Mannequin | undefined
+    let pickers: THREE.Object3D[] | undefined
     if (o.kind === 'mannequin') {
       figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints)
       body = figure.root
+      // ST2: a picker sphere on every joint (FK) and a handle at each hand and foot (IK), hidden until pose mode
+      pickers = []
+      for (const j of JOINTS) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), this.pickerMat)
+        m.userData.joint = j; m.renderOrder = 10; m.visible = false
+        figure.joints[j].add(m); pickers.push(m)
+      }
+      for (const [chain, c] of Object.entries(CHAINS)) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), this.ikMat)
+        m.position.set(0, -c.b, 0); m.userData.ik = chain; m.renderOrder = 11; m.visible = false
+        figure.joints[c.lower].add(m); pickers.push(m)
+      }
     } else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)
     else if (o.kind === 'prop') body = prop(o.preset ?? 'block', this.clayMat)
     else if (o.kind === 'plane' && o.asset_id) {
@@ -276,7 +392,7 @@ export class StageEngine {
     } else body = prop('block', this.clayMat)
     body.traverse((c) => { c.userData.stageId = o.id })
     holder.add(body)
-    return { holder, body, doc: o, figure }
+    return { holder, body, doc: o, figure, pickers }
   }
 
   // ---- render ---------------------------------------------------------------------------------------------------------------------

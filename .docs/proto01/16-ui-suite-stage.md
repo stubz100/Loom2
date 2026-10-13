@@ -76,6 +76,15 @@ Presets as a grid of silhouettes (stand, sit, walk, run, point, reach, crouch, w
 FK on joint pickers (click a joint, a rotate gizmo appears) and **two-bone IK** handles at hands and feet (drag the hand, elbow
 and shoulder follow; analytic, with `CCDIKSolver` as the fallback); the pose tab shows the active joint's angles.
 
+*ST2 built 2026-10-13 (journal of that day): the Poses rail tab shows the ten built-in presets (`builders.ts POSES`, in code rather
+than `stages/poses/*.json` — they are the mannequin's own) and the project's saved poses from one file, `stages/poses.json`
+(`GET` / `PUT /stages/poses`, each pose `{preset, joints}` with a delete ×). While the tab is open the selected figure wears its
+pickers: orange spheres on the twelve joints (click → the rotate gizmo in local space, the free-rotate ball off so neighbours stay
+clickable) and blue cubes at hands and feet (click → a translate gizmo on a proxy; dragging it solves the two bones analytically in
+the chain parent's space, `ik.ts solveTwoBone`, bend hints elbows +Z / knees −Z; out of reach the chain points at the target). Every
+commit writes the twelve joints in degrees (YXZ) into the document, one undo entry; Mirror swaps left / right and negates Y / Z;
+Reset returns to stand; the tab also takes a joint from a list and its x · y · z by number. `CCDIKSolver` was not needed.*
+
 ### 3e. Shot
 The generation form for the blocking, generated from `/capabilities` (07 §3d):
 - **Method** (D78): ◉ **Clay reference** — Klein 9B, the clay pass as `ReferenceLatent`, "keep image 1's camera, framing and poses";
@@ -191,7 +200,9 @@ All are registry commands with mouse homes (D32) and remappable (D72); unmodifie
 ## 13. Acceptance checklist (`scripts/st_acceptance.py`, rig)
 *ST1 built 2026-10-13 (D81; journal of that day): the suite tab (Ctrl+6), Library · Outliner · Cameras, the viewport with the gizmo
 bar, raycast placement and image planes by drop, cameras in mm with the letterboxed camera view and guides, `stages/<id>.json` with
-revision saves, undo / redo; the smoke scenario covers create → add → outliner → save → reload. Posing beyond presets is ST2, passes ST3.*
+revision saves, undo / redo; the smoke scenario covers create → add → outliner → save → reload. Passes are ST3.*
+*ST2 built 2026-10-13: joint pickers (FK), hand / foot handles (two-bone IK), Mirror / Reset / Save pose…, the project pose library;
+the smoke scenario drives the mouse onto a joint and drags a hand, mirrors twice (an involution) and saves a pose.*
 - [ ] Create a stage, place two mannequins and a set plane, pose with presets (ST1) and IK (ST2), frame a 35 mm camera, export
       the five passes at Draft size; the keypoints JSON matches the pose pass (vitest on projection).
 - [ ] Generate with the clay method: the blocking is kept (the author's blind check ≥ 8/10 on a 10-shot set, as E10); with

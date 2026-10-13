@@ -436,3 +436,59 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await page.locator('nav.rail button[title^="Outliner"]').click()
   await expect(page.locator('.outl-row .kind')).toHaveCount(2)
 })
+
+test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits one joint by number and saves the pose to the project library', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Crossing')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Adult/ }).click()                       // the empty-stage card adds (and selects) a figure
+  await page.locator('nav.rail button[title^="Poses"]').click()
+  await expect(page.locator('.stage-panel .head b')).toHaveText('Figure 1')
+  type Doc = { name: string; objects: { kind: string; pose: { preset: string; joints: Record<string, number[]> } | null }[] }
+  const figure = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Crossing')?.objects.find((o) => o.kind === 'mannequin')   // the save is debounced: may be absent at first
+  const WALK: Record<string, number[]> = { r_shoulder: [22, 0, -6], r_elbow: [0, 0, 0] }                                 // builders.ts POSES.walk (the right arm)
+  await page.locator('.lib-grid button', { hasText: /^walk$/ }).click()
+  await expect.poll(async () => (await figure())?.pose?.preset, { timeout: 10_000 }).toBe('walk')
+  // the mouse on the figure: a click on the elbow's picker selects that joint (the rotate gizmo moves there)
+  const at = async (what: string) => (await page.evaluate((w) => (window as unknown as { __loom2Stage: { screenOf: (at: string) => { x: number; y: number } | null } }).__loom2Stage.screenOf(w), what))!
+  const elbow = await at('r_elbow')
+  await page.mouse.click(elbow.x, elbow.y)
+  await expect(page.locator('.stage-panel select').last()).toHaveValue('r_elbow')
+  // a click on the right hand's handle puts a translate gizmo there; dragging its centre moves the hand, the forearm and upper arm follow (two-bone IK)
+  const hand = await at('r_arm')
+  await page.mouse.click(hand.x, hand.y)
+  await expect(page.locator('.stage-panel select').last()).toHaveValue('')
+  const goal = { x: hand.x + 28, y: hand.y - 36 }
+  await page.mouse.move(hand.x, hand.y); await page.mouse.down(); await page.mouse.move(goal.x, goal.y, { steps: 10 }); await page.mouse.up()
+  const left = (j: Record<string, number[]> | undefined) => !!j?.r_shoulder && !!j.r_elbow && (j.r_shoulder.some((v, i) => Math.abs(v - WALK.r_shoulder[i]) > 1) || j.r_elbow.some((v, i) => Math.abs(v - WALK.r_elbow[i]) > 1))
+  await expect.poll(async () => left((await figure())?.pose?.joints), { timeout: 10_000 }).toBe(true)                      // the commit writes every joint; the arm left the walk preset
+  const ik = (await figure())!.pose!.joints
+  expect(Object.keys(ik)).toHaveLength(12)
+  const after = await at('r_arm')
+  expect(Math.hypot(after.x - goal.x, after.y - goal.y)).toBeLessThan(Math.hypot(hand.x - goal.x, hand.y - goal.y) / 2)    // the hand went to (or toward, if out of reach) the goal
+  // Mirror writes every joint explicitly; a second mirror is the first pose again, so the two are each other's left / right swap
+  await page.locator('.stage-panel button', { hasText: /^Mirror the pose$/ }).click()
+  await expect.poll(async () => JSON.stringify((await figure())?.pose?.joints) !== JSON.stringify(ik), { timeout: 10_000 }).toBe(true)
+  const m1 = (await figure())!.pose!.joints
+  await page.locator('.stage-panel button', { hasText: /^Mirror the pose$/ }).click()
+  await expect.poll(async () => JSON.stringify((await figure())?.pose?.joints) !== JSON.stringify(m1), { timeout: 10_000 }).toBe(true)
+  const m2 = (await figure())!.pose!.joints
+  expect(m1.r_hip[0]).toBe(m2.l_hip[0]); expect(m1.r_hip[1]).toBe(-m2.l_hip[1] || 0); expect(m1.l_shoulder[0]).toBe(m2.r_shoulder[0])
+  // one joint by number: the Joint picker then the x field
+  await page.locator('.stage-panel select').last().selectOption('r_elbow')
+  const x = page.locator('.stage-panel .vec input').first()
+  await x.fill('-90'); await x.dispatchEvent('change')
+  await expect.poll(async () => (await figure())?.pose?.joints.r_elbow?.[0], { timeout: 10_000 }).toBe(-90)
+  // save it to the project's library and see it back as a card
+  await page.locator('.stage-panel button', { hasText: /^Save pose/ }).click()
+  await dialog.locator('input').fill('crossing step')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.pose-card button', { hasText: /^crossing step$/ })).toBeVisible()
+  const lib = await api<{ poses: Record<string, { preset: string | null; joints: Record<string, number[]> }> }>('GET', '/stages/poses')
+  expect(lib.poses['crossing step'].preset).toBe('walk')
+  expect(lib.poses['crossing step'].joints.r_elbow[0]).toBe(-90)
+  await page.screenshot({ path: 'node_modules/.e2e/stage-poses.png' })
+})

@@ -37,3 +37,9 @@
 .stage-panel .focals { display: flex; gap: 4px; align-items: center; }
 .stage-panel .focals button.active { border-color: var(--accent); color: var(--fg); }
 .stage-panel .focals input { width: 64px; }
+/* ST2: the Poses tab */
+.pose-card { display: flex; gap: 2px; min-width: 0; }
+.pose-card > button:first-child { flex: 1; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pose-card .quiet { flex: none; width: 22px; padding: 0; color: var(--fg3); }
+.pose-card .quiet:hover { color: var(--danger, #e66); }
+.lib-grid button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }

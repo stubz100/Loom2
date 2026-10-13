@@ -72,3 +72,25 @@ def test_routes(tmp_path: Path):
         assert cl.get(f"/stages/{s['id']}", headers=H).json()["objects"][0]["name"] == "Ada"
         assert cl.delete(f"/stages/{s['id']}", headers=H).json()["deleted"] == s["id"]
         assert cl.get(f"/stages/{s['id']}", headers=H).status_code == 404
+
+
+def test_pose_library_routes(tmp_path: Path):
+    """ST2: the project's saved poses round-trip; a malformed joint list is refused."""
+    from fastapi.testclient import TestClient
+    from loom2.api import create_app
+    from loom2.config import AppState
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
+                                     "mounted_model_trees": [], "variant": "full"})
+    app = create_app(state)
+    H = {"X-Loom-Token": app.state.services.app.token}
+    with TestClient(app) as cl:
+        cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "S", "size_cap_gb": 10}, headers=H)
+        assert cl.get("/stages/poses", headers=H).json() == {"poses": {}}
+        lib = {"poses": {"salute": {"preset": "stand", "joints": {"r_shoulder": [-150, 0, -20], "r_elbow": [-120, 0, 0]}}}}
+        assert cl.put("/stages/poses", json=lib, headers=H).status_code == 200
+        assert cl.get("/stages/poses", headers=H).json() == lib
+        assert cl.put("/stages/poses", json={"poses": {"bad": {"joints": {"head": [1, 2]}}}}, headers=H).status_code == 422
+        assert (Workspace(tmp_path / "proj").stages_dir / "poses.json").is_file()
+        # the literal route is not shadowed by /stages/{st_id}
+        assert cl.get("/stages/poses", headers=H).status_code == 200

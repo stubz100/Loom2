@@ -7,6 +7,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..fsio import atomic_write_json, read_json_or
 from ..schemas import Deleted, StageList
 from ..stages import Stage, StageStore, StaleStage
 from .deps import Svc
@@ -31,6 +32,30 @@ async def stage_create(svc: Svc, body: StageCreate):
     st = await asyncio.to_thread(StageStore(ws).create, body.name, {"w": fmt.width, "h": fmt.height, "fps": fmt.fps})
     svc.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
     return st.model_dump()
+
+
+class PoseLibrary(BaseModel):
+    """ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`."""
+    poses: dict[str, dict] = {}
+
+
+@router.get("/stages/poses", response_model=PoseLibrary)
+async def poses_get(svc: Svc):
+    ws, _, _ = svc.require_project()
+    p = ws.stages_dir / "poses.json"
+    return await asyncio.to_thread(lambda: read_json_or(p, {"poses": {}}))
+
+
+@router.put("/stages/poses", response_model=PoseLibrary)
+async def poses_put(svc: Svc, body: PoseLibrary):
+    ws, _, _ = svc.require_project()
+    for name, pose in body.poses.items():
+        joints = pose.get("joints", {}) if isinstance(pose, dict) else None
+        if not name.strip() or not isinstance(joints, dict) or any(not (isinstance(v, list) and len(v) == 3) for v in joints.values()):
+            raise HTTPException(422, f"pose {name!r}: joints are {{name: [x, y, z]}} in degrees")
+    await asyncio.to_thread(atomic_write_json, ws.stages_dir / "poses.json", body.model_dump())
+    return body.model_dump()
+
 
 
 @router.get("/stages/{st_id}", response_model=Stage)

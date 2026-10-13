@@ -6156,6 +6156,22 @@
         "title": "Pose",
         "type": "object"
       },
+      "PoseLibrary": {
+        "description": "ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`.",
+        "properties": {
+          "poses": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "default": {},
+            "title": "Poses",
+            "type": "object"
+          }
+        },
+        "title": "PoseLibrary",
+        "type": "object"
+      },
       "ProjectClosed": {
         "properties": {
           "path": {
@@ -13783,6 +13799,66 @@
           }
         },
         "summary": "Stage Create",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/poses": {
+      "get": {
+        "operationId": "poses_get_stages_poses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoseLibrary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Poses Get",
+        "tags": [
+          "stages"
+        ]
+      },
+      "put": {
+        "operationId": "poses_put_stages_poses_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoseLibrary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoseLibrary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Poses Put",
         "tags": [
           "stages"
         ]

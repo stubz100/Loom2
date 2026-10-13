@@ -1344,6 +1344,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/poses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Poses Get */
+        get: operations["poses_get_stages_poses_get"];
+        /** Poses Put */
+        put: operations["poses_put_stages_poses_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stages/{st_id}": {
         parameters: {
             query?: never;
@@ -3957,6 +3975,21 @@ export interface components {
             };
             /** Preset */
             preset: string | null;
+        };
+        /**
+         * PoseLibrary
+         * @description ST2: the project's saved poses — name → {preset?, joints {joint: [x, y, z] degrees}} — kept as `stages/poses.json`.
+         */
+        PoseLibrary: {
+            /**
+             * Poses
+             * @default {}
+             */
+            poses?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
         };
         /** ProjectClosed */
         ProjectClosed: {
@@ -8107,6 +8140,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    poses_get_stages_poses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoseLibrary"];
+                };
+            };
+        };
+    };
+    poses_put_stages_poses_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PoseLibrary"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoseLibrary"];
                 };
             };
             /** @description Validation Error */

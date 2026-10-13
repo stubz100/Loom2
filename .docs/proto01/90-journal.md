@@ -3263,3 +3263,35 @@ split by file so that no two hands touched the same module.
 - Not in ST1 (by plan): IK and joint posing (ST2), passes and `StageShot` (ST3), keyframes and clips (ST4), meshes (P18). Known
   rough edges to take in ST2: the gizmo bar has no Local / World toggle yet; planes drop at the pointer but stand at a fixed 1.6 m
   width until their image loads the aspect; no rig acceptance script yet (`scripts/st_acceptance.py` comes with ST3's passes).
+
+### 2026-10-13 09:12 — ST2 Posing built (D81, 16 §3d): joints, two-bone IK, the pose library
+- **Maths:** `frontend/src/suites/stage/ik.ts` — `solveTwoBone(root, target, a, b, bend)` in the chain parent's space: the bend plane
+  from the target direction and a hint (elbows +Z, knees −Z, a fallback when parallel), the upper bone's frame built from the hinge
+  axis, the lower bone's angle `atan2(−z, −y)` inside it; returns degrees YXZ for both joints and the reach ratio. `mirrorJoints`
+  swaps `r_` / `l_` and negates Y / Z. Limb lengths from the E10 mannequin (0.29 / 0.27 arm, 0.44 / 0.43 leg). Five vitest cases
+  check the solve against forward kinematics (in reach lands within 1 mm, out of reach points at the target with a straight knee
+  within 3°, the mirror is an involution). `CCDIKSolver` was not needed.
+- **Routes:** `GET` / `PUT /stages/poses` — the project's pose library as one file, `stages/poses.json` (`PoseLibrary`: name →
+  `{preset, joints}`; 422 on a joint that is not `[x, y, z]`), placed above `/stages/{st_id}` so the literal path wins; route
+  snapshot (107 rows) and OpenAPI regenerated; `test_pose_library_routes`.
+- **Engine:** every mannequin carries twelve orange picker spheres on its joints and four blue cubes at the hands and feet, hidden
+  until pose mode (the Poses rail tab) and the figure is selected. `pick()` raycasts the pickers before the bodies (a joint sits
+  inside its limb). A joint click puts the rotate gizmo on the joint in local space with the free-rotate ball off (its 52 px pick
+  sphere covered the neighbouring joints ~30 px away); a handle click puts a translate gizmo on a proxy at the hand, `objectChange`
+  solves the chain live, `mouseUp` commits all twelve joints (degrees YXZ from the quaternions) through `onPosed` → `setJoints`,
+  which ignores an unchanged pose (a click without a turn makes no undo entry). The pointer → NDC mapping now uses the letterboxed
+  frame in the camera view (picking there was off before). A dev hook `window.__loom2Stage.screenOf(joint | chain)` lets the
+  smoke test aim the mouse.
+- **UI:** the Poses tab — preset grid (the ten built-ins), the project's saved poses with a delete × (`askConfirm`), Mirror / Reset /
+  Save pose… (`stage.pose.mirror` M, `stage.pose.reset`, `stage.pose.save` with `askText`; also on the figure's context menu and the
+  Inspector), a joint list and its x · y · z fields; the Inspector's pose select marks an edited pose. User poses load with the
+  project.
+- **Checks:** the smoke scenario (new stage → figure → Poses → walk → click the elbow picker (the joint list shows r_elbow) → click the
+  hand handle and drag it 28 / −36 px (the document gets twelve joints, the right arm leaves the walk preset, the hand ends at least
+  twice as close to the goal) → Mirror twice (the two documents are each other's left / right swap) → r_elbow x = −90 by number →
+  Save pose… "crossing step" → the card appears and `GET /stages/poses` has it with the −90) — 17/17; 253 offline, 187 unit, lint 100,
+  tsc clean, audits clean. Two flakes fixed on the way: the store's `selectJoint(null)` effect ended a just-started IK drag (the
+  engine now keeps a live handle when the joint is cleared), and the test read the document before the debounced save (polls now).
+  Screenshot `frontend/node_modules/.e2e/stage-poses.png`: the walk pose with the right forearm raised, the pickers, the gizmo on
+  the elbow, the saved card.
+- Next: ST3 (passes → image, `StageShot`, `scripts/st_acceptance.py`), then ST4, P18.

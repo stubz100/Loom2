@@ -7,13 +7,14 @@ import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
+import { DEV_HOOKS } from '../../devHooks'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
-import { askText, useSession } from '../../store/session'
-import { MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS } from './builders'
+import { askConfirm, askText, useSession } from '../../store/session'
+import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu } from './stageCommands'
-import { st, useStage } from './stageStore'
+import { effectiveJoints, st, useStage } from './stageStore'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
@@ -109,12 +110,46 @@ function CamerasTab() {
   )
 }
 
+// ST2 (16 §3d): presets (built-in + the project's saved ones), the pose verbs, the selected joint's angles. While this tab is open the
+// viewport shows the joint pickers: click a joint for the rotate gizmo, click a hand / foot handle and drag it (two-bone IK).
+function PosesTab() {
+  const current = useStage((s) => s.current)
+  const o = useStage((s) => s.object(s.selected))
+  const joint = useStage((s) => s.selectedJoint)
+  const userPoses = useStage((s) => s.userPoses)
+  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
+  if (!o || o.kind !== 'mannequin') return <div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">Select a figure — then click a joint for the rotate gizmo, or drag a hand / foot handle.</span></div>
+  const joints = effectiveJoints(o)
+  const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
+  const setJoint = (nv: number[]) => { if (joint) st().setJoints(o.id, { ...joints, [joint]: nv }) }
+  return (
+    <div className="stage-panel">
+      <div className="head"><b>{o.name}</b><span className="hint">pose · {o.pose?.preset ?? 'stand'}{Object.keys(o.pose?.joints ?? {}).length ? ' (edited)' : ''}</span></div>
+      <h4>Presets</h4>
+      <div className="lib-grid">{POSE_NAMES.map((p) => <button key={p} className={o.pose?.preset === p && !Object.keys(o.pose?.joints ?? {}).length ? 'active' : ''} onClick={() => st().applyPose(o.id, p)}>{p}</button>)}</div>
+      <h4>Saved in this project</h4>
+      {!Object.keys(userPoses).length && <span className="hint">None yet — pose the figure and Save pose….</span>}
+      <div className="lib-grid">{Object.entries(userPoses).map(([name, def]) => (
+        <span key={name} className="pose-card"><button onClick={() => st().applyPose(o.id, def.preset ?? 'stand', def.joints)}>{name}</button>
+          <button className="quiet" title="Delete this pose" onClick={() => void askConfirm({ title: `Delete the pose "${name}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deletePose(name) })}>×</button></span>
+      ))}</div>
+      <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text /></div>
+      <h4>Joint</h4>
+      <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
+      {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
+      <p className="hint">Orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools.</p>
+    </div>
+  )
+}
+
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) void st().load() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'outliner') return <OutlinerTab />
   if (tab === 'cameras') return <CamerasTab />
+  if (tab === 'poses') return <PosesTab />
   return <LibraryTab />
 }
 
@@ -162,6 +197,8 @@ function Viewport() {
   const view = useStage((s) => s.view)
   const guides = useStage((s) => s.guides)
   const frameReq = useStage((s) => s.frameRequest)
+  const selectedJoint = useStage((s) => s.selectedJoint)
+  const poseMode = useSuiteRail().active === 'poses'                                   // ST2: the Poses tab shows the joint pickers
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
     (d) => { const id = d.items.find((i) => i.kind === 'asset' && i.media !== 'video')?.id; const e = engineRef.current; const p = lastPointer.current; if (id && e) st().addObject('plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), id) },
@@ -173,9 +210,11 @@ function Viewport() {
     const engine = new StageEngine(canvas, {
       onPick: (id) => st().select(id),
       onTransformed: (id, t) => st().setTransform(id, t),
+      onPosed: (id, joints) => st().setJoints(id, joints),
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
+    if (DEV_HOOKS) (window as unknown as { __loom2Stage?: unknown }).__loom2Stage = { screenOf: (at: string) => engine.screenOf(at as Joint) }   // the smoke test aims the mouse at joints and handles
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
@@ -187,18 +226,23 @@ function Viewport() {
   useEffect(() => { engineRef.current?.setTool(tool, snap) }, [tool, snap])
   useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
+  useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
+  useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
   const down = useRef<{ x: number; y: number; t: number } | null>(null)
   const onDown = (e: ReactPointerEvent) => { if (e.button === 0) down.current = { x: e.clientX, y: e.clientY, t: Date.now() } }
   const onUp = (e: ReactPointerEvent) => {
     const d = down.current; down.current = null
     const eng = engineRef.current
     if (!d || !eng || e.button !== 0 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
-    st().select(eng.pick(e.clientX, e.clientY))
+    const p = eng.pick(e.clientX, e.clientY)
+    if (p.joint && p.id) { st().selectJoint(p.joint) }                                 // the rotate gizmo moves to the joint (FK)
+    else if (p.ik && p.id) { st().selectJoint(null); eng.startIk(p.id, p.ik) }         // a translate handle on the hand / foot (IK)
+    else st().select(p.id)
   }
   const onMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     const eng = engineRef.current
-    const id = eng ? eng.pick(e.clientX, e.clientY) : null
+    const id = eng ? eng.pick(e.clientX, e.clientY).id : null
     if (id) st().select(id)
     showMenu(e, viewportMenu(!!id))
   }
@@ -248,7 +292,7 @@ export function Inspector() {
         <Vec label="position" v={t.pos} onChange={(pos) => st().setTransform(o.id, { ...t, pos })} />
         <Vec label="rotation" v={t.rot} onChange={(rot) => st().setTransform(o.id, { ...t, rot })} step={1} />
         <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
-        {o.kind === 'mannequin' && <div className="kv"><span>pose</span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().updateObject(o.id, { pose: { preset: e.target.value, joints: {} } })}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>}
+        {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select>{Object.keys(o.pose?.joints ?? {}).length ? <span className="hint"> edited</span> : null}</span></div>}
         {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
         <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
         <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>

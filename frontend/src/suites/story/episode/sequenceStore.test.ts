@@ -1,7 +1,7 @@
 // P17 (D83): the document ↔ lane conversions and the clip-bin drop rule.
 import { describe, expect, it } from 'vitest'
-import type { Clip, Timeline } from '../../api/types'
-import { laneDrop } from '../../frame/dropRules'
+import type { Clip, Timeline } from '../../../api/types'
+import { laneDrop } from '../../../frame/dropRules'
 import { clipsOf, laneClipFrom, laneOf } from './sequenceStore'
 
 const tl = { id: 'tl_1', name: 'S', fps: 24, w: 1920, h: 1080, revision: 2, schema_version: 1, created_at: '', updated_at: '',
@@ -13,7 +13,15 @@ describe('sequence conversions', () => {
     const lane = laneOf(tl)
     expect(lane.clips[0]).toEqual({ id: 'a', source: 'clp_a', in: 0, out: 120 })
     expect(lane.clips[1]).toEqual({ id: 'b', source: 'clp_b', in: 5, out: 81, fps: 16 })
-    expect(clipsOf(lane)).toEqual([{ id: 'a', clip_id: 'clp_a', in: 0, out: 120, fps: null }, { id: 'b', clip_id: 'clp_b', in: 5, out: 81, fps: 16 }])
+    const none = { shot_id: null, shot_version: null, node_id: null }                              // SY4: the stamps ride along, null when a plain clip
+    expect(clipsOf(lane)).toEqual([{ id: 'a', clip_id: 'clp_a', in: 0, out: 120, fps: null, ...none }, { id: 'b', clip_id: 'clp_b', in: 5, out: 81, fps: 16, ...none }])
+  })
+  it("a shot version's clip keeps its stamps through the lane and back (17 §3e)", () => {
+    const stamped = { ...tl, clips: [{ ...tl.clips[0], shot_id: 'sht_1', shot_version: 'v2', node_id: 'node_9' }] }
+    const lane = laneOf(stamped)
+    expect(lane.clips[0].shot).toEqual({ id: 'sht_1', version: 'v2', node: 'node_9' })
+    expect(clipsOf(lane)[0]).toMatchObject({ shot_id: 'sht_1', shot_version: 'v2', node_id: 'node_9' })
+    expect(laneClipFrom(clip('clp_w', 24, 10), 24, { id: 'sht_1', version: 'v1', node: null }).shot).toEqual({ id: 'sht_1', version: 'v1', node: null })
   })
   it('a new lane clip takes the whole Catalogue clip', () => {
     const c = laneClipFrom(clip('clp_w', 16, 81), 24)

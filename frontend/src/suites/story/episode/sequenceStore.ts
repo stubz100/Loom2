@@ -2,24 +2,25 @@
 // playhead, a command-pattern undo stack, and debounced saves that carry the document's revision (409 → reload, the change is lost
 // and the toast says so). Project data lives here and on disk, never in component state.
 import { create } from 'zustand'
-import { ApiError, http, unwrap } from '../../api/client'
-import type { Clip, Timeline, TimelineClipIn } from '../../api/types'
-import { useSession } from '../../store/session'
+import { ApiError, http, unwrap } from '../../../api/client'
+import type { Clip, Timeline, TimelineClipIn } from '../../../api/types'
+import { useSession } from '../../../store/session'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip } from './lane'
 
-export type ExportFormat = 'edl' | 'fcpxml'
+export type ExportFormat = 'edl' | 'fcpxml' | 'srt'
 
 /** The server document as the pure lane the view and the maths use. */
 export function laneOf(tl: Timeline): Lane {
-  return { fps: tl.fps, clips: tl.clips.map((c) => ({ id: c.id, source: c.clip_id, in: c.in, out: c.out, ...(c.fps && c.fps !== tl.fps ? { fps: c.fps } : {}) })), overlaps: [...tl.overlaps] }
+  return { fps: tl.fps, clips: tl.clips.map((c) => ({ id: c.id, source: c.clip_id, in: c.in, out: c.out, ...(c.fps && c.fps !== tl.fps ? { fps: c.fps } : {}),
+    ...(c.shot_id && c.shot_version ? { shot: { id: c.shot_id, version: c.shot_version, node: c.node_id ?? null } } : {}) })), overlaps: [...tl.overlaps] }
 }
 /** The lane back into the document's clip rows. */
 export function clipsOf(lane: Lane): TimelineClipIn[] {
-  return lane.clips.map((c) => ({ id: c.id, clip_id: c.source, in: c.in, out: c.out, fps: c.fps ?? null }))
+  return lane.clips.map((c) => ({ id: c.id, clip_id: c.source, in: c.in, out: c.out, fps: c.fps ?? null, shot_id: c.shot?.id ?? null, shot_version: c.shot?.version ?? null, node_id: c.shot?.node ?? null }))
 }
 /** A new lane clip from a Catalogue clip: the whole clip, its own rate kept when it differs from the lane's. */
-export function laneClipFrom(clip: Clip, laneFps: number): LaneClip {
-  return { id: `${clip.id}-${Date.now().toString(36)}`, source: clip.id, in: 0, out: clip.frames, ...(clip.fps !== laneFps ? { fps: clip.fps } : {}) }
+export function laneClipFrom(clip: Clip, laneFps: number, shot?: { id: string; version: string; node: string | null }): LaneClip {
+  return { id: `${clip.id}-${Date.now().toString(36)}`, source: clip.id, in: 0, out: clip.frames, ...(clip.fps !== laneFps ? { fps: clip.fps } : {}), ...(shot ? { shot } : {}) }
 }
 
 interface SequenceState {
@@ -43,6 +44,8 @@ interface SequenceState {
   undoEdit: () => void
   redoEdit: () => void
   addClip: (clip: Clip) => void
+  /** 17 §3e: a shot version's clip, stamped with the shot, its version and its owner node (the Shots bin). */
+  addShot: (clip: Clip, shot: { id: string; version: string; node: string | null }) => void
   removeClip: (i: number) => void
   moveClip: (from: number, to: number) => void
   trimClip: (i: number, edge: 'in' | 'out', delta: number, sourceLen: number) => void
@@ -127,6 +130,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
   redoEdit: () => { const r = get().redo; if (!r.length || !get().lane) return; set({ lane: r[r.length - 1], redo: r.slice(0, -1), undo: [...get().undo, get().lane!] }); if (saveTimer) window.clearTimeout(saveTimer); saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300) },
 
   addClip: (clip) => { const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps)), 'add clip'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
+  addShot: (clip, shot) => { const fps = get().lane?.fps ?? 24; get().apply((l) => append(l, laneClipFrom(clip, fps, shot)), 'add shot'); set({ selected: (get().lane?.clips.length ?? 1) - 1 }) },
   removeClip: (i) => { get().apply((l) => remove(l, i), 'remove clip'); set({ selected: null }) },
   moveClip: (from, to) => { get().apply((l) => move(l, from, to), 'move clip'); set({ selected: to }) },
   trimClip: (i, edge, delta, sourceLen) => get().apply((l) => trim(l, i, edge, delta, () => sourceLen), 'trim'),

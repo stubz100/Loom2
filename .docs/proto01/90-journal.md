@@ -3634,3 +3634,40 @@ split by file so that no two hands touched the same module.
 - No rig run: SY3 queues no job (the acceptance is the smoke and the unit tests; 17 §12 item 4 is covered by the scenario).
 - Not in SY3: node colours in the Inspector (the field exists), a Choice option's `set` editor (the model has it; the Action node sets),
   centring the canvas on an outline click. Next: SY4 Episode (the Sequence tab moves to Story).
+
+## 2026-10-13 22:49 — SY4 · Episode: the lane moves into Story, the Shots bin, the checklist, subtitles and chapter markers (17 §3e / §10, D85)
+- **The move (D83's "until Story's Episode tab exists"):** `lane.ts`, `sequenceStore.ts`, `SequencePanel.tsx`, `SequenceStage.tsx`,
+  `sequenceCommands.ts` and their tests went from `suites/animate/` to `suites/story/episode/` by `git mv` (imports re-pointed, the
+  commands renamed `story.episode.*` in the Story scope — the lane's Delete key dropped, `story.world.remove` has it; Ctrl+Z / Ctrl+Shift+Z
+  are the Story suite's undo now); the Animate rail lost its Sequence tab, the Story rail gained Episode; `?suite=animate&tab=sequence`
+  lands on Story · Episode (`suiteRegistry` and the session's deep link, one release). The Episode tab: Panel = the sequences, **the Shots
+  bin** (every shot whose current version has a clip, final first, named with its owner node, `+` adds it stamped) and the Clips bin; Stage
+  = the lane as it was; Inspector = the sequence, **the checklist** (a plain clip, a version not final, a stale one — advisory, loom R153
+  per 02 §7), the exports EDL · FCPXML + markers · SRT · Render draft, the clip's shot; the panel foot **Export ▶** (FCPXML) with "n of m
+  clips not final shots".
+- **Backend:** `TimelineClip.shot_id / shot_version / node_id` (optional — Animate-era documents load unchanged; the lane carries them as
+  `LaneClip.shot` through every edit); `timelines.py`: `to_srt` (loom R152: each lane clip's Dialogue lines laid evenly over its ticks,
+  SubRip times from the lane), `to_markers` (the sidecar `markers.txt`, `HH:MM:SS:FF<TAB>name`), `to_fcpxml` with a `<marker>` at the head
+  of every named clip (loom R158 — Resolve reads them; unnamed clips stay self-closing), `TimelineStore.export(…, name_of, lines_of)`
+  writing `markers.txt` beside the FCPXML; the export route takes `srt` and reads the Story records — a clip's chapter name is its
+  node's title, else its shot's name; its lines are its node's (or the node bound to its shot). The route snapshot is unchanged.
+- **Frontend:** `laneChecklist()` (what on the lane is not a final shot version, with the reason) and `exportChecked(format)` — the
+  export asks with the list when something is not final and goes on when the author says so (17 §14.5); `addShot(clip, {id, version,
+  node})`; `csp_check.py` pages `story-flow` and `story-episode` (Mediabunny in the Story chunk) — clean.
+- **Checks:** `tests/test_story_episode_d85.py` (+2: SubRip times and the even layout over a dissolve, the markers sidecar, the FCPXML
+  marker per named clip, the route end to end — the stamps round-trip and are optional, the SRT with the bound node's two lines, the
+  FCPXML with one marker named by the node and `markers.txt`, EDL, an unknown format 422); the moved unit tests (+1: the stamps through
+  the lane and back); the P17 scenario moved to Story · Episode (the checklist asks on the EDL export of a plain clip); the smoke scenario
+  "an episode": a format-size fake-engine clip → a final shot → a Dialogue node with a line bound to it; the old deep link opens Story ·
+  Episode; the Shots bin shows the shot *final* with its node's name, `+` puts it on the lane stamped, a plain clip beside it; the
+  checklist names clip 2 and the foot says "1 of 2 clips not final shots"; Export ▶ asks "1 of 2 clips not finalized shots", the FCPXML
+  carries one marker named by the node, the SRT the line at 00:00:00,000; Animate's rail has no Sequence tab — 25/25 under `full` and
+  `open`. 292 offline, 204 unit, lint 100, tsc and build clean, CSP clean on seven pages, audits clean.
+- **The author's check (17 §3e):** the Resolve import of an FCPXML with markers and an `.srt` — not mine to run.
+- **CI on SY3 (35cc759) failed on both variants in the Flow scenario:** on the runner's smaller window the three nodes stacked at the view's
+  centre overlapped, and a mouse drag of the Start grabbed the Dialogue (two columns instead of three). The scenario now lays the nodes
+  out through `PUT /story/flow/graph`, reloads and fits, and keeps one mouse drag on the free Choice node (its saved y moves); passes
+  under both variants here. Lesson: an e2e mouse gesture on React Flow nodes needs nodes that cannot overlap at any window size.
+- Not in SY4: the Shots bin as a drop source onto the lane with stamps (its drag carries the clip, the stamps come with `+`); a per-clip
+  "hold / freeze" at a transition (loom R157, the lane trims into content). Next: SY5 alpha — `scripts/sy_acceptance.py` through the six
+  workflows of 17 §4 on the rig, the docs, D85's acceptance mark.

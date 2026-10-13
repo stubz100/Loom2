@@ -84,7 +84,7 @@ under the timeline. Keys and verbs are registry commands (`anim.*`, 36 of them) 
 Frames ruler with **S** and **E** markers (end only in FLF mode); in/out handles; keyframe "beats" for LTX
 (draggable markers with strength); extracted frames show as pins; the jobs list sits below (collapsible).
 
-### 5b. Sequence tab (P17, D83 — 2026-10-12)
+### 5b. Sequence tab (P17, D83 — 2026-10-12; **moved to Story · Episode on 2026-10-13 by 17 SY4 (D85)** — the lane, its bin, the exports and the draft render live there now with the Shots bin, the checklist, `.srt` and chapter markers; `?suite=animate&tab=sequence` redirects for one release)
 A sixth rail tab houses the single-lane timeline until the Story workspace's Episode tab exists (14, loom P5). **Panel:** the
 project's sequences (New… · open; rename and delete in the Inspector) and the **Clips bin** — every clip of the project, dragged onto
 the lane (the ghost says "Add to the end of the sequence"; images are refused) or added with its **+**. **Stage** (while the tab is

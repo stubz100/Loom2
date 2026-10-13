@@ -1,0 +1,80 @@
+// P17 (D83): the Sequence tab's verbs — every one has a mouse home (the lane's context menu, the Inspector, the transport) per D32;
+// undo / redo take Ctrl+Z / Ctrl+Shift+Z in the Animate scope (the clip player has no undo of its own).
+import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, Clapperboard, FileDown, Pause, Play, Plus, Redo2, Scissors, SkipBack, SkipForward, Trash2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { registerCommands, sep, type MenuItem } from '../../../frame/commands'
+import { askConfirm, askText, useSession } from '../../../store/session'
+import { useAnimate } from '../../animate/animateStore'
+import { useStory } from '../storyStore'
+import { duration, ticks } from './lane'
+import { useSequence } from './sequenceStore'
+
+const sq = () => useSequence.getState()
+const hasSeq = () => !!sq().current
+const hasSel = () => hasSeq() && sq().selected !== null && !!sq().lane?.clips[sq().selected!]
+const an = () => useAnimate.getState()
+
+/** 17 §3e: what on the lane is not a final shot version — a plain clip, a draft version, a stale one (advisory, 02 §7). */
+export function laneChecklist(): { i: number; what: string }[] {
+  const lane = sq().lane; if (!lane) return []
+  const st = useStory.getState()
+  const out: { i: number; what: string }[] = []
+  lane.clips.forEach((c, i) => {
+    if (!c.shot) { out.push({ i, what: 'a plain clip, not a shot' }); return }
+    const sh = st.shots.find((s) => s.id === c.shot!.id)
+    const v = sh?.versions.find((x) => x.id === c.shot!.version)
+    if (!sh || !v) out.push({ i, what: 'its shot is gone' })
+    else if (v.state !== 'final') out.push({ i, what: `${sh.name} ${v.id} is not final` })
+    else if (st.shotStale(v)) out.push({ i, what: `${sh.name} ${v.id} is stale (its stage moved)` })
+  })
+  return out
+}
+
+/** The export goes on after a look at the checklist when something on the lane is not a final shot (loom R153 kept advisory). */
+async function exportChecked(format: 'edl' | 'fcpxml' | 'srt'): Promise<void> {
+  const issues = laneChecklist()
+  const n = sq().lane?.clips.length ?? 0
+  if (issues.length) {
+    const ok = await askConfirm({ title: `Export with ${issues.length} of ${n} clips not finalized shots?`, okLabel: 'Export anyway',
+      text: issues.slice(0, 6).map((x) => `clip ${x.i + 1}: ${x.what}`).join('\n') + (issues.length > 6 ? `\n… and ${issues.length - 6} more` : '') })
+    if (!ok) return
+  }
+  await sq().exportAs(format)
+}
+
+registerCommands([
+  { id: 'story.episode.new', scope: 'story', label: 'New sequence…', icon: Plus, placement: ['panel', 'context'],
+    run: () => void askText({ title: 'New sequence', text: 'A single lane at the project frame rate; clips come from the Clips bin.', placeholder: 'sequence name', initial: 'Sequence' }).then((n) => { if (n?.trim()) void sq().create(n.trim()) }) },
+  { id: 'story.episode.rename', scope: 'story', label: 'Rename sequence…', icon: Clapperboard, placement: ['inspector', 'context'], when: hasSeq,
+    run: () => void askText({ title: 'Rename sequence', initial: sq().current?.name ?? '', placeholder: 'sequence name' }).then((n) => { if (n?.trim()) void sq().rename(n.trim()) }) },
+  { id: 'story.episode.delete', scope: 'story', label: 'Delete sequence', icon: Trash2, placement: ['inspector', 'context'], when: hasSeq,
+    run: () => void askConfirm({ title: 'Delete this sequence?', text: 'The document and its exports go; the clips stay in the Catalogue.', okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void sq().destroy() }) },
+  { id: 'story.episode.addCurrent', scope: 'story', label: 'Add the current clip', icon: Plus, placement: ['panel', 'context'], when: () => hasSeq() && !!an().clip(),
+    run: () => { const c = an().clip(); if (c) sq().addClip(c) } },
+  { id: 'story.episode.removeClip', scope: 'story', label: 'Remove from the sequence', icon: Trash2, placement: ['inspector', 'context'], when: hasSel, run: () => sq().removeClip(sq().selected!) },
+  { id: 'story.episode.moveLeft', scope: 'story', label: 'Move clip earlier', icon: ArrowLeft, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! > 0, run: () => sq().moveClip(sq().selected!, sq().selected! - 1) },
+  { id: 'story.episode.moveRight', scope: 'story', label: 'Move clip later', icon: ArrowRight, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! < (sq().lane?.clips.length ?? 0) - 1, run: () => sq().moveClip(sq().selected!, sq().selected! + 1) },
+  { id: 'story.episode.dissolve', scope: 'story', label: 'Dissolve from the previous clip (12 frames)', icon: Scissors, placement: ['inspector', 'context'], when: () => hasSel() && sq().selected! > 0,
+    run: () => { const i = sq().selected!; const l = sq().lane!; sq().setDissolve(i, l.overlaps[i] ? 0 : Math.min(12, ticks(l, l.clips[i]) - 1, ticks(l, l.clips[i - 1]) - 1)) } },
+  { id: 'story.episode.undo', scope: 'story', label: 'Undo (sequence)', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => hasSeq() && sq().undo.length > 0, run: () => sq().undoEdit() },
+  { id: 'story.episode.redo', scope: 'story', label: 'Redo (sequence)', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => hasSeq() && sq().redo.length > 0, run: () => sq().redoEdit() },
+  { id: 'story.episode.play', scope: 'story', label: 'Play / pause the sequence', icon: Play, placement: ['toolbar', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => sq().togglePlay() },
+  { id: 'story.episode.stepBack', scope: 'story', label: 'Previous tick', icon: SkipBack, placement: ['toolbar'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead - 1) },
+  { id: 'story.episode.stepForward', scope: 'story', label: 'Next tick', icon: SkipForward, placement: ['toolbar'], when: hasSeq, run: () => sq().setPlayhead(sq().playhead + 1) },
+  { id: 'story.episode.home', scope: 'story', label: 'Sequence start', icon: ChevronFirst, placement: ['toolbar'], when: hasSeq, run: () => sq().setPlayhead(0) },
+  { id: 'story.episode.end', scope: 'story', label: 'Sequence end', icon: ChevronLast, placement: ['toolbar'], when: hasSeq, run: () => { const l = sq().lane; if (l) sq().setPlayhead(duration(l) - 1) } },
+  { id: 'story.episode.zoomIn', scope: 'story', label: 'Zoom the lane in', icon: ZoomIn, placement: ['toolbar'], when: hasSeq, run: () => sq().zoom(1.5) },
+  { id: 'story.episode.zoomOut', scope: 'story', label: 'Zoom the lane out', icon: ZoomOut, placement: ['toolbar'], when: hasSeq, run: () => sq().zoom(1 / 1.5) },
+  { id: 'story.episode.exportEdl', scope: 'story', label: 'Export EDL (CMX 3600)', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('edl') },
+  { id: 'story.episode.exportSrt', scope: 'story', label: 'Export subtitles (.srt from the nodes\' lines)', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('srt') },
+  { id: 'story.episode.exportFcpxml', scope: 'story', label: 'Export FCPXML 1.10', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('fcpxml') },
+  { id: 'story.episode.render', scope: 'story', label: 'Render a draft clip (CPU)', icon: Clapperboard, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().render() },
+  { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: hasSel,
+    run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Clips tab)', 'info') } },
+])
+
+/** Right-click on a lane clip (selected by the caller) or on the lane's empty space. */
+export function laneMenu(onClip: boolean): MenuItem[] {
+  return onClip
+    ? [{ cmd: 'story.episode.dissolve' }, { cmd: 'story.episode.moveLeft' }, { cmd: 'story.episode.moveRight' }, { cmd: 'story.episode.openClip' }, sep, { cmd: 'story.episode.removeClip' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+    : [{ cmd: 'story.episode.addCurrent' }, { cmd: 'story.episode.play' }, sep, { cmd: 'story.episode.exportEdl' }, { cmd: 'story.episode.exportFcpxml' }, { cmd: 'story.episode.exportSrt' }, { cmd: 'story.episode.render' }, sep, { cmd: 'story.episode.rename' }, { cmd: 'story.episode.delete' }, sep, { cmd: 'story.episode.undo' }, { cmd: 'story.episode.redo' }]
+}

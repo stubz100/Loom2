@@ -25,7 +25,7 @@ class TimelineCreate(BaseModel):
 
 
 class TimelineExport(BaseModel):
-    format: Literal["edl", "fcpxml"]
+    format: Literal["edl", "fcpxml", "srt"]   # 17 §3e (D85): .srt from the lane clips' Dialogue lines, markers with the FCPXML
 
 
 @router.get("/timelines", response_model=TimelineList)
@@ -112,7 +112,31 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
     if missing:
         raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
     try:
-        path, text = await asyncio.to_thread(store.export, tl, body.format, recs)
+        names, lines = await asyncio.to_thread(_story_lookup, ws)
+        path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines)
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"format": body.format, "path": path.relative_to(ws.path).as_posix(), "text": text}
+
+
+def _story_lookup(ws):
+    """17 §3e: a lane clip's chapter name (its node's title, else its shot's name) and its Dialogue lines, from the Story records."""
+    from ..story import StoryStore
+    from ..timelines import TimelineClip
+    store = StoryStore(ws)
+    shots = {sh.id: sh for sh in store.shots()}
+    nodes = store.flow_nodes()
+
+    def name_of(c: TimelineClip) -> str | None:
+        n = nodes.get(c.node_id) if c.node_id else None
+        if n is not None and (n.title or n.type):
+            return n.title or n.type
+        sh = shots.get(c.shot_id) if c.shot_id else None
+        return sh.name if sh is not None else None
+
+    def lines_of(c: TimelineClip) -> list[str]:
+        n = nodes.get(c.node_id) if c.node_id else None
+        if n is None and c.shot_id:
+            n = next((x for x in nodes.values() if x.shot_id == c.shot_id), None)
+        return [ln.text for ln in n.lines] if n is not None else []
+    return name_of, lines_of

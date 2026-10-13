@@ -84,7 +84,8 @@ export const useSession = create<SessionState>()(
           set({ backendError: (e as Error).message })
           return
         }
-        const deep = new URLSearchParams(location.search).get('suite')
+        const q0 = new URLSearchParams(location.search)
+        const deep = q0.get('suite') === 'animate' && q0.get('tab') === 'sequence' ? 'story' : q0.get('suite')   // 17 SY4: the Sequence tab moved to Story · Episode
         if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
         try {
           await get().refreshAll()

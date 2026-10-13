@@ -33,6 +33,9 @@ class TimelineClip(BaseModel):
     in_: int = Field(0, alias="in", ge=0)         # source frames used: [in, out)
     out: int = Field(..., gt=0)
     fps: int | None = None                        # the clip's own rate when it differs from the lane's (stamped on add from the ClipRecord)
+    shot_id: str | None = None                    # 17 §3e (D85): the Story shot this clip is (its version and owner node) — the Shots bin stamps them
+    shot_version: str | None = None
+    node_id: str | None = None
 
     @property
     def length(self) -> int:
@@ -162,13 +165,53 @@ def to_edl(tl: Timeline, title: str) -> str:
     return "\n".join(lines)
 
 
+def srt_tc(frames: int, fps: int) -> str:
+    """SubRip time: HH:MM:SS,mmm from lane ticks."""
+    ms = round(frames * 1000 / fps)
+    h, rem = divmod(ms, 3_600_000)
+    m, rem = divmod(rem, 60_000)
+    s, ms = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def to_srt(tl: Timeline, lines_of: Callable[[TimelineClip], list[str]]) -> str:
+    """SubRip (loom R152): each lane clip's node lines laid evenly across the clip's ticks (a dissolve's overlap shortens the first)."""
+    s = starts(tl)
+    out: list[str] = []
+    n = 0
+    for i, c in enumerate(tl.clips):
+        lines = [x.strip() for x in lines_of(c) if x and x.strip()]
+        if not lines:
+            continue
+        span = ticks(tl, c)
+        t0 = s[i]
+        per = max(1, span // len(lines))
+        for k, text in enumerate(lines):
+            a = t0 + k * per
+            b = t0 + span if k == len(lines) - 1 else t0 + (k + 1) * per
+            n += 1
+            out += [str(n), f"{srt_tc(a, tl.fps)} --> {srt_tc(max(a + 1, b), tl.fps)}", text, ""]
+    return "\n".join(out)
+
+
+def to_markers(tl: Timeline, name_of: Callable[[TimelineClip], str | None]) -> str:
+    """The sidecar list (loom R158): one line per lane clip with a name — `HH:MM:SS:FF<TAB>name`."""
+    s = starts(tl)
+    out = []
+    for i, c in enumerate(tl.clips):
+        name = name_of(c)
+        if name:
+            out.append(f"{tc(s[i], tl.fps)}\t{name}")
+    return "\n".join(out) + ("\n" if out else "")
+
+
 def _esc(x: str) -> str:
     return x.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
 
 
-def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, int, int]]) -> str:
+def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, int, int]], name_of: Callable[[TimelineClip], str | None] | None = None) -> str:
     """FCPXML 1.10: a format per frame rate, one asset per clip (`media(clip_id)` → name, src URL, frames, fps), a spine of
-    asset-clips with a cross dissolve where clips overlap."""
+    asset-clips with a cross dissolve where clips overlap; `name_of` gives a chapter marker at a clip's head (loom R158 — Resolve reads them)."""
     def t(fr: int, fps: int) -> str:
         return f"{fr}/{fps}s"
     clip_ids = list(dict.fromkeys(c.clip_id for c in tl.clips))
@@ -186,8 +229,15 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
         ov = tl.overlaps[i] if i > 0 else 0
         if ov > 0:
             spine.append(f'            <transition name="Cross Dissolve" offset="{t(s[i], tl.fps)}" duration="{t(ov, tl.fps)}"/>')
-        spine.append(f'            <asset-clip ref="a{k}" name="{_esc(name)}" offset="{t(s[i], tl.fps)}" start="{t(c.in_, fps)}" '
-                     f'duration="{t(c.length, fps)}" format="f{fps}" tcFormat="NDF"/>')
+        marker = name_of(c) if name_of else None
+        head = (f'            <asset-clip ref="a{k}" name="{_esc(name)}" offset="{t(s[i], tl.fps)}" start="{t(c.in_, fps)}" '
+                f'duration="{t(c.length, fps)}" format="f{fps}" tcFormat="NDF"')
+        if marker:
+            spine.append(head + ">")
+            spine.append(f'                <marker start="{t(c.in_, fps)}" duration="{t(1, fps)}" value="{_esc(marker)}"/>')
+            spine.append("            </asset-clip>")
+        else:
+            spine.append(head + "/>")
     return "\n".join([
         '<?xml version="1.0" encoding="UTF-8"?>', "<!DOCTYPE fcpxml>", '<fcpxml version="1.10">', "  <resources>", *formats, *assets,
         "  </resources>", "  <library>", f'    <event name="{_esc(title)}">', f'      <project name="{_esc(title)}">',
@@ -252,8 +302,10 @@ class TimelineStore:
             d.rmdir()
         return True
 
-    def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord]) -> tuple[Path, str]:
-        """Write the EDL or FCPXML beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL."""
+    def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord], name_of: Callable[[TimelineClip], str | None] | None = None,
+               lines_of: Callable[[TimelineClip], list[str]] | None = None) -> tuple[Path, str]:
+        """Write the EDL, FCPXML or SRT beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL and
+        carries a chapter marker per named clip (`name_of`), written to `markers.txt` beside it too; the SRT takes each clip's lines (`lines_of`)."""
         if fmt == "edl":
             text = to_edl(tl, tl.name)
         elif fmt == "fcpxml":
@@ -261,11 +313,15 @@ class TimelineStore:
                 rec = clips[cid]
                 src = (self.ws.path / rec.proxy_path).resolve().as_uri() if rec.proxy_path else cid
                 return cid, src, rec.frames, int(rec.fps)
-            text = to_fcpxml(tl, tl.name, media)
+            text = to_fcpxml(tl, tl.name, media, name_of)
+        elif fmt == "srt":
+            text = to_srt(tl, lines_of or (lambda c: []))
         else:
             raise ValueError(f"unknown export format {fmt!r}")
         d = self.export_dir(tl.id)
         d.mkdir(parents=True, exist_ok=True)
         out = d / f"{slugify(tl.name, 'sequence')}.{fmt}"
         atomic_write_text(out, text)
+        if fmt == "fcpxml" and name_of:
+            atomic_write_text(d / "markers.txt", to_markers(tl, name_of))
         return out, text

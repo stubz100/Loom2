@@ -87,7 +87,8 @@ def main() -> int:
         pages = {"catalogue": base + "&suite=catalogue", "edit": base + f"&suite=edit&doc={doc['id']}", "generate": base + "&suite=generate",
                  "generate-model": base + "&suite=generate&tab=model", "edit-ai": base + f"&suite=edit&doc={doc['id']}&tab=ai",
                  "edit-wasm": base + f"&suite=edit&doc={doc['id']}&wasmprobe=1",            # D59: the smart-select Worker's WebAssembly
-                 "story-flow": base + "&suite=story&tab=flow"}                                   # 17 SY3 (D85): React Flow's styles and scripts
+                 "story-flow": base + "&suite=story&tab=flow",                                  # 17 SY3 (D85): React Flow's styles and scripts
+                 "story-episode": base + "&suite=story&tab=episode"}                             # 17 SY4: the lane (Mediabunny) in the Story chunk
         violations: dict[str, list[str]] = {}
         for name, url in pages.items():
             OUT.mkdir(parents=True, exist_ok=True)

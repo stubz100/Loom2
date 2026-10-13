@@ -17,6 +17,10 @@ import { coverageGrid, rowsCovered } from './coverage'
 import { askExpand, rowMenu } from './storyCommands'
 import { CLASS_LABEL, SECTIONS, sy, useStory, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
+import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
+import { SequenceStage } from './episode/SequenceStage'
+import { laneChecklist } from './episode/sequenceCommands'
+import { useSequence } from './episode/sequenceStore'
 import { NODE_LABEL } from './flow/types'
 import { optionsAvailable } from './flow/play'
 import type { FlowNode, FlowOption } from '../../api/types'
@@ -191,6 +195,7 @@ export function Panel({ tab }: { tab: string }) {
   if (tab === 'cast') return <CastTab />
   if (tab === 'shots') return <ShotsTab />
   if (tab === 'flow') return <FlowTab />
+  if (tab === 'episode') return <SequencePanel />
   return <WorldTab />
 }
 
@@ -210,7 +215,20 @@ export function PrimaryAction() {
   const play = useStory((s) => s.play)
   const flowGraph = useStory((s) => s.flowGraph)
   const flowNodes = useStory((s) => s.flowNodes)
-  markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop')
+  const seqLane = useSequence((s) => s.lane)
+  const seqCurrent = useSequence((s) => s.current)
+  markUsed('story.cast.expand'); markUsed('story.shot.new'); markUsed('story.flow.play'); markUsed('story.flow.stop'); markUsed('story.episode.exportFcpxml'); markUsed('story.episode.new')
+  if (tab === 'episode') {
+    const issues = seqLane ? laneChecklist().length : 0
+    const n = seqLane?.clips.length ?? 0
+    return (
+      <div>
+        {seqCurrent ? <button className="primary" disabled={!n} onClick={() => runCommand('story.episode.exportFcpxml')} title="FCPXML with chapter markers (and markers.txt beside it); the checklist asks first when a clip is not a final shot">Export ▶</button>
+          : <button className="primary" onClick={() => runCommand('story.episode.new')}>New sequence…</button>}
+        <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no sequence open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }}>{issues} of {n} clips not final shots</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
+      </div>
+    )
+  }
   if (tab === 'flow') {
     const n = Object.keys(flowNodes).length
     return (
@@ -289,6 +307,9 @@ export function Strip() {
   const play = useStory((s) => s.play)
   const problems = useStory((s) => s.problems)
   markUsed('story.cast.lock'); markUsed('story.cast.newVersion'); markUsed('story.shot.finalize'); markUsed('story.shot.newVersion'); markUsed('story.shot.openStage'); markUsed('story.shot.openAnimate')
+  if (tab === 'episode') {
+    return <div className="story-strip"><span>Episode</span><span className="spacer" /><span className="hint">the hand-built render list: shots from the Shots bin, clips from the Clips bin; every join a cut or a dissolve</span></div>
+  }
   if (tab === 'flow') {
     return (
       <div className="story-strip flow-strip">
@@ -614,6 +635,7 @@ export function Stage() {
   if (tab === 'cast') return <CastPage />
   if (tab === 'shots') return <ShotBoard />
   if (tab === 'flow') return play ? <PlayView /> : <FlowCanvas />
+  if (tab === 'episode') return <SequenceStage />
   return <WorldEditor />
 }
 
@@ -823,6 +845,7 @@ export function Inspector() {
   if (tab === 'cast') return <CastInspector />
   if (tab === 'shots') return <ShotInspector />
   if (tab === 'flow') return <NodeInspector />
+  if (tab === 'episode') return <SequenceInspector />
   if (!world) return <span className="hint">Nothing selected.</span>
   const fmt = project.format
   const style = selected?.kind === 'style' ? world.styles.find((s) => s.id === selected.id) : undefined

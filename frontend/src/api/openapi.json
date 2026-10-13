@@ -10852,10 +10852,43 @@
             "title": "In",
             "type": "integer"
           },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
           "out": {
             "exclusiveMinimum": 0.0,
             "title": "Out",
             "type": "integer"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Version"
           }
         },
         "required": [
@@ -10863,7 +10896,10 @@
           "clip_id",
           "in",
           "out",
-          "fps"
+          "fps",
+          "shot_id",
+          "shot_version",
+          "node_id"
         ],
         "title": "TimelineClip",
         "type": "object"
@@ -10917,7 +10953,8 @@
           "format": {
             "enum": [
               "edl",
-              "fcpxml"
+              "fcpxml",
+              "srt"
             ],
             "title": "Format",
             "type": "string"

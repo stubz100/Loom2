@@ -3,11 +3,11 @@
 // both edges, a dissolve grip, the playhead; Ctrl+wheel zooms. Lifted from the E13 view (frontend/src/spikes/e13Timeline.ts).
 import { ALL_FORMATS, CanvasSink, Input, UrlSource } from 'mediabunny'
 import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { api } from '../../api/client'
-import type { Clip } from '../../api/types'
-import { CommandRow } from '../../frame/CommandButton'
-import { showMenu } from '../../frame/ContextMenu'
-import { useAnimate } from './animateStore'
+import { api } from '../../../api/client'
+import type { Clip } from '../../../api/types'
+import { CommandRow } from '../../../frame/CommandButton'
+import { showMenu } from '../../../frame/ContextMenu'
+import { useAnimate } from '../../animate/animateStore'
 import { at, duration, starts, tc, ticks, type Lane } from './lane'
 import { laneMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -212,10 +212,10 @@ export function SequenceStage() {
         {lane.clips.length ? <Preview lane={lane} w={current.w} h={current.h} byId={byId} /> : <div className="anim-empty">an empty lane — add a clip from the Clips bin (the panel), or <b>Add the current clip</b></div>}
       </div>
       <div className="transport">
-        <CommandRow ids={['anim.seq.home', 'anim.seq.stepBack', 'anim.seq.play', 'anim.seq.stepForward', 'anim.seq.end']} labels={{ 'anim.seq.play': playing ? 'Pause' : 'Play' }} />
+        <CommandRow ids={['story.episode.home', 'story.episode.stepBack', 'story.episode.play', 'story.episode.stepForward', 'story.episode.end']} labels={{ 'story.episode.play': playing ? 'Pause' : 'Play' }} />
         <span className="counter">{tc(playhead, lane.fps)} / {tc(total, lane.fps)} · tick {playhead}{what ? ` · ${lane.clips[what.a.i].source.replace(/^clp_/, '')} f${what.a.local}${what.b ? ` ⇢ ${lane.clips[what.b.i].source.replace(/^clp_/, '')} f${what.b.local} (${Math.round((what.mix ?? 0) * 100)} %)` : ''}` : ''}</span>
         <span className="spacer" />
-        <CommandRow ids={['anim.seq.undo', 'anim.seq.redo', 'gap', 'anim.seq.zoomOut', 'anim.seq.zoomIn']} />
+        <CommandRow ids={['story.episode.undo', 'story.episode.redo', 'gap', 'story.episode.zoomOut', 'story.episode.zoomIn']} />
       </div>
       <LaneView lane={lane} byId={byId} />
     </div>

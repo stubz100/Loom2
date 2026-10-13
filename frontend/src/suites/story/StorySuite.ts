@@ -3,6 +3,7 @@
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { Inspector, Panel, PrimaryAction, Stage, Strip } from './StoryParts'
+import './episode/sequenceCommands'                     // SY4: the lane's verbs register with the Story suite
 
 export const StorySuite: SuiteDef = {
   id: 'story',

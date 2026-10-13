@@ -6448,8 +6448,14 @@ export interface components {
              * @default 0
              */
             in: number;
+            /** Node Id */
+            node_id: string | null;
             /** Out */
             out: number;
+            /** Shot Id */
+            shot_id: string | null;
+            /** Shot Version */
+            shot_version: string | null;
         };
         /** TimelineCreate */
         TimelineCreate: {
@@ -6471,7 +6477,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "edl" | "fcpxml";
+            format: "edl" | "fcpxml" | "srt";
         };
         /**
          * TimelineExported

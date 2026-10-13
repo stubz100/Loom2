@@ -150,3 +150,11 @@
 .play-lines { width: min(960px, 100%); font-size: 15px; }
 .play-lines p { margin: 4px 0; }
 .play-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: min(960px, 100%); }
+
+/* SY4: the Episode tab — the Shots bin beside the Clips bin, the checklist */
+.shots-bin .seq-clip-card.shot { border-left: 3px solid var(--warn, #c7a23a); }
+.shots-bin .seq-clip-card.shot.final { border-left-color: var(--ok, #4caf50); }
+.shots-bin .seq-clip-card small { color: var(--fg3); }
+.seq-check { margin: 4px 0; padding-left: 16px; font-size: 12px; color: var(--fg2); }
+.seq-check li.ok { color: var(--ok, #4caf50); list-style: none; margin-left: -16px; }
+.seq-check li.warn { color: var(--warn, #c7a23a); }

@@ -10,10 +10,7 @@ import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButto
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { useSuiteRail, type SuiteDef } from '../../frame/suiteRegistry'
-import { SequenceInspector, SequencePanel } from './SequencePanel'
-import { SequenceStage } from './SequenceStage'
-import './sequenceCommands'
+import { type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
 import { playerMenu } from './animateCommands'
@@ -237,7 +234,6 @@ function Panel({ tab }: { tab: string }) {
   if (tab === 'length') return <LengthTab />
   if (tab === 'presets') return <PresetsTab />
   if (tab === 'clips') return <ClipsTab />
-  if (tab === 'sequence') return <SequencePanel />
   return <InputsTab />
 }
 
@@ -444,9 +440,7 @@ function Stage() {
   // deep link ?clip=<id> (the headed check and the verification loop)
   useEffect(() => { const q = new URLSearchParams(location.search).get('clip'); if (q && clips.some((c) => c.id === q) && an().current !== q) an().select(q) }, [clips])
   usePlayback()
-  const railTab = useSuiteRail().active
   if (!project?.open) return <div className="placeholder"><div><h2>Animate</h2>open or create a project to begin</div></div>
-  if (railTab === 'sequence') return <SequenceStage />                        // P17: the lane takes the stage while its tab is up
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
@@ -537,8 +531,6 @@ function LineageTab({ clip }: { clip: Clip }) {
 function Inspector() {
   const [tab, setTab] = useState<'clip' | 'frames' | 'lineage'>('clip')
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
-  const railTab = useSuiteRail().active
-  if (railTab === 'sequence') return <SequenceInspector />
   if (!clip) return <span className="hint">No clip selected — clips appear here as they finish, or pick one in the Clips panel.</span>
   return (
     <div>

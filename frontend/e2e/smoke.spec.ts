@@ -373,20 +373,21 @@ test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
 })
 
-test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin, the document saves with its revision, the EDL is written', async ({ page }) => {
+test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine clip goes on a new lane from the bin, the document saves with its revision, the EDL is written', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   await contextChoose(page, tiles(page).nth(6), 'Animate from this frame (start)')
   const go = page.locator('.panel .foot button.primary', { hasText: /^Animate/ })
   await expect(go).toBeEnabled({ timeout: 20_000 })
   await go.click()
-  await page.locator('nav.rail button[title^="Sequence"]').click()
-  await expect(page.locator('.seq-clip-card')).toHaveCount(1, { timeout: 120_000 })    // the clip lands when its proxy is ready (clip.ready)
+  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()                 // 17 SY4 (D85): the lane lives in Story · Episode now
+  await page.locator('nav.rail button[title^="Episode"]').click()
+  await expect(page.locator('.seq-bin:not(.shots-bin) .seq-clip-card')).toHaveCount(1, { timeout: 120_000 })    // the clip lands when its proxy is ready (clip.ready)
   await page.locator('.seq-list-head button[title^="New sequence"]').click()
   const dialog = page.locator('.modal.ask')
   await dialog.locator('input').fill('Reel one')
   await dialog.locator('button.primary').click()
   await expect(page.locator('.seq-row.active')).toContainText('Reel one')
-  await page.locator('.seq-clip-card button').first().click()                            // + : add the clip to the end of the lane
+  await page.locator('.seq-bin:not(.shots-bin) .seq-clip-card button').first().click()    // + : add the clip to the end of the lane
   await expect(page.locator('.seq-clip')).toHaveCount(1)
   await expect(page.locator('.seq-canvas')).toBeVisible()
   const thumb = page.locator('.seq-clip .seq-thumbs img').first()                          // C24 frame thumbnails across the block
@@ -396,13 +397,14 @@ test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin,
   const tl = (await api<{ items: { id: string; name: string; clips: { out: number }[] }[] }>('GET', '/timelines')).items.find((t) => t.name === 'Reel one')!
   expect(tl.clips).toHaveLength(1)
   await page.locator('.seq-insp button', { hasText: /^EDL$/ }).click()
+  await page.locator('.modal.ask button.primary', { hasText: /^Export anyway$/ }).click()  // the checklist: a plain clip is not a final shot (advisory)
   await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText('.edl')
   const exported = await api<{ format: string; text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'edl' })
   expect(exported.text).toContain('TITLE: Reel one')
   expect(exported.text).toContain('V     C')
   // the draft render: a CPU job that becomes a second clip in the bin, with lineage to the first
   await page.locator('.seq-insp button', { hasText: /^Render draft$/ }).click()
-  await expect(page.locator('.seq-clip-card')).toHaveCount(2, { timeout: 120_000 })
+  await expect(page.locator('.seq-bin:not(.shots-bin) .seq-clip-card')).toHaveCount(2, { timeout: 120_000 })
   const clips = await api<{ items: { id: string; model_id: string; frames: number; fps: number; asset_id: string | null }[] }>('GET', '/clips')
   const render = clips.items.find((c) => c.model_id === 'sequence')!
   const source = clips.items.find((c) => c.model_id !== 'sequence')!
@@ -873,12 +875,17 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await page.locator('.story-strip button[aria-label="Add Choice"]').click()
   await expect(page.locator('.flow-node')).toHaveCount(3)
   const start = page.locator('.flow-node.t-start'), dlg = page.locator('.flow-node.t-dialogue'), choice = page.locator('.flow-node.t-choice')
-  // the nodes landed stepped at the view's centre: drag them apart with the mouse (saved on drop), then Fit
-  const move = async (node: ReturnType<typeof page.locator>, dx: number, dy: number) => { const a = await centre(node.locator('.head')); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(a.x + 10, a.y + 6, { steps: 3 }); await page.mouse.move(a.x + dx, a.y + dy, { steps: 12 }); await page.mouse.up() }
-  await move(start, -260, -120)
-  await move(choice, 260, 120)
+  // the nodes landed stepped at the view's centre (they overlap on a small window): lay them out through the index, then one mouse drag
+  type Graph = { graph: { revision: number; nodes: { id: string; x: number; y: number }[]; edges: unknown[]; start: string | null } }
+  const g0 = (await api<Graph>('GET', '/story/flow')).graph
+  const ids = { start: (await start.getAttribute('data-id'))!, dlg: (await dlg.getAttribute('data-id'))!, choice: (await choice.getAttribute('data-id'))! }
+  await api('PUT', '/story/flow/graph', { revision: g0.revision, nodes: [{ id: ids.start, x: 0, y: 0 }, { id: ids.dlg, x: 340, y: 0 }, { id: ids.choice, x: 680, y: 0 }], edges: g0.edges, start: g0.start })
+  await page.evaluate(() => (window as unknown as { __loom2Story: Hook }).__loom2Story.loadFlow())
   await page.locator('.story-strip button[aria-label="Fit the graph"]').click()
-  await expect.poll(async () => { const g = (await api<FlowLite & { graph: { nodes: { id: string; x: number }[] } }>('GET', '/story/flow')).graph; return new Set(g.nodes.map((n) => Math.round(n.x / 50))).size }).toBe(3)   // three distinct columns, saved
+  await expect.poll(async () => (await api<Graph>('GET', '/story/flow')).graph.nodes.find((n) => n.id === ids.choice)?.x).toBe(680)
+  const before = await centre(choice.locator('.head'))
+  await page.mouse.move(before.x, before.y); await page.mouse.down(); await page.mouse.move(before.x + 10, before.y + 6, { steps: 3 }); await page.mouse.move(before.x + 10, before.y + 90, { steps: 10 }); await page.mouse.up()   // a drag saves on drop
+  await expect.poll(async () => (await api<Graph>('GET', '/story/flow')).graph.nodes.find((n) => n.id === ids.choice)?.y ?? 0, { timeout: 10_000 }).toBeGreaterThan(40)
   // the Inspector: the Dialogue's title and line, the Choice's two options (each an out-port)
   await dlg.locator('.head').click()
   await page.locator('.inspector input[aria-label="node title"]').fill('Hello')
@@ -933,4 +940,59 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await expect(page.locator('.flow-node')).toHaveCount(3)
   await expect(page.locator('.flow-node.t-dialogue .shot img, .flow-node.t-dialogue .shot span')).toHaveCount(1)
   expect((await api<FlowLite>('GET', '/story/flow')).nodes.find((n) => n.type === 'dialogue')!.shot_id).toBeTruthy()
+})
+
+test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it stamped; the checklist names the plain clip; Export asks, writes the FCPXML with a chapter marker and markers.txt, and the SRT carries the node's line; the old deep link redirects", async ({ page }) => {
+  test.setTimeout(120_000)
+  // a final shot: a clip at the project format (the fake engine), a Dialogue node bound to it
+  const fmt = (await api<{ format: { width: number; height: number } }>('GET', '/project')).format
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=unprocessed&kind=image&sort=created_desc&limit=1')).items[0].id
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: fmt.width, height: fmt.height, frames: 9, fps: 16, prompt_text: 'episode clip' }, stage: false, origin: { suite: 'animate', surface: 'clip' } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const clipId = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  const name = `Ep ${Date.now().toString(36)}`
+  const shot = await api<{ id: string }>('POST', '/story/shots', { name, clip_id: clipId })
+  await api('POST', `/story/shots/${shot.id}/versions/v1/finalize`)
+  const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} node`, x: 900, y: 500 })
+  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: null, text: 'Open the gate.' }] })
+  await api('POST', `/story/flow/nodes/${node.id}/bind`, { shot_id: shot.id })
+  // the old Sequence deep link lands on Story · Episode
+  await openApp(page, { suite: 'animate', tab: 'sequence' })
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('nav.rail button.active[title^="Episode"]')).toBeVisible()
+  await page.locator('.seq-list-head button[title^="New sequence"]').click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(name)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.seq-row.active')).toContainText(name)
+  const card = page.locator(`.shots-bin .seq-clip-card[data-shot="${shot.id}"]`)
+  await expect(card).toHaveClass(/\bfinal\b/)
+  await expect(card).toContainText(`${name} node`)
+  await card.locator('button[aria-label^="add shot"]').click()                                // + : stamped with the shot, its version and its node
+  await expect(page.locator('.seq-clip')).toHaveCount(1)
+  await page.locator('.seq-bin:not(.shots-bin) .seq-clip-card button').first().click()         // a plain clip beside it
+  await expect(page.locator('.seq-clip')).toHaveCount(2)
+  type TL = { id: string; name: string; clips: { clip_id: string; shot_id: string | null; shot_version: string | null; node_id: string | null }[] }
+  await expect.poll(async () => (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)?.clips.length, { timeout: 10_000 }).toBe(2)
+  const tl = (await api<{ items: TL[] }>('GET', '/timelines')).items.find((t) => t.name === name)!
+  expect(tl.clips[0]).toMatchObject({ clip_id: clipId, shot_id: shot.id, shot_version: 'v1', node_id: node.id })
+  expect(tl.clips[1].shot_id).toBeNull()
+  await expect(page.locator('.seq-insp .seq-check li.warn')).toHaveCount(1)                   // clip 2: a plain clip
+  await expect(page.locator('.panel .foot .estimate')).toContainText('1 of 2 clips not final shots')
+  // Export ▶ (the panel foot): the checklist asks, then the FCPXML carries the marker; markers.txt and the SRT follow
+  await page.locator('.panel .foot button.primary', { hasText: /^Export/ }).click()
+  await expect(dialog).toContainText(/1 of 2 clips not finalized shots/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText('.fcpxml')
+  const fx = await api<{ text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'fcpxml' })
+  expect(fx.text).toContain(`value="${name} node"`)
+  expect(fx.text.match(/<marker /g)).toHaveLength(1)
+  const srt = await api<{ text: string }>('POST', `/timelines/${tl.id}/export`, { format: 'srt' })
+  expect(srt.text).toContain('Open the gate.')
+  expect(srt.text).toContain('00:00:00,000 -->')
+  // the Animate rail no longer has the tab
+  await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
+  await expect(page.locator('nav.rail button[title^="Sequence"]')).toHaveCount(0)
 })

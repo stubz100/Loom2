@@ -49,7 +49,8 @@ export const setRailTab = (suite: string, tab: string) => useRailState.getState(
 // ?suite=X&tab=Y opens that panel section at launch (07 §1.7 deep links; scripts/csp_check.py and the acceptance loops use it)
 {
   const q = new URLSearchParams(location.search)
-  const s = q.get('suite'), t = q.get('tab')
+  const s0 = q.get('suite'), t0 = q.get('tab')
+  const [s, t] = s0 === 'animate' && t0 === 'sequence' ? ['story', 'episode'] : [s0, t0]    // 17 SY4 (D85): the Sequence tab moved to Story · Episode (one release of redirect)
   if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(s, t)
   // D71: ?suite=edit&tool=ai&ai=select[&sel=subject][&asset=<id>] — Edit with that tool / AI operation chosen (frame/openWith.ts)
   if (q.get('tool') || q.get('ai')) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })

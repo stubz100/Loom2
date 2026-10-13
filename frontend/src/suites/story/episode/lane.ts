@@ -4,7 +4,7 @@
 // the previous clip is a dissolve (14 R157). The server (orchestrator/loom2/timelines.py) does the same maths and writes the exports;
 // `toEDL` here exists for the parity test and a live preview.
 
-export interface LaneClip { id: string; source: string; in: number; out: number; fps?: number }   // source frames [in, out) of clip `source`
+export interface LaneClip { id: string; source: string; in: number; out: number; fps?: number; shot?: { id: string; version: string; node: string | null } }   // source frames [in, out) of clip `source`; 17 §3e: the Story shot it is
 export interface Lane { fps: number; clips: LaneClip[]; overlaps: number[] }                     // overlaps[i]: ticks clip i dissolves over clip i-1
 export interface Shown { i: number; local: number }                                               // clip index, source frame
 export interface At { a: Shown; b?: Shown; mix?: number }                                         // b over a by mix (0 → a, 1 → b)

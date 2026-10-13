@@ -3671,3 +3671,31 @@ split by file so that no two hands touched the same module.
 - Not in SY4: the Shots bin as a drop source onto the lane with stamps (its drag carries the clip, the stamps come with `+`); a per-clip
   "hold / freeze" at a transition (loom R157, the lane trims into content). Next: SY5 alpha — `scripts/sy_acceptance.py` through the six
   workflows of 17 §4 on the rig, the docs, D85's acceptance mark.
+
+## 2026-10-14 01:21 — SY5 · the Story alpha: 17 §12 through the app on the rig, the documents closed (17 §10, D85)
+- **`scripts/sy_acceptance.py` grew the rest of 17 §12** and ran as one pass (its own orchestrator + engine, Edge via CDP on the dev server):
+  `world` (item 1), `sy1` with `durability` inside (items 2 and 6), `sy2` (item 3), `sy3` (item 4), `sy4` (item 5). Dev hooks for it:
+  `__loom2Story.openTab`, `__loom2Sequence` (the lane's store, DEV only).
+- **Rig (00:59–01:19, 71 checks ok, `engine/spikes/out/sy/`):** *world* — two styles, the first the default, the World tab shows both; the
+  preview appends style B's fragment; a Klein 9B job with style B done in 31 s, its manifest stamping `style_id` and the fragment that ran.
+  *sy1* — Mara v1 from the heroine (the hero its page's cover), the Cast page shows her; Expand Full coverage queues 36 jobs; **the
+  orchestrator killed after 3 jobs and relaunched on the same state with `--project`: the queue came back paused with the 33 others
+  queued, the world and the profile at their revisions, the page back on the socket; `POST /queue/unpause` resumed it** (the engine had
+  gone with the killed process and came back cold on the next job: 33.9 s, then 10.6 s median) — 36/36 done in 411 s; 36 candidates
+  with their cells, the Cast page lists them; 30 kept with every shot-size row, the rejected marked, the grid tinted; Lock → 423 on the
+  page, the stub 422, the strip's badge; `@Mara` → v1 with the hero first, the stub on the note; a Generate job with the mention done
+  in 38 s with the stamp in its manifest. *sy2* — the clay frame landed on the shot (32 s), the Wan draft clip (84 s) refused with the
+  format in the reason, the Full one (1920×1072, 25 f, 621 s) accepted → final, the strip says final, then stale after a focal change.
+  *sy3* — six nodes, six edges, the SY2 shot bound (a second bind 422), Validate names only the two empty end shots, the canvas shows
+  the six, Play stops at the Dialogue (the play view with the lines and the bound clip), Push sets the variable and takes *then*, Wait
+  takes *else*, the job count unchanged. *sy4* — the lane's first clip the final shot stamped with its version and node, the FCPXML with
+  one marker "At the gate", `markers.txt`, the SRT with the two lines, the EDL, the draft render in 15 s. A first pass of the same
+  script stalled for an hour after the relaunch: my script had called `/queue/release` (staged jobs) instead of `/queue/unpause` (the
+  Resume the banner offers); `wait_jobs` now gives up when nothing finishes for 15 min and the check counts the jobs it asked for.
+- **Docs:** 17's status closes (SY0–SY5 built, D85 accepted with the alpha on the rig), 17 §12 gets the run's line, 13 D85 the acceptance
+  mark, 14 §5 and 12 §8d the built note, 08 §1 the SY row. The author's own checks stay theirs: the Resolve import of the FCPXML with
+  markers and the SRT (`engine/spikes/out/sy/` holds a reel's exports from this run), and the curation of a real cast by eye.
+- **What the alpha does not have (17 §13, by decision):** LoRA training (the version's `trigger` / `lora` slots wait for the LT wave),
+  voice and lip-sync, Muse (spike E15 first, then queued assistants only), continuity chains beyond Animate's extract → first/last frame,
+  a hold / freeze at a transition, re-rolling one thin coverage cell into the candidates page. Next: the author's checks; then the LT wave
+  (03 §5 item 2) or Klein tiers / SeedVR2 (03 §5 items 3 and 5) — the author's call; E15 before any Muse work.

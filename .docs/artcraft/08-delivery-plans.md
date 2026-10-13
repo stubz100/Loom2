@@ -36,6 +36,7 @@ D34 has modified.
 | **Spikes** | E10, E11, E12, E13, E14 | Stage conditioning (image, video), angles, timeline, image → mesh | ≈ 13 d | H2 (P1 registry to land winners) |
 | **ST · Stage suite** (with Story L3) | P13 | 3D blocking with control passes | ≈ 25–30 d | E10/E11 decided, UI doc approved (D12), P5 policy |
 | **Later** | P14 build, P17 build, P18 build | angles verb, single-lane timeline, mesh props | 6 / 10 / 6 d | E12 / E13 / E14 passed |
+| **SY · Story workspace** (D85, `../proto01/17-ui-suite-story.md`) | SY0–SY5 | bible · cast · shots · flow · episode on the shipped foundation (loom's design re-planned, 14 §4) | ≈ 28 d | every proposal P1–P19 built (2026-10-13); P17's lane moves into the Episode tab |
 
 ```
 D34 commit ─► H1: P7 ─► P19 ─► P8 ─► P3

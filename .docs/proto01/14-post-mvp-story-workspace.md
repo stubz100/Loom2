@@ -48,4 +48,6 @@ advisory; provenance must be stamped at write time; verify on the rig, not in CI
 
 Agenda items 1–4 are answered in 17 §0 and §9: a `story/` directory of records beside the shipped groups, clips, stages and timelines;
 Cast → Expand → Curate as Catalogue / Generate verbs; the Animate presets as the video tiers (no drive tier); Muse deferred behind a
-spike (E15) to a wave after the Story alpha. Slices SY0–SY5 in 17 §10; defaults to approve in 17 §14.
+spike (E15) to a wave after the Story alpha. Slices SY0–SY5 in 17 §10; defaults to approve in 17 §14. **Built 2026-10-13/14; the alpha
+acceptance (17 §12) passed on the rig 2026-10-14.** The author's own checks: the Resolve import of an exported FCPXML with markers and
+an SRT (`engine/spikes/out/sy/`), and curating a real cast by eye.

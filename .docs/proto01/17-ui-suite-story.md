@@ -1,6 +1,6 @@
 # 17 · Suite F — Story (bible → cast → shots → flow → episode) — UI document and plan
 
-Status: **approved 2026-10-13 (D85) with the §14 defaults; SY0–SY4 built 2026-10-13, SY5 next.** Proposed the same day as the output of the refining session
+Status: **built — SY0–SY5 2026-10-13/14; the alpha acceptance (§12) passed on the rig 2026-10-14 (71 checks), D85 accepted.** Approved 2026-10-13 with the §14 defaults. Proposed the same day as the output of the refining session
 14 §4 asked for, held after every ArtCraft proposal (P1–P19) was built (08 §1). Source: loom's storyboard design (14 §1:
 `kb-storyboard01.md` L1–L4 and R1–R170, `kb-loom-p1..p6.md`, `kb-loom-ui.md`), adopted as-is by D23 and now **re-planned on
 loom2's shipped foundation** — nothing of loom's intent is dropped, but every piece is mapped onto what already runs: groups and
@@ -257,7 +257,7 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 | **SY2 Shots** | shot records, versions, takes, finalize gate (format), stale mark, the Shots board + player + Inspector, the verbs in Stage (camera → shot; ST3 / ST4 results fill the version), Animate (clip → shot, use as clip / frame) and the Catalogue; `story.changed` events; **rig:** a stage camera → frame + guided clip on one version, finalized at 1920×1080 — **built 2026-10-13** (journal of that day): `story.py` `Shot` / `ShotVersion` / `ShotTake`, `finalize_reason` (the format within the video grids' 32 px), `record_stage_result` called by the asset and clip finishers (a camera's ST3 frame and ST4 clip become takes of the shots pointing at it, the empty slot filled), `routes/story.py` shots · versions · take · finalize; the Shots rail tab (list by owner, the version strip with Finalize and the stale badge, the board with version cards, the player and the takes, the Inspector), `story.shot.*`, *New shot from this camera…* (Stage · Cameras and Shot tabs), *Make a shot from this clip…* (Animate's transport, a clip tile); `scripts/sy_acceptance.py --part sy2` | 5 d |
 | **SY3 Flow** | `@xyflow/react`, node files + index, the eight node types, ports and edges, bind / spawn / release (R146), variables and conditions, `play.ts` + the play Stage (no AI), Validate; unit tests on the walker and the index rebuild — **built 2026-10-13** (journal of that day): `story.py` `FlowNode` / `FlowGraph` (one file per node, the index rebuilt from the files), `node_ports`, `validate_flow`, bind / unbind / spawn with sole ownership, `routes/story.py` flow routes; `@xyflow/react` 12.12 on `suites/story/flow/FlowCanvas.tsx`, `play.ts` (pure, 3 unit tests), the Flow rail tab (outline + variables, the palette on the Strip, the node Inspector with lines · options · condition · sets editors and the shot binding, the play view); *Make a Flow node from this beat* on World | 7 d |
 | **SY4 Episode** | the Sequence tab moved (redirect), shot stamps, the Shots bin, the checklist + `askConfirm`, `.srt`, markers in FCPXML + sidecar; parity tests; **author:** Resolve import with markers and subtitles — **built 2026-10-13** (journal of that day): the lane modules moved to `suites/story/episode/` (`story.episode.*` commands in the Story scope, `?suite=animate&tab=sequence` redirects), `TimelineClip.shot_id / shot_version / node_id`, the Shots bin, `laneChecklist` + the export's `askConfirm`, `to_srt` / `to_markers` and the FCPXML `<marker>` per named clip (`timelines.py`), the export route reading the Story records, `csp_check` pages for Flow and Episode. The Resolve import of markers and subtitles is the author's check | 4 d |
-| **SY5 Alpha** | `scripts/sy_acceptance.py` (§12) through the app on the rig, the smoke scenarios on the fake engine for both variants, docs (this document's built notes, 08 §1, 12, 14), the D85 acceptance mark | 3 d |
+| **SY5 Alpha** | `scripts/sy_acceptance.py` (§12) through the app on the rig, the smoke scenarios on the fake engine for both variants, docs (this document's built notes, 08 §1, 12, 14), the D85 acceptance mark — **done 2026-10-14** (journal of that day): the script runs §12 items 1–6 in one pass (`--part world,sy1,durability,sy2,sy3,sy4`), 71 checks ok on the rig; smoke 25/25 under both variants; 13, 14, 12 and 08 updated | 3 d |
 
 ≈ 28 d. SY1 and SY3 are independent after SY0; SY2 needs SY1 only for the speaker chips (none in SY2), so SY2 can run beside SY1.
 
@@ -282,6 +282,9 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 5. Episode: three clips from the Shots bin, one dissolve, the checklist names the non-final clip, Export → EDL + FCPXML (markers) +
    `.srt`; the draft render job lands as a clip.
 6. Kill the app mid-Expand → relaunch resumes paused with the remaining cells queued; every record reopens at its revision.
+
+**Run 2026-10-14 (journal 2026-10-14):** all six items through `scripts/sy_acceptance.py` on the rig — 71 checks ok (the orchestrator killed
+after 3 of 36 Expand jobs, relaunched with the project, the queue paused with 33 queued, resumed; the rest as the items say).
 
 ## 13. Later waves (not in this plan; order from 03 §5)
 - **LT · LoRA training** (03 §5 item 2, loom P2): ai-toolkit on ROCm as a staged job from a locked version's ref set, template

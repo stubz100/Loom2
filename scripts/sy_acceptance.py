@@ -2,8 +2,14 @@
 coverage cell on D78's clay model, Klein 9B) → the candidates on the version's page with their cells → curate ≥ 25 into the reference set
 with every shot-size row covered → Lock (the album refuses) → `@Mara` resolves to the locked version with the hero first, and a Generate
 job with the mention records the stamp. SY2 (item 3): a stage with a camera → "New shot from this camera" → the camera's clay frame
-arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is refused by the gate with the reason, a Full-size LTX clip
-(1920×1080 → the model's grid) used as the clip is accepted → final → the stage moved → stale. `--part sy1,sy2` picks.
+arrives on the shot's v1 as its frame (the finisher's link) → a draft clip is refused by the gate with the reason, a Full-size clip
+(1920×1080 → the model's grid) used as the clip is accepted → final → the stage moved → stale. SY5 (17 §12, the alpha): `world` (item 1:
+two styles, a Generate job with style B stamps `style_id` and appends the fragment), `durability` inside SY1 (item 6: the orchestrator
+killed mid-Expand and relaunched → the queue resumes paused with the rest queued, the records reopen at their revisions, release →
+the rest run), `sy3` (item 4: five nodes with a Choice and a Condition through the API, the SY2 shot bound, a second bind refused,
+Validate, Play through both branches with the job count unchanged), `sy4` (item 5: a sequence with the final shot stamped and a plain
+clip, the checklist, EDL + FCPXML with a marker + markers.txt + the SRT with the node's line, the draft render as a clip).
+`--part world,sy1,sy2,sy3,sy4` picks (`durability` is a part of its own).
 
 Needs the frontend dev server on 1420 (`npx vite --host 127.0.0.1 --port 1420 --strictPort` in frontend/), a visible Edge, and port 8188
 free: the orchestrator it starts launches the engine itself (a standalone engine writes its outputs elsewhere — stop it first,
@@ -64,15 +70,21 @@ def status_of(method: str, path: str, body=None) -> int:
         return e.code
 
 
-def wait_jobs(ids: list[str], timeout_s: float = 3600) -> dict[str, dict]:
-    """Every job of `ids` in a terminal state; returns them by id (progress printed as they finish)."""
+def wait_jobs(ids: list[str], timeout_s: float = 3600, progress_s: float = 900) -> dict[str, dict]:
+    """Every job of `ids` in a terminal state; returns them by id (progress printed as they finish). Gives up when nothing finishes for
+    `progress_s` (a paused queue, a dead engine) — the caller sees fewer jobs than it asked for."""
     t0 = time.time()
+    last = time.time()
     done: dict[str, dict] = {}
     while time.time() - t0 < timeout_s and len(done) < len(ids):
         for j in api("GET", "/jobs")["items"]:
             if j["id"] in ids and j["id"] not in done and j["status"] in ("done", "failed", "cancelled"):
                 done[j["id"]] = j
+                last = time.time()
                 print(f"  job {len(done)}/{len(ids)} {j['status']} wall {j.get('wall_s')}", flush=True)
+        if time.time() - last > progress_s:
+            print(f"  no job finished for {progress_s:.0f} s — giving up on the rest ({len(done)}/{len(ids)})", flush=True)
+            break
         time.sleep(1.0)
     return done
 
@@ -97,7 +109,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default="full")
     ap.add_argument("--keep", type=int, default=30, help="how many candidates to keep (by cell order, every shot-size row first)")
-    ap.add_argument("--part", default="sy1,sy2", help="which slices to run")
+    ap.add_argument("--part", default="world,sy1,durability,sy2,sy3,sy4", help="which slices to run")
     a = ap.parse_args()
     if not EDGE:
         print("Edge not found"); return 2
@@ -117,8 +129,8 @@ def main() -> int:
                                               "engine": {"port": 8188}})
     env = {**os.environ, "LOOM2_TOKEN": TOKEN, "PYTHONIOENCODING": "utf-8"}
     orch_log = (OUT / "orchestrator.log").open("w", encoding="utf-8")                       # never a pipe: an unread pipe fills and stalls the server mid-job
-    orch = subprocess.Popen([sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")], cwd=str(ROOT / "orchestrator"), env=env,
-                            stdout=orch_log, stderr=subprocess.STDOUT, text=True)
+    proc = {"orch": subprocess.Popen([sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")], cwd=str(ROOT / "orchestrator"), env=env,
+                                      stdout=orch_log, stderr=subprocess.STDOUT, text=True), "env": env, "log": orch_log, "state": tmp / "state", "project": tmp / "proj"}
     edge = None
     failures: list[str] = []
     rows: list[dict] = []
@@ -164,34 +176,111 @@ def main() -> int:
             check(False, f"the Story suite loaded (dev hook present) — page errors: {cdp.page_errors()[:3]}")
             return 1
         check(True, "the Story suite loaded (dev hook present)")
+        ctx: dict = {"shot": None, "clip": None, "node": None}
+        if "world" in parts:
+            world(cdp, hero, caps, check, rows, failures)
         if "sy1" in parts:
-            sy1(cdp, hero, caps, a, check, rows, failures)
+            sy1(cdp, hero, caps, a, check, rows, failures, proc if "durability" in parts else None)
         if "sy2" in parts:
-            sy2(cdp, hero, check, rows, failures)
+            sy2(cdp, hero, check, rows, failures, ctx)
+        if "sy3" in parts:
+            sy3(cdp, check, rows, failures, ctx)
+        if "sy4" in parts:
+            sy4(cdp, check, rows, failures, ctx)
     finally:
-        code = finish(edge, orch, orch_log, failures)                                     # every path, the early returns included
+        code = finish(edge, proc, failures)                                                # every path, the early returns included
     return code
 
 
-def sy1(cdp, hero, caps, a, check, rows, failures) -> None:
+def restart_orchestrator(proc: dict, check) -> None:
+    """17 §12 item 6: kill the orchestrator mid-work and relaunch it on the same state with the project reopened (the engine it launched
+    stays up and is adopted)."""
+    proc["orch"].kill()
+    try:
+        proc["orch"].wait(timeout=20)
+    except Exception:
+        pass
+    t0 = time.time()
+    while time.time() - t0 < 10:
+        try:
+            api("GET", "/health"); time.sleep(0.3)
+        except Exception:
+            break
+    proc["orch"] = subprocess.Popen([sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(proc["state"]), "--project", str(proc["project"])],
+                                    cwd=str(ROOT / "orchestrator"), env=proc["env"], stdout=proc["log"], stderr=subprocess.STDOUT, text=True)
+    t0 = time.time()
+    while time.time() - t0 < 90:
+        try:
+            if api("GET", "/project")["open"]:
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+    check(api("GET", "/project")["open"], "the orchestrator relaunched with the project open")
+
+
+def world(cdp, hero, caps, check, rows, failures) -> None:
+    """17 §12 item 1: two styles; a Generate job with style B stamps style_id and appends its fragment."""
+    w = api("GET", "/story/world")
+    styles = [{"id": "sty_ink", "name": "Ink wash", "fragment": "ink and wash storyboard, loose brush", "group_id": None},
+              {"id": "sty_film", "name": "Film still", "fragment": "cinematic film still, 35 mm, shallow depth of field", "group_id": None}]
+    w2 = api("PUT", "/story/world", {**w, "logline": "A courier must cross the city before dawn.", "styles": styles, "default_style": "sty_ink",
+                                     "variables": [{"name": "met_mara", "type": "bool", "values": [], "default": False}]})
+    check(w2["revision"] == w["revision"] + 1 and w2["default_style"] == "sty_ink", "the world holds two styles, the first the default")
+    cdp.eval("window.__loom2Story.openTab('world')")
+    check(cdp.wait_for("document.querySelectorAll('.world-editor .style-row').length === 2", timeout=30, settle=0.5), "the World tab shows both styles")
+    pv = api("POST", "/recipes/preview", {"recipe": {"kind": "t2i", "model_id": caps["model_id"], "prompt_mode": "text", "prompt_text": "a courier on a rooftop at dawn", "width": 960, "height": 544, "style_id": "sty_film"}})
+    check(pv["style_text"] == styles[1]["fragment"] and pv["serialized_prompt"].endswith(styles[1]["fragment"]), "the preview appends style B's fragment")
+    t0 = time.time()
+    job = api("POST", "/jobs", {"recipe": {"kind": "t2i", "model_id": caps["model_id"], "prompt_mode": "text", "prompt_text": "a courier on a rooftop at dawn", "width": 960, "height": 544, "seeds": [5], "style_id": "sty_film"},
+                                "stage": False, "origin": {"suite": "generate", "surface": "results"}})["jobs"][0]
+    j = wait_jobs([job["id"]]).get(job["id"], {"status": "missing"})
+    ok = j["status"] == "done" and bool(j.get("result", {}).get("asset_ids"))
+    check(ok, f"a Generate job with style B done in {time.time() - t0:.0f} s")
+    if ok:
+        a = api("GET", f"/assets/{j['result']['asset_ids'][0]}")
+        check(a["params"].get("style_id") == "sty_film" and a["params"].get("style_text") == styles[1]["fragment"] and a["prompt_text"].endswith(styles[1]["fragment"]), "the asset's manifest stamps style_id and the fragment that ran")
+        (OUT / "style_result.jpg").write_bytes(api("GET", f"/assets/{a['id']}/file", raw=True))
+    rows.append({"part": "world", "style_job_s": round(time.time() - t0, 1), "failures": list(failures)})
+
+
+def sy1(cdp, hero, caps, a, check, rows, failures, proc: dict | None = None) -> None:
     if True:
         # 1. the profile from the hero
         p = cdp.eval(f"window.__loom2Story.createProfile('Mara', 'character', {json.dumps(hero)}, {json.dumps(STUB)})", timeout=30)
         check(bool(p) and p["versions"][0]["hero_asset_id"] == hero, "the profile Mara v1 made with the hero")
         pid, gid = p["id"], p["versions"][0]["group_id"]
         check(api("GET", f"/groups/{gid}")["group"]["cover_id"] == hero, "the hero is the reference page's cover")
+        cdp.eval("window.__loom2Story.openTab('cast')")                                     # the world part may have left the suite on World
+        cdp.eval(f"window.__loom2Story.selectProfile({json.dumps(pid)})")
         check(cdp.wait_for("!!document.querySelector('.cast-page h2') && document.querySelector('.cast-page h2').textContent.includes('Mara')", timeout=20, settle=1.0), "the Cast page shows Mara")
         # 2. Expand: one job per cell, timed
         t_exp = time.time()
         r = cdp.eval(f"window.__loom2Story.expand({json.dumps(a.preset)}, 1, 'draft')", timeout=120)
         check(bool(r) and r["cells"] == caps["presets"][a.preset]["cells"] and len(r["job_ids"]) == r["cells"], f"Expand {a.preset}: {r and r['cells']} jobs queued in one batch")
+        if proc is not None:                                                             # 17 §12 item 6: killed mid-Expand, relaunched, resumed
+            t_first = time.time()
+            while time.time() - t_first < 600 and sum(1 for j in api("GET", "/jobs")["items"] if j["id"] in r["job_ids"] and j["status"] == "done") < 3:
+                time.sleep(1.0)
+            done_before = sum(1 for j in api("GET", "/jobs")["items"] if j["id"] in r["job_ids"] and j["status"] == "done")
+            rev_before = api("GET", f"/story/profiles/{pid}")["revision"]
+            restart_orchestrator(proc, check)
+            q = api("GET", "/queue")
+            left = [j for j in api("GET", "/jobs")["items"] if j["id"] in r["job_ids"] and j["status"] in ("queued", "running")]
+            check(q["paused"] and len(left) >= r["cells"] - done_before - 1, f"after the relaunch the queue is paused with {len(left)} of the Expand's jobs still queued ({done_before} done before the kill)")
+            check(api("GET", f"/story/profiles/{pid}")["revision"] == rev_before and api("GET", "/story/world")["revision"] >= 1, "the records reopened at their revisions")
+            check(cdp.wait_for("!!window.__loom2Story", timeout=60, settle=1.0), "the page is back on the relaunched orchestrator")
+            eng = api("GET", "/engine")
+            print("engine after the relaunch:", {k: eng.get(k) for k in ("running", "responding", "pid", "port") if k in eng}, flush=True)
+            q2 = api("POST", "/queue/unpause")                                             # the Resume the banner offers (a paused queue is not a staged one)
+            check(not q2["paused"], "the queue resumed (unpause)")
         jobs = wait_jobs(r["job_ids"])
         exp_wall = time.time() - t_exp
         walls = [j.get("wall_s") or 0 for j in jobs.values()]
         order = {jid: i for i, jid in enumerate(r["job_ids"])}
         first = min(jobs.values(), key=lambda j: order[j["id"]])
         warm = sorted(j.get("wall_s") or 0 for j in jobs.values() if j["id"] != first["id"])
-        check(all(j["status"] == "done" and j.get("result", {}).get("asset_ids") for j in jobs.values()), f"every job done with an asset ({len(jobs)}/{r['cells']}) in {exp_wall:.0f} s")
+        check(len(jobs) == r["cells"] and all(j["status"] == "done" and j.get("result", {}).get("asset_ids") for j in jobs.values()), f"every job done with an asset ({len(jobs)}/{r['cells']}) in {exp_wall:.0f} s")
         check(bool(warm) and max(warm) <= BARS["warm_s"], f"warm jobs ≤ {BARS['warm_s']:.0f} s: first (cold) {first.get('wall_s')} s, warm min / median / max {warm[0] if warm else 0:.1f} / {warm[len(warm)//2] if warm else 0:.1f} / {warm[-1] if warm else 0:.1f} s")
         cand = api("GET", f"/groups/{r['group_id']}")
         cands = list(cand["assets"].values())
@@ -247,7 +336,7 @@ def sy1(cdp, hero, caps, a, check, rows, failures) -> None:
         t0 = time.time()
         job = api("POST", "/jobs", {"recipe": {"kind": "t2i", "model_id": klein, "prompt_mode": "text", "prompt_text": "@Mara waits at the city gate at dawn", "width": 960, "height": 544, "seeds": [11],
                                                "mentions": [{"profile_id": pid, "name": "Mara"}]}, "stage": False, "origin": {"suite": "generate", "surface": "results"}})["jobs"][0]
-        j = wait_jobs([job["id"]])[job["id"]]
+        j = wait_jobs([job["id"]]).get(job["id"], {"status": "missing"})
         wall = time.time() - t0
         ok = j["status"] == "done" and bool(j.get("result", {}).get("asset_ids"))
         check(ok, f"a Generate job with @Mara done in {wall:.0f} s")
@@ -263,7 +352,7 @@ def sy1(cdp, hero, caps, a, check, rows, failures) -> None:
         print(json.dumps({k: v for k, v in rows[-1].items() if k != "walls"}, indent=1))
 
 
-def sy2(cdp, hero, check, rows, failures) -> None:
+def sy2(cdp, hero, check, rows, failures, ctx: dict | None = None) -> None:
     """17 §12 item 3: a stage camera → a shot; the clay frame lands on it; the gate refuses a draft clip and accepts a Full one; stale after a move."""
     fmt = api("GET", "/project")["format"]
     st = api("POST", "/stages", {"name": "SY2 gate"})
@@ -308,6 +397,8 @@ def sy2(cdp, hero, check, rows, failures) -> None:
             continue
         clip = api("GET", f"/clips/{j['result']['clip_id']}")
         rows_local[label] = {"clip": clip["id"], "w": clip["w"], "h": clip["h"], "frames": clip["frames"], "wall_s": round(wall, 1)}
+        if ctx is not None and label == "draft":
+            ctx["draft_clip"] = clip["id"]
         cdp.eval(f"window.__loom2Story.openShots({json.dumps(shot['id'])})")                     # the Shots tab with the shot selected (the strip's badges)
         cdp.eval(f"window.__loom2Story.useTake('clip', {json.dumps(clip['id'])}).then(() => true)", timeout=30)
         s3 = api("GET", f"/story/shots/{shot['id']}")
@@ -330,12 +421,102 @@ def sy2(cdp, hero, check, rows, failures) -> None:
     api("PUT", f"/stages/{st['id']}", {**st2, "cameras": [{**st2["cameras"][0], "focal_mm": 50}]})
     cdp.eval("window.__loom2Story.loadShots().then(() => true)", timeout=30)
     check(cdp.wait_for("!!document.querySelector('.story-strip .stale-badge')", timeout=20, settle=0.5), "the version is marked stale after the stage moved (advisory)")
+    if ctx is not None:
+        ctx["shot"] = shot["id"]
+        ctx["clip"] = rows_local.get("full", {}).get("clip")
+        ctx["frame"] = frame
     rows.append({"part": "sy2", **rows_local, "failures": list(failures)})
     (OUT / "results.jsonl").open("a", encoding="utf-8").write(json.dumps(rows[-1]) + "\n")
     print(json.dumps(rows[-1], indent=1))
 
 
-def finish(edge, orch, orch_log, failures) -> int:
+def sy3(cdp, check, rows, failures, ctx: dict) -> None:
+    """17 §12 item 4: five nodes with a Choice and a Condition, the SY2 shot bound (a second bind refused), Validate, Play through both
+    branches without a job being queued."""
+    shot = ctx.get("shot")
+    jobs_before = len(api("GET", "/jobs")["items"])
+    s = api("POST", "/story/flow/nodes", {"type": "start", "x": 0, "y": 0})
+    d = api("POST", "/story/flow/nodes", {"type": "dialogue", "title": "At the gate", "x": 320, "y": 0})
+    d = api("PATCH", f"/story/flow/nodes/{d['id']}", {"revision": d["revision"], "lines": [{"speaker": None, "text": "Let me through."}, {"speaker": None, "text": "The gate stays shut."}]})
+    c = api("POST", "/story/flow/nodes", {"type": "choice", "title": "Push or wait", "x": 640, "y": 0})
+    c = api("PATCH", f"/story/flow/nodes/{c['id']}", {"revision": c["revision"], "options": [{"id": "opt_push", "label": "Push through", "set": [{"var": "met_mara", "value": True}]}, {"id": "opt_wait", "label": "Wait"}]})
+    q = api("POST", "/story/flow/nodes", {"type": "condition", "title": "Met her?", "x": 960, "y": 0})
+    q = api("PATCH", f"/story/flow/nodes/{q['id']}", {"revision": q["revision"], "cond": {"var": "met_mara", "op": "eq", "value": True}})
+    e1 = api("POST", "/story/flow/nodes", {"type": "shot", "title": "Dawn", "x": 1280, "y": -80})
+    e2 = api("POST", "/story/flow/nodes", {"type": "shot", "title": "Dusk", "x": 1280, "y": 80})
+    g = api("GET", "/story/flow")["graph"]
+    g = api("PUT", "/story/flow/graph", {"revision": g["revision"], "nodes": g["nodes"], "start": s["id"],
+                                        "edges": [{"from": s["id"], "port": "out", "to": d["id"]}, {"from": d["id"], "port": "out", "to": c["id"]}, {"from": c["id"], "port": "opt:opt_push", "to": q["id"]},
+                                                  {"from": c["id"], "port": "opt:opt_wait", "to": q["id"]}, {"from": q["id"], "port": "then", "to": e1["id"]}, {"from": q["id"], "port": "else", "to": e2["id"]}]})
+    check(len(g["edges"]) == 6 and g["start"] == s["id"], "six nodes and six edges saved, the Start the start")
+    if shot:
+        b = api("POST", f"/story/flow/nodes/{d['id']}/bind", {"shot_id": shot})
+        check(b["shot"]["owner_node"] == d["id"], "the SY2 shot bound to the Dialogue (sole owner)")
+        check(status_of("POST", f"/story/flow/nodes/{e1['id']}/bind", {"shot_id": shot}) == 422, "a second node cannot bind the same shot (422)")
+    problems = api("POST", "/story/flow/validate")["problems"]
+    codes = sorted(p["code"] for p in problems)
+    check(codes == ["no_shot", "no_shot"], f"Validate lists only the two end shots without a shot: {codes}")
+    cdp.eval("window.__loom2Story.openTab('flow')")
+    cdp.eval("window.__loom2Story.loadFlow().then(() => true)", timeout=30)
+    check(cdp.wait_for("document.querySelectorAll('.flow-node').length === 6", timeout=30, settle=1.0), "the canvas shows the six nodes")
+    cdp.eval("window.__loom2Story.playStart()")
+    st = cdp.eval("window.__loom2Story.flow().play")
+    check(bool(st) and st["node"] == d["id"] and st["waiting"] == "next", "Play stops at the Dialogue")
+    check(cdp.wait_for("!!document.querySelector('[data-testid=\"play-view\"] .play-lines') && document.querySelector('[data-testid=\"play-view\"]').textContent.includes('Let me through.')", timeout=20, settle=0.5), "the play view shows the lines (and the bound shot's clip)")
+    cdp.eval("window.__loom2Story.playNext()")
+    cdp.eval("window.__loom2Story.playNext('opt_push')")
+    st = cdp.eval("window.__loom2Story.flow().play")
+    check(bool(st) and st["node"] == e1["id"] and st["vars"].get("met_mara") is True, "Push sets the variable; the Condition takes then → Dawn")
+    cdp.eval("window.__loom2Story.playNext()")
+    st = cdp.eval("window.__loom2Story.flow().play")
+    check(bool(st) and st["ended"], "the end after Dawn")
+    cdp.eval("window.__loom2Story.playStart()"); cdp.eval("window.__loom2Story.playNext()"); cdp.eval("window.__loom2Story.playNext('opt_wait')")
+    st = cdp.eval("window.__loom2Story.flow().play")
+    check(bool(st) and st["node"] == e2["id"], "Wait leaves the variable; the Condition takes else → Dusk")
+    cdp.eval("window.__loom2Story.playStop()")
+    check(len(api("GET", "/jobs")["items"]) == jobs_before, "play queued no job (loom R143)")
+    ctx["node"] = d["id"]
+    rows.append({"part": "sy3", "nodes": 6, "edges": 6, "problems": codes, "failures": list(failures)})
+
+
+def sy4(cdp, check, rows, failures, ctx: dict) -> None:
+    """17 §12 item 5: a sequence with the final shot (stamped) and a plain clip, the checklist, the exports with a marker and the lines,
+    the draft render as a clip."""
+    shot, clip_id = ctx.get("shot"), ctx.get("clip")
+    if not shot or not clip_id:
+        check(False, "sy4 needs sy2's final shot and clip"); return
+    clip = api("GET", f"/clips/{clip_id}")
+    tl = api("POST", "/timelines", {"name": "SY5 alpha reel"})
+    cdp.eval("window.__loom2Story.openTab('episode')")
+    check(cdp.wait_for("!!window.__loom2Sequence", timeout=30, settle=0.5), "the Episode tab loaded")
+    cdp.eval(f"window.__loom2Sequence.getState().load().then(() => window.__loom2Sequence.getState().open({json.dumps(tl['id'])})).then(() => true)", timeout=30)
+    cdp.eval(f"window.__loom2Sequence.getState().addShot({json.dumps(clip)}, {json.dumps({'id': shot, 'version': 'v1', 'node': ctx.get('node')})})")
+    draft = ctx.get("draft_clip")
+    if draft:
+        cdp.eval(f"window.__loom2Sequence.getState().addClip({json.dumps(api('GET', f'/clips/{draft}'))})")
+    t0 = time.time()
+    while time.time() - t0 < 20 and len(api("GET", f"/timelines/{tl['id']}")["clips"]) < (2 if draft else 1):
+        time.sleep(0.5)
+    doc = api("GET", f"/timelines/{tl['id']}")
+    check(doc["clips"][0]["shot_id"] == shot and doc["clips"][0]["shot_version"] == "v1" and doc["clips"][0]["node_id"] == ctx.get("node"), "the lane's first clip is the final shot, stamped with its version and node")
+    check(cdp.wait_for("document.querySelectorAll('.seq-clip').length >= 1", timeout=20, settle=0.5), "the lane shows the block")
+    fx = api("POST", f"/timelines/{tl['id']}/export", {"format": "fcpxml"})
+    check(fx["text"].count("<marker ") == 1 and 'value="At the gate"' in fx["text"], "the FCPXML carries one chapter marker named by the node")
+    markers = (Path(api("GET", "/project")["path"]) / "timelines" / tl["id"] / "markers.txt").read_text(encoding="utf-8")
+    check(markers.startswith("00:00:00:00\tAt the gate"), f"markers.txt: {markers.strip()!r}")
+    srt = api("POST", f"/timelines/{tl['id']}/export", {"format": "srt"})
+    check("Let me through." in srt["text"] and "The gate stays shut." in srt["text"] and srt["text"].count("-->") == 2, "the SRT carries the node's two lines, timed by the lane")
+    edl = api("POST", f"/timelines/{tl['id']}/export", {"format": "edl"})
+    check(edl["text"].startswith("TITLE: SY5 alpha reel"), "the EDL is written")
+    t0 = time.time()
+    jobs = api("POST", f"/timelines/{tl['id']}/render")["jobs"]
+    j = wait_jobs([jobs[0]["id"]])[jobs[0]["id"]]
+    check(j["status"] == "done" and bool(j.get("result", {}).get("clip_id")), f"the draft render (CPU) done in {time.time() - t0:.0f} s")
+    rows.append({"part": "sy4", "timeline": tl["id"], "render_s": round(time.time() - t0, 1), "failures": list(failures)})
+
+
+def finish(edge, proc: dict, failures) -> int:
+    orch, orch_log = proc["orch"], proc["log"]
     if edge:
         edge.terminate()
     try:
@@ -343,10 +524,18 @@ def finish(edge, orch, orch_log, failures) -> int:
     except Exception:
         pass
     try:
-        orch.wait(timeout=30)
+        orch.wait(timeout=60)
     except Exception:
         orch.kill()
     orch_log.close()
+    try:                                                                                   # an engine left by a killed orchestrator (the durability part)
+        urllib.request.urlopen(f"http://{ENGINE}/system_stats", timeout=2)
+        pid = subprocess.run(["powershell", "-NoProfile", "-Command", "(Get-NetTCPConnection -LocalPort 8188 -State Listen | Select-Object -First 1).OwningProcess"], capture_output=True, text=True).stdout.strip()
+        if pid.isdigit():
+            subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True)
+            print(f"stopped the leftover engine (pid {pid})")
+    except Exception:
+        pass
     print(f"{len(failures)} failure(s)" if failures else "all checks ok")
     return 1 if failures else 0
 

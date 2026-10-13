@@ -47,7 +47,8 @@ function devHook(): Record<string, unknown> {
     addNode: (t: FlowNode['type'], title?: string, at?: { x: number; y: number }) => sy().addNode(t, title, at), connect: (a: string, port: string, b: string) => sy().connect(a, port, b),
     patchNode: (id: string, patch: Record<string, unknown>) => sy().patchNode(id, patch as never), selectNode: (id: string | null) => sy().selectNode(id), validate: () => sy().validate(),
     playStart: () => sy().playStart(), playNext: (o?: string) => sy().playNext(o), playStop: () => sy().playStop(),
-    openShots: (id: string | null) => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); useSession.getState().setSuite('story'); sy().selectShot(id) }) } }
+    openShots: (id: string | null) => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); useSession.getState().setSuite('story'); sy().selectShot(id) }) },
+    openTab: (tab: 'world' | 'cast' | 'shots' | 'flow' | 'episode') => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', tab); useSession.getState().setSuite('story') }) } }
   return w.__loom2Story
 }
 if (DEV_HOOKS) devHook()

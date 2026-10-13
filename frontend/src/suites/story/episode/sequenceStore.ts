@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { ApiError, http, unwrap } from '../../../api/client'
 import type { Clip, Timeline, TimelineClipIn } from '../../../api/types'
 import { useSession } from '../../../store/session'
+import { DEV_HOOKS } from '../../../devHooks'
 import { append, at, duration, move, remove, setOverlap, starts, trim, type Lane, type LaneClip } from './lane'
 
 export type ExportFormat = 'edl' | 'fcpxml' | 'srt'
@@ -161,6 +162,8 @@ export const useSequence = create<SequenceState>()((set, get) => ({
 }))
 
 export const seqActive = (): boolean => !!useSequence.getState().current
+// dev: scripts/sy_acceptance.py drives the lane through the store (the smoke test uses the buttons)
+if (DEV_HOOKS) (window as unknown as { __loom2Sequence?: typeof useSequence }).__loom2Sequence = useSequence
 /** What the lane shows at the playhead (for the preview and the Inspector). */
 export function shownNow(): ReturnType<typeof at> {
   const { lane, playhead } = useSequence.getState()

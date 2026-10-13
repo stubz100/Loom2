@@ -1,7 +1,8 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Check, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftRight, Box, Check, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
 import { revealPath } from '../../shell/tauri'
@@ -48,7 +49,7 @@ registerCommands([
   { id: 'cat.animate', scope: 'catalogue', label: 'Animate from this frame (start)', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (!a) return
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); const clipId = (a.params as { clip_id?: string }).clip_id
         if (a.kind === 'video' && clipId) { useSession.getState().setSuite('animate'); void an.loadClips().then(() => an.select(clipId)) } else an.setStart(a.id, true) }) } },
-  { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame in Animate', icon: Film, keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind !== 'video', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
+  { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame in Animate', icon: Film, keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind === 'image', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
   { id: 'cat.reveal', scope: 'catalogue', label: 'Reveal in folder', icon: ExternalLink, keys: 'Ctrl+Shift+R', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (a) void revealPath(a.path) } },
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),
     run: () => { const list = ids(); const c = cat(); void c.trash(list).then(() => useSession.getState().toast(`Moved ${list.length} to trash`, 'info', () => void c.restore(list))) } },
@@ -76,13 +77,31 @@ registerCommands([
   { id: 'cat.next', scope: 'catalogue', label: 'Next image', icon: ChevronRight, keys: 'ArrowRight', placement: ['strip', 'context'], when: () => { const i = loupeIndex(); return i >= 0 && i < cat().visibleOrder().length - 1 }, run: () => { const c = cat(); c.openLoupe(c.visibleOrder()[loupeIndex() + 1]) } },
   { id: 'cat.closeLoupe', scope: 'catalogue', label: 'Back', icon: X, placement: ['strip', 'context'], when: () => !!cat().loupe || cat().compareOpen || !!cat().lineage, run: () => { const c = cat(); if (c.loupe) c.openLoupe(null); else if (c.lineage) c.openLineage(null); else c.setCompareOpen(false) } },
   // D71 (P15): "Start from this image" — Edit with the right AI tool already chosen
-  { id: 'cat.start.removeBg', scope: 'catalogue', label: 'Remove background…', icon: Eraser, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind !== 'video',
+  { id: 'cat.start.removeBg', scope: 'catalogue', label: 'Remove background…', icon: Eraser, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'edit', aiOp: 'select', selMode: 'subject' }) } },
-  { id: 'cat.start.upscale', scope: 'catalogue', label: 'Upscale in Edit…', icon: ImageUpscale, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind !== 'video',
+  { id: 'cat.start.upscale', scope: 'catalogue', label: 'Upscale in Edit…', icon: ImageUpscale, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'edit', aiOp: 'upscale' }) } },
   // P14 (D82): a new viewpoint of the image — Generate's Angle tab with this asset as the source
-  { id: 'cat.start.angle', scope: 'catalogue', label: 'New angle…', icon: Orbit, placement: ['inspector', 'context', 'toolbar'], when: () => !!primary() && primary()!.kind !== 'video',
+  { id: 'cat.start.angle', scope: 'catalogue', label: 'New angle…', icon: Orbit, placement: ['inspector', 'context', 'toolbar'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'generate', slot: 'angle' }) } },
+  // P18 (D84): a 3D prop from the image — Pixal3D as a background job, its cost said before it is queued; the mesh lands in the Catalogue
+  { id: 'cat.start.mesh', scope: 'catalogue', label: 'Make a 3D prop…', icon: Box, placement: ['inspector', 'context'],
+    when: () => !!primary() && primary()!.kind === 'image' && !!useSession.getState().capabilities?.mesh?.model_id,
+    run: () => {
+      const a = primary(); const mc = useSession.getState().capabilities?.mesh
+      if (!a || !mc?.model_id) return
+      const mins = (s: number | null | undefined) => (s ? `${Math.round(s / 60)} min` : '?')
+      void askConfirm({ title: 'Make a 3D prop from this image?', okLabel: 'Queue it',
+        text: `${mc.label} cuts the object out and builds a textured GLB (${mc.resolutions[0]}, ${Math.round(mc.faces / 1000)}k faces). About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, on this card${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}. It runs in the background; the prop lands here and in the Stage library.` })
+        .then(async (ok) => {
+          if (!ok) return
+          const s = useSession.getState()
+          try {
+            await unwrap(http.POST('/jobs', { body: { recipe: { kind: 'image_to_mesh', asset_id: a.id } as never, stage: false, origin: { suite: 'catalogue', surface: 'mesh', ref: a.id } } }))
+            s.toast(`Queued a 3D prop from ${a.id} (${mins(mc.seconds)})`, 'success')
+          } catch (e) { s.toast(`Make a 3D prop failed: ${(e as ApiError).detail ?? e}`, 'error') }
+        })
+    } },
   // D72: the loupe's and compare's own keys, now remappable (the buttons in their bars are these commands)
   { id: 'cat.loupe.fit', scope: 'catalogue', label: 'Fit to view', keys: 'Ctrl+0', placement: ['toolbar'], when: () => !!catView.fit, run: () => catView.fit?.() },
   { id: 'cat.loupe.one', scope: 'catalogue', label: 'Actual pixels (1:1)', keys: 'Ctrl+1', placement: ['toolbar'], when: () => !!catView.one, run: () => catView.one?.() },
@@ -113,7 +132,7 @@ export function tileMenu(): MenuItem[] {
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
     { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, sep,
-    { label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.animate' }, { cmd: 'cat.variations' }] }, sep,
+    { label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, { cmd: 'cat.animate' }, { cmd: 'cat.variations' }] }, sep,
     { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin from compare' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,
     ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),

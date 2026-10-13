@@ -5,12 +5,14 @@ with Turbo / LoRA chains, reference images and an exact serialisation preview (0
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -810,6 +812,64 @@ def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: s
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
+# ---- P18 (D84): image → mesh from the frozen Pixal3D graph --------------------------------------------------------------------------------
+_MESH_GRAPH: dict[str, Any] | None = None
+
+
+def mesh_graph_fixture() -> dict[str, Any]:
+    """The template's Pixal3D branch as scripts/make_mesh_graph.py froze it: `graph` (blank loader names) and `roles` (node id → role)."""
+    global _MESH_GRAPH
+    if _MESH_GRAPH is None:
+        _MESH_GRAPH = json.loads((Path(__file__).parent / "pixal3d_graph.json").read_text(encoding="utf-8"))
+    return _MESH_GRAPH
+
+
+def build_mesh(recipe: ImageToMesh, roster: Roster, seed: int, out_prefix: str, image_name: str) -> Compiled:
+    """The frozen graph with the roster's file names in its loaders, the source image, one seed in every sampler, the face count, the
+    upsample resolution and the output prefix; a `RenderMesh` view of the final mesh saved beside the GLB for the thumbnail."""
+    spec = registry.get(recipe.model_id)
+    if spec is None or not spec.recipes.mesh or spec.graph != "pixal3d":
+        raise CompileError(f"{recipe.model_id!r} is not an image → mesh model")
+    fx = mesh_graph_fixture()
+    g: dict[str, Any] = copy.deepcopy(fx["graph"])
+    roles: dict[str, str] = fx["roles"]
+    by_role = {r: k for k, r in roles.items()}
+    files = {"model": roster.require(spec.id)[1]}
+    for role in ("shape_vae", "texture_vae", "dino", "moge", "matte"):
+        rid = spec.roles.extra.get(role)
+        if not rid:
+            raise CompileError(f"the {spec.label} spec names no {role}")
+        files[role] = roster.require(rid)[1]
+    for k, role in roles.items():
+        node = g[k]
+        if role == "model":
+            node["inputs"]["unet_name"] = files["model"]
+        elif role in ("shape_vae", "texture_vae"):
+            node["inputs"]["vae_name"] = files[role]
+        elif role == "dino":
+            node["inputs"]["clip_name"] = files["dino"]
+        elif role == "moge":
+            node["inputs"]["model_name"] = files["moge"]
+        elif role == "matte":
+            node["inputs"]["bg_removal_name"] = files["matte"]
+        elif role == "image":
+            node["inputs"]["image"] = image_name
+        elif role == "sampler":
+            node["inputs"]["seed"] = int(seed)
+        elif role == "decimate":
+            node["inputs"]["target_face_count"] = int(recipe.faces)
+        elif role == "upsample":
+            node["inputs"]["target_resolution"] = int(recipe.resolution)
+        elif role == "save":
+            node["inputs"]["filename_prefix"] = out_prefix
+    final = by_role.get("final_mesh")
+    if final:
+        g["900"] = {"class_type": "RenderMesh", "inputs": {"mesh": [final, 0], "mode": "auto", "width": 512, "height": 512, "background": "#2a2a2e"}}
+        g["901"] = {"class_type": "SaveImage", "inputs": {"images": ["900", 0], "filename_prefix": out_prefix + "_view"}}
+    summary = {"model_id": spec.id, "resolution": recipe.resolution, "faces": recipe.faces, "seed": int(seed), "nodes": len(g), "template": fx.get("source")}
+    return Compiled(graph=g, output_node=by_role.get("save", "322"), summary=summary, serialized_prompt="")
+
+
 def upscale_factor(model_id: str) -> int:
     spec = registry.get(model_id)
     if spec is None or spec.recipes.upscale_factor is None:
@@ -912,7 +972,7 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
     return Compiled(graph=g, output_node="99", summary=summary | {"op": recipe.op, "expand": recipe.expand, "feather": recipe.feather}, serialized_prompt=recipe.text)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -944,6 +1004,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if not (i.get("clay") or i.get("pose")):
             raise CompileError("stage_shot needs the uploaded passes (pipeline.prepare_stage_shot)")
         c = build_stage_shot(recipe, roster, seed, out_prefix, i, ref_files, variant)
+    elif isinstance(recipe, ImageToMesh):
+        i = inputs or {}
+        if "image" not in i:
+            raise CompileError("image_to_mesh needs the uploaded source (pipeline.prepare_mesh)")
+        c = build_mesh(recipe, roster, seed, out_prefix, i["image"])
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -971,8 +1036,11 @@ def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, vari
     return _vram(recipe.model_id)
 
 
-def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot, variant: str = "full") -> list[str]:
+def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh, variant: str = "full") -> list[str]:
     """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
+    if isinstance(recipe, ImageToMesh):
+        spec = registry.get(recipe.model_id)
+        return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
         ids = spec.weights() if spec else [recipe.model_id]

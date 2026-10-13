@@ -8,7 +8,7 @@ import asyncio
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -172,7 +172,30 @@ async def asset_file(svc: Svc, asset_id: str):
     rec = await asyncio.to_thread(cat.get, asset_id)
     if not rec:
         raise HTTPException(404, "asset not found")
-    return FileResponse(cat.abs_path(rec), headers={**IMMUTABLE, "ETag": f'"{rec.sha256}"'})
+    media = "model/gltf-binary" if rec.path.lower().endswith(".glb") else None       # P18: a mesh asset is a GLB (the browser's loader needs the type)
+    return FileResponse(cat.abs_path(rec), media_type=media, headers={**IMMUTABLE, "ETag": f'"{rec.sha256}"'})
+
+
+@router.put("/assets/{asset_id}/thumbnail", response_model=AssetRecord)
+async def asset_thumbnail(svc: Svc, asset_id: str, request: Request):
+    """P18 (D84): a view rendered by the client becomes the asset's thumbnails — the Stage renders a mesh with a camera fitted to its bounding
+    sphere, which the engine's RenderMesh (its camera inside some props) cannot. A PNG body, ≤ 8 MB; the record notes `thumb_source: client`."""
+    ws, cat, _ = svc.require_project()
+    rec = await asyncio.to_thread(cat.get, asset_id)
+    if not rec:
+        raise HTTPException(404, "asset not found")
+    data = await request.body()
+    if len(data) > 8 * 2**20:
+        raise HTTPException(413, "a thumbnail is at most 8 MB")
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(400, "a PNG is expected")
+    tmp = ws.temp_dir / "thumbs" / f"{asset_id}.png"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(tmp.write_bytes, data)
+    rec.params = {**rec.params, "thumb_source": "client"}              # make_thumbs writes the manifest and the index with it
+    rec = await asyncio.to_thread(cat.make_thumbs, rec, tmp)
+    svc.hub.broadcast("asset.updated", rec.model_dump())
+    return rec
 
 
 @router.get("/thumbs/{asset_id}/{size}")

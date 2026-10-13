@@ -7,7 +7,9 @@
 // references"); the ghost shows ✓ or ✕ with that text while it hovers. `onDragHover` lets a target act on a long hover (spring-loaded tabs).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-export interface DragItem { kind: 'asset' | 'group'; id: string; media?: 'image' | 'video' }   // media: known where the drag starts
+export interface DragItem { kind: 'asset' | 'group'; id: string; media?: 'image' | 'video' | 'mesh' }   // media: known where the drag starts (mesh: P18, a GLB prop)
+/** The drag medium of an asset kind (every other kind drags as an image). */
+export const mediaOf = (kind: string | undefined): 'image' | 'video' | 'mesh' => (kind === 'video' ? 'video' : kind === 'mesh' ? 'mesh' : 'image')
 export interface DragPayload { items: DragItem[]; from?: string; thumb?: string; label?: string; onCancel?: () => void }
 export interface DropInfo { x: number; y: number; ctrl: boolean; el: HTMLElement }
 

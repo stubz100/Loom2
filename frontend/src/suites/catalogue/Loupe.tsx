@@ -72,7 +72,7 @@ export function Loupe({ asset }: { asset: Asset }) {
   return (
     <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, tileMenu()) }}>
       <div className="view" ref={ref} {...handlers}>
-        <img src={api.assetUrl(asset.id)} alt="" style={style(xf)} draggable={false} />
+        <img src={asset.kind === 'mesh' ? api.thumbUrl(asset.id, 1024) : api.assetUrl(asset.id)} alt="" style={style(xf)} draggable={false} />
       </div>
       <div className="facts">
         <CommandButton id="cat.prev" /><span>{idx + 1} / {order.length}</span><CommandButton id="cat.next" />
@@ -137,7 +137,7 @@ export function Compare({ assets }: { assets: Asset[] }) {
         {shown.map((a, i) => (
           <div key={a.id} className={`cell${diff && i > 0 ? ' diff' : ''}`} ref={i === 0 ? ref : undefined} {...handlers}>
             {diff && i > 0 && <img src={api.assetUrl(shown[0].id)} alt="" style={style(xf)} draggable={false} />}
-            <img className={diff && i > 0 ? 'over' : ''} src={api.assetUrl(a.id)} alt="" style={{ ...style(xf), ...(two && i === 1 && !diff ? { clipPath: `inset(0 0 0 ${wipe * 100}%)` } : {}) }} draggable={false} />
+            <img className={diff && i > 0 ? 'over' : ''} src={a.kind === 'mesh' ? api.thumbUrl(a.id, 1024) : api.assetUrl(a.id)} alt="" style={{ ...style(xf), ...(two && i === 1 && !diff ? { clipPath: `inset(0 0 0 ${wipe * 100}%)` } : {}) }} draggable={false} />
             {two && i === 1 && !diff && <div className="wipe" style={{ left: `${wipe * 100}%` }} />}
             <span className="tag">{String.fromCharCode(65 + i)} · {a.model_id ?? a.suite} · seed {a.seed ?? '—'}</span>
           </div>

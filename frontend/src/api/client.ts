@@ -61,6 +61,7 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: BodyI
 /** Byte transfers and URLs (D4: pixels never go through JSON). JSON calls use `unwrap(http.GET(…))` and friends (D38). */
 export const api = {
   putBlob: async (sha256: string, bytes: ArrayBuffer | Blob) => call<{ sha256: string; bytes: number }>('PUT', `/blobs/${sha256}`, undefined, bytes),
+  putThumbnail: async (assetId: string, png: Blob) => call<unknown>('PUT', `/assets/${assetId}/thumbnail`, undefined, png),   // P18: a client-rendered view
   fileUrl: (path: string) => withKey(baseUrl() + path),
   thumbUrl: (assetId: string, size: 256 | 512 | 1024 = 256) => withKey(`${baseUrl()}/thumbs/${assetId}/${size}`),
   assetUrl: (assetId: string) => withKey(`${baseUrl()}/assets/${assetId}/file`),

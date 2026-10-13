@@ -86,7 +86,8 @@ def get(model_id: str | None) -> ModelSpec | None:
 
 
 RUNS = {"t2i": lambda s: s.recipes.t2i, "i2i": lambda s: s.recipes.i2i, "inpaint": lambda s: bool(s.recipes.inpaint),
-        "upscale": lambda s: s.recipes.upscale_factor is not None, "segment": lambda s: bool(s.recipes.segment), "i2v": lambda s: s.recipes.i2v}
+        "upscale": lambda s: s.recipes.upscale_factor is not None, "segment": lambda s: bool(s.recipes.segment), "i2v": lambda s: s.recipes.i2v,
+        "mesh": lambda s: s.recipes.mesh}
 
 
 def offered(spec: ModelSpec, variant: str | None) -> bool:
@@ -110,6 +111,11 @@ def default_model(kind: str, variant: str | None = None) -> str:
 def reangle_specs() -> list[ModelSpec]:
     """P14 (D82): the specs that implement an angles method, by `order` — `auto` takes the first one listing the move."""
     return sorted((s for s in SPECS.values() if s.recipes.reangle), key=lambda s: s.order)
+
+
+def mesh_specs() -> list[ModelSpec]:
+    """P18 (D84): the specs that make a mesh from an image, by `order`."""
+    return sorted((s for s in SPECS.values() if s.recipes.mesh), key=lambda s: s.order)
 
 
 def stage_specs() -> list[ModelSpec]:

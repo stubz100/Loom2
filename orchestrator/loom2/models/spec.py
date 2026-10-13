@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Graph = Literal["flux2", "klein", "wan22", "ltx23", "esrgan", "matte", "sam", "qwen_edit"]      # the builder: image, video, upscaler, subject matte, SAM
+Graph = Literal["flux2", "klein", "wan22", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # the builder: image, video, upscaler, subject matte, SAM, mesh
 
 
 class Strict(BaseModel):
@@ -72,6 +72,7 @@ class Recipes(Strict):
     stage_cfg: float | None = None
     guide_lora: str | None = None                  # P13 ST4 (D76): the IC-LoRA a video model takes a pass sequence through (I2V.guide)
     guide_seconds: float | None = None             # E11's measured seconds for a guided Draft clip (121 frames at 1024×576)
+    mesh: bool = False                             # P18 (D84): image → mesh (the Pixal3D graph)
 
 
 class RefsSuggest(Strict):
@@ -118,6 +119,7 @@ class Estimates(Strict):
     turbo_seconds: float | None = None
     doc_seconds: float | None = None               # one Edit candidate, warm, incl. the model swap (D64)
     tile_seconds: float | None = None              # one 1024² tile of a tiled refine
+    cold_seconds: float | None = None              # P18: the same job with nothing resident (shown beside the warm figure)
 
 
 class ModelSpec(Strict):

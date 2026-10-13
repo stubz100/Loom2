@@ -66,7 +66,8 @@ def capabilities(svc: Services) -> dict:
             "advanced": advanced(), "tiers": image_tiers(), "refine_edge": matting.capabilities(),
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
-            "stage": _stage(svc, variant)}                                     # P13 ST3 (D78): the Shot tab's methods and passes
+            "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
+            "mesh": _mesh(svc, variant)}                                       # P18 (D84): image → mesh props
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -120,6 +121,24 @@ def _stage(svc: Services, variant: str) -> dict:
                 "size": list(spec.geometry.size or []), "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
         break
     return {"methods": methods, "passes": list(STAGE_PASSES), "default": "clay" if "clay" in methods else (next(iter(methods)) if methods else None), "clip": clip}
+
+
+def _mesh(svc: Services, variant: str) -> dict:
+    """Image → mesh (P18): the model that makes props in this build (none under `open` while DINOv3 keeps it full-only), its health, E14's warm
+    and cold seconds — shown before the job is queued — the resolutions and the face count."""
+    for spec in registry.mesh_specs():
+        if not _offered(spec, variant):
+            continue
+        needs = spec.weights()
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        return {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": spec.hint,
+                "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"), "missing": missing,
+                "seconds": spec.estimates.base_seconds, "cold_seconds": spec.estimates.cold_seconds, "resolutions": [1024, 1536], "faces": 50000,
+                "licences": {x: ROSTER_BY_ID[x].license for x in needs}, "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+    return {"model_id": None, "label": None, "short": None, "hint": None, "health": "unavailable", "missing": [], "seconds": None, "cold_seconds": None,
+            "resolutions": [], "faces": 50000, "licences": {}, "approx_gb": 0.0,
+            "why": "no image → mesh model is offered in this build (DINOv3's licence keeps Pixal3D full-only, D17 / D26)" if variant == "open" else "no image → mesh spec"}
 
 
 def _offered(spec: ModelSpec, variant: str) -> bool:

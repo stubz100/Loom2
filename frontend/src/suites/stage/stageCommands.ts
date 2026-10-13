@@ -2,7 +2,7 @@
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
 import { Aperture, Box, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, Layers, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
-import { askConfirm, askText } from '../../store/session'
+import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
@@ -69,7 +69,7 @@ registerCommands([
   { id: 'stage.anim.setStart', scope: 'stage', label: 'Range starts here', icon: Diamond, keys: '[', placement: ['strip'], when: hasStage, run: () => st().setRange(st().frame, Math.max(st().frame + 1, st().current!.range.end)) },
   { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here', icon: Diamond, keys: ']', placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
-  { id: 'stage.clip.animate', scope: 'stage', label: 'Animate the shot', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().guideEntry() && !!st().shotStart && !st().rendering, run: () => void st().animateShot() },
+  { id: 'stage.clip.animate', scope: 'stage', label: 'Animate the shot', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().guideEntry() && !!st().shotStart && !st().rendering && !!useSession.getState().capabilities?.stage?.clip, run: () => void st().animateShot() },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])

@@ -29,7 +29,7 @@ ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manife
 INDEX_SCHEMA_VERSION = 2
 log = logging.getLogger(__name__)
 
-AssetKind = Literal["image", "video", "mask", "document-render"]
+AssetKind = Literal["image", "video", "mask", "document-render", "mesh"]     # mesh: P18 (D84), a GLB
 AssetState = Literal["none", "keep", "reject"]
 GroupMode = Literal["none", "batch", "lineage", "session", "model"]
 Folder = Literal["all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"]

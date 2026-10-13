@@ -586,6 +586,11 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await expect(page.locator('.shot-tab .guide-state')).toContainText('9 frames')
   // Animate ▶: the I2V job with the guide; the fake engine decodes nine frames; the clip carries lineage to the shot and the guide
   const animate = page.locator('.shot-tab button', { hasText: /^Animate/ })
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: LTX-2.3 is full-only — the section says so
+    await expect(page.locator('.shot-tab .clip-section')).toContainText('No clip model in this build')
+    await expect(animate).toBeDisabled()
+    return
+  }
   await expect(animate).toBeEnabled()
   await animate.click()
   await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
@@ -596,4 +601,44 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   expect(clips[0].parents).toContain(guide.asset_id); expect(clips[0].parents.length).toBe(2)
   expect(startId).toContain(clips[0].parents[0])                                                              // the start shot is the first parent
   await page.screenshot({ path: 'node_modules/.e2e/stage-clip.png' })
+})
+
+test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fake engine answers with a GLB, the mesh asset lands with lineage and a thumbnail, and the Stage library places it', async ({ page }) => {
+  await openApp(page, { suite: 'catalogue' })
+  const src = tiles(page).nth(5)
+  await src.click()
+  const srcId = await src.getAttribute('data-id')
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D17 / D26: DINOv3 keeps Pixal3D full-only
+    await expect(page.locator('.insp .quick-card', { hasText: 'New angle' })).toBeEnabled()
+    await expect(page.locator('.insp .quick-card', { hasText: '3D prop' })).toBeDisabled()                  // the card stays, greyed: no model in this build
+    const mc = await api<{ model_id: string | null; why: string | null }>('GET', '/capabilities').then((c) => (c as unknown as { mesh: { model_id: string | null; why: string | null } }).mesh)
+    expect(mc.model_id).toBeNull(); expect(mc.why).toContain('DINOv3')
+    return
+  }
+  await page.locator('.insp .quick-card', { hasText: '3D prop' }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/Pixal3D/)
+  await expect(dialog).toContainText(/min/)                                                                 // the cost, before the job is queued
+  await dialog.locator('button.primary').click()
+  type Mesh = AssetLite & { kind: string; parents: string[]; lineage_kind: string | null; thumb_status: string; params: { licences: Record<string, string>; format: string } }
+  type JobLite = { id: string; status: string; progress_text: string | null; error: string | null; log_tail: string[]; recipe: { kind: string } }
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.recipe?.kind === 'image_to_mesh')
+  await expect.poll(async () => { const j = await jobOf(); return j ? `${j.status} · ${j.progress_text ?? ''} · ${j.error ?? ''} · ${j.log_tail?.slice(-2).join(' | ') ?? ''}` : 'no job' }, { timeout: 90_000 }).toMatch(/^done/)
+  const meshOf = async () => (await api<{ items: Mesh[] }>('GET', '/assets?kind=mesh&sort=created_desc&limit=5')).items[0]
+  await expect.poll(async () => (await meshOf())?.thumb_status, { timeout: 30_000 }).toBe('done')
+  const m = await meshOf()
+  expect(m.kind).toBe('mesh'); expect(m.lineage_kind).toBe('image-to-mesh'); expect(m.parents).toEqual([srcId]); expect(m.params.format).toBe('glb')
+  expect(Object.keys(m.params.licences)).toContain('dinov3-l')                                              // the weights' licences in the manifest
+  await expect(tiles(page).first().locator('.badge-dot[title^="3D prop"]')).toBeVisible()                   // the newest tile wears the mesh badge
+  // the Stage library lists it; one click places it; the viewport loads the GLB
+  await page.locator('nav.tabs button.tab', { hasText: 'Stage' }).click()
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  await dialog.locator('input').fill('Props')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.lib-grid .mesh-card').first().click()
+  await expect(page.locator('.inspector .stage-insp h4')).toContainText('Mesh 1')
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[]; failed: Record<string, string> } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
+  await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
+  await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
 })

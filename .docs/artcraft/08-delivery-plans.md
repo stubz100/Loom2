@@ -851,6 +851,15 @@ thumbnails on the blocks. Left: the Resolve import check (the author's) and, wit
 
 **Acceptance.** Five E14 inputs become posable props in a Stage scene through the app; licence fields are present in their manifests.
 
+*Built 2026-10-13 (D84; journal of that day): the template's Pixal3D branch frozen as `orchestrator/loom2/engine/pixal3d_graph.json` by
+`scripts/make_mesh_graph.py` (switches resolved, previews dropped, loader names blank — the builder fills them from the roster), recipe
+`ImageToMesh {asset_id, model_id, resolution 1024 | 1536, faces}` (no TRELLIS.2: deleted by D79), `build_mesh` adds a `RenderMesh` view for
+the thumbnail, `MeshFinisher` makes the `mesh` asset (GLB, lineage `image-to-mesh`, the weights' licences in `params.licences`),
+`/capabilities.mesh` with E14's warm and cold seconds, the contract checker learned type unions and V3 dynamic combos, roster entries for
+Pixal3D / the TRELLIS.2 VAEs / DINOv3 / MoGe (DINOv3 keeps it full-only), Hunyuan3D names on the unlisted ignore list with the reason
+(`/models/unlisted.ignored`); the Catalogue's "Make a 3D prop…" (tile menu, Inspector card) says the cost first; the Stage library's
+Meshes cards and a mesh drop place `mesh` objects loaded by GLTFLoader, stood on the floor; `scripts/p18_acceptance.py` runs the five.*
+
 ## 10. Decisions to record if accepted
 
 | Proposal | Decision text (draft) |

@@ -271,6 +271,23 @@ class StageCaps(Open):
     clip: StageClipCaps | None = None
 
 
+class MeshCaps(Open):
+    """P18 (D84): the image → mesh model of this build, or why there is none."""
+    model_id: str | None = None
+    label: str | None = None
+    short: str | None = None
+    hint: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    cold_seconds: float | None = None
+    resolutions: list[int]
+    faces: int
+    licences: dict[str, str]
+    approx_gb: float
+    why: str | None = None
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -291,6 +308,7 @@ class Capabilities(Open):
     content_aware: ContentAwareCaps
     reangle: ReangleCaps                           # P14 (D82)
     stage: StageCaps                               # P13 ST3 (D78)
+    mesh: MeshCaps                                 # P18 (D84)
 
 
 class MissingWeight(Open):
@@ -677,8 +695,13 @@ class UnlistedFile(Out):
     size: int
 
 
+class IgnoredFile(UnlistedFile):
+    reason: str
+
+
 class UnlistedFiles(Out):
     items: list[UnlistedFile]
+    ignored: list[IgnoredFile] = []               # P18 (D84): files loom2 never suggests, with the licence reason
 
 
 class ModelScan(Out):

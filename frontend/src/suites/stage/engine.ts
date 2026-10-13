@@ -6,6 +6,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Joint, type Mannequin } from './builders'
@@ -19,6 +20,8 @@ export interface EngineHooks {
   /** ST2: a joint was rotated or a hand / foot dragged — the figure's full joint map in degrees (YXZ). */
   onPosed: (id: string, joints: Record<string, number[]>) => void
   onFreeCameraMoved?: () => void
+  /** P18: a mesh asset's GLB arrived and a fitted view of it is ready — the store may make it the asset's thumbnail. */
+  onMeshThumb?: (assetId: string, view: Blob) => void
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
 
@@ -56,6 +59,9 @@ export class StageEngine {
   private ik: { id: string; chain: Chain; proxy: THREE.Object3D } | null = null
   private pickerMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, depthTest: false, transparent: true, opacity: 0.9 })
   private ikMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff, depthTest: false, transparent: true, opacity: 0.95 })
+  // P18: which mesh objects have their GLB in the scene (the smoke test and the rig ask)
+  readonly meshesLoaded = new Set<string>()
+  readonly meshesFailed = new Map<string, string>()
   // ST3: the pass materials and the helpers that stay out of the passes
   private grid: THREE.GridHelper
   private passClay = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })
@@ -383,6 +389,30 @@ export class StageEngine {
       }
     } else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)
     else if (o.kind === 'prop') body = prop(o.preset ?? 'block', this.clayMat)
+    else if (o.kind === 'mesh' && o.asset_id) {
+      // P18 (D84): a GLB prop from the Catalogue — a placeholder box until the file arrives, then the model stood on the floor at its own size
+      const group = new THREE.Group()
+      const stub = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({ color: 0x8899bb, wireframe: true }))
+      stub.position.y = 0.25
+      group.add(stub)
+      const id = o.id
+      new GLTFLoader().loadAsync(api.assetUrl(o.asset_id)).then((gltf) => {
+        const e = this.entries.get(id)
+        if (!e || e.body !== group || this.disposed) return
+        const model = gltf.scene
+        const box = new THREE.Box3().setFromObject(model)
+        const c = box.getCenter(new THREE.Vector3())
+        model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z))             // centred on its footprint, standing on the floor
+        model.traverse((m) => { m.userData.stageId = id })
+        group.remove(stub)
+        group.add(model)
+        this.meshesLoaded.add(id)
+        if (this.selectedId === id) this.selection.setFromObject(e.holder)
+        this.dirty = true
+        if (this.hooks.onMeshThumb && o.asset_id) { const aid = o.asset_id; void this.thumbnailOf(model).then((b) => this.hooks.onMeshThumb?.(aid, b)).catch(() => {}) }
+      }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true })
+      body = group
+    }
     else if (o.kind === 'plane' && o.asset_id) {
       const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true })
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), mat)
@@ -467,6 +497,30 @@ export class StageEngine {
       this.sync(restoreDoc)
       this.dirty = true
     }
+  }
+  /** P18: a lit three-quarter view of a model with the camera fitted to its bounding sphere (the E14 renderer's framing) — the thumbnail the
+   *  engine's RenderMesh cannot make (its camera sits inside some props). */
+  async thumbnailOf(model: THREE.Object3D, size = 512): Promise<Blob> {
+    const r = this.passRenderer(size, size)
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x2a2a2e)
+    const clone = model.clone()
+    const box = new THREE.Box3().setFromObject(clone)
+    const centre = box.getCenter(new THREE.Vector3())
+    const radius = Math.max(1e-3, box.getSize(new THREE.Vector3()).length() / 2)
+    scene.add(clone, new THREE.HemisphereLight(0xffffff, 0x777777, 1.4))
+    const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(centre.x + radius, centre.y + 2 * radius, centre.z + 3 * radius); scene.add(key)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.7); fill.position.set(centre.x - 2 * radius, centre.y + radius, centre.z - radius); scene.add(fill)
+    const fov = 35
+    const cam = new THREE.PerspectiveCamera(fov, 1, radius / 100, radius * 100)
+    const dist = (radius / Math.tan(THREE.MathUtils.degToRad(fov / 2))) * 1.15
+    const yaw = THREE.MathUtils.degToRad(35), pitch = THREE.MathUtils.degToRad(20)
+    cam.position.set(centre.x + dist * Math.sin(yaw) * Math.cos(pitch), centre.y + dist * Math.sin(pitch), centre.z + dist * Math.cos(yaw) * Math.cos(pitch))
+    cam.lookAt(centre); cam.updateProjectionMatrix(); cam.updateMatrixWorld()
+    try {
+      r.render(scene, cam)
+      return await toBlob(r.domElement)
+    } finally { r.dispose(); r.forceContextLoss() }
   }
   private passRenderer(w: number, h: number): THREE.WebGLRenderer {
     const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })

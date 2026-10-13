@@ -210,6 +210,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assets/{asset_id}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Asset Thumbnail
+         * @description P18 (D84): a view rendered by the client becomes the asset's thumbnails — the Stage renders a mesh with a camera fitted to its bounding
+         *     sphere, which the engine's RenderMesh (its camera inside some props) cannot. A PNG body, ≤ 8 MB; the record notes `thumb_source: client`.
+         */
+        put: operations["asset_thumbnail_assets__asset_id__thumbnail_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/blobs/{sha}": {
         parameters: {
             query?: never;
@@ -1721,7 +1742,7 @@ export interface components {
              * @default image
              * @enum {string}
              */
-            kind: "image" | "video" | "mask" | "document-render";
+            kind: "image" | "video" | "mask" | "document-render" | "mesh";
             /** Lineage Kind */
             lineage_kind: string | null;
             /** Model Id */
@@ -1838,6 +1859,7 @@ export interface components {
             };
             facesim: components["schemas"]["FaceSimCaps"];
             i2v: components["schemas"]["I2vCaps"];
+            mesh: components["schemas"]["MeshCaps"];
             /** Models */
             models: {
                 [key: string]: components["schemas"]["ImageModelCaps"];
@@ -3373,6 +3395,19 @@ export interface components {
             /** Ids */
             ids: string[];
         };
+        /** IgnoredFile */
+        IgnoredFile: {
+            /** Folder */
+            folder: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string;
+            /** Size */
+            size: number;
+        };
         /** ImageModelCaps */
         ImageModelCaps: {
             /** Cfg */
@@ -3934,6 +3969,42 @@ export interface components {
             /** Revision */
             revision: number | null;
         };
+        /**
+         * MeshCaps
+         * @description P18 (D84): the image → mesh model of this build, or why there is none.
+         */
+        MeshCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Cold Seconds */
+            cold_seconds?: number | null;
+            /** Faces */
+            faces: number;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Licences */
+            licences: {
+                [key: string]: string;
+            };
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id?: string | null;
+            /** Resolutions */
+            resolutions: number[];
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short?: string | null;
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** MissingWeight */
         MissingWeight: {
             /** Approx Gb */
@@ -3957,7 +4028,7 @@ export interface components {
              * Folder
              * @enum {string}
              */
-            folder: "diffusion_models" | "text_encoders" | "vae" | "loras" | "clip_vision" | "upscale_models" | "controlnet" | "checkpoints" | "sam3" | "background_removal" | "embeddings";
+            folder: "diffusion_models" | "text_encoders" | "vae" | "loras" | "clip_vision" | "upscale_models" | "controlnet" | "checkpoints" | "sam3" | "background_removal" | "embeddings" | "geometry_estimation";
             /**
              * Health
              * @enum {string}
@@ -4488,6 +4559,11 @@ export interface components {
              * @default false
              */
             inpaint_hero?: boolean;
+            /**
+             * Mesh
+             * @default false
+             */
+            mesh?: boolean;
             /** Reangle */
             reangle?: string | null;
             /**
@@ -5462,6 +5538,11 @@ export interface components {
         };
         /** UnlistedFiles */
         UnlistedFiles: {
+            /**
+             * Ignored
+             * @default []
+             */
+            ignored: components["schemas"]["IgnoredFile"][];
             /** Items */
             items: components["schemas"]["UnlistedFile"][];
         };
@@ -5659,7 +5740,7 @@ export interface operations {
         parameters: {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
-                kind?: ("image" | "video" | "mask" | "document-render") | null;
+                kind?: ("image" | "video" | "mask" | "document-render" | "mesh") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
@@ -5806,7 +5887,7 @@ export interface operations {
         parameters: {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
-                kind?: ("image" | "video" | "mask" | "document-render") | null;
+                kind?: ("image" | "video" | "mask" | "document-render" | "mesh") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
@@ -6128,6 +6209,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    asset_thumbnail_assets__asset_id__thumbnail_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRecord"];
                 };
             };
             /** @description Validation Error */

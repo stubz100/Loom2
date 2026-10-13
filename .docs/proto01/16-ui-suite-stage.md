@@ -46,7 +46,9 @@ viewport (clay · depth · normal · pose · masks) without leaving the scene.
 Cards by category with a search box; click adds at the viewport centre, **drag** drops where the ray hits the floor or a surface
 (`frame/drag.ts`; the ghost says "Place on the floor" / "Place on crate").
 - **Figures:** the procedural mannequin of E10 (`frontend/src/spikes/e10Stage.ts`, lifted into `suites/stage/`): a joint tree with
-  COCO-18 markers, no licence question, already proven to carry a blocking (E10, D78). Sizes: adult 1.75 m, child 1.2 m. ST2 adds the
+  COCO-18 markers, no licence question, already proven to carry a blocking (E10, D78). Sizes: adult 1.75 m, child 1.2 m. *P18 (D84, 2026-10-13): the
+  Library's Meshes section lists the project's GLB props (Pixal3D results, kind `mesh`); a card or a dropped mesh tile places a `mesh` object at its
+  own size, standing on the floor.* ST2 adds the
   CC0 Quaternius base mannequins as skinned bodies on the same joint names; **Mixamo assets must not ship** (08 §7).
 - **Sets:** primitives that read as rooms, streets, decks (floor, walls with openings, a few blocks) — the three E10 sets plus
   *empty*. Walls carry object-ID colours for the masks pass.

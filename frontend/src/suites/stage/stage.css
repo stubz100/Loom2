@@ -82,3 +82,7 @@
 .shot-tab .clip-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .shot-tab .clip-thumb { position: relative; }
 .shot-tab .clip-thumb .n { position: absolute; left: 4px; bottom: 4px; font-size: 10px; background: rgba(0,0,0,.6); color: #fff; border-radius: 3px; padding: 0 4px; }
+/* P18: mesh props in the Library */
+.lib-grid .mesh-card { display: grid; grid-template-rows: auto auto; justify-items: center; gap: 2px; padding: 4px; }
+.lib-grid .mesh-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: var(--bg2); }
+.lib-grid .mesh-card span { font-size: 10px; color: var(--fg3); }

@@ -455,7 +455,8 @@
               "image",
               "video",
               "mask",
-              "document-render"
+              "document-render",
+              "mesh"
             ],
             "title": "Kind",
             "type": "string"
@@ -794,6 +795,9 @@
           "i2v": {
             "$ref": "#/components/schemas/I2vCaps"
           },
+          "mesh": {
+            "$ref": "#/components/schemas/MeshCaps"
+          },
           "models": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ImageModelCaps"
@@ -910,7 +914,8 @@
           "refine_edge",
           "content_aware",
           "reangle",
-          "stage"
+          "stage",
+          "mesh"
         ],
         "title": "Capabilities",
         "type": "object"
@@ -4525,6 +4530,39 @@
         "title": "IdsReply",
         "type": "object"
       },
+      "IgnoredFile": {
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "folder",
+          "name",
+          "path",
+          "size",
+          "reason"
+        ],
+        "title": "IgnoredFile",
+        "type": "object"
+      },
       "ImageModelCaps": {
         "additionalProperties": true,
         "properties": {
@@ -5817,6 +5855,132 @@
         "title": "MentionOut",
         "type": "object"
       },
+      "MeshCaps": {
+        "additionalProperties": true,
+        "description": "P18 (D84): the image → mesh model of this build, or why there is none.",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "cold_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Seconds"
+          },
+          "faces": {
+            "title": "Faces",
+            "type": "integer"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "licences": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Licences",
+            "type": "object"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "resolutions": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Resolutions",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "health",
+          "missing",
+          "resolutions",
+          "faces",
+          "licences",
+          "approx_gb"
+        ],
+        "title": "MeshCaps",
+        "type": "object"
+      },
       "MissingWeight": {
         "additionalProperties": true,
         "properties": {
@@ -5887,7 +6051,8 @@
               "checkpoints",
               "sam3",
               "background_removal",
-              "embeddings"
+              "embeddings",
+              "geometry_estimation"
             ],
             "title": "Folder",
             "type": "string"
@@ -7145,6 +7310,11 @@
           "inpaint_hero": {
             "default": false,
             "title": "Inpaint Hero",
+            "type": "boolean"
+          },
+          "mesh": {
+            "default": false,
+            "title": "Mesh",
             "type": "boolean"
           },
           "reangle": {
@@ -9365,6 +9535,14 @@
       },
       "UnlistedFiles": {
         "properties": {
+          "ignored": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/IgnoredFile"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/UnlistedFile"
@@ -9374,7 +9552,8 @@
           }
         },
         "required": [
-          "items"
+          "items",
+          "ignored"
         ],
         "title": "UnlistedFiles",
         "type": "object"
@@ -9810,7 +9989,8 @@
                     "image",
                     "video",
                     "mask",
-                    "document-render"
+                    "document-render",
+                    "mesh"
                   ],
                   "type": "string"
                 },
@@ -10433,7 +10613,8 @@
                     "image",
                     "video",
                     "mask",
-                    "document-render"
+                    "document-render",
+                    "mesh"
                   ],
                   "type": "string"
                 },
@@ -11268,6 +11449,49 @@
           }
         },
         "summary": "Asset File",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/assets/{asset_id}/thumbnail": {
+      "put": {
+        "description": "P18 (D84): a view rendered by the client becomes the asset's thumbnails — the Stage renders a mesh with a camera fitted to its bounding\nsphere, which the engine's RenderMesh (its camera inside some props) cannot. A PNG body, ≤ 8 MB; the record notes `thumb_source: client`.",
+        "operationId": "asset_thumbnail_assets__asset_id__thumbnail_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Asset Thumbnail",
         "tags": [
           "assets"
         ]

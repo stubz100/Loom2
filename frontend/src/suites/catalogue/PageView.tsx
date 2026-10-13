@@ -9,7 +9,7 @@ import { api, ApiError, http, unwrap } from '../../api/client'
 import type { GroupItem, GroupPage, GroupSummary } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
-import { carry, registerDropTarget, type DragItem, type DragPayload } from '../../frame/drag'
+import { carry, registerDropTarget, type DragItem, type DragPayload, mediaOf } from '../../frame/drag'
 import { askConfirm, askText, onEvents, useSession } from '../../store/session'
 import { useAlbum } from './albumStore'
 import { tileMenu } from './catalogueCommands'
@@ -159,7 +159,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
       if (ev.clientX < r.left - 4 || ev.clientX > r.right + 4 || ev.clientY < r.top - 4 || ev.clientY > r.bottom + 4) {
         cleanup(); setLive(null)                                      // beyond the page: carry the items to another target
         const first = moving[0]
-        carry({ items: moving.map(({ kind, id }) => ({ kind, id, media: kind === 'asset' ? (page?.assets[id]?.kind === 'video' ? 'video' as const : 'image' as const) : undefined })), from: gid, thumb: first.kind === 'asset' ? api.thumbUrl(first.id, 256) : undefined }, ev.clientX, ev.clientY)
+        carry({ items: moving.map(({ kind, id }) => ({ kind, id, media: kind === 'asset' ? mediaOf(page?.assets[id]?.kind) : undefined })), from: gid, thumb: first.kind === 'asset' ? api.thumbUrl(first.id, 256) : undefined }, ev.clientX, ev.clientY)
         return
       }
       setLive(Object.fromEntries(moving.map((m, i) => [key(m), { x: m.x + dx, y: m.y + dy, w: m.w, z: zTop + 1 + i }])))

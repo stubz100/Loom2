@@ -31,7 +31,33 @@ def _enum(spec: Any) -> list | None:
         return spec[0]
     if spec[0] == "COMBO" and len(spec) > 1 and isinstance(spec[1], dict) and isinstance(spec[1].get("options"), list):
         return spec[1]["options"]
+    if spec[0] == "COMFY_DYNAMICCOMBO_V3" and len(spec) > 1 and isinstance(spec[1], dict) and isinstance(spec[1].get("options"), list):
+        return [o.get("key") for o in spec[1]["options"] if isinstance(o, dict)]       # P18: a V3 dynamic combo — its keys; sub-inputs are `<name>.<key>`
     return None
+
+
+def _dynamic_sub_spec(req: dict, opt: dict, inputs: dict, key: str) -> Any:
+    """The spec of a V3 dynamic combo's sub-input (`sign_mode.qef`): found under the option the node currently selects, or None."""
+    if "." not in key:
+        return None
+    prefix, sub = key.split(".", 1)
+    pspec = req.get(prefix) or opt.get(prefix)
+    if not pspec or pspec[0] != "COMFY_DYNAMICCOMBO_V3" or len(pspec) < 2 or not isinstance(pspec[1], dict):
+        return None
+    chosen = inputs.get(prefix)
+    for o in pspec[1].get("options", []) or []:
+        if isinstance(o, dict) and o.get("key") == chosen:
+            ins = o.get("inputs", {}) or {}
+            return (ins.get("required", {}) or {}).get(sub) or (ins.get("optional", {}) or {}).get(sub)
+    return None
+
+
+def _types_meet(want: str, have: str) -> bool:
+    """An output feeds an input when their types agree; either side may be a comma-joined union (Save3DAdvanced takes FILE_3D_GLB,FILE_3D_GLTF,…)."""
+    if "*" in (want, have):
+        return True
+    w, h = {t.strip() for t in want.split(",")}, {t.strip() for t in have.split(",")}
+    return bool(w & h)
 
 
 def _is_link(v: Any) -> bool:
@@ -76,7 +102,7 @@ def check_graph(object_info: dict, graph: dict) -> list[str]:
             if key not in inputs:
                 problems.append(f"{nid} ({cls}): required '{key}' missing")
         for key, val in inputs.items():
-            spec = req.get(key) or opt.get(key)
+            spec = req.get(key) or opt.get(key) or _dynamic_sub_spec(req, opt, inputs, key)
             if spec is None:
                 if key not in ("hidden",):
                     problems.append(f"{nid} ({cls}): input '{key}' not accepted")
@@ -93,7 +119,7 @@ def check_graph(object_info: dict, graph: dict) -> list[str]:
                     problems.append(f"{nid} ({cls}): '{key}' links to output {out_idx} of {src['class_type']} which has {len(outs)}")
                 elif src_info:
                     want, have = spec[0], outs[out_idx]                           # C9: the output's type must be the input's
-                    if isinstance(want, str) and isinstance(have, str) and "*" not in (want, have) and want != have:
+                    if isinstance(want, str) and isinstance(have, str) and not _types_meet(want, have):
                         problems.append(f"{nid} ({cls}): '{key}' takes {want}, but {src['class_type']} output {out_idx} is {have}")
                 continue
             kind = spec[0]

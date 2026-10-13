@@ -26,7 +26,8 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
-from ..recipes import I2I, I2V, Inpaint, Reangle, Render, Segment, StageShot, Upscale, stage_model_id
+from ..recipes import I2I, I2V, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, stage_model_id
+from ..roster import ROSTER_BY_ID
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from .pipeline import AnyRecipe, Submission
@@ -264,7 +265,35 @@ async def identity_task(q: JobQueue, clip_id: str) -> None:
         q.hub.broadcast("clip.updated", {"clip_id": clip_id, "identity": result})
 
 
+class MeshFinisher:
+    """P18 (D84): the GLB becomes a Catalogue asset of kind `mesh` (lineage `image-to-mesh` ← the source, the weights' licences in its params);
+    the RenderMesh view saved beside it makes the thumbnail."""
+    frees_cache = True
+
+    async def finish(self, job: JobRecord, recipe: ImageToMesh, files: list[dict], sub: Submission, q: JobQueue) -> None:
+        from .graphs import recipe_weights
+        paths = [output_path(q, f) for f in files]
+        glb = next((p for p in paths if p.suffix.lower() in (".glb", ".gltf") and p.is_file()), None)
+        view = next((p for p in paths if p.suffix.lower() == ".png" and p.is_file()), None)
+        if glb is None:
+            raise ValueError("the engine finished but produced no mesh (no .glb among its outputs)")
+        compiled = sub.compiled
+        licences = {rid: ROSTER_BY_ID[rid].license for rid in recipe_weights(recipe) if rid in ROSTER_BY_ID}
+        rec = await asyncio.to_thread(q.catalogue.ingest_file, glb, kind="mesh", move=True, job_id=job.id, batch_id=job.batch_id, suite="generate",
+                                      model_id=recipe.model_id, seed=job.seed, prompt_text=None,
+                                      params=compiled.summary | {"recipe": recipe.model_dump(), "licences": licences, "format": "glb"},
+                                      timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash, variant=job.variant,
+                                      parents=[recipe.asset_id], lineage_kind="image-to-mesh", origin=job.origin)
+        if view is not None:
+            rec = await asyncio.to_thread(q.catalogue.make_thumbs, rec, view)
+        q.hub.broadcast("asset.created", rec.model_dump())
+        job.result["asset_ids"] = [rec.id]
+        job.log_tail.append(f"mesh {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)" + (" with its view" if view else ", no view for the thumbnail"))
+
+
 def finisher_for(recipe: AnyRecipe) -> Finisher:
+    if isinstance(recipe, ImageToMesh):
+        return MeshFinisher()
     if isinstance(recipe, I2V):
         return ClipFinisher()
     if isinstance(recipe, Segment):

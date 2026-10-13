@@ -107,6 +107,10 @@ interface StageState {
   guideSize: () => [number, number]                         // the clip model's grid at the project's aspect
   renderGuide: () => Promise<boolean>
   animateShot: () => Promise<Job[] | null>
+  // P18 (D84): the project's mesh assets (GLB props) for the Library
+  meshes: Asset[]
+  loadMeshes: () => Promise<void>
+  uploadMeshThumbnail: (assetId: string, view: Blob) => Promise<void>   // the viewport's fitted view replaces the engine's RenderMesh thumbnail, once
   load: () => Promise<void>
   create: (name: string) => Promise<StageDoc | null>
   open: (id: string | null) => Promise<void>
@@ -169,12 +173,29 @@ async function flushSave(get: () => StageState, set: (p: Partial<StageState>) =>
 }
 
 let shotPreviewSeq = 0
+const thumbed = new Set<string>()                                            // P18: mesh assets whose thumbnail this session already rendered
 
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', shotStart: null, rendered: null, sequenceRenderer: null,
+  meshes: [],
+
+  // ---- P18: mesh props ----
+  loadMeshes: async () => {
+    try { const r = await unwrap(http.GET('/assets', { params: { query: { kind: 'mesh', sort: 'created_desc', limit: 60 } } })); set({ meshes: r.items as Asset[] }) }
+    catch { set({ meshes: [] }) }
+  },
+  uploadMeshThumbnail: async (assetId, view) => {
+    const a = get().meshes.find((m) => m.id === assetId)
+    if (!a || (a.params as { thumb_source?: string }).thumb_source === 'client' || thumbed.has(assetId)) return
+    thumbed.add(assetId)
+    try {
+      const rec = (await api.putThumbnail(assetId, view)) as Asset
+      set({ meshes: get().meshes.map((m) => (m.id === assetId ? rec : m)) })
+    } catch { thumbed.delete(assetId) }
+  },
 
   // ---- ST4: keyframes and the clip ----
   keys: () => { const cur = get().current; return cur ? keyframesOf(cur) : EMPTY_KEYS },
@@ -335,6 +356,7 @@ export const useStage = create<StageState>()((set, get) => ({
     } catch { set({ shots: [] }) }
   },
   onAssetCreated: (a) => {
+    if (a.kind === 'mesh' && !get().meshes.some((x) => x.id === a.id)) set({ meshes: [a, ...get().meshes] })       // P18: a new prop joins the Library
     const cur = get().current
     if (!cur || a.lineage_kind !== 'stage-shot' || !ofStage(a, cur.id) || get().shots.some((x) => x.id === a.id)) return
     set({ shots: [a, ...get().shots] })

@@ -111,7 +111,17 @@ class FakeComfy:
             col = self.color if not vid else (self.color[0], (i * 29) % 256, self.color[2], 255)      # frames differ, so the proxy encode is real work
             Image.new("RGBA", (w, h), col).save(out_dir / fname)
             images.append({"filename": fname, "subfolder": subfolder, "type": "output"})
-        self.histories[pid] = {"outputs": {"99": {"images": images}}, "status": {"completed": True, "status_str": "success"}}
+        outputs: dict = {"99": {"images": images}}
+        save3d = next((k for k, n in graph.items() if n.get("class_type") == "Save3DAdvanced"), None)
+        if save3d:                                                      # P18: a mesh graph writes one GLB (a real, minimal one — the browser's loader reads it)
+            gprefix = graph[save3d]["inputs"].get("filename_prefix", "loom2/mesh")
+            gsub, _, gbase = gprefix.rpartition("/")
+            gdir = self.output_dir / gsub if gsub else self.output_dir
+            gdir.mkdir(parents=True, exist_ok=True)
+            gname = f"{gbase}_{sum(1 for p in gdir.glob(f'{gbase}_*.glb')) + 1:05d}_.glb"
+            (gdir / gname).write_bytes(minimal_glb())
+            outputs[save3d] = {"3d": [{"filename": gname, "subfolder": gsub, "type": "output"}]}
+        self.histories[pid] = {"outputs": outputs, "status": {"completed": True, "status_str": "success"}}
         await self._send({"type": "executing", "data": {"prompt_id": pid, "node": None}})
         await self._send({"type": "execution_success", "data": {"prompt_id": pid}})
 
@@ -216,7 +226,20 @@ def main(argv: list[str] | None = None) -> int:
     uvicorn.run(fake.app, host="127.0.0.1", port=a.port, log_level="warning", lifespan="off")
     return 0
 
+def minimal_glb() -> bytes:
+    """A valid glTF 2.0 binary with one triangle (positions only): what the fake engine 'generates' for a mesh job."""
+    import struct
+    positions = struct.pack("<9f", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    gltf = {"asset": {"version": "2.0", "generator": "loom2 fake engine"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(positions)}], "buffers": [{"byteLength": len(positions)}]}
+    js = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    js += b" " * ((4 - len(js) % 4) % 4)
+    binc = positions + b"\x00" * ((4 - len(positions) % 4) % 4)
+    body = struct.pack("<II", len(js), 0x4E4F534A) + js + struct.pack("<II", len(binc), 0x004E4942) + binc
+    return struct.pack("<III", 0x46546C67, 2, 12 + len(body)) + body
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

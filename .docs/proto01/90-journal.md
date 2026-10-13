@@ -3382,3 +3382,50 @@ split by file so that no two hands touched the same module.
   (`engine/spikes/out/st/clip_sheet.jpg`) shows the dolly in on the two figures with the walk and the point held. 22/22 checks.
 - Not in ST4: the Story L3 link (14); object keys beyond transform + pose; a pose-guide measurement (E11: the weaker second, offered).
   Next: P18 (Pixal3D props, D79).
+
+### 2026-10-13 16:52 — P18 Image → mesh props built (D79 / D84): Pixal3D as a background job, mesh assets, props in the Stage
+- **Graph:** ComfyUI's template `3d_pixal3d_trellis2_image_to_model.json` (the one E14 ran) frozen by `scripts/make_mesh_graph.py` into
+  `orchestrator/loom2/engine/pixal3d_graph.json` — 41 nodes: the method switch set to Pixal3D and every constant `ComfySwitchNode`
+  resolved, the TRELLIS.2-only nodes and every preview dropped (consumers rewired to what the preview showed), loader names blanked
+  and the roles recorded by node id (model, shape / texture VAE, dino, moge, matte, image, four samplers, decimate, upsample, save,
+  final mesh). `graphs.build_mesh` fills the names from the roster, one seed into every sampler, the face count (50k) and the
+  upsample resolution (1024; 1536 is the template's own), and adds a `RenderMesh` view saved beside the GLB for the thumbnail. The
+  contract checker learned type unions (`FILE_3D_GLB,FILE_3D_GLTF,…`) and V3 dynamic combos (`sign_mode.qef` under the chosen
+  option); the fixture gained 28 classes (104). D65 kept: a roster id as a role name (`birefnet`) tripped `model_literals_check` —
+  the role is `matte`.
+- **Recipe and roster:** `ImageToMesh {asset_id, model_id = the registry's mesh default, resolution 1024 | 1536, faces 2k–700k}`;
+  `specs/pixal3d.toml` (`recipes.mesh`, extras for both VAEs, DINOv3, MoGe and BiRefNet, `base_seconds 243`, `cold_seconds 361`);
+  roster entries pixal3d-int8 (5.6 GB), trellis2-shape-vae, trellis2-texture-vae, moge2-vitl (MIT) and dinov3-l (Meta's licence) — the
+  Pixal3D entry is `full`-only while DINOv3 is (D17 / D26), so `/capabilities.mesh` under `open` says why; Hunyuan3D names on
+  `IGNORED_UNLISTED` with the reason, `/models/unlisted` returns them as `ignored`. `prepare_mesh` uploads the photo; the engine's
+  history for `Save3DAdvanced` carries the GLB under `"3d"` and a bare path list under `"result"` — the output collector takes dict
+  records only (the first rig job crashed on the string). `MeshFinisher`: the GLB becomes a `mesh` asset (new `AssetKind`, served as
+  `model/gltf-binary`) with lineage `image-to-mesh` ← the photo, the six weights' licences in `params.licences`, the view as its
+  thumbnail; the fake engine writes a real minimal GLB for a mesh graph (the helper must sit above its `__main__` block).
+- **UI:** "Make a 3D prop…" on the tile menu's *Start from this image* and as an Inspector card, `askConfirm` with the model, the
+  size, the warm and cold minutes and the missing-weights note before the job is queued; mesh tiles wear a badge and drag as
+  `media: mesh` (`mediaOf`), image-only verbs take `kind === 'image'`, the loupe shows a mesh by its thumbnail; the Stage library's
+  *Meshes* cards and a mesh drop on the viewport place a `mesh` object — `GLTFLoader` on the asset file, a wireframe stub until it
+  arrives, centred on its footprint and stood on the floor at its own size; `__loom2Stage.meshes()` says which loaded.
+- **Checks:** smoke scenario (tile → 3D prop → the dialog names Pixal3D and the minutes → the fake GLB → a mesh asset with lineage,
+  licences and a thumbnail, the badge on the tile → Stage → the Meshes card → "Mesh 1" placed and its GLB loaded) — 20/20 (the ST4 and
+  P18 scenarios are variant-aware: under `open` they assert the absence and the reason); 268 offline (+6: resolution, the frozen
+  graph against the contract, plan / preview / capabilities, the finisher's asset, the job end to end on the fake engine, the output
+  collector on the rig's history shape), 197 unit, lint 100, tsc clean, audits clean; the e2e teardown now keeps the fake-engine and
+  orchestrator logs under `node_modules/.e2e/` for a post-mortem.
+- **Rig (`scripts/p18_acceptance.py`, its own orchestrator + engine, Edge via CDP):** the five E14 inputs → five jobs: 344 s cold, then
+  538 / 314 / 226 / 266 s warm — the GPU stages take seconds; the CPU stages (remesh at 768 from 6.2 M faces, unwrap, the 4096²
+  bakes) vary with the prop, so the time is recorded with a 600 s runaway ceiling, not a bar (D79: the cost is shown). Every job
+  produced a mesh asset with lineage, a thumbnail and the six licences; 46.5–49.9k triangles, 3 textures, 20–27 MB each. The Stage:
+  the Library listed the five, all five GLBs loaded in the viewport, took transforms; screenshot `engine/spikes/out/p18/stage.png` —
+  the boat, the wheel, the chest, the lantern and the compass in the room. One browser log line while five 22 MB GLBs loaded at
+  once (`net::ERR_NO_BUFFER_SPACE` on a thumbnail image); 34 checks ok. The `RenderMesh` thumbnail frames the compass well but the
+  lantern from inside (its own camera; see the next line).
+- **Thumbnails:** `RenderMesh` with or without the Load3D viewer's `camera_info` gives the same view (tested on the lantern GLB through a
+  Load3DAdvanced → Get3DComponents → RenderMesh graph: its camera sits inside the mesh for some props) — so the plan's other option is
+  built: when the Stage loads a mesh asset, `engine.thumbnailOf` renders a lit three-quarter view with the camera fitted to the
+  bounding sphere (the E14 renderer's framing) and `PUT /assets/{id}/thumbnail` (a PNG ≤ 8 MB, `params.thumb_source = client`) makes
+  it the asset's thumbnails, once per asset; the engine's view remains the first thumbnail until a prop is placed. Route snapshot 110.
+- Not in P18: a texture-size knob (the template bakes 4096², 20–27 MB per prop); a client thumbnail without placing the prop; TRELLIS.2
+  (deleted by D79). Every ArtCraft proposal P1–P19 is now built; next the Story workspace (14) and the author's own checks (the
+  Resolve import, the clay blind check, the licence review of DINOv3).

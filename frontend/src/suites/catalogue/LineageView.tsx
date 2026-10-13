@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
-import { beginDrag } from '../../frame/drag'
+import { beginDrag, mediaOf } from '../../frame/drag'
 import { tileMenu } from './catalogueCommands'
 import { useCat } from './catalogueContext'
 
@@ -94,7 +94,7 @@ export function LineageView({ id }: { id: string }) {
               <div key={a.id} className={`lin-card${a.id === id ? ' here' : ''}${sel.has(a.id) ? ' selected' : ''}`} style={{ left: x, top: y, width: CARD_W, height: CARD_H }}
                 onClick={() => c.select(a.id, 'single')} onDoubleClick={() => { if (a.id !== id) c.openLineage(a.id) }}
                 onContextMenu={(e) => { c.select(a.id, 'single'); showMenu(e, tileMenu()) }}
-                onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: a.id, media: a.kind === 'video' ? 'video' : 'image' }], thumb: api.thumbUrl(a.id, 256) }))}
+                onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }], thumb: api.thumbUrl(a.id, 256) }))}
                 title={`${a.model_id ?? a.suite} · ${a.w}×${a.h} · seed ${a.seed ?? '—'}`}>
                 <img src={api.thumbUrl(a.id, 256)} alt="" draggable={false} />
                 <span className="txt">

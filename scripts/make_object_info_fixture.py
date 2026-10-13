@@ -31,6 +31,11 @@ CLASSES = [
     # LTX-2.3
     "LTXVImgToVideo", "LTXVAddGuide", "LTXVConditioning", "LTXVScheduler", "LTXVEmptyLatentAudio", "LTXVConcatAVLatent", "LTXVSeparateAVLatent",
     "GetICLoRAParameters", "LoadVideo", "GetVideoComponents",                                         # ST4 (D76): the IC-LoRA guide
+    # P18 (D84): the Pixal3D template's branch (engine/pixal3d_graph.json) and the thumbnail view
+    "CLIPVisionLoader", "LoadMoGeModel", "MoGeInference", "MoGeGeometryToFOV", "Pixal3DConditioning", "EmptyTrellis2LatentStructure", "VaeDecodeStructureTrellis2",
+    "Trellis2ShapeStage", "Trellis2UpsampleStage", "Trellis2TextureStage", "VaeDecodeShapeTrellis", "VaeDecodeTextureTrellis", "RemeshMesh", "DecimateMesh",
+    "MeshSmoothNormals", "UnwrapMesh", "BakeTextureFromVoxel", "BakeAmbientOcclusion", "BakeNormalMapFromMesh", "ApplyTextureToMesh", "MeshToFile3D",
+    "Save3DAdvanced", "RenderMesh", "CFGOverride", "RescaleCFG", "ImageCropToMask", "PrimitiveInt", "GetMeshInfo",
     "LTXVCropGuides", "LTXVPreprocess",
     # upscale / tools
     "UpscaleModelLoader", "ImageUpscaleWithModel",

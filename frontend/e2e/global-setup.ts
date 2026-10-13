@@ -6,7 +6,7 @@
 // The tests read what they need from process.env.LOOM2_E2E (JSON, see `E2EEnv` in fixtures.ts). The returned teardown stops
 // everything this setup started: POST /shutdown for the orchestrator, then the process trees, then the temp folder.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -79,6 +79,9 @@ export default async function globalSetup(config: FullConfig): Promise<() => Pro
     }
     killTree(orch)
     killTree(fake)
+    for (const f of ['fake_comfy.log', 'orchestrator.e2e.log']) {     // keep the two logs for a failed scenario's post-mortem (the state goes)
+      try { mkdirSync(join(REPO, 'frontend', 'node_modules', '.e2e'), { recursive: true }); copyFileSync(join(state, 'logs', f), join(REPO, 'frontend', 'node_modules', '.e2e', f)) } catch { /* none */ }
+    }
     for (let i = 0; i < 10; i++) {                                   // Windows: files may stay locked for a moment after the processes exit
       try { rmSync(tmp, { recursive: true, force: true }); break } catch { await new Promise((r) => setTimeout(r, 300)) }
     }

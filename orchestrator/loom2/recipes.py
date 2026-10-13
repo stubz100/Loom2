@@ -317,6 +317,19 @@ def stage_model_id(recipe: StageShot, variant: str = "full") -> str:
     return spec.id
 
 
+class ImageToMesh(BaseModel):
+    """P18 (D79 / D84): a textured GLB prop from one image through Pixal3D (ComfyUI's template, frozen as engine/pixal3d_graph.json): the
+    cut-out by BiRefNet, DINOv3 conditioning with MoGe's field of view, the structure → shape → upsample → texture stages, remesh, decimate,
+    bake. A background job of some minutes (warm ≈ 243 s, cold ≈ 361 s on the rig); the result is a Catalogue asset of kind `mesh` with
+    lineage `image-to-mesh` to the source, which the Stage library places as a prop."""
+    kind: Literal["image_to_mesh"] = "image_to_mesh"
+    asset_id: str
+    model_id: str = _default("mesh")
+    resolution: Literal[1024, 1536] = 1024        # the upsample stage's target (0.39 floors at 1024; 1536 is the template's own, slower)
+    faces: int = Field(50000, ge=2000, le=700000)  # DecimateMesh's target (E14: 46–50k after 50k)
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+
 class Render(BaseModel):
     """P17 (D83) slice 2: a draft render of a sequence — a CPU job (no engine) that becomes a Catalogue clip: every lane tick read from
     the clips' PNG masters, dissolves blended, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no
@@ -326,8 +339,8 @@ class Render(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh
 
 
 class RecipeEnvelope(BaseModel):

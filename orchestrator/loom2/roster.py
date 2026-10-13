@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Folder = Literal["diffusion_models", "text_encoders", "vae", "loras", "clip_vision", "upscale_models",
-                 "controlnet", "checkpoints", "sam3", "background_removal", "embeddings"]
+                 "controlnet", "checkpoints", "sam3", "background_removal", "embeddings", "geometry_estimation"]
 Health = Literal["present", "verified", "missing", "retired"]
 
 
@@ -32,6 +32,18 @@ class RosterEntry(BaseModel):
     approx_gb: float | None = None
     retired: str | None = None                 # D30: struck by a spike; deleted from disk, re-fetchable
     note: str | None = None
+
+
+# P18 (D84): weights loom2 never lists or suggests, by a name fragment, with the licence reason the Models suite shows.
+IGNORED_UNLISTED: list[tuple[str, str]] = [
+    ("hunyuan3d", "Hunyuan3D's licence excludes the EU (D17); loom2 makes props with Pixal3D (D79)"),
+    ("hunyuan_3d", "Hunyuan3D's licence excludes the EU (D17); loom2 makes props with Pixal3D (D79)"),
+]
+
+
+def ignore_reason(name: str) -> str | None:
+    low = name.lower()
+    return next((why for frag, why in IGNORED_UNLISTED if frag in low), None)
 
 
 # The catalogue. Order: family, then role. `open` variant = Apache/MIT only (D26).
@@ -133,6 +145,20 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="qwen-edit-2509-angles", name="Qwen-Edit-2509-Multiple-angles.safetensors", folder="loras", family="qwen_image", role="lora",
                 repo="dx8152/Qwen-Edit-2509-Multiple-angles", file="Qwen-Edit-2509-Multiple-angles.safetensors", license="apache-2.0",
                 variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA"),
+    # ---- Image → mesh props (P18, D79 / D84): ComfyUI's Pixal3D template — Pixal3D int8, the two TRELLIS.2 VAEs, MoGe (MIT) and DINOv3 ----
+    RosterEntry(id="pixal3d-int8", name="pixal3d_int8_convrot.safetensors", folder="diffusion_models", family="pixal3d", role="transformer",
+                repo="Comfy-Org/Pixal3D", file="diffusion_models/pixal3d_int8_convrot.safetensors", license="mit", variants=["full"], approx_gb=5.6,
+                note="E14 (D79): props from a cut-out, IoU 0.90–0.99, 46–50k triangles, warm 243 s / cold 361 s at 1024; full only while DINOv3 is (D17)"),
+    RosterEntry(id="trellis2-shape-vae", name="trellis_2_shape_vae_bf16.safetensors", folder="vae", family="pixal3d", role="vae",
+                repo="Comfy-Org/Pixal3D", file="vae/trellis_2_shape_vae_bf16.safetensors", license="mit", variants=["full", "open"], approx_gb=1.1),
+    RosterEntry(id="trellis2-texture-vae", name="trellis_2_texture_vae_bf16.safetensors", folder="vae", family="pixal3d", role="vae",
+                repo="Comfy-Org/Pixal3D", file="vae/trellis_2_texture_vae_bf16.safetensors", license="mit", variants=["full", "open"], approx_gb=0.95),
+    RosterEntry(id="dinov3-l", name="dino_v3_L_naf_fp32.safetensors", folder="clip_vision", family="pixal3d", role="text_encoder",
+                repo="Comfy-Org/Pixal3D", file="clip_vision/dino_v3_L_naf_fp32.safetensors", license="dinov3 (Meta custom)", variants=["full"], approx_gb=1.2,
+                note="the image encoder of Pixal3D and TRELLIS.2; its licence keeps P18 full-only until reviewed (D17 / D26)"),
+    RosterEntry(id="moge2-vitl", name="moge_2_vitl_normal_fp16.safetensors", folder="geometry_estimation", family="pixal3d", role="tool",
+                repo="Comfy-Org/MoGe", file="geometry_estimation/moge_2_vitl_normal_fp16.safetensors", license="mit", variants=["full", "open"], approx_gb=0.66,
+                note="the field of view the template estimates for Pixal3D's conditioning"),
     # ---- Stage → clip (P13 ST4, D76): LTX-2.3's IC-LoRA Union — the depth (or pose) sequence as the guide at frame 0 ----
     RosterEntry(id="ltx23-ic-lora-union", name="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", folder="loras", family="ltx23", role="lora",
                 repo="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control", file="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", license="ltx-2.x community",
@@ -232,7 +258,13 @@ class Roster:
         return out
 
     def unlisted_files(self) -> list[dict]:
-        """Files on disk no roster entry claims — surfaced in the Models suite as 'unknown'."""
+        """Files on disk no roster entry claims — surfaced in the Models suite as 'unknown'; the ignore list's files are left out (ignored_files)."""
         claimed = {(e.folder, e.name) for e in ROSTER}
         return [{"folder": k[0], "name": k[1], "path": str(v[0]), "size": v[0].stat().st_size}
-                for k, v in sorted(self._found.items()) if k not in claimed]
+                for k, v in sorted(self._found.items()) if k not in claimed and not ignore_reason(k[1])]
+
+    def ignored_files(self) -> list[dict]:
+        """P18 (D84): files on disk loom2 will never suggest, with the reason (Hunyuan3D: its licence excludes the EU, D17)."""
+        claimed = {(e.folder, e.name) for e in ROSTER}
+        return [{"folder": k[0], "name": k[1], "path": str(v[0]), "size": v[0].stat().st_size, "reason": ignore_reason(k[1]) or ""}
+                for k, v in sorted(self._found.items()) if k not in claimed and ignore_reason(k[1])]

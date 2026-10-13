@@ -5,7 +5,8 @@ import type { DragItem, DragPayload, DropVerdict } from './drag'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const assets = (p: DragPayload | DragItem[]) => (Array.isArray(p) ? p : p.items).filter((i) => i.kind === 'asset')
-const images = (items: DragItem[]) => items.filter((i) => i.media !== 'video')
+const images = (items: DragItem[]) => items.filter((i) => !i.media || i.media === 'image')      // a clip or a mesh (P18) is not an image
+export const meshes = (items: DragItem[]) => items.filter((i) => i.media === 'mesh')
 
 /** Reference slots: images only, no duplicates, at most `max` in all (the model's `max_refs`). */
 export function refDrop(current: string[], p: DragPayload | DragItem[], max: number): { take: string[]; verdict: DropVerdict } {

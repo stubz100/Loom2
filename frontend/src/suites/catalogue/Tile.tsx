@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
-import { beginDrag, type DragItem } from '../../frame/drag'
+import { beginDrag, type DragItem, mediaOf } from '../../frame/drag'
 
 export interface TileProps {
   a: Asset; size: number; fill: boolean; caption?: 'off' | 'prompt' | 'model'; selected: boolean; primary: boolean; pinned: number
@@ -20,7 +20,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
     <div className={`tile${selected ? ' selected' : ''}${primary ? ' primary' : ''}${a.state === 'reject' ? ' reject' : ''}${fill ? ' fill' : ''}`}
       data-id={a.id} tabIndex={-1} onClick={(e) => onClick(e, a.id)} onDoubleClick={() => onDouble(a.id)} onContextMenu={(e) => onContext?.(e, a.id)}
       onPointerDown={(e) => beginDrag(e, () => {                     // a selected tile carries the selection, another one only itself
-        const self: DragItem = { kind: 'asset', id: a.id, media: a.kind === 'video' ? 'video' : 'image' }
+        const self: DragItem = { kind: 'asset', id: a.id, media: mediaOf(a.kind) }
         return { items: selected ? (dragItems?.() ?? [self]) : [self], thumb }
       })}
       title={`${a.model_id ?? a.suite} · seed ${a.seed ?? '—'} · ${a.w ?? '?'}×${a.h ?? '?'} · ${new Date(a.created_at).toLocaleTimeString()}`}>
@@ -30,6 +30,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
       <div className="badges">
         {stateBadge && <span className={`badge-dot ${a.state}`}>{stateBadge}</span>}
         {a.kind === 'video' && <span className="badge-dot" title="clip">🎬</span>}
+        {a.kind === 'mesh' && <span className="badge-dot" title="3D prop (GLB)">🧊</span>}
         {a.has_document && <span className="badge-dot" title="has document">✎</span>}
         {derived && (onLineage
           ? <button className="badge-dot lin" title="derived from another asset: show the lineage" aria-label="Show lineage" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onLineage(a.id) }}>⤷</button>

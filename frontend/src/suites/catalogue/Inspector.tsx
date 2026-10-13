@@ -231,11 +231,12 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
         </div>
       </Section>
-      {a.kind !== 'video' && <Section id="start" title="Start from this image">
+      {a.kind === 'image' && <Section id="start" title="Start from this image">
         <div className="quick-cards compact">
           <CommandCard id="cat.start.removeBg" label="Remove background" hint="Edit · AI Select · Subject" />
           <CommandCard id="cat.start.upscale" label="Upscale" hint="Edit · AI Upscale" />
           <CommandCard id="cat.start.angle" label="New angle" hint="Generate · Angle" />
+          <CommandCard id="cat.start.mesh" label="3D prop" hint="Pixal3D · a background job" />
           <CommandCard id="cat.animate" label="Animate from here" hint="the start frame" />
           <CommandCard id="cat.variations" label="Variations" hint="new seeds" />
         </div>

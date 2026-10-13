@@ -33,7 +33,8 @@ function devHook(): Record<string, unknown> {
     // ST4: the clip path
     setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(), setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
-    updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch) }
+    updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch), setTransform: (id: string, t: { pos: number[]; rot: number[]; scale: number[] }) => st().setTransform(id, t),
+    frameAll: () => st().frameView(null) }
   return w.__loom2Stage
 }
 if (DEV_HOOKS) devHook()
@@ -42,6 +43,7 @@ if (DEV_HOOKS) devHook()
 function LibraryTab() {
   const current = useStage((s) => s.current)
   const stages = useStage((s) => s.stages)
+  const meshes = useStage((s) => s.meshes)
   return (
     <div className="stage-panel">
       <div className="stage-list">
@@ -60,6 +62,12 @@ function LibraryTab() {
         <div className="lib-grid">{SET_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.set.${p}`} text label={p} />)}</div>
         <h4>Props</h4>
         <div className="lib-grid">{PROP_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.prop.${p}`} text label={p} />)}</div>
+        <h4>Meshes{meshes.length ? ` · ${meshes.length}` : ''}</h4>
+        {!meshes.length && <span className="hint">None yet — a Catalogue image's "Make a 3D prop…" (Pixal3D) lands here (P18).</span>}
+        <div className="lib-grid">{meshes.slice(0, 24).map((m) => (
+          <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
+            <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
+          </button>))}</div>
         <p className="hint">Image planes: drop a Catalogue tile on the viewport (it lands where the pointer is). Each card adds at the viewport's centre.</p>
       </>}
     </div>
@@ -274,7 +282,7 @@ function ClipSection({ clips }: { clips: Asset[] }) {
 
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'outliner') return <OutlinerTab />
   if (tab === 'cameras') return <CamerasTab />
@@ -380,8 +388,9 @@ function Viewport() {
   const poseMode = useSuiteRail().active === 'poses'                                   // ST2: the Poses tab shows the joint pickers
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
-    (d) => { const id = d.items.find((i) => i.kind === 'asset' && i.media !== 'video')?.id; const e = engineRef.current; const p = lastPointer.current; if (id && e) st().addObject('plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), id) },
-    (d) => (d.items.some((i) => i.kind === 'asset' && i.media !== 'video') ? { ok: true, label: 'Place as an image plane' } : { ok: false, reason: 'Only images become planes' }))
+    (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
+      if (it && e) st().addObject(it.media === 'mesh' ? 'mesh' : 'plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), it.id) },         // P18: a mesh lands as a prop
+    (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); return it ? { ok: true, label: it.media === 'mesh' ? 'Place the prop here' : 'Place as an image plane' } : { ok: false, reason: 'Only images and meshes go on the stage' } })
   // the engine: one per mounted viewport (kept alive with the suite, D69)
   useEffect(() => {
     const canvas = canvasRef.current, host = hostRef.current
@@ -390,11 +399,12 @@ function Viewport() {
       onPick: (id) => st().select(id),
       onTransformed: (id, t) => st().setTransform(id, t),
       onPosed: (id, joints) => st().setJoints(id, joints),
+      onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on) })   // ST3 / ST4
-    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint) })                   // the smoke test aims the mouse at joints and handles
+    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()

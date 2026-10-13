@@ -1,0 +1,14 @@
+# Pixal3D (P18 / D79, D84): ComfyUI's own image → mesh template, its Pixal3D branch, int8 — frozen as engine/pixal3d_graph.json
+# (scripts/make_mesh_graph.py). Measured in E14 (journal 2026-10-12): silhouette IoU 0.90–0.99 on five props, plausible backs 5/5,
+# 46–50k triangles after DecimateMesh, no OOM on 16 GB; warm 243 s, cold 361 s at 1024. DINOv3's licence keeps it full-only (D17 / D26).
+[[model]]
+id = "pixal3d-int8"
+family = "pixal3d"
+label = "Pixal3D · image → mesh"
+short = "Pixal3D"
+hint = "a textured GLB prop from one cut-out photo — a background job of some minutes, made once"
+order = 60
+graph = "pixal3d"
+roles.extra = { shape_vae = "trellis2-shape-vae", texture_vae = "trellis2-texture-vae", dino = "dinov3-l", moge = "moge2-vitl", matte = "birefnet" }
+recipes = { mesh = true, default_for = ["mesh"] }
+estimates = { vram_gb = 14.0, base_seconds = 243.0, cold_seconds = 361.0 }

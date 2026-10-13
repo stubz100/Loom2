@@ -35,7 +35,7 @@ async def models_scan(svc: Svc):
 
 @router.get("/models/unlisted", response_model=UnlistedFiles)
 async def models_unlisted(svc: Svc):
-    return {"items": await asyncio.to_thread(svc.roster.unlisted_files)}
+    return {"items": await asyncio.to_thread(svc.roster.unlisted_files), "ignored": await asyncio.to_thread(svc.roster.ignored_files)}
 
 
 @router.post("/models/fetch", response_model=FetchState)

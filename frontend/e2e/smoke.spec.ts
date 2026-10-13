@@ -361,9 +361,10 @@ test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the
   expect(newest.lineage_kind).toBe('reangle')
   const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${newest.id}`)
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
-  const job = (await api<{ items: { id: string; status: string; recipe: { kind: string; move?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
-  expect(job?.status).toBe('done')
-  expect(job?.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
+  type JobLite = { id: string; status: string; recipe: { kind: string; move?: string } }
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
+  await expect.poll(async () => (await jobOf())?.status, { timeout: 10_000 }).toBe('done')               // the asset lands a beat before the job's status flips
+  expect((await jobOf())?.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
 })
 
 test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin, the document saves with its revision, the EDL is written', async ({ page }) => {

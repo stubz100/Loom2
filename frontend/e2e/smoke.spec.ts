@@ -355,16 +355,21 @@ test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/)                 // auto: a framing move runs Klein (D77)
   await go.click()
-  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + 1)
-  const newest = (await api<{ items: (AssetLite & { parents: string[]; lineage_kind: string | null })[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
+  // the result is found through its job, not as "the newest asset": on a slow runner an earlier scenario's job (the @mentions one, four
+  // parents) can land in Unprocessed between the click and the poll (CI on bb1f90a, open variant)
+  type JobLite = { id: string; status: string; recipe: { kind: string; move?: string }; result: { asset_ids?: string[] } | null }
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.recipe?.kind === 'reangle')
+  await expect.poll(async () => (await jobOf())?.status, { timeout: 45_000 }).toBe('done')
+  const job = (await jobOf())!
+  expect(job.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
+  expect(job.result?.asset_ids).toHaveLength(1)
+  const newest = await api<AssetLite & { parents: string[]; lineage_kind: string | null; state: string }>('GET', `/assets/${job.result!.asset_ids![0]}`)
   expect(newest.parents).toEqual([srcId])                                                               // lineage: the source …
   expect(newest.lineage_kind).toBe('reangle')
+  expect(newest.state).toBe('none')                                                                     // … it landed in Unprocessed
+  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(before + 1)
   const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${newest.id}`)
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[srcId, 'reangle']])                   // … and the edge kind
-  type JobLite = { id: string; status: string; recipe: { kind: string; move?: string } }
-  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
-  await expect.poll(async () => (await jobOf())?.status, { timeout: 10_000 }).toBe('done')               // the asset lands a beat before the job's status flips
-  expect((await jobOf())?.recipe).toMatchObject({ kind: 'reangle', move: 'wide' })
 })
 
 test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin, the document saves with its revision, the EDL is written', async ({ page }) => {

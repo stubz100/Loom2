@@ -1381,6 +1381,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/{st_id}/guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Guide
+         * @description The frames become one video asset (h264 near-lossless, `kind = video`, suite stage, `lineage_kind = stage-pass`, `params {stage_id,
+         *     camera_id, revision, pass: "<kind>-sequence", frames, fps, size, range, keypoints}`) on the stage's album page; the document records
+         *     it under the camera's passes entry (`guides[kind]`) and comes back at its new revision.
+         */
+        post: operations["stage_guide_stages__st_id__guide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stages/{st_id}/passes": {
         parameters: {
             query?: never;
@@ -2934,6 +2956,62 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * Guide
+         * @description P13 ST4 (D76, 16 §8): a pass sequence (a video asset the Stage rendered — depth by default, pose as the weaker second) that LTX-2.3's
+         *     IC-LoRA Union conditions the whole clip on, from frame 0. The start frame is a Stage shot; the clip keeps lineage to both.
+         */
+        Guide: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Kind
+             * @default depth
+             * @enum {string}
+             */
+            kind?: "depth" | "pose";
+            /**
+             * Strength
+             * @default 1
+             */
+            strength?: number;
+        };
+        /**
+         * GuideUpload
+         * @description ST4 (16 §8): a pass rendered per frame of the range — each frame a PNG put through `PUT /blobs/{sha}`, in order — with the
+         *     per-frame COCO-18 keypoints (for the rig's scoring).
+         */
+        GuideUpload: {
+            /** Camera Id */
+            camera_id: string;
+            /**
+             * Fps
+             * @default 24
+             */
+            fps?: number;
+            /** Frames */
+            frames: string[];
+            /**
+             * Keypoints
+             * @default []
+             */
+            keypoints?: unknown[];
+            /**
+             * Kind
+             * @default depth
+             */
+            kind?: string;
+            /** Range */
+            range: {
+                [key: string]: number;
+            };
+            /** Revision */
+            revision: number;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -3093,6 +3171,8 @@ export interface components {
              * @default 81
              */
             frames?: number;
+            /** @default null */
+            guide?: components["schemas"]["Guide"] | null;
             /**
              * Height
              * @default 480
@@ -4379,6 +4459,10 @@ export interface components {
              * @default false
              */
             flf?: boolean;
+            /** Guide Lora */
+            guide_lora?: string | null;
+            /** Guide Seconds */
+            guide_seconds?: number | null;
             /**
              * I2I
              * @default false
@@ -4795,6 +4879,7 @@ export interface components {
         };
         /** StageCaps */
         StageCaps: {
+            clip?: components["schemas"]["StageClipCaps"] | null;
             /** Default */
             default?: string | null;
             /** Methods */
@@ -4803,6 +4888,34 @@ export interface components {
             };
             /** Passes */
             passes: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * StageClipCaps
+         * @description P13 ST4 (D76): the video model that animates a stage through its IC-LoRA — health, E11's seconds, the guide kinds, its grid.
+         */
+        StageClipCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Fps */
+            fps?: number | null;
+            /** Frame Step */
+            frame_step?: number | null;
+            /** Health */
+            health: string;
+            /** Kinds */
+            kinds: string[];
+            /** Label */
+            label: string;
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id: string;
+            /** Seconds */
+            seconds?: number | null;
+            /** Size */
+            size: number[];
         } & {
             [key: string]: unknown;
         };
@@ -8401,6 +8514,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_guide_stages__st_id__guide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuideUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
                 };
             };
             /** @description Validation Error */

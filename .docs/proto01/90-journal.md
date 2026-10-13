@@ -3345,3 +3345,40 @@ split by file so that no two hands touched the same module.
   exact pose ≤ 150 s); E10's 74 s for RefControl is not reproduced at 1280×720 / 30 steps on this card — 100 s of sampling alone.
 - Not in ST3: `GET /stages/{id}/thumb`; region prompting from the mask pass; the clay method's extra-person habit with a reference.
   Next: ST4 (keyframes → pass sequences → the E11 IC-LoRA clip), then P18.
+
+### 2026-10-13 15:45 — ST4 Shots → clip built (D76 / D81, 16 §8): keyframes, the timeline, the pass sequence, LTX + the IC-LoRA
+- **Keyframes (client):** `suites/stage/anim.ts` — `keyframesOf`, `bracket` (the keys around a frame, held outside, smoothstep for
+  `ease`), `sampleCamera` / `sampleObject` (rotations the short way, a pose preset switching at the halfway point, joints interpolated
+  under one preset), `sampleDoc`, `withKey` / `withoutKey`, `keyedFrames`, `neighbourKey`, `clipFrames` (8n + 1 inside the range); 5
+  vitest cases. The store holds `frame`, `playing`, `guideKind`, `shotStart`; `keyCamera` / `keyObject` write the state shown at the
+  frame; `setTransform` and `updateCamera` auto-key a keyed object / camera (an unkeyed one edits the base); `removeKeyAt`, `setRange`.
+  The viewport syncs `sampleDoc(current, frame)`; playback loops the range at the project's fps. The Strip gained the timeline row
+  (transport, frame field, scrubber with key diamonds, range fields, `[` `]`, Key camera K, Key object Shift+K, remove keys);
+  `stage.anim.*` commands, Space / arrows / Shift+arrows as accelerators.
+- **Sequence → guide:** `engine.renderSequence(frames, w, h, kind, restoreDoc)` (the pass rendering factored into `shotCamera`,
+  `hideHelpers`, `shotWith`, `depthFor`, `keypoints`; the scene synced per frame, left at the viewport's frame), uploaded as blobs;
+  `POST /stages/{id}/guide {camera_id, revision, kind, fps, size, range, frames[sha], keypoints}` → `stages.encode_guide` (PyAV h264
+  crf 10, yuv420p, the E11 encoding) under `stages/<id>/guides/`, ingested in place as a video asset (suite stage, `stage-pass`,
+  `params {…, pass: "<kind>-sequence", frames, fps, range, keypoints}`, `origin {stage, guide}`) on the album page; `StageStore.set_guide`
+  records `guides[kind]` under the camera's passes entry (made if the stills were never rendered). Route snapshot 109 rows.
+- **Clip:** `I2V.guide {asset_id, kind depth | pose, strength}`; the LTX spec carries `guide_lora = ltx23-ic-lora-union` (new roster entry,
+  0.65 GB, the model's licence) and `guide_seconds 147` (E11); `build_i2v` adds `LoraLoaderModelOnly` + `GetICLoRAParameters` +
+  `LoadVideo` + `GetVideoComponents` + `LTXVAddGuide` at frame 0 last in the guide chain, the guider on the LoRA'd model (Wan refuses a
+  guide); `prepare_i2v` uploads the mp4 as it is (LoadVideo reads it by name after the object_info refresh); `recipe_weights` adds the
+  LoRA only with a guide; the estimate scales by E11's ratio; `placeholder_inputs` takes LoadVideo's first option (a V3 combo:
+  `["COMBO", {options}]` — the fake engine learned to grow it on an mp4 upload); the clip finisher adds the guide to the parents, sets
+  `lineage_kind stage-shot` and `suite stage` when the job's origin is the stage. `/capabilities.stage.clip` names the model, health,
+  seconds, kinds, fps, frame step and size. Fixture classes +3 (76). The Shot tab's Clip section: guide kind, Render sequence with
+  progress, the start shot picked by clicking a result, Animate ▶, the stage's clips. The Go-to-origin case covers the clip.
+- **Checks:** smoke scenario (stage → figure → a shot on the fake engine → the start picked → Key camera at 0 → frame 8 → the camera's z
+  edited on the Inspector (a keyed camera takes it as a key) → range 0–8 → Render sequence → the document's `guides.depth` has 9 frames,
+  the asset is a 9-frame video with keypoints → Animate ▶ → the fake engine decodes 9 frames → a stage-shot clip whose parents are the
+  shot and the guide, origin stage / clip) — 19/19; 262 offline (+4 clip tests), 197 unit, lint 100, tsc clean, audits clean.
+  Screenshot `frontend/node_modules/.e2e/stage-clip.png`: the timeline with two key diamonds, the Clip section, "Clip ready".
+- **Rig (`scripts/st_acceptance.py --methods clay --rounds 1`, the clip step on by default):** the camera keyed at 0 and 48 (a dolly
+  from z 4.2 to 2.4 through the hook), the depth sequence rendered, uploaded and encoded in 2.4 s (49 frames at 1024×576, 24 fps),
+  the clip job done in 131.5 s cold (LTX-2.3 distilled draft, 8 steps, the IC-LoRA), lineage stage-shot ← the clay shot + the guide,
+  origin stage / clip; SDPose on frames 0, 8, … 48 vs the guide's keypoints: PCK@0.1 0.996 (240/241). The clip sheet
+  (`engine/spikes/out/st/clip_sheet.jpg`) shows the dolly in on the two figures with the walk and the point held. 22/22 checks.
+- Not in ST4: the Story L3 link (14); object keys beyond transform + pose; a pose-guide measurement (E11: the weaker second, offered).
+  Next: P18 (Pixal3D props, D79).

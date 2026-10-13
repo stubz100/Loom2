@@ -201,6 +201,14 @@ class Beat(BaseModel):
     strength: float = Field(1.0, ge=0.1, le=1.0)
 
 
+class Guide(BaseModel):
+    """P13 ST4 (D76, 16 §8): a pass sequence (a video asset the Stage rendered — depth by default, pose as the weaker second) that LTX-2.3's
+    IC-LoRA Union conditions the whole clip on, from frame 0. The start frame is a Stage shot; the clip keeps lineage to both."""
+    asset_id: str
+    kind: Literal["depth", "pose"] = "depth"
+    strength: float = Field(1.0, ge=0.0, le=1.0)
+
+
 class I2V(BaseModel):
     """Image-to-video (11 §10; D8 Wan 2.2 I2V-A14B fp8 experts + Lightning, FLF on the same weights; D9 LTX-2.3 distilled
     fp8 with keyframe beats). Sizes and frame counts snap to the model's rule in the compiler (Wan ×16 and 4n+1,
@@ -221,6 +229,7 @@ class I2V(BaseModel):
     cfg: float | None = Field(None, ge=1.0, le=12.0)          # Wan high expert CFG (motion / quality); the distilled paths ignore it
     shift: float | None = Field(None, ge=0.5, le=12.0)
     beats: list[Beat] = Field(default_factory=list)           # LTX only
+    guide: Guide | None = None                                # ST4: a Stage pass sequence through the IC-LoRA (LTX only)
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 

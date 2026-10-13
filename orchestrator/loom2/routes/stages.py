@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..fsio import atomic_write_json, read_json_or, utc_now
+from ..stages import encode_guide
 from ..origin import JobOrigin
 from ..recipes import STAGE_PASSES
 from ..schemas import Deleted, StageList
@@ -140,6 +141,67 @@ async def stage_passes(svc: Svc, st_id: str, body: PassesUpload):
     entry = {"camera_id": body.camera_id, "revision": body.revision, "size": body.size, "assets": assets, "keypoints": body.keypoints, "legend": body.legend,
              "rendered_at": utc_now()}
     st2 = await asyncio.to_thread(store.set_passes, st_id, entry, gid)
+    svc.hub.broadcast("stage.updated", {"id": st2.id, "revision": st2.revision})
+    return st2.model_dump()
+
+
+class GuideUpload(BaseModel):
+    """ST4 (16 §8): a pass rendered per frame of the range — each frame a PNG put through `PUT /blobs/{sha}`, in order — with the
+    per-frame COCO-18 keypoints (for the rig's scoring)."""
+    camera_id: str
+    revision: int
+    kind: str = "depth"                           # depth | pose
+    fps: int = 24
+    size: dict[str, int]
+    range: dict[str, int]                         # {start, end} of the document's frames the sequence covers
+    frames: list[str]                             # blob sha256 per frame
+    keypoints: list[Any] = []                     # per frame: per figure 18 × [x, y, visible]
+
+
+@router.post("/stages/{st_id}/guide", response_model=Stage)
+async def stage_guide(svc: Svc, st_id: str, body: GuideUpload):
+    """The frames become one video asset (h264 near-lossless, `kind = video`, suite stage, `lineage_kind = stage-pass`, `params {stage_id,
+    camera_id, revision, pass: "<kind>-sequence", frames, fps, size, range, keypoints}`) on the stage's album page; the document records
+    it under the camera's passes entry (`guides[kind]`) and comes back at its new revision."""
+    ws, catalogue, _ = svc.require_project()
+    groups = svc.require_groups()
+    store = StageStore(ws)
+    st = await asyncio.to_thread(store.get, st_id)
+    if st is None:
+        raise HTTPException(404, "stage not found")
+    if not any(c.id == body.camera_id for c in st.cameras):
+        raise HTTPException(422, f"camera {body.camera_id!r} is not in the stage")
+    if body.kind not in ("depth", "pose"):
+        raise HTTPException(422, "a guide is the depth or the pose sequence")
+    if len(body.frames) < 2:
+        raise HTTPException(422, "a sequence needs at least two frames")
+    if body.fps < 1 or body.fps > 60:
+        raise HTTPException(422, "fps is 1–60")
+    paths = []
+    for i, sha in enumerate(body.frames):
+        if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            raise HTTPException(422, f"frame {i}: a blob id is a lowercase sha256")
+        p = ws.temp_dir / "blobs" / sha
+        if not p.is_file():
+            raise HTTPException(422, f"frame {i}: blob {sha[:12]}… was not uploaded (PUT /blobs/{{sha}} first)")
+        paths.append(p)
+    gid = st.group_id if st.group_id and st.group_id in groups.groups else None
+    if gid is None:
+        gid = (await asyncio.to_thread(groups.create, f"Stage · {st.name}")).id
+    out_dir = ws.stages_dir / st_id / "guides"
+    out = out_dir / f"{body.camera_id}-{body.kind}-r{body.revision}.mp4"
+    await asyncio.to_thread(encode_guide, paths, out, body.fps)
+    origin = JobOrigin(suite="stage", surface="guide", ref=st_id, payload={"camera_id": body.camera_id, "kind": body.kind})
+    params = {"stage_id": st_id, "camera_id": body.camera_id, "revision": body.revision, "pass": f"{body.kind}-sequence", "frames": len(paths), "fps": body.fps,
+              "size": body.size, "range": body.range, "keypoints": body.keypoints}
+    rec = await asyncio.to_thread(catalogue.ingest_file, out, kind="video", in_place=True, suite="stage", lineage_kind="stage-pass", origin=origin, params=params,
+                                  prompt_text=f"{st.name} · {body.kind} sequence", frames=len(paths), fps=float(body.fps), w=int(body.size.get("w", 0)) or None,
+                                  h=int(body.size.get("h", 0)) or None)
+    rec = await asyncio.to_thread(catalogue.make_thumbs, rec, paths[0])
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    await asyncio.to_thread(groups.move, [("asset", rec.id)], gid)
+    guide = {"asset_id": rec.id, "frames": len(paths), "fps": body.fps, "size": body.size, "range": body.range, "revision": body.revision, "rendered_at": utc_now()}
+    st2 = await asyncio.to_thread(store.set_guide, st_id, body.camera_id, body.kind, guide, gid)
     svc.hub.broadcast("stage.updated", {"id": st2.id, "revision": st2.revision})
     return st2.model_dump()
 

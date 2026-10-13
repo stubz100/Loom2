@@ -170,9 +170,52 @@ class StageStore:
         self.save(st)
         return st
 
+    def set_guide(self, st_id: str, camera_id: str, kind: str, guide: dict[str, Any], group_id: str | None) -> Stage:
+        """ST4: record a camera's rendered pass sequence under its passes entry (`guides[kind]`), making the entry when the stills were
+        never rendered; the revision moves like set_passes."""
+        cur = self.get(st_id)
+        if cur is None:
+            raise KeyError(st_id)
+        passes = [dict(p) for p in cur.passes]
+        entry = next((p for p in passes if p.get("camera_id") == camera_id), None)
+        if entry is None:
+            entry = {"camera_id": camera_id, "revision": guide.get("revision", cur.revision), "size": guide.get("size"), "assets": {}, "keypoints": [], "legend": {}}
+            passes.append(entry)
+        entry.setdefault("guides", {})[kind] = guide
+        st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save(st)
+        return st
+
     def delete(self, st_id: str) -> bool:
         p = self.path(st_id)
         if not p.is_file():
             return False
         p.unlink()
         return True
+
+
+def encode_guide(frames: list[Path], out: Path, fps: int) -> None:
+    """ST4: the per-frame PNGs as one near-lossless h264 (crf 10, yuv420p — the E11 guide encoding); odd sizes lose a row / column."""
+    import av
+    import numpy as np
+    from PIL import Image
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp.mp4")
+    with Image.open(frames[0]) as im:
+        w, h = im.size
+    w, h = w - w % 2, h - h % 2
+    with av.open(str(tmp), "w", format="mp4", options={"movflags": "+faststart"}) as container:
+        stream = container.add_stream("libx264", rate=fps)
+        stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
+        stream.options = {"crf": "10", "preset": "veryfast", "g": "24"}
+        for i, f in enumerate(frames):
+            with Image.open(f) as im:
+                arr = np.ascontiguousarray(np.asarray(im.convert("RGB"))[:h, :w])
+            vf = av.VideoFrame.from_ndarray(arr, format="rgb24")
+            vf.pts = i
+            for pkt in stream.encode(vf):
+                container.mux(pkt)
+        for pkt in stream.encode():
+            container.mux(pkt)
+    tmp.replace(out)

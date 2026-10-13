@@ -337,7 +337,7 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await page.locator('.stage .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
   await expect(page.locator('.frame')).toBeVisible()
   await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
-  await expect(page.locator('.edit-empty')).toBeVisible()                            // the code loads this time
+  await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 45_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot)
 })
 
 test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
@@ -541,4 +541,59 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${shots[0].id}`)
   expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[entry.assets.clay, 'stage-shot']])
   await page.screenshot({ path: 'node_modules/.e2e/stage-shot.png' })
+})
+
+test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth sequence renders as a video asset, and the fake engine animates the shot through the IC-LoRA with lineage to both', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Dolly')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
+  // a shot first (the clip starts from it)
+  await page.locator('nav.rail button[title^="Shot"]').click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 15_000 })
+  await go.click()
+  await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
+  await page.locator('.shot-tab .shot-thumb').first().click()                                               // the clip starts from this shot
+  await expect(page.locator('.shot-tab .shot-thumb.start')).toHaveCount(1)
+  // keys: the camera at frame 0, then a move at frame 8 (a keyed camera takes the edit as a key); the range is 0–8 (9 frames = 8n + 1)
+  const tl = page.locator('.stage-timeline')
+  await tl.locator('button', { hasText: /^Key camera$/ }).click()
+  await tl.locator('.frame-field').fill('8'); await tl.locator('.frame-field').dispatchEvent('change')
+  await page.locator('nav.rail button[title^="Cameras"]').click()
+  const box = (await page.locator('canvas.stage-canvas').boundingBox())!
+  await page.mouse.click(box.x + box.width - 40, box.y + box.height - 40)                                    // empty floor (the gizmo bar sits top-left): nothing selected, the Inspector shows the camera
+  await expect(page.locator('.inspector .stage-insp h4')).toContainText('Camera 1')
+  const z = page.locator('.inspector .stage-insp .vec input').nth(2)                                           // the camera's position z
+  await z.fill('2'); await z.dispatchEvent('change')
+  const rangeEnd = tl.locator('.range-field input').nth(1)
+  await rangeEnd.fill('8'); await rangeEnd.dispatchEvent('change')
+  type Doc = { id: string; name: string; revision: number; range: { start: number; end: number }; keyframes: { camera: Record<string, { frame: number; pos: number[] }[]> }; passes: { guides?: Record<string, { asset_id: string; frames: number; fps: number }> }[] }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Dolly')!
+  await expect.poll(async () => { const d = await doc(); const ks = Object.values(d.keyframes.camera)[0] ?? []; return ks.map((k) => k.frame).join(',') + '|' + d.range.end }, { timeout: 10_000 }).toBe('0,8|8')
+  expect((Object.values((await doc()).keyframes.camera)[0])[1].pos[2]).toBe(2)
+  expect(tl.locator('.key-mark')).toHaveCount(2)
+  // the sequence: nine depth frames become one video asset on the album page, recorded under the camera's passes entry
+  await page.locator('nav.rail button[title^="Shot"]').click()
+  await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
+  await expect.poll(async () => (await doc()).passes[0]?.guides?.depth?.frames ?? 0, { timeout: 60_000 }).toBe(9)
+  const guide = (await doc()).passes[0].guides!.depth
+  const gasset = await api<AssetLite & { kind: string; lineage_kind: string | null; frames: number | null; fps: number | null; params: { pass: string; keypoints: unknown[] } }>('GET', `/assets/${guide.asset_id}`)
+  expect(gasset.kind).toBe('video'); expect(gasset.lineage_kind).toBe('stage-pass'); expect(gasset.frames).toBe(9); expect(gasset.params.pass).toBe('depth-sequence'); expect(gasset.params.keypoints).toHaveLength(9)
+  await expect(page.locator('.shot-tab .guide-state')).toContainText('9 frames')
+  // Animate ▶: the I2V job with the guide; the fake engine decodes nine frames; the clip carries lineage to the shot and the guide
+  const animate = page.locator('.shot-tab button', { hasText: /^Animate/ })
+  await expect(animate).toBeEnabled()
+  await animate.click()
+  await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
+  const startId = await page.locator('.shot-tab .shot-thumb.start').getAttribute('src')
+  const clips = (await api<{ items: (AssetLite & { kind: string; parents: string[]; lineage_kind: string | null; frames: number | null; origin: { suite: string; surface: string } | null; params: { recipe: { guide: { kind: string } } } })[] }>('GET', '/assets?suite=stage&sort=created_desc&limit=20')).items.filter((a) => a.kind === 'video' && a.lineage_kind === 'stage-shot')
+  expect(clips).toHaveLength(1)
+  expect(clips[0].frames).toBe(9); expect(clips[0].origin).toMatchObject({ suite: 'stage', surface: 'clip' }); expect(clips[0].params.recipe.guide.kind).toBe('depth')
+  expect(clips[0].parents).toContain(guide.asset_id); expect(clips[0].parents.length).toBe(2)
+  expect(startId).toContain(clips[0].parents[0])                                                              // the start shot is the first parent
+  await page.screenshot({ path: 'node_modules/.e2e/stage-clip.png' })
 })

@@ -223,10 +223,12 @@ class ClipFinisher:
                                       timings={"engine_wall_s": q.wall_s(), "node_s": job.node_times})
         q.progress(job, "encoding the proxy")
         rec = await asyncio.to_thread(clips.encode_proxy, rec)
-        parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats]
+        parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats] + ([recipe.guide.asset_id] if recipe.guide else [])
         parents = list(dict.fromkeys(parents))
+        from_stage = bool(job.origin and job.origin.suite == "stage")
         asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
-                                        suite="animate", model_id=recipe.model_id, seed=job.seed, prompt_text=recipe.prompt_text,
+                                        suite="stage" if from_stage else "animate", model_id=recipe.model_id, seed=job.seed, prompt_text=recipe.prompt_text,
+                                        **({"lineage_kind": "stage-shot"} if recipe.guide else {}),
                                         params={"clip_id": rec.id, "preset": recipe.preset, "recipe": recipe.model_dump(), **ep},
                                         timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash,
                                         parents=parents, frames=rec.frames, w=rec.w, h=rec.h, variant=job.variant, origin=job.origin)

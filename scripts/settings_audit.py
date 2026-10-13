@@ -42,7 +42,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "te_alternates": ["recipe:T2I.te_id", "recipe:I2I.te_id", "recipe:Inpaint.te_id", "recipe:Upscale.te_id"],
     "advanced": ["recipe:T2I.base_shift", "recipe:T2I.max_shift", "recipe:T2I.tile_size"],
     "reangle": ["recipe:Reangle.move", "recipe:Reangle.method", "recipe:Reangle.te_id"],   # P14 (D82): the Angle tab's moves and methods
-    "stage": ["recipe:StageShot.method", "recipe:StageShot.passes", "recipe:StageShot.refs", "recipe:StageShot.te_id"],   # P13 ST3 (D78): the Shot tab's methods and passes
+    "stage": ["recipe:StageShot.method", "recipe:StageShot.passes", "recipe:StageShot.refs", "recipe:StageShot.te_id", "recipe:I2V.guide"],   # P13 ST3 / ST4: the Shot tab's methods, passes and the clip's guide
     "tiers": ["recipe:T2I.tier"],
     "tools": ["recipe:Upscale.model_id", "recipe:Segment.model_id"],          # D65: the Edit tools from the registry
     "defaults": ["recipe:T2I.model_id", "recipe:I2I.model_id", "recipe:Inpaint.model_id", "recipe:Upscale.model_id", "recipe:Segment.model_id", "recipe:I2V.model_id"],

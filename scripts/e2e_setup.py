@@ -42,7 +42,8 @@ def fake_models(root: Path) -> list[str]:
     i2v = registry.get(registry.default_model("i2v"))                 # P17: the smoke run animates one clip for the sequence lane
     if i2v is not None:
         specs.append(i2v)
-    for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else [])]):
+    specs += [s for s in registry.video_specs() if s.recipes.guide_lora]  # ST4: the clip model with its IC-LoRA (LTX-2.3)
+    for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else [])]):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name
         p.parent.mkdir(parents=True, exist_ok=True)

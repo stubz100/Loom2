@@ -3637,6 +3637,95 @@
         "title": "GroupSummary",
         "type": "object"
       },
+      "Guide": {
+        "description": "P13 ST4 (D76, 16 §8): a pass sequence (a video asset the Stage rendered — depth by default, pose as the weaker second) that LTX-2.3's\nIC-LoRA Union conditions the whole clip on, from frame 0. The start frame is a Stage shot; the clip keeps lineage to both.",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "depth",
+            "enum": [
+              "depth",
+              "pose"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "strength": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Strength",
+            "type": "number"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "Guide",
+        "type": "object"
+      },
+      "GuideUpload": {
+        "description": "ST4 (16 §8): a pass rendered per frame of the range — each frame a PNG put through `PUT /blobs/{sha}`, in order — with the\nper-frame COCO-18 keypoints (for the rig's scoring).",
+        "properties": {
+          "camera_id": {
+            "title": "Camera Id",
+            "type": "string"
+          },
+          "fps": {
+            "default": 24,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "keypoints": {
+            "default": [],
+            "items": {},
+            "title": "Keypoints",
+            "type": "array"
+          },
+          "kind": {
+            "default": "depth",
+            "title": "Kind",
+            "type": "string"
+          },
+          "range": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Range",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          }
+        },
+        "required": [
+          "camera_id",
+          "revision",
+          "size",
+          "range",
+          "frames"
+        ],
+        "title": "GuideUpload",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3938,6 +4027,17 @@
             "minimum": 9,
             "title": "Frames",
             "type": "integer"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Guide"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "height": {
             "default": 480,
@@ -6994,6 +7094,28 @@
             "title": "Flf",
             "type": "boolean"
           },
+          "guide_lora": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Lora"
+          },
+          "guide_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Seconds"
+          },
           "i2i": {
             "default": false,
             "title": "I2I",
@@ -7874,6 +7996,16 @@
       "StageCaps": {
         "additionalProperties": true,
         "properties": {
+          "clip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageClipCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "default": {
             "anyOf": [
               {
@@ -7905,6 +8037,93 @@
           "passes"
         ],
         "title": "StageCaps",
+        "type": "object"
+      },
+      "StageClipCaps": {
+        "additionalProperties": true,
+        "description": "P13 ST4 (D76): the video model that animates a stage through its IC-LoRA — health, E11's seconds, the guide kinds, its grid.",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "frame_step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Step"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "size": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "label",
+          "health",
+          "missing",
+          "kinds",
+          "size",
+          "approx_gb"
+        ],
+        "title": "StageClipCaps",
         "type": "object"
       },
       "StageCreate": {
@@ -14227,6 +14446,59 @@
           }
         },
         "summary": "Stage Put",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/guide": {
+      "post": {
+        "description": "The frames become one video asset (h264 near-lossless, `kind = video`, suite stage, `lineage_kind = stage-pass`, `params {stage_id,\ncamera_id, revision, pass: \"<kind>-sequence\", frames, fps, size, range, keypoints}`) on the stage's album page; the document records\nit under the camera's passes entry (`guides[kind]`) and comes back at its new revision.",
+        "operationId": "stage_guide_stages__st_id__guide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuideUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Guide",
         "tags": [
           "stages"
         ]

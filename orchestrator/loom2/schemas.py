@@ -250,10 +250,25 @@ class StageMethodCaps(Open):
     approx_gb: float
 
 
+class StageClipCaps(Open):
+    """P13 ST4 (D76): the video model that animates a stage through its IC-LoRA — health, E11's seconds, the guide kinds, its grid."""
+    model_id: str
+    label: str
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    kinds: list[str]
+    fps: int | None = None
+    frame_step: int | None = None
+    size: list[int]
+    approx_gb: float
+
+
 class StageCaps(Open):
     methods: dict[str, StageMethodCaps]
     passes: list[str]
     default: str | None = None
+    clip: StageClipCaps | None = None
 
 
 class Capabilities(Open):

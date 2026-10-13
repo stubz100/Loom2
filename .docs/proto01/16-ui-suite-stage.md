@@ -172,6 +172,23 @@ Keyframes on the camera and objects (position, rotation, pose preset, linear or 
 made by the clay method; result = an Animate clip with `lineage_kind = stage-shot`. The pose guide is offered as a weaker second
 (E11: 3/5). The shot keeps its stage id, camera and frame range, which is what Story L3 (14, Shots & Takes) links to later.
 
+*ST4 built 2026-10-13 (journal of that day). Keyframes live in the document as specified (`keyframes.camera[id][]` of `{frame, ease, pos,
+target, focal_mm}`, `keyframes.objects[id][]` of `{frame, ease, transform, pose?}`, `range`); `anim.ts` samples them (linear or
+smoothstep, held outside the keys, rotations the short way, a pose preset switching at the halfway point, joints interpolated under
+one preset; vitest). The Strip gained a timeline row: transport (previous / next frame and key, play looping over the range at the
+project's fps), the frame field, the scrubber with key diamonds, the range fields and `[` `]`, **Key camera** (K) and **Key object**
+(Shift+K) from the state shown, remove keys at the frame. A keyed camera or object takes a move as a key at the current frame
+(auto-key); an unkeyed one edits the base state. The viewport shows the document sampled at the frame. The Shot tab's *Clip* section:
+the guide kind (depth default, pose), **Render sequence** (one pass per frame of the range through `engine.renderSequence`, 8n + 1
+frames at the clip model's grid — 1024×576 at 16:9 — uploaded as blobs; `POST /stages/{id}/guide` encodes them to one near-lossless
+h264 asset, `kind video`, `lineage_kind stage-pass`, `params {…, pass: "<kind>-sequence", frames, fps, range, keypoints}` on the album
+page, recorded under the camera's passes entry as `guides[kind]`), the start shot picked by clicking a result, **Animate ▶** → the
+`I2V` recipe with `guide {asset_id, kind, strength}` → LTX-2.3's IC-LoRA Union (a spec `guide_lora`, roster `ltx23-ic-lora-union`)
+through `GetICLoRAParameters` + `LoadVideo` + `LTXVAddGuide` at frame 0, last in the guide chain (E11's graph); the clip lands as an
+Animate clip whose asset carries `suite stage`, `lineage_kind stage-shot`, parents = the start shot + the guide, `origin {stage, clip}`;
+`/capabilities.stage.clip` names the model, its health, E11's seconds and the grid. The pose guide is offered as the weaker second.
+Not built: object keyframes on the Inspector's fields beyond the transform (the pose keys through Key object), the Story L3 link.*
+
 ## 9. Workflows
 1. **Block and render:** Library → drag *room*, drag two mannequins → Outliner names them → Poses: *point* and *arms crossed* →
    Cameras: 35 mm, Look through, frame → **Render passes** → Shot: clay method, prompt, `@heroine` → Generate (12 s) → the result
@@ -225,6 +242,9 @@ the smoke scenario drives the mouse onto a joint and drags a hand, mirrors twice
 *ST3 built 2026-10-13: the five passes as `stage-pass` assets on the stage's album page, `StageShot` with the clay and exact-pose
 methods, the Shot tab; the smoke scenario renders the passes and makes a shot on the fake engine; `scripts/st_acceptance.py` runs
 the rig bars below through the app (the first two boxes; the clay "blind check" stays the author's look at the sheet).*
+*ST4 built 2026-10-13: keyframes and the timeline, the depth / pose sequence as a video asset, `I2V.guide` through the IC-LoRA; the
+smoke scenario keys the camera twice, renders nine depth frames and animates them on the fake engine; `scripts/st_acceptance.py`
+keys a dolly, renders the sequence and scores the clip with SDPose (the fifth box).*
 - [ ] Create a stage, place two mannequins and a set plane, pose with presets (ST1) and IK (ST2), frame a 35 mm camera, export
       the five passes at Draft size; the keypoints JSON matches the pose pass (vitest on projection).
 - [ ] Generate with the clay method: the blocking is kept (the author's blind check ≥ 8/10 on a 10-shot set, as E10); with

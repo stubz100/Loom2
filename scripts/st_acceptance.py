@@ -49,7 +49,7 @@ OUT = ROOT / "engine" / "spikes" / "out" / "st"
 HEROINE = ROOT / "bench" / "angles" / "07.jpg"
 PROMPT = ("The figure on the left is a woman in a red coat walking in; the figure on the right is a man in a grey suit pointing at her; a dim brick "
           "room, a wooden crate, a single warm lamp, cinematic film still, shallow depth of field, 35 mm")
-BARS = {"clay": {"warm_s": 45.0}, "refcontrol": {"warm_s": 150.0, "pck": 0.8}}
+BARS = {"clay": {"warm_s": 45.0}, "refcontrol": {"warm_s": 150.0, "pck": 0.8}, "clip": {"wall_s": 300.0, "pck": 0.5}}   # clip: E11 (D76) — the pose followed at PCK ≥ 0.5, ≤ 2× plain LTX
 
 
 def api(method: str, path: str, body=None, raw: bool = False):
@@ -85,6 +85,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--methods", default="clay,refcontrol")
     ap.add_argument("--rounds", type=int, default=2, help="jobs per method (the first is cold)")
+    ap.add_argument("--no-clip", dest="clip", action="store_false", help="skip ST4's clip (the keyed dolly, the depth sequence, LTX + the IC-LoRA)")
     a = ap.parse_args()
     methods = [m for m in a.methods.split(",") if m]
     if not EDGE:
@@ -242,6 +243,76 @@ def main() -> int:
                 im = Image.open(p).convert("RGB"); im.thumbnail((tw, th)); sheet.paste(im, (8 + j * (tw + 8), 30))
         sheet.save(OUT / "sheet.jpg", quality=88)
         print(f"sheet: {OUT / 'sheet.jpg'} · results: {RESULTS}")
+        # ---- ST4 (D76, 16 §8): the clip — a dolly in keyed on the camera over 49 frames (8·6 + 1 at 24 fps), the depth sequence rendered by the
+        # viewport, LTX-2.3 + the IC-LoRA from the clay result; scored like E11 (SDPose on every 8th frame vs the guide's own keypoints)
+        start_asset = next((r["asset_ids"][0] for r in reversed(rows) if r["method"] == "clay" and r.get("asset_ids")), None)
+        if a.clip and start_asset:
+            cam_id = st["cameras"][0]["id"]
+            cdp.eval("window.__loom2Stage.setRange(0, 48)")
+            cdp.eval("window.__loom2Stage.setFrame(0)"); cdp.eval("window.__loom2Stage.keyCamera()")
+            cdp.eval("window.__loom2Stage.setFrame(48)")
+            cdp.eval(f"window.__loom2Stage.updateCamera({json.dumps(cam_id)}, {{pos: [0.3, 1.4, 2.4], target: [0.0, 1.0, 0.0]}})")   # a keyed camera takes the move as a key
+            cdp.eval("window.__loom2Stage.setFrame(0)")
+            time.sleep(1.0)                                                                                       # the debounced save
+            keys = (cdp.eval("window.__loom2Stage.state()") or {}).get("current", {}).get("keyframes", {}).get("camera", {}).get(cam_id, [])
+            check([k["frame"] for k in keys] == [0, 48], f"the camera keyed at frames 0 and 48 ({[k['frame'] for k in keys]})")
+            t0 = time.time()
+            ok = cdp.eval("window.__loom2Stage.renderGuide()", timeout=600)
+            check(bool(ok), f"the depth sequence rendered and uploaded in {time.time() - t0:.1f} s")
+            guide = (cdp.eval("window.__loom2Stage.state()") or {}).get("guide")
+            check(bool(guide) and guide["frames"] == 49, "49 frames of depth (8n + 1) as one video asset")
+            if guide:
+                gasset = api("GET", f"/assets/{guide['asset_id']}")
+                check(gasset["kind"] == "video" and gasset["lineage_kind"] == "stage-pass" and gasset["frames"] == 49 and len(gasset["params"]["keypoints"]) == 49,
+                      "the guide asset: video, stage-pass, 49 frames with keypoints")
+                cdp.eval(f"window.__loom2Stage.setShotStart({json.dumps(start_asset)})")
+                jobs = cdp.eval("window.__loom2Stage.animateShot()", timeout=60)
+                if not jobs:
+                    check(False, f"the clip was not queued ({cdp.page_errors()})")
+                else:
+                    t0 = time.time()
+                    j = wait_job(jobs[0]["id"])
+                    wall = time.time() - t0
+                    ok = j["status"] == "done" and bool(j.get("result", {}).get("asset_ids"))
+                    check(ok, f"clip job {j['status']} in {wall:.1f} s" + (f" — {j.get('error')}" if j.get("error") else ""))
+                    row = {"method": "clip_depth", "round": 0, "cold": True, "job": jobs[0]["id"], "status": j["status"], "error": j.get("error"), "wall_s": round(wall, 1),
+                           "frames": 49, "asset_ids": j.get("result", {}).get("asset_ids"), "clip_id": j.get("result", {}).get("clip_id")}
+                    if ok:
+                        check(wall <= BARS["clip"]["wall_s"], f"clip {wall:.1f} s ≤ {BARS['clip']['wall_s']} s (E11: 147 s for 121 frames)")
+                        casset = api("GET", f"/assets/{row['asset_ids'][0]}")
+                        check(casset["kind"] == "video" and casset["lineage_kind"] == "stage-shot" and casset["parents"] == [start_asset, guide["asset_id"]] and casset["suite"] == "stage",
+                              "the clip: video, lineage stage-shot ← the start shot + the guide, suite stage")
+                        check((casset.get("origin") or {}).get("surface") == "clip" and casset["frames"] == 49, "origin stage / clip, 49 frames")
+                        kp_all = gasset["params"]["keypoints"]
+                        hit = tot = 0
+                        frames_dir = OUT / "clip"
+                        frames_dir.mkdir(exist_ok=True)
+                        for i in range(0, 49, 8):
+                            p = frames_dir / f"{i:04d}.png"
+                            p.write_bytes(api("GET", f"/clips/{row['clip_id']}/frames/{i}.png", raw=True))
+                            try:
+                                h, _, _ = eng.run(sdpose_graph(eng.upload(p)))
+                                people = json.loads(h["outputs"]["6"]["text"][0])[0]["people"]
+                                h_, t_ = pck(kp_all[i], people)
+                                hit += h_; tot += t_
+                            except Exception as e:  # noqa: BLE001
+                                check(False, f"scoring clip frame {i}: {e}")
+                        score = hit / tot if tot else 0.0
+                        row.update(pck_hit=hit, pck_total=tot, pck=round(score, 3))
+                        print(f"     clip: PCK@0.1 {score:.3f} ({hit}/{tot}) over frames 0, 8, … 48")
+                        check(score >= BARS["clip"]["pck"], f"clip PCK@0.1 {score:.3f} ≥ {BARS['clip']['pck']} (E11's bar: the pose followed)")
+                        cells = [(f"frame {i}", frames_dir / f"{i:04d}.png") for i in (0, 16, 32, 48)]
+                        tw, th = 480, 270
+                        csheet = Image.new("RGB", (8 + (tw + 8) * len(cells), 30 + th + 8), (24, 24, 24))
+                        dr = ImageDraw.Draw(csheet)
+                        for jx, (head, p) in enumerate(cells):
+                            dr.text((8 + jx * (tw + 8), 8), head, fill=(230, 230, 230))
+                            if p.is_file():
+                                im = Image.open(p).convert("RGB"); im.thumbnail((tw, th)); csheet.paste(im, (8 + jx * (tw + 8), 30))
+                        csheet.save(OUT / "clip_sheet.jpg", quality=88)
+                        print(f"clip sheet: {OUT / 'clip_sheet.jpg'}")
+                    with RESULTS.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps({**row, "at": time.strftime("%Y-%m-%d %H:%M")}) + "\n")
         errs = cdp.page_errors()
         check(not errs, f"no page errors ({errs[:3]})")
         try:

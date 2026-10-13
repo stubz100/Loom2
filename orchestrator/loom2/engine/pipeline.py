@@ -126,11 +126,22 @@ def _placeholder_image(object_info: dict) -> str:
     return names[0] if names else "loom2-preview.png"
 
 
+def _placeholder_video(object_info: dict) -> str:
+    """A video name the engine already lists (LoadVideo's enum) for the preview's compile of a guided clip."""
+    try:
+        spec = object_info["LoadVideo"]["input"]["required"]["file"]
+        names = list(spec[1]["options"]) if isinstance(spec[0], str) else list(spec[0])      # V3 dynamic combo: ["COMBO", {options}]; classic: [[...]]
+    except (KeyError, IndexError, TypeError):
+        names = []
+    return names[0] if names else "loom2-guide.mp4"
+
+
 def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
     """Inputs shaped like finalize()'s for the preview's compile."""
     img = _placeholder_image(object_info)
     if isinstance(recipe, I2V):
-        return {"start": img, "end": img if recipe.end_asset else None, "beats": {b.asset_id: img for b in recipe.beats}}
+        return {"start": img, "end": img if recipe.end_asset else None, "beats": {b.asset_id: img for b in recipe.beats},
+                **({"guide": _placeholder_video(object_info)} if recipe.guide else {})}
     if isinstance(recipe, DOCUMENT_KINDS):
         return {"image": img, "mask": img, "w": 1024, "h": 576, "points": [], "box": None}
     if isinstance(recipe, Reangle):
@@ -375,6 +386,13 @@ async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any
     names["end"] = await up(recipe.end_asset, "end") if recipe.end_asset else None
     for b in recipe.beats:
         names["beats"][b.asset_id] = await up(b.asset_id, f"beat {b.frame}")
+    if recipe.guide:                                                   # ST4: the pass sequence (an mp4 asset) goes up as it is — LoadVideo reads it by name
+        a = q.catalogue.get(recipe.guide.asset_id)
+        src = q.catalogue.abs_path(a) if a else None
+        if not src or not Path(src).is_file() or a is None or a.kind != "video":
+            raise ValueError(f"the {recipe.guide.kind} guide ({recipe.guide.asset_id}) is missing from the Catalogue — render the sequence first")
+        names["guide"] = await q.engine.client.upload_image(Path(src))
+        job.log_tail.append(f"{recipe.guide.kind} guide uploaded: {a.frames} frames @ {a.fps} fps")
     job.log_tail.append("frames uploaded: start" + (", end" if names["end"] else "") + (f", {len(recipe.beats)} beat(s)" if recipe.beats else ""))
     return names
 

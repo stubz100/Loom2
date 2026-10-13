@@ -108,7 +108,18 @@ def _stage(svc: Services, variant: str) -> dict:
                       "missing": missing, "seconds": spec.recipes.stage_seconds, "measured": spec.recipes.stage_seconds is not None,
                       "image1": stage_pass_for(m), "max_refs": 1 if m == "refcontrol" else max(0, spec.inputs.refs_max - 1),
                       "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
-    return {"methods": methods, "passes": list(STAGE_PASSES), "default": "clay" if "clay" in methods else (next(iter(methods)) if methods else None)}
+    clip = None
+    for spec in registry.video_specs():                               # ST4 (D76): the first offered video model with an IC-LoRA animates the stage
+        if not spec.recipes.guide_lora or not _offered(spec, variant):
+            continue
+        needs = [*spec.weights(), spec.recipes.guide_lora]
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        clip = {"model_id": spec.id, "label": spec.label, "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+                "missing": missing, "seconds": spec.recipes.guide_seconds, "kinds": ["depth", "pose"], "fps": spec.geometry.fps, "frame_step": spec.geometry.frame_step,
+                "size": list(spec.geometry.size or []), "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+        break
+    return {"methods": methods, "passes": list(STAGE_PASSES), "default": "clay" if "clay" in methods else (next(iter(methods)) if methods else None), "clip": clip}
 
 
 def _offered(spec: ModelSpec, variant: str) -> bool:

@@ -13,6 +13,8 @@ import { DEV_HOOKS } from '../../devHooks'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
+import type { Asset, StageCamera } from '../../api/types'
+import { clipFrames, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu } from './stageCommands'
@@ -27,7 +29,11 @@ const num = (v: number) => +v.toFixed(2)
 function devHook(): Record<string, unknown> {
   const w = window as unknown as { __loom2Stage?: Record<string, unknown> }
   w.__loom2Stage ??= { open: (id: string) => st().open(id), setShot: (p: Partial<ShotState>) => st().setShot(p), renderPasses: () => st().renderPasses(),
-    generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry() }), screenOf: () => null }
+    generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry(), guide: st().guideEntry(), frame: st().frame }), screenOf: () => null,
+    // ST4: the clip path
+    setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(), setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
+    renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
+    updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch) }
   return w.__loom2Stage
 }
 if (DEV_HOOKS) devHook()
@@ -70,7 +76,7 @@ function OutlinerTab() {
       <div className="head"><b>Outliner</b><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'}</span></div>
       {!current.objects.length && <span className="hint">Nothing on the stage — add from the Library.</span>}
       {current.objects.map((o) => (
-        <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} onClick={() => st().select(o.id)} onDoubleClick={() => st().frame([o.id])}
+        <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} onClick={() => st().select(o.id)} onDoubleClick={() => st().frameView([o.id])}
           onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
           <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
           <span className="kind">{o.kind}</span>
@@ -166,6 +172,9 @@ function ShotTab() {
   const err = useStage((s) => s.shotPreviewError)
   const rendering = useStage((s) => s.rendering)
   const shots = useStage((s) => s.shots)
+  const shotStart = useStage((s) => s.shotStart)
+  const stills = shots.filter((a) => a.kind !== 'video')
+  const clips = shots.filter((a) => a.kind === 'video')
   const entry = useStage((s) => s.passesEntry())
   const stale = useStage((s) => s.passesStale())
   const caps = useSession((s) => s.capabilities?.stage)
@@ -224,9 +233,41 @@ function ShotTab() {
       {pv?.params?.prompt ? <p className="hint prompt-preview">{String(pv.params.prompt)}</p> : null}
       {err && <p className="disabled-why">{err}</p>}
       {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
-      <h4>Results{shots.length ? ` · ${shots.length}` : ''}</h4>
-      {!shots.length && <span className="hint">None yet — the shots of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
-      <div className="shot-results">{shots.slice(0, 12).map((a) => <img key={a.id} className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''}`} />)}</div>
+      <h4>Results{stills.length ? ` · ${stills.length}` : ''}</h4>
+      {!stills.length && <span className="hint">None yet — the shots of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
+      <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this shot`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
+      <ClipSection clips={clips} />
+    </div>
+  )
+}
+
+// ST4 (16 §8): the clip — the pass sequence over the range (depth by default, pose as the weaker second, D76) rendered by the viewport,
+// the start frame picked among the shots, Animate ▶ through LTX-2.3's IC-LoRA; the stage's clips land here and in Animate.
+function ClipSection({ clips }: { clips: Asset[] }) {
+  const current = useStage((s) => s.current)!
+  const kind = useStage((s) => s.guideKind)
+  const g = useStage((s) => s.guideEntry())
+  const rendering = useStage((s) => s.rendering)
+  const rendered = useStage((s) => s.rendered)
+  const shotStart = useStage((s) => s.shotStart)
+  const clipCap = useSession((s) => s.capabilities?.stage?.clip)
+  const [gw, gh] = st().guideSize()
+  const n = clipFrames(current.range.start, current.range.end, clipCap?.frame_step ?? 8)
+  const stale = !!g && (g.range.start !== current.range.start || g.frames !== n || current.revision > g.revision + 1)
+  markUsed('stage.clip.guide'); markUsed('stage.clip.animate')
+  return (
+    <div className="clip-section">
+      <h4>Clip · frames {current.range.start}–{current.range.end}</h4>
+      {!clipCap && <span className="hint">No clip model in this build (LTX-2.3 with its IC-LoRA is full-variant).</span>}
+      <div className="kv"><span>guide</span><span className="segmented"><button className={kind === 'depth' ? 'active' : ''} onClick={() => st().setGuideKind('depth')} title="the depth sequence (E11: the pose followed 4/5)">Depth</button><button className={kind === 'pose' ? 'active' : ''} onClick={() => st().setGuideKind('pose')} title="the pose sequence (E11: 3/5)">Pose</button></span></div>
+      <div className="guide-state">
+        {rendering && rendered ? `rendering ${rendered.done} / ${rendered.total || n}…` : g ? `${kind} sequence · ${g.frames} frames · ${g.size.w}×${g.size.h} · ${g.fps} fps${stale ? ' · from an earlier range or revision — render again' : ' · current'}` : `no ${kind} sequence yet · ${n} frames at ${gw}×${gh} (8n + 1 for the clip model)`}
+      </div>
+      <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /><CommandButton id="stage.clip.animate" text label="Animate ▶" /></div>
+      {!shotStart && <p className="disabled-why">Click one of the results above to start the clip from it.</p>}
+      {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for 121 frames (E11){clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}</p>}
+      {clips.length > 0 && <><h4>Clips · {clips.length}</h4>
+        <div className="clip-results">{clips.slice(0, 9).map((a) => <span key={a.id} className="clip-thumb"><img className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.frames ?? '?'} frames · ${a.model_id ?? ''}`} /><span className="n">{a.frames ?? '?'} f</span></span>)}</div></>}
     </div>
   )
 }
@@ -278,12 +319,45 @@ export function Strip() {
   const current = useStage((s) => s.current)
   if (!current) return null
   return (
-    <div className="stage-strip">
-      <CommandRow ids={['stage.view.free', 'stage.view.camera']} active={view === 'camera' ? 'stage.view.camera' : 'stage.view.free'} labels={{ 'stage.view.free': 'free', 'stage.view.camera': 'camera' }} />
-      <CommandButton id="stage.guides" active={guides} />
-      <CommandButton id="stage.frameAll" />
-      <span className="spacer" />
-      <span className="hint">{current.name} · {current.size.w}×{current.size.h}</span>
+    <div className="stage-strip-wrap">
+      <div className="stage-strip">
+        <CommandRow ids={['stage.view.free', 'stage.view.camera']} active={view === 'camera' ? 'stage.view.camera' : 'stage.view.free'} labels={{ 'stage.view.free': 'free', 'stage.view.camera': 'camera' }} />
+        <CommandButton id="stage.guides" active={guides} />
+        <CommandButton id="stage.frameAll" />
+        <span className="spacer" />
+        <span className="hint">{current.name} · {current.size.w}×{current.size.h}</span>
+      </div>
+      <Timeline />
+    </div>
+  )
+}
+
+// ST4 (16 §8): the frame scrubber with the key markers, the range, play and step, Key camera / object — every verb a button (D32).
+function Timeline() {
+  const current = useStage((s) => s.current)!
+  const frame = useStage((s) => s.frame)
+  const playing = useStage((s) => s.playing)
+  const selected = useStage((s) => s.selected)
+  const keyed = keyedFramesOf(keyframesOf(current), current.active_camera)        // derived from `current` (subscribed): a selector must not return a fresh array
+  const { start, end } = current.range
+  const span = Math.max(1, end - start)
+  markUsed('stage.anim.play'); markUsed('stage.anim.prev'); markUsed('stage.anim.next'); markUsed('stage.anim.prevKey'); markUsed('stage.anim.nextKey'); markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey'); markUsed('stage.anim.setStart'); markUsed('stage.anim.setEnd')
+  return (
+    <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>
+      <CommandRow ids={['stage.anim.prevKey', 'stage.anim.prev', 'stage.anim.play', 'stage.anim.next', 'stage.anim.nextKey']} active={playing ? 'stage.anim.play' : undefined} />
+      <input className="frame-field" type="number" min={0} value={frame} onChange={(e) => st().setFrame(Number(e.target.value) || 0)} title="the frame the viewport shows" />
+      <div className="scrub-wrap">
+        <div className="key-marks">{keyed.filter((f) => f >= start && f <= end).map((f) => <i key={f} className={`key-mark${f === frame ? ' here' : ''}`} style={{ left: `${((f - start) / span) * 100}%` }} title={`key at frame ${f}`} />)}</div>
+        <input className="scrub" type="range" min={start} max={end} step={1} value={Math.min(end, Math.max(start, frame))} onChange={(e) => st().setFrame(Number(e.target.value))} />
+      </div>
+      <span className="range-field" title="the clip's range (frames, inclusive) at the project's fps">
+        <input type="number" min={0} value={start} onChange={(e) => st().setRange(Number(e.target.value) || 0, end)} />–<input type="number" min={1} value={end} onChange={(e) => st().setRange(start, Number(e.target.value) || 1)} /> · {current.size.fps} fps
+      </span>
+      <CommandRow ids={['stage.anim.setStart', 'stage.anim.setEnd']} />
+      <span className="sep" />
+      <CommandButton id="stage.anim.keyCamera" text label="Key camera" active={keyed.includes(frame) && !!(st().keys().camera[current.active_camera ?? ''] ?? []).some((k) => k.frame === frame)} />
+      <CommandButton id="stage.anim.keyObject" text label={selected ? 'Key object' : 'Key object (select one)'} />
+      <CommandButton id="stage.anim.removeKey" />
     </div>
   )
 }
@@ -319,15 +393,22 @@ function Viewport() {
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
-    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h) })                                       // ST3
+    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on) })   // ST3 / ST4
     if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint) })                   // the smoke test aims the mouse at joints and handles
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; useStage.setState({ passRenderer: null }) }
+    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
-  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(current); setRect({ ...e.frameRect() }) } }, [current])
+  const frame = useStage((s) => s.frame)
+  const playing = useStage((s) => s.playing)
+  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }) } }, [current, frame])   // ST4: the document at the frame
+  useEffect(() => {                                                                                                     // ST4: playback loops over the range at the project's fps
+    if (!playing || !current) return
+    const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))
+    return () => window.clearInterval(t)
+  }, [playing, current?.size.fps]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { engineRef.current?.select(selected) }, [selected])
   useEffect(() => { engineRef.current?.setTool(tool, snap) }, [tool, snap])
   useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps

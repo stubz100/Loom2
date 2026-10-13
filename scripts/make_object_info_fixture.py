@@ -30,6 +30,7 @@ CLASSES = [
     "WanImageToVideo", "WanFirstLastFrameToVideo", "CreateVideo", "SaveVideo",
     # LTX-2.3
     "LTXVImgToVideo", "LTXVAddGuide", "LTXVConditioning", "LTXVScheduler", "LTXVEmptyLatentAudio", "LTXVConcatAVLatent", "LTXVSeparateAVLatent",
+    "GetICLoRAParameters", "LoadVideo", "GetVideoComponents",                                         # ST4 (D76): the IC-LoRA guide
     "LTXVCropGuides", "LTXVPreprocess",
     # upscale / tools
     "UpscaleModelLoader", "ImageUpscaleWithModel",

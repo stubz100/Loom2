@@ -70,6 +70,8 @@ class Recipes(Strict):
     stage_seconds: float | None = None             # E10's measured warm seconds at the Draft size (the Shot tab's estimate)
     stage_steps: int | None = None                 # the method's steps / CFG when they differ from `sampling` (E10 ran base at 30 / 4.0)
     stage_cfg: float | None = None
+    guide_lora: str | None = None                  # P13 ST4 (D76): the IC-LoRA a video model takes a pass sequence through (I2V.guide)
+    guide_seconds: float | None = None             # E11's measured seconds for a guided Draft clip (121 frames at 1024×576)
 
 
 class RefsSuggest(Strict):

@@ -66,3 +66,19 @@
 .shot-tab .prompt-preview { font-size: 11px; line-height: 1.35; max-height: 80px; overflow: auto; }
 .shot-tab .shot-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .shot-tab .shot-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: var(--bg2); }
+/* ST4: the timeline row under the strip, and the clip section of the Shot tab */
+.stage-timeline { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-bottom: 1px solid var(--line); background: var(--bg1); font-size: 11px; color: var(--fg2); }
+.stage-timeline .scrub-wrap { position: relative; flex: 1; height: 22px; display: flex; align-items: center; }
+.stage-timeline input[type=range].scrub { width: 100%; margin: 0; }
+.stage-timeline .key-marks { position: absolute; left: 8px; right: 8px; top: 0; height: 6px; pointer-events: none; }
+.stage-timeline .key-mark { position: absolute; top: 0; width: 6px; height: 6px; margin-left: -3px; background: var(--accent); transform: rotate(45deg); }
+.stage-timeline .key-mark.here { background: var(--fg); }
+.stage-timeline input[type=number] { width: 52px; }
+.stage-timeline .range-field { display: inline-flex; align-items: center; gap: 3px; }
+.stage-timeline .sep { width: 1px; height: 16px; background: var(--line2); margin: 0 2px; }
+.shot-tab .clip-section .guide-state { font-size: 11px; color: var(--fg2); }
+.shot-tab .shot-thumb.start { outline: 2px solid var(--accent); outline-offset: 1px; }
+.shot-tab .shot-thumb { cursor: pointer; }
+.shot-tab .clip-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.shot-tab .clip-thumb { position: relative; }
+.shot-tab .clip-thumb .n { position: absolute; left: 4px; bottom: 4px; font-size: 10px; background: rgba(0,0,0,.6); color: #fff; border-radius: 3px; padding: 0 4px; }

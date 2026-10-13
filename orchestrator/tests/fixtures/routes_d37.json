@@ -92,6 +92,7 @@
  "POST /recipes/preview",
  "POST /shutdown",
  "POST /stages",
+ "POST /stages/{st_id}/guide",
  "POST /stages/{st_id}/passes",
  "POST /timelines",
  "POST /timelines/{tl_id}/export",

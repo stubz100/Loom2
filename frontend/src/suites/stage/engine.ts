@@ -10,7 +10,7 @@ import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Joint, type Mannequin } from './builders'
 import { CHAINS, eulerDeg, solveTwoBone, type Chain } from './ik'
-import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type PassName } from './passes'
+import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
 export interface EngineHooks {
@@ -407,29 +407,16 @@ export class StageEngine {
    *  colour per object, the legend returned) and the pose (every figure's COCO-18 in OpenPose colours). Helpers, pickers and the gizmo
    *  stay out; hidden objects too. The viewport's own renderer and state are untouched. */
   async renderPasses(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> {
-    const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
-    r.setPixelRatio(1); r.setSize(w, h, false)
-    const camera = new THREE.PerspectiveCamera(vfovFor(cam.focal_mm, cam.sensor_mm, w / h), w / h, 0.05, 500)
-    camera.position.set(cam.pos[0], cam.pos[1], cam.pos[2]); camera.up.set(0, 1, 0); camera.lookAt(cam.target[0], cam.target[1], cam.target[2])
-    camera.rotateZ(rad(cam.roll)); camera.updateProjectionMatrix(); camera.updateMatrixWorld()
-    const hidden: THREE.Object3D[] = []
-    const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
-    hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
-    for (const hlp of this.camHelpers.values()) hide(hlp)
-    for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }
-    const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
-    const shot = (material: THREE.Material | null, bg: number): Promise<Blob> => {
-      this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg); r.render(this.scene, camera); return toBlob(r.domElement)
-    }
+    const r = this.passRenderer(w, h)
+    const camera = this.shotCamera(cam, w / h)
+    const restore = this.hideHelpers(camera)
     const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = []
     try {
       this.scene.updateMatrixWorld(true)
       const blobs: Partial<Record<PassName, Blob>> = {}
-      blobs.clay = await shot(this.passClay, 0xb8b8b8)
-      const dr = depthRange(camera.position.distanceTo(new THREE.Vector3(cam.target[0], cam.target[1], cam.target[2])))
-      this.passDepth.uniforms.near.value = dr.near; this.passDepth.uniforms.far.value = dr.far
-      blobs.depth = await shot(this.passDepth, 0x000000)
-      blobs.normal = await shot(this.passNormal, 0x8080ff)
+      blobs.clay = await this.shotWith(r, camera, this.passClay, 0xb8b8b8)
+      blobs.depth = await this.shotWith(r, camera, this.depthFor(cam), 0x000000)
+      blobs.normal = await this.shotWith(r, camera, this.passNormal, 0x8080ff)
       // masks: one flat colour per object, swapped in by hand (an override material cannot differ per object)
       const legend: Record<string, string> = {}
       let i = 0
@@ -439,20 +426,81 @@ export class StageEngine {
         const m = new THREE.MeshBasicMaterial({ color: hex })
         e.body.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })
       }
-      blobs.mask = await shot(null, 0x000000)
+      blobs.mask = await this.shotWith(r, camera, null, 0x000000)
       for (const [mesh, mat] of swapped) mesh.material = mat
       swapped.length = 0
-      const figures = [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => e.figure!.markers)
-      const keypoints = projectMarkers(figures, camera, w, h)
+      const keypoints = this.keypoints(camera, w, h)
       blobs.pose = await toBlob(drawPose(keypoints, w, h))
       return { size: { w, h }, blobs: blobs as Record<PassName, Blob>, keypoints, legend }
     } finally {
       for (const [mesh, mat] of swapped) mesh.material = mat
-      this.scene.overrideMaterial = prevOverride; this.scene.background = prevBg
-      for (const o of hidden) o.visible = true
+      restore()
       r.dispose(); r.forceContextLoss()
       this.dirty = true
     }
+  }
+  /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
+   *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
+   *  is left at `restoreDoc` (the frame the viewport shows). */
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose', restoreDoc: StageDoc,
+                       onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][] }> {
+    const r = this.passRenderer(w, h)
+    let restore = () => {}
+    try {
+      const blobs: Blob[] = []
+      const keypoints: Keypoint[][][] = []
+      for (let i = 0; i < frames.length; i++) {
+        const { cam, doc } = frames[i]
+        this.sync(doc)
+        const camera = this.shotCamera(cam, w / h)
+        restore(); restore = this.hideHelpers(camera)
+        this.scene.updateMatrixWorld(true)
+        const kp = this.keypoints(camera, w, h)
+        keypoints.push(kp)
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h)))
+        onProgress?.(i + 1, frames.length)
+      }
+      return { blobs, keypoints }
+    } finally {
+      restore()
+      r.dispose(); r.forceContextLoss()
+      this.sync(restoreDoc)
+      this.dirty = true
+    }
+  }
+  private passRenderer(w: number, h: number): THREE.WebGLRenderer {
+    const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    r.setPixelRatio(1); r.setSize(w, h, false)
+    return r
+  }
+  /** The render camera of a document camera at an aspect (36 mm sensor, roll), as applyShot builds the viewport's. */
+  private shotCamera(cam: StageCamera, aspect: number): THREE.PerspectiveCamera {
+    const camera = new THREE.PerspectiveCamera(vfovFor(cam.focal_mm, cam.sensor_mm, aspect), aspect, 0.05, 500)
+    camera.position.set(cam.pos[0], cam.pos[1], cam.pos[2]); camera.up.set(0, 1, 0); camera.lookAt(cam.target[0], cam.target[1], cam.target[2])
+    camera.rotateZ(rad(cam.roll)); camera.updateProjectionMatrix(); camera.updateMatrixWorld()
+    return camera
+  }
+  /** Helpers, pickers and the gizmo out of the picture (hidden objects stay out), billboards faced; returns the undo. */
+  private hideHelpers(camera: THREE.Camera): () => void {
+    const hidden: THREE.Object3D[] = []
+    const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
+    hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
+    for (const hlp of this.camHelpers.values()) hide(hlp)
+    for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }
+    const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
+    return () => { this.scene.overrideMaterial = prevOverride; this.scene.background = prevBg; for (const o of hidden) o.visible = true }
+  }
+  private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number): Promise<Blob> {
+    this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg); r.render(this.scene, camera); return toBlob(r.domElement)
+  }
+  private depthFor(cam: StageCamera): THREE.ShaderMaterial {
+    const dr = depthRange(Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2]))
+    this.passDepth.uniforms.near.value = dr.near; this.passDepth.uniforms.far.value = dr.far
+    return this.passDepth
+  }
+  private keypoints(camera: THREE.Camera, w: number, h: number): Keypoint[][] {
+    const figures = [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => e.figure!.markers)
+    return projectMarkers(figures, camera, w, h)
   }
 
   // ---- render ---------------------------------------------------------------------------------------------------------------------

@@ -133,6 +133,10 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="qwen-edit-2509-angles", name="Qwen-Edit-2509-Multiple-angles.safetensors", folder="loras", family="qwen_image", role="lora",
                 repo="dx8152/Qwen-Edit-2509-Multiple-angles", file="Qwen-Edit-2509-Multiple-angles.safetensors", license="apache-2.0",
                 variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA"),
+    # ---- Stage → clip (P13 ST4, D76): LTX-2.3's IC-LoRA Union — the depth (or pose) sequence as the guide at frame 0 ----
+    RosterEntry(id="ltx23-ic-lora-union", name="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", folder="loras", family="ltx23", role="lora",
+                repo="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control", file="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", license="ltx-2.x community",
+                approx_gb=0.65, note="E11 (D76): GetICLoRAParameters + LTXVAddGuide on the rendered depth sequence; 1.22× plain LTX, the pose followed 4/5"),
     # ---- Stage → image (P13 ST3, D78): E10's exact-pose method — RefControl's pose LoRA for Klein base 9B (apache-2.0) ----
     RosterEntry(id="refcontrol-v2-poses", name="refcontrol_v2_poses.safetensors", folder="loras", family="klein", role="lora",
                 repo="thedeoxen/refcontrol-FLUX.2-klein-9B-reference-pose-lora", file="refcontrol_v2_poses.safetensors", license="apache-2.0",

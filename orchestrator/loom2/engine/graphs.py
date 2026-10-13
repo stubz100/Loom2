@@ -129,12 +129,18 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
 
 
 def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_name: str, end_name: str | None = None,
-              beat_names: dict[str, str] | None = None) -> Compiled:
+              beat_names: dict[str, str] | None = None, guide_name: str | None = None) -> Compiled:
     """Wan: loaders → ModelSamplingSD3 ×2 → WanImageToVideo / WanFirstLastFrameToVideo → KSamplerAdvanced high → low → VAEDecode
     → SaveImage (one PNG per frame: the clip master; the proxy is encoded by the orchestrator). LTX: the E5 graph — joint
-    audio-video latent, LTXVAddGuide for the end frame (frame_idx −1) and every beat — ending in SaveImage the same way."""
+    audio-video latent, LTXVAddGuide for the end frame (frame_idx −1) and every beat — ending in SaveImage the same way. ST4 (D76): with
+    `recipe.guide`, the IC-LoRA Union on the model, `GetICLoRAParameters` and one more `LTXVAddGuide` on the uploaded guide video at
+    frame 0 — the E11 graph."""
     ep = i2v_params(recipe)
     spec = video_spec(recipe.model_id)
+    if recipe.guide and (spec.graph != "ltx23" or not spec.recipes.guide_lora):
+        raise CompileError(f"a pass-sequence guide needs LTX-2.3 with its IC-LoRA; {spec.label} has none")
+    if recipe.guide and not guide_name:
+        raise CompileError("the guide video was not uploaded to the engine (pipeline.prepare_i2v)")
     roles, video = spec.roles, spec.video
     assert roles.te is not None and roles.vae is not None and video is not None
     w, h, frames, fps = ep["width"], ep["height"], ep["frames"], ep["fps"]
@@ -219,9 +225,20 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
             g[gid] = {"class_type": "LTXVAddGuide", "inputs": {"positive": pos, "negative": neg, "vae": ["3", 0], "latent": lat, "image": guide_image(nid, name),
                                                              "frame_idx": idx, "strength": strength}}
             pos, neg, lat = [gid, 0], [gid, 1], [gid, 2]
+        model_link: list = ["1", 0]
+        if recipe.guide and guide_name:                                     # ST4: the IC-LoRA and the guide video, last in the chain (E11)
+            _, ic = roster.require(spec.recipes.guide_lora or "")
+            g["50"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": ic, "strength_model": 1.0}}
+            g["51"] = {"class_type": "GetICLoRAParameters", "inputs": {"iclora_model": ["50", 0]}}
+            g["52"] = {"class_type": "LoadVideo", "inputs": {"file": guide_name}}
+            g["53"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["52", 0]}}
+            g["54"] = {"class_type": "LTXVAddGuide", "inputs": {"positive": pos, "negative": neg, "vae": ["3", 0], "latent": lat, "image": ["53", 0],
+                                                            "frame_idx": 0, "strength": float(recipe.guide.strength), "iclora_parameters": ["51", 0]}}
+            pos, neg, lat = ["54", 0], ["54", 1], ["54", 2]
+            model_link = ["50", 0]
         g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1, "audio_vae": ["99", 0]}}
         g["13"] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": lat, "audio_latent": ["12", 0]}}
-        g["14"] = {"class_type": "BasicGuider", "inputs": {"model": ["1", 0], "conditioning": pos}}
+        g["14"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": pos}}
         g["15"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
         g["16"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
         g["17"] = {"class_type": "LTXVScheduler", "inputs": {"steps": ep["steps"], "max_shift": 2.05, "base_shift": 0.95, "stretch": True, "terminal": 0.1, "latent": ["13", 0]}}
@@ -231,11 +248,24 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g["21"] = {"class_type": "VAEDecode", "inputs": {"samples": ["20", 2], "vae": ["3", 0]}}
         out_node = "22"
         g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["21", 0], "filename_prefix": out_prefix}}
-    summary = {"model_id": recipe.model_id, **{k: v for k, v in ep.items() if k != "label"}, "label": ep["label"]}
+    summary = {"model_id": recipe.model_id, **{k: v for k, v in ep.items() if k != "label"}, "label": ep["label"],
+               **({"guide": recipe.guide.kind, "guide_strength": recipe.guide.strength} if recipe.guide else {})}
     return Compiled(graph=g, output_node=out_node, summary=summary, serialized_prompt=recipe.prompt_text)
 
 
 def estimate_i2v_seconds(recipe: I2V) -> dict[str, Any]:
+    """The plain clip's estimate; a guided clip (ST4) is scaled by E11's measured ratio (guide_seconds over the Draft preset's seconds)."""
+    est = _estimate_i2v_plain(recipe)
+    if recipe.guide:
+        spec = registry.get(recipe.model_id)
+        draft = (spec.video.presets.get("draft").seconds if spec and spec.video and spec.video.presets.get("draft") else None) if spec else None
+        ratio = (spec.recipes.guide_seconds / draft) if spec and spec.recipes.guide_seconds and draft else 1.25
+        if est.get("seconds") is not None:
+            est = {**est, "seconds": round(float(est["seconds"]) * ratio, 1), "source": f"{est.get('source', 'baseline')} × {ratio:.2f} for the IC-LoRA guide (E11 2026-10-12)"}
+    return est
+
+
+def _estimate_i2v_plain(recipe: I2V) -> dict[str, Any]:
     """ETA from the E4/E5 spike baselines at the Draft tier, scaled by pixel-frames and (half) by the step ratio — the VAE
     passes are a fixed share of a Wan clip (Q18)."""
     ep = i2v_params(recipe)
@@ -903,7 +933,7 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         i = inputs or {}
         if "start" not in i:
             raise CompileError("i2v needs the uploaded start frame (queue._prepare_i2v_inputs)")
-        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"))
+        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"), i.get("guide"))
     elif isinstance(recipe, Reangle):
         i = inputs or {}
         if "image" not in i:
@@ -945,7 +975,10 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
     """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
-        return spec.weights() if spec else [recipe.model_id]
+        ids = spec.weights() if spec else [recipe.model_id]
+        if recipe.guide and spec is not None and spec.recipes.guide_lora:
+            ids = [*ids, spec.recipes.guide_lora]                      # ST4: the IC-LoRA rides only on a guided clip
+        return ids
     if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
         return []                                                     # R3 (D62) / P17: no weights at all
 

@@ -143,6 +143,15 @@ class FakeComfy:
             menum = fake.object_info.get("LoadImageMask", {}).get("input", {}).get("required", {}).get("image", [[]])[0]
             if isinstance(menum, list) and name not in menum:
                 menum.append(name)
+            if name.lower().endswith((".mp4", ".webm", ".mov")):                # ST4: a guide video shows up in LoadVideo's enum
+                vspec = fake.object_info.get("LoadVideo", {}).get("input", {}).get("required", {}).get("file")
+                if isinstance(vspec, list) and vspec:
+                    if isinstance(vspec[0], str) and len(vspec) > 1 and isinstance(vspec[1], dict):     # V3 dynamic combo: ["COMBO", {"options": [...]}]
+                        opts = vspec[1].setdefault("options", [])
+                        if name not in opts:
+                            opts.append(name)
+                    elif isinstance(vspec[0], list) and name not in vspec[0]:
+                        vspec[0].append(name)
             return {"name": name, "subfolder": subfolder, "type": type}
 
         @app.post("/prompt")

@@ -71,9 +71,9 @@ test('Generate with Klein 4B: the fake engine answers and the new asset lands in
   // the job ran the model chosen in the UI (its id comes from /capabilities, D65 — no model id in the test)
   const caps = await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')
   const klein4b = Object.entries(caps.models).find(([, m]) => m.label === 'Klein 4B')![0]
-  const job = (await api<{ items: { id: string; status: string; recipe: { model_id?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
-  expect(job?.status).toBe('done')
-  expect(job?.recipe.model_id).toBe(klein4b)
+  const jobOf = async () => (await api<{ items: { id: string; status: string; recipe: { model_id?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
+  await expect.poll(async () => (await jobOf())?.status, { timeout: 10_000 }).toBe('done')                // the asset lands a beat before the job's status flips (CI, full runner)
+  expect((await jobOf())?.recipe.model_id).toBe(klein4b)
   await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
   await page.locator('.place-row', { hasText: 'Unprocessed' }).locator('button.place-open').click()
   await expect(page.locator('.place-row', { hasText: 'Unprocessed' }).locator('.n')).toHaveText(String(before + count))

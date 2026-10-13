@@ -10,7 +10,8 @@ import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Joint, type Mannequin } from './builders'
 import { CHAINS, eulerDeg, solveTwoBone, type Chain } from './ik'
-import type { Tool, Transform, View } from './stageStore'
+import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type PassName } from './passes'
+import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
 export interface EngineHooks {
   onPick: (id: string | null) => void
@@ -55,6 +56,11 @@ export class StageEngine {
   private ik: { id: string; chain: Chain; proxy: THREE.Object3D } | null = null
   private pickerMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, depthTest: false, transparent: true, opacity: 0.9 })
   private ikMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff, depthTest: false, transparent: true, opacity: 0.95 })
+  // ST3: the pass materials and the helpers that stay out of the passes
+  private grid: THREE.GridHelper
+  private passClay = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })
+  private passDepth = depthMaterial()
+  private passNormal = new THREE.MeshNormalMaterial()
   readonly canvas: HTMLCanvasElement
   private hooks: EngineHooks
 
@@ -66,7 +72,7 @@ export class StageEngine {
     this.scene.background = new THREE.Color(0x1d1e22)
     this.scene.add(new THREE.HemisphereLight(0xdde3ff, 0x44403a, 1.1))
     const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 8, 6); this.scene.add(key)
-    const grid = new THREE.GridHelper(40, 40, 0x555a66, 0x33363d); grid.position.y = 0.001; this.scene.add(grid)
+    this.grid = new THREE.GridHelper(40, 40, 0x555a66, 0x33363d); this.grid.position.y = 0.001; this.scene.add(this.grid)
     this.selection.visible = false
     this.scene.add(this.selection)
     this.free.position.set(5, 3.5, 7)
@@ -393,6 +399,60 @@ export class StageEngine {
     body.traverse((c) => { c.userData.stageId = o.id })
     holder.add(body)
     return { holder, body, doc: o, figure, pickers }
+  }
+
+  // ---- ST3: the passes ------------------------------------------------------------------------------------------------------------
+  /** The five passes of a camera at a size (16 §7), rendered off the viewport in a renderer of their own: clay (everything in grey
+   *  Lambert — image planes become grey cards, D81), depth (linear disparity around the subject), normals, the object-ID masks (a flat
+   *  colour per object, the legend returned) and the pose (every figure's COCO-18 in OpenPose colours). Helpers, pickers and the gizmo
+   *  stay out; hidden objects too. The viewport's own renderer and state are untouched. */
+  async renderPasses(cam: StageCamera, w: number, h: number): Promise<RenderedPasses> {
+    const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    r.setPixelRatio(1); r.setSize(w, h, false)
+    const camera = new THREE.PerspectiveCamera(vfovFor(cam.focal_mm, cam.sensor_mm, w / h), w / h, 0.05, 500)
+    camera.position.set(cam.pos[0], cam.pos[1], cam.pos[2]); camera.up.set(0, 1, 0); camera.lookAt(cam.target[0], cam.target[1], cam.target[2])
+    camera.rotateZ(rad(cam.roll)); camera.updateProjectionMatrix(); camera.updateMatrixWorld()
+    const hidden: THREE.Object3D[] = []
+    const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
+    hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
+    for (const hlp of this.camHelpers.values()) hide(hlp)
+    for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }
+    const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
+    const shot = (material: THREE.Material | null, bg: number): Promise<Blob> => {
+      this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg); r.render(this.scene, camera); return toBlob(r.domElement)
+    }
+    const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = []
+    try {
+      this.scene.updateMatrixWorld(true)
+      const blobs: Partial<Record<PassName, Blob>> = {}
+      blobs.clay = await shot(this.passClay, 0xb8b8b8)
+      const dr = depthRange(camera.position.distanceTo(new THREE.Vector3(cam.target[0], cam.target[1], cam.target[2])))
+      this.passDepth.uniforms.near.value = dr.near; this.passDepth.uniforms.far.value = dr.far
+      blobs.depth = await shot(this.passDepth, 0x000000)
+      blobs.normal = await shot(this.passNormal, 0x8080ff)
+      // masks: one flat colour per object, swapped in by hand (an override material cannot differ per object)
+      const legend: Record<string, string> = {}
+      let i = 0
+      for (const e of this.entries.values()) {
+        if (!e.doc.visible) continue
+        const hex = maskColour(i++); legend[hex] = e.doc.id
+        const m = new THREE.MeshBasicMaterial({ color: hex })
+        e.body.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })
+      }
+      blobs.mask = await shot(null, 0x000000)
+      for (const [mesh, mat] of swapped) mesh.material = mat
+      swapped.length = 0
+      const figures = [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => e.figure!.markers)
+      const keypoints = projectMarkers(figures, camera, w, h)
+      blobs.pose = await toBlob(drawPose(keypoints, w, h))
+      return { size: { w, h }, blobs: blobs as Record<PassName, Blob>, keypoints, legend }
+    } finally {
+      for (const [mesh, mat] of swapped) mesh.material = mat
+      this.scene.overrideMaterial = prevOverride; this.scene.background = prevBg
+      for (const o of hidden) o.visible = true
+      r.dispose(); r.forceContextLoss()
+      this.dirty = true
+    }
   }
 
   // ---- render ---------------------------------------------------------------------------------------------------------------------

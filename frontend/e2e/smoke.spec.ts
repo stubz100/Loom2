@@ -493,3 +493,47 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   expect(lib.poses['crossing step'].joints.r_elbow[0]).toBe(-90)
   await page.screenshot({ path: 'node_modules/.e2e/stage-poses.png' })
 })
+
+test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pass assets on the stage\'s album page, then the fake engine makes a shot with lineage to the clay pass', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Courtyard')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
+  await page.locator('.lib-grid button', { hasText: /Adult/ }).click()
+  await page.locator('nav.rail button[title^="Shot"]').click()
+  await expect(page.locator('.shot-tab .method.active b')).toHaveText('Clay reference')
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
+  type Doc = { id: string; name: string; revision: number; group_id: string | null; passes: { camera_id: string; revision: number; assets: Record<string, string>; keypoints: number[][][]; legend: Record<string, string> }[] }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Courtyard')!
+  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
+  await expect.poll(async () => (await doc()).passes.length, { timeout: 30_000 }).toBe(1)
+  const d = await doc()
+  const entry = d.passes[0]
+  expect(Object.keys(entry.assets).sort()).toEqual(['clay', 'depth', 'mask', 'normal', 'pose'])
+  expect(entry.keypoints).toHaveLength(1); expect(entry.keypoints[0]).toHaveLength(18)                    // one figure, COCO-18
+  expect(Object.keys(entry.legend)).toHaveLength(2)                                                        // the set and the figure
+  expect(d.group_id).toBeTruthy()
+  const pose = await api<AssetLite & { lineage_kind: string | null; suite: string; params: { pass: string; keypoints: unknown[] }; w: number }>('GET', `/assets/${entry.assets.pose}`)
+  expect(pose.lineage_kind).toBe('stage-pass'); expect(pose.suite).toBe('stage'); expect(pose.params.pass).toBe('pose'); expect(pose.w).toBe(1280)
+  const pageItems = await api<{ group: { name: string; items: { id: string }[] } }>('GET', `/groups/${d.group_id}`)
+  expect(pageItems.group.name).toBe('Stage · Courtyard'); expect(pageItems.group.items.map((i) => i.id).sort()).toEqual(Object.values(entry.assets).sort())
+  await expect(page.locator('.shot-tab .ref-slot.source img')).toBeVisible()                                // image 1 shows the clay pass
+  await expect(page.locator('.shot-tab .pass-side .hint')).toContainText('current')
+  // the shot: Generate ▶ queues the StageShot job with the passes as they are; the fake engine answers; the result carries the lineage
+  await page.locator('.shot-tab .shot-prompt').fill('a sunlit courtyard, a woman in a red coat')
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 15_000 })
+  await go.click()
+  await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
+  const shots = (await api<{ items: (AssetLite & { parents: string[]; lineage_kind: string | null; origin: { suite: string; surface: string; ref: string } | null; prompt_text: string | null })[] }>('GET', '/assets?suite=stage&sort=created_desc&limit=10')).items.filter((a) => a.lineage_kind === 'stage-shot')
+  expect(shots).toHaveLength(1)
+  expect(shots[0].parents).toEqual([entry.assets.clay])                                                    // lineage: the clay pass (no references)
+  expect(shots[0].origin).toMatchObject({ suite: 'stage', surface: 'shot', ref: d.id })
+  expect(shots[0].prompt_text).toContain('grey clay blocking'); expect(shots[0].prompt_text).toContain('red coat')
+  const edges = await api<{ parents: { from_id: string; kind: string }[] }>('GET', `/lineage/${shots[0].id}`)
+  expect(edges.parents.map((p) => [p.from_id, p.kind])).toEqual([[entry.assets.clay, 'stage-shot']])
+  await page.screenshot({ path: 'node_modules/.e2e/stage-shot.png' })
+})

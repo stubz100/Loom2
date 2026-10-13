@@ -10,7 +10,7 @@ graph = "klein"
 roles.te = { default = "qwen3-4b" }
 roles.vae = "flux2-vae"
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
-recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"] }   # P14: the framing moves under `open` (9B is flux-nc); unmeasured on 4B
+recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"], stage = "clay" }   # P14: the framing moves under `open` (9B is flux-nc); unmeasured on 4B. ST3: the clay method under `open`, unmeasured
 inputs = { refs_max = 4 }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 8.5, base_seconds = 10.0, doc_seconds = 28.0 }
@@ -38,7 +38,7 @@ graph = "klein"
 roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
 roles.vae = "flux2-vae"
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
-recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"] }   # P14 / D82: E12's framing moves (9 / 10 / 9 of 10, 6 s warm)
+recipes = { default_for = ["inpaint"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["full"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"], stage = "clay", stage_seconds = 12.0 }   # P14 / D82: E12's framing moves (9 / 10 / 9 of 10, 6 s warm). ST3 / D78: the clay reference (E10: 10/10 blocking kept, 12 s warm)
 inputs = { refs_max = 4, refs_suggest = { at = 2, model = "klein-9b-kv", why = "2.5× faster with several references" } }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 15.0, base_seconds = 18.0, doc_seconds = 28.0 }
@@ -52,7 +52,7 @@ graph = "klein"
 roles.te = { default = "qwen3-8b-q4km", alternates = ["qwen3-8b-fp8mixed"], labels = { "qwen3-8b-q4km" = "Qwen3-8B Q4_K_M GGUF · 5.0 GB", "qwen3-8b-fp8mixed" = "Qwen3-8B fp8 · 8.7 GB" } }
 roles.vae = "flux2-vae"
 sampling = { steps = 20, guidance = 1.0, cfg = 3.5, weight_dtype = "fp8_e4m3fn", distilled = false, json_prompt = false, model_shift = 2.02, cfg_note = "base: 3–5, negatives work" }
-recipes = { default_for = ["i2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"] }
+recipes = { default_for = ["i2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"], stage = "refcontrol", stage_lora = "refcontrol-v2-poses", stage_seconds = 74.0, stage_steps = 30, stage_cfg = 4.0 }   # ST3 / D78: the exact-pose method (E10: PCK 0.86, 74 s warm); the LoRA loads in the Stage graph only
 inputs = { refs_max = 4 }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 15.0, base_seconds = 50.0, doc_seconds = 28.0, tile_seconds = 38.0 }

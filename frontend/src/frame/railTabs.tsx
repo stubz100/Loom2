@@ -1,5 +1,5 @@
 // Rail tab definitions per suite (07 §2). A leaf module: suites and the frame both import it, it imports neither.
-import { BookOpen, Bookmark, Boxes, Brush, Camera, Clapperboard, Clock, Cpu, Film, Files, Image as ImageIcon, Lasso, ListTree, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react'
+import { Aperture, BookOpen, Bookmark, Boxes, Brush, Camera, Clapperboard, Clock, Cpu, Film, Files, Image as ImageIcon, Lasso, ListTree, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
@@ -14,7 +14,7 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
     { id: 'presets', label: 'Presets', icon: <Bookmark size={18} /> }, { id: 'clips', label: 'Clips', icon: <Film size={18} /> },
     { id: 'sequence', label: 'Sequence', icon: <Clapperboard size={18} /> }],                   // P17 (D83): the single-lane timeline
   models: [{ id: 'roster', label: 'Roster', icon: <Boxes size={18} /> }, { id: 'engine', label: 'Engine', icon: <Cpu size={18} /> }],
-  // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses (ST2) and Shot (ST3) join later
+  // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses came with ST2, Shot with ST3
   stage: [{ id: 'library', label: 'Library', icon: <Shapes size={18} /> }, { id: 'outliner', label: 'Outliner', icon: <ListTree size={18} /> }, { id: 'cameras', label: 'Cameras', icon: <Camera size={18} /> },
-    { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }],
+    { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }, { id: 'shot', label: 'Shot', icon: <Aperture size={18} /> }],
 }

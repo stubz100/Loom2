@@ -22,11 +22,11 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, Inpaint, Reangle, Render, Segment, Upscale, reangle_method, reangle_model_id, warm_group
+from ..recipes import I2I, I2V, T2I, Inpaint, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
-                     estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights)
+                     estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights, stage_pass_for, stage_prompt, stage_refs)
 
 if TYPE_CHECKING:
     from ..queue import JobQueue, JobRecord
@@ -71,6 +71,8 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("frames")
     if isinstance(recipe, Reangle):
         needs.append("source")
+    if isinstance(recipe, StageShot):
+        needs.append("passes")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
         est = estimate_seconds(recipe, history)
@@ -89,11 +91,28 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         params = {"move": recipe.move, "method": reangle_method(recipe, variant), "model_id": mid, "prompt": reangle_prompt(recipe, variant),
                   "label": spec.label if spec else mid}
         est = {"seconds": spec.estimates.base_seconds if spec else None, "source": "baseline (E12 2026-10-12, warm)"}
+    elif isinstance(recipe, StageShot):                               # P13 ST3 (D78): the method's model in this build and E10's measured time
+        try:
+            mid = stage_model_id(recipe, variant)
+        except ValueError as e:
+            raise CompileError(str(e)) from e
+        spec = registry.get(mid)
+        kept = stage_refs(recipe, spec) if spec else recipe.refs
+        if recipe.method == "refcontrol" and not kept:
+            raise CompileError("the exact-pose method needs one reference image (image 2)")
+        params = {"method": recipe.method, "model_id": mid, "label": spec.label if spec else mid, "prompt": stage_prompt(recipe, variant),
+                  "image1": stage_pass_for(recipe.method), "width": recipe.width, "height": recipe.height, "refs": len(kept),
+                  "max_refs": len(kept) if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1),
+                  "refs_dropped": max(0, len(recipe.refs) - len(kept))}
+        measured = spec.recipes.stage_seconds if spec else None
+        est = {"seconds": measured if measured is not None else (spec.estimates.base_seconds if spec else None),
+               "source": "baseline (E10 2026-10-12, warm)" if measured is not None else "the model's base estimate (this method is unmeasured on it)"}
     else:
         keep = ("mode", "model_id", "source", "strength", "margin_pct", "min_size", "feather", "expand", "blend", "refine", "refine_model_id", "as_layer", "op", "max_size")
         params = {k: v for k, v in recipe.model_dump().items() if k in keep}
         est = doc_estimate_seconds(recipe, variant)
-    return Plan(kind=recipe.kind, model_id=None if quick else getattr(recipe, "model_id", None), engine=not quick,
+    resolved = isinstance(recipe, (Reangle, StageShot))               # the model the method runs in this build, not the property's `full` answer
+    return Plan(kind=recipe.kind, model_id=None if quick else str(params["model_id"]) if resolved else getattr(recipe, "model_id", None), engine=not quick,
                 warm_group=warm_group(recipe, variant), vram_gb=estimate_vram_gb(recipe, variant), estimate=est, params=params, needs=needs,
                 weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]))
 
@@ -116,6 +135,8 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
         return {"image": img, "mask": img, "w": 1024, "h": 576, "points": [], "box": None}
     if isinstance(recipe, Reangle):
         return {"image": img, "w": 1024, "h": 576}
+    if isinstance(recipe, StageShot):
+        return {"clay": img, "pose": img}
     return {}
 
 
@@ -179,6 +200,11 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     if isinstance(recipe, Reangle):                                    # P14: the source asset goes in through /upload/image
         q.progress(job, "uploading source")
         inputs = await prepare_reangle(job, recipe, q)
+        object_info = await q.object_info_refresh()
+        q.check_cancel(job)
+    if isinstance(recipe, StageShot):                                  # ST3: the pass the method takes goes in through /upload/image
+        q.progress(job, "uploading passes")
+        inputs = await prepare_stage_shot(job, recipe, q)
         object_info = await q.object_info_refresh()
         q.check_cancel(job)
     compiled = compile_recipe(recipe, q.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs or None,
@@ -317,6 +343,20 @@ async def prepare_reangle(job: JobRecord, recipe: Reangle, q: JobQueue) -> dict[
     name = await q.engine.client.upload_image(fitted)
     job.log_tail.append(f"source uploaded: {w}×{h}, move {recipe.move}, method {reangle_method(recipe, q.app.settings.variant)}")
     return {"image": name, "w": w, "h": h}
+
+
+async def prepare_stage_shot(job: JobRecord, recipe: StageShot, q: JobQueue) -> dict[str, Any]:
+    """Upload the pass the method takes as image 1 (the clay, or the pose map) as PNG at its own size — it was rendered at the recipe's."""
+    key = stage_pass_for(recipe.method)
+    aid = recipe.passes.get(key)
+    a = q.catalogue.get(aid) if aid else None
+    src = q.catalogue.abs_path(a) if a else None
+    if not aid or not src or not Path(src).is_file():
+        raise ValueError(f"the {key} pass ({aid or 'none'}) is missing from the Catalogue — render the passes first")
+    fitted = await asyncio.to_thread(fit_reference, q, Path(src), 0, f"pass-{aid}")
+    name = await q.engine.client.upload_image(fitted)
+    job.log_tail.append(f"{key} pass uploaded: {a.w}×{a.h}, method {recipe.method}, model {stage_model_id(recipe, q.app.settings.variant)}")
+    return {key: name}
 
 
 async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any]:

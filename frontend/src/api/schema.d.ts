@@ -1381,6 +1381,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/{st_id}/passes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Passes
+         * @description Each pass becomes an asset (`lineage_kind = stage-pass`, suite stage, `params {stage_id, camera_id, revision, pass, size}`, the
+         *     keypoints on the pose pass, the legend on the mask pass) placed on the stage's album page (made on first use, D34); the document
+         *     records them for the camera and comes back at its new revision.
+         */
+        post: operations["stage_passes_stages__st_id__passes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/thumbs/{asset_id}/{size}": {
         parameters: {
             query?: never;
@@ -1806,6 +1828,7 @@ export interface components {
             samplers: string[];
             /** Schedulers */
             schedulers: string[];
+            stage: components["schemas"]["StageCaps"];
             /** Te Alternates */
             te_alternates: {
                 [key: string]: string[];
@@ -3946,6 +3969,37 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * PassesUpload
+         * @description ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18
+         *     keypoints behind the pose pass and the mask pass's colour legend.
+         */
+        PassesUpload: {
+            /** Camera Id */
+            camera_id: string;
+            /**
+             * Keypoints
+             * @default []
+             */
+            keypoints?: unknown[];
+            /**
+             * Legend
+             * @default {}
+             */
+            legend?: {
+                [key: string]: unknown;
+            };
+            /** Passes */
+            passes: {
+                [key: string]: string;
+            };
+            /** Revision */
+            revision: number;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+        };
         /** PathStep */
         PathStep: {
             /** Id */
@@ -4362,6 +4416,16 @@ export interface components {
              * @default []
              */
             segment?: string[];
+            /** Stage */
+            stage?: string | null;
+            /** Stage Cfg */
+            stage_cfg?: number | null;
+            /** Stage Lora */
+            stage_lora?: string | null;
+            /** Stage Seconds */
+            stage_seconds?: number | null;
+            /** Stage Steps */
+            stage_steps?: number | null;
             /**
              * T2I
              * @default false
@@ -4663,6 +4727,8 @@ export interface components {
             cameras: components["schemas"]["StageCamera"][];
             /** Created At */
             created_at: string;
+            /** Group Id */
+            group_id: string | null;
             /** Id */
             id: string;
             /** Keyframes */
@@ -4727,6 +4793,19 @@ export interface components {
             /** Target */
             target: number[];
         };
+        /** StageCaps */
+        StageCaps: {
+            /** Default */
+            default?: string | null;
+            /** Methods */
+            methods: {
+                [key: string]: components["schemas"]["StageMethodCaps"];
+            };
+            /** Passes */
+            passes: string[];
+        } & {
+            [key: string]: unknown;
+        };
         /** StageCreate */
         StageCreate: {
             /**
@@ -4742,6 +4821,36 @@ export interface components {
         StageList: {
             /** Items */
             items: components["schemas"]["Stage"][];
+        };
+        /**
+         * StageMethodCaps
+         * @description P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows.
+         */
+        StageMethodCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Health */
+            health: string;
+            /** Hint */
+            hint?: string | null;
+            /** Image1 */
+            image1: string;
+            /** Label */
+            label: string;
+            /** Max Refs */
+            max_refs: number;
+            /** Measured */
+            measured: boolean;
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id: string;
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short: string;
+        } & {
+            [key: string]: unknown;
         };
         /** StageObject */
         StageObject: {
@@ -8292,6 +8401,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_passes_stages__st_id__passes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassesUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stage"];
                 };
             };
             /** @description Validation Error */

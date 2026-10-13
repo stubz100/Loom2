@@ -43,3 +43,26 @@
 .pose-card .quiet { flex: none; width: 22px; padding: 0; color: var(--fg3); }
 .pose-card .quiet:hover { color: var(--danger, #e66); }
 .lib-grid button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
+/* ST3: the Shot tab */
+.shot-tab .method-list { display: grid; gap: 4px; }
+.shot-tab .method { display: grid; text-align: left; justify-items: start; gap: 1px; padding: 6px 8px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); }
+.shot-tab .method.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.shot-tab .method span { font-size: 11px; color: var(--fg2); }
+.shot-tab .method small { font-size: 10px; color: var(--fg3); }
+.shot-tab .pass-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: start; }
+.shot-tab .pass-side { display: grid; gap: 4px; font-size: 11px; }
+.shot-tab .check { display: flex; align-items: center; gap: 4px; }
+.shot-tab .ref-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shot-tab .ref-slot { position: relative; border: 1px dashed var(--line2); border-radius: var(--radius); aspect-ratio: 1; display: grid; place-items: center; color: var(--fg3); font-size: 11px; overflow: hidden; background: var(--bg2); }
+.shot-tab .ref-slot.source { aspect-ratio: 16 / 9; }
+.shot-tab .ref-slot.locked { border-style: solid; }
+.shot-tab .ref-slot img { width: 100%; height: 100%; object-fit: cover; }
+.shot-tab .ref-slot .n { position: absolute; top: 4px; left: 4px; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 11px; border-radius: 4px; padding: 0 6px; }
+.shot-tab .ref-slot .x { position: absolute; top: 2px; right: 2px; }
+.shot-tab .ref-slots.over { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
+.shot-tab .shot-prompt { width: 100%; resize: vertical; min-height: 54px; font: inherit; }
+.shot-tab .segmented button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
+.shot-tab .angle-count { display: inline-flex; align-items: center; gap: 8px; }
+.shot-tab .prompt-preview { font-size: 11px; line-height: 1.35; max-height: 80px; overflow: auto; }
+.shot-tab .shot-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.shot-tab .shot-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: var(--bg2); }

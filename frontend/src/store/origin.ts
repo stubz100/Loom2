@@ -44,6 +44,11 @@ export function goToOrigin(j: Job): void {
         else if (folder) void c.setQuery({ folder: folder as typeof c.q.folder, group_id: undefined, collection_id: undefined })
       })
       break
+    case 'stage':                                                 // ST3: the stage the shot was framed in, at that camera
+      s.setSuite('stage')
+      if (o.ref) { const ref = o.ref; const cam = typeof o.payload?.camera_id === 'string' ? o.payload.camera_id : null
+        void import('../suites/stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === ref ? Promise.resolve() : st.open(ref); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) }
+      break
     default: break
   }
 }

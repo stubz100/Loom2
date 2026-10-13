@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import json
+
 import pytest
 
 from loom2.engine import contract
@@ -57,10 +59,14 @@ def test_contract_check_and_name_resolution(object_info: dict):
     text = "\n".join(problems)
     assert "unknown node class" in text and "links to missing node" in text and "expects INT" in text and "not in enum" in text
     assert "required 'steps' missing" in text
-    # sub-folder names: the engine lists 't5\\t5xxl…' for a mounted sub-folder; we pass the basename
+    # sub-folder names: an engine with a mounted sub-folder lists 't5\\t5xxl…'; we pass the basename and the resolver notes the rewrite.
+    # D80: the fixture is captured from F: alone (no mounted trees, every file flat), so the sub-folder enum is synthesised here.
+    oi2 = json.loads(json.dumps(object_info))
+    oi2["DualCLIPLoader"]["input"]["required"]["clip_name1"][0] = ["clip_l.safetensors"]
+    oi2["DualCLIPLoader"]["input"]["required"]["clip_name2"][0] = ["t5\\t5xxl_fp8_e4m3fn_scaled.safetensors"]
     g2 = {"2": {"class_type": "DualCLIPLoader", "inputs": {"clip_name1": "clip_l.safetensors", "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors", "type": "flux"}}}
-    notes = contract.resolve_names(object_info, g2)
-    assert any("clip_name2" in n for n in notes) or contract.check_graph(object_info, g2) == []
+    notes = contract.resolve_names(oi2, g2)
+    assert any("clip_name2" in n for n in notes) and contract.check_graph(oi2, g2) == []
 
 
 def test_node_signature(object_info: dict):

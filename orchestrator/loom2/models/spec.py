@@ -65,6 +65,11 @@ class Recipes(Strict):
     beats: bool = False                            # keyframes in between
     reangle: str | None = None                     # P14 (D82): the angles method this model implements — angles_lora | klein_prompt
     reangle_moves: list[str] = []                  # the moves it is good for (E12 ≥ 7/10): auto picks the first model listing the move
+    stage: str | None = None                       # P13 ST3 (D78): the Stage → image method this model implements — clay | refcontrol
+    stage_lora: str | None = None                  # refcontrol: the pose LoRA's roster id (only the Stage graph loads it)
+    stage_seconds: float | None = None             # E10's measured warm seconds at the Draft size (the Shot tab's estimate)
+    stage_steps: int | None = None                 # the method's steps / CFG when they differ from `sampling` (E10 ran base at 30 / 4.0)
+    stage_cfg: float | None = None
 
 
 class RefsSuggest(Strict):

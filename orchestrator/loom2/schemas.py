@@ -235,6 +235,27 @@ class ReangleCaps(Open):
     auto: dict[str, str]                           # move → the method `auto` picks
 
 
+class StageMethodCaps(Open):
+    """P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows."""
+    model_id: str
+    label: str
+    short: str
+    hint: str | None = None
+    health: str
+    missing: list[str]
+    seconds: float | None = None
+    measured: bool
+    image1: str                                    # the pass that is image 1: clay | pose
+    max_refs: int                                  # references after image 1
+    approx_gb: float
+
+
+class StageCaps(Open):
+    methods: dict[str, StageMethodCaps]
+    passes: list[str]
+    default: str | None = None
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
@@ -254,6 +275,7 @@ class Capabilities(Open):
     refine_edge: RefineEdgeCaps
     content_aware: ContentAwareCaps
     reangle: ReangleCaps                           # P14 (D82)
+    stage: StageCaps                               # P13 ST3 (D78)
 
 
 class MissingWeight(Open):

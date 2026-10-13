@@ -266,6 +266,48 @@ def reangle_model_id(recipe: Reangle, variant: str = "full") -> str:
     raise ValueError(f"no model this build offers implements the angles method {method!r}")
 
 
+STAGE_METHODS = ("clay", "refcontrol")
+STAGE_PASSES = ("clay", "depth", "normal", "pose", "mask")
+
+
+class StageShot(BaseModel):
+    """P13 ST3 (D78, 16 §7): a stage camera's blocking rendered as an image. `clay`: Klein 9B with the clay pass as image 1 ("keep image 1's
+    camera, framing and poses"), the reference deck as images 2…; `refcontrol`: Klein base 9B + RefControl's pose LoRA, the pose pass as
+    image 1 and the first reference as image 2 (D81: the pose pass alone). The passes are `stage-pass` assets uploaded by the client
+    (`POST /stages/{id}/passes`); the result lands with lineage `stage-shot` to them and the references."""
+    kind: Literal["stage_shot"] = "stage_shot"
+    stage_id: str
+    camera_id: str
+    passes: dict[str, str]                        # pass name → asset id (at least the one the method takes: clay, or pose)
+    method: Literal["clay", "refcontrol"] = "clay"
+    prompt_text: str = ""                         # what the scene is — after the method's own lead sentence
+    refs: list[RefImage] = Field(default_factory=list)   # the reference deck (D73); refcontrol takes the first as image 2
+    seeds: list[int] = Field(default_factory=lambda: [0])
+    width: int = 1280                             # the project tier (D18: Draft by default)
+    height: int = 720
+    te_id: str | None = None                      # Klein's encoder override (D31)
+
+    @property
+    def model_id(self) -> str:
+        """The model the method runs under `full`; the job code asks `stage_model_id(recipe, variant)` (under `open` clay runs Klein 4B)."""
+        return stage_model_id(self)
+
+
+def stage_spec(method: str, variant: str = "full"):
+    """The first offered spec (by `order`) implementing a Stage method, or None."""
+    for spec in registry.stage_specs():
+        if spec.recipes.stage == method and registry.offered(spec, variant):
+            return spec
+    return None
+
+
+def stage_model_id(recipe: StageShot, variant: str = "full") -> str:
+    spec = stage_spec(recipe.method, variant)
+    if spec is None:
+        raise ValueError(f"no model this build offers implements the Stage method {recipe.method!r}")
+    return spec.id
+
+
 class Render(BaseModel):
     """P17 (D83) slice 2: a draft render of a sequence — a CPU job (no engine) that becomes a Catalogue clip: every lane tick read from
     the clips' PNG masters, dissolves blended, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no
@@ -275,8 +317,8 @@ class Render(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot
 
 
 class RecipeEnvelope(BaseModel):
@@ -310,6 +352,8 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return recipe.refine_model_id            # the big model decides the swap, not the 70 MB upscaler
     if isinstance(recipe, Reangle):
         return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
+    if isinstance(recipe, StageShot):
+        return stage_model_id(recipe, variant)     # ST3: the model the Stage method runs in this build
     if isinstance(recipe, Render):
         return "cpu"                               # P17: the draft render never touches the engine
     return recipe.model_id

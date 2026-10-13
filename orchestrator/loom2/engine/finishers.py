@@ -26,7 +26,7 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
-from ..recipes import I2I, I2V, Inpaint, Reangle, Render, Segment, Upscale
+from ..recipes import I2I, I2V, Inpaint, Reangle, Render, Segment, StageShot, Upscale, stage_model_id
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from .pipeline import AnyRecipe, Submission
@@ -34,9 +34,14 @@ from .pipeline import AnyRecipe, Submission
 
 def _parents(recipe: Any) -> list[str]:
     """Lineage: the reference images the job used — the kept ones only (D73: those over the model's limit never reached the engine);
-    a new angle's parent is its source (P14)."""
+    a new angle's parent is its source (P14); a stage shot's are the pass it took as image 1 and the references that followed (ST3)."""
     if isinstance(recipe, Reangle):
         return [recipe.asset_id]
+    if isinstance(recipe, StageShot):
+        from .graphs import stage_pass_for, stage_refs
+        spec = registry.get(stage_model_id(recipe))
+        used = [recipe.passes[k] for k in (stage_pass_for(recipe.method),) if recipe.passes.get(k)]
+        return used + [r.asset_id for r in (stage_refs(recipe, spec) if spec else recipe.refs) if r.asset_id]
     refs = getattr(recipe, "refs", []) or []
     spec = registry.get(getattr(recipe, "model_id", "") or "")
     if spec is not None:
@@ -71,11 +76,11 @@ class AssetFinisher:
                 continue
             rec = await asyncio.to_thread(
                 q.catalogue.ingest_file, src, kind="video" if src.suffix.lower() in (".mp4", ".webm", ".mov") else "image", move=True,
-                job_id=job.id, batch_id=job.batch_id, suite="generate", model_id=compiled.summary.get("model_id", getattr(recipe, "model_id", None)), seed=job.seed,
+                job_id=job.id, batch_id=job.batch_id, suite="stage" if isinstance(recipe, StageShot) else "generate", model_id=compiled.summary.get("model_id", getattr(recipe, "model_id", None)), seed=job.seed,
                 prompt_text=compiled.serialized_prompt or getattr(recipe, "prompt_text", None), prompt_json=getattr(recipe, "prompt_json", None),
                 params=compiled.summary | {"recipe": recipe.model_dump()}, timings={"wall_s": q.wall_s(), "node_s": job.node_times},
                 compiled_graph_hash=compiled.graph_hash, variant=job.variant, parents=_parents(recipe),
-                origin=job.origin, **({"lineage_kind": "reangle"} if isinstance(recipe, Reangle) else {}))
+                origin=job.origin, **({"lineage_kind": "reangle"} if isinstance(recipe, Reangle) else {"lineage_kind": "stage-shot"} if isinstance(recipe, StageShot) else {}))
             assets.append(rec)
             q.hub.broadcast("asset.created", rec.model_dump())
         job.progress_text = "thumbnails"
@@ -264,7 +269,13 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
         return SelectionFinisher()
     if isinstance(recipe, (Inpaint, I2I, Upscale)):
         return DocumentFinisher()
-    return AssetFinisher()
+    fin = AssetFinisher()
+    if isinstance(recipe, StageShot) and recipe.method == "refcontrol":
+        # ST3 rig (journal 2026-10-13): a second exact-pose shot with the same prompt skips the text encode (ComfyUI's cache), so the
+        # 6.8 GB encoder stays resident and the LoRA-patched base 9B streams from RAM — 15.7 s/it instead of 3.3 (474 s against 108).
+        # Dropping the cache after the job costs a ~10 s reload from the page cache and keeps the next shot at its measured time.
+        fin.frees_cache = True
+    return fin
 
 
 # ---- D62 Quick Remove: no engine -------------------------------------------------------------------------------------------------

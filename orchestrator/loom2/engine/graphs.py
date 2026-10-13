@@ -10,8 +10,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, Render, Segment, Upscale,
-                       inpaint_model_id, reangle_method, reangle_model_id)
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, Upscale,
+                       inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
 from ..models.spec import ModelSpec
@@ -59,7 +59,7 @@ def resolve_te_id(spec: ModelSpec, te_id: str | None) -> str:
     return te_id
 
 
-def recipe_te_id(recipe: T2I | I2I | Inpaint | Upscale, variant: str = "full") -> str | None:
+def recipe_te_id(recipe: T2I | I2I | Inpaint | Upscale | StageShot, variant: str = "full") -> str | None:
     """The encoder a FLUX.2-family recipe will load (None for recipes without one); raises CompileError on a bad override."""
     if isinstance(recipe, Inpaint):
         mid = inpaint_model_id(recipe, variant)
@@ -69,6 +69,8 @@ def recipe_te_id(recipe: T2I | I2I | Inpaint | Upscale, variant: str = "full") -
         mid = recipe.refine_model_id
     elif isinstance(recipe, (T2I, I2I)):
         mid = recipe.model_id
+    elif isinstance(recipe, StageShot):
+        mid = stage_model_id(recipe, variant)                             # ST3: the model the method runs in this build
     else:
         return None
     spec = registry.get(mid)
@@ -674,6 +676,110 @@ def build_reangle(recipe: Reangle, roster: Roster, seed: int, out_prefix: str, i
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
+# ---- P13 ST3 (D78, 16 §7): the Stage → image graphs, ported from engine/spikes/e10_stage.py ----------------------------------------
+STAGE_CLAY_LEAD = ("Image 1 is a grey clay blocking of this exact shot: the grey mannequins stand for the people described below, the grey blocks for the "
+                   "set and props. Render it as a finished cinematic still: keep image 1's camera, framing, composition, and every figure's pose, "
+                   "position and size exactly; replace every mannequin with its person and the clay with the real scene, nothing stays grey.")
+STAGE_POSE_LEAD = "apply pose from image 1 with reference from image 2."
+STAGE_NEG = "blurry, low quality, deformed, extra limbs, text, watermark"
+STAGE_HINTS = {"clay": "keeps the blocking (E10: 10/10 on the sheet); limbs may drift (PCK 0.60)",
+               "refcontrol": "exact limbs (PCK 0.86) from the pose pass; needs one reference image, ≈ 6× slower"}
+
+
+def stage_pass_for(method: str) -> str:
+    """The pass a method takes as image 1: the clay for `clay`, the pose map for `refcontrol` (D81: the pose pass alone)."""
+    return "pose" if method == "refcontrol" else "clay"
+
+
+def stage_refs(recipe: StageShot, spec: ModelSpec) -> list[RefImage]:
+    """The references that follow image 1: `refcontrol` takes exactly one (image 2), `clay` fills the model's remaining slots."""
+    room = 1 if spec.recipes.stage == "refcontrol" else max(0, spec.inputs.refs_max - 1)
+    return recipe.refs[:room]
+
+
+def stage_prompt(recipe: StageShot, variant: str = "full") -> str:
+    """The exact text the engine gets: the method's lead sentence about image 1, then a sentence per noted reference ("Image 2 shows …",
+    D73), then the recipe's own sentence."""
+    spec = registry.get(stage_model_id(recipe, variant))
+    extra = recipe.prompt_text.strip()
+    if recipe.method == "refcontrol":
+        return _then(STAGE_POSE_LEAD, extra)
+    text = STAGE_CLAY_LEAD
+    for i, r in enumerate(stage_refs(recipe, spec) if spec else []):
+        if r.note and r.note.strip():
+            text = _then(text, f"Image {i + 2} shows {r.note.strip().rstrip('.')}.")
+    return _then(text, extra)
+
+
+def build_stage_shot(recipe: StageShot, roster: Roster, seed: int, out_prefix: str, inputs: dict[str, Any], ref_files: dict[str, str] | None = None,
+                     variant: str = "full") -> Compiled:
+    """clay: Klein 9B (4B under `open`) with the clay pass as a ReferenceLatent on the prompt, the deck's images chained after it, the
+    output at the recipe's size. refcontrol: Klein base 9B + RefControl's pose LoRA (0.9), the pose pass as image 1, the first
+    reference (fitted to 0.6 MP) as image 2, the E10 negative, 30 steps at CFG 4. Both measured in E10 (journal 2026-10-12)."""
+    try:
+        mid = stage_model_id(recipe, variant)
+    except ValueError as e:
+        raise CompileError(str(e)) from e
+    spec = registry.get(mid)
+    if spec is None or spec.recipes.stage != recipe.method:
+        raise CompileError(f"no spec implements the Stage method {recipe.method!r}")
+    key = stage_pass_for(recipe.method)
+    pass_name = inputs.get(key)
+    if not pass_name:
+        raise CompileError(f"the {key} pass was not uploaded to the engine")
+    refs = stage_refs(recipe, spec)
+    if recipe.method == "refcontrol" and not refs:
+        raise CompileError("the exact-pose method needs one reference image (image 2)")
+    prompt = stage_prompt(recipe, variant)
+    mult = spec.geometry.size_mult
+    w, h = max(mult, (recipe.width // mult) * mult), max(mult, (recipe.height // mult) * mult)
+    g: dict[str, Any] = {}
+    model_link = _flux2_loaders(g, roster, mid, spec, None, recipe.te_id)
+    steps = int(spec.recipes.stage_steps or spec.sampling.steps)
+    cfg = float(spec.recipes.stage_cfg if spec.recipes.stage_cfg is not None else spec.sampling.cfg)
+    if recipe.method == "refcontrol":
+        if not spec.recipes.stage_lora:
+            raise CompileError("the exact-pose spec names no pose LoRA")
+        _, lora = roster.require(spec.recipes.stage_lora)
+        g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model_link, "lora_name": lora, "strength_model": 0.9}}
+        model_link = ["4", 0]
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+    g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "" if spec.sampling.distilled else STAGE_NEG, "clip": ["2", 0]}}
+    g["100"] = {"class_type": "LoadImage", "inputs": {"image": pass_name}}
+    g["7"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
+    g["8"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["7", 0]}}          # image 1: the pass
+    cond: list = ["8", 0]
+    nid = 30
+    ref_files = ref_files or {}
+    for i, ref in enumerate(refs):
+        rkey = ref.asset_id or ref.blob or ""
+        rname = ref_files.get(rkey)
+        if not rname:
+            raise CompileError(f"reference image {i + 2} ({rkey}) was not uploaded to the engine")
+        g[str(nid)] = {"class_type": "LoadImage", "inputs": {"image": rname}}
+        img: list = [str(nid), 0]
+        nid += 1
+        if recipe.method == "refcontrol":                                       # E10: the reference at 0.6 MP beside a 0.9 MP pose map
+            g[str(nid)] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": img, "upscale_method": "lanczos", "megapixels": 0.6, "resolution_steps": 16}}
+            img = [str(nid), 0]
+            nid += 1
+        g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": ["3", 0]}}
+        lat = [str(nid), 0]
+        nid += 1
+        g[str(nid)] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": cond, "latent": lat}}
+        cond = [str(nid), 0]
+        nid += 1
+    g["9"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}}
+    g["10"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": steps, "cfg": cfg,
+                                                  "sampler_name": spec.sampling.sampler, "scheduler": spec.sampling.scheduler,
+                                                  "positive": cond, "negative": ["6", 0], "latent_image": ["9", 0], "denoise": 1.0}}
+    g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["11", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": mid, "method": recipe.method, "stage_id": recipe.stage_id, "camera_id": recipe.camera_id, "image1": key, "steps": steps,
+               "cfg": cfg, "seed": int(seed), "width": w, "height": h, "refs": len(refs), "refs_dropped": max(0, len(recipe.refs) - len(refs))}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
 def upscale_factor(model_id: str) -> int:
     spec = registry.get(model_id)
     if spec is None or spec.recipes.upscale_factor is None:
@@ -776,7 +882,7 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
     return Compiled(graph=g, output_node="99", summary=summary | {"op": recipe.op, "expand": recipe.expand, "feather": recipe.feather}, serialized_prompt=recipe.text)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -803,6 +909,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V, roster: Roster, 
         if "image" not in i:
             raise CompileError("reangle needs the uploaded source (pipeline.prepare_reangle)")
         c = build_reangle(recipe, roster, seed, out_prefix, i["image"], int(i.get("w", 0)), int(i.get("h", 0)), variant)
+    elif isinstance(recipe, StageShot):
+        i = inputs or {}
+        if not (i.get("clay") or i.get("pose")):
+            raise CompileError("stage_shot needs the uploaded passes (pipeline.prepare_stage_shot)")
+        c = build_stage_shot(recipe, roster, seed, out_prefix, i, ref_files, variant)
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -825,10 +936,12 @@ def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, vari
         return _vram(inpaint_model_id(recipe, variant))               # C10: Fill Hero runs dev, whatever the panel named
     if isinstance(recipe, Reangle):
         return _vram(reangle_model_id(recipe, variant))
+    if isinstance(recipe, StageShot):
+        return _vram(stage_model_id(recipe, variant))
     return _vram(recipe.model_id)
 
 
-def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> list[str]:
+def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot, variant: str = "full") -> list[str]:
     """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
@@ -847,6 +960,12 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, varian
         ids += model_ids(recipe.model_id, bool(recipe.turbo))
     elif isinstance(recipe, Reangle):
         ids += model_ids(reangle_model_id(recipe, variant), False)     # the spec's extras carry the Lightning and angles LoRAs
+    elif isinstance(recipe, StageShot):
+        mid = stage_model_id(recipe, variant)
+        ids += model_ids(mid, False)
+        spec = registry.get(mid)
+        if spec is not None and spec.recipes.stage_lora:
+            ids.append(spec.recipes.stage_lora)                        # ST3: the pose LoRA rides only on the Stage graph
     elif isinstance(recipe, Inpaint):
         ids += model_ids(inpaint_model_id(recipe, variant), True)      # _flux2_loaders chains the spec's Turbo LoRA in the Edit graphs
     elif isinstance(recipe, I2I):

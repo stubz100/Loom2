@@ -3,13 +3,21 @@
 // the change is lost and the toast says so). The three.js engine (engine.ts) renders from this store and reports edits back to it;
 // project data never lives in the engine or in component state.
 import { create } from 'zustand'
-import { ApiError, http, unwrap } from '../../api/client'
-import type { StageCamera, StageDoc, StageObject } from '../../api/types'
+import { api, ApiError, http, sha256Hex, unwrap } from '../../api/client'
+import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject } from '../../api/types'
 import { useSession } from '../../store/session'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
 
 export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
+// ---- ST3 (16 §3e / §7): the Shot tab ----
+export interface ShotRef { asset_id: string; note?: string | null }
+export interface ShotState { method: string; prompt_text: string; refs: ShotRef[]; count: number; tier: 'draft' | 'full'; use_as_is: boolean }
+export interface RenderedPasses { size: { w: number; h: number }; blobs: Record<string, Blob>; keypoints: number[][][]; legend: Record<string, string> }
+/** The document's record of a camera's rendered passes (stages/<id>.json `passes[]`). */
+export interface PassesEntry { camera_id: string; revision: number; size: { w: number; h: number }; assets: Record<string, string>; keypoints: unknown[]; legend: Record<string, unknown>; rendered_at?: string }
+export const DEFAULT_SHOT: ShotState = { method: 'clay', prompt_text: '', refs: [], count: 1, tier: 'draft', use_as_is: false }
+const snap16 = (v: number) => Math.max(16, Math.round(v / 16) * 16)
 /** The full joint map a figure shows: the preset's angles under the figure's own edits (ST2). */
 export function effectiveJoints(o: StageObject): Record<string, number[]> {
   const preset = POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand
@@ -47,6 +55,24 @@ interface StageState {
   loadPoses: () => Promise<void>
   savePose: (name: string, id: string) => Promise<void>
   deletePose: (name: string) => Promise<void>
+  // ST3: the Shot tab — passes rendered by the viewport, uploaded as assets; the StageShot job; its results
+  shot: ShotState
+  shotPreview: DocumentPreview | null
+  shotPreviewError: string | null
+  rendering: boolean
+  shots: Asset[]                                            // this stage's stage-shot results, newest first
+  passRenderer: ((cam: StageCamera, w: number, h: number) => Promise<RenderedPasses>) | null   // the mounted viewport registers it
+  setShot: (patch: Partial<ShotState>) => void
+  addShotRef: (assetId: string) => void
+  removeShotRef: (assetId: string) => void
+  refreshShotPreview: () => Promise<void>
+  passesEntry: () => PassesEntry | null                     // the active camera's passes, if rendered
+  passesStale: () => boolean                                // the document moved on since they were rendered (or a save is pending)
+  shotSize: () => [number, number]                          // the recipe size: the tier's height at the project's aspect, snapped to 16
+  renderPasses: () => Promise<boolean>
+  generateShot: () => Promise<Job[] | null>
+  loadShots: () => Promise<void>
+  onAssetCreated: (a: Asset) => void
   load: () => Promise<void>
   create: (name: string) => Promise<StageDoc | null>
   open: (id: string | null) => Promise<void>
@@ -102,9 +128,106 @@ function schedule(get: () => StageState, set: (p: Partial<StageState>) => void):
   saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300)
 }
 
+/** ST3: a pending or in-flight save completes before the passes are rendered, so they carry the document's real revision. */
+async function flushSave(get: () => StageState, set: (p: Partial<StageState>) => void): Promise<void> {
+  if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; await save(get, set) }
+  for (let i = 0; i < 100 && get().saving; i++) await new Promise((r) => window.setTimeout(r, 50))
+}
+
+let shotPreviewSeq = 0
+
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
+  shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
+
+  // ---- ST3: the Shot tab ----
+  setShot: (patch) => { set({ shot: { ...get().shot, ...patch } }); void get().refreshShotPreview() },
+  addShotRef: (assetId) => { const refs = get().shot.refs; if (refs.some((r) => r.asset_id === assetId)) return; get().setShot({ refs: [...refs, { asset_id: assetId, note: null }] }) },
+  removeShotRef: (assetId) => get().setShot({ refs: get().shot.refs.filter((r) => r.asset_id !== assetId) }),
+  passesEntry: () => { const cur = get().current; const cam = get().activeCamera(); if (!cur || !cam) return null; return ((cur.passes as unknown as PassesEntry[]).find((p) => p.camera_id === cam.id)) ?? null },
+  passesStale: () => { const e = get().passesEntry(); const cur = get().current; if (!e || !cur) return true; return cur.revision > e.revision + 1 || saveTimer !== null || get().saving },
+  shotSize: () => {
+    const cur = get().current
+    const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : 16 / 9
+    const h = get().shot.tier === 'full' ? (cur?.size.h ?? 1080) : 720
+    return [snap16(h * aspect), snap16(h)]
+  },
+  refreshShotPreview: async () => {
+    const cur = get().current, cam = get().activeCamera()
+    if (!cur || !cam) { set({ shotPreview: null, shotPreviewError: null }); return }
+    const seq = ++shotPreviewSeq
+    const sh = get().shot
+    const entry = get().passesEntry()
+    const [width, height] = get().shotSize()
+    const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method,
+      prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), seeds: [0], width, height }
+    try {
+      const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: recipe as never } }))
+      if (seq === shotPreviewSeq) set({ shotPreview: isDocumentPreview(pv) ? pv : null, shotPreviewError: null })
+    } catch (e) {
+      if (seq === shotPreviewSeq) set({ shotPreview: null, shotPreviewError: (e as ApiError).detail ?? String(e) })
+    }
+  },
+  renderPasses: async () => {
+    const s = useSession.getState()
+    const cur = get().current, cam = get().activeCamera(), render = get().passRenderer
+    if (!cur || !cam) { s.toast('No camera to render the passes from', 'error'); return false }
+    if (!render) { s.toast('The viewport is not ready to render', 'error'); return false }
+    set({ rendering: true })
+    try {
+      await flushSave(get, set)
+      const doc = get().current
+      if (!doc) return false
+      const [w, h] = get().shotSize()
+      const out = await render(cam, w, h)
+      const passes: Record<string, string> = {}
+      for (const [name, blob] of Object.entries(out.blobs)) {
+        const sha = await sha256Hex(await blob.arrayBuffer())
+        await api.putBlob(sha, blob)
+        passes[name] = sha
+      }
+      const next = await unwrap(http.POST('/stages/{st_id}/passes', { params: { path: { st_id: doc.id } },
+        body: { camera_id: cam.id, revision: doc.revision, size: out.size, passes, keypoints: out.keypoints as never, legend: out.legend as never } }))
+      set({ current: next, stages: get().stages.map((x) => (x.id === next.id ? next : x)) })
+      s.toast(`Passes rendered for ${cam.name} at ${w}×${h}`, 'success')
+      void get().refreshShotPreview()
+      return true
+    } catch (e) { s.toast(`Render passes failed: ${(e as ApiError).detail ?? e}`, 'error'); return false } finally { set({ rendering: false }) }
+  },
+  generateShot: async () => {
+    const s = useSession.getState()
+    const cur = get().current, cam = get().activeCamera()
+    if (!cur || !cam) return null
+    let entry = get().passesEntry()
+    if (!entry || (get().passesStale() && !get().shot.use_as_is)) {
+      if (!(await get().renderPasses())) return null
+      entry = get().passesEntry()
+    }
+    if (!entry) return null
+    const sh = get().shot
+    const [width, height] = get().shotSize()
+    const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, prompt_text: sh.prompt_text.trim(),
+      refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }
+    try {
+      const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'shot', ref: cur.id, payload: { camera_id: cam.id } } } }))
+      s.toast(`Queued ${jobs.jobs.length} shot${jobs.jobs.length > 1 ? 's' : ''} of ${cam.name}`, 'success')
+      return jobs.jobs
+    } catch (e) { s.toast(`Shot failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
+  },
+  loadShots: async () => {
+    const cur = get().current
+    if (!cur) { set({ shots: [] }); return }
+    try {
+      const r = await unwrap(http.GET('/assets', { params: { query: { suite: 'stage', sort: 'created_desc', limit: 60 } } }))
+      set({ shots: (r.items as Asset[]).filter((a) => a.lineage_kind === 'stage-shot' && (a.params as { stage_id?: string }).stage_id === cur.id) })
+    } catch { set({ shots: [] }) }
+  },
+  onAssetCreated: (a) => {
+    const cur = get().current
+    if (!cur || a.lineage_kind !== 'stage-shot' || (a.params as { stage_id?: string }).stage_id !== cur.id || get().shots.some((x) => x.id === a.id)) return
+    set({ shots: [a, ...get().shots] })
+  },
 
   selectJoint: (j) => set({ selectedJoint: j }),
   setJoints: (id, joints) => {
@@ -143,7 +266,9 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!id) { set({ current: null, selected: null, undo: [], redo: [] }); return }
     try {
       const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
-      set({ current: st, selected: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages] })
+      set({ current: st, selected: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
+        shot: { ...get().shot, refs: [], use_as_is: false }, shots: [] })
+      void get().loadShots(); void get().refreshShotPreview()
     } catch (e) { useSession.getState().toast(`Open stage failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   rename: async (name) => { const cur = get().current; if (!cur || !name.trim()) return; set({ current: { ...cur, name: name.trim() } }); await save(get, set) },

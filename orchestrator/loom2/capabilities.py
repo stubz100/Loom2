@@ -4,10 +4,10 @@ and every model gains `recipes` / `inputs` / `geometry` blocks the panels gate t
 """
 from __future__ import annotations
 
-from .engine.graphs import te_alternates, te_label, te_options
+from .engine.graphs import STAGE_HINTS, stage_pass_for, te_alternates, te_label, te_options
 from .models import registry
 from .models.spec import ModelSpec
-from .recipes import FLUX2_SCHEDULE, MOVES, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, Reangle, reangle_method
+from .recipes import FLUX2_SCHEDULE, MOVES, SAMPLERS, SCHEDULERS, STAGE_PASSES, TE_DEVICES, WEIGHT_DTYPES, Reangle, reangle_method
 from .roster import ROSTER_BY_ID
 from .services import Services
 from . import matting, native
@@ -65,7 +65,8 @@ def capabilities(svc: Services) -> dict:
             "weight_dtypes": live("UNETLoader", "weight_dtype") or WEIGHT_DTYPES, "te_devices": TE_DEVICES, "te_alternates": te_alternates(),
             "advanced": advanced(), "tiers": image_tiers(), "refine_edge": matting.capabilities(),
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
-            "reangle": _reangle(svc, variant)}                                 # P14 (D82): the Angle tab's moves and methods
+            "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
+            "stage": _stage(svc, variant)}                                     # P13 ST3 (D78): the Shot tab's methods and passes
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -89,6 +90,25 @@ def _reangle(svc: Services, variant: str) -> dict:
         except ValueError:
             continue
     return {"moves": list(MOVES), "methods": methods, "auto": auto}
+
+
+def _stage(svc: Services, variant: str) -> dict:
+    """Stage → image (P13 ST3): each method with the model it runs in this build, its health, E10's measured seconds (or none), the
+    pass it takes as image 1 and how many references follow — the Shot tab shows the method and its time before the job is queued."""
+    methods = {}
+    for spec in registry.stage_specs():                               # by order: the first offered spec of a method is the one that runs
+        m = spec.recipes.stage
+        if not m or not _offered(spec, variant) or m in methods:
+            continue
+        needs = spec.weights() + ([spec.recipes.stage_lora] if spec.recipes.stage_lora else [])
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        methods[m] = {"model_id": spec.id, "label": spec.label, "short": spec.short or spec.label, "hint": STAGE_HINTS.get(m),
+                      "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+                      "missing": missing, "seconds": spec.recipes.stage_seconds, "measured": spec.recipes.stage_seconds is not None,
+                      "image1": stage_pass_for(m), "max_refs": 1 if m == "refcontrol" else max(0, spec.inputs.refs_max - 1),
+                      "approx_gb": round(sum((ROSTER_BY_ID[x].approx_gb or 0) for x in needs), 1)}
+    return {"methods": methods, "passes": list(STAGE_PASSES), "default": "clay" if "clay" in methods else (next(iter(methods)) if methods else None)}
 
 
 def _offered(spec: ModelSpec, variant: str) -> bool:

@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Box, Camera, Copy, Crosshair, Eye, EyeOff, Focus, Frame, Grid3x3, Lock, LockOpen, Magnet, Move3d, MousePointer2, Plus, Redo2, Rotate3d, Scaling, Trash2, Undo2, User, Video } from 'lucide-react'
+import { Aperture, Box, Camera, Copy, Crosshair, Eye, EyeOff, Focus, Frame, Grid3x3, Layers, Lock, LockOpen, Magnet, Move3d, MousePointer2, Plus, Redo2, Rotate3d, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
@@ -51,6 +51,11 @@ registerCommands([
   { id: 'stage.pose.reset', scope: 'stage', label: 'Reset the pose (stand)', icon: LockOpen, placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().resetPose(st().selected!) },
   { id: 'stage.pose.save', scope: 'stage', label: 'Save pose…', icon: Plus, placement: ['panel', 'context'], when: () => sel()?.kind === 'mannequin',
     run: () => void askText({ title: 'Save pose', text: "The figure's joints, as a preset of this project.", placeholder: 'pose name' }).then((n) => { if (n?.trim()) void st().savePose(n.trim(), st().selected!) }) },
+  // ST3: the shot
+  { id: 'stage.shot.generate', scope: 'stage', label: 'Generate the shot', icon: Aperture, keys: 'Ctrl+Enter', placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,
+    run: () => void st().generateShot() },
+  { id: 'stage.shot.passes', scope: 'stage', label: 'Render the passes', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderPasses() },
+  { id: 'stage.shot.clearRefs', scope: 'stage', label: 'Clear the references', icon: X, placement: ['panel'], when: () => st().shot.refs.length > 0, run: () => st().setShot({ refs: [] }) },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])
@@ -67,7 +72,8 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
       ...(sel()?.kind === 'mannequin' ? [{ cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, sep] : []),
       { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
-    : [addMenu(), { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
+    : [addMenu(), { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
+      { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
 }
 
 export { useStage }

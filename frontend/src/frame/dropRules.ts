@@ -81,6 +81,17 @@ export function angleDrop(p: DragPayload | DragItem[]): DropVerdict {
   return { ok: true, label: items.length > 1 ? 'Use the first image as the source' : 'Use as the source' }
 }
 
+/** ST3: the Shot tab's reference deck — images only; clips are refused. */
+export function shotRefDrop(p: DragPayload | DragItem[], room: number): DropVerdict {
+  const items = assets(p)
+  if (!items.length) return { ok: false }
+  const imgs = images(items)
+  if (!imgs.length) return { ok: false, reason: items.length === 1 ? "A clip can't be a reference" : "Clips can't be references" }
+  if (room <= 0) return { ok: false, reason: 'The deck is full for this method' }
+  const n = Math.min(room, imgs.length)
+  return { ok: true, label: n === 1 ? 'Add as a reference' : `Add ${n} references` }
+}
+
 export function beatDrop(p: DragPayload | DragItem[]): { take: string[]; verdict: DropVerdict } {
   const take = assets(p).map((i) => i.id)
   return { take, verdict: take.length ? { ok: true, label: take.length === 1 ? 'Add a beat' : `Add ${take.length} beats` } : { ok: false } }

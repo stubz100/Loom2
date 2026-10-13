@@ -112,6 +112,11 @@ def reangle_specs() -> list[ModelSpec]:
     return sorted((s for s in SPECS.values() if s.recipes.reangle), key=lambda s: s.order)
 
 
+def stage_specs() -> list[ModelSpec]:
+    """P13 ST3 (D78): the specs that implement a Stage → image method, by `order` — the first offered one per method runs."""
+    return sorted((s for s in SPECS.values() if s.recipes.stage), key=lambda s: s.order)
+
+
 def image_specs() -> list[ModelSpec]:
     return [s for s in SPECS.values() if s.graph in IMAGE_GRAPHS]
 

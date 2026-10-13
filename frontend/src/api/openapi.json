@@ -828,6 +828,9 @@
             "title": "Schedulers",
             "type": "array"
           },
+          "stage": {
+            "$ref": "#/components/schemas/StageCaps"
+          },
           "te_alternates": {
             "additionalProperties": {
               "items": {
@@ -906,7 +909,8 @@
           "tiers",
           "refine_edge",
           "content_aware",
-          "reangle"
+          "reangle",
+          "stage"
         ],
         "title": "Capabilities",
         "type": "object"
@@ -6075,6 +6079,53 @@
         "title": "NodePin",
         "type": "object"
       },
+      "PassesUpload": {
+        "description": "ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18\nkeypoints behind the pose pass and the mask pass's colour legend.",
+        "properties": {
+          "camera_id": {
+            "title": "Camera Id",
+            "type": "string"
+          },
+          "keypoints": {
+            "default": [],
+            "items": {},
+            "title": "Keypoints",
+            "type": "array"
+          },
+          "legend": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Legend",
+            "type": "object"
+          },
+          "passes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Passes",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          }
+        },
+        "required": [
+          "camera_id",
+          "revision",
+          "size",
+          "passes"
+        ],
+        "title": "PassesUpload",
+        "type": "object"
+      },
       "PathStep": {
         "properties": {
           "id": {
@@ -7001,6 +7052,61 @@
             "title": "Segment",
             "type": "array"
           },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "stage_cfg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Cfg"
+          },
+          "stage_lora": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Lora"
+          },
+          "stage_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Seconds"
+          },
+          "stage_steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Steps"
+          },
           "t2i": {
             "default": false,
             "title": "T2I",
@@ -7628,6 +7734,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -7693,6 +7810,7 @@
           "keyframes",
           "range",
           "passes",
+          "group_id",
           "revision",
           "created_at",
           "updated_at"
@@ -7753,6 +7871,42 @@
         "title": "StageCamera",
         "type": "object"
       },
+      "StageCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "methods": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StageMethodCaps"
+            },
+            "title": "Methods",
+            "type": "object"
+          },
+          "passes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Passes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "methods",
+          "passes"
+        ],
+        "title": "StageCaps",
+        "type": "object"
+      },
       "StageCreate": {
         "properties": {
           "name": {
@@ -7779,6 +7933,86 @@
           "items"
         ],
         "title": "StageList",
+        "type": "object"
+      },
+      "StageMethodCaps": {
+        "additionalProperties": true,
+        "description": "P13 ST3 (D78): one Stage → image method — the model it runs, its health, E10's seconds, the pass it takes and the references it allows.",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "image1": {
+            "title": "Image1",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_refs": {
+            "title": "Max Refs",
+            "type": "integer"
+          },
+          "measured": {
+            "title": "Measured",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "label",
+          "short",
+          "health",
+          "missing",
+          "measured",
+          "image1",
+          "max_refs",
+          "approx_gb"
+        ],
+        "title": "StageMethodCaps",
         "type": "object"
       },
       "StageObject": {
@@ -13993,6 +14227,59 @@
           }
         },
         "summary": "Stage Put",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/passes": {
+      "post": {
+        "description": "Each pass becomes an asset (`lineage_kind = stage-pass`, suite stage, `params {stage_id, camera_id, revision, pass, size}`, the\nkeypoints on the pose pass, the legend on the mask pass) placed on the stage's album page (made on first use, D34); the document\nrecords them for the camera and comes back at its new revision.",
+        "operationId": "stage_passes_stages__st_id__passes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassesUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Passes",
         "tags": [
           "stages"
         ]

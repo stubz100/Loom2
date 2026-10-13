@@ -7,6 +7,8 @@ import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
+import { shotRefDrop } from '../../frame/dropRules'
+import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
@@ -14,11 +16,21 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu } from './stageCommands'
-import { effectiveJoints, st, useStage } from './stageStore'
+import { effectiveJoints, st, useStage, type ShotState } from './stageStore'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
 const num = (v: number) => +v.toFixed(2)
+
+/** Dev hook (`window.__loom2Stage`, DEV_HOOKS only): the smoke test and scripts/st_acceptance.py drive the suite through the store — present as
+ *  soon as the suite's code loads; the viewport adds `screenOf` when it mounts. */
+function devHook(): Record<string, unknown> {
+  const w = window as unknown as { __loom2Stage?: Record<string, unknown> }
+  w.__loom2Stage ??= { open: (id: string) => st().open(id), setShot: (p: Partial<ShotState>) => st().setShot(p), renderPasses: () => st().renderPasses(),
+    generateShot: () => st().generateShot(), state: () => ({ current: st().current, shot: st().shot, passes: st().passesEntry() }), screenOf: () => null }
+  return w.__loom2Stage
+}
+if (DEV_HOOKS) devHook()
 
 // ------------------------------------------------------------------ Panel
 function LibraryTab() {
@@ -143,6 +155,82 @@ function PosesTab() {
   )
 }
 
+// ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), image 1
+// locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
+// Generate when stale (or by the button), the results land below with lineage to the passes.
+function ShotTab() {
+  const current = useStage((s) => s.current)
+  const cam = useStage((s) => s.activeCamera())
+  const sh = useStage((s) => s.shot)
+  const pv = useStage((s) => s.shotPreview)
+  const err = useStage((s) => s.shotPreviewError)
+  const rendering = useStage((s) => s.rendering)
+  const shots = useStage((s) => s.shots)
+  const entry = useStage((s) => s.passesEntry())
+  const stale = useStage((s) => s.passesStale())
+  const caps = useSession((s) => s.capabilities?.stage)
+  const [w, h] = st().shotSize()                                   // derived from `shot.tier` and `current`, both subscribed above (a selector must not return a fresh tuple)
+  const method = caps?.methods[sh.method]
+  const room = Math.max(0, (method?.max_refs ?? 3) - sh.refs.length)
+  const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && shotRefDrop(d, room).ok,
+    (d) => { d.items.filter((i) => i.kind === 'asset' && i.media !== 'video').slice(0, room).forEach((i) => st().addShotRef(i.id)) }, (d) => shotRefDrop(d, room))
+  markUsed('stage.shot.generate'); markUsed('stage.shot.passes'); markUsed('stage.shot.clearRefs')
+  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  const image1 = method?.image1 ?? 'clay'
+  const passId = entry?.assets[image1]
+  return (
+    <div className="stage-panel shot-tab">
+      <div className="head"><b>Shot</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span></div>
+      <h4>Method</h4>
+      <div className="method-list">
+        {caps && Object.entries(caps.methods).map(([id, m]) => (
+          <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id })} title={m.hint ?? m.label}>
+            <b>{id === 'clay' ? 'Clay reference' : id === 'refcontrol' ? 'Exact pose' : m.label}</b>
+            <span>{m.short} · {m.seconds != null ? `≈ ${Math.round(m.seconds)} s` : 'unmeasured'}{m.health === 'missing' ? ' · weights missing' : ''}</span>
+            <small>{m.hint}</small>
+          </button>
+        ))}
+        {!caps && <span className="hint">No Stage method in this build.</span>}
+      </div>
+      <h4>Image 1 · the {image1} pass</h4>
+      <div className="pass-row">
+        <div className="ref-slot source locked" title={passId ? `the ${image1} pass, rendered at revision ${entry?.revision}` : 'render the passes first'}>
+          {passId ? <img src={api.thumbUrl(passId, 256)} alt="" /> : <span className="empty">{image1}</span>}
+          <span className="n">1</span>
+        </div>
+        <div className="pass-side">
+          {entry ? <span className="hint">{Object.keys(entry.assets).length} passes · {entry.size.w}×{entry.size.h}{stale ? ` · from revision ${entry.revision}, the scene moved on — re-rendered on Generate` : ' · current'}</span>
+            : <span className="hint">No passes yet for this camera — Generate renders them, or:</span>}
+          <div className="verbs"><CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} /></div>
+          {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
+        </div>
+      </div>
+      <h4>References{method ? ` · up to ${method.max_refs}` : ''}</h4>
+      <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
+        {sh.refs.map((r, i) => (
+          <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2}`}>
+            <img src={api.thumbUrl(r.asset_id, 256)} alt="" /><span className="n">{i + 2}</span>
+            <button className="quiet x" title="Remove" onClick={() => st().removeShotRef(r.asset_id)}>✕</button>
+          </div>
+        ))}
+        {room > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + 2}</span></div>}
+      </div>
+      {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
+      {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
+      <h4>Prompt</h4>
+      <textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} />
+      <div className="kv"><span>size</span><span className="segmented"><button className={sh.tier === 'draft' ? 'active' : ''} onClick={() => st().setShot({ tier: 'draft' })}>Draft</button><button className={sh.tier === 'full' ? 'active' : ''} onClick={() => st().setShot({ tier: 'full' })}>Full</button><span className="hint"> {w}×{h}</span></span></div>
+      <div className="kv"><span>candidates</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
+      {pv?.params?.prompt ? <p className="hint prompt-preview">{String(pv.params.prompt)}</p> : null}
+      {err && <p className="disabled-why">{err}</p>}
+      {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
+      <h4>Results{shots.length ? ` · ${shots.length}` : ''}</h4>
+      {!shots.length && <span className="hint">None yet — the shots of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
+      <div className="shot-results">{shots.slice(0, 12).map((a) => <img key={a.id} className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''}`} />)}</div>
+    </div>
+  )
+}
+
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -150,15 +238,32 @@ export function Panel({ tab }: { tab: string }) {
   if (tab === 'outliner') return <OutlinerTab />
   if (tab === 'cameras') return <CamerasTab />
   if (tab === 'poses') return <PosesTab />
+  if (tab === 'shot') return <ShotTab />
   return <LibraryTab />
 }
 
 export function PrimaryAction() {
   const saving = useStage((s) => s.saving)
   const current = useStage((s) => s.current)
+  const rendering = useStage((s) => s.rendering)
+  const pv = useStage((s) => s.shotPreview)
+  const err = useStage((s) => s.shotPreviewError)
+  const count = useStage((s) => s.shot.count)
+  const cam = useStage((s) => s.activeCamera())
+  const { active: tab } = useSuiteRail()
   markUsed('stage.new')
   if (!current) return <div><button className="primary" onClick={() => runCommand('stage.new')}>New stage…</button></div>
-  return <div className="estimate"><span className={`dot ${saving ? 'tight' : 'ok'}`} />{saving ? 'saving…' : `saved · revision ${current.revision}`} · passes come with ST3</div>
+  if (tab === 'shot') {                                                                                       // ST3: the verb and its estimate
+    const missing = pv?.missing ?? []
+    const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
+    return (
+      <div>
+        <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the shot (Ctrl+Enter)">Generate{count > 1 ? ` ×${count}` : ''} ▶</button>
+        <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
+      </div>
+    )
+  }
+  return <div className="estimate"><span className={`dot ${saving ? 'tight' : 'ok'}`} />{saving ? 'saving…' : `saved · revision ${current.revision}`}</div>
 }
 
 // ------------------------------------------------------------------ Strip
@@ -214,11 +319,12 @@ function Viewport() {
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
-    if (DEV_HOOKS) (window as unknown as { __loom2Stage?: unknown }).__loom2Stage = { screenOf: (at: string) => engine.screenOf(at as Joint) }   // the smoke test aims the mouse at joints and handles
+    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h) })                                       // ST3
+    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint) })                   // the smoke test aims the mouse at joints and handles
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined }
+    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; useStage.setState({ passRenderer: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(current); setRect({ ...e.frameRect() }) } }, [current])

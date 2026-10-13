@@ -3295,3 +3295,53 @@ split by file so that no two hands touched the same module.
   Screenshot `frontend/node_modules/.e2e/stage-poses.png`: the walk pose with the right forearm raised, the pickers, the gizmo on
   the elbow, the saved card.
 - Next: ST3 (passes → image, `StageShot`, `scripts/st_acceptance.py`), then ST4, P18.
+
+### 2026-10-13 10:28 — ST3 Passes → image built (D78 / D81, 16 §7): the passes, StageShot, the Shot tab, rig acceptance
+- **Passes (client):** `suites/stage/passes.ts` (COCO-18 order, limbs, OpenPose colours, the E10 disparity shader, `depthRange`,
+  `projectPoints` / `projectMarkers`, `drawPose` with a stroke that scales with the frame, golden-angle `maskColour`; 5 vitest
+  cases) and `engine.renderPasses(cam, w, h)`: a renderer of its own at the recipe size, the shot camera rebuilt from the document
+  (36 mm sensor, roll), helpers / pickers / gizmo / camera glyphs hidden, hidden objects skipped, billboards faced; clay = grey
+  Lambert override (planes are grey cards, D81), depth with near / far from the camera-to-target distance, normals, masks by
+  swapping a flat `MeshBasicMaterial` per object (legend colour → id), pose from the figures' markers. The five PNGs go up as blobs
+  (`PUT /blobs/{sha}`) and `POST /stages/{id}/passes` makes them `stage-pass` assets (suite stage, `params {stage_id, camera_id,
+  revision, pass, size}`, keypoints on the pose pass, legend on the mask pass, `origin {stage, passes}`) on the album page
+  "Stage · <name>" (made once, kept as the document's `group_id`), records `passes[]` per camera and returns the document at a
+  new revision; the store flushes its debounced save first and takes the returned document.
+- **Recipe and engine:** `StageShot {stage_id, camera_id, passes, method clay | refcontrol, prompt_text, refs, seeds, width, height,
+  te_id}`; specs carry `recipes.stage` (klein-9b clay 12 s, klein-4b clay under `open` unmeasured, klein-base-9b refcontrol with
+  `stage_lora = refcontrol-v2-poses` (new roster entry, apache-2.0, 0.17 GB), `stage_seconds 74`, `stage_steps 30`, `stage_cfg 4`);
+  `registry.stage_specs()`, `stage_spec` / `stage_model_id` (open → 4B for clay, none for refcontrol); `build_stage_shot` ported from
+  E10 (the pass as image 1 through ReferenceLatent, the deck's images chained after it — one for refcontrol, fitted to 0.6 MP;
+  the LoRA at 0.9; the E10 negative on base), `stage_prompt` (the lead sentence, "Image N shows …" per noted reference, D73, then
+  the recipe's text); plan / preview (needs `passes`, E10's seconds), `prepare_stage_shot` (the pass uploaded as PNG), the
+  finisher (suite stage, lineage `stage-shot` ← the pass used + the kept references), `/capabilities.stage` (methods with model,
+  health, seconds, image 1, max refs; passes; default), `recipe_te_id` covers the recipe; the audit maps the key. Route snapshot
+  108 rows; the object_info fixture re-captured from the 0.39.0 engine (the roster-contract test now synthesises its sub-folder
+  enum — D80 left every file flat). OpenAPI regenerated.
+- **UI:** the Shot rail tab (Aperture): method cards (label, model, measured seconds, hint, missing weights), image 1 locked to the
+  pass the method takes (thumbnail, "current" or "from revision N — re-rendered on Generate" with *use as is*), Render passes, the
+  reference deck (drop, D71 verdict `shotRefDrop`; a note per image), prompt, Draft / Full size at the project aspect, candidates
+  1–4, the exact prompt preview, the stage's results strip (live through `asset.created` with `origin.suite = stage`); the Panel's
+  foot on that tab is Generate ▶ (`stage.shot.generate`, Ctrl+Enter) with the estimate; `stage.shot.passes`, `stage.shot.clearRefs`;
+  *Go to origin* reopens the stage at the shot's camera (`store/origin.ts`). A zustand selector that returned a fresh tuple crashed
+  the panel ("Stage is not available") — selectors return stable references now.
+- **Checks:** smoke scenario (stage → set + figure → Shot → Render passes → five stage-pass assets, two of them with 18 keypoints and
+  a 2-entry legend, on the album page → Generate ▶ on the fake engine → a stage-shot asset with parents [clay pass], origin
+  stage / shot, the prompt carrying the lead and the text, the lineage edge) — 18/18; 258 offline, 192 unit, lint 100, build clean,
+  audits clean. Screenshot `frontend/node_modules/.e2e/stage-shot.png`.
+- **Rig (`scripts/st_acceptance.py`, through the app: its own orchestrator on 8771 launching the engine, Edge via CDP, the
+  `__loom2Stage` dev hook, E10's SDPose PCK):** the room + two figures (walk, point) + a crate at 35 mm; the passes rendered and
+  uploaded in 0.7 s; four shots: clay cold 46.5 s (first run 40.6), warm 14.3–32.4 s; exact pose cold 108–115 s, warm 121 s; every
+  result with its lineage and origin; PCK@0.1 on the results: exact pose 1.000 / 1.000 (36/36 both rounds, both runs), clay 1.000 /
+  1.000 after the lead sentence said "the grey mannequins stand for the people described below … nothing stays grey" (before it:
+  0.50 / 0.00 — Klein painted the mannequins as mannequins and added the referenced woman beside them; with the new lead it still
+  paints the reference woman a second time as a third person — the author's blind check decides what the clay method is for).
+  Two things found and fixed on the way: (1) the second exact-pose shot took 474 s — the identical prompt was served from ComfyUI's
+  output cache, the 6.8 GB encoder stayed resident and the LoRA-patched base 9B streamed from RAM at 15.7 s/it; the finisher now
+  drops the cache after a refcontrol shot (`frees_cache`), the next one reloads from the page cache in ≈ 10 s and runs at 3.3 s/it
+  (121 s); (2) the acceptance orchestrator stalled when its stdout was an unread pipe — it logs to a file now, and the script refuses a
+  standalone engine on 8188 (its outputs land outside the orchestrator's state; every job finished with no asset). Sheet
+  `engine/spikes/out/st/sheet.jpg`, rows in `results.jsonl`. The script's time bars are set from these runs (clay ≤ 45 s warm,
+  exact pose ≤ 150 s); E10's 74 s for RefControl is not reproduced at 1280×720 / 30 steps on this card — 100 s of sampling alone.
+- Not in ST3: `GET /stages/{id}/thumb`; region prompting from the mask pass; the clay method's extra-person habit with a reference.
+  Next: ST4 (keyframes → pass sequences → the E11 IC-LoRA clip), then P18.

@@ -281,6 +281,8 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) h.getState().applyEvent(f) })
+      if (f.type === 'asset.created' && (f.data as { origin?: { suite?: string } } | null)?.origin?.suite === 'stage')      // ST3: a shot or a pass of a stage
+        void import('../suites/stage/stageStore').then((m) => m.useStage.getState().onAssetCreated(f.data as never))
       break
     case 'clip.updated':
       void import('../suites/animate/animateStore').then((m) => m.useAnimate.getState().onClipUpdated(f.data))

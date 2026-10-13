@@ -133,6 +133,10 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="qwen-edit-2509-angles", name="Qwen-Edit-2509-Multiple-angles.safetensors", folder="loras", family="qwen_image", role="lora",
                 repo="dx8152/Qwen-Edit-2509-Multiple-angles", file="Qwen-Edit-2509-Multiple-angles.safetensors", license="apache-2.0",
                 variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA"),
+    # ---- Stage → image (P13 ST3, D78): E10's exact-pose method — RefControl's pose LoRA for Klein base 9B (apache-2.0) ----
+    RosterEntry(id="refcontrol-v2-poses", name="refcontrol_v2_poses.safetensors", folder="loras", family="klein", role="lora",
+                repo="thedeoxen/refcontrol-FLUX.2-klein-9B-reference-pose-lora", file="refcontrol_v2_poses.safetensors", license="apache-2.0",
+                variants=["full"], approx_gb=0.17, note="E10 (D78): 'apply pose from image 1 with reference from image 2', strength 0.9 — PCK 0.86 at ≈ 74 s"),
     # ---- retired by spikes (D30: deleted, re-fetchable) ----
     RosterEntry(id="flux1-fill-dev", name="flux1-fill-dev.safetensors", folder="diffusion_models", family="flux1", role="transformer",
                 repo="black-forest-labs/FLUX.1-Fill-dev", file="flux1-fill-dev.safetensors", license="flux-nc (gated)", approx_gb=22.2, retired="E8 2026-10-05"),

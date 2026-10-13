@@ -78,7 +78,8 @@ class Stage(BaseModel):
     active_camera: str | None = None
     keyframes: dict[str, Any] = Field(default_factory=lambda: {"camera": {}, "objects": {}})  # ST4
     range: StageRange = Field(default_factory=StageRange)
-    passes: list[dict[str, Any]] = Field(default_factory=list)                                 # ST3: {camera_id, revision, frame?, assets, keypoints}
+    passes: list[dict[str, Any]] = Field(default_factory=list)                                 # ST3: {camera_id, revision, size, assets, keypoints, legend, rendered_at}
+    group_id: str | None = None                                                                # ST3: the album page the passes and shots are placed on (server-set)
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -155,6 +156,17 @@ class StageStore:
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         st = Stage.model_validate(merged)
         check(st)
+        self.save(st)
+        return st
+
+    def set_passes(self, st_id: str, entry: dict[str, Any], group_id: str | None) -> Stage:
+        """ST3: record the passes rendered for one camera (replacing that camera's earlier entry) and the stage's album page; a server-side
+        change, so the revision moves — the client takes the returned document."""
+        cur = self.get(st_id)
+        if cur is None:
+            raise KeyError(st_id)
+        passes = [p for p in cur.passes if p.get("camera_id") != entry.get("camera_id")] + [entry]
+        st = cur.model_copy(update={"passes": passes, "group_id": group_id or cur.group_id, "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save(st)
         return st
 

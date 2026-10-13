@@ -146,6 +146,25 @@ pins — not a second timeline implementation (P17 owns clips; this is keyframes
    that camera.
 Stale passes: the Shot tab shows "passes from revision 12, scene is at 15 — re-render on Generate" and does it unless *Use as is*.
 
+*ST3 built 2026-10-13 (journal of that day). As specified, with these particulars: the passes go up as blobs (`PUT /blobs/{sha}`, the
+editor's own path) and `POST /stages/{id}/passes` takes a JSON body `{camera_id, revision, size, passes: {name: sha}, keypoints,
+legend}` — no multipart; each pass is an asset with `suite = stage`, `lineage_kind = stage-pass`, `params {stage_id, camera_id,
+revision, pass, size}` (the keypoints on the pose pass, the colour legend on the mask pass) and `origin {stage, passes}`, placed on
+"Stage · <name>", an album page made on first use and remembered as the document's `group_id`; the document records
+`passes[] {camera_id, revision, size, assets, keypoints, legend, rendered_at}` per camera and comes back at a new revision (the
+client takes it). The engine renders the passes in a renderer of its own at the recipe size (helpers, pickers and the gizmo hidden; a
+hidden object stays out): clay = grey Lambert override (planes are grey cards, D81), depth = the E10 disparity shader with near / far
+from the camera-to-target distance, normals = `MeshNormalMaterial`, masks = one flat golden-angle colour per object swapped in by hand,
+pose = the figures' COCO-18 markers projected and drawn in OpenPose colours (`passes.ts`, vitest on the projection and the range).
+The recipe is `StageShot {stage_id, camera_id, passes, method, prompt_text, refs, seeds, width, height, te_id}`; the specs carry
+`recipes.stage` (`klein-9b` clay, `klein-4b` clay under `open` — unmeasured, `klein-base-9b` refcontrol with `stage_lora`,
+`stage_seconds`, `stage_steps 30`, `stage_cfg 4.0`); the pose LoRA is a roster entry loaded by the Stage graph alone, so base 9B's
+other recipes never require it. `/capabilities.stage` lists the methods with their model, health, measured seconds, the pass each
+takes as image 1 and how many references follow (clay: `refs_max − 1`; refcontrol: one). The result lands with `suite = stage`,
+`lineage_kind = stage-shot`, parents = the pass used + the kept references, `origin {stage, shot, stage_id, {camera_id}}`; the Dock's
+*Go to origin* reopens the stage at that camera. The Shot tab shows the results of the stage as a strip; the size tier is Draft (720
+lines at the project aspect, snapped to 16) or Full. No `GET /stages/{id}/thumb` yet (the Library rows name counts, not pictures).*
+
 ## 8. Shots → clip (ST4)
 Keyframes on the camera and objects (position, rotation, pose preset, linear or ease), a frame range at the project's fps (D18:
 24), **Render sequence** → the depth pass per frame (the E11 guide) and the first frame's clay pass → the `I2V` recipe gains
@@ -203,6 +222,9 @@ bar, raycast placement and image planes by drop, cameras in mm with the letterbo
 revision saves, undo / redo; the smoke scenario covers create → add → outliner → save → reload. Passes are ST3.*
 *ST2 built 2026-10-13: joint pickers (FK), hand / foot handles (two-bone IK), Mirror / Reset / Save pose…, the project pose library;
 the smoke scenario drives the mouse onto a joint and drags a hand, mirrors twice (an involution) and saves a pose.*
+*ST3 built 2026-10-13: the five passes as `stage-pass` assets on the stage's album page, `StageShot` with the clay and exact-pose
+methods, the Shot tab; the smoke scenario renders the passes and makes a shot on the fake engine; `scripts/st_acceptance.py` runs
+the rig bars below through the app (the first two boxes; the clay "blind check" stays the author's look at the sheet).*
 - [ ] Create a stage, place two mannequins and a set plane, pose with presets (ST1) and IK (ST2), frame a 35 mm camera, export
       the five passes at Draft size; the keypoints JSON matches the pose pass (vitest on projection).
 - [ ] Generate with the clay method: the blocking is kept (the author's blind check ≥ 8/10 on a 10-shot set, as E10); with

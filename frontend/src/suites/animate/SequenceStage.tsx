@@ -127,6 +127,38 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
     useSequence.getState().select(i)
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
+  /** Drag a block body: a click selects and scrubs; a drag past a neighbour's middle swaps the two (live, each step undoable). */
+  const blockDrag = (i: number) => (e: ReactPointerEvent) => {
+    e.stopPropagation()
+    const sq = useSequence.getState()
+    sq.select(i); sq.togglePlay(false); sq.setPlayhead(tickAt(e.clientX))
+    const x0 = e.clientX
+    let cur = i
+    let dragging = false
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - x0
+      if (!dragging && Math.abs(dx) < 6) return
+      dragging = true
+      const l = useSequence.getState().lane
+      if (!l) return
+      const st = starts(l)
+      const centre = st[cur] * ppf + (ticks(l, l.clips[cur]) * ppf) / 2 + dx           // where the dragged block's middle is now
+      if (cur > 0 && centre < st[cur - 1] * ppf + (ticks(l, l.clips[cur - 1]) * ppf) / 2) { useSequence.getState().moveClip(cur, cur - 1); cur -= 1 }
+      else if (cur < l.clips.length - 1 && centre > st[cur + 1] * ppf + (ticks(l, l.clips[cur + 1]) * ppf) / 2) { useSequence.getState().moveClip(cur, cur + 1); cur += 1 }
+    }
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+  }
+  /** Frame thumbnails across a block (the C24 strip endpoint, cached WebP): one per ≈ 80 px, at evenly spaced source frames. */
+  const thumbs = (c: Lane['clips'][number], clip: Clip | undefined, width: number) => {
+    if (!clip) return null
+    const tw = Math.max(40, Math.round(40 * clip.w / Math.max(1, clip.h)))
+    const n = Math.max(1, Math.min(60, Math.floor(width / tw)))
+    return Array.from({ length: n }, (_, k) => {
+      const local = Math.min(c.out - 1, c.in + Math.floor(((k + 0.5) / n) * (c.out - c.in)))
+      return <img key={k} src={api.fileUrl(`/clips/${clip.id}/frames/${local}.png?size=96`)} alt="" draggable={false} loading="lazy" style={{ left: k * tw, width: tw }} />
+    })
+  }
   const major = Math.max(1, Math.round(lane.fps * (ppf < 1 ? 5 : ppf < 3 ? 2 : 1)))
   const marks: number[] = []
   for (let f = 0; f <= total; f += major) marks.push(f)
@@ -145,8 +177,9 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
             <div key={c.id} className={`seq-clip${selected === i ? ' selected' : ''}${missing ? ' missing' : ''}`}
               style={{ left: s[i] * ppf, width: ticks(lane, c) * ppf, zIndex: i }}
               title={`${c.source} · frames ${c.in}–${c.out}${c.fps ? ` @ ${c.fps} fps` : ''}${missing ? ' — clip missing from the project' : ''}`}
-              onPointerDown={(e) => { e.stopPropagation(); useSequence.getState().select(i); useSequence.getState().togglePlay(false); useSequence.getState().setPlayhead(tickAt(e.clientX)) }}
+              onPointerDown={blockDrag(i)}
               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); useSequence.getState().select(i); showMenu(e, laneMenu(true)) }}>
+              <div className="seq-thumbs">{thumbs(c, clip, ticks(lane, c) * ppf)}</div>
               {ov > 0 && <i className="seq-ov" style={{ width: ov * ppf }} title={`dissolve · ${ov} frames (drag to change)`} onPointerDown={dissolveDrag(i)} />}
               <b>{clip ? `${clip.model_id.split('-')[0]} · ${c.out - c.in}f` : c.source}</b>
               <span className="seq-h l" onPointerDown={trimDrag(i, 'in')} title="trim in (drag)" />

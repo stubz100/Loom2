@@ -838,8 +838,8 @@ rates: ticks by duration, nearest-frame scrub), the **Sequence** rail tab in Ani
 lane stage with preview / transport / trims / dissolve grip / playhead, the Inspector with exports), undo stack, debounced saves;
 parity test on the EDL text between the TypeScript and Python writers; a smoke scenario on the fake engine. **Slice 2 the same
 evening:** the draft render as a CPU job (`Render` recipe, `run_render`: PNG masters → blended dissolves → `ClipStore` → a Catalogue
-clip with `render` lineage; frame-mapped, not conformed — RIFE stays post-MVP). Left: reorder by drag, the C24 frame-thumbnail strip on
-the blocks, and the Resolve import check (the author's).
+clip with `render` lineage; frame-mapped, not conformed — RIFE stays post-MVP). **2026-10-13:** reorder by drag and the C24 frame
+thumbnails on the blocks. Left: the Resolve import check (the author's) and, with Story P5, the move to the Episode tab.
 
 ### P18 · Image → mesh props — 6 d (after E14 passes, and only after ST1)
 

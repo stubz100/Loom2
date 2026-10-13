@@ -382,6 +382,9 @@ test('a sequence (P17, D83): a fake-engine clip goes on a new lane from the bin,
   await page.locator('.seq-clip-card button').first().click()                            // + : add the clip to the end of the lane
   await expect(page.locator('.seq-clip')).toHaveCount(1)
   await expect(page.locator('.seq-canvas')).toBeVisible()
+  const thumb = page.locator('.seq-clip .seq-thumbs img').first()                          // C24 frame thumbnails across the block
+  await expect(thumb).toBeAttached()
+  await expect.poll(() => thumb.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0), { timeout: 15_000 }).toBe(true)
   await expect.poll(async () => (await api<{ items: { name: string; revision: number; clips: unknown[] }[] }>('GET', '/timelines')).items.find((t) => t.name === 'Reel one')?.revision ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
   const tl = (await api<{ items: { id: string; name: string; clips: { out: number }[] }[] }>('GET', '/timelines')).items.find((t) => t.name === 'Reel one')!
   expect(tl.clips).toHaveLength(1)

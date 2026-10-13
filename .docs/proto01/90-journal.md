@@ -3217,3 +3217,11 @@ split by file so that no two hands touched the same module.
   first tick 150 / 50 red / blue (weight 0.25), its second 50 / 150, lineage to both assets; the smoke scenario now renders the
   fake-engine clip's lane too — a 16 fps, 81-frame Wan clip gives a 122-frame clip at 24 fps, as designed. 249 offline, 182 unit,
   smoke 15/15, lint 100, build clean, audits clean; the route snapshot and the OpenAPI regenerated (80 paths).
+
+## 2026-10-13 08:08 — P17: reorder by drag and frame thumbnails on the lane blocks
+
+- Blocks show frame thumbnails from the C24 strip endpoint (`/clips/{id}/frames/{n}.png?size=96`, cached WebP; one per ≈ 80 px at
+  evenly spaced source frames, lazy-loaded); dragging a block body past a neighbour's middle swaps the two through `move()` — live,
+  each swap its own undo step; a short press still selects and scrubs. The smoke scenario checks a thumbnail loads. tsc clean, lint 100,
+  smoke 15/15. CI for the two P17 commits is green under both variants (the one `open` failure on 8e13865 did not recur and its
+  suite passes here under `open` — treated as a runner hiccup; the log needs a token I do not have).

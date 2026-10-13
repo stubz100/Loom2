@@ -92,7 +92,9 @@ up): the preview — the frame the lane shows at the playhead, two frames mixed 
 transport (start · step · play · step · end, undo / redo, zoom), and the **lane**: a timecode ruler, one block per clip (width = its
 ticks at the lane's fps; a 16 fps Wan clip takes its duration, scrubbed by nearest frame — no frames are made, D27), trim handles at
 both edges (ripple), a dissolve grip at the left edge (drag; *Dissolve from the previous clip* toggles 12 frames), the playhead
-(drag the ruler or the lane); Ctrl+wheel zooms. Right-click a clip: dissolve · move earlier / later · open in the player · remove.
+(drag the ruler or the lane); Ctrl+wheel zooms. Blocks carry frame thumbnails (the C24 strip endpoint, one per ≈ 80 px); dragging a
+block past a neighbour's middle swaps the two (live, each swap undoable). Right-click a clip: dissolve · move earlier / later · open in
+the player · remove.
 **Inspector:** the sequence (fps, size, duration, revision; rename, delete), **Export EDL / FCPXML** (written into
 `timelines/<id>/` by the server; the last path shown), the selected clip (source, frames used, ticks, dissolve) and its verbs.
 Every edit saves after 300 ms with the document's `revision`; a 409 reloads and says the last change was lost. Undo / redo are

@@ -111,6 +111,9 @@
 .seq-lane { position: relative; height: 56px; min-width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; }
 .seq-clip { position: absolute; top: 6px; height: 44px; background: color-mix(in srgb, var(--accent) 35%, var(--bg3, #333)); border: 1px solid var(--line2); border-radius: 4px; overflow: hidden; box-sizing: border-box; cursor: pointer; }
 .seq-clip.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.seq-clip .seq-thumbs { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.seq-clip .seq-thumbs img { position: absolute; top: 0; height: 100%; object-fit: cover; opacity: .75; }
+.seq-clip b { text-shadow: 0 0 3px var(--bg0), 0 0 2px var(--bg0); }
 .seq-clip.missing { background: repeating-linear-gradient(45deg, var(--reject-bg, #533) 0 6px, var(--bg2) 6px 12px); }
 .seq-clip b { position: absolute; left: 8px; top: 4px; font-size: 11px; font-weight: 600; color: var(--fg); white-space: nowrap; pointer-events: none; }
 .seq-clip .seq-ov { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 35%, transparent)); cursor: ew-resize; }

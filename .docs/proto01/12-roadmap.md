@@ -349,6 +349,10 @@ World (3 d) → SY1 Cast (6 d) → SY2 Shots (5 d) → SY3 Flow (7 d) → SY4 Ep
 SY1 ∥ SY3 after SY0. Gate: 17 §14 approved. Later waves in 17 §13: LoRA training, voice, Muse (spike E15 first). **Built 2026-10-13/14, the
 alpha acceptance on the rig 2026-10-14 (journal).**
 
+## 8e. LoRA training E16 + LT1–LT3 (from `18-lora-training.md`, D86)
+
+03 §5 item 2 on the Story foundation: E16 the ai-toolkit-on-ROCm gate with Klein base-4B (3 d) → LT1 D25's slots live (2 d, may run during E16) → LT2 the staged `train_lora` job, the registry, readiness, the Cast and Models UI (5 d) → LT3 mentions, the FaceSim check, the rig acceptance (3 d), ≈ 13 d. Gate: 18 §9 approved (D86); E16 GO before LT2. **Proposed 2026-10-14.**
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

@@ -3699,3 +3699,24 @@ split by file so that no two hands touched the same module.
   voice and lip-sync, Muse (spike E15 first, then queued assistants only), continuity chains beyond Animate's extract → first/last frame,
   a hold / freeze at a transition, re-rolling one thin coverage cell into the candidates page. Next: the author's checks; then the LT wave
   (03 §5 item 2) or Klein tiers / SeedVR2 (03 §5 items 3 and 5) — the author's call; E15 before any Muse work.
+
+## 2026-10-14 08:11 — Wave LT · LoRA training: the plan → `18-lora-training.md`, D86 proposed
+- After the Story alpha (01:21) the next wave of 17 §13 / 03 §5 item 2. Read: D25's plumbing (`LoraRef`, `_lora_chain`, `_validate_models`,
+  the manifest's `loras[]`, Generate's disabled slots), the Story version's reserved `trigger` / `lora`, loom P2's M1 record
+  (`kb-loom-p2-imp.md` §M1 and `trainers/ai-toolkit/LOOM_VENDOR.md`: ai-toolkit `548a286` trained Z-Image on this card under ROCm 7.2 —
+  512², rank 16, qfloat8 Quanto, low_vram, AdamW 1e-4, 1.34 s/it, 500 steps for an identity, resume from `optimizer.pt`; six patch seams,
+  no torchao / bitsandbytes, NumPy 1.26.4, PEFT in an overlay), ai-toolkit at `f7a1fb9` (2026-10-10: `arch flux2_klein_4b / _9b`, the base
+  transformer read from a folder holding `flux-2-klein-base-4b.safetensors` — loom2's own file —, the encoder as a Qwen3 transformers folder,
+  pins torch 2.13.0 / torchvision 0.28.0 / torchaudio 2.11.0 = the engine venv's versions, SciPy 1.12 → Python 3.12), the queue's CPU path
+  (`plan().engine` False → `run_cpu`), `supervisor.stop`, the roster's `rglob` scan and `unlisted_files`, ComfyUI's `loras` folder listing
+  subfolders, the disk (Klein base 4B / 9B and the VAE present; `F:/HF_HOME` holds BiRefNet only; 750 GB free).
+- The plan (18): §2 spike E16 as the gate (install on torch 2.13 ROCm 10 in `trainers/.venv`; 1 000 steps of Klein base-4B on the SY1 run's 30
+  Mara refs ≤ 2.0 s/it under 15 GB with a kill + resume; the adapter on distilled klein-4b through `LoraLoaderModelOnly` with FaceSim ≥ 0.30
+  and ≥ base + 0.20; 9B a recorded stretch); §3 the design — the trained-LoRA record in the project (`story/loras/`) cached under
+  `<models_root>/loras/projects/<project_id>/` for the engine, `LoraRef` ids from the registry with a base check at submission, the staged
+  `train_lora` job with the engine stopped, captions = trigger + `cell_sentence(coverage_cell)`, the runner's progress file and log, resume by
+  ai-toolkit's checkpoints, `TrainFinisher`, readiness (advisory), Generate's four slots fed by `GET /loras`, `@mention` → LoRA + trigger,
+  the Models suite's Trained group, the optional FaceSim check; §6 E16 (3 d) · LT1 slots (2 d) · LT2 the job (5 d) · LT3 mentions + check +
+  rig (3 d) ≈ 13 d; §9 the nine defaults for the author. 13 D86 proposed, 00 row 18, 12 §8e, 08 §1 the LT row, 17 §13 the pointer.
+- Not done on purpose: nothing installed, nothing fetched — E16 needs the `Qwen/Qwen3-4B` transformers folder (7.5 GB, Apache-2.0) and ≈ 7 GB
+  of venv, which the author approves with 18 §9 (the 16 / 17 precedent). Next: the author's answer → E16.

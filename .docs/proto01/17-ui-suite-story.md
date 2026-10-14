@@ -289,6 +289,7 @@ after 3 of 36 Expand jobs, relaunched with the project, the queue paused with 33
 ## 13. Later waves (not in this plan; order from 03 §5)
 - **LT · LoRA training** (03 §5 item 2, loom P2): ai-toolkit on ROCm as a staged job from a locked version's ref set, template
   captions from `coverage_cell`, the readiness meter (advisory), promote into the version's `lora` + `trigger`; a spike first.
+  **Planned 2026-10-14 → `18-lora-training.md` (spike E16, slices LT1–LT3, D86 proposed).**
 - **SV · Voice and lip-sync** (03 §5 item 4, loom P3 §9): out of v1 (loom R95).
 - **SM · Muse** (03 §5 item 5, loom P4 §7–§13): spike **E15** (a local VLM as a queue job on this rig — a llama.cpp sidecar the
   orchestrator starts and stops around jobs vs a ComfyUI node; Qwen3-VL-4B; licence vs D17 / D26), then propose-and-approve

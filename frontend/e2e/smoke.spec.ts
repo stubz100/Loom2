@@ -996,3 +996,41 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
   await expect(page.locator('nav.rail button[title^="Sequence"]')).toHaveCount(0)
 })
+
+test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file for Klein 4B, a slot with a strength rides the recipe, the job\'s compiled summary names the loader\'s file and the manifest records the slot', async ({ page }) => {
+  await openApp(page, { suite: 'generate' })
+  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  const slot = page.locator('.panel select[aria-label="LoRA slot 1"]')
+  await expect(slot.locator('option', { hasText: 'smoke/mara_smoke' })).toHaveCount(1)                   // the e2e tree's file LoRA (e2e_setup.py)
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: a file declares no licence — listed, disabled, with the sentence
+    await expect(slot.locator('option[disabled]', { hasText: 'smoke/mara_smoke' })).toContainText('open variant')
+    await expect(slot.locator('option:not([disabled])')).toHaveCount(1)                                   // "— none —" only
+    return
+  }
+  await slot.selectOption('file:smoke/mara_smoke.safetensors')
+  const strength = page.locator('.panel input[aria-label="LoRA strength 1"]')
+  await expect(strength).toBeVisible()
+  await strength.fill('0.7')
+  await expect(page.locator('.panel select[aria-label="LoRA slot 2"]')).toBeEnabled()                       // the next slot opens
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await page.locator('.panel textarea').fill('a courier in the trained look')
+  const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled()
+  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
+  await go.click()
+  await expect.poll(async () => (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0, { timeout: 45_000 }).toBe(before + count)
+  type Made = AssetLite & { params: { recipe: { loras: { model_id: string; strength: number }[] } } }
+  const newest = (await api<{ items: Made[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
+  expect(newest.params.recipe.loras).toEqual([{ model_id: 'file:smoke/mara_smoke.safetensors', strength: 0.7 }])
+  type JobLite = { id: string; status: string; result: { compiled?: { loras?: { model_id: string; strength: number; lora_name: string | null }[] } } | null }
+  const job = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)!
+  expect(job.status).toBe('done')
+  expect(job.result?.compiled?.loras?.[0]).toEqual({ model_id: 'file:smoke/mara_smoke.safetensors', strength: 0.7, lora_name: 'smoke/mara_smoke.safetensors' })
+  // the slot is cleared by its own select; a model the file does not fit never lists it under the open variant (the backend's 422 covers the rest)
+  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('.panel select[aria-label="LoRA slot 1"]').selectOption('')
+  await expect(page.locator('.panel input[aria-label="LoRA strength 1"]')).toHaveCount(0)
+})

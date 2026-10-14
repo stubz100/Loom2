@@ -50,6 +50,10 @@ def fake_models(root: Path) -> list[str]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"x" * 16)
         written.append(f"{e.folder}/{e.name}")
+    lora = root / "loras" / "smoke" / "mara_smoke.safetensors"                 # LT1: a file LoRA for the slots scenario (18 §3e)
+    lora.parent.mkdir(parents=True, exist_ok=True)
+    lora.write_bytes(b"x" * 16)
+    written.append("loras/smoke/mara_smoke.safetensors")
     (root / "roster.index.json").write_text(json.dumps({"files": []}), encoding="utf-8")
     return written
 

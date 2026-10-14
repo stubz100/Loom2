@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..roster import ROSTER_BY_ID
-from ..schemas import FetchState, ModelListing, ModelScan, ModelVerify, UnlistedFiles
+from ..loras import MAX_SLOTS, lora_options, model_base
+from ..models import registry
+from ..schemas import FetchState, LoraListing, ModelListing, ModelScan, ModelVerify, UnlistedFiles
 from ..tools.fetch import FetchJob, sha256_of
 from .deps import Svc
 
@@ -31,6 +33,15 @@ async def models_scan(svc: Svc):
     roster = svc.roster
     await asyncio.to_thread(roster.scan)                     # D37: two model roots are walked; never on the event loop
     return {"items": await asyncio.to_thread(roster.listing), "unlisted": await asyncio.to_thread(roster.unlisted_files)}
+
+
+@router.get("/loras", response_model=LoraListing)
+async def loras_for(svc: Svc, model_id: str):
+    """LT1 (18 §3e): the slots' list for a model — the roster's free LoRAs that fit and the files on disk (T8: what the worker loads)."""
+    if registry.get(model_id) is None:
+        raise HTTPException(422, f"unknown model id {model_id!r}")
+    items = await asyncio.to_thread(lora_options, svc.roster, model_id, svc.app.settings.variant)
+    return {"model_id": model_id, "base": model_base(model_id), "items": items, "max_slots": MAX_SLOTS}
 
 
 @router.get("/models/unlisted", response_model=UnlistedFiles)

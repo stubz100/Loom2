@@ -80,6 +80,9 @@ Dock: Running klein-9b 5/8 ████░░ · Queued 1 · Recent
 - **LoRA slots** (D25): the section exists in the Panel from M3 — up to 4 slots (roster `kind: lora` for the
   selected family, strength 0–1.5) — rendered disabled with "post-MVP" until loading is wired; the recipe and
   manifest already carry `loras[]`.
+  **Live since LT1 (2026-10-14, 18 §3e):** the four slots list what `GET /loras` offers for the model — the project's trained LoRAs (LT2), the
+  roster's free LoRAs that fit, the files under the loras folders (`file:<path>`, no family declared) — with a strength each; a LoRA that does
+  not fit stays visible, disabled, with the sentence; the preview and the manifest name the loader's file.
 
 ### 3c. Size & Batch
 - Aspect from the project format by default (16:9); override presets (1:1, 3:2, 2:3, 9:16, 21:9) and custom

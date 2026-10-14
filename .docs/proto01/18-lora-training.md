@@ -1,6 +1,6 @@
 # 18 · Wave LT — LoRA training: D25's slots live, ai-toolkit on ROCm as a staged job — plan
 
-Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
+Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders; the registry's trained ids come with LT2). 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
 
 A character, place or prop of the Cast (17 §3b) gets its own LoRA, trained on the rig from a version's reference set as a staged
 queue job, promoted into the version's `trigger` and `lora` slots, loaded by Generate's LoRA slots (09 §3b) and, through `@Mara`,
@@ -68,6 +68,9 @@ lists subfolders). Why not mount the project folder: `extra_model_paths.yaml` is
 need an engine restart. `Roster.unlisted_files` skips the `projects/` subtree; the Models suite shows the registry instead (3g).
 
 ### 3b. `LoraRef` and the chain
+
+*Built in LT1 (2026-10-14) as written, with two additions: a `file:<path under a loras folder>` id for the author's own LoRAs on disk (no family declared — offered to every model with that said, not under `open`), and the roster's LoRA entries carrying `base` and `preset` (the Turbo / Lightning / angles / Stage / guide LoRAs are their toggles', never slots). The chain feeds the t2i, i2i and inpaint graphs; `finalize` refreshes the engine's listing when a slot's file is newer than it.*
+
 
 `LoraRef {model_id, strength}` is unchanged. A trained LoRA's `model_id` is its record id (`lora-…` is not a roster prefix):
 `_validate_models` accepts an id found in the project's registry; `_lora_chain` resolves it to the cache path (3a) and a roster id as
@@ -171,7 +174,7 @@ Records: `story/loras/<id>.json` (3a); jobs of kind `train_lora` in the queue an
 | Slice | What | Days |
 | --- | --- | --- |
 | **E16** | the spike (§2) | 3 |
-| **LT1 · slots live** | `_validate_models` + `_lora_chain` for roster and registry ids with the base check, `GET /loras`, the Generate slots, preview and manifest; tests; the smoke scenario (a roster LoRA in a slot, the fake engine's graph carries the loader node) | 2 |
+| **LT1 · slots live** | `_validate_models` + `_lora_chain` for roster and registry ids with the base check, `GET /loras`, the Generate slots, preview and manifest; tests; the smoke scenario (a roster LoRA in a slot, the fake engine's graph carries the loader node) | 2 | **built 2026-10-14** (journal): `loras.py` (roster `base` / `preset`, `file:<path>` ids for the loras folders' own files, `check_recipe_loras` for the queue and the preview, `lora_name`), the chain in t2i / i2i / inpaint after the preset's own LoRA, `GET /loras`, the Model tab's four slots, finalize's refresh of the engine's listing, the fake engine listing its tree's loras folder |
 | **LT2 · the training job** | `trainers/` (submodule at the pin, patches, constraints, `scripts/trainer-setup.ps1`, the runner), the `Train` recipe, `plan().gpu` + the engine stop, the dataset materialiser and captions, progress / cancel / resume, `TrainFinisher`, the registry + `ensure_mounted`, readiness, the Cast UI, the Models group; tests on a **fake trainer** (a stub the runner launches instead of `run.py`: it prints steps and writes a 1 KB safetensors; the kill / resume path included); the smoke scenario | 5 |
 | **LT3 · mentions, the check, acceptance** | 3f, 3h, `scripts/lt_acceptance.py` on the rig (§8); 09 / 17 / 12 / 08 updated, D86 closed | 3 |
 

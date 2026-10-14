@@ -6298,6 +6298,161 @@
         "title": "Location",
         "type": "object"
       },
+      "LoraListing": {
+        "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LoraOption"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_slots": {
+            "title": "Max Slots",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "base",
+          "items",
+          "max_slots"
+        ],
+        "title": "LoraListing",
+        "type": "object"
+      },
+      "LoraOption": {
+        "description": "LT1 (18 §3e): one entry of the slots' picker — what the worker would load, and why it would not.",
+        "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "fits": {
+            "title": "Fits",
+            "type": "boolean"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "source": {
+            "enum": [
+              "roster",
+              "file",
+              "trained"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "strength": {
+            "default": 1.0,
+            "title": "Strength",
+            "type": "number"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source",
+          "base",
+          "fits",
+          "why",
+          "name",
+          "size",
+          "license",
+          "health",
+          "preset",
+          "strength"
+        ],
+        "title": "LoraOption",
+        "type": "object"
+      },
       "LoraRef": {
         "properties": {
           "model_id": {
@@ -6306,6 +6461,8 @@
           },
           "strength": {
             "default": 1.0,
+            "maximum": 2.0,
+            "minimum": 0.0,
             "title": "Strength",
             "type": "number"
           }
@@ -6678,6 +6835,17 @@
             ],
             "title": "Approx Gb"
           },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
           "family": {
             "title": "Family",
             "type": "string"
@@ -6755,6 +6923,17 @@
               }
             ],
             "title": "Path"
+          },
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
           },
           "repo": {
             "anyOf": [
@@ -6836,6 +7015,8 @@
           "approx_gb",
           "retired",
           "note",
+          "base",
+          "preset",
           "path",
           "health",
           "size",
@@ -15452,6 +15633,49 @@
         "summary": "Lineage",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/loras": {
+      "get": {
+        "description": "LT1 (18 §3e): the slots' list for a model — the roster's free LoRAs that fit and the files on disk (T8: what the worker loads).",
+        "operationId": "loras_for_loras_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoraListing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Loras For",
+        "tags": [
+          "models"
         ]
       }
     },

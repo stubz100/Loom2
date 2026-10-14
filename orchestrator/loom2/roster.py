@@ -32,6 +32,8 @@ class RosterEntry(BaseModel):
     approx_gb: float | None = None
     retired: str | None = None                 # D30: struck by a spike; deleted from disk, re-fetchable
     note: str | None = None
+    base: str | None = None                    # LT1 (18 §3b): a LoRA's base — the model base it fits (klein-9b, flux2, wan22 …); the family when absent
+    preset: str | None = None                  # LT1: the mechanism that applies this LoRA (turbo | lightning | angles | stage | guide) — never a slot
 
 
 # P18 (D84): weights loom2 never lists or suggests, by a name fragment, with the licence reason the Models suite shows.
@@ -71,7 +73,7 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="flux2-small-decoder", name="flux2-small-decoder.safetensors", folder="vae", family="flux2", role="vae",
                 license="apache-2.0", variants=["full", "open"], approx_gb=0.23, note="fast preview decoder"),
     RosterEntry(id="flux2-turbo-lora", name="Flux2TurboComfyv2.safetensors", folder="loras", family="flux2", role="lora",
-                license="flux-nc", approx_gb=2.6, note="8-step Turbo LoRA for dev (E0: ≈ 40 s per 960×544)"),
+                license="flux-nc", approx_gb=2.6, note="8-step Turbo LoRA for dev (E0: ≈ 40 s per 960×544)", base="flux2", preset="turbo"),
     # ---- FLUX.2 Klein (Edit workhorse, Iterate/Quality tiers, D6/D7) ----
     RosterEntry(id="klein-4b", name="flux-2-klein-4b.safetensors", folder="diffusion_models", family="klein", role="transformer",
                 repo="Comfy-Org/flux2-klein-4B", file="split_files/diffusion_models/flux-2-klein-4b.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=7.2),
@@ -113,9 +115,11 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="wan21-vae", name="wan_2.1_vae.safetensors", folder="vae", family="wan22", role="vae",
                 repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/vae/wan_2.1_vae.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=0.24),
     RosterEntry(id="wan22-lightning-high", name="Wan2.2-I2V-A14B-Lightning-4steps-high.safetensors", folder="loras", family="wan22", role="lora",
-                repo="lightx2v/Wan2.2-Lightning", file="Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=1.1),
+                repo="lightx2v/Wan2.2-Lightning", file="Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=1.1,
+                base="wan22", preset="lightning"),
     RosterEntry(id="wan22-lightning-low", name="Wan2.2-I2V-A14B-Lightning-4steps-low.safetensors", folder="loras", family="wan22", role="lora",
-                repo="lightx2v/Wan2.2-Lightning", file="Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=1.1),
+                repo="lightx2v/Wan2.2-Lightning", file="Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=1.1,
+                base="wan22", preset="lightning"),
     # ---- LTX-2.3 distilled (secondary i2v, D9, fp8 only after E5b) ----
     RosterEntry(id="ltx23-distilled-fp8", name="ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors", folder="diffusion_models", family="ltx23", role="transformer",
                 repo="Kijai/LTX2.3_comfy", file="diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors", license="ltx-2.x community", approx_gb=23.5),
@@ -141,10 +145,10 @@ ROSTER: list[RosterEntry] = [
                 repo="Comfy-Org/Qwen-Image_ComfyUI", file="split_files/vae/qwen_image_vae.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=0.25),
     RosterEntry(id="qwen-edit-2509-lightning-4", name="Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors", folder="loras", family="qwen_image", role="lora",
                 repo="lightx2v/Qwen-Image-Lightning", file="Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors", license="apache-2.0",
-                variants=["full", "open"], approx_gb=0.85),
+                variants=["full", "open"], approx_gb=0.85, base="qwen_image", preset="lightning"),
     RosterEntry(id="qwen-edit-2509-angles", name="Qwen-Edit-2509-Multiple-angles.safetensors", folder="loras", family="qwen_image", role="lora",
                 repo="dx8152/Qwen-Edit-2509-Multiple-angles", file="Qwen-Edit-2509-Multiple-angles.safetensors", license="apache-2.0",
-                variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA"),
+                variants=["full", "open"], approx_gb=0.24, note="camera instructions in Chinese (将镜头向左旋转45度 …); used with the Lightning LoRA", base="qwen_image", preset="angles"),
     # ---- Image → mesh props (P18, D79 / D84): ComfyUI's Pixal3D template — Pixal3D int8, the two TRELLIS.2 VAEs, MoGe (MIT) and DINOv3 ----
     RosterEntry(id="pixal3d-int8", name="pixal3d_int8_convrot.safetensors", folder="diffusion_models", family="pixal3d", role="transformer",
                 repo="Comfy-Org/Pixal3D", file="diffusion_models/pixal3d_int8_convrot.safetensors", license="mit", variants=["full"], approx_gb=5.6,
@@ -162,11 +166,11 @@ ROSTER: list[RosterEntry] = [
     # ---- Stage → clip (P13 ST4, D76): LTX-2.3's IC-LoRA Union — the depth (or pose) sequence as the guide at frame 0 ----
     RosterEntry(id="ltx23-ic-lora-union", name="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", folder="loras", family="ltx23", role="lora",
                 repo="Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control", file="ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors", license="ltx-2.x community",
-                approx_gb=0.65, note="E11 (D76): GetICLoRAParameters + LTXVAddGuide on the rendered depth sequence; 1.22× plain LTX, the pose followed 4/5"),
+                approx_gb=0.65, note="E11 (D76): GetICLoRAParameters + LTXVAddGuide on the rendered depth sequence; 1.22× plain LTX, the pose followed 4/5", base="ltx23", preset="guide"),
     # ---- Stage → image (P13 ST3, D78): E10's exact-pose method — RefControl's pose LoRA for Klein base 9B (apache-2.0) ----
     RosterEntry(id="refcontrol-v2-poses", name="refcontrol_v2_poses.safetensors", folder="loras", family="klein", role="lora",
                 repo="thedeoxen/refcontrol-FLUX.2-klein-9B-reference-pose-lora", file="refcontrol_v2_poses.safetensors", license="apache-2.0",
-                variants=["full"], approx_gb=0.17, note="E10 (D78): 'apply pose from image 1 with reference from image 2', strength 0.9 — PCK 0.86 at ≈ 74 s"),
+                variants=["full"], approx_gb=0.17, note="E10 (D78): 'apply pose from image 1 with reference from image 2', strength 0.9 — PCK 0.86 at ≈ 74 s", base="klein-9b", preset="stage"),
     # ---- retired by spikes (D30: deleted, re-fetchable) ----
     RosterEntry(id="flux1-fill-dev", name="flux1-fill-dev.safetensors", folder="diffusion_models", family="flux1", role="transformer",
                 repo="black-forest-labs/FLUX.1-Fill-dev", file="flux1-fill-dev.safetensors", license="flux-nc (gated)", approx_gb=22.2, retired="E8 2026-10-05"),
@@ -257,11 +261,27 @@ class Roster:
             out.append({**e.model_dump(), "path": r.path, "health": r.health, "size": r.size, "sha256": r.sha256, "source_tree": r.source_tree})
         return out
 
+    def lora_files(self) -> list[dict]:
+        """LT1 (18 §3b): files under the loras folders (the models root and the mounted trees, subfolders included) no roster entry claims —
+        `rel` is the loader's name relative to the folder (with "/"), the slots' `file:<rel>` id. The engine's cache of trained LoRAs
+        (`loras/projects/…`, LT2) is left out: the project's registry lists those."""
+        claimed = {e.name for e in ROSTER if e.folder == "loras"}
+        out = []
+        for (folder, name), (path, root) in sorted(self._found.items()):
+            if folder != "loras" or name in claimed or ignore_reason(name) or path.suffix.lower() != ".safetensors":
+                continue
+            rel = path.relative_to(root / folder).as_posix()
+            if rel.startswith("projects/"):
+                continue
+            out.append({"rel": rel, "name": name, "path": str(path), "size": path.stat().st_size, "root": str(root)})
+        return out
+
     def unlisted_files(self) -> list[dict]:
         """Files on disk no roster entry claims — surfaced in the Models suite as 'unknown'; the ignore list's files are left out (ignored_files)."""
         claimed = {(e.folder, e.name) for e in ROSTER}
         return [{"folder": k[0], "name": k[1], "path": str(v[0]), "size": v[0].stat().st_size}
-                for k, v in sorted(self._found.items()) if k not in claimed and not ignore_reason(k[1])]
+                for k, v in sorted(self._found.items()) if k not in claimed and not ignore_reason(k[1])
+                and not (k[0] == "loras" and v[0].relative_to(v[1] / "loras").as_posix().startswith("projects/"))]   # LT2's cache is the registry's
 
     def ignored_files(self) -> list[dict]:
         """P18 (D84): files on disk loom2 will never suggest, with the reason (Hunyuan3D: its licence excludes the EU, D17)."""

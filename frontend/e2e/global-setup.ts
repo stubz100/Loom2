@@ -87,7 +87,8 @@ export default async function globalSetup(config: FullConfig): Promise<() => Pro
     }
   }
   try {
-    fake = spawn(PYTHON, [join(REPO, 'orchestrator', 'tests', 'fake_comfy.py'), '--port', String(enginePort), '--mode', 'success', '--output-dir', join(state, 'engine_out')],
+    fake = spawn(PYTHON, [join(REPO, 'orchestrator', 'tests', 'fake_comfy.py'), '--port', String(enginePort), '--mode', 'success', '--output-dir', join(state, 'engine_out'),
+      '--models-root', join(state, 'models')],                                                           // LT1: the loras folder in the loader's enum
       { env, stdio: ['ignore', 'pipe', 'pipe'] })
     const fakeLog = createWriteStream(join(state, 'logs', 'fake_comfy.log'))
     fake.stdout!.pipe(fakeLog); fake.stderr!.pipe(fakeLog)

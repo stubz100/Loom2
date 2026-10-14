@@ -1010,6 +1010,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/loras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Loras For
+         * @description LT1 (18 §3e): the slots' list for a model — the roster's free LoRAs that fit and the files on disk (T8: what the worker loads).
+         */
+        get: operations["loras_for_loras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/models": {
         parameters: {
             query?: never;
@@ -4505,6 +4525,53 @@ export interface components {
             /** Path */
             path: components["schemas"]["PathStep"][];
         };
+        /** LoraListing */
+        LoraListing: {
+            /** Base */
+            base: string | null;
+            /** Items */
+            items: components["schemas"]["LoraOption"][];
+            /** Max Slots */
+            max_slots: number;
+            /** Model Id */
+            model_id: string;
+        };
+        /**
+         * LoraOption
+         * @description LT1 (18 §3e): one entry of the slots' picker — what the worker would load, and why it would not.
+         */
+        LoraOption: {
+            /** Base */
+            base: string | null;
+            /** Fits */
+            fits: boolean;
+            /** Health */
+            health: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** License */
+            license: string | null;
+            /** Name */
+            name: string;
+            /** Preset */
+            preset: string | null;
+            /** Size */
+            size: number | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "roster" | "file" | "trained";
+            /**
+             * Strength
+             * @default 1
+             */
+            strength: number;
+            /** Why */
+            why: string | null;
+        };
         /** LoraRef */
         LoraRef: {
             /** Model Id */
@@ -4658,6 +4725,8 @@ export interface components {
         ModelEntry: {
             /** Approx Gb */
             approx_gb: number | null;
+            /** Base */
+            base: string | null;
             /** Family */
             family: string;
             /** File */
@@ -4685,6 +4754,8 @@ export interface components {
             note: string | null;
             /** Path */
             path: string | null;
+            /** Preset */
+            preset: string | null;
             /** Repo */
             repo: string | null;
             /** Retired */
@@ -8891,6 +8962,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Lineage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    loras_for_loras_get: {
+        parameters: {
+            query: {
+                model_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraListing"];
                 };
             };
             /** @description Validation Error */

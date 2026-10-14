@@ -749,6 +749,29 @@ class FetchState(Open):
     elapsed_s: float
 
 
+class LoraOption(Out):
+    """LT1 (18 §3e): one entry of the slots' picker — what the worker would load, and why it would not."""
+    id: str                                       # a roster id, `file:<path>` or a trained LoRA's id
+    label: str
+    source: Literal["roster", "file", "trained"]
+    base: str | None = None                       # the model base it fits; None when the file does not declare one
+    fits: bool
+    why: str | None = None                        # the sentence when it does not fit, or the caveat for a file
+    name: str
+    size: int | None = None
+    license: str | None = None
+    health: str | None = None
+    preset: str | None = None
+    strength: float = 1.0                         # the default strength at use
+
+
+class LoraListing(Out):
+    model_id: str
+    base: str | None = None
+    items: list[LoraOption]
+    max_slots: int
+
+
 class ModelListing(Out):
     items: list[ModelEntry]
     models_root: str

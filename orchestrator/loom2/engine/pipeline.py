@@ -188,6 +188,17 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     """Everything between a started engine and a graph ready to queue. Raises JobCancelled, ValueError (a missing reference, an
     empty selection) or CompileError."""
     object_info = await q.object_info_fresh()
+    slot_loras = getattr(recipe, "loras", None) or []
+    if slot_loras:                                                     # LT1: a file copied in since the engine last listed its loras folder (E16; LT2's cache)
+        from ..loras import lora_name, lora_names_listed
+        names = []
+        for l in slot_loras:
+            try:
+                names.append(lora_name(q.roster, l.model_id))
+            except (FileNotFoundError, KeyError):
+                pass
+        if names and not lora_names_listed(object_info, names):
+            object_info = await q.object_info_refresh()
     ref_files: dict[str, str] = {}
     refs = getattr(recipe, "refs", []) or []
     if isinstance(recipe, T2I) and (spec := registry.get(recipe.model_id)):

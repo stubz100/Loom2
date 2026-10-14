@@ -17,7 +17,7 @@ from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_
 from ..edit_ai import plan_tiles
 from ..models import registry
 from ..models.spec import ModelSpec
-from ..roster import Roster
+from ..roster import Roster, ROSTER_BY_ID
 from .contract import check_graph, resolve_names
 
 
@@ -397,16 +397,33 @@ def snap(value: int, mult: int, lo: int, policy: str, field: str) -> int:
 
 
 def _lora_chain(g: dict, model_link: list, loras: list[LoraRef], roster: Roster, first_id: int) -> tuple[list, int]:
+    """LT1 (18 §3b): the slots' LoRAs after the preset's own (Turbo, Lightning) and after the reference nodes (B11); a roster id by its
+    file name, a `file:` id by its path under the loras folder (the contract check matches the engine's listing)."""
+    from ..loras import lora_name                                                  # the slots' module reads the roster; no cycle at import
     nid = first_id
     for ref in loras:
-        _, name = roster.require(ref.model_id)
+        name = lora_name(roster, ref.model_id)
         g[str(nid)] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": model_link, "lora_name": name, "strength_model": float(ref.strength)}}
         model_link = [str(nid), 0]
         nid += 1
     return model_link, nid
 
 
-def effective_params(recipe: T2I) -> dict[str, Any]:
+def loras_summary(loras: list[LoraRef], roster: Roster | None) -> list[dict[str, Any]]:
+    """The slots as the preview and the manifest show them: id, strength and the loader's name (display == reality, T8); without a
+    roster (the estimate's effective_params) the name stays None."""
+    from ..loras import lora_name
+    out = []
+    for l in loras:
+        try:
+            name = lora_name(roster, l.model_id) if roster is not None else None
+        except (FileNotFoundError, KeyError):
+            name = None
+        out.append({**l.model_dump(), "lora_name": name})
+    return out
+
+
+def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any]:
     """What will actually run (the UI shows exactly this: 07 §1.4 'display == reality'). A sampler, scheduler, weight
     dtype or encoder device the engine does not offer is an error here — never a silent fall-back to the preset."""
     spec = image_spec(recipe.model_id)
@@ -449,13 +466,13 @@ def effective_params(recipe: T2I) -> dict[str, Any]:
             "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
             "refs": min(len(recipe.refs), refs_max), "max_refs": refs_max, "refs_dropped": max(0, len(recipe.refs) - refs_max),
-            "ref_notes": len(ref_notes(recipe, spec)), "loras": [l.model_dump() for l in recipe.loras],
+            "ref_notes": len(ref_notes(recipe, spec)), "loras": loras_summary(recipe.loras, roster),
             "style_id": recipe.style_id, "style_text": recipe.style_text}                                   # D85: what the Story style added (the manifest keeps both)
 
 
 def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files: dict[str, str] | None = None) -> Compiled:
     spec = image_spec(recipe.model_id)
-    ep = effective_params(recipe)
+    ep = effective_params(recipe, roster)
     _, unet = roster.require(recipe.model_id)
     _, te = roster.require(ep["te_id"])
     _, vae = roster.require(spec.roles.vae or "")
@@ -560,11 +577,13 @@ def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, i
     sm = spec.sampling
     g: dict[str, Any] = {}
     model_link = _flux2_loaders(g, roster, model_id, spec, recipe.te_device, recipe.te_id)
+    model_link, _ = _lora_chain(g, model_link, recipe.loras, roster, 300)           # LT1: the slots, after the Turbo LoRA the loaders chain
     prompt = recipe.prompt_text.strip()
     g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
     g["102"] = {"class_type": "LoadImageMask", "inputs": {"image": mask_name, "channel": "red"}}
     image, mask = ["100", 0], ["102", 0]
-    summary: dict[str, Any] = {"mode": recipe.mode, "model_id": model_id, "width": w, "height": h, "seed": int(seed), "feather": recipe.feather, "margin_pct": recipe.margin_pct}
+    summary: dict[str, Any] = {"mode": recipe.mode, "model_id": model_id, "width": w, "height": h, "seed": int(seed), "feather": recipe.feather, "margin_pct": recipe.margin_pct,
+                               "loras": loras_summary(recipe.loras, roster)}
     if recipe.mode in ("fill", "fill_hero", "outpaint"):
         # LanPaint: image-encode with the mask, ReferenceLatent of the same image, custom sampler with LanPaint steps
         steps = int(sm.edit_steps if sm.edit_steps is not None else sm.steps)
@@ -615,6 +634,7 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
         raise CompileError("refine needs Klein base or FLUX.2 dev: distilled Klein cannot partial-denoise (04 §4)")
     g: dict[str, Any] = {}
     model_link = _flux2_loaders(g, roster, recipe.model_id, spec, recipe.te_device, recipe.te_id)
+    model_link, _ = _lora_chain(g, model_link, recipe.loras, roster, 300)           # LT1: the slots
     steps = int(recipe.steps or (sm.edit_steps if sm.edit_steps is not None else sm.steps))
     strength = max(0.05, min(1.0, float(recipe.strength)))
     prompt = recipe.prompt_text.strip()
@@ -630,7 +650,7 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
                                                  "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["8", 0], "denoise": strength}}
     g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
-    summary = {"model_id": recipe.model_id, "source": recipe.source, "strength": strength, "steps": steps, "cfg": float(sm.cfg), "guidance": float(sm.guidance), "width": w, "height": h, "seed": int(seed)}
+    summary = {"model_id": recipe.model_id, "source": recipe.source, "strength": strength, "loras": loras_summary(recipe.loras, roster), "steps": steps, "cfg": float(sm.cfg), "guidance": float(sm.guidance), "width": w, "height": h, "seed": int(seed)}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
@@ -1082,7 +1102,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
             ids += model_ids(recipe.refine_model_id, True)
     else:
         ids.append(recipe.model_id)
-    ids += [l.model_id for l in getattr(recipe, "loras", [])]
+    ids += [l.model_id for l in getattr(recipe, "loras", []) if l.model_id in ROSTER_BY_ID]   # LT1: `file:` and trained ids are not roster weights
     return list(dict.fromkeys(ids))
 
 

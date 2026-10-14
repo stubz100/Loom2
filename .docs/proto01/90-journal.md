@@ -3767,3 +3767,28 @@ split by file so that no two hands touched the same module.
   no longer drops it; the venv is 12 GB); the optional-import patch stays — the 4B path runs without it. The spike's error list now reads the last
   launch's part of the appended log (the first attempt's KeyError had leaked into the row).
 - **E16 closed:** GO on 4B (09:14), 9B a per-job base; 18 §2 / §9, 13 D86 carry both. Next: LT1 (slots live), LT2 on the spike's runner shape.
+
+## 2026-10-14 09:48 — LT1 · D25's LoRA slots live (18 §3b / §3e, D86)
+- **`orchestrator/loom2/loras.py`:** a `LoraRef.model_id` is a roster id (`role="lora"`, now with `base` — the model base it fits — and `preset` — the
+  toggle or method that applies it: turbo / lightning / angles / stage / guide, never a slot), a `file:<path under a loras folder>` (the author's
+  own files, E16's adapters under `loras/e16/`; no family declared, so offered to every model with that said, not under `open` — D26) or, with
+  LT2, a trained `lora-…`. `model_base` from the spec's new `base` (`klein-4b` for 4B and base-4B, `klein-9b` for 9B, base-9B and KV; the family
+  elsewhere), `lora_options` (what the pickers show, the non-fitting ones with their sentence), `check_recipe_loras` (≤ 4 slots, no duplicate, the
+  base, the preset owners, the open gate, the file on disk — one sentence, 422 at submission and from the preview alike), `lora_name` (a roster
+  file's name, a file's path with "/"; `contract.resolve_names` settles the engine's own spelling — ComfyUI lists a subfolder with the OS
+  separator, E16), `lora_names_listed` (finalize refreshes `/object_info` once when a slot's file is newer than the engine's listing).
+  `Roster.lora_files` reads the loras folders of every tree, LT2's `projects/` cache left out (and out of the unknown files).
+- **Graphs:** `_lora_chain` by `lora_name`, after the preset's own LoRA (Turbo on dev) and the reference nodes (B11), now in t2i, i2i and inpaint
+  (node ids 300+); every summary carries `loras[{model_id, strength, lora_name}]` (`loras_summary`; `effective_params` takes the roster) —
+  the parity snapshot regenerated for the new key. `recipe_weights` keeps roster ids only.
+- **API:** `GET /loras?model_id=` → `LoraListing {model_id, base, items[LoraOption], max_slots}` (139 routes; openapi 107 paths / 227 schemas,
+  `schema.d.ts`); `/recipes/preview` runs the same check and leaves an unlisted slot file out of its contract problems. The fake engine's
+  standalone takes `--models-root` and lists the tree's loras folder as ComfyUI does; the e2e tree holds `loras/smoke/mara_smoke.safetensors`.
+- **Generate:** `LoraSlots.tsx` replaces the D25 stub in the Model tab — four selects (the fitting ones, then "does not fit" disabled with the
+  sentence) with a strength each, the next slot opening after the last used one; `generateStore.loadLoras` on a model change prunes a persisted
+  slot that no longer fits. Lint 100 (none new), tsc and build clean, Vitest 204.
+- **Tests:** `test_lora_slots_lt1.py` (+5: the sources and the fit, a roster LoRA's base through a monkeypatched entry, the chain in the three
+  graphs by its links with the engine's own spelling, the route and the 422, a job on the fake engine whose compiled summary and manifest record
+  the slot after the listing refresh); `test_api` / `test_lifecycle` keep "unknown model id" for a bad slot id; 297 offline, audits clean
+  (`base_label` reads the registry — D65 caught a literal first). Smoke "lora slots (18 / LT1)" 26/26 under full and open under full.
+- Next: LT2 — the staged `train_lora` job on E16's runner shape, the registry (`story/loras/`), readiness, the Cast and Models UI.

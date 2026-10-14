@@ -28,6 +28,7 @@ from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_jso
 from .recipes import T2I, I2V, Inpaint, Render, parse_recipe, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
+from .loras import check_recipe_loras
 from .mentions import resolve_mentions
 from .story import StoryStore, resolve_style
 from . import native
@@ -367,9 +368,10 @@ class JobQueue:
             raise ValueError(f"{what} needs the native extension (uv sync --project orchestrator --extra native)")
         if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
             return                       # R3 / P17: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
-        for mid in [recipe.model_id, *[l.model_id for l in getattr(recipe, "loras", [])], *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
+        for mid in [recipe.model_id, *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
+        check_recipe_loras(self.roster, recipe, self.app.settings.variant)   # LT1 (18 §3b): the slots' fit, by the model that will run
         spec = registry.get(recipe.model_id)
         if isinstance(recipe, T2I) and (spec is None or not spec.recipes.t2i):
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")

@@ -38,8 +38,8 @@ TE_DEVICES = ["default", "cpu"]                                                 
 
 
 class LoraRef(BaseModel):
-    model_id: str
-    strength: float = 1.0
+    model_id: str                                 # a roster id, `file:<path under a loras folder>` or a trained LoRA's id (LT1 / LT2, 18 §3b)
+    strength: float = Field(1.0, ge=0.0, le=2.0)
 
 
 class RefImage(BaseModel):

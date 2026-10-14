@@ -34,6 +34,7 @@
  "GET /jobs/{job_id}",
  "GET /lineage/tree/{root_id}",
  "GET /lineage/{asset_id}",
+ "GET /loras",
  "GET /models",
  "GET /models/unlisted",
  "GET /project",

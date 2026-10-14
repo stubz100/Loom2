@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isDocumentPreview, isT2IPreview, type Asset, type DocumentPreview, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
+import type { components } from '../../api/schema'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
 import { refDrop } from '../../frame/dropRules'
@@ -18,7 +19,9 @@ export type SeedMode = 'random' | 'fixed' | 'increment'
 export interface RefSlot { asset_id: string; note?: string }
 /** D73: an @mention of an album group — the server turns it into references (the cover first, then page order) when the panel previews or
  *  submits, and stamps the group's revision into the recipe. */
-export interface MentionRef { group_id: string; name: string; profile_id?: string }   // D85: a Story profile (the server swaps its current version's group in)
+export interface MentionRef { group_id: string; name: string; profile_id?: string }
+/** LT1 (18 §3e): one entry of the LoRA slots' picker, as GET /loras lists it for the panel's model. */
+export type LoraOption = components['schemas']['LoraOption']   // D85: a Story profile (the server swaps its current version's group in)
 
 export interface Panel {
   prompt_mode: PromptMode; tree: Tree; json_text: string; text: string; negative: string
@@ -159,6 +162,9 @@ export interface GenerateState {
   presets: Preset[]; lastPreset: string | null; snippets: Snippet[]
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
   angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
+  /** LT1: what the slots may hold for the panel's model (GET /loras); loadLoras prunes slots that do not fit after a model change. */
+  lorasAvailable: LoraOption[]
+  loadLoras: (modelId: string) => Promise<void>
   setAngle: (patch: Partial<AngleState>) => void
   refreshAnglePreview: () => Promise<void>
   /** P14: queue the new angle(s) of the source; results land in Generate's batch strip with lineage `reangle`. */
@@ -214,7 +220,18 @@ export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
       panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, snippets: [], show: 'batch', lastBatch: null, pinned: [],
-      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null,
+      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [],
+
+      loadLoras: async (modelId) => {
+        try {
+          const r = await unwrap(http.GET('/loras', { params: { query: { model_id: modelId } } }))
+          if (get().panel.model_id !== modelId) return                                            // the model moved on while this answered
+          const fits = new Set(r.items.filter((o) => o.fits).map((o) => o.id))
+          const kept = get().panel.loras.filter((l) => fits.has(l.model_id))
+          set({ lorasAvailable: r.items })
+          if (kept.length !== get().panel.loras.length) get().set({ loras: kept })               // a persisted slot from another model
+        } catch { set({ lorasAvailable: [] }) }
+      },
 
       setAngle: (patch) => { set({ angle: { ...get().angle, ...patch } }); void get().refreshAnglePreview() },
       refreshAnglePreview: async () => {

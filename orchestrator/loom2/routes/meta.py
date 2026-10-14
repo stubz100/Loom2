@@ -12,6 +12,7 @@ from .. import __version__
 from ..build_info import version_info
 from ..capabilities import capabilities as build_capabilities
 from ..engine.graphs import CompileError, FieldError
+from ..loras import check_recipe_loras
 from ..engine.pipeline import plan, preview_problems
 from ..recipes import I2V, T2I, parse_recipe
 from ..schemas import Capabilities, DocumentPreview, HealthInfo, I2VPreview, SessionInfo, ShuttingDown, T2IPreview, VersionInfo
@@ -68,6 +69,10 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
         raise HTTPException(422, e.detail())                                  # D65: {field, value, allowed, message}
     except CompileError as e:
         raise HTTPException(422, str(e))
+    try:
+        check_recipe_loras(svc.roster, recipe, variant)                       # LT1: the slots' fit, the sentence a submit would answer
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     missing = []
     for mid in p.weights:
         try:
@@ -78,6 +83,8 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
             missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
     est = svc.queue.estimate(recipe) if svc.queue else {**p.estimate, "vram_gb": p.vram_gb}
     problems = preview_problems(recipe, svc.roster, svc.queue.object_info_cached() if svc.queue else None, variant)
+    if getattr(recipe, "loras", None):                                         # LT1: a slot file the engine has not listed yet is refreshed at submission (finalize), not a problem here
+        problems = [x for x in problems if "'lora_name'=" not in x]
     common = {"missing": missing, "estimate": est, "count": p.count, "problems": problems, "weights": p.weights, "warm_group": p.warm_group}
     if isinstance(recipe, T2I):                                               # D73: which images go in (mentions included) and what they say
         kept = recipe.refs[: p.params.get("max_refs", len(recipe.refs))]

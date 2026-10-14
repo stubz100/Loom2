@@ -125,6 +125,7 @@ class Estimates(Strict):
 class ModelSpec(Strict):
     id: str                                        # the roster id of the main weight
     family: str
+    base: str | None = None                        # LT1 (18 §3b): the adapter base this model takes LoRAs for (klein-4b | klein-9b …); the family when absent
     label: str
     short: str | None = None                       # the panels' compact name (job rows, clip cards)
     hint: str | None = None                        # one line on the model card

@@ -20,6 +20,7 @@ import { RefExtras, TextPrompt } from './RefExtras'
 import { useMentions } from './useMentions'
 import { useStory } from '../story/storyStore'
 import { StylePicker } from './StylePicker'
+import { LoraSlots } from './LoraSlots'
 import './generate.css'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 
@@ -292,11 +293,7 @@ function ModelTab() {
             <span className="hint" style={{ gridColumn: 'auto' }}>VAEDecodeTiled trades a little time for VRAM headroom on the Full tier (D13)</span></div>
         </div>
       </details>
-      <h4 style={{ margin: '12px 0 6px', color: 'var(--fg3)', fontSize: 11 }}>LORA SLOTS (D25)</h4>
-      <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr' }}>
-        {[1, 2, 3, 4].map((n) => <><label key={`l${n}`}>slot {n}</label><div key={`v${n}`}><select disabled style={{ width: 160 }}><option>— post-MVP —</option></select> <input type="number" disabled value={1} style={{ width: 70 }} /></div></>)}
-        <span className="hint">the recipe and manifest already carry loras[]; loading is wired post-MVP</span>
-      </div>
+      <LoraSlots />
     </div>
   )
 }

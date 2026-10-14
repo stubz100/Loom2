@@ -55,7 +55,8 @@ def _cast(rig: Rig, n_refs: int = 4, cells: bool = True):
 
 
 def _settings(rig: Rig, **extra) -> None:
-    rig.app.update_settings({"trainer": {"python": sys.executable, "run": str(FAKE), "cwd": str(TESTS), "vae": "ai-toolkit/flux2_vae", "quantize": "qfloat8"}, **extra})
+    vae = rig.app.state_dir.parent / "models" / "vae" / "flux2-vae.safetensors"                 # a local stand-in: no hub access in a test (CI has no F:)
+    rig.app.update_settings({"trainer": {"python": sys.executable, "run": str(FAKE), "cwd": str(TESTS), "vae": str(vae), "quantize": "qfloat8"}, "hf_home": str(rig.app.state_dir / "hf"), **extra})
 
 
 # ---- the registry and the engine's copy --------------------------------------------------------------------------------------------

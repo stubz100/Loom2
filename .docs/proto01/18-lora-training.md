@@ -1,6 +1,6 @@
 # 18 · Wave LT — LoRA training: D25's slots live, ai-toolkit on ROCm as a staged job — plan
 
-Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders); **LT2 built 2026-10-14** (the staged `train_lora` job, the registry, readiness, the Cast and Models UI — on the fake trainer offline, the rig acceptance with LT3). 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
+Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders); **LT2 built 2026-10-14** (the staged `train_lora` job, the registry, readiness, the Cast and Models UI); **LT3 built 2026-10-14 and the wave accepted on the rig** (§8's run line, journal) — **D86 closed.** 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
 
 A character, place or prop of the Cast (17 §3b) gets its own LoRA, trained on the rig from a version's reference set as a staged
 queue job, promoted into the version's `trigger` and `lora` slots, loaded by Generate's LoRA slots (09 §3b) and, through `@Mara`,
@@ -134,16 +134,25 @@ health); the recipe preview shows the chain; the manifest records it. Under `ope
 
 ### 3f. Mentions (D73 / D85)
 
+*Built in LT3 (2026-10-14): `resolve_mentions` takes the roster; `T2I.auto_lora` (default on) is the per-prompt switch the chip toggles; the mention is stamped with `lora` (added) and `lora_available` (the version's, added or not); the trigger leads every note the mention's references carry into the prompt.*
+
+
 `@Mara` whose current version has a `lora`: `resolve_mentions` appends `LoraRef(<id>, 0.8)` when the recipe's model has the LoRA's
 base, a slot is free and the id is not already there, and the mention stub carries the trigger ("Mara (mara_7f3a)"). The panel shows
 the chip "LoRA mara_7f3a · 0.8 from @Mara v2 · ×" — dropping it is remembered for that prompt. Expand never adds it (§1).
 
 ### 3g. The Models suite
 
+*Built in LT2 (the `TrainedTable`).*
+
+
 A **Trained (this project)** group under the roster listing: name, base, steps, size, sha, "used by n jobs", *Show in Cast*, *Delete*
 (askConfirm). The `projects/` subtree is left out of *unknown files*.
 
 ### 3h. Identity check — optional, advisory (11 §6's FaceSim)
+
+*Built in LT3: `POST /story/loras/{id}/check` queues the eight Iterate jobs (four coverage sentences × with / without, the same seeds, the trigger in the prompt, `auto_lora` off) onto a "LoRA check" page under the version; the asset finisher scores each against the hero as it lands and the record's `identity` grows (`with`, `without`, the means, `done` / `n`, the status — "weights missing" without FaceSim). The refs' own band is not computed (E16 measured it once: 0.42 / 0.58 / 0.74).*
+
 
 *Check ▶* on a trained character queues 8 Iterate-tier T2I jobs (4 coverage sentences × with / without the LoRA, fixed seeds, the
 trigger in the prompt) into a "LoRA check" group on the version's candidates page; when they land, FaceSim (present when
@@ -182,7 +191,7 @@ Records: `story/loras/<id>.json` (3a); jobs of kind `train_lora` in the queue an
 | **E16** | the spike (§2) | 3 |
 | **LT1 · slots live** | `_validate_models` + `_lora_chain` for roster and registry ids with the base check, `GET /loras`, the Generate slots, preview and manifest; tests; the smoke scenario (a roster LoRA in a slot, the fake engine's graph carries the loader node) | 2 | **built 2026-10-14** (journal): `loras.py` (roster `base` / `preset`, `file:<path>` ids for the loras folders' own files, `check_recipe_loras` for the queue and the preview, `lora_name`), the chain in t2i / i2i / inpaint after the preset's own LoRA, `GET /loras`, the Model tab's four slots, finalize's refresh of the engine's listing, the fake engine listing its tree's loras folder |
 | **LT2 · the training job** | `trainers/` (submodule at the pin, patches, constraints, `scripts/trainer-setup.ps1`, the runner), the `Train` recipe, `plan().gpu` + the engine stop, the dataset materialiser and captions, progress / cancel / resume, `TrainFinisher`, the registry + `ensure_mounted`, readiness, the Cast UI, the Models group; tests on a **fake trainer** (a stub the runner launches instead of `run.py`: it prints steps and writes a 1 KB safetensors; the kill / resume path included); the smoke scenario | 5 | **built 2026-10-14** (journal): `recipes.TrainLora`, `trainer.py`, `loras.py`'s registry + `publish`, `/story/profiles/{id}/train`, `/story/loras`, `/jobs/{id}/requeue`, `/capabilities.train`, the Cast Inspector's training block, the Models suite's Trained table, `tests/fake_trainer.py` |
-| **LT3 · mentions, the check, acceptance** | 3f, 3h, `scripts/lt_acceptance.py` on the rig (§8); 09 / 17 / 12 / 08 updated, D86 closed | 3 |
+| **LT3 · mentions, the check, acceptance** | 3f, 3h, `scripts/lt_acceptance.py` on the rig (§8); 09 / 17 / 12 / 08 updated, D86 closed | 3 | **built 2026-10-14** (journal): the auto-slot with the trigger, the check route and its finisher hook, the chip, `scripts/lt_acceptance.py`; the trainer's process in the orchestrator's job object |
 
 ≈ 13 d; LT1 can start during E16 (it needs no trainer). Gate: D86 approved; E16 GO before LT2.
 
@@ -209,6 +218,8 @@ Records: `story/loras/<id>.json` (3a); jobs of kind `train_lora` in the queue an
 4. `@Mara` in a prompt without a slot set adds the LoRA and the trigger (the chip); `×` drops it; the manifest records `loras[]`.
 5. A wrong base refused at submission with the sentence; the open variant trains and loads the same (klein-base-4b, Apache).
 6. The Models suite lists the LoRA under Trained; Delete removes the file, the record and the cache copy.
+
+**Run 2026-10-14 (`scripts/lt_acceptance.py`, journal):** the hero → Mara → Expand full (36 jobs in 894 s with the e2e running beside it; 37 references kept) → the staged job released → **killed at step 300** (the trainer's two pids died with the orchestrator — the job object), relaunched, requeued → **resumed from the step-250 save** and finished: 1 255 s wall, **1.15 s/it, peak 13.5 GB**, the record 44 MB (37 refs, the setting word), the version's slot and trigger `mara_d01f`, the engine's cache, `GET /loras` on Klein 4B first and fitting, not on 9B; the preview and a 36 s Generate job with "@Mara waits at the city gate at dawn" took the LoRA and the trigger by themselves (the manifest and the compiled name say so); the check's 8 images in 37 s on klein-4b: **FaceSim with 0.426 · without 0.118** (bars ≥ 0.30 and ≥ without + 0.20 met); a wrong base refused (422); Delete removed the record, the file, the cache copy and the slot and kept the trigger (verified on disk — the route's reply shape was wrong for its schema and is fixed with a unit test). Two passes: the first stopped at the preview (a None guard in the preview's LoRA filter after a relaunch, fixed), the second ran the rest on the trained state (`--reuse`); 27 checks ok, 0 failed.
 
 ## 9. Defaults to approve (D86)
 

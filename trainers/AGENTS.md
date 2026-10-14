@@ -1,6 +1,6 @@
 # trainers/ — notes for coding agents
 
-Verified at 8d380e5 on 2026-10-14.
+Verified at d4a99b6 on 2026-10-14.
 
 The LoRA trainer of wave LT (`.docs/proto01/18-lora-training.md`, D86): ai-toolkit (MIT) as the pinned submodule `trainers/ai-toolkit`,
 run from its own venv `trainers/.venv` — never from the engine venv, never with the engine running (16 GB first).

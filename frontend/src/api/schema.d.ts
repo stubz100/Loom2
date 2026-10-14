@@ -1667,6 +1667,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/loras/{lid}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lora Check
+         * @description 18 §3h (LT3), advisory: eight Iterate images — four coverage sentences × with / without the LoRA, the same seeds, the trigger in the
+         *     prompt — into a "LoRA check" page under the version's candidates; FaceSim scores each against the hero as it lands (the finisher) and the
+         *     record's `identity` grows. Never a gate; without the FaceSim weights the record says so.
+         */
+        post: operations["lora_check_story_loras__lid__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles": {
         parameters: {
             query?: never;
@@ -4644,6 +4666,20 @@ export interface components {
              */
             type: "lora.changed";
         };
+        /**
+         * LoraCheckQueued
+         * @description LT3 (18 §3h): the identity check's jobs — with and without the LoRA, the same seeds and sentences.
+         */
+        LoraCheckQueued: {
+            /** Batch Id */
+            batch_id: string;
+            /** Group Id */
+            group_id: string;
+            /** Job Ids */
+            job_ids: string[];
+            /** Model Id */
+            model_id: string;
+        };
         /** LoraListing */
         LoraListing: {
             /** Base */
@@ -4818,6 +4854,16 @@ export interface components {
              */
             group_id?: string;
             /**
+             * Lora
+             * @default null
+             */
+            lora?: string | null;
+            /**
+             * Lora Available
+             * @default null
+             */
+            lora_available?: string | null;
+            /**
              * Name
              * @default null
              */
@@ -4847,6 +4893,10 @@ export interface components {
             asset_ids: string[];
             /** Group Id */
             group_id: string;
+            /** Lora */
+            lora: string | null;
+            /** Lora Available */
+            lora_available: string | null;
             /** Name */
             name: string | null;
             /** Profile Id */
@@ -6352,6 +6402,11 @@ export interface components {
         };
         /** T2I */
         T2I: {
+            /**
+             * Auto Lora
+             * @default true
+             */
+            auto_lora?: boolean;
             /**
              * Base Shift
              * @default null
@@ -10586,6 +10641,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lora_check_story_loras__lid__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraCheckQueued"];
                 };
             };
             /** @description Validation Error */

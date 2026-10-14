@@ -116,6 +116,7 @@
  "POST /story/flow/nodes/{nid}/shot",
  "POST /story/flow/nodes/{nid}/unbind",
  "POST /story/flow/validate",
+ "POST /story/loras/{lid}/check",
  "POST /story/profiles",
  "POST /story/profiles/{pid}/expand",
  "POST /story/profiles/{pid}/train",

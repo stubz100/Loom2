@@ -173,11 +173,22 @@ def train_config(recipe: TrainLora, name: str, set_path: Path, out_path: Path, m
 
 
 def vae_path(settings: "Settings") -> str:
-    """The Flux.2 autoencoder as ai-toolkit reads it: the hub file in HF_HOME (E16 — loom2's own `vae/flux2-vae.safetensors` is the
-    diffusers-named repack its loader rejects); fetched once when absent (0.3 GB, the Apache Klein repos' VAE)."""
+    """The Flux.2 autoencoder as ai-toolkit reads it: a local file when `Settings.trainer.vae` names one (the tests' and the e2e's stand-in),
+    else the hub repo's `ae.safetensors` from HF_HOME (E16 — loom2's own `vae/flux2-vae.safetensors` is the diffusers-named repack its loader
+    rejects), fetched once when absent (0.3 GB, the Apache Klein repos' VAE); a sentence when neither works (CI has no F:)."""
+    v = settings.trainer.vae
+    if Path(v).is_file():
+        return str(Path(v))
     os.environ.setdefault("HF_HOME", settings.hf_home)
     from huggingface_hub import hf_hub_download
-    return hf_hub_download(settings.trainer.vae, "ae.safetensors")
+    try:
+        return hf_hub_download(v, "ae.safetensors", local_files_only=True)
+    except Exception:  # noqa: BLE001 — not cached yet
+        pass
+    try:
+        return hf_hub_download(v, "ae.safetensors")
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"the Flux.2 autoencoder (ae.safetensors from {v}) is neither a file nor cached in {settings.hf_home}, and could not be fetched: {e}")
 
 
 # ---- the run -------------------------------------------------------------------------------------------------------------------------
@@ -278,22 +289,23 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
     state: dict[str, Any] = {"step": 0, "total": int(recipe.steps)}
     sampler = VramSampler()
     sampler.start()
+    from .engine.supervisor import _assign_to_job
     with log_path.open("ab") as lf:
         lf.write(f"==== launch {utc_now()} job {job.id} {spec.id} {recipe.steps} steps\n".encode("utf-8"))
         lf.flush()
         start_pos = lf.tell()
-        proc = await asyncio.create_subprocess_exec(settings.trainer.python, settings.trainer.run, str(yaml_path), cwd=settings.trainer.cwd, env=env,
-                                                    stdout=lf, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen([settings.trainer.python, settings.trainer.run, str(yaml_path)], cwd=settings.trainer.cwd, env=env, stdout=lf, stderr=subprocess.STDOUT)
+        in_job = _assign_to_job(proc)                                   # LT3: the orchestrator's job object — a kill takes the trainer along (one trainer per card)
+    job.log_tail.append(f"trainer pid {proc.pid}" + (" in the job object" if in_job else ""))
     q.progress(job, "training: loading the base")
     pos = start_pos
     last_text = ""
     try:
         while True:
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=2.0)
-                done = True
-            except asyncio.TimeoutError:
-                done = False
+            done = proc.poll() is not None
+            if not done:
+                await asyncio.sleep(2.0)
+                done = proc.poll() is not None
             try:
                 with log_path.open("rb") as rf:
                     rf.seek(pos)
@@ -318,7 +330,7 @@ async def run_train(job: "JobRecord", recipe: TrainLora, q: "JobQueue") -> bool:
                 break
             if job.id in q._cancel_requested:
                 _kill(proc.pid)
-                await proc.wait()
+                await asyncio.to_thread(proc.wait)
                 raise JobCancelled(job.id)
     finally:
         sampler.stop()

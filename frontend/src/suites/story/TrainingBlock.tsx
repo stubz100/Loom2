@@ -8,6 +8,15 @@ import type { Profile, ProfileVersion } from '../../api/types'
 import { readiness } from './coverage'
 import { latestTrainJob, sy, useStory } from './storyStore'
 
+function identityLine(id: Record<string, unknown>): string {
+  const status = String(id.status ?? '')
+  if (status && status !== 'ok' && status !== 'running') return status
+  const w = id.with_mean, wo = id.without_mean
+  const n = Number(id.done ?? 0), total = Number(id.n ?? 0)
+  const part = status === 'running' && n < total ? ` · ${n} of ${total}` : ''
+  return `with ${typeof w === 'number' ? w.toFixed(2) : '—'} · without ${typeof wo === 'number' ? wo.toFixed(2) : '—'}${part}`
+}
+
 export function TrainingBlock({ p, v }: { p: Profile; v: ProfileVersion }) {
   const caps = useSession((s) => s.capabilities?.train)
   const storyCaps = useSession((s) => s.capabilities?.story)
@@ -32,6 +41,7 @@ export function TrainingBlock({ p, v }: { p: Profile; v: ProfileVersion }) {
         <span>trigger</span><span className="mono">{v.trigger ?? '— (made at the first training)'}</span>
         <span>LoRA</span>
         <span>{rec ? `${rec.name} · ${rec.steps} steps · ${Math.max(1, Math.round(rec.size / 2 ** 20))} MB` : v.lora ? v.lora : '—'}</span>
+        {rec?.identity && <><span>identity</span><span className="identity" title="FaceSim (ArcFace) of the check images against the hero: the mean with the LoRA, the mean without — advisory; same person ≈ 0.45–0.7, different people < 0.3">{identityLine(rec.identity)}</span></>}
         {rec && <><span>measured</span><span>{String(rec.measured.s_per_it ?? '?')} s/it · peak {String(rec.measured.peak_vram_gb ?? '?')} GB · {Math.round(Number(rec.measured.wall_s ?? 0) / 60)} min{rec.measured.resumed_from ? ` · resumed from step ${String(rec.measured.resumed_from)}` : ''}</span></>}
       </div>
       {!caps?.available ? <span className="hint">{caps?.why ?? (bases.length ? 'no trainable base has its weights on disk' : 'the trainer is not available in this build')}</span> : (
@@ -51,7 +61,7 @@ export function TrainingBlock({ p, v }: { p: Profile; v: ProfileVersion }) {
           <span>estimate</span><span>{secs ? `≈ ${Math.max(1, Math.round(secs / 60))} min of steps + the loads` : '—'}{refs.length < (caps.min_refs ?? 4) ? ` · ${refs.length} of ${caps.min_refs} references` : ''}</span>
         </div>
       )}
-      <div className="verbs"><CommandButton id="story.cast.train" text />{rec && <CommandButton id="story.cast.useLora" text />}{rec && <CommandButton id="story.cast.deleteLora" text />}</div>
+      <div className="verbs"><CommandButton id="story.cast.train" text />{rec && <CommandButton id="story.cast.useLora" text />}{rec && <CommandButton id="story.cast.checkLora" text />}{rec && <CommandButton id="story.cast.deleteLora" text />}</div>
       {job && (
         <div className={`train-job ${job.status}`} aria-label="train job">
           <span className={`badge ${job.status}`}>{job.status}</span>

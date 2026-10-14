@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Palette, Play, Plus, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, X, Zap, GraduationCap, RotateCcw, Wand2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Palette, Play, Plus, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, X, Zap, GraduationCap, RotateCcw, ScanFace, Wand2 } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
@@ -87,6 +87,9 @@ const cmds: Command[] = [
     run: () => void askTrain() },
   { id: 'story.cast.useLora', scope: 'story', label: 'Use in Generate', icon: Wand2, placement: ['inspector', 'context'], when: () => !!version()?.lora,
     run: () => void sy().useLora(version()!.lora!) },
+  { id: 'story.cast.checkLora', scope: 'story', label: 'Check the identity (8 images)', icon: ScanFace, placement: ['inspector', 'context'],
+    when: () => !!version()?.lora && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.facesim?.available,
+    run: () => void sy().checkLora(version()!.lora!) },
   { id: 'story.cast.deleteLora', scope: 'story', label: 'Delete the LoRA', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!version()?.lora,
     run: async () => { const v = version(); if (!v?.lora) return; if (await askConfirm({ title: 'Delete the LoRA?', okLabel: 'Delete', text: 'The file, its record and the engine\'s cached copy go; the version keeps its trigger for a retrain.' })) await sy().deleteLora(v.lora) } },
   { id: 'story.cast.releaseTrain', scope: 'story', label: 'Release the training job', icon: Play, placement: ['inspector'], when: () => trainJob()?.status === 'staged',

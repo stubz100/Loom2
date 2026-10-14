@@ -34,10 +34,16 @@ export function RefExtras() {
       {ms.length > 0 && (
         <div className="mention-chips">
           {ms.map((m) => {
-            const got = pv?.mentions?.find((x) => x.group_id === m.group_id)?.asset_ids?.length
+            const pm = pv?.mentions?.find((x) => x.group_id === m.group_id)
+            const got = pm?.asset_ids?.length
+            const loraOn = !!pm?.lora
+            const loraKnown = !!pm?.lora_available
             return (
-              <span key={m.group_id} className={`mchip${m.profile_id ? ' profile' : ''}`} title={m.profile_id ? "the profile's current version: its hero, then its reference set in order — as many as the model has room for; its stub rides on the note" : "the group's cover, then its page in order — as many as the model has room for"}>
+              <span key={m.group_id} className={`mchip${m.profile_id ? ' profile' : ''}${loraOn ? ' lora' : ''}`} title={m.profile_id ? "the profile's current version: its hero, then its reference set in order — as many as the model has room for; its stub rides on the note" : "the group's cover, then its page in order — as many as the model has room for"}>
                 @{m.name}<span className="muted"> · {got === undefined ? '…' : `${got} image${got === 1 ? '' : 's'}`}</span>
+                {loraKnown && (loraOn
+                  ? <button className="quiet lora-toggle on" aria-label={`LoRA of ${m.name} on`} title="The version's LoRA rides in a slot with its trigger — click to leave it out of this prompt (18 §3f)" onClick={() => g.set({ auto_lora: false })}>+ LoRA</button>
+                  : <button className="quiet lora-toggle" aria-label={`LoRA of ${m.name} off`} title={p.auto_lora ? "The version's LoRA does not fit this model's base" : 'Left out for this prompt — click to add the LoRA and its trigger again'} disabled={p.auto_lora} onClick={() => g.set({ auto_lora: true })}>LoRA off</button>)}
                 <button className="quiet" aria-label={`Stop mentioning ${m.name}`} title="Stop mentioning it (the name stays as plain text)" onClick={() => g.removeMention(m.group_id)}><X size={12} /></button>
               </span>
             )

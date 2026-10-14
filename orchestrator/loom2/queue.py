@@ -250,7 +250,7 @@ class JobQueue:
             return recipe
         if recipe.mentions:
             spec = registry.get(recipe.model_id)
-            recipe = resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0, StoryStore(self.ws))
+            recipe = resolve_mentions(recipe, self.groups, self.catalogue, spec.inputs.refs_max if spec else 0, StoryStore(self.ws), self.roster)   # LT3: the version's LoRA rides along
         if recipe.style_id:
             recipe = resolve_style(recipe, StoryStore(self.ws))
         return recipe

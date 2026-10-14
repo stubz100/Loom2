@@ -60,6 +60,8 @@ class Mention(BaseModel):
     asset_ids: list[str] = Field(default_factory=list)
     profile_id: str | None = None
     version: str | None = None
+    lora: str | None = None                       # LT3 (18 §3f): the version's LoRA the mention added to the slots (stamped)
+    lora_available: str | None = None             # LT3: the version's LoRA whether or not it was added (the chip's on / off)
 
 
 class T2I(BaseModel):
@@ -92,6 +94,7 @@ class T2I(BaseModel):
     refs: list[RefImage] = Field(default_factory=list)   # reference images (FLUX.2 unified editing)
     ref_max_px: int = 1024                        # references are downscaled to fit this square by default
     mentions: list[Mention] = Field(default_factory=list)   # D73: @mentioned groups ("@hero walks into @tavern")
+    auto_lora: bool = True                        # LT3 (18 §3f): a profile mention adds its version's LoRA + trigger when the model takes it; off = this prompt without
     style_id: str | None = None                   # D85: the Story world's style this generation carries (one; None = no style)
     style_text: str | None = None                 # D85: its fragment, stamped at submit by story.resolve_style and appended after the prompt; None = unresolved
     tier: str | None = None

@@ -3824,3 +3824,27 @@ split by file so that no two hands touched the same module.
   Release → the version holds the LoRA, the slot lists it on Klein 4B) — 26/26 under full and open.
 - **Delta to 18 §3c:** no `trainers/loom2_train.py` wrapper — the orchestrator runs `run.py` itself; the identity check (3h) and the mention
   auto-slot (3f) are LT3's with the rig acceptance (`scripts/lt_acceptance.py`: the real Mara through the app).
+
+## 2026-10-14 14:41 — LT3 · the mention auto-slot, the identity check, the rig acceptance — the LoRA wave closed (18 §3f / §3h / §8, D86)
+- **3f:** `resolve_mentions(…, roster)` — a profile mention whose version holds a trained LoRA adds `LoraRef(id, 1.0)` to the slots when the
+  recipe's model takes the base (`model_base`), a slot is free and it is not there yet; the trigger leads every note the mention's references
+  carry into the prompt; the mention is stamped `lora` / `lora_available`; `T2I.auto_lora` (default on) is the per-prompt switch — the
+  chip's "+ LoRA" / "LoRA off" in Generate (`RefExtras`), the stored recipe's mention-added slot dropped at reload (the server adds it again at
+  today's version). The queue passes its roster, so the preview and the submit agree (T8).
+- **3h:** `POST /story/loras/{id}/check` — eight Iterate jobs (four coverage sentences × with / without, seeds 1001–1004, the trigger in the
+  prompt, `auto_lora` off) in one batch onto "<profile> · <version> · LoRA check" under the version; the asset finisher's `_lora_check_result`
+  scores each image's largest face against the hero's (FaceSim, cosine) as it lands and the record's `identity` grows (`with`, `without`, the
+  means, `done` / `n`, `status` — "weights missing — scripts/fetch_facesim.py" without the weights); the Inspector's identity line and the
+  `story.cast.checkLora` verb (when the hero and the weights are there). Advisory, never a gate.
+- **The trainer's process** is a `Popen` in the orchestrator's job object (`engine/supervisor._assign_to_job`): a killed orchestrator takes its
+  trainer along — never two trainers on one card; the relaunch's `requeue` continues from the newest save.
+- **Tests:** `test_lora_mentions_lt3.py` (+3: the auto-slot with the trigger, off per prompt, a slot already held, another base, the queue's
+  path with the engine's graph and the manifest; the check's eight jobs and the record growing to 8 with the weights absent; the job object);
+  `test_mentions_d73` excludes the new stamps; the fake engine rescans its loras folder on every `/object_info` as ComfyUI does (the e2e's
+  check jobs met a stale enum before). 305 offline, 145 routes, openapi 112 / 238, audits clean, lint 100, tsc and build clean, Vitest 206;
+  the "a cast" smoke scenario now ends with the mention's "+ LoRA" chip, the preview's slot and trigger, `auto_lora` off, and the check's
+  eight fake-engine images — 26/26 under full and open.
+- **Rig (`scripts/lt_acceptance.py`, 18 §8):** the hero → Mara → Expand full (36 jobs in 894 s with the e2e running beside it; 37 references kept) → the staged job released → **killed at step 300** (the trainer's two pids died with the orchestrator — the job object), relaunched, requeued → **resumed from the step-250 save** and finished: 1 255 s wall, **1.15 s/it, peak 13.5 GB**, the record 44 MB (37 refs, the setting word), the version's slot and trigger `mara_d01f`, the engine's cache, `GET /loras` on Klein 4B first and fitting, not on 9B; the preview and a 36 s Generate job with "@Mara waits at the city gate at dawn" took the LoRA and the trigger by themselves (the manifest and the compiled name say so); the check's 8 images in 37 s on klein-4b: **FaceSim with 0.426 · without 0.118** (bars ≥ 0.30 and ≥ without + 0.20 met); a wrong base refused (422); Delete removed the record, the file, the cache copy and the slot and kept the trigger (verified on disk — the route's reply shape was wrong for its schema and is fixed with a unit test). Two passes: the first stopped at the preview (a None guard in the preview's LoRA filter after a relaunch, fixed), the second ran the rest on the trained state (`--reuse`); 27 checks ok, 0 failed.
+- **D86 closed:** 18's status, §3f / §3g / §3h notes and §8's run line, 13, 12 §8e, 08 §1, 00 row 18, `trainers/AGENTS.md`. Next: 17 §13's
+  other waves (voice, Muse behind E15) or 03 §5 items 3 / 5 — the author's call; LT's follow-ups are 18 §1's "out" list (style LoRAs on an album
+  group, video LoRAs) and the CI flakes noted on 8d380e5 / 9e3bfa2 (the open-variant smoke, a Windows replace race now retried in `fsio`).

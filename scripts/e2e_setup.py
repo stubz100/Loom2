@@ -83,7 +83,9 @@ def main() -> int:
     # exits at once (never the real ComfyUI on the GPU)
     settings["engine"].update(port=a.engine_port, health_timeout_s=10.0, python=sys.executable, main="-c")
     tests = Path(__file__).resolve().parents[1] / "orchestrator" / "tests"                      # LT2: the fake trainer stands in for ai-toolkit
-    settings["trainer"] = {**settings["trainer"], "python": sys.executable, "run": str(tests / "fake_trainer.py"), "cwd": str(tests)}
+    settings["trainer"] = {**settings["trainer"], "python": sys.executable, "run": str(tests / "fake_trainer.py"), "cwd": str(tests),
+                           "vae": str(next(models.glob("vae/*.safetensors"), models / "vae" / "none.safetensors"))}   # a local stand-in: no hub access
+    settings["hf_home"] = str(state / "hf")
     atomic_write_json(state / "app.json", AppRecord(settings=Settings.model_validate(settings)).model_dump())
 
     key = project_key(a.count)

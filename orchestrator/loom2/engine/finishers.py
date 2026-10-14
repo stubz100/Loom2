@@ -94,6 +94,8 @@ class AssetFinisher:
         job.result["asset_ids"] = [a.id for a in assets]
         if isinstance(recipe, StageShot) and assets:                                            # 17 §3c: the frame of every shot pointing at this camera
             await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id)
+        if assets and job.origin and job.origin.surface == "lora_check":                        # 18 §3h (LT3): FaceSim against the hero, the record grows
+            await asyncio.to_thread(_lora_check_result, q, job.origin.payload or {}, assets[0].id)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -260,6 +262,46 @@ class ClipFinisher:
             await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id)
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
+
+
+def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:
+    """18 §3h: one check image scored against the hero (the largest face each; cosine), appended to the record's `identity` under
+    `with` / `without`; the means follow. Advisory and never the job's failure; without the weights the record says so."""
+    from ..loras import LoraRegistry
+    try:
+        reg = LoraRegistry(q.ws)
+        rec = reg.get(str(payload.get("lora_id") or ""))
+        if rec is None:
+            return
+        ident = dict(rec.identity or {})
+        ident.setdefault("with", []); ident.setdefault("without", [])
+        which = "with" if payload.get("which") == "with" else "without"
+        sim: float | None = None
+        if not facesim.available(q.app.settings.models_root):
+            ident["status"] = "weights missing — scripts/fetch_facesim.py"
+        else:
+            hero = q.catalogue.get(str(ident.get("hero_asset_id") or ""))
+            img = q.catalogue.get(asset_id)
+            if hero is not None and img is not None:
+                fs = facesim.FaceSim(q.app.settings.models_root)
+                a = np.asarray(Image.open(q.catalogue.abs_path(hero)).convert("RGB"))
+                b = np.asarray(Image.open(q.catalogue.abs_path(img)).convert("RGB"))
+                fa, fb = fs.detect(a), fs.detect(b)
+                if fa and fb:
+                    sim = round(fs.similarity(fs.embed(a, fa[0].kps), fs.embed(b, fb[0].kps)), 3)
+                ident["status"] = "ok"
+        ident[which] = [*ident[which], sim]
+        for k in ("with", "without"):
+            vals = [x for x in ident[k] if isinstance(x, (int, float))]
+            ident[f"{k}_mean"] = round(sum(vals) / len(vals), 3) if vals else None
+        ident["done"] = len(ident["with"]) + len(ident["without"])
+        if ident.get("n") and ident["done"] >= ident["n"] and ident.get("status") == "running":
+            ident["status"] = "ok"
+        rec.identity = ident
+        reg.save(rec)
+        q.hub.broadcast("lora.changed", {"id": rec.id, "profile_id": rec.profile_id, "version": rec.version})
+    except Exception as e:  # noqa: BLE001 — advisory
+        q.hub.broadcast("lora.changed", {"id": str(payload.get("lora_id") or ""), "profile_id": None, "version": None, "error": str(e)})
 
 
 def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:

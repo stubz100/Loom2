@@ -16,9 +16,9 @@ from ..fsio import new_id
 from ..origin import JobOrigin
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
-from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued
+from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued
 from ..stages import StageStore
-from ..story import NODE_TYPES, PRESETS, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from .deps import Svc
 
 router = APIRouter(tags=["story"])
@@ -301,6 +301,59 @@ async def lora_get(svc: Svc, lid: str):
     return r.model_dump()
 
 
+CHECK_CELLS = [{"shot": "close-up", "angle": "front", "expression": "neutral"}, {"shot": "medium", "angle": "three-quarter left", "expression": "smiling"},
+               {"shot": "close-up", "angle": "three-quarter right", "expression": "neutral"}, {"shot": "medium", "angle": "front", "expression": "surprised"}]
+
+
+@router.post("/story/loras/{lid}/check", response_model=LoraCheckQueued)
+async def lora_check(svc: Svc, lid: str):
+    """18 §3h (LT3), advisory: eight Iterate images — four coverage sentences × with / without the LoRA, the same seeds, the trigger in the
+    prompt — into a "LoRA check" page under the version's candidates; FaceSim scores each against the hero as it lands (the finisher) and the
+    record's `identity` grows. Never a gate; without the FaceSim weights the record says so."""
+    ws, _, q = svc.require_project()
+    groups = svc.require_groups()
+    reg = LoraRegistry(ws)
+    rec = await asyncio.to_thread(reg.get, lid)
+    if rec is None:
+        raise HTTPException(404, "LoRA not found")
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, rec.profile_id)
+    if p is None:
+        raise HTTPException(404, "the LoRA's profile is gone")
+    v = p.version(rec.version)
+    if not v.hero_asset_id:
+        raise HTTPException(422, "the version has no hero to compare against")
+    variant = svc.app.settings.variant
+    from ..loras import model_base
+    from ..models import registry as reg_models
+    cands = sorted((s for s in reg_models.image_specs() if s.recipes.t2i and reg_models.offered(s, variant) and (s.base or s.family) == rec.base
+                    and q.roster.resolve(s.id).path), key=lambda s: s.order)
+    if not cands:
+        raise HTTPException(422, f"no model of the {rec.base} base with its weights is offered in this build")
+    spec = cands[0]
+    fmt = ws.load().format
+    h = 544
+    w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    name = f"{p.name} · {v.id} · LoRA check"
+    gid = next((g.id for g in groups.groups.values() if g.name == name), None) or (await asyncio.to_thread(groups.create, name)).id
+    batch = new_id("bat")
+    jobs = []
+    try:
+        for i, cell in enumerate(CHECK_CELLS):
+            for which in ("with", "without"):
+                recipe = {"kind": "t2i", "model_id": spec.id, "prompt_mode": "text", "prompt_text": f"{rec.trigger}, {cell_sentence(cell)}.", "width": w, "height": h,
+                          "seeds": [1001 + i], "auto_lora": False, "loras": [{"model_id": rec.id, "strength": 1.0}] if which == "with" else []}
+                origin = JobOrigin(suite="story", surface="lora_check", ref=rec.profile_id, payload={"lora_id": rec.id, "version": v.id, "which": which, "cell": cell, "group_id": gid})
+                jobs += q.submit(recipe, origin=origin, batch_id=batch)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    rec.identity = {"status": "running", "model_id": spec.id, "hero_asset_id": v.hero_asset_id, "with": [], "without": [], "n": len(jobs)}
+    await asyncio.to_thread(reg.save, rec)
+    svc.hub.broadcast("lora.changed", {"id": rec.id, "profile_id": rec.profile_id, "version": rec.version})
+    svc.group_changed([gid])
+    return {"batch_id": batch, "job_ids": [j.id for j in jobs], "model_id": spec.id, "group_id": gid}
+
+
 @router.delete("/story/loras/{lid}", response_model=Deleted)
 async def lora_delete(svc: Svc, lid: str):
     """The record, the file, the engine's cached copy; every version pointing at it loses its slot (the trigger stays)."""
@@ -315,7 +368,7 @@ async def lora_delete(svc: Svc, lid: str):
     for p in await asyncio.to_thread(StoryStore(ws).clear_lora, lid):
         _changed(svc, p)
     svc.hub.broadcast("lora.changed", {"id": lid, "profile_id": r.profile_id, "version": r.version, "deleted": True})
-    return {"deleted": True, "id": lid}
+    return {"deleted": lid}
 
 
 # ---- shots (SY2, 17 §3c) --------------------------------------------------------------------------------------------------------------

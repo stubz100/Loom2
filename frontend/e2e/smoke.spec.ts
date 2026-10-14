@@ -784,14 +784,29 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await page.locator('.text-prompt button[aria-label^="Mention a group"]').click()
   await page.locator('.ctx-menu button.item').filter({ hasText: `${name} · character` }).click()   // the profile's entry (its groups are named after it too)
   await expect(page.locator('.panel .mention-chips .mchip.profile')).toContainText(`@${name}`)
+  await expect(page.locator('.panel .mention-chips .mchip.profile .lora-toggle.on')).toHaveText('+ LoRA')             // LT3: the version's LoRA rides along
   await expect(page.locator('.panel textarea')).toHaveValue(new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   type Preview = { mentions: { profile_id: string | null; version: string | null; group_id: string; asset_ids: string[] }[]; ref_list: { asset_id: string | null; note: string | null }[] }
+  const klein4bId = Object.entries((await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')).models).find(([, m]) => m.label === 'Klein 4B')![0]
   await expect.poll(async () => {
-    const caps = await api<{ models: Record<string, { label: string }> }>('GET', '/capabilities')
-    const klein4b = Object.entries(caps.models).find(([, m]) => m.label === 'Klein 4B')![0]
-    const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4b, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
+    const pv = await api<Preview>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
     return `${pv.mentions[0]?.profile_id}/${pv.mentions[0]?.version}/${pv.mentions[0]?.group_id}/${pv.ref_list[0]?.asset_id}`
   }).toBe(`${profile.id}/v1/${gid}/${heroId}`)
+  type Preview2 = { mentions: { lora: string | null; lora_available: string | null }[]; loras: { model_id: string; strength: number; lora_name: string | null }[]; serialized_prompt: string }
+  const pv2 = await api<Preview2>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, mentions: [{ profile_id: profile.id, name }] } })
+  expect(pv2.mentions[0].lora).toBe(lora.lora_id)                                                                   // LT3: added to the slots …
+  expect(pv2.loras[0].model_id).toBe(lora.lora_id)
+  expect(pv2.serialized_prompt).toContain(lora.trigger!)                                                            // … with the trigger in the prompt
+  const off = await api<Preview2>('POST', '/recipes/preview', { recipe: { kind: 't2i', model_id: klein4bId, prompt_mode: 'text', prompt_text: `@${name} at the gate`, auto_lora: false, mentions: [{ profile_id: profile.id, name }] } })
+  expect(off.loras).toEqual([])
+  expect(off.mentions[0].lora_available).toBe(lora.lora_id)
+  // the identity check: eight fake-engine images with / without, the record says the FaceSim weights are absent here
+  const chk = await api<{ job_ids: string[]; model_id: string }>('POST', `/story/loras/${lora.lora_id}/check`)
+  expect(chk.job_ids).toHaveLength(8)
+  await expect.poll(async () => (await api<{ identity: { done?: number } | null }>('GET', `/story/loras/${lora.lora_id}`)).identity?.done ?? 0, { timeout: 90_000 }).toBe(8)
+  const ident = (await api<{ identity: { status: string; with: unknown[]; without: unknown[] } }>('GET', `/story/loras/${lora.lora_id}`)).identity
+  expect(ident.with).toHaveLength(4)
+  expect(ident.status).toMatch(/weights missing/)
 })
 
 test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story shot whose frame arrives from the camera\'s generate; "Make a shot from this clip" in Animate makes another; Finalize is refused at draft size with the reason and accepted at the format', async ({ page }) => {

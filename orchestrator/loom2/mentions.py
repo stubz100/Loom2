@@ -10,9 +10,9 @@ AssetProfiles behind the same function.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from .recipes import Mention, RefImage, T2I
+from .recipes import Mention, RefImage, T2I, LoraRef
 
 if TYPE_CHECKING:
     from .catalogue import Catalogue
@@ -33,7 +33,7 @@ def candidates(groups: GroupStore, catalogue: Catalogue, gid: str) -> list[str]:
     return out
 
 
-def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogue | None, refs_max: int, story: StoryStore | None = None) -> T2I:
+def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogue | None, refs_max: int, story: StoryStore | None = None, roster: Any = None) -> T2I:
     """The recipe with its unresolved mentions turned into references and stamped. Without mentions it is returned unchanged. D85: a
     profile mention is first pointed at its version's reference group (the current one unless pinned), and its note carries the
     version's prompt stub ('Image 2 shows Mara, a wiry courier in a grey coat')."""
@@ -44,6 +44,13 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
         raise ValueError("mentions need an open project")
     stubs: dict[str, str] = {}
     pinned: dict[int, Mention] = {}
+    triggers: dict[str, str] = {}                                               # LT3 (18 §3f): group id → the trigger of the LoRA the mention added
+    loras = list(recipe.loras)
+    trained = getattr(roster, "trained", {}) or {}
+    base = None
+    if roster is not None:
+        from .loras import MAX_SLOTS, model_base
+        base = model_base(recipe.model_id)
     for i, m in enumerate(recipe.mentions):
         if m.revision is not None or not m.profile_id:
             continue
@@ -56,7 +63,15 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
             v = p.version(m.version)
         except KeyError as e:
             raise ValueError(str(e)) from e
-        pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id)
+        added = None
+        if v.lora and v.lora in trained and roster is not None:               # LT3: the version's LoRA rides along when the model takes its base
+            fits = trained[v.lora]["base"] == base
+            if fits and recipe.auto_lora and v.lora not in {l.model_id for l in loras} and len(loras) < MAX_SLOTS:
+                loras.append(LoraRef(model_id=v.lora, strength=1.0))
+                added = v.lora
+                if v.trigger:
+                    triggers[v.group_id] = v.trigger.strip()
+        pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id, lora=added, lora_available=v.lora if v.lora in trained else None)
         if v.stub.strip() and v.stub.strip().lower() != (m.name or p.name).strip().lower():
             stubs[v.group_id] = v.stub.strip().rstrip(".")
     if pinned:
@@ -82,8 +97,11 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
             given[m.group_id].append(aid)
             stub = stubs.get(m.group_id)                                        # D85: the stub is the clause ('Mara, a wiry courier…'); it leads with the name or gets it
             note = names[m.group_id] if not stub else stub if stub.lower().startswith(names[m.group_id].lower()) else f"{names[m.group_id]}, {stub}"
+            if m.group_id in triggers:                                          # LT3: the trigger word leads the note the prompt carries
+                note = f"{triggers[m.group_id]}, {note}"
             refs.append(RefImage(asset_id=aid, note=note, mention=m.group_id))
             room -= 1
     stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
-                                                        asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version) for m in recipe.mentions]
-    return recipe.model_copy(update={"refs": refs, "mentions": stamped})
+                                                        asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version, lora=m.lora, lora_available=m.lora_available)
+               for m in recipe.mentions]
+    return recipe.model_copy(update={"refs": refs, "mentions": stamped, "loras": loras})

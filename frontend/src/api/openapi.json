@@ -6394,6 +6394,38 @@
         "title": "LoraChangedEvent",
         "type": "object"
       },
+      "LoraCheckQueued": {
+        "description": "LT3 (18 §3h): the identity check's jobs — with and without the LoRA, the same seeds and sentences.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "job_ids",
+          "model_id",
+          "group_id"
+        ],
+        "title": "LoraCheckQueued",
+        "type": "object"
+      },
       "LoraListing": {
         "properties": {
           "base": {
@@ -6801,6 +6833,30 @@
             "title": "Group Id",
             "type": "string"
           },
+          "lora": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lora"
+          },
+          "lora_available": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lora Available"
+          },
           "name": {
             "anyOf": [
               {
@@ -6867,6 +6923,28 @@
             "title": "Group Id",
             "type": "string"
           },
+          "lora": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lora"
+          },
+          "lora_available": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lora Available"
+          },
           "name": {
             "anyOf": [
               {
@@ -6918,7 +6996,9 @@
           "revision",
           "asset_ids",
           "profile_id",
-          "version"
+          "version",
+          "lora",
+          "lora_available"
         ],
         "title": "MentionOut",
         "type": "object"
@@ -10534,6 +10614,11 @@
       },
       "T2I": {
         "properties": {
+          "auto_lora": {
+            "default": true,
+            "title": "Auto Lora",
+            "type": "boolean"
+          },
           "base_shift": {
             "anyOf": [
               {
@@ -17814,6 +17899,49 @@
           }
         },
         "summary": "Lora Get",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/loras/{lid}/check": {
+      "post": {
+        "description": "18 §3h (LT3), advisory: eight Iterate images — four coverage sentences × with / without the LoRA, the same seeds, the trigger in the\nprompt — into a \"LoRA check\" page under the version's candidates; FaceSim scores each against the hero as it lands (the finisher) and the\nrecord's `identity` grows. Never a gate; without the FaceSim weights the record says so.",
+        "operationId": "lora_check_story_loras__lid__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoraCheckQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lora Check",
         "tags": [
           "story"
         ]

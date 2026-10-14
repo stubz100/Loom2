@@ -31,6 +31,7 @@ class FakeComfy:
         self.behaviour = behaviour
         self.color = color
         self.object_info_delay = object_info_delay
+        self.models_root: Path | None = None                              # LT2: the tree whose loras/ the enum follows (the standalone's --models-root)
         self.vram_free_gb = 12.0                                         # D69: tests set it low to see the engine.vram_pressure event
         self.uploads: list[tuple[str, bytes]] = []
         self.prompts: list[dict] = []
@@ -140,6 +141,8 @@ class FakeComfy:
             fake.object_info_calls += 1
             if fake.object_info_delay:
                 await asyncio.sleep(fake.object_info_delay)
+            if fake.models_root is not None:                                 # LT2: ComfyUI rescans its folders on every /object_info — a LoRA cached since then appears
+                list_loras(fake.object_info, fake.models_root)
             return fake.object_info
 
         @app.post("/upload/image")
@@ -223,7 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     data = json.loads(Path(a.object_info).read_text(encoding="utf-8"))
     fake = FakeComfy(data.get("object_info", data), Path(a.output_dir), behaviour=a.mode)
     if a.models_root:
-        list_loras(fake.object_info, Path(a.models_root))
+        fake.models_root = Path(a.models_root)
+        list_loras(fake.object_info, fake.models_root)
     sys.stdout.write(f"fake ComfyUI ({a.mode}) starting on 127.0.0.1:{a.port}, outputs in {a.output_dir}\n")   # callers poll /system_stats
     sys.stdout.flush()
     uvicorn.run(fake.app, host="127.0.0.1", port=a.port, log_level="warning", lifespan="off")

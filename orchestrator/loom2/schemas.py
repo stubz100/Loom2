@@ -361,6 +361,8 @@ class MentionOut(Out):
     asset_ids: list[str] = []
     profile_id: str | None = None                 # D85: a Story profile mention — the version's group was swapped in
     version: str | None = None
+    lora: str | None = None                       # LT3: the version's LoRA the mention added to the slots
+    lora_available: str | None = None             # LT3: the version's LoRA, added or not (the chip's on / off)
 
 
 class T2IPreview(Open):
@@ -795,6 +797,14 @@ class LoraRecordOut(Open):
 
 class LoraRecordList(Out):
     items: list[LoraRecordOut]
+
+
+class LoraCheckQueued(Out):
+    """LT3 (18 §3h): the identity check's jobs — with and without the LoRA, the same seeds and sentences."""
+    batch_id: str
+    job_ids: list[str]
+    model_id: str
+    group_id: str
 
 
 class TrainQueued(Out):

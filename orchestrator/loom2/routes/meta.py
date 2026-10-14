@@ -83,8 +83,8 @@ async def recipe_preview(svc: Svc, body: RecipeBody):
             missing.append({"model_id": mid, "health": r.health, "approx_gb": r.entry.approx_gb})
     est = svc.queue.estimate(recipe) if svc.queue else {**p.estimate, "vram_gb": p.vram_gb}
     problems = preview_problems(recipe, svc.roster, svc.queue.object_info_cached() if svc.queue else None, variant)
-    if getattr(recipe, "loras", None):                                         # LT1: a slot file the engine has not listed yet is refreshed at submission (finalize), not a problem here
-        problems = [x for x in problems if "'lora_name'=" not in x]
+    if problems and getattr(recipe, "loras", None):                            # LT1: a slot file the engine has not listed yet is refreshed at submission (finalize), not a problem here
+        problems = [x for x in problems if "'lora_name'=" not in x]           # (None before the engine's first catalogue — the relaunch case the rig met)
     common = {"missing": missing, "estimate": est, "count": p.count, "problems": problems, "weights": p.weights, "warm_group": p.warm_group}
     if isinstance(recipe, T2I):                                               # D73: which images go in (mentions included) and what they say
         kept = recipe.refs[: p.params.get("max_refs", len(recipe.refs))]

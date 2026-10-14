@@ -33,6 +33,7 @@ export interface Panel {
   refs: RefSlot[]; ref_max_px: number
   mentions?: MentionRef[]
   loras: { model_id: string; strength: number }[]
+  auto_lora: boolean                                        // LT3 (18 §3f): a profile mention adds its version's LoRA + trigger; off = this prompt without
   style_id?: string | null                                  // D85: a Story style id; null = none; absent = the world's default style
 }
 
@@ -62,7 +63,7 @@ export const DEFAULT_PANEL: Panel = {
   prompt_mode: 'tree', tree: EMPTY_TREE, json_text: '', text: '', negative: '',
   model_id: '', steps: null, guidance: null, cfg: null, sampler: null, scheduler: null, turbo: true,
   turbo_strength: 1, weight_dtype: null, te_device: null, te_id: null, base_shift: null, max_shift: null, tiled_vae: false, tile_size: 512,
-  seed_mode: 'random', seed: 1, count: 4, width: 960, height: 544, tier: 'draft', refs: [], ref_max_px: 1024, loras: [],
+  seed_mode: 'random', seed: 1, count: 4, width: 960, height: 544, tier: 'draft', refs: [], ref_max_px: 1024, loras: [], auto_lora: true,
 }
 
 /** Drop empty leaves so the JSON sent is compact (04 §3c). */
@@ -110,7 +111,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     kind: 't2i', model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
-    seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras,
+    seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
     mentions: mentionsInUse(p).map((m) => ({ group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}) })),   // D85: a profile mention names its profile
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
@@ -127,7 +128,9 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     // D73: the references a mention gave are the server's to resolve again; the mentions come back unstamped (resolved at today's revision)
     refs: Array.isArray(r.refs) ? (r.refs as { asset_id?: string; note?: string; mention?: string | null }[]).filter((x) => x.asset_id && !x.mention).map((x) => ({ asset_id: x.asset_id!, note: x.note })) : [],
     mentions: Array.isArray(r.mentions) ? (r.mentions as { group_id: string; name?: string | null; profile_id?: string | null }[]).filter((m) => m.group_id && m.name).map((m) => ({ group_id: m.group_id, name: m.name!, ...(m.profile_id ? { profile_id: m.profile_id } : {}) })) : [],
-    ref_max_px: Number(r.ref_max_px ?? 1024), loras: (r.loras as Panel['loras']) ?? [],
+    ref_max_px: Number(r.ref_max_px ?? 1024), auto_lora: r.auto_lora === undefined ? true : Boolean(r.auto_lora),
+    // LT3: a slot a mention added comes back from the mention (the server adds it again at today's version), not from the stored slots
+    loras: ((r.loras as Panel['loras']) ?? []).filter((l) => !(Array.isArray(r.mentions) && (r.mentions as { lora?: string | null }[]).some((m) => m.lora === l.model_id))),
     style_id: (r.style_id as string | null | undefined) ?? null,                                     // D85: a stored recipe's style (null = it ran without one)
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }

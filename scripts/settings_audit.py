@@ -25,7 +25,7 @@ from pydantic import BaseModel  # noqa: E402
 from loom2 import config, recipes  # noqa: E402
 
 # the code path that runs jobs (recipe fields must be read here)
-JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "trainer.py", "loras.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py", "mentions.py"]
+JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "trainer.py", "loras.py", "mentions.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py", "mentions.py"]
 
 # /capabilities keys → what they parameterise ("recipe:Model.field", "settings:field") or None for informational keys
 CAPABILITIES: dict[str, list[str] | None] = {

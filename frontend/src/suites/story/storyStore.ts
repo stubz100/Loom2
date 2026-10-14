@@ -41,6 +41,8 @@ export interface StoryState {
   deleteLora: (id: string) => Promise<void>
   useLora: (id: string) => Promise<void>
   requeueTrain: (jobId: string) => Promise<void>
+  /** 18 §3h: the identity check — eight images with / without the LoRA, FaceSim against the hero (advisory). */
+  checkLora: (id: string) => Promise<{ job_ids: string[] } | null>
   onLoraChanged: (data: { id?: string; profile_id?: string | null; deleted?: boolean } | null) => void
   castFilter: ProfileClass | 'all'; castSearch: string
   picked: string[]; expanding: boolean; busy: boolean
@@ -395,6 +397,14 @@ export const useStory = create<StoryState>()((set, get) => {
       g.set({ model_id, loras: [{ model_id: rec.id, strength: 1 }], prompt_mode: 'text', text })
       s.setSuite('generate')
       toast(`Generate: ${rec.name} in slot 1 with its trigger`, 'info')
+    },
+    checkLora: async (id) => {
+      try {
+        const r = await unwrap(http.POST('/story/loras/{lid}/check', { params: { path: { lid: id } } }))
+        await useSession.getState().refreshAll()
+        toast(`${r.job_ids.length} check images queued on ${r.model_id} — FaceSim against the hero as they land`, 'info')
+        return r
+      } catch (e) { toast(`Check: ${detail(e)}`); return null }
     },
     requeueTrain: async (jobId) => {
       try { await unwrap(http.POST('/jobs/{job_id}/requeue', { params: { path: { job_id: jobId } } })); await useSession.getState().refreshAll() }

@@ -3720,3 +3720,37 @@ split by file so that no two hands touched the same module.
   rig (3 d) ≈ 13 d; §9 the nine defaults for the author. 13 D86 proposed, 00 row 18, 12 §8e, 08 §1 the LT row, 17 §13 the pointer.
 - Not done on purpose: nothing installed, nothing fetched — E16 needs the `Qwen/Qwen3-4B` transformers folder (7.5 GB, Apache-2.0) and ≈ 7 GB
   of venv, which the author approves with 18 §9 (the 16 / 17 precedent). Next: the author's answer → E16.
+
+## 2026-10-14 09:14 — E16 · ai-toolkit on torch 2.13 ROCm 10 with Klein base-4B: GO (18 §2, D86)
+- **E16a install:** `scripts/trainer-setup.ps1` → `trainers/.venv` (12 GB; Python 3.12.10 — ai-toolkit pins SciPy 1.12, no 3.13 wheel; torch
+  2.13.0+rocm10.0.0, HIP 7.15, the AMD index resolves its wheels for cp312), ai-toolkit `f7a1fb9` (2026-10-10) as the submodule `trainers/ai-toolkit`,
+  the requirements minus torchao / bitsandbytes / torchcodec under `trainers/constraints.txt` (numpy 1.26.4; `--index-strategy unsafe-best-match`
+  after the first install stopped at the AMD index's own numpy). **One patch seam** instead of loom's six: `trainers/patches/0001-torchao-optional.patch`
+  guards the three eager torchao imports (`toolkit/config_modules.py`, `toolkit/util/quantize.py`, `toolkit/models/lokr.py`); this torch build's
+  `torch.distributed` is complete (is_initialized, c10d, fsdp), so loom's `run.py` predicate and the Diffusers FSDP shim are not needed. `run.py --help`,
+  the flux2 extension (`flux2_klein_4b` / `_9b`), `quantize` and the trainer import clean. Fetched (the author's approval): `Qwen/Qwen3-4B` as a
+  transformers folder (7.5 GB, 459 s) and `Qwen3-8B` (15.3 GB, 912 s) into `F:/HF_HOME`, the autoencoder `ae.safetensors` from `ai-toolkit/flux2_vae`
+  (321 MB): loom2's `vae/flux2-vae.safetensors` is the diffusers-named repack (251 tensors, `decoder.conv_norm_out…`) the loader rejects
+  (`KeyError decoder.up.0.block.0.conv1.bias`) — LT2 remaps it rather than carrying two files.
+- **The reference set** through the product's own path (`e16_klein_lora.py --part refs`: loom2's orchestrator on a temp state, the hero
+  `bench/angles/07.jpg` → Mara → Expand `full` on Klein 9B): 36 jobs in 504 s (walls 7.2 / 12.9 / 56.0 s), every candidate kept, 37 PNGs under
+  `engine/spikes/out/e16/refs/` with `mara_e16, <cell sentence>` (the hero with the stub). The curate route lives under the version
+  (`/story/profiles/<id>/versions/<vid>/curate`) — the first pass 404'd on a wrong path and was re-exported with `--reuse`.
+- **E16b train:** 1 000 steps, 37 refs at 512, rank / alpha 16, qfloat8 Quanto on the transformer and the encoder, `low_vram`, gradient checkpointing,
+  AdamW 1e-4, batch 1, sampling off: **1.07 s/it** steady (bar ≤ 2.0), **peak VRAM 13.6 GB** by Windows' GPU adapter counter (bar ≤ 15; 13.5 GB during
+  the steps), 1 214 s wall for the two launches with their model loads; the kill at step 300 (`taskkill /T`) → the relaunch on the same yaml printed
+  `#### IMPORTANT RESUMING FROM …\4b_1000_000000250.safetensors ####` · `Found step 250 in metadata, starting from there` and ran 250 → 1 000 (exit 0);
+  the adapter `4b_1000.safetensors` 46.2 MB, sha256 `bf541319…`. The spike's first `resumed` flag read tqdm's initial `0/1000` bar as the first step —
+  it now reads ai-toolkit's own resume lines.
+- **E16c load:** the adapter copied to `F:/loom2-models/loras/e16/`, the engine standalone, loom2's Klein t2i graph + `LoraLoaderModelOnly`: the first
+  prompt was refused — ComfyUI lists a subfolder's file as `e16\4b_1000.safetensors` (the OS separator, as E10 met for `flux1\ae.safetensors`); with
+  `os.path.join` it loads with **0 `lora key not loaded` lines**. FaceSim (ArcFace, the largest face against the hero) over 8 coverage prompts
+  (the back view has no face): klein-4b (4 steps, 4.0 s an image warm, 23 s cold) **LoRA 1.0 = 0.377** (7 / 8 faces), LoRA 0.8 = 0.291, trigger-only
+  0.107, the stub without the LoRA 0.110; klein-base-4b (20 steps, 12.6 s) **LoRA 1.0 = 0.392, 0.8 = 0.405**, trigger-only 0.011, stub 0.049; the refs'
+  own band to the hero p10 / median / p90 = 0.418 / 0.582 / 0.743 (34 faces of 36). Bars: ≥ 0.30 ✓ and ≥ control + 0.20 ✓ on both models. By eye
+  (`load_4b_1000.jpg`): the LoRA rows show the same red-haired woman, grey coat and red scarf in 7 / 8 cells on both models; the trigger-only rows
+  random people, the stub rows the costume on random faces. Two things for LT2: at 0.8 the distilled model drifts (hair colour) — the default strength
+  is 1.0 on distilled, 0.8–1.0 on base; and the LoRA carried the refs' white-room setting with the character — the template captions name no
+  background, so LT2's captions add the setting word (`caption_dropout_rate 0.05` kept).
+- **Verdict: GO on Klein base-4B** — every bar of 18 §2 met on the first run; 18 §2 carries the run line, 18 §9 item 6 the strength, 13 D86 the
+  mark. E16d (9B base with Qwen3-8B on the CPU) runs next and gets its own line. Next: LT1 (slots live), then LT2 on this spike's runner shape.

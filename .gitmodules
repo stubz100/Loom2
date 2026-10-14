@@ -1,3 +1,7 @@
 [submodule "engine/comfyui"]
 	path = engine/comfyui
 	url = https://github.com/Comfy-Org/ComfyUI
+[submodule "trainers/ai-toolkit"]
+	path = trainers/ai-toolkit
+	url = https://github.com/ostris/ai-toolkit
+	ignore = dirty

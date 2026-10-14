@@ -1,0 +1,7 @@
+# trainers/.venv (18 §2 E16a, D86): the engine venv's ROCm torch build, never swapped for a CUDA or CPU wheel; NumPy 1.26 for ai-toolkit's
+# scipy==1.12.0 pin (its ABI); the rest comes from trainers/ai-toolkit/requirements.txt filtered by scripts/trainer-setup.ps1
+# (no torchao — qfloat8 is optimum-quanto's —, no bitsandbytes — no ROCm/Windows build; AdamW instead of adamw8bit —, no torchcodec — video only).
+torch==2.13.0+rocm10.0.0
+torchvision==0.28.0+rocm10.0.0
+torchaudio==2.11.0.2+rocm10.0.0
+numpy==1.26.4

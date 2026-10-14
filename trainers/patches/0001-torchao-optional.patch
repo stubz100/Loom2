@@ -1,0 +1,68 @@
+diff --git a/toolkit/config_modules.py b/toolkit/config_modules.py
+index 4f05d74..19e66dc 100644
+--- a/toolkit/config_modules.py
++++ b/toolkit/config_modules.py
+@@ -8,7 +8,11 @@ import torchaudio
+ 
+ from toolkit.audio.album_artwork import add_album_artwork
+ from toolkit.prompt_utils import PromptEmbeds
+-from torchao.quantization.quant_primitives import _DTYPE_TO_BIT_WIDTH
++try:
++    from torchao.quantization.quant_primitives import _DTYPE_TO_BIT_WIDTH
++except (ImportError, RuntimeError):
++    # loom2 (18 §2 E16a): torchao is optional on Windows ROCm — qfloat8 is optimum-quanto's; the bit widths are not used here
++    _DTYPE_TO_BIT_WIDTH = {}
+ 
+ ImgExt = Literal['jpg', 'png', 'webp']
+ 
+diff --git a/toolkit/models/lokr.py b/toolkit/models/lokr.py
+index 34d507f..9374e4d 100644
+--- a/toolkit/models/lokr.py
++++ b/toolkit/models/lokr.py
+@@ -11,7 +11,11 @@ from toolkit.network_mixins import ToolkitModuleMixin
+ from typing import TYPE_CHECKING, Union, List
+ 
+ from optimum.quanto import QBytesTensor, QTensor
+-from torchao.dtypes import AffineQuantizedTensor
++try:
++    from torchao.dtypes import AffineQuantizedTensor
++except (ImportError, RuntimeError):
++    # loom2 (18 §2 E16a): torchao is optional on Windows ROCm; an empty tuple keeps the isinstance checks false
++    AffineQuantizedTensor = ()
+ 
+ if TYPE_CHECKING:
+ 
+diff --git a/toolkit/util/quantize.py b/toolkit/util/quantize.py
+index 902b47c..de6cbc8 100644
+--- a/toolkit/util/quantize.py
++++ b/toolkit/util/quantize.py
+@@ -6,11 +6,15 @@ import torch
+ 
+ from optimum.quanto.quantize import _quantize_submodule
+ from optimum.quanto.tensor import Optimizer, qtype, qtypes
+-from torchao.quantization.quant_api import (
+-    quantize_ as torchao_quantize_,
+-    Float8WeightOnlyConfig,
+-    Int8WeightOnlyConfig
+-)
++try:
++    from torchao.quantization.quant_api import (
++        quantize_ as torchao_quantize_,
++        Float8WeightOnlyConfig,
++        Int8WeightOnlyConfig
++    )
++except (ImportError, RuntimeError):
++    # loom2 (18 §2 E16a): torchao is optional on Windows ROCm — the int8 / float8 torchao qtypes are then unavailable, quanto's stay
++    torchao_quantize_ = None
+ from optimum.quanto import freeze
+ from tqdm import tqdm
+ from safetensors.torch import load_file
+@@ -41,7 +45,7 @@ Q_MODULES = [
+     "OstrisLinear",
+ ]
+ 
+-torchao_qtypes = {
++torchao_qtypes = {} if torchao_quantize_ is None else {
+     # "int4": Int4WeightOnlyConfig(),
+     # uint2..uint8 are handled by the UIntXQuantizer ostris backend
+     # (toolkit/util/uintx_quant.py), a bit-exact reproduction of torchao 0.10.0's

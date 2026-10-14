@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coverageGrid, rowsCovered, thinCells } from './coverage'
+import { readiness, coverageGrid, rowsCovered, thinCells } from './coverage'
 
 const SHOTS = ['close-up', 'portrait', 'waist-up', 'full-body']
 const ANGLES = ['front', 'three-quarter left', 'back']
@@ -25,5 +25,34 @@ describe('coverage grid (17 §3b)', () => {
     const g = coverageGrid([], SHOTS, ANGLES)
     expect(rowsCovered(g)).toEqual([])
     expect(thinCells(g)).toHaveLength(12)
+  })
+})
+
+describe('readiness (18 §3d, LT2)', () => {
+  const shots = ['close-up', 'medium', 'cowboy', 'full body']
+  const angles = ['front', 'three-quarter left', 'three-quarter right', 'profile left', 'profile right', 'back']
+  const cell = (shot: string, angle: string, expression = 'neutral') => ({ params: { coverage_cell: { shot, angle, expression, take: 1 } } })
+  it('scores an empty set as too few and a full spread as strong, with its sentences', () => {
+    const none = readiness([], shots, angles, false)
+    expect(none.score).toBe(0)
+    expect(none.summary).toBe('too few references')
+    const few = readiness([cell('close-up', 'front'), cell('medium', 'front'), { params: {} }], shots, angles, true)
+    expect(few.refs).toBe(3)
+    expect(few.summary).toBe('too few references')
+    const many = [...shots.flatMap((s) => angles.map((a) => cell(s, a))), ...['smiling', 'angry'].map((e) => cell('close-up', 'front', e))]
+    const strong = readiness(many, shots, angles, true)
+    expect(strong.rows).toBe(4)
+    expect(strong.anglesCovered).toBe(6)
+    expect(strong.expressions).toBe(3)
+    expect(strong.score).toBeGreaterThanOrEqual(80)
+    expect(strong.summary).toBe('strong')
+    expect(strong.lines[0]).toMatch(/^26 references/)
+    expect(strong.lines[5]).toBe('26 of 26 carry a coverage cell (their captions)')
+  })
+  it('is a thin set with one row and no cells', () => {
+    const r = readiness([{ params: {} }, { params: {} }, { params: {} }, { params: {} }, { params: {} }], shots, angles, true)
+    expect(r.rows).toBe(0)
+    expect(r.celled).toBe(0)
+    expect(r.summary).toBe('thin')
   })
 })

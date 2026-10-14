@@ -17,9 +17,12 @@ run from its own venv `trainers/.venv` — never from the engine venv, never wit
   models root's `diffusion_models/` as it is; the encoder is the `Qwen/Qwen3-4B` (8B) transformers folder in `HF_HOME` (`F:/HF_HOME`,
   offline after the fetch; ComfyUI's single-file encoder is not loadable there); the autoencoder is the hub's `ae.safetensors`
   (`ai-toolkit/flux2_vae`) — loom2's `vae/flux2-vae.safetensors` is the diffusers-named repack its loader does not read (LT2 remaps it).
-- **Runs:** every run's `training_folder` is a temp dir of the job (the spike: `engine/spikes/out/e16/`); ai-toolkit resumes by itself
-  from the newest checkpoint found there (`save_every`, `optimizer.pt`), so a killed job is relaunched on the same config. Logs go to a
-  file, never an unread pipe; VRAM is sampled from Windows' GPU adapter counter (no CUDA context of its own).
+- **Runs:** `orchestrator/loom2/trainer.py` (LT2) writes the set and the yaml under the project's `_temp/train/<job>/`, runs this venv's `run.py`
+  with the log at `state/logs/train-<job>.log` (never an unread pipe), parses the trainer's own lines for the job card, samples VRAM from
+  Windows' GPU adapter counter (no CUDA context of its own), and promotes the adapter into `story/loras/` + the engine's cache
+  `loras/projects/<project>/`. ai-toolkit resumes by itself from the newest save in the run dir (`save_every`, `optimizer.pt`), so a
+  failed job requeued (`POST /jobs/{id}/requeue`) continues. Tests and the e2e run `orchestrator/tests/fake_trainer.py` in its place
+  (`Settings.trainer.run`). The spike's own runner is `engine/spikes/e16_klein_lora.py`.
 - **Spike:** `engine/spikes/e16_klein_lora.py` (refs → train → load) is the record of what works on this card; its numbers are in the
   journal and 18 §2: Klein base-4B, 37 refs at 512, rank 16 → 1.07 s/it, 13.6 GB peak (9B base: 70 s/it paging without, 2.8 s/it at
   8.7 GB with `layer_offloading`), the adapter on distilled klein-4b with 0 unmatched

@@ -345,8 +345,27 @@ class Render(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh
+class TrainLora(BaseModel):
+    """18 §3c (LT2, D86): a LoRA trained from a Cast version's reference set — a staged job that runs ai-toolkit in its own venv with the
+    engine stopped (16 GB first); the adapter lands in the project's registry (story/loras/) and on the version's `lora` + `trigger`.
+    `model_id` is the base's roster id (a spec with `recipes.train`; the Cast tab offers /capabilities.train's bases)."""
+    kind: Literal["train_lora"] = "train_lora"
+    profile_id: str
+    version: str
+    model_id: str
+    steps: int = Field(1000, ge=100, le=5000)
+    rank: int = Field(16, ge=4, le=128)
+    resolution: int = Field(512, ge=256, le=1024)
+    lr: float = Field(1e-4, gt=0.0, le=1e-2)
+    seed: int = 42
+    trigger: str = ""                             # the Cast tab makes one from the profile's name: <slug>_<4 hex>
+    name: str = ""                                # the record's name; "<profile> <version>" when empty
+    setting: str = ""                             # E16: a setting word appended to every caption, so the background is a captioned thing
+    seeds: list[int] = Field(default_factory=lambda: [0])   # one job (the queue's seed loop); the training seed is `seed`
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora
 
 
 class RecipeEnvelope(BaseModel):
@@ -384,4 +403,6 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return stage_model_id(recipe, variant)     # ST3: the model the Stage method runs in this build
     if isinstance(recipe, Render):
         return "cpu"                               # P17: the draft render never touches the engine
+    if isinstance(recipe, TrainLora):
+        return "trainer"                           # LT2: the engine is stopped for it; no weights of the engine's stay warm
     return recipe.model_id

@@ -351,7 +351,7 @@ alpha acceptance on the rig 2026-10-14 (journal).**
 
 ## 8e. LoRA training E16 + LT1–LT3 (from `18-lora-training.md`, D86)
 
-03 §5 item 2 on the Story foundation: E16 the ai-toolkit-on-ROCm gate with Klein base-4B (3 d) → LT1 D25's slots live (2 d, may run during E16) → LT2 the staged `train_lora` job, the registry, readiness, the Cast and Models UI (5 d) → LT3 mentions, the FaceSim check, the rig acceptance (3 d), ≈ 13 d. Gate: 18 §9 approved (D86); E16 GO before LT2. **Proposed 2026-10-14; E16 GO and LT1 built 2026-10-14 (journal).**
+03 §5 item 2 on the Story foundation: E16 the ai-toolkit-on-ROCm gate with Klein base-4B (3 d) → LT1 D25's slots live (2 d, may run during E16) → LT2 the staged `train_lora` job, the registry, readiness, the Cast and Models UI (5 d) → LT3 mentions, the FaceSim check, the rig acceptance (3 d), ≈ 13 d. Gate: 18 §9 approved (D86); E16 GO before LT2. **Proposed 2026-10-14; E16 GO, LT1 and LT2 built 2026-10-14 (journal).**
 
 ## 9. Totals and parallelism
 

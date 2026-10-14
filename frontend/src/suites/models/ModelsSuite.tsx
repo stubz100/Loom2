@@ -11,6 +11,8 @@ const useModelsUi = create<ModelsUi>()((set) => ({ family: 'all', showRetired: f
 
 const gb = (n: number | null | undefined) => (n == null ? '—' : `${(n / 2 ** 30).toFixed(2)} GB`)
 
+import { TrainedTable } from './TrainedTable'
+
 function ModelsPanel({ tab }: { tab: string }) {
   const s = useSession()
   const ui = useModelsUi()
@@ -72,6 +74,7 @@ function ModelsStage() {
     (!ui.search || `${m.name} ${m.repo} ${m.role} ${m.id}`.toLowerCase().includes(ui.search.toLowerCase())))
   if (!s.models.length) return <div className="placeholder"><div><h2>No roster loaded</h2>waiting for the orchestrator…</div></div>
   return (
+    <div>
     <table className="grid">
       <thead><tr><th>Model</th><th>Family / role</th><th>Licence</th><th>Size</th><th>Health</th><th></th></tr></thead>
       <tbody>
@@ -97,6 +100,8 @@ function ModelsStage() {
         })}
       </tbody>
     </table>
+    <TrainedTable />
+    </div>
   )
 }
 

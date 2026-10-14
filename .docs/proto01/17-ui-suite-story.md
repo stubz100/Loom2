@@ -244,7 +244,7 @@ New dependency: `@xyflow/react` 12 (MIT) — checked by `scripts/csp_check.py` (
 | Muse: `llama-server` sidecar, Qwen3-VL-4B + Embedding-8B (R144) | no language model; ComfyUI inference only (D2) | deferred (§13); spike E15 first |
 | staged jobs in `jobs/staged.json` (R118 / R123) | the queue's `staged` status (06 §5) | Expand queues after `askConfirm` with the cost (D79); training stays staged (the LoRA wave) |
 | project format presets (R45 / R56) | `ProjectFormat` fixed at creation (16:9 · 1920×1080 · 24 fps) | as is; the finalize gate reads it |
-| LoRA + trigger per version (P2) | D25 slots: `loras[]` on recipes, roster `role: lora` | the version's `trigger` and `lora` fields reserved, filled by the LoRA wave |
+| LoRA + trigger per version (P2) | D25 slots: `loras[]` on recipes, roster `role: lora` | the version's `trigger` and `lora` fields reserved, filled by the LoRA wave — **filled since LT2 (18 §3c, 2026-10-14)** |
 | style: fixed fragment + override checkbox (R104) | Generate presets | a Style picker: one, appended, `style_id` stamped; *none* overrides |
 | Muse as an Inspector tab (`kb-loom-ui` D9) | — | the Inspector keeps the slot free; nothing built |
 

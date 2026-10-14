@@ -3792,3 +3792,35 @@ split by file so that no two hands touched the same module.
   the slot after the listing refresh); `test_api` / `test_lifecycle` keep "unknown model id" for a bad slot id; 297 offline, audits clean
   (`base_label` reads the registry — D65 caught a literal first). Smoke "lora slots (18 / LT1)" 26/26 under full and open under full.
 - Next: LT2 — the staged `train_lora` job on E16's runner shape, the registry (`story/loras/`), readiness, the Cast and Models UI.
+
+## 2026-10-14 10:19 — LT2 · the staged `train_lora` job, the registry, readiness, the Cast and Models UI (18 §3a / §3c / §3d / §3g, D86)
+- **Backend:** `recipes.TrainLora` (profile, version, the base's roster id, steps / rank / resolution / lr / seed, trigger, name, the `setting`
+  word — one job through the queue's seed loop); the specs' `recipes.train` block (klein.toml: base-4B `flux2_klein_4b` + Qwen3-4B, 13.6 GB,
+  1.07 s/it; base-9B offloaded, 8.7 GB, 2.8 s/it — E16's figures, D65); `Settings.trainer` (the venv's python, `run.py`, cwd, the hub VAE repo,
+  the quantisation); `orchestrator/loom2/trainer.py` — `validate_train` (a trainable base offered under the variant with its weights, the venv,
+  the trigger, the version with ≥ 4 references: one sentence at submission and from the preview), `materialise` (the reference page's images
+  as PNG ≤ 1024 with `<trigger>, <cell sentence | the stub>[, <setting>]`, deterministic names so the trainer's latent cache survives a
+  resume), `train_config` (loom P2's exercised shape with E16's Klein values), `run_train` (the engine stopped first — `plan().gpu` —, an
+  asyncio subprocess of the trainer venv with its log in `state/logs/train-<job>.log`, the job card from the trainer's own lines
+  "step N / M · loss · s/it · min left", VRAM sampled from the adapter counter, a cancel killing the process tree, an exit ≠ 0 failing the
+  job with its last lines, the adapter promoted: `story/loras/<id>.json` + `.safetensors`, the version's `lora` + `trigger`, the engine's
+  cache `loras/projects/<project>/`, `lora.changed`; the set and the saves deleted, the log kept); `loras.py`'s `LoraRecord` / `LoraRegistry`
+  / `ensure_mounted` / `publish` (the roster's `trained` map at project open and after every change; trained ids first in the slots' list,
+  the base check, the loader's name under `projects/`); `JobQueue.requeue` (a failed, resumable job back to the queue — a killed trainer
+  continues from its newest save); routes `POST /story/profiles/{pid}/train` (the trigger made from the name, kept on the version), `GET /
+  story/loras`, `GET /story/loras/{id}`, `DELETE /story/loras/{id}` (the file, the record, the cache, the versions' slots cleared, the trigger
+  kept), `POST /jobs/{id}/requeue`; `/capabilities.train` (available + why, the bases with E16's figures and health, the ranges, `min_refs`)
+  and `.models[].base`; 144 routes, openapi 111 / 237.
+- **Frontend:** `coverage.ts readiness` (references, rows, angles, expressions, hero, celled → 0–100 with its sentences; advisory), the Cast
+  strip's Train step live with the score, the Inspector's `TrainingBlock` (readiness, trigger, the LoRA with its measured figures, the
+  options — base / steps / resolution / rank / name / setting / staged —, the estimate from E16's rate, the newest job's state with Release /
+  Resume / Cancel as commands), `story.cast.train` (askConfirm with the cost), `useLora` (Generate on a model of the LoRA's base with slot 1 and
+  the trigger), `deleteLora`, the Models suite's `TrainedTable`, LoraSlots' "+ trigger" chip, `lora.changed` → the registry, the profiles and
+  the slots reload. Lint 100, tsc and build clean, Vitest 206 (+2 readiness).
+- **Tests:** `tests/fake_trainer.py` (tqdm-shaped lines, the step saves, the resume lines, a crash at `FAKE_TRAINER_CRASH_AT`);
+  `test_train_lora_lt2.py` (+5: the registry / publish / options, the dataset and the config, the staged job released → promoted → a Generate job
+  carrying it under the engine's spelling and a retrain's `previous`, a crash requeued and resumed from step 250 + a cancel, the routes and the
+  capabilities); 302 offline, audits clean. The "a cast" smoke scenario trains 100 steps on the fake trainer from the Inspector (staged →
+  Release → the version holds the LoRA, the slot lists it on Klein 4B) — 26/26 under full and open.
+- **Delta to 18 §3c:** no `trainers/loom2_train.py` wrapper — the orchestrator runs `run.py` itself; the identity check (3h) and the mention
+  auto-slot (3f) are LT3's with the rig acceptance (`scripts/lt_acceptance.py`: the real Mara through the app).

@@ -8,6 +8,7 @@ import asyncio
 import logging
 import shutil
 import time
+from pathlib import Path
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -25,10 +26,10 @@ from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, Inpaint, Render, parse_recipe, warm_group
+from .recipes import T2I, I2V, Inpaint, Render, TrainLora, parse_recipe, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
-from .loras import check_recipe_loras
+from .loras import LoraRegistry, check_recipe_loras, publish
 from .mentions import resolve_mentions
 from .story import StoryStore, resolve_style
 from . import native
@@ -97,6 +98,10 @@ class JobQueue:
         self._cancel_requested: set[str] = set()
         self._t0 = time.time()
         self._pending: dict | None = None        # D64: the newest queue snapshot waiting for the writer
+        try:                                      # LT2 (18 §3a): the project's trained LoRAs, mounted for the engine and known to the slots
+            publish(roster, LoraRegistry(ws), Path(app.settings.models_root), (ws.info() or {}).get("id") or ws.path.name)
+        except Exception as e:  # noqa: BLE001 — a torn registry never blocks a project
+            log.warning("trained LoRAs not published: %s", e)
         self._writer: asyncio.Task | None = None
         self._write_error: OSError | None = None
         self._roster_stamp: tuple | None = None   # D64: the model roots' mtimes at the last scan
@@ -258,7 +263,7 @@ class JobQueue:
         recipe = self.resolve_mentions(recipe)                # D73: @mentions → references, stamped before the job record is written
         plan(recipe, self.app.settings.variant)          # D65: a size off the grid (size_policy error), a bad sampler … → 422 here
         self._disk_guard()
-        seeds = recipe.seeds or [0]
+        seeds = getattr(recipe, "seeds", None) or [0]
         batch_id = batch_id or (new_id("bat") if len(seeds) > 1 else None)
         out: list[JobRecord] = []
         for seed in seeds:
@@ -292,6 +297,20 @@ class JobQueue:
         self.persist()
         self.hub.broadcast("job.updated", rec.model_dump())
         return True
+
+    def requeue(self, job_id: str) -> JobRecord:
+        """LT2: a failed job that can continue (a killed trainer resumes from its newest save) goes back to the queue."""
+        rec = self.jobs.get(job_id)
+        if rec is None:
+            raise KeyError(job_id)
+        if rec.status != "failed" or not rec.resumable:
+            raise ValueError(f"job {job_id} is {rec.status}" + ("" if rec.resumable else " and cannot be resumed"))
+        rec.status, rec.error, rec.finished_at, rec.started_at, rec.progress, rec.progress_text = "queued", None, None, None, 0.0, ""
+        rec.retry_count += 1
+        self.persist()
+        self.hub.broadcast("job.updated", rec.model_dump())
+        self._wake.set()
+        return rec
 
     def release(self, job_id: str | None = None) -> list[JobRecord]:
         """Staged → queued (one job, or every staged job when no id is given) — 09 §3 'Stage' for overnight runs."""
@@ -372,6 +391,10 @@ class JobQueue:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")
         check_recipe_loras(self.roster, recipe, self.app.settings.variant)   # LT1 (18 §3b): the slots' fit, by the model that will run
+        if isinstance(recipe, TrainLora):                                   # LT2 (18 §3c): the base, the venv, the version's references
+            from .trainer import validate_train
+            validate_train(self, recipe)
+            return
         spec = registry.get(recipe.model_id)
         if isinstance(recipe, T2I) and (spec is None or not spec.recipes.t2i):
             raise ValueError(f"no t2i preset for {recipe.model_id!r}")
@@ -586,7 +609,11 @@ class JobQueue:
         self.hub.broadcast("job.updated", job.model_dump())
         try:
             recipe = parse_recipe(job.recipe)
-            if not plan(recipe, job.variant).engine:                    # D62 Quick Remove / P17 draft render: CPU only — the engine is not started
+            p = plan(recipe, job.variant)
+            if not p.engine:                                           # D62 Quick Remove / P17 draft render: CPU only — the engine is not started
+                if p.gpu:                                              # LT2: the trainer takes the whole card — the engine stops, the next engine job restarts it
+                    self.progress(job, "stopping the engine")
+                    await self.engine.stop()
                 await run_cpu(job, recipe, self)
                 self._complete(job, engine=False)
                 return

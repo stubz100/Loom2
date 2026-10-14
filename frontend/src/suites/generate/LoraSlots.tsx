@@ -45,6 +45,8 @@ export function LoraSlots() {
                   {fitting.map((o) => <option key={o.id} value={o.id} title={o.why ?? ''}>{o.label}</option>)}
                   {others.length > 0 && <optgroup label="does not fit this model">{others.map((o) => <option key={o.id} value={o.id} disabled title={o.why ?? ''}>{o.label} — {o.why}</option>)}</optgroup>}
                 </select>
+                {cur && opts.find((o) => o.id === cur.model_id)?.trigger && p.prompt_mode === 'text' && !p.text.includes(opts.find((o) => o.id === cur.model_id)!.trigger!) &&
+                  <button className="quiet" aria-label={`add trigger ${i + 1}`} title="Put the LoRA's trigger word at the start of the prompt" onClick={() => g.set({ text: `${opts.find((o) => o.id === cur.model_id)!.trigger}, ${p.text}`.replace(/, $/, '') })}>+ trigger</button>}
                 {cur && <> <input type="number" aria-label={`LoRA strength ${i + 1}`} step={0.05} min={0} max={2} value={cur.strength} style={{ width: 64 }} onChange={(e) => setStrength(i, Number(e.target.value))} title="strength_model of the LoraLoaderModelOnly node (0–2)" /></>}
               </div>
             </div>

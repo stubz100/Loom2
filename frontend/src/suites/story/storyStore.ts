@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, http, unwrap } from '../../api/client'
-import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
+import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
 import { useSession } from '../../store/session'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 
@@ -17,6 +17,14 @@ export const SECTIONS: { id: Section; label: string }[] = [
 ]
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
 
+export interface TrainOpts { model_id: string | null; steps: number; rank: number; resolution: number; name: string; setting: string; stage: boolean }
+const DEFAULT_TRAIN: TrainOpts = { model_id: null, steps: 1000, rank: 16, resolution: 512, name: '', setting: '', stage: true }
+/** The newest training job of a profile version (the Inspector's state line; the verbs' `when`). */
+export function latestTrainJob(jobs: Record<string, Job>, profileId: string, versionId: string): Job | undefined {
+  return Object.values(jobs).filter((j) => j.kind === 'train_lora' && (j.recipe as { profile_id?: string }).profile_id === profileId && (j.recipe as { version?: string }).version === versionId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+}
+
 export interface StoryState {
   world: World | null; loading: boolean; saving: boolean
   section: Section; selected: Selection
@@ -24,6 +32,16 @@ export interface StoryState {
   profiles: Profile[]; profilesLoaded: boolean
   profileId: string | null; versionId: string | null
   refPage: GroupPage | null; candPage: GroupPage | null; pagesFor: string | null
+  /** LT2 (18 §3a / §3c): the project's trained LoRAs and the options the next training job runs with. */
+  loras: LoraRecord[]
+  trainOpts: TrainOpts
+  loadLoras: () => Promise<void>
+  setTrainOpts: (patch: Partial<TrainOpts>) => void
+  train: () => Promise<{ job_id: string; trigger: string; model_id: string; staged: boolean } | null>
+  deleteLora: (id: string) => Promise<void>
+  useLora: (id: string) => Promise<void>
+  requeueTrain: (jobId: string) => Promise<void>
+  onLoraChanged: (data: { id?: string; profile_id?: string | null; deleted?: boolean } | null) => void
   castFilter: ProfileClass | 'all'; castSearch: string
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
@@ -171,6 +189,7 @@ export const useStory = create<StoryState>()((set, get) => {
   return {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
+    loras: [], trainOpts: DEFAULT_TRAIN,
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null,
@@ -261,6 +280,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     // ---- SY1 · Cast
     loadProfiles: async () => {
+      void get().loadLoras()                                                                     // LT2: the records the versions point at
       try {
         const r = await unwrap(http.GET('/story/profiles'))
         set({ profiles: r.items, profilesLoaded: true })
@@ -335,6 +355,52 @@ export const useStory = create<StoryState>()((set, get) => {
         await get().loadPages()
       } catch (e) { toast(`Curate: ${detail(e)}`) }
     },
+    loadLoras: async () => {
+      try { set({ loras: (await unwrap(http.GET('/story/loras'))).items }) } catch { set({ loras: [] }) }
+    },
+    setTrainOpts: (patch) => set({ trainOpts: { ...get().trainOpts, ...patch } }),
+    train: async () => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return null
+      const o = get().trainOpts
+      const caps = useSession.getState().capabilities?.train
+      const model_id = o.model_id ?? caps?.bases.find((b) => b.health !== 'missing')?.model_id ?? null
+      try {
+        const r = await unwrap(http.POST('/story/profiles/{pid}/train', { params: { path: { pid: p.id } },
+          body: { version: v.id, model_id, steps: o.steps, rank: o.rank, resolution: o.resolution, name: o.name, setting: o.setting, stage: o.stage } }))
+        await get().loadProfiles()
+        await useSession.getState().refreshAll()
+        toast(r.staged ? `Training ${p.name} ${v.id} staged — release it when the rig is free (trigger ${r.trigger})` : `Training ${p.name} ${v.id} queued (trigger ${r.trigger})`, 'info')
+        return r
+      } catch (e) { toast(`Train: ${detail(e)}`); return null }
+    },
+    deleteLora: async (id) => {
+      try {
+        await unwrap(http.DELETE('/story/loras/{lid}', { params: { path: { lid: id } } }))
+        await get().loadLoras(); await get().loadProfiles()
+        toast('LoRA deleted — the version keeps its trigger', 'info')
+      } catch (e) { toast(`Delete LoRA: ${detail(e)}`) }
+    },
+    useLora: async (id) => {                                                                     // 18 §5: Generate with the slot and the trigger
+      const rec = get().loras.find((l) => l.id === id)
+      if (!rec) { toast('that LoRA is not in the project'); return }
+      const s = useSession.getState()
+      const models = s.capabilities?.models ?? {}
+      const { useGenerate } = await import('../generate/generateStore')
+      const g = useGenerate.getState()
+      const cur = g.panel.model_id
+      const fits = (m: string) => models[m]?.base === rec.base && models[m]?.wired
+      const model_id = fits(cur) ? cur : Object.keys(models).find(fits)
+      if (!model_id) { toast(`no model of the ${rec.base} base is offered in this build`); return }
+      const text = g.panel.text.includes(rec.trigger) ? g.panel.text : `${rec.trigger}, ${g.panel.text}`.replace(/, $/, '')
+      g.set({ model_id, loras: [{ model_id: rec.id, strength: 1 }], prompt_mode: 'text', text })
+      s.setSuite('generate')
+      toast(`Generate: ${rec.name} in slot 1 with its trigger`, 'info')
+    },
+    requeueTrain: async (jobId) => {
+      try { await unwrap(http.POST('/jobs/{job_id}/requeue', { params: { path: { job_id: jobId } } })); await useSession.getState().refreshAll() }
+      catch (e) { toast(`Resume: ${detail(e)}`) }
+    },
+    onLoraChanged: () => { void get().loadLoras(); void get().loadProfiles() },
     expand: async (preset, seeds, tier) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return null
       set({ expanding: true })

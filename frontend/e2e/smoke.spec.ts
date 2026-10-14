@@ -735,6 +735,12 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   const second = page.locator('.cand-card').first()
   await contextChoose(page, second, 'Reject')
   await expect(second).toHaveClass(/\breject\b/)
+  // LT2: four more references of the same shot size through the API (training needs 4; the Curate step stays open — one row of four)
+  const keptShot = cands.find((a) => a.id === keptId)?.params.coverage_cell?.shot
+  const rejectedId = (await second.getAttribute('data-id'))!
+  const more = cands.filter((a) => a.id !== keptId && a.id !== rejectedId).sort((a, b) => Number(b.params.coverage_cell?.shot === keptShot) - Number(a.params.coverage_cell?.shot === keptShot)).slice(0, 4)
+  await api('POST', `/story/profiles/${profile.id}/versions/v1/curate`, { asset_ids: more.map((a) => a.id), verdict: 'keep' })
+  await expect(page.locator('.cand-card')).toHaveCount(r.cells - 5)
   // the bootstrap strip and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
   await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(2)  // Cast ✓ · Expand ✓
   await page.locator('.story-strip button[title^="Lock the version"]').click()
@@ -744,9 +750,34 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)?.versions[0].state).toBe('final')
   await expect(api('POST', '/groups/move', { items: [{ kind: 'asset', id: keptId }], to: null })).rejects.toThrow(/423/)
   await expect(page.locator('.panel .foot .estimate')).toContainText(/locked/)
+  // LT2 (18 §3c): Train from the Inspector — the readiness line, 100 steps on the fake trainer, staged → Release → the version holds the LoRA
+  const training = page.locator('.inspector .training')
+  await expect(training.locator('.readiness')).toContainText(/\d+ · (thin|good|strong)/)
+  await training.locator('input[aria-label="train steps"]').fill('100')
+  await training.locator('input[aria-label="train setting"]').fill('plain studio background')
+  await page.locator('.inspector button[title^="Train a LoRA"]').click()
+  await expect(dialog).toContainText(/Train .* v1\?/)
+  await expect(dialog).toContainText(/100 steps at 512²/)
+  await dialog.locator('button.primary').click()
+  await expect(training.locator('.train-job .badge')).toHaveText('staged')
+  type JobLite2 = { id: string; kind: string; status: string; result: { lora_id?: string; trigger?: string } | null }
+  const trainJob = async () => (await api<{ items: JobLite2[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'train_lora').sort((a, b) => (a.id < b.id ? 1 : -1))[0]
+  expect((await trainJob()).status).toBe('staged')
+  await page.locator('.inspector button[title^="Release the training job"]').click()
+  await expect.poll(async () => (await trainJob()).status, { timeout: 60_000 }).toBe('done')
+  const lora = (await trainJob()).result!
+  expect(lora.lora_id).toMatch(/^lora_/)
+  await expect(training).toContainText(`${name} v1 · 100 steps`)
+  await expect(training.locator('.mono').first()).toHaveText(lora.trigger!)
+  const rec = (await api<{ items: { id: string; name: string; base: string; steps: number; dataset: { count: number; setting: string } }[] }>('GET', '/story/loras')).items.find((l) => l.id === lora.lora_id)!
+  expect(rec.steps).toBe(100)
+  expect(rec.dataset.setting).toBe('plain studio background')
+  await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(4)  // Cast ✓ · Expand ✓ · Train ✓ · Lock ✓
   // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
   await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
   await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await expect(page.locator('.panel select[aria-label="LoRA slot 1"] option', { hasText: `${name} v1 · Klein 4B · 100 steps` })).toHaveCount(1)   // LT2: the trained LoRA fits the 4B base
   await page.locator('nav.rail button[title^="Prompt"]').click()
   await page.locator('.segmented button', { hasText: /^Text$/ }).click()
   await page.locator('.panel textarea').fill('at the gate')
@@ -1005,7 +1036,7 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   await expect(slot.locator('option', { hasText: 'smoke/mara_smoke' })).toHaveCount(1)                   // the e2e tree's file LoRA (e2e_setup.py)
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: a file declares no licence — listed, disabled, with the sentence
     await expect(slot.locator('option[disabled]', { hasText: 'smoke/mara_smoke' })).toContainText('open variant')
-    await expect(slot.locator('option:not([disabled])')).toHaveCount(1)                                   // "— none —" only
+    await expect(slot.locator('option:not([disabled])', { hasText: '· file' })).toHaveCount(0)              // no file is enabled (the project's own trained LoRA may be)
     return
   }
   await slot.selectOption('file:smoke/mara_smoke.safetensors')

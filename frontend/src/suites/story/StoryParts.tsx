@@ -13,7 +13,8 @@ import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
-import { coverageGrid, rowsCovered } from './coverage'
+import { coverageGrid, readiness, rowsCovered } from './coverage'
+import { TrainingBlock } from './TrainingBlock'
 import { askExpand, rowMenu } from './storyCommands'
 import { CLASS_LABEL, SECTIONS, sy, useStory, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
@@ -38,6 +39,8 @@ function devHook(): Record<string, unknown> {
     createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => sy().createProfile(name, cls, hero, stub),
     expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), curate: (ids: string[], verdict: 'keep' | 'reject') => sy().curate(ids, verdict),
     lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setStub(s),
+    train: (opts: Record<string, unknown> = {}) => { sy().setTrainOpts(opts as never); return sy().train() }, loras: () => sy().loras, loadLoras: () => sy().loadLoras(),
+    useLora: (id: string) => sy().useLora(id), deleteLora: (id: string) => sy().deleteLora(id),
     // SY2
     loadShots: () => sy().loadShots(), selectShot: (id: string | null, v?: string | null) => sy().selectShot(id, v), shots: () => ({ shots: sy().shots, shotId: sy().shotId, shotVersionId: sy().shotVersionId }),
     createShot: (name: string, src?: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }) => sy().createShot(name, src), useTake: (kind: 'image' | 'clip', id: string) => sy().useTake(kind, id),
@@ -273,19 +276,21 @@ function Bootstrap({ p }: { p: Profile }) {
   const versionId = useStory((s) => s.versionId)
   const caps = useSession((s) => s.capabilities?.story)
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
-  const grid = coverageGrid(Object.values(refPage?.assets ?? {}), caps?.coverage.shots ?? [], caps?.coverage.angles ?? [])
+  const refs = Object.values(refPage?.assets ?? {})
+  const grid = coverageGrid(refs, caps?.coverage.shots ?? [], caps?.coverage.angles ?? [])
+  const ready = readiness(refs, caps?.coverage.shots ?? [], caps?.coverage.angles ?? [], !!v?.hero_asset_id)
   const curated = (caps?.coverage.shots?.length ?? 0) > 0 && rowsCovered(grid).length === (caps?.coverage.shots?.length ?? 0)
   const steps: { id: string; label: string; done: boolean; hint: string; run?: string }[] = [
     { id: 'cast', label: 'Cast', done: !!v?.hero_asset_id, hint: v?.hero_asset_id ? 'the hero is set' : 'make an image the hero ("Make a character…" on a tile, or pick a candidate)' },
     { id: 'expand', label: 'Expand', done: Object.keys(candPage?.assets ?? {}).length > 0, hint: 'one job per coverage cell with the hero as the reference', run: 'story.cast.expand' },
     { id: 'curate', label: 'Curate', done: curated, hint: curated ? 'every shot-size row has a reference' : 'keep candidates until every shot-size row has one (advisory)' },
-    { id: 'train', label: 'Train', done: !!v?.lora, hint: 'LoRA training comes with the next wave (03 §5)' },
+    { id: 'train', label: 'Train', done: !!v?.lora, hint: v?.lora ? `the version holds a LoRA (trigger ${v.trigger})` : `readiness ${ready.score} · ${ready.summary} — ${ready.lines[0]}; a LoRA from the reference set (advisory, 18 §3d)`, run: 'story.cast.train' },
     { id: 'lock', label: 'Lock', done: v?.state === 'final', hint: 'the version becomes read-only; a retake is a new version', run: 'story.cast.lock' },
   ]
   return (
     <span className="bootstrap" aria-label="bootstrap">
       {steps.map((s, i) => (
-        <span key={s.id} className={`bs-step${s.done ? ' done' : ''}${s.id === 'train' ? ' off' : ''}`} title={s.hint}>
+        <span key={s.id} className={`bs-step${s.done ? ' done' : ''}`} title={s.hint}>
           {s.run ? <button className="quiet" onClick={() => runCommand(s.run!)}>{s.label}{s.done ? ' ✓' : ''}</button> : <span>{s.label}{s.done ? ' ✓' : ''}</span>}
           {i < steps.length - 1 && <span className="sep">›</span>}
         </span>
@@ -667,13 +672,12 @@ function CastInspector() {
           <span>hero</span><span>{v.hero_asset_id ? <img className="insp-thumb small" src={api.thumbUrl(v.hero_asset_id, 256)} alt="" /> : '—'}</span>
           <span>reference set</span><span className="mono">{v.group_id}</span>
           <span>candidates</span><span className="mono">{v.candidates_group_id ?? '—'}</span>
-          <span>trigger</span><span>{v.trigger ?? '— (LoRA wave)'}</span>
-          <span>LoRA</span><span>{v.lora ?? '— (LoRA wave)'}</span>
           <span>from</span><span>{v.derived_from ?? '—'}</span>
           <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
         </div>
         <div className="verbs"><CommandButton id="story.cast.expand" text /><CommandButton id="story.cast.lock" text /><CommandButton id="story.cast.newVersion" text /></div>
         <div className="verbs"><CommandButton id="story.cast.openGroup" text /><CommandButton id="story.cast.openCandidates" text /></div>
+        <TrainingBlock p={p} v={v} />
         {picked.length > 0 && <><h4>{picked.length} candidate{picked.length === 1 ? '' : 's'} selected</h4><div className="verbs"><CommandButton id="story.cast.keep" text /><CommandButton id="story.cast.reject" text /><CommandButton id="story.cast.setHero" text /></div></>}
       </>}
       <div className="verbs"><CommandButton id="story.cast.delete" text /></div>

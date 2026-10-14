@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group
+from ..recipes import I2I, I2V, T2I, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -52,6 +52,7 @@ class Plan:
     needs: list[str]                      # "refs" · "document" · "frames"
     weights: list[str]                    # every roster id it loads (the open-variant gate, the missing-weights list)
     count: int                            # jobs one submission makes (one per seed)
+    gpu: bool = False                     # LT2: a CPU-path job that needs the card — the queue stops the engine for it (train_lora)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -59,8 +60,10 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render)
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora))
     needs: list[str] = []
+    if isinstance(recipe, TrainLora):
+        needs.append("reference set")
     if getattr(recipe, "refs", None):
         needs.append("refs")
     if isinstance(recipe, Render):
@@ -81,6 +84,15 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     elif isinstance(recipe, I2V):
         params = i2v_params(recipe)
         est = estimate_i2v_seconds(recipe)
+    elif isinstance(recipe, TrainLora):                               # LT2 (18 §3c): ai-toolkit on the base, E16's measured rate
+        spec = registry.get(recipe.model_id)
+        tr = spec.recipes.train if spec else None
+        if spec is None or tr is None:
+            raise CompileError(f"{recipe.model_id!r} is not a trainable base (18 §2)")
+        params = {"model_id": spec.id, "label": spec.label, "arch": tr.arch, "offload": tr.offload, "steps": recipe.steps, "rank": recipe.rank,
+                  "resolution": recipe.resolution, "lr": recipe.lr, "trigger": recipe.trigger, "profile_id": recipe.profile_id, "version": recipe.version}
+        est = {"seconds": round(recipe.steps * tr.s_per_it) if tr.s_per_it else None,
+               "source": "E16 2026-10-14: the base's measured s/it on this card at 512², plus the model loads"}
     elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
         params = {"timeline_id": recipe.timeline_id}
         est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
@@ -122,7 +134,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     resolved = isinstance(recipe, (Reangle, StageShot))               # the model the method runs in this build, not the property's `full` answer
     return Plan(kind=recipe.kind, model_id=None if quick else str(params["model_id"]) if resolved else getattr(recipe, "model_id", None), engine=not quick,
                 warm_group=warm_group(recipe, variant), vram_gb=estimate_vram_gb(recipe, variant), estimate=est, params=params, needs=needs,
-                weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]))
+                weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]), gpu=isinstance(recipe, TrainLora))
 
 
 def _placeholder_image(object_info: dict) -> str:

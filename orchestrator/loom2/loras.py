@@ -12,14 +12,114 @@ The engine's loader takes the file's name relative to the loras folder; ComfyUI 
 """
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from .fsio import atomic_write_json, read_json, utc_now
 from .models import registry
 from .recipes import LoraRef
 from .roster import ROSTER, ROSTER_BY_ID, Roster, RosterEntry
 
 FILE_PREFIX = "file:"
 MAX_SLOTS = 4
+LORA_SCHEMA_VERSION = 1
+
+
+# ---- the project's trained LoRAs (18 §3a): files are truth, the engine's copy is a cache ---------------------------------------------
+class LoraRecord(BaseModel):
+    """`story/loras/<id>.json` beside `<id>.safetensors`: what was trained from what, measured how; the lineage of the adapter."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = LORA_SCHEMA_VERSION
+    id: str
+    name: str
+    profile_id: str
+    version: str
+    base: str                                     # the model base it fits (klein-4b | klein-9b …)
+    model_id: str                                 # the base's roster id it was trained on
+    trigger: str
+    steps: int
+    rank: int
+    resolution: int
+    lr: float
+    seed: int
+    dataset: dict[str, Any] = Field(default_factory=dict)      # group_id, asset_ids, count, captions_sha256, setting, stub
+    job_id: str | None = None
+    sha256: str
+    size: int
+    created_at: str = Field(default_factory=utc_now)
+    measured: dict[str, Any] = Field(default_factory=dict)     # s_per_it, peak_vram_gb, wall_s, resumed_from
+    identity: dict[str, Any] | None = None                     # 18 §3h (LT3): the FaceSim check, advisory
+    previous: list[str] = Field(default_factory=list)          # the version's earlier LoRA ids (a retrain keeps them until deleted)
+
+
+class LoraRegistry:
+    def __init__(self, ws: Any) -> None:
+        self.dir: Path = ws.story_dir / "loras"
+
+    def path(self, lid: str) -> Path:
+        return self.dir / f"{lid}.json"
+
+    def file(self, lid: str) -> Path:
+        return self.dir / f"{lid}.safetensors"
+
+    def list(self) -> list[LoraRecord]:
+        out = []
+        if self.dir.is_dir():
+            for p in sorted(self.dir.glob("*.json")):
+                try:
+                    out.append(LoraRecord.model_validate(read_json(p)))
+                except Exception:  # noqa: BLE001 — a torn record is skipped, never fatal (files are truth, the index is this listing)
+                    continue
+        return sorted(out, key=lambda r: r.created_at, reverse=True)
+
+    def get(self, lid: str) -> LoraRecord | None:
+        p = self.path(lid)
+        return LoraRecord.model_validate(read_json(p)) if p.is_file() else None
+
+    def save(self, rec: LoraRecord) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.path(rec.id), rec.model_dump())
+
+    def delete(self, lid: str) -> None:
+        for p in (self.path(lid), self.file(lid)):
+            p.unlink(missing_ok=True)
+
+
+def cache_name(project_id: str, lid: str) -> str:
+    """The loader's name of a trained LoRA: under the models root's `loras/projects/<project_id>/` (ComfyUI lists subfolders)."""
+    return f"projects/{project_id}/{lid}.safetensors"
+
+
+def ensure_mounted(models_root: Path, project_id: str, rec: LoraRecord, src: Path) -> Path | None:
+    """The engine's copy of a trained LoRA, made when missing or of another size (a rebuildable cache, house rule 4); None without the source."""
+    if not src.is_file():
+        return None
+    dest = Path(models_root) / "loras" / cache_name(project_id, rec.id)
+    if not dest.is_file() or dest.stat().st_size != src.stat().st_size:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+    return dest
+
+
+def publish(roster: Roster, reg: LoraRegistry, models_root: Path, project_id: str) -> dict[str, dict]:
+    """The roster's `trained` map for the open project: every record with its file, mounted for the engine."""
+    trained: dict[str, dict] = {}
+    for rec in reg.list():
+        if ensure_mounted(models_root, project_id, rec, reg.file(rec.id)) is None:
+            continue
+        trained[rec.id] = {"name": cache_name(project_id, rec.id), "base": rec.base, "label": rec.name, "trigger": rec.trigger, "steps": rec.steps, "size": rec.size,
+                           "profile_id": rec.profile_id, "version": rec.version}
+    roster.trained = trained
+    return trained
+
+
+def unpublish(roster: Roster, models_root: Path, project_id: str, lid: str) -> None:
+    roster.trained.pop(lid, None)
+    (Path(models_root) / "loras" / cache_name(project_id, lid)).unlink(missing_ok=True)
+
 PRESET_OWNERS = {"turbo": "the Turbo toggle", "lightning": "the Lightning preset", "angles": "the angles method", "stage": "the Stage pose method",
                  "guide": "the guided clip"}
 
@@ -57,6 +157,11 @@ def lora_options(roster: Roster, model_id: str, variant: str | None = "full") ->
     not fit stay in the list with `fits: false` and the sentence, so the panel can say why. Preset-owned entries are left out."""
     base = model_base(model_id)
     out: list[dict[str, Any]] = []
+    for lid, t in roster.trained.items():                               # LT2: the project's own LoRAs first
+        fits = t["base"] == base
+        out.append({"id": lid, "label": f"{t['label']} · {base_label(t['base'])} · {t['steps']} steps", "source": "trained", "base": t["base"], "fits": fits,
+                    "why": None if fits else f"trained for {base_label(t['base'])}", "name": t["name"], "size": t["size"], "license": "this project's own",
+                    "health": "present", "preset": None, "strength": 1.0, "trigger": t["trigger"]})
     for e in ROSTER:
         if e.role != "lora" or e.retired or e.preset:
             continue
@@ -78,6 +183,8 @@ def lora_options(roster: Roster, model_id: str, variant: str | None = "full") ->
 def lora_name(roster: Roster, model_id: str) -> str:
     """The loader's `lora_name`: a roster LoRA's file name, a file's path relative to its loras folder (with "/"; the contract check
     matches the engine's listing). Raises FileNotFoundError when the file is not on disk."""
+    if model_id in roster.trained:
+        return roster.trained[model_id]["name"]
     if is_file(model_id):
         rel = _file_rel(model_id)
         if not any(f["rel"] == rel for f in roster.lora_files()):
@@ -101,6 +208,10 @@ def check_loras(roster: Roster, loras: list[LoraRef], model_id: str, variant: st
         seen.add(mid)
         if not (0.0 <= float(ref.strength) <= 2.0):
             raise ValueError(f"LoRA {mid!r}: strength {ref.strength} is outside 0–2")
+        if mid in roster.trained:                                    # LT2: a trained LoRA fits its base
+            if roster.trained[mid]["base"] != base:
+                raise ValueError(f"{roster.trained[mid]['label']} was trained for {base_label(roster.trained[mid]['base'])}; this job runs {spec.label if spec else model_id}")
+            continue
         if is_file(mid):
             if variant == "open":
                 raise ValueError(f"LoRA file {_file_rel(mid)!r}: licence unknown — not offered under the open variant (D26)")

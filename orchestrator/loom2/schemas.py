@@ -110,6 +110,7 @@ class TeOption(Open):
 
 class ImageModelCaps(Open):
     family: str
+    base: str | None = None                       # LT2 (18 §3b): the adapter base this model takes LoRAs for
     label: str
     health: str
     steps: int
@@ -329,6 +330,7 @@ class Capabilities(Open):
     stage: StageCaps                               # P13 ST3 (D78)
     mesh: MeshCaps                                 # P18 (D84)
     story: StoryCaps | None = None                # 17 (D85): the Cast tab's Expand model and presets
+    train: TrainCaps | None = None                # 18 (D86): the LoRA trainer's bases and ranges
 
 
 class MissingWeight(Open):
@@ -763,6 +765,71 @@ class LoraOption(Out):
     health: str | None = None
     preset: str | None = None
     strength: float = 1.0                         # the default strength at use
+    trigger: str | None = None                    # LT2: a trained LoRA's trigger word
+
+
+class LoraRecordOut(Open):
+    """LT2 (18 §3a): a trained LoRA of the project."""
+    schema_version: int
+    id: str
+    name: str
+    profile_id: str
+    version: str
+    base: str
+    model_id: str
+    trigger: str
+    steps: int
+    rank: int
+    resolution: int
+    lr: float
+    seed: int
+    dataset: dict[str, Any]
+    job_id: str | None = None
+    sha256: str
+    size: int
+    created_at: str
+    measured: dict[str, Any]
+    identity: dict[str, Any] | None = None
+    previous: list[str]
+
+
+class LoraRecordList(Out):
+    items: list[LoraRecordOut]
+
+
+class TrainQueued(Out):
+    job_id: str
+    trigger: str
+    model_id: str
+    staged: bool
+
+
+class TrainBaseCaps(Open):
+    model_id: str
+    label: str
+    offload: bool
+    vram_gb: float
+    s_per_it: float | None = None
+    health: str
+
+
+class TrainCaps(Open):
+    """LT2 (18 §4): whether the trainer can run, the bases and E16's figures, the ranges the Cast dialog offers."""
+    available: bool
+    why: str | None = None
+    bases: list[TrainBaseCaps]
+    steps: dict[str, int]
+    ranks: list[int]
+    resolutions: list[int]
+    lr: float
+    min_refs: int
+
+
+class LoraChanged(Open):
+    id: str
+    profile_id: str | None = None
+    version: str | None = None
+    deleted: bool = False
 
 
 class LoraListing(Out):
@@ -985,6 +1052,11 @@ class StoryChangedEvent(_Frame):
     data: StoryChanged
 
 
+class LoraChangedEvent(_Frame):
+    type: Literal["lora.changed"]
+    data: LoraChanged
+
+
 class ClipReadyEvent(_Frame):
     type: Literal["clip.ready"]
     data: ClipReady
@@ -1016,6 +1088,6 @@ class HelloEvent(_Frame):
 
 
 EVENT_FRAMES = (JobEvent, JobProgressEvent, JobDeletedEvent, QueueStateEvent, EngineStateEvent, AssetEvent, AssetDeletedEvent,
-                CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, StoryChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
+                CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, StoryChangedEvent, LoraChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
                 ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent)
 EVENT_TYPES = sorted({t for frame in EVENT_FRAMES for t in frame.model_fields["type"].annotation.__args__})

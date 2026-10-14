@@ -201,6 +201,7 @@ class Roster:
         self.mounted = [Path(m) for m in (mounted or [])]
         self.variant = variant
         self._found: dict[tuple[str, str], tuple[Path, Path]] = {}
+        self.trained: dict[str, dict] = {}          # LT2 (18 §3a): the open project's trained LoRAs — id → {name (the loader's), base, label, trigger, steps, size}; loras.publish fills it
         self._ledger: dict[str, dict] = {}
         self.scanned_at: float | None = None
 

@@ -43,6 +43,16 @@ class EngineSettings(BaseModel):
     health_timeout_s: float = 120.0
 
 
+class TrainerSettings(BaseModel):
+    """LT2 (18 §3c): ai-toolkit in its own venv — never the engine's (scripts/trainer-setup.ps1)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    python: str = str(REPO_ROOT / "trainers" / ".venv" / "Scripts" / "python.exe")
+    run: str = str(REPO_ROOT / "trainers" / "ai-toolkit" / "run.py")
+    cwd: str = str(REPO_ROOT / "trainers" / "ai-toolkit")
+    vae: str = "ai-toolkit/flux2_vae"      # the hub repo whose ae.safetensors the trainer reads (E16; loom2's own repack has diffusers names)
+    quantize: str = "qfloat8"              # Quanto on the transformer and the encoder (E16: 13.6 GB on the 4B base)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = APP_SCHEMA_VERSION
@@ -52,6 +62,7 @@ class Settings(BaseModel):
     variant: Variant = os.environ.get("LOOM2_VARIANT", "full")  # type: ignore[assignment]
     hf_home: str = os.environ.get("HF_HOME", "F:/HF_HOME")
     engine: EngineSettings = Field(default_factory=EngineSettings)
+    trainer: TrainerSettings = Field(default_factory=TrainerSettings)   # LT2 (D86)
     api_host: str = "127.0.0.1"
     api_port: int = 8765
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])

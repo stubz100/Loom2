@@ -298,6 +298,10 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     case 'story.changed':                                         // 17 (D85): the world (later profiles, shots, the flow) moved on the server
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
       break
+    case 'lora.changed':                                          // 18 (D86) LT2: a LoRA trained or deleted — the registry and the versions' slots moved
+      void import('../suites/story/storyStore').then((m) => m.useStory.getState().onLoraChanged(f.data as never))
+      void import('../suites/generate/generateStore').then((m) => { const g = m.useGenerate.getState(); void g.loadLoras(g.panel.model_id) })
+      break
     default: break
   }
 }

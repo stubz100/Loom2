@@ -976,6 +976,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{job_id}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Job Requeue
+         * @description LT2: a failed, resumable job back to the queue (a killed trainer continues from its newest save).
+         */
+        post: operations["job_requeue_jobs__job_id__requeue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lineage/tree/{root_id}": {
         parameters: {
             query?: never;
@@ -1609,6 +1629,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/loras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Loras List */
+        get: operations["loras_list_story_loras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/loras/{lid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lora Get */
+        get: operations["lora_get_story_loras__lid__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Lora Delete
+         * @description The record, the file, the engine's cached copy; every version pointing at it loses its slot (the trigger stays).
+         */
+        delete: operations["lora_delete_story_loras__lid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles": {
         parameters: {
             query?: never;
@@ -1661,6 +1719,26 @@ export interface paths {
          *     after the stub; the results land on the version's candidates page (made on the first Expand) with `params.coverage_cell`.
          */
         post: operations["profile_expand_story_profiles__pid__expand_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Train
+         * @description One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence.
+         */
+        post: operations["profile_train_story_profiles__pid__train_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2290,6 +2368,7 @@ export interface components {
             tools: {
                 [key: string]: components["schemas"]["ToolCaps"];
             };
+            train?: components["schemas"]["TrainCaps"] | null;
             /** Variant */
             variant: string;
             /** Vram Budget Gb */
@@ -3007,7 +3086,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** EventFrame */
-        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
+        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["LoraChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
         /** ExpandBody */
         ExpandBody: {
             /**
@@ -4049,6 +4128,8 @@ export interface components {
         };
         /** ImageModelCaps */
         ImageModelCaps: {
+            /** Base */
+            base?: string | null;
             /** Cfg */
             cfg: number;
             /** Cfg Fixed */
@@ -4525,6 +4606,44 @@ export interface components {
             /** Path */
             path: components["schemas"]["PathStep"][];
         };
+        /** LoraChanged */
+        LoraChanged: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted?: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Profile Id
+             * @default null
+             */
+            profile_id?: string | null;
+            /**
+             * Version
+             * @default null
+             */
+            version?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** LoraChangedEvent */
+        LoraChangedEvent: {
+            data: components["schemas"]["LoraChanged"];
+            /** Seq */
+            seq: number;
+            /**
+             * T
+             * @default 0
+             */
+            t: number;
+            /**
+             * Type
+             * @constant
+             */
+            type: "lora.changed";
+        };
         /** LoraListing */
         LoraListing: {
             /** Base */
@@ -4569,8 +4688,71 @@ export interface components {
              * @default 1
              */
             strength: number;
+            /** Trigger */
+            trigger: string | null;
             /** Why */
             why: string | null;
+        };
+        /** LoraRecordList */
+        LoraRecordList: {
+            /** Items */
+            items: components["schemas"]["LoraRecordOut"][];
+        };
+        /**
+         * LoraRecordOut
+         * @description LT2 (18 §3a): a trained LoRA of the project.
+         */
+        LoraRecordOut: {
+            /** Base */
+            base: string;
+            /** Created At */
+            created_at: string;
+            /** Dataset */
+            dataset: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Identity */
+            identity?: {
+                [key: string]: unknown;
+            } | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Lr */
+            lr: number;
+            /** Measured */
+            measured: {
+                [key: string]: unknown;
+            };
+            /** Model Id */
+            model_id: string;
+            /** Name */
+            name: string;
+            /** Previous */
+            previous: string[];
+            /** Profile Id */
+            profile_id: string;
+            /** Rank */
+            rank: number;
+            /** Resolution */
+            resolution: number;
+            /** Schema Version */
+            schema_version: number;
+            /** Seed */
+            seed: number;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Steps */
+            steps: number;
+            /** Trigger */
+            trigger: string;
+            /** Version */
+            version: string;
+        } & {
+            [key: string]: unknown;
         };
         /** LoraRef */
         LoraRef: {
@@ -5429,6 +5611,7 @@ export interface components {
              * @default false
              */
             t2i?: boolean;
+            train?: components["schemas"]["Train"] | null;
             /** Upscale Factor */
             upscale_factor?: number | null;
         };
@@ -5689,6 +5872,7 @@ export interface components {
             schema_version: number;
             /** Thumbnail Sizes */
             thumbnail_sizes: number[];
+            trainer: components["schemas"]["TrainerSettings"];
             /**
              * Variant
              * @default full
@@ -6598,6 +6782,163 @@ export interface components {
             vram_gb?: number | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * Train
+         * @description LT2 (18 §2 / §3c): how ai-toolkit trains a LoRA on this base — its arch name, the encoder's hub folder, offloading (the 9B base's
+         *     only fit on 16 GB, E16d) and E16's measured peak and rate on this card.
+         */
+        Train: {
+            /** Arch */
+            arch: string;
+            /**
+             * Offload
+             * @default false
+             */
+            offload?: boolean;
+            /** S Per It */
+            s_per_it?: number | null;
+            /** Te Repo */
+            te_repo: string;
+            /**
+             * Vram Gb
+             * @default 14
+             */
+            vram_gb?: number;
+        };
+        /** TrainBaseCaps */
+        TrainBaseCaps: {
+            /** Health */
+            health: string;
+            /** Label */
+            label: string;
+            /** Model Id */
+            model_id: string;
+            /** Offload */
+            offload: boolean;
+            /** S Per It */
+            s_per_it?: number | null;
+            /** Vram Gb */
+            vram_gb: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TrainBody */
+        TrainBody: {
+            /**
+             * Lr
+             * @default 0.0001
+             */
+            lr?: number;
+            /** Model Id */
+            model_id?: string | null;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /**
+             * Rank
+             * @default 16
+             */
+            rank?: number;
+            /**
+             * Resolution
+             * @default 512
+             */
+            resolution?: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed?: number;
+            /**
+             * Setting
+             * @default
+             */
+            setting?: string;
+            /**
+             * Stage
+             * @default true
+             */
+            stage?: boolean;
+            /**
+             * Steps
+             * @default 1000
+             */
+            steps?: number;
+            /** Trigger */
+            trigger?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * TrainCaps
+         * @description LT2 (18 §4): whether the trainer can run, the bases and E16's figures, the ranges the Cast dialog offers.
+         */
+        TrainCaps: {
+            /** Available */
+            available: boolean;
+            /** Bases */
+            bases: components["schemas"]["TrainBaseCaps"][];
+            /** Lr */
+            lr: number;
+            /** Min Refs */
+            min_refs: number;
+            /** Ranks */
+            ranks: number[];
+            /** Resolutions */
+            resolutions: number[];
+            /** Steps */
+            steps: {
+                [key: string]: number;
+            };
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TrainQueued */
+        TrainQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Model Id */
+            model_id: string;
+            /** Staged */
+            staged: boolean;
+            /** Trigger */
+            trigger: string;
+        };
+        /**
+         * TrainerSettings
+         * @description LT2 (18 §3c): ai-toolkit in its own venv — never the engine's (scripts/trainer-setup.ps1).
+         */
+        TrainerSettings: {
+            /**
+             * Cwd
+             * @default <repo>\trainers\ai-toolkit
+             */
+            cwd: string;
+            /**
+             * Python
+             * @default <repo>\trainers\.venv\Scripts\python.exe
+             */
+            python: string;
+            /**
+             * Quantize
+             * @default qfloat8
+             */
+            quantize: string;
+            /**
+             * Run
+             * @default <repo>\trainers\ai-toolkit\run.py
+             */
+            run: string;
+            /**
+             * Vae
+             * @default ai-toolkit/flux2_vae
+             */
+            vae: string;
         };
         /** Transform */
         Transform: {
@@ -8913,6 +9254,37 @@ export interface operations {
             };
         };
     };
+    job_requeue_jobs__job_id__requeue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     lineage_tree_lineage_tree__root_id__get: {
         parameters: {
             query?: never;
@@ -10145,6 +10517,88 @@ export interface operations {
             };
         };
     };
+    loras_list_story_loras_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraRecordList"];
+                };
+            };
+        };
+    };
+    lora_get_story_loras__lid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraRecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lora_delete_story_loras__lid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     profiles_list_story_profiles_get: {
         parameters: {
             query?: never;
@@ -10319,6 +10773,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Expanded"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_train_story_profiles__pid__train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainQueued"];
                 };
             };
             /** @description Validation Error */

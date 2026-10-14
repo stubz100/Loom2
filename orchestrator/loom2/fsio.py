@@ -111,13 +111,20 @@ def atomic_move(src: Path, dst: Path) -> None:
 
 
 def read_json(path: Path) -> Any:
+    """A record; a `PermissionError` is retried briefly — on Windows a reader can meet the writer's `replace` (CI 2026-10-14: a stage
+    record read while it was being replaced), which is transient, not a torn file."""
     path = Path(path)
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as e:
-        raise StateError(f"missing record: {path}") from e
-    except (json.JSONDecodeError, OSError) as e:
-        raise StateError(f"corrupt or partial record (refused): {path} — {e}") from e
+    for attempt in range(6):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as e:
+            raise StateError(f"missing record: {path}") from e
+        except PermissionError as e:
+            if attempt == 5:
+                raise StateError(f"corrupt or partial record (refused): {path} — {e}") from e
+            time.sleep(0.03 * (attempt + 1))
+        except (json.JSONDecodeError, OSError) as e:
+            raise StateError(f"corrupt or partial record (refused): {path} — {e}") from e
 
 
 def read_json_or(path: Path, default: Any) -> Any:

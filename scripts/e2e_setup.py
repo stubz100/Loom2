@@ -44,6 +44,7 @@ def fake_models(root: Path) -> list[str]:
         specs.append(i2v)
     specs += [s for s in registry.video_specs() if s.recipes.guide_lora]  # ST4: the clip model with its IC-LoRA (LTX-2.3)
     specs += registry.mesh_specs()                                     # P18: Pixal3D and its encoders (the fake engine writes a GLB)
+    specs += [s for s in registry.image_specs() if s.recipes.train]     # LT2: the LoRA bases (the fake trainer never loads them)
     for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else [])]):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name
@@ -81,6 +82,8 @@ def main() -> int:
     # the orchestrator adopts the fake engine listening on that port; should it be down, the "engine" it launches is `python -c …`, which
     # exits at once (never the real ComfyUI on the GPU)
     settings["engine"].update(port=a.engine_port, health_timeout_s=10.0, python=sys.executable, main="-c")
+    tests = Path(__file__).resolve().parents[1] / "orchestrator" / "tests"                      # LT2: the fake trainer stands in for ai-toolkit
+    settings["trainer"] = {**settings["trainer"], "python": sys.executable, "run": str(tests / "fake_trainer.py"), "cwd": str(tests)}
     atomic_write_json(state / "app.json", AppRecord(settings=Settings.model_validate(settings)).model_dump())
 
     key = project_key(a.count)

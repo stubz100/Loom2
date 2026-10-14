@@ -67,7 +67,7 @@ def capabilities(svc: Services) -> dict:
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
-            "mesh": _mesh(svc, variant), "story": _story(svc, variant)}                                       # P18 (D84): image → mesh props
+            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -141,6 +141,22 @@ def _story(svc: Services, variant: str) -> dict:
             "presets": presets, "coverage": coverage}
 
 
+def _train(svc: Services, variant: str) -> dict:
+    """LT2 (18 §4): the trainer's bases (specs with `recipes.train`, offered under the variant) with E16's figures and health, whether the
+    venv is there, and the ranges the Cast dialog offers — T8: the dialog shows exactly what the job will run."""
+    from .trainer import MIN_REFS, trainer_available
+    bases = []
+    for spec in registry.image_specs():
+        tr = spec.recipes.train
+        if tr is None or not _offered(spec, variant):
+            continue
+        bases.append({"model_id": spec.id, "label": spec.label, "offload": tr.offload, "vram_gb": tr.vram_gb, "s_per_it": tr.s_per_it,
+                      "health": svc.roster.resolve(spec.id).health})
+    why = trainer_available(svc.app.settings)
+    return {"available": why is None and any(b["health"] in ("present", "verified") for b in bases), "why": why, "bases": bases,
+            "steps": {"min": 100, "max": 5000, "default": 1000}, "ranks": [8, 16, 32], "resolutions": [512, 768], "lr": 1e-4, "min_refs": MIN_REFS}
+
+
 def _mesh(svc: Services, variant: str) -> dict:
     """Image → mesh (P18): the model that makes props in this build (none under `open` while DINOv3 keeps it full-only), its health, E14's warm
     and cold seconds — shown before the job is queued — the resolutions and the face count."""
@@ -179,7 +195,7 @@ def _image_models(svc: Services, variant: str) -> dict:
         models[spec.id] = {"family": spec.family, "label": spec.label, "health": r.health, "steps": sm.steps, "guidance": sm.guidance, "cfg": sm.cfg,
                            "distilled": sm.distilled, "turbo": sm.turbo is not None, "turbo_steps": sm.turbo.steps if sm.turbo else 8, "json_prompt": sm.json_prompt,
                            "max_refs": spec.inputs.refs_max, "sampler": sm.sampler, "scheduler": sm.scheduler, "vram_gb": spec.estimates.vram_gb,
-                           "wired": spec.wired, "license": e.license, "variants": e.variants,
+                           "wired": spec.wired, "license": e.license, "variants": e.variants, "base": spec.base or spec.family,   # LT2: the adapter base it takes LoRAs for
                            "cfg_fixed": sm.cfg_fixed, "cfg_note": sm.cfg_note, "model_shift": sm.model_shift,
                            # D31: the encoder that runs by default and the alternates a recipe may name in `te_id` (the panels' picker)
                            "te_id": te_default,

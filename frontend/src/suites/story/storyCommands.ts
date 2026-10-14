@@ -1,9 +1,9 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Palette, Play, Plus, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, X, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Palette, Play, Plus, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, X, Zap, GraduationCap, RotateCcw, Wand2 } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { CLASS_LABEL, sy, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
@@ -13,6 +13,9 @@ const profile = () => sy().profile()
 const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
 const picked = () => sy().picked
+const trainJob = () => { const p = profile(); const v = version(); return p && v ? latestTrainJob(useSession.getState().jobs, p.id, v.id) : undefined }
+const trainCaps = () => useSession.getState().capabilities?.train
+const refsCount = () => Object.keys(sy().refPage?.assets ?? {}).length
 const shot = () => sy().shot()
 const shotVersion = () => sy().shotVersion()
 const node = () => sy().node()
@@ -32,6 +35,18 @@ export async function askExpand(preset: string, seeds: number, tier: 'draft' | '
   const ok = await askConfirm({ title: `Expand ${p.name} ${v.id}?`, okLabel: `Queue ${cells} jobs`,
     text: `${caps.presets[preset]?.label ?? preset}: ${cells} ${tier === 'full' ? 'full-size' : 'draft'} images on ${caps.label} with the hero as the reference — ${mins} on this card${caps.missing.length ? ` (weights missing: ${caps.missing.join(', ')})` : ''}. They land on the version's candidates page; keep the good ones into the reference set.` })
   if (ok) await sy().expand(preset, seeds, tier)
+}
+
+/** LT2 (18 §3c): the cost before the job — the base and E16's rate, the steps, the references; staged by default. */
+export async function askTrain(): Promise<void> {
+  const p = profile(); const v = version(); const caps = trainCaps(); const o = sy().trainOpts
+  if (!p || !v || !caps?.available) return
+  const base = caps.bases.find((b) => b.model_id === (o.model_id ?? caps.bases.find((x) => x.health !== 'missing')?.model_id))
+  const secs = base?.s_per_it ? Math.round(o.steps * base.s_per_it) : 0
+  const mins = secs ? `about ${Math.max(1, Math.round(secs / 60))} min of steps plus the model loads` : 'time unknown'
+  const ok = await askConfirm({ title: `Train ${p.name} ${v.id}?`, okLabel: o.stage ? 'Stage the job' : 'Train now',
+    text: `${base?.label ?? 'the base'}${base?.offload ? ' (offloaded)' : ''} · ${o.steps} steps at ${o.resolution}² · rank ${o.rank} · ${refsCount()} references — ${mins} on this card; the engine stops while it runs${o.stage ? '. Staged: release it when the rig is free.' : '.'}` })
+  if (ok) await sy().train()
 }
 
 export async function newProfile(cls: ProfileClass = 'character', hero: string | null = null): Promise<void> {
@@ -67,6 +82,19 @@ const cmds: Command[] = [
   { id: 'story.cast.newVersion', scope: 'story', label: 'New version (copy)', icon: Copy, placement: ['strip', 'inspector', 'context'], when: () => !!version() && !sy().busy,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
       void askConfirm({ title: `Copy ${p.name} ${v.id} into a new version?`, okLabel: 'Copy', text: 'The reference set is duplicated (its images copied — an image lives on one page), the stub and hero copied; the copy becomes the current version, open.' }).then((ok) => { if (ok) void sy().newVersion() }) } },
+  { id: 'story.cast.train', scope: 'story', label: 'Train a LoRA…', icon: GraduationCap, placement: ['panel', 'inspector', 'context'],
+    when: () => !!version()?.hero_asset_id && !!trainCaps()?.available && refsCount() >= (trainCaps()?.min_refs ?? 4) && !['staged', 'queued', 'running'].includes(trainJob()?.status ?? '') && !sy().busy,
+    run: () => void askTrain() },
+  { id: 'story.cast.useLora', scope: 'story', label: 'Use in Generate', icon: Wand2, placement: ['inspector', 'context'], when: () => !!version()?.lora,
+    run: () => void sy().useLora(version()!.lora!) },
+  { id: 'story.cast.deleteLora', scope: 'story', label: 'Delete the LoRA', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!version()?.lora,
+    run: async () => { const v = version(); if (!v?.lora) return; if (await askConfirm({ title: 'Delete the LoRA?', okLabel: 'Delete', text: 'The file, its record and the engine\'s cached copy go; the version keeps its trigger for a retrain.' })) await sy().deleteLora(v.lora) } },
+  { id: 'story.cast.releaseTrain', scope: 'story', label: 'Release the training job', icon: Play, placement: ['inspector'], when: () => trainJob()?.status === 'staged',
+    run: () => { const j = trainJob(); if (j) void useSession.getState().releaseJob(j.id) } },
+  { id: 'story.cast.resumeTrain', scope: 'story', label: 'Resume the training job', icon: RotateCcw, placement: ['inspector'], when: () => trainJob()?.status === 'failed' && !!trainJob()?.resumable,
+    run: () => { const j = trainJob(); if (j) void sy().requeueTrain(j.id) } },
+  { id: 'story.cast.cancelTrain', scope: 'story', label: 'Cancel the training job', icon: X, placement: ['inspector'], when: () => ['staged', 'queued', 'running'].includes(trainJob()?.status ?? ''),
+    run: () => { const j = trainJob(); if (j) void useSession.getState().cancelJob(j.id) } },
   { id: 'story.cast.openGroup', scope: 'story', label: 'Open the reference set in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version(),
     run: () => { const v = version(); if (!v) return; useSession.getState().setSuite('catalogue'); void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: v.group_id }) }) } },
   { id: 'story.cast.openCandidates', scope: 'story', label: 'Open the candidates in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version()?.candidates_group_id,

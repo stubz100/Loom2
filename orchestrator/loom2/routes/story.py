@@ -6,6 +6,7 @@ spawn a shot as a node's sole property; validation as a list)."""
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -14,7 +15,8 @@ from pydantic import BaseModel, Field
 from ..fsio import new_id
 from ..origin import JobOrigin
 from ..clips import ClipStore
-from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, NodeShot, ProfileList, ShotList
+from ..loras import LoraRegistry, publish, unpublish
+from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued
 from ..stages import StageStore
 from ..story import NODE_TYPES, PRESETS, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from .deps import Svc
@@ -230,6 +232,90 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
         raise HTTPException(422, str(e))
     _changed(svc, p)
     return {"batch_id": batch, "job_ids": [j.id for j in jobs], "cells": len(planned), "group_id": gid, "model_id": spec.id}
+
+
+# ---- LoRA training (LT2, 18 §3c) ------------------------------------------------------------------------------------------------------
+class TrainBody(BaseModel):
+    version: str | None = None                    # the current one when absent
+    model_id: str | None = None                   # the base; the first of /capabilities.train when absent
+    steps: int = Field(1000, ge=100, le=5000)
+    rank: int = Field(16, ge=4, le=128)
+    resolution: int = Field(512, ge=256, le=1024)
+    lr: float = Field(1e-4, gt=0.0, le=1e-2)
+    seed: int = 42
+    name: str = ""
+    setting: str = ""
+    trigger: str | None = None                    # made from the profile's name when absent (<slug>_<4 hex>)
+    stage: bool = True                            # staged by default (18 §9): released when the rig is free
+
+
+def _trigger(name: str) -> str:
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9]+", "", name.lower())[:12] or "lora"
+    return f"{slug}_{new_id('t')[-4:]}"
+
+
+@router.post("/story/profiles/{pid}/train", response_model=TrainQueued)
+async def profile_train(svc: Svc, pid: str, body: TrainBody):
+    """One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence."""
+    ws, _, q = svc.require_project()
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(body.version)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    from ..capabilities import _train
+    caps = _train(svc, svc.app.settings.variant)
+    model_id = body.model_id or next((b["model_id"] for b in caps["bases"] if b["health"] in ("present", "verified")), None)
+    if not model_id:
+        raise HTTPException(422, caps["why"] or "no trainable base with its weights on disk")
+    trigger = (body.trigger or v.trigger or _trigger(p.name)).strip()
+    recipe = {"kind": "train_lora", "profile_id": pid, "version": v.id, "model_id": model_id, "steps": body.steps, "rank": body.rank, "resolution": body.resolution,
+              "lr": body.lr, "seed": body.seed, "trigger": trigger, "name": body.name.strip() or f"{p.name} {v.id}", "setting": body.setting}
+    origin = JobOrigin(suite="story", surface="train", ref=pid, payload={"version": v.id})
+    try:
+        job = q.submit(recipe, stage=body.stage, origin=origin)[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if v.trigger != trigger:                                                      # the trigger is the version's from now on (a retrain keeps it)
+        p = await asyncio.to_thread(store.set_version_lora, pid, v.id, v.lora, trigger)
+        _changed(svc, p)
+    return {"job_id": job.id, "trigger": trigger, "model_id": model_id, "staged": job.status == "staged"}
+
+
+@router.get("/story/loras", response_model=LoraRecordList)
+async def loras_list(svc: Svc):
+    ws, _, _ = svc.require_project()
+    return {"items": [r.model_dump() for r in await asyncio.to_thread(LoraRegistry(ws).list)]}
+
+
+@router.get("/story/loras/{lid}", response_model=LoraRecordOut)
+async def lora_get(svc: Svc, lid: str):
+    ws, _, _ = svc.require_project()
+    r = await asyncio.to_thread(LoraRegistry(ws).get, lid)
+    if r is None:
+        raise HTTPException(404, "LoRA not found")
+    return r.model_dump()
+
+
+@router.delete("/story/loras/{lid}", response_model=Deleted)
+async def lora_delete(svc: Svc, lid: str):
+    """The record, the file, the engine's cached copy; every version pointing at it loses its slot (the trigger stays)."""
+    ws, _, q = svc.require_project()
+    reg = LoraRegistry(ws)
+    r = await asyncio.to_thread(reg.get, lid)
+    if r is None:
+        raise HTTPException(404, "LoRA not found")
+    await asyncio.to_thread(reg.delete, lid)
+    project_id = (ws.info() or {}).get("id") or ws.path.name
+    unpublish(q.roster, Path(svc.app.settings.models_root), project_id, lid)
+    for p in await asyncio.to_thread(StoryStore(ws).clear_lora, lid):
+        _changed(svc, p)
+    svc.hub.broadcast("lora.changed", {"id": lid, "profile_id": r.profile_id, "version": r.version, "deleted": True})
+    return {"deleted": True, "id": lid}
 
 
 # ---- shots (SY2, 17 §3c) --------------------------------------------------------------------------------------------------------------

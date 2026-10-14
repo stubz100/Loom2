@@ -913,6 +913,16 @@
             "title": "Tools",
             "type": "object"
           },
+          "train": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrainCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "variant": {
             "title": "Variant",
             "type": "string"
@@ -2791,6 +2801,9 @@
           },
           {
             "$ref": "#/components/schemas/StoryChangedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LoraChangedEvent"
           },
           {
             "$ref": "#/components/schemas/ClipReadyEvent"
@@ -5171,6 +5184,17 @@
       "ImageModelCaps": {
         "additionalProperties": true,
         "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
           "cfg": {
             "title": "Cfg",
             "type": "number"
@@ -6298,6 +6322,78 @@
         "title": "Location",
         "type": "object"
       },
+      "LoraChanged": {
+        "additionalProperties": true,
+        "properties": {
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "LoraChanged",
+        "type": "object"
+      },
+      "LoraChangedEvent": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LoraChanged"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "t": {
+            "default": 0,
+            "title": "T",
+            "type": "number"
+          },
+          "type": {
+            "const": "lora.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "t",
+          "type",
+          "data"
+        ],
+        "title": "LoraChangedEvent",
+        "type": "object"
+      },
       "LoraListing": {
         "properties": {
           "base": {
@@ -6424,6 +6520,17 @@
             "title": "Strength",
             "type": "number"
           },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
+          },
           "why": {
             "anyOf": [
               {
@@ -6448,9 +6555,159 @@
           "license",
           "health",
           "preset",
-          "strength"
+          "strength",
+          "trigger"
         ],
         "title": "LoraOption",
+        "type": "object"
+      },
+      "LoraRecordList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LoraRecordOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LoraRecordList",
+        "type": "object"
+      },
+      "LoraRecordOut": {
+        "additionalProperties": true,
+        "description": "LT2 (18 §3a): a trained LoRA of the project.",
+        "properties": {
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset": {
+            "additionalProperties": true,
+            "title": "Dataset",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "lr": {
+            "title": "Lr",
+            "type": "number"
+          },
+          "measured": {
+            "additionalProperties": true,
+            "title": "Measured",
+            "type": "object"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "previous": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Previous",
+            "type": "array"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "resolution": {
+            "title": "Resolution",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "profile_id",
+          "version",
+          "base",
+          "model_id",
+          "trigger",
+          "steps",
+          "rank",
+          "resolution",
+          "lr",
+          "seed",
+          "dataset",
+          "sha256",
+          "size",
+          "created_at",
+          "measured",
+          "previous"
+        ],
+        "title": "LoraRecordOut",
         "type": "object"
       },
       "LoraRef": {
@@ -8536,6 +8793,16 @@
             "title": "T2I",
             "type": "boolean"
           },
+          "train": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Train"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "upscale_factor": {
             "anyOf": [
               {
@@ -9052,6 +9319,9 @@
             "title": "Thumbnail Sizes",
             "type": "array"
           },
+          "trainer": {
+            "$ref": "#/components/schemas/TrainerSettings"
+          },
           "variant": {
             "default": "full",
             "enum": [
@@ -9075,6 +9345,7 @@
           "variant",
           "hf_home",
           "engine",
+          "trainer",
           "api_host",
           "api_port",
           "thumbnail_sizes",
@@ -11265,6 +11536,314 @@
           "order"
         ],
         "title": "ToolCaps",
+        "type": "object"
+      },
+      "Train": {
+        "additionalProperties": false,
+        "description": "LT2 (18 §2 / §3c): how ai-toolkit trains a LoRA on this base — its arch name, the encoder's hub folder, offloading (the 9B base's\nonly fit on 16 GB, E16d) and E16's measured peak and rate on this card.",
+        "properties": {
+          "arch": {
+            "title": "Arch",
+            "type": "string"
+          },
+          "offload": {
+            "default": false,
+            "title": "Offload",
+            "type": "boolean"
+          },
+          "s_per_it": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S Per It"
+          },
+          "te_repo": {
+            "title": "Te Repo",
+            "type": "string"
+          },
+          "vram_gb": {
+            "default": 14.0,
+            "title": "Vram Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "arch",
+          "te_repo"
+        ],
+        "title": "Train",
+        "type": "object"
+      },
+      "TrainBaseCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "offload": {
+            "title": "Offload",
+            "type": "boolean"
+          },
+          "s_per_it": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S Per It"
+          },
+          "vram_gb": {
+            "title": "Vram Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model_id",
+          "label",
+          "offload",
+          "vram_gb",
+          "health"
+        ],
+        "title": "TrainBaseCaps",
+        "type": "object"
+      },
+      "TrainBody": {
+        "properties": {
+          "lr": {
+            "default": 0.0001,
+            "exclusiveMinimum": 0.0,
+            "maximum": 0.01,
+            "title": "Lr",
+            "type": "number"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "default": 16,
+            "maximum": 128.0,
+            "minimum": 4.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "resolution": {
+            "default": 512,
+            "maximum": 1024.0,
+            "minimum": 256.0,
+            "title": "Resolution",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "setting": {
+            "default": "",
+            "title": "Setting",
+            "type": "string"
+          },
+          "stage": {
+            "default": true,
+            "title": "Stage",
+            "type": "boolean"
+          },
+          "steps": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 100.0,
+            "title": "Steps",
+            "type": "integer"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "TrainBody",
+        "type": "object"
+      },
+      "TrainCaps": {
+        "additionalProperties": true,
+        "description": "LT2 (18 §4): whether the trainer can run, the bases and E16's figures, the ranges the Cast dialog offers.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "bases": {
+            "items": {
+              "$ref": "#/components/schemas/TrainBaseCaps"
+            },
+            "title": "Bases",
+            "type": "array"
+          },
+          "lr": {
+            "title": "Lr",
+            "type": "number"
+          },
+          "min_refs": {
+            "title": "Min Refs",
+            "type": "integer"
+          },
+          "ranks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ranks",
+            "type": "array"
+          },
+          "resolutions": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Resolutions",
+            "type": "array"
+          },
+          "steps": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Steps",
+            "type": "object"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "available",
+          "bases",
+          "steps",
+          "ranks",
+          "resolutions",
+          "lr",
+          "min_refs"
+        ],
+        "title": "TrainCaps",
+        "type": "object"
+      },
+      "TrainQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "staged": {
+            "title": "Staged",
+            "type": "boolean"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "trigger",
+          "model_id",
+          "staged"
+        ],
+        "title": "TrainQueued",
+        "type": "object"
+      },
+      "TrainerSettings": {
+        "description": "LT2 (18 §3c): ai-toolkit in its own venv — never the engine's (scripts/trainer-setup.ps1).",
+        "properties": {
+          "cwd": {
+            "default": "<repo>\\trainers\\ai-toolkit",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "python": {
+            "default": "<repo>\\trainers\\.venv\\Scripts\\python.exe",
+            "title": "Python",
+            "type": "string"
+          },
+          "quantize": {
+            "default": "qfloat8",
+            "title": "Quantize",
+            "type": "string"
+          },
+          "run": {
+            "default": "<repo>\\trainers\\ai-toolkit\\run.py",
+            "title": "Run",
+            "type": "string"
+          },
+          "vae": {
+            "default": "ai-toolkit/flux2_vae",
+            "title": "Vae",
+            "type": "string"
+          }
+        },
+        "required": [
+          "python",
+          "run",
+          "cwd",
+          "vae",
+          "quantize"
+        ],
+        "title": "TrainerSettings",
         "type": "object"
       },
       "Transform": {
@@ -15552,6 +16131,49 @@
         ]
       }
     },
+    "/jobs/{job_id}/requeue": {
+      "post": {
+        "description": "LT2: a failed, resumable job back to the queue (a killed trainer continues from its newest save).",
+        "operationId": "job_requeue_jobs__job_id__requeue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Requeue",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/lineage/tree/{root_id}": {
       "get": {
         "operationId": "lineage_tree_lineage_tree__root_id__get",
@@ -17093,6 +17715,110 @@
         ]
       }
     },
+    "/story/loras": {
+      "get": {
+        "operationId": "loras_list_story_loras_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoraRecordList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Loras List",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/loras/{lid}": {
+      "delete": {
+        "description": "The record, the file, the engine's cached copy; every version pointing at it loses its slot (the trigger stays).",
+        "operationId": "lora_delete_story_loras__lid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lora Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "get": {
+        "operationId": "lora_get_story_loras__lid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoraRecordOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lora Get",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/profiles": {
       "get": {
         "operationId": "profiles_list_story_profiles_get",
@@ -17335,6 +18061,59 @@
           }
         },
         "summary": "Profile Expand",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/train": {
+      "post": {
+        "description": "One `train_lora` job (staged by default) from the version's reference set; the queue's validation answers 422 with the sentence.",
+        "operationId": "profile_train_story_profiles__pid__train_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Train",
         "tags": [
           "story"
         ]

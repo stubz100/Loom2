@@ -1,6 +1,6 @@
 # 18 · Wave LT — LoRA training: D25's slots live, ai-toolkit on ROCm as a staged job — plan
 
-Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders; the registry's trained ids come with LT2). 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
+Status: **accepted 2026-10-14** (D86, the author: §9 as written, E16 with the 9B stretch, the downloads); **E16 GO on Klein base-4B 2026-10-14** (§2's run line, journal 09:12) — LT1–LT3 may start; **E16d: Klein base-9B fits with layer offloading** (2.8 s/it, 8.7 GB) and is a per-job base. **LT1 built 2026-10-14** (the slots live for the roster's free LoRAs and the files under the loras folders); **LT2 built 2026-10-14** (the staged `train_lora` job, the registry, readiness, the Cast and Models UI — on the fake trainer offline, the rig acceptance with LT3). 03 §5 item 2, 17 §13 "LT · LoRA training", loom P2 (02 §2).
 
 A character, place or prop of the Cast (17 §3b) gets its own LoRA, trained on the rig from a version's reference set as a staged
 queue job, promoted into the version's `trigger` and `lora` slots, loaded by Generate's LoRA slots (09 §3b) and, through `@Mara`,
@@ -81,6 +81,9 @@ the roster entries keep their tags (D26).
 
 ### 3c. The training job
 
+*Built in LT2 (2026-10-14) with one change of shape: the runner is `orchestrator/loom2/trainer.py` inside the orchestrator (an asyncio subprocess of the trainer venv's `run.py`, the log a file under `state/logs/train-<job>.log`, the progress parsed from the trainer's own lines, VRAM from Windows' adapter counter) — no `trainers/loom2_train.py` wrapper; `plan().gpu` marks the job and the queue stops the engine before `run_cpu`; a failed job keeps `resumable` and `POST /jobs/{id}/requeue` continues it from the newest save; the config's bases come from the specs (`recipes.train`: arch, encoder repo, offloading, E16's figures) and the trainer venv from `Settings.trainer`; the dataset's captions take the `setting` word (E16).*
+
+
 `Train` recipe, `kind: "train_lora"`: `{profile_id, version, base: "klein-base-4b" | "klein-base-9b", steps (1 000; 250–3 000),
 rank (16; 8 / 16 / 32), resolution (512; 768 as the slower option), lr (1e-4), seed, trigger, name}`. `plan().engine` is False and
 a new `plan().gpu` is True: **the queue stops the engine** (`supervisor.stop`) before the trainer starts — `free_cache` is not enough on
@@ -112,6 +115,9 @@ finisher runs. The job card: "step 420 / 1 000 · loss 0.38 · 1.6 s/it · 15 mi
 `lora.changed`. Delete = the record, the file, the cache copy, the version's slot cleared (askConfirm, "3 jobs' manifests name it").
 
 ### 3d. Readiness — advisory (loom P2's meter, D10)
+
+*Built in LT2 as a pure function of the frontend (`coverage.ts readiness`, with the grid) — the server keeps no score; Train is offered from 4 references (`/capabilities.train.min_refs`).*
+
 
 `readiness(version)` in `story.py`: references (≥ 12 good, ≥ 24 strong), shot-size rows covered (of 4), angles (≥ 3), expressions (≥ 2),
 a hero, captions available (a cell on ≥ 80 %), duplicates by sha → a 0–100 score with sentences. The Cast version page shows it on the
@@ -175,7 +181,7 @@ Records: `story/loras/<id>.json` (3a); jobs of kind `train_lora` in the queue an
 | --- | --- | --- |
 | **E16** | the spike (§2) | 3 |
 | **LT1 · slots live** | `_validate_models` + `_lora_chain` for roster and registry ids with the base check, `GET /loras`, the Generate slots, preview and manifest; tests; the smoke scenario (a roster LoRA in a slot, the fake engine's graph carries the loader node) | 2 | **built 2026-10-14** (journal): `loras.py` (roster `base` / `preset`, `file:<path>` ids for the loras folders' own files, `check_recipe_loras` for the queue and the preview, `lora_name`), the chain in t2i / i2i / inpaint after the preset's own LoRA, `GET /loras`, the Model tab's four slots, finalize's refresh of the engine's listing, the fake engine listing its tree's loras folder |
-| **LT2 · the training job** | `trainers/` (submodule at the pin, patches, constraints, `scripts/trainer-setup.ps1`, the runner), the `Train` recipe, `plan().gpu` + the engine stop, the dataset materialiser and captions, progress / cancel / resume, `TrainFinisher`, the registry + `ensure_mounted`, readiness, the Cast UI, the Models group; tests on a **fake trainer** (a stub the runner launches instead of `run.py`: it prints steps and writes a 1 KB safetensors; the kill / resume path included); the smoke scenario | 5 |
+| **LT2 · the training job** | `trainers/` (submodule at the pin, patches, constraints, `scripts/trainer-setup.ps1`, the runner), the `Train` recipe, `plan().gpu` + the engine stop, the dataset materialiser and captions, progress / cancel / resume, `TrainFinisher`, the registry + `ensure_mounted`, readiness, the Cast UI, the Models group; tests on a **fake trainer** (a stub the runner launches instead of `run.py`: it prints steps and writes a 1 KB safetensors; the kill / resume path included); the smoke scenario | 5 | **built 2026-10-14** (journal): `recipes.TrainLora`, `trainer.py`, `loras.py`'s registry + `publish`, `/story/profiles/{id}/train`, `/story/loras`, `/jobs/{id}/requeue`, `/capabilities.train`, the Cast Inspector's training block, the Models suite's Trained table, `tests/fake_trainer.py` |
 | **LT3 · mentions, the check, acceptance** | 3f, 3h, `scripts/lt_acceptance.py` on the rig (§8); 09 / 17 / 12 / 08 updated, D86 closed | 3 |
 
 ≈ 13 d; LT1 can start during E16 (it needs no trainer). Gate: D86 approved; E16 GO before LT2.

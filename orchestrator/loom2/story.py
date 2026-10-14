@@ -892,6 +892,31 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.save_profile(p)
         return p
 
+    def set_version_lora(self, pid: str, vid: str, lora: str | None, trigger: str | None) -> Profile:
+        """LT2: the trainer's promotion (and a delete's clearing) — server-side, no revision guard; a locked version takes it too (the LoRA is
+        the version's product, not an edit of its reference set)."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.lora, v.trigger = lora, trigger
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def clear_lora(self, lid: str) -> list[Profile]:
+        """Every version pointing at a deleted LoRA loses its slot (the trigger stays — a retrain reuses it)."""
+        out = []
+        for p in self.profiles():
+            if any(v.lora == lid for v in p.versions):
+                for v in p.versions:
+                    if v.lora == lid:
+                        out.append(self.set_version_lora(p.id, v.id, None, v.trigger))
+        return out
+
     def new_version(self, pid: str, groups: GroupStore) -> Profile:
         """A full copy of the current version (loom R53 / R58): the reference set duplicated (its assets copied — an asset lives on one page,
         D34), the fields copied, `derived_from` stamped; the copy becomes the current version, open."""

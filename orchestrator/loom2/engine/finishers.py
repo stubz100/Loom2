@@ -26,7 +26,7 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
-from ..recipes import I2I, I2V, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, stage_model_id
+from ..recipes import I2I, I2V, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -341,6 +341,9 @@ async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
     """The jobs that never start the engine (plan().engine is False): Quick Remove (D62) and the sequence draft render (P17)."""
     if isinstance(recipe, Render):
         return await run_render(job, recipe, q)
+    if isinstance(recipe, TrainLora):                                 # LT2: ai-toolkit in its venv, the engine stopped by the queue
+        from ..trainer import run_train
+        return await run_train(job, recipe, q)
     if isinstance(recipe, Inpaint):
         return await run_quick_remove(job, recipe, q)
     raise ValueError(f"no CPU path for recipe kind {recipe.kind!r}")

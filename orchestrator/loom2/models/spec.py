@@ -51,6 +51,16 @@ class Sampling(Strict):
     cfg_note: str | None = None                    # why, or how to use it — the panel's hint next to CFG
 
 
+class Train(Strict):
+    """LT2 (18 §2 / §3c): how ai-toolkit trains a LoRA on this base — its arch name, the encoder's hub folder, offloading (the 9B base's
+    only fit on 16 GB, E16d) and E16's measured peak and rate on this card."""
+    arch: str                                      # ai-toolkit's arch (flux2_klein_4b | flux2_klein_9b)
+    te_repo: str                                   # the transformers folder the trainer loads (Qwen/Qwen3-4B | Qwen/Qwen3-8B) — in HF_HOME
+    offload: bool = False                          # layer_offloading (qfloat8 → torchao float8): the 9B base
+    vram_gb: float = 14.0                          # E16's peak on the RX 9070 XT
+    s_per_it: float | None = None                  # E16's steady rate at 512², rank 16, batch 1
+
+
 class Recipes(Strict):
     default_for: list[str] = []                    # recipe kinds whose default model this is (t2i, i2i, inpaint, upscale, segment, i2v)
     t2i: bool = False
@@ -73,6 +83,7 @@ class Recipes(Strict):
     guide_lora: str | None = None                  # P13 ST4 (D76): the IC-LoRA a video model takes a pass sequence through (I2V.guide)
     guide_seconds: float | None = None             # E11's measured seconds for a guided Draft clip (121 frames at 1024×576)
     mesh: bool = False                             # P18 (D84): image → mesh (the Pixal3D graph)
+    train: Train | None = None                     # LT2 (D86): a LoRA base ai-toolkit trains on this card
 
 
 class RefsSuggest(Strict):

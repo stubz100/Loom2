@@ -79,6 +79,18 @@ async def job_cancel(svc: Svc, job_id: str):
     return {"cancelled": job_id}
 
 
+@router.post("/jobs/{job_id}/requeue", response_model=JobRecord)
+async def job_requeue(svc: Svc, job_id: str):
+    """LT2: a failed, resumable job back to the queue (a killed trainer continues from its newest save)."""
+    _, _, q = svc.require_project()
+    try:
+        return q.requeue(job_id)
+    except KeyError:
+        raise HTTPException(404, "job not found")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
 @router.delete("/jobs/{job_id}", response_model=Deleted)
 async def job_delete(svc: Svc, job_id: str):
     _, _, q = svc.require_project()

@@ -354,7 +354,8 @@ def train(tag: str, base: str, steps: int, res: int, rank: int, lr: float, kill_
            "adapter_bytes": adapter.stat().st_size if ok_adapter else None, "resumed": resumed if kill_at else None, "resume_step": resume_step,
            "bars": {"vram": peak_gb <= BARS["vram_gb"], "rate": bool(rate) and rate <= BARS["s_per_it"], "finished": final["exit"] == 0 and ok_adapter,
                     "resume": (resumed if kill_at else None)},
-           "errors": [ln.strip()[:300] for ln in text.splitlines() if "Error" in ln or "error:" in ln.lower()][-5:], "stamp": time.strftime("%Y-%m-%d %H:%M")}
+           "errors": [ln.strip()[:300] for ln in text.split("==== launch")[-1].splitlines() if "Error" in ln or "error:" in ln.lower()][-5:],
+           "stamp": time.strftime("%Y-%m-%d %H:%M")}
     record(row)
     print(json.dumps({k: v for k, v in row.items() if k not in ("launches",)}, indent=1))
 

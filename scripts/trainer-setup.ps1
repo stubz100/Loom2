@@ -6,7 +6,7 @@
   1. git submodule update --init trainers/ai-toolkit (at the pin recorded in .gitmodules / the superproject)
   2. trainers/.venv via uv on Python 3.12 (ai-toolkit pins scipy 1.12, which has no 3.13 wheel) with torch 2.13.0+rocm10.0.0
      from the AMD index ([device-all] extras, as engine-setup.ps1)
-  3. ai-toolkit's requirements minus torchao / bitsandbytes / torchcodec, under trainers/constraints.txt
+  3. ai-toolkit's requirements minus bitsandbytes / torchcodec, under trainers/constraints.txt (torchao kept: E16d's layer offloading)
   4. trainers/patches/*.patch applied with git apply (skipped when already applied)
   Re-runnable; skips what already exists. Nothing here touches PATH, the system Python, or any other venv.
 .PARAMETER SkipTorch   Do not (re)install torch — only refresh the requirements and the patches.
@@ -28,8 +28,9 @@ if (-not $SkipTorch) {
     'torch[device-all]==2.13.0+rocm10.0.0' 'torchvision[device-all]==0.28.0+rocm10.0.0' 'torchaudio==2.11.0.2+rocm10.0.0'
 }
 
-Write-Host "[trainer] 3/4 ai-toolkit requirements under trainers/constraints.txt (no torchao / bitsandbytes / torchcodec)"
-$drop = '^(torchao|bitsandbytes|torchcodec)\b'
+Write-Host "[trainer] 3/4 ai-toolkit requirements under trainers/constraints.txt (no bitsandbytes / torchcodec)"
+# torchao stays: its pure-Python wheel imports on the ROCm torch and layer_offloading (the 9B base, E16d) needs its float8 qtype
+$drop = '^(bitsandbytes|torchcodec)\b'
 $lines = Get-Content trainers/ai-toolkit/requirements_base.txt | Where-Object { $_ -notmatch $drop }
 $lines += Get-Content trainers/ai-toolkit/requirements.txt | Where-Object { $_ -notmatch '^-r ' -and $_ -notmatch $drop }
 $filtered = Join-Path $env:TEMP 'loom2-trainer-requirements.txt'

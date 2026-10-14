@@ -3754,3 +3754,16 @@ split by file so that no two hands touched the same module.
   background, so LT2's captions add the setting word (`caption_dropout_rate 0.05` kept).
 - **Verdict: GO on Klein base-4B** — every bar of 18 §2 met on the first run; 18 §2 carries the run line, 18 §9 item 6 the strength, 13 D86 the
   mark. E16d (9B base with Qwen3-8B on the CPU) runs next and gets its own line. Next: LT1 (slots live), then LT2 on this spike's runner shape.
+
+## 2026-10-14 09:23 — E16d · the 9B stretch: Klein base-9B fits only with layer offloading (18 §2, D86)
+- **As configured for 4B** (qfloat8 Quanto on the transformer and the encoder, `low_vram` — Qwen3-8B on the CPU): the run paged from the first step
+  — **70 s/it** at 15.7 GB dedicated + 8.2 GB shared (the 9B transformer at qfloat8 ≈ 9 GB plus the grads and activations is over the card, ROCm
+  spills to host memory as loom saw with dev); killed at step 3.
+- **With ai-toolkit's `layer_offloading`** (`--offload`; it turns `qfloat8` into torchao's `float8` on both models, so the first probe failed with
+  `KeyError: 'float8'` under the torchao-optional seam): torchao 0.10.0's pure-Python wheel installs and imports on torch 2.13.0+rocm10.0.0 ("no
+  triton" warning only), and 100 steps ran at **2.8 s/it (tqdm; 3.8 by the 2 s poller) with a peak of 8.7 GB**, the checkpoint and optimizer saved —
+  1 000 steps ≈ 47 min, inside the stretch's bar (≤ 4 s/it, < 15 GB). The adapter's quality on 9B is not measured (100 steps); LT2 offers
+  `klein-base-9b` as a per-job base with offloading on, and keeps 4B as the default. torchao stays in the trainer venv (`scripts/trainer-setup.ps1`
+  no longer drops it; the venv is 12 GB); the optional-import patch stays — the 4B path runs without it. The spike's error list now reads the last
+  launch's part of the appended log (the first attempt's KeyError had leaked into the row).
+- **E16 closed:** GO on 4B (09:14), 9B a per-job base; 18 §2 / §9, 13 D86 carry both. Next: LT1 (slots live), LT2 on the spike's runner shape.

@@ -104,6 +104,13 @@ MANIFEST = [
     # E5b (2026-10-05): GGUF Q4 runs at 68-81 s/it on the 9070 XT; fp8 with weight streaming is the fast path (E0)
     dict(spike="e5", repo="Kijai/LTX2.3_comfy", file="diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
          dest="diffusion_models", license="ltx-2.x community (Kijai repack)"),
+    # ---- E18 lip-sync (D87): Wan2.2 S2V-14B fp8 + its wav2vec2 audio encoder (Comfy-Org repack, Apache-2.0) ----
+    dict(spike="e18", repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_s2v_14B_fp8_scaled.safetensors", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="e18", repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/audio_encoders/wav2vec2_large_english_fp16.safetensors", dest="audio_encoders", license="apache-2.0"),
+    # ---- E19 pose-driven shots (D87): Wan2.2 Animate-14B fp8 (Kijai's scaled repack, the ComfyUI template's file), clip_vision_h, the LightX2V 4-step I2V LoRA ----
+    dict(spike="e19", repo="Kijai/WanVideo_comfy_fp8_scaled", file="Wan22Animate/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors", dest="diffusion_models", license="apache-2.0 (Kijai repack)"),
+    dict(spike="e19", repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/clip_vision/clip_vision_h.safetensors", dest="clip_vision", license="apache-2.0"),
+    dict(spike="e19", repo="Kijai/WanVideo_comfy", file="Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", dest="loras", license="apache-2.0 (lightx2v; Kijai repack)"),
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),

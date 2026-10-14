@@ -1,0 +1,5 @@
+# voices/.venv (19 §2 E20, D87): the engine venv's ROCm torch build, never swapped for a CUDA or CPU wheel. Qwen3-TTS pins its own
+# transformers (4.x) — the reason this venv is not trainers/.venv (ai-toolkit pins 5.5.3).
+torch==2.13.0+rocm10.0.0
+torchvision==0.28.0+rocm10.0.0
+torchaudio==2.11.0.2+rocm10.0.0

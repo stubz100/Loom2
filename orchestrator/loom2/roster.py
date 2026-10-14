@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Folder = Literal["diffusion_models", "text_encoders", "vae", "loras", "clip_vision", "upscale_models",
+Folder = Literal["diffusion_models", "text_encoders", "vae", "loras", "clip_vision", "upscale_models", "audio_encoders",
                  "controlnet", "checkpoints", "sam3", "background_removal", "embeddings", "geometry_estimation"]
 Health = Literal["present", "verified", "missing", "retired"]
 
@@ -110,6 +110,22 @@ ROSTER: list[RosterEntry] = [
                 repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=13.3, note="E4c 2026-10-05: 236 s per 81 f clip vs 322 s GGUF; D8 recipe"),
     RosterEntry(id="wan22-i2v-low-fp8", name="wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", folder="diffusion_models", family="wan22", role="transformer",
                 repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=13.3, note="E4c 2026-10-05: 236 s per 81 f clip vs 322 s GGUF; D8 recipe"),
+    # ---- wave CN (D87, 19 §2): E18 lip-sync and E19 pose-driven shots — Apache-2.0 repacks, both variants ----
+    RosterEntry(id="wan22-s2v-fp8", name="wan2.2_s2v_14B_fp8_scaled.safetensors", folder="diffusion_models", family="wan22", role="transformer",
+                repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/diffusion_models/wan2.2_s2v_14B_fp8_scaled.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=15.3, note="Wan2.2 S2V-14B: a reference image + audio → a talking clip (E18)"),
+    RosterEntry(id="wav2vec2-large-english", name="wav2vec2_large_english_fp16.safetensors", folder="audio_encoders", family="wan22", role="audio_encoder",
+                repo="Comfy-Org/Wan_2.2_ComfyUI_Repackaged", file="split_files/audio_encoders/wav2vec2_large_english_fp16.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=0.6, note="the S2V audio encoder (core AudioEncoderLoader)"),
+    RosterEntry(id="wan22-animate-fp8", name="Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors", folder="diffusion_models", family="wan22", role="transformer",
+                repo="Kijai/WanVideo_comfy_fp8_scaled", file="Wan22Animate/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors", license="apache-2.0 (Kijai repack)",
+                variants=["full", "open"], approx_gb=17.1, note="Wan2.2 Animate-14B: a reference image + a pose video → the character performing it (E19, Move)"),
+    RosterEntry(id="clip-vision-h", name="clip_vision_h.safetensors", folder="clip_vision", family="wan22", role="clip_vision",
+                repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/clip_vision/clip_vision_h.safetensors", license="apache-2.0",
+                variants=["full", "open"], approx_gb=1.2, note="the CLIP vision Animate conditions the reference on"),
+    RosterEntry(id="lightx2v-i2v-4step", name="lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", folder="loras", family="wan22", role="lora",
+                repo="Kijai/WanVideo_comfy", file="Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", license="apache-2.0 (lightx2v; Kijai repack)",
+                variants=["full", "open"], approx_gb=0.7, base="wan22", preset="lightning", note="the 4-step distillation LoRA the Animate template samples with"),
     RosterEntry(id="umt5-xxl-fp8", name="umt5_xxl_fp8_e4m3fn_scaled.safetensors", folder="text_encoders", family="wan22", role="text_encoder",
                 repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=6.3),
     RosterEntry(id="wan21-vae", name="wan_2.1_vae.safetensors", folder="vae", family="wan22", role="vae",

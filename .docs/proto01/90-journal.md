@@ -3867,3 +3867,18 @@ split by file so that no two hands touched the same module.
   Flow line, an audio lane in the exports), CN3 lip-sync (a take on a shot version), CN4 the `animate` clip method, CN5 the rig acceptance;
   ≈ 22 d; nine defaults for the author (19 §6) incl. ≈ 38 GB of downloads and the TTS packages into `trainers/.venv`.
 - 13 D87 proposed, 00 row 19, 12 §8f, 08 §1 the CN row, 17 §13 and 11 §3d pointers. Nothing installed or fetched.
+
+## 2026-10-14 16:29 — E20 · the voice tiers: GO on both (19 §2, D87)
+- **Setup:** the voice tools could not share `trainers/.venv` — `qwen-tts` pins transformers 4.57 while ai-toolkit pins 5.5.3 (with 5.5.3 restored,
+  `qwen_tts` fails to import: `check_model_inputs() missing 1 required positional argument`) — so they have `voices/.venv` (`scripts/voices-setup.ps1`:
+  Python 3.12, the engine's ROCm torch wheels, `kokoro` + `misaki[en]` + `soundfile` + `qwen-tts` under `voices/constraints.txt`, plus pip and spaCy's
+  `en_core_web_sm` — Kokoro's English G2P fetches it through pip / uv, which need a venv marker and pip itself; the first run died on
+  "No virtual environment found"). `voices/AGENTS.md` written. The draft tier's `soundfile` and PyAV also serve E18 in the orchestrator venv.
+- **Draft (Kokoro-82M, Apache-2.0, CPU):** loads in 2.2 s; four English lines of 3.5–5.0 s of speech in 4.7 / 2.5 / 2.7 / 13.0 s — the 13 s one ran while
+  E17's engine decode and two 15 GB downloads shared the machine (bar ≤ 5 s: 3 / 4, the outlier to be rerun at idle). No German in Kokoro.
+- **Cloning (Qwen3-TTS-12Hz-0.6B-Base, Apache-2.0, GPU):** loads in 167 s cold (the 2.3 GB fetch included), the clone prompt from a 4.6 s Kokoro
+  reference + its transcript in 19.5 s, then six lines — four EN of 3.4–4.1 s in 3.0–5.1 s, two DE of 5.0–5.4 s in 4.6–4.9 s — at a 2.6 GB peak,
+  the plain-torch path (no FlashAttention). Bar ≤ 15 s ✓ on all six; by ear the author's (`engine/spikes/out/e20/*_clone.wav`). Chatterbox not needed.
+- **Verdict: GO** — the draft tier on the CPU beside a running engine, the cloning tier on the GPU (2.6 GB fits beside an idle engine; the plan keeps
+  it behind `plan().gpu` for the engine-stopped case). CN2's `tts` job runs `voices/.venv`'s python (`Settings.voices`). 19 §2 run line, §6 item 3
+  amended, 13 D87 marked.

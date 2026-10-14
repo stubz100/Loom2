@@ -17,6 +17,7 @@ loom2_models:
   controlnet: controlnet
   upscale_models: upscale_models
   clip_vision: clip_vision
+  audio_encoders: audio_encoders            # D87 / E18: wav2vec2 for Wan2.2 S2V (core AudioEncoderLoader)
   embeddings: embeddings
   background_removal: background_removal
   model_patches: model_patches                # D74 / E10: core ModelPatchLoader (Fun ControlNet patches)

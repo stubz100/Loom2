@@ -4967,7 +4967,7 @@ export interface components {
              * Folder
              * @enum {string}
              */
-            folder: "diffusion_models" | "text_encoders" | "vae" | "loras" | "clip_vision" | "upscale_models" | "controlnet" | "checkpoints" | "sam3" | "background_removal" | "embeddings" | "geometry_estimation";
+            folder: "diffusion_models" | "text_encoders" | "vae" | "loras" | "clip_vision" | "upscale_models" | "audio_encoders" | "controlnet" | "checkpoints" | "sam3" | "background_removal" | "embeddings" | "geometry_estimation";
             /**
              * Health
              * @enum {string}

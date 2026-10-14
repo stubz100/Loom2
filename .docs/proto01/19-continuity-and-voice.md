@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **proposed 2026-10-14**; approval gates the spikes (D87). 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); the spikes in progress, each gating its slice. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -47,6 +47,8 @@ Every spike is a script under `engine/spikes/`, its numbers in the journal, D87'
 | Kokoro-82M (Apache-2.0, `pip kokoro`, 0.3 GB) | draft | CPU, seconds, 50+ fixed voices (EN; other languages need espeak-ng) | a 5-s English line ≤ 5 s on the CPU; intelligible by ear |
 | Qwen3-TTS-0.6B (Apache-2.0, `pip qwen-tts`, 2.3 GB) | cloning | ten languages with DE / FR / ES / IT / PT (the author is EU-based), a 3-s clone with a transcript | installs in `trainers/.venv` on torch 2.13 ROCm without FlashAttention; a 5-s DE and EN line ≤ 15 s on the GPU; the clone recognisable by ear (3 / 3 listeners of one) |
 | Chatterbox (MIT, `pip chatterbox-tts`, the English model ≈ 1–2 GB) | cloning (alternate) | the blind-test favourite for English | the same bars; chosen over Qwen3-TTS only if Qwen3 fails to install or sounds worse |
+
+**Run 2026-10-14 (`engine/spikes/e20_voice.py`, journal) — GO on both tiers.** Kokoro 0.9.4 loads in 2 s and speaks a 3.5–5 s English line in 2.5–4.7 s on the CPU (one 13 s outlier while the engine and two 15 GB downloads shared the machine); Qwen3-TTS-0.6B-Base loads in 167 s cold (the 2.3 GB fetch included), makes a clone prompt from a 4.6 s Kokoro reference in 20 s and speaks EN and DE lines of 3.4–5.4 s in 3.0–5.1 s on the GPU at a 2.6 GB peak — without FlashAttention (the package's plain-torch path). Chatterbox was not needed. **One change to §6 item 3:** the voice tools got their own venv `voices/.venv` (`scripts/voices-setup.ps1`, `voices/AGENTS.md`) — Qwen3-TTS pins transformers 4.x and ai-toolkit 5.5.3, so they cannot share `trainers/.venv`; the venv also carries pip and spaCy's `en_core_web_sm` for Kokoro's English G2P.
 
 The winner of the cloning tier is one model; the draft tier is Kokoro unless it fails to install. Both run as queue jobs without the engine
 (the cloning tier with the engine stopped, as training — `plan().gpu`). The reference clip for a clone is the author's own voice or a
@@ -155,8 +157,7 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 1. **The four spikes first**, in the order E20 → E17 → E18 → E19; a spike's NO-GO drops its slice from the wave and is recorded, the wave
    goes on with the rest.
 2. **Downloads** as listed in §2 (≈ 38 GB, Apache-2.0 / MIT; VACE only on E19's NO-GO), through `scripts/fetch_weights.py`; losers deleted.
-3. **The TTS packages go into `trainers/.venv`** (the ROCm torch venv beside the engine's — the *tools* venv); no new venv, no change to the
-   engine venv. The cloning tier and the GPU lip-sync methods run with the engine stopped, as training does; the draft tier on the CPU
+3. ~~The TTS packages go into `trainers/.venv`~~ **The TTS packages have their own venv `voices/.venv`** (E20: Qwen3-TTS pins transformers 4.x, ai-toolkit 5.5.3 — they cannot share one; the ROCm torch wheels beside the engine's); no change to the engine venv. The cloning tier and the GPU lip-sync methods run with the engine stopped, as training does; the draft tier on the CPU
    beside a running engine.
 4. **A chain is N clips** with `chained_from` / `overlap` links and native fps; the join is welded by the Episode at export (RIFE), never in
    the masters; the first segment's model decides the chain's model.

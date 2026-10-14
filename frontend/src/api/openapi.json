@@ -7206,6 +7206,7 @@
               "loras",
               "clip_vision",
               "upscale_models",
+              "audio_encoders",
               "controlnet",
               "checkpoints",
               "sam3",

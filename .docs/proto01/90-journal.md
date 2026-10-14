@@ -3848,3 +3848,22 @@ split by file so that no two hands touched the same module.
 - **D86 closed:** 18's status, §3f / §3g / §3h notes and §8's run line, 13, 12 §8e, 08 §1, 00 row 18, `trainers/AGENTS.md`. Next: 17 §13's
   other waves (voice, Muse behind E15) or 03 §5 items 3 / 5 — the author's call; LT's follow-ups are 18 §1's "out" list (style LoRAs on an album
   group, video LoRAs) and the CI flakes noted on 8d380e5 / 9e3bfa2 (the open-variant smoke, a Windows replace race now retried in `fsio`).
+
+## 2026-10-14 15:12 — Wave CN · continuity and voice: the plan → `19-continuity-and-voice.md`, D87 proposed
+- The author chose 03 §5 item 4 for the next wave and asked for lip-sync with it (after the LoRA wave closed at a8fee57, CI green). Read:
+  11 (Animate: FLF, beats, extract → first / last frame, the *Extend* verb reserved), 16 §8 (ST4: LTX + IC-LoRA on the Stage's depth pass, the
+  pose pass weaker), 17 (shots with takes, Flow lines, the Episode's SRT), 18 (the LoRA as the identity source), loom P3 (continuity the
+  make-or-break R&D: pixel-identical handoffs vs a seam weld vs a dissolve; node-level voice with two TTS tiers + lip-sync), D8 / D9 / D27 / D76's
+  measurements; the pinned engine's own nodes — `WanSoundImageToVideo` (+ Extend), `WanInfiniteTalkToVideo`, `WanAnimateToVideo` / `…2`,
+  `WanVaceToVideo`, `Wan22FunControlToVideo`, `LTXVAudioVAEEncode` / `LTXVConcatAVLatent` (loom2's LTX graph already builds the joint latent
+  with an empty audio latent), `LTXVAddGuide` on a frame sequence, `AudioEncoderLoader`; the Apache repacks (S2V fp8 15.3 GB + wav2vec2 0.6 GB,
+  Animate fp8 KJ 17.1 GB + clip_vision_h 1.2 GB, Fun-VACE 16.2 GB × 2 or Kijai's 2.8 GB modules); the 2026 TTS field (Kokoro Apache CPU,
+  Chatterbox MIT, Qwen3-TTS Apache with ten languages and a 3-s clone — XTTS / F5 non-commercial, out under D17 / D26).
+- The plan (19): four spikes first — E20 voice, E17 extend (LTX guide-frame extension with the previous clip's last 9 frames vs Wan last-frame
+  chaining + a RIFE weld, a seam metric and FaceSim at both ends of a three-segment chain), E18 lip-sync (LTX-2.3 IA2V on the distilled
+  transformer vs Wan2.2 S2V, a mouth-motion proxy against the audio envelope), E19 pose-driven shots (Wan2.2 Animate *Move* on loom2's own
+  pose pass with the Cast hero, PCK vs the rendered keypoints; VACE only on a NO-GO); then CN1 extend (`extend_from`, `chained_from`, the
+  Episode's weld at export, beats across a chain), CN2 voice (an `audio` asset kind, `voice` records with the consent note, the `tts` job per
+  Flow line, an audio lane in the exports), CN3 lip-sync (a take on a shot version), CN4 the `animate` clip method, CN5 the rig acceptance;
+  ≈ 22 d; nine defaults for the author (19 §6) incl. ≈ 38 GB of downloads and the TTS packages into `trainers/.venv`.
+- 13 D87 proposed, 00 row 19, 12 §8f, 08 §1 the CN row, 17 §13 and 11 §3d pointers. Nothing installed or fetched.

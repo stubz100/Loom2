@@ -353,6 +353,10 @@ alpha acceptance on the rig 2026-10-14 (journal).**
 
 03 §5 item 2 on the Story foundation: E16 the ai-toolkit-on-ROCm gate with Klein base-4B (3 d) → LT1 D25's slots live (2 d, may run during E16) → LT2 the staged `train_lora` job, the registry, readiness, the Cast and Models UI (5 d) → LT3 mentions, the FaceSim check, the rig acceptance (3 d), ≈ 13 d. Gate: 18 §9 approved (D86); E16 GO before LT2. **Proposed 2026-10-14; E16 GO, LT1–LT3 built and the wave accepted on the rig 2026-10-14 (journal).**
 
+## 8f. Continuity and voice E20 / E17 / E18 / E19 + CN1–CN5 (from `19-continuity-and-voice.md`, D87)
+
+03 §5 item 4 with lip-sync (the author, 2026-10-14): E20 voice (1 d) → E17 extend (2 d) → E18 lip-sync (2 d) → E19 pose-driven shots (2 d) → CN1 extend (3 d) → CN2 voice (4 d) → CN3 lip-sync (3 d) → CN4 the animate method (3 d) → CN5 acceptance (2 d), ≈ 22 d. Gate: 19 §6 approved (D87); each spike's GO before its slice. **Proposed 2026-10-14.**
+
 ## 9. Totals and parallelism
 
 Sequential sum ≈ 24–32 weeks. Realistic overlaps: E1–E3 and E6 run while E0/E4/E5 occupy the GPU; M2 UI can

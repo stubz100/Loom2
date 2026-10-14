@@ -38,6 +38,7 @@ D34 has modified.
 | **Later** | P14 build, P17 build, P18 build | angles verb, single-lane timeline, mesh props | 6 / 10 / 6 d | E12 / E13 / E14 passed |
 | **SY · Story workspace** (D85, `../proto01/17-ui-suite-story.md`) | SY0–SY5 | bible · cast · shots · flow · episode on the shipped foundation (loom's design re-planned, 14 §4) | ≈ 28 d | every proposal P1–P19 built (2026-10-13); P17's lane moves into the Episode tab |
 | **LT · LoRA training** (D86, `../proto01/18-lora-training.md`) | E16, LT1–LT3 | D25's slots live; ai-toolkit on ROCm as a staged job from a Cast version's reference set; `@mention` → LoRA + trigger | ≈ 13 d | built 2026-10-14 (E16 GO, LT1–LT3, the rig acceptance) |
+| **CN · Continuity and voice** (D87, `../proto01/19-continuity-and-voice.md`) | E20, E17, E18, E19, CN1–CN5 | extension and keyframe chains, pose-driven shots, voice (two TTS tiers) and lip-sync as shot takes | ≈ 22 d | proposed 2026-10-14; the spikes gate the slices |
 
 ```
 D34 commit ─► H1: P7 ─► P19 ─► P8 ─► P3

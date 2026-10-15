@@ -98,7 +98,7 @@ class FakeComfy:
             return
         for v in (1, 2):
             await self._send({"type": "progress", "data": {"prompt_id": pid, "value": v, "max": 2, "node": "1"}})
-        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo")), None)
+        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo", "WanSoundImageToVideo")), None)
         if vid:                                                  # M6: a video graph decodes `length` frames; SaveImage writes one PNG each
             w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
         else:
@@ -165,6 +165,15 @@ class FakeComfy:
                             opts.append(name)
                     elif isinstance(vspec[0], list) and name not in vspec[0]:
                         vspec[0].append(name)
+            if name.lower().endswith((".wav", ".flac", ".mp3")):                # D88 XL: a line shows up in LoadAudio's enum, as ComfyUI lists the input folder
+                aspec = fake.object_info.get("LoadAudio", {}).get("input", {}).get("required", {}).get("audio")
+                if isinstance(aspec, list) and aspec:
+                    if isinstance(aspec[0], str) and len(aspec) > 1 and isinstance(aspec[1], dict):
+                        opts = aspec[1].setdefault("options", [])
+                        if name not in opts:
+                            opts.append(name)
+                    elif isinstance(aspec[0], list) and name not in aspec[0]:
+                        aspec[0].append(name)
             return {"name": name, "subfolder": subfolder, "type": type}
 
         @app.post("/prompt")

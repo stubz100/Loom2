@@ -377,6 +377,40 @@ class JobQueue:
         return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
                 "resumed_unclean": self.resumed_unclean, "recovery": list(self.recovery) + list(getattr(self.catalogue, "recovery", []) or [])}
 
+    def _check_extend(self, recipe: Any, spec: Any) -> None:
+        """D88 XE: the clip exists, it is this model's, the lead is the model's (LTX 9, Wan 1)."""
+        from .clips import ClipStore
+        if spec.recipes.extend_lead is None:
+            raise ValueError(f"{spec.label} does not continue clips")
+        ext = recipe.extend_from
+        prev = ClipStore(self.ws).get(ext.clip_id)
+        if prev is None:
+            raise ValueError(f"the clip to extend ({ext.clip_id}) is not in the project")
+        if prev.model_id != recipe.model_id:
+            raise ValueError(f"a continuation runs on the clip's own model ({prev.model_id}); this job names {recipe.model_id}")
+        if ext.lead != spec.recipes.extend_lead:
+            raise ValueError(f"{spec.label} continues from the last {spec.recipes.extend_lead} frame(s), not {ext.lead}")
+        if prev.frames < ext.lead:
+            raise ValueError(f"the clip has {prev.frames} frames; the lead-in needs {ext.lead}")
+        if recipe.end_asset or recipe.guide:
+            raise ValueError("a continuation takes no end frame and no pass guide (experimental)")
+
+    def _check_lipsync(self, recipe: Any, spec: Any) -> None:
+        """D88 XL: the line is an audio asset, in a language the encoder hears, inside one window; one image, nothing else."""
+        if not recipe.audio:
+            raise ValueError(f"{spec.label} follows a spoken line — voice the line first (Flow · 🎙), then lip-sync it")
+        if recipe.end_asset or recipe.beats or recipe.guide or recipe.extend_from:
+            raise ValueError(f"{spec.label} takes one image and one line — no end frame, beats, guide or extension")
+        a = self.catalogue.get(recipe.audio.asset_id)
+        if a is None or a.kind != "audio":
+            raise ValueError(f"the line ({recipe.audio.asset_id}) is not an audio asset in the Catalogue")
+        lang = (a.params or {}).get("language")
+        if lang and spec.recipes.lipsync_languages and lang not in spec.recipes.lipsync_languages:
+            raise ValueError(f"{spec.label} hears {' / '.join(spec.recipes.lipsync_languages)} only (E18); this line is {lang}")
+        cap = (spec.geometry.frames or 77) / float(spec.geometry.fps or 16)
+        if a.duration_s and a.duration_s > cap + 0.05:
+            raise ValueError(f"the line is {a.duration_s:.1f} s; {spec.label} makes one window of {cap:.1f} s (experimental) — split the line")
+
     def _check_animate(self, recipe: Any, spec: Any) -> None:
         """CN4: Animate performs the Stage's pose sequence with the start image as the character — one figure per pass (E19's two small
         runners came back as hands over a face), no end frame, no beats."""
@@ -424,11 +458,17 @@ class JobQueue:
                 recipe_te_id(recipe, self.app.settings.variant)          # the encoder must pair with the model (TE_ALTERNATES)
             except CompileError as e:
                 raise ValueError(str(e))
-        if isinstance(recipe, I2V) and spec is not None and spec.recipes.animate:   # CN4 (19 §3d, E19): the pose pass, one figure
+        if isinstance(recipe, I2V) and spec is not None and spec.recipes.lipsync:   # D88 XL (experimental): one image, one English line, one window
+            self._check_lipsync(recipe, spec)
+        elif isinstance(recipe, I2V) and spec is not None and spec.recipes.animate:   # CN4 (19 §3d, E19): the pose pass, one figure
             self._check_animate(recipe, spec)
         elif isinstance(recipe, I2V):
             if spec is None or not spec.recipes.i2v:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
+            if recipe.audio:
+                raise ValueError(f"{spec.label} does not follow audio — lip-sync is the S2V model's")
+            if recipe.extend_from:                                         # D88 XE (experimental)
+                self._check_extend(recipe, spec)
             if recipe.beats and not spec.recipes.beats:
                 raise ValueError(f"keyframe beats need a model that takes them ({', '.join(s.label for s in registry.video_specs() if s.recipes.beats)}); {spec.label} takes a start and an end frame")
         variant = self.app.settings.variant

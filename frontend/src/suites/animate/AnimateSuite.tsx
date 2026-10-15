@@ -460,6 +460,7 @@ function ClipTab({ clip }: { clip: Clip }) {
   const asset = useAnimate((s) => (clip.asset_id ? s.assets[clip.asset_id] : undefined))
   const caps = useSession((s) => s.capabilities?.i2v)
   const facesim = useSession((s) => s.capabilities?.facesim)
+  const experimental = useSession((s) => s.capabilities?.experimental)
   const wall = (clip.timings as { wall_s?: number }).wall_s
   return (
     <div>
@@ -482,7 +483,10 @@ function ClipTab({ clip }: { clip: Clip }) {
           {' '}<CommandButton id="anim.identity" text />
         </dd>
         <dt>clip</dt><dd className="mono">{clip.id}{clip.job_id ? ` · job ${clip.job_id}` : ''}</dd>
-        <dt>extend</dt><dd><CommandButton id="anim.useAsStart" text /> <span className="hint">native extension waits for LTX-2.3 (post-MVP)</span></dd>
+        <dt>extend</dt><dd><CommandButton id="anim.extend" text /> <CommandButton id="anim.useAsStart" text />{' '}
+          {experimental?.extend.models[clip.model_id] ? <span className="hint"><span className="badge experimental">experimental</span> {experimental.extend.caveat}</span> : <span className="hint">this model does not continue clips</span>}</dd>
+        {clip.chained_from && <><dt>continues</dt><dd className="mono">{clip.chained_from} · its first {clip.overlap} frame{clip.overlap === 1 ? '' : 's'} repeat the end of it</dd></>}
+        {clip.audio_asset_id && <><dt>line</dt><dd><span className="badge experimental">lip-sync · experimental</span> the proxy carries the line</dd></>}
       </dl>
     </div>
   )

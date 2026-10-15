@@ -5,6 +5,8 @@ frames into the Catalogue as images with `frame-extract` lineage.
 """
 from __future__ import annotations
 
+from fractions import Fraction
+
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -50,6 +52,9 @@ class ClipRecord(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     timings: dict[str, Any] = Field(default_factory=dict)
     identity: Annotated[dict[str, Any] | None, WithJsonSchema(IDENTITY_SCHEMA)] = None       # FaceSim advisory (tools/facesim.py), filled after the proxy
+    chained_from: str | None = None               # D88 XE (experimental): the clip this one continues
+    overlap: int = 0                              # its first `overlap` frames repeat the previous clip's last ones (LTX 9, Wan 1)
+    audio_asset_id: str | None = None             # D88 XL (experimental): the line the proxy carries (a lip-sync clip)
 
 
 class ClipStore:
@@ -100,7 +105,27 @@ class ClipStore:
         self.save(rec)
         return rec
 
-    def encode_proxy(self, rec: ClipRecord, *, gop: int = 6, crf: int = 18) -> ClipRecord:
+    def encode_tail(self, rec: ClipRecord, n: int, out: Path) -> Path:
+        """D88 XE: the master's last `n` frames as a near-lossless mp4 at the clip's rate (the continuation's lead-in for LoadVideo)."""
+        import av
+        from PIL import Image
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        w, h = rec.w - rec.w % 2, rec.h - rec.h % 2
+        with av.open(str(out), "w", format="mp4") as container:
+            stream = container.add_stream("libx264", rate=rec.fps)
+            stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
+            stream.options = {"crf": "10", "preset": "medium"}
+            for i in range(max(0, rec.frames - n), rec.frames):
+                with Image.open(self.frame_path(rec.id, i)) as im:
+                    arr = np.ascontiguousarray(np.asarray(im.convert("RGB"))[:h, :w])
+                for pkt in stream.encode(av.VideoFrame.from_ndarray(arr, format="rgb24")):
+                    container.mux(pkt)
+            for pkt in stream.encode():
+                container.mux(pkt)
+        return out
+
+    def encode_proxy(self, rec: ClipRecord, *, gop: int = 6, crf: int = 18, audio: Path | None = None) -> ClipRecord:
         """h264 yuv420p proxy from the master: a short, fixed GOP keeps random-access decode cheap (E6: GOP 6 ≈ 10 ms
         per seek in Mediabunny); odd sizes lose their last row/column (yuv420p needs even dimensions)."""
         import av
@@ -113,6 +138,13 @@ class ClipStore:
             stream = container.add_stream("libx264", rate=rec.fps)
             stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
             stream.options = {"crf": str(crf), "preset": "medium", "g": str(gop), "keyint_min": str(gop), "sc_threshold": "0"}
+            astream, data, sr = None, None, 0
+            if audio is not None and Path(audio).is_file():               # D88 XL: the line, AAC, cut to the clip's length (both streams before any packet)
+                import soundfile as sf
+                data, sr = sf.read(str(audio), dtype="float32", always_2d=True)
+                data = data[: int(sr * rec.frames / rec.fps)].mean(axis=1)
+                astream = container.add_stream("aac", rate=sr)
+                astream.layout = "mono"
             for i in range(rec.frames):
                 with Image.open(self.frame_path(rec.id, i)) as im:
                     arr = np.ascontiguousarray(np.asarray(im.convert("RGB"))[:h, :w])
@@ -120,6 +152,18 @@ class ClipStore:
                     container.mux(pkt)
             for pkt in stream.encode():
                 container.mux(pkt)
+            if astream is not None and data is not None:
+                step = 1024
+                for i in range(0, len(data), step):
+                    chunk = np.ascontiguousarray(data[i:i + step].reshape(1, -1))
+                    af = av.AudioFrame.from_ndarray(chunk, format="fltp", layout="mono")
+                    af.sample_rate = sr
+                    af.pts = i
+                    af.time_base = Fraction(1, sr)
+                    for pkt in astream.encode(af):
+                        container.mux(pkt)
+                for pkt in astream.encode():
+                    container.mux(pkt)
         tmp.replace(out)
         rec.proxy_path = out.relative_to(self.ws.path).as_posix()
         rec.proxy_bytes = out.stat().st_size

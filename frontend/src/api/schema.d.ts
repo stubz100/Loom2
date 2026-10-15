@@ -317,6 +317,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clips/{clip_id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clip Extend
+         * @description D88 XE (experimental): continue the clip on its own model, preset, size, fps and length — its last frame extracted as the start
+         *     (`frame-extract` lineage), its last `extend_lead` frames pinned as the lead-in (LTX 9; Wan 1 = the start alone). 422 with the sentence.
+         */
+        post: operations["clip_extend_clips__clip_id__extend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clips/{clip_id}/extract": {
         parameters: {
             query?: never;
@@ -1939,6 +1960,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/lipsync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Lipsync
+         * @description D88 XL (experimental): a talking clip of the version's frame (or any image) speaking a voiced line — one window (≤ 4.8 s at 16 fps),
+         *     English only (E18); it lands as a take on the version. 422 with the sentence.
+         */
+        post: operations["shot_lipsync_story_shots__sid__versions__vid__lipsync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/take": {
         parameters: {
             query?: never;
@@ -2391,6 +2433,14 @@ export interface components {
             w: number | null;
         };
         /**
+         * AudioRef
+         * @description D88 XL (experimental): the spoken line a lip-sync clip follows (an `audio` asset, CN2).
+         */
+        AudioRef: {
+            /** Asset Id */
+            asset_id: string;
+        };
+        /**
          * Beat
          * @description LTX keyframe guide (11 §3b): the asset is encoded as a guide at `frame` with `strength`.
          */
@@ -2441,6 +2491,7 @@ export interface components {
             defaults: {
                 [key: string]: string;
             };
+            experimental?: components["schemas"]["ExperimentalCaps"] | null;
             facesim: components["schemas"]["FaceSimCaps"];
             i2v: components["schemas"]["I2vCaps"];
             mesh: components["schemas"]["MeshCaps"];
@@ -2571,6 +2622,8 @@ export interface components {
         ClipRecord: {
             /** Asset Id */
             asset_id: string | null;
+            /** Audio Asset Id */
+            audio_asset_id: string | null;
             /** Batch Id */
             batch_id: string | null;
             /** Beats */
@@ -2579,6 +2632,8 @@ export interface components {
                 frame: number;
                 strength: number;
             }[];
+            /** Chained From */
+            chained_from: string | null;
             /** Created At */
             created_at: string;
             /** End Asset Id */
@@ -2618,6 +2673,11 @@ export interface components {
             master_dir: string;
             /** Model Id */
             model_id: string;
+            /**
+             * Overlap
+             * @default 0
+             */
+            overlap: number;
             /** Params */
             params: {
                 [key: string]: unknown;
@@ -3241,6 +3301,69 @@ export interface components {
             /** Model Id */
             model_id: string;
         };
+        /**
+         * ExperimentalCaps
+         * @description D88: features shipped before their bars are met — each with the caveat the UI shows beside its verb.
+         */
+        ExperimentalCaps: {
+            extend: components["schemas"]["ExperimentalExtendCaps"];
+            lipsync: components["schemas"]["ExperimentalLipsyncCaps"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** ExperimentalExtendCaps */
+        ExperimentalExtendCaps: {
+            /** Caveat */
+            caveat: string;
+            /** Models */
+            models: {
+                [key: string]: number;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /** ExperimentalLipsyncCaps */
+        ExperimentalLipsyncCaps: {
+            /** Available */
+            available: boolean;
+            /** Caveat */
+            caveat: string;
+            /** Fps */
+            fps?: number | null;
+            /** Frames Max */
+            frames_max?: number | null;
+            /** Health */
+            health?: string | null;
+            /** Label */
+            label?: string | null;
+            /**
+             * Languages
+             * @default []
+             */
+            languages?: string[];
+            /**
+             * Missing
+             * @default []
+             */
+            missing?: string[];
+            /** Model Id */
+            model_id?: string | null;
+            /**
+             * Presets
+             * @default {}
+             */
+            presets?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Seconds Max */
+            seconds_max?: number | null;
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ExportRequest */
         ExportRequest: {
             /**
@@ -3248,6 +3371,46 @@ export interface components {
              * @default png
              */
             format?: string;
+        };
+        /** ExtendBody */
+        ExtendBody: {
+            /** Prompt Text */
+            prompt_text?: string | null;
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
+        };
+        /**
+         * ExtendFrom
+         * @description D88 XE (experimental): continue a clip — its last `lead` frames lead the new one in (LTX: 9 pinned by LTXVAddGuide at frame 0;
+         *     Wan: 1, the start image is its last frame). The new clip records `chained_from` / `overlap`.
+         */
+        ExtendFrom: {
+            /** Clip Id */
+            clip_id: string;
+            /**
+             * Lead
+             * @default 9
+             */
+            lead?: number;
+        };
+        /**
+         * ExtendQueued
+         * @description D88 XE (experimental): the continuation's job, its start (the clip's last frame, extracted) and the lead-in it pins.
+         */
+        ExtendQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Lead */
+            lead: number;
+            /** Model Id */
+            model_id: string;
+            /** Staged */
+            staged: boolean;
+            /** Start Asset Id */
+            start_asset_id: string;
         };
         /** FaceSimCaps */
         FaceSimCaps: {
@@ -4012,6 +4175,8 @@ export interface components {
          *     LTX ×32 and 8n+1); `graphs.i2v_params` shows the UI what will run.
          */
         I2V: {
+            /** @default null */
+            audio?: components["schemas"]["AudioRef"] | null;
             /** Beats */
             beats?: components["schemas"]["Beat"][];
             /**
@@ -4024,6 +4189,8 @@ export interface components {
              * @default null
              */
             end_asset?: string | null;
+            /** @default null */
+            extend_from?: components["schemas"]["ExtendFrom"] | null;
             /**
              * Fps
              * @default 16
@@ -4064,7 +4231,7 @@ export interface components {
              * @default draft
              * @enum {string}
              */
-            preset?: "draft" | "motion" | "quality";
+            preset?: "draft" | "motion" | "quality" | "fast";
             /**
              * Prompt Text
              * @default
@@ -4736,6 +4903,53 @@ export interface components {
             };
             /** Root Id */
             root_id: string;
+        };
+        /** LipsyncBody */
+        LipsyncBody: {
+            /** Audio Asset Id */
+            audio_asset_id?: string | null;
+            /** Image Asset Id */
+            image_asset_id?: string | null;
+            /** Index */
+            index?: number | null;
+            /** Node Id */
+            node_id?: string | null;
+            /**
+             * Preset
+             * @default draft
+             * @enum {string}
+             */
+            preset?: "draft" | "fast";
+            /**
+             * Prompt Text
+             * @default the character speaks the line to the camera, calm, natural head motion, steady camera, soft light
+             */
+            prompt_text?: string;
+            /**
+             * Stage
+             * @default true
+             */
+            stage?: boolean;
+        };
+        /**
+         * LipsyncQueued
+         * @description D88 XL (experimental): the talking clip's job — it lands as a take on the shot version.
+         */
+        LipsyncQueued: {
+            /** Audio Asset Id */
+            audio_asset_id: string;
+            /** Frames */
+            frames: number;
+            /** Image Asset Id */
+            image_asset_id: string;
+            /** Job Id */
+            job_id: string;
+            /** Model Id */
+            model_id: string;
+            /** Seconds */
+            seconds: number | null;
+            /** Staged */
+            staged: boolean;
         };
         /** Location */
         Location: {
@@ -5718,6 +5932,8 @@ export interface components {
              * @default []
              */
             default_for?: string[];
+            /** Extend Lead */
+            extend_lead?: number | null;
             /**
              * Flf
              * @default false
@@ -5754,6 +5970,16 @@ export interface components {
              * @default false
              */
             inpaint_hero?: boolean;
+            /**
+             * Lipsync
+             * @default false
+             */
+            lipsync?: boolean;
+            /**
+             * Lipsync Languages
+             * @default []
+             */
+            lipsync_languages?: string[];
             /**
              * Mesh
              * @default false
@@ -8272,6 +8498,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClipRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clip_extend_clips__clip_id__extend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtendBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtendQueued"];
                 };
             };
             /** @description Validation Error */
@@ -11634,6 +11895,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_lipsync_story_shots__sid__versions__vid__lipsync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LipsyncBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LipsyncQueued"];
                 };
             };
             /** @description Validation Error */

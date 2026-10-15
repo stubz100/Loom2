@@ -235,3 +235,15 @@ Shots tab's *Lip-sync ▶* with the line picker), staged by default (an overnigh
 **Acceptance:** offline tests, smoke scenarios on the fake engine, and `scripts/cn_acceptance.py --parts extend,lipsync` on the rig
 (a chain of two LTX clips with the seam ratio, a lip-synced take with the sync proxy) — measured and recorded, not gated: both stay
 experimental until their bars are met.
+
+**Built 2026-10-15 (journal).** `I2V.extend_from {clip_id, lead}` and `I2V.audio {asset_id}`; the specs' `extend_lead` (LTX 9, Wan 1),
+`lipsync`, `lipsync_languages` and the S2V spec (`wan22-s2v-fp8`, graph `wan_s2v`, presets Draft 20 / Fast 10 steps; `registry.lipsync_specs`);
+the LTX lead-in as the last `LTXVAddGuide` in the chain (the previous clip's last 9 frames as an mp4 from `ClipStore.encode_tail`); E18's S2V
+graph; the queue's sentences (the clip and its model, the lead, one window ≤ 4.8 s, English only, an audio asset, nothing else); the
+`ClipRecord`'s `chained_from` / `overlap` / `audio_asset_id`, lineage to the previous clip and to the line; the proxy muxing the line (AAC);
+the lip-sync clip a take on the shot version (`use = False`). Routes `POST /clips/{id}/extend` (the last frame extracted as the start) and
+`POST /story/shots/{sid}/versions/{vid}/lipsync` (the voiced line, the version's frame, frames from the line's length, staged);
+`/capabilities.experimental` with the caveats. UI: Animate's *Extend ▶ (experimental)* in the clip Inspector and the player's menu (the
+prompt editable, the caveat in the dialog), the *continues* and *line* rows; the shot version's Lip-sync block (the voiced lines, the
+preset with its time, the caveat, *Lip-sync ▶*); the Episode lane starting a continuation at its overlap when it follows its parent
+(`lane.chainIn`). **Rig:** extend — an LTX-2.3 clip of the hero (121 frames, 1024×576) continued through `POST /clips/{id}/extend`: the continuation in 156 s, `chained_from` / `overlap 9` recorded, the seam ratio 1.46 (E17's bar ≤ 1.5), FaceSim to the hero 0.97 at the start and 0.69 at the continuation's end (the character mid-frame, walking — E17's failure case is the character leaving the middle); lip-sync — a 3.1 s English line voiced by the draft tier on a shot with the hero's frame, Lip-sync at Fast through the app: staged, released, 49 frames in 282 s wall (cold load included), the take on the version, the line in the proxy, sync r 0.635 (E18's bar ≥ 0.5), FaceSim 0.70–0.95.

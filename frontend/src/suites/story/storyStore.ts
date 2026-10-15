@@ -25,6 +25,13 @@ export type VoiceBody = { name: string; tier: 'draft' | 'cloning'; voice: string
 export function voiceLabel(v: { name: string; tier: string; language: string }): string {
   return `${v.name} · ${v.tier}${v.language !== 'English' ? ` · ${v.language}` : ''}`
 }
+/** D88 XL: the voiced Flow lines a lip-sync can follow — the owner node's first. */
+export function voicedLines(nodes: Record<string, FlowNode>, ownerNode: string | null): { node_id: string; index: number; label: string; too_long: boolean }[] {
+  const out: { node_id: string; index: number; label: string; too_long: boolean }[] = []
+  const order = Object.values(nodes).sort((a, b) => (a.id === ownerNode ? -1 : b.id === ownerNode ? 1 : 0))
+  for (const n of order) n.lines.forEach((l, i) => { if (l.audio_asset_id && l.text.trim()) out.push({ node_id: n.id, index: i, label: `${n.title || n.type} · ${l.text.slice(0, 40)}`, too_long: false }) })
+  return out
+}
 /** The newest `tts` job that speaks a Flow line (the line's state in the Inspector). */
 export function ttsJobFor(jobs: Record<string, Job>, nodeId: string, index: number): Job | undefined {
   type Items = { items?: { node_id?: string | null; index?: number | null }[] }
@@ -68,6 +75,10 @@ export interface StoryState {
   voiceLine: (nodeId: string, index: number) => Promise<void>
   voiceNode: (nodeId: string) => Promise<void>
   playLine: (assetId: string) => void
+  /** D88 XL (experimental): the shot version's lip-sync options and the verb. */
+  lipsyncOpts: { node_id: string | null; index: number | null; preset: 'draft' | 'fast' }
+  setLipsyncOpts: (patch: Partial<{ node_id: string | null; index: number | null; preset: 'draft' | 'fast' }>) => void
+  lipsync: () => Promise<void>
   castFilter: ProfileClass | 'all'; castSearch: string
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
@@ -215,7 +226,7 @@ export const useStory = create<StoryState>()((set, get) => {
   return {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
-    loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false,
+    loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' },
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null,
@@ -474,6 +485,19 @@ export const useStory = create<StoryState>()((set, get) => {
         await useSession.getState().refreshAll()
         toast(`${r.lines} line${r.lines === 1 ? '' : 's'} queued in ${r.job_ids.length} job${r.job_ids.length === 1 ? '' : 's'}`, 'info')
       } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
+    },
+    setLipsyncOpts: (patch) => set({ lipsyncOpts: { ...get().lipsyncOpts, ...patch } }),
+    lipsync: async () => {
+      const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return
+      const o = get().lipsyncOpts
+      const line = o.node_id !== null && o.index !== null ? { node_id: o.node_id, index: o.index } : voicedLines(get().flowNodes, s.owner_node ?? null)[0]
+      if (!line) { toast('No voiced line — voice one in the Flow (🎙) first'); return }
+      try {
+        const r = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/lipsync', { params: { path: { sid: s.id, vid: v.id } },
+          body: { node_id: line.node_id, index: line.index, preset: o.preset, stage: true } as never }))
+        await useSession.getState().refreshAll()
+        toast(`Lip-sync staged (experimental): ${r.frames} frames, ≈ ${Math.round((r.seconds ?? 0) / 60)} min — release it when the rig is free; it lands as a take`, 'info')
+      } catch (e) { toast(`Lip-sync: ${detail(e)}`) }
     },
     playLine: (assetId) => {
       const a = new Audio(api.assetUrl(assetId))

@@ -210,6 +210,18 @@ class Beat(BaseModel):
     strength: float = Field(1.0, ge=0.1, le=1.0)
 
 
+class ExtendFrom(BaseModel):
+    """D88 XE (experimental): continue a clip — its last `lead` frames lead the new one in (LTX: 9 pinned by LTXVAddGuide at frame 0;
+    Wan: 1, the start image is its last frame). The new clip records `chained_from` / `overlap`."""
+    clip_id: str
+    lead: int = Field(9, ge=1, le=33)
+
+
+class AudioRef(BaseModel):
+    """D88 XL (experimental): the spoken line a lip-sync clip follows (an `audio` asset, CN2)."""
+    asset_id: str
+
+
 class Guide(BaseModel):
     """P13 ST4 (D76, 16 §8): a pass sequence (a video asset the Stage rendered — depth by default, pose as the weaker second) that LTX-2.3's
     IC-LoRA Union conditions the whole clip on, from frame 0. The start frame is a Stage shot; the clip keeps lineage to both."""
@@ -233,12 +245,14 @@ class I2V(BaseModel):
     width: int = Field(832, ge=128, le=1920)
     height: int = Field(480, ge=128, le=1920)
     size_policy: SizePolicy = "snap_down"     # D65: width, height and frames off the model's grid
-    preset: Literal["draft", "motion", "quality"] = "draft"   # Wan: Lightning 2+2 / undistilled high + distilled low / 10+10; LTX: 8 / 12 / 20 steps
+    preset: Literal["draft", "motion", "quality", "fast"] = "draft"   # D88 XL: S2V draft (20) / fast (10); Wan: Lightning 2+2 / undistilled high + distilled low / 10+10; LTX: 8 / 12 / 20 steps
     steps: int | None = Field(None, ge=1, le=60)  # overrides the preset's step count
     cfg: float | None = Field(None, ge=1.0, le=12.0)          # Wan high expert CFG (motion / quality); the distilled paths ignore it
     shift: float | None = Field(None, ge=0.5, le=12.0)
     beats: list[Beat] = Field(default_factory=list)           # LTX only
     guide: Guide | None = None                                # ST4: a Stage pass sequence through the IC-LoRA (LTX only)
+    extend_from: ExtendFrom | None = None                     # D88 XE (experimental): continue that clip
+    audio: AudioRef | None = None                             # D88 XL (experimental): the line a lip-sync model follows (S2V)
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 

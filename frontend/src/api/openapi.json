@@ -705,6 +705,20 @@
         "title": "AssetRecord",
         "type": "object"
       },
+      "AudioRef": {
+        "description": "D88 XL (experimental): the spoken line a lip-sync clip follows (an `audio` asset, CN2).",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "AudioRef",
+        "type": "object"
+      },
       "Beat": {
         "description": "LTX keyframe guide (11 §3b): the asset is encoded as a guide at `frame` with `strength`.",
         "properties": {
@@ -825,6 +839,16 @@
             },
             "title": "Defaults",
             "type": "object"
+          },
+          "experimental": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentalCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "facesim": {
             "$ref": "#/components/schemas/FaceSimCaps"
@@ -1194,6 +1218,17 @@
             ],
             "title": "Asset Id"
           },
+          "audio_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Asset Id"
+          },
           "batch_id": {
             "anyOf": [
               {
@@ -1228,6 +1263,17 @@
             },
             "title": "Beats",
             "type": "array"
+          },
+          "chained_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chained From"
           },
           "created_at": {
             "title": "Created At",
@@ -1360,6 +1406,11 @@
             "title": "Model Id",
             "type": "string"
           },
+          "overlap": {
+            "default": 0,
+            "title": "Overlap",
+            "type": "integer"
+          },
           "params": {
             "additionalProperties": true,
             "title": "Params",
@@ -1439,7 +1490,10 @@
           "extracted_asset_ids",
           "params",
           "timings",
-          "identity"
+          "identity",
+          "chained_from",
+          "overlap",
+          "audio_asset_id"
         ],
         "title": "ClipRecord",
         "type": "object"
@@ -2959,6 +3013,167 @@
         "title": "Expanded",
         "type": "object"
       },
+      "ExperimentalCaps": {
+        "additionalProperties": true,
+        "description": "D88: features shipped before their bars are met — each with the caveat the UI shows beside its verb.",
+        "properties": {
+          "extend": {
+            "$ref": "#/components/schemas/ExperimentalExtendCaps"
+          },
+          "lipsync": {
+            "$ref": "#/components/schemas/ExperimentalLipsyncCaps"
+          }
+        },
+        "required": [
+          "extend",
+          "lipsync"
+        ],
+        "title": "ExperimentalCaps",
+        "type": "object"
+      },
+      "ExperimentalExtendCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "models": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Models",
+            "type": "object"
+          }
+        },
+        "required": [
+          "models",
+          "caveat"
+        ],
+        "title": "ExperimentalExtendCaps",
+        "type": "object"
+      },
+      "ExperimentalLipsyncCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "frames_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frames Max"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "languages": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "missing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "presets": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "default": {},
+            "title": "Presets",
+            "type": "object"
+          },
+          "seconds_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds Max"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "available",
+          "caveat"
+        ],
+        "title": "ExperimentalLipsyncCaps",
+        "type": "object"
+      },
       "ExportRequest": {
         "properties": {
           "format": {
@@ -2968,6 +3183,83 @@
           }
         },
         "title": "ExportRequest",
+        "type": "object"
+      },
+      "ExtendBody": {
+        "properties": {
+          "prompt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Text"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
+          }
+        },
+        "title": "ExtendBody",
+        "type": "object"
+      },
+      "ExtendFrom": {
+        "description": "D88 XE (experimental): continue a clip — its last `lead` frames lead the new one in (LTX: 9 pinned by LTXVAddGuide at frame 0;\nWan: 1, the start image is its last frame). The new clip records `chained_from` / `overlap`.",
+        "properties": {
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "lead": {
+            "default": 9,
+            "maximum": 33,
+            "minimum": 1,
+            "title": "Lead",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clip_id"
+        ],
+        "title": "ExtendFrom",
+        "type": "object"
+      },
+      "ExtendQueued": {
+        "description": "D88 XE (experimental): the continuation's job, its start (the clip's last frame, extracted) and the lead-in it pins.",
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "lead": {
+            "title": "Lead",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "staged": {
+            "title": "Staged",
+            "type": "boolean"
+          },
+          "start_asset_id": {
+            "title": "Start Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "start_asset_id",
+          "lead",
+          "model_id",
+          "staged"
+        ],
+        "title": "ExtendQueued",
         "type": "object"
       },
       "FaceSimCaps": {
@@ -4670,6 +4962,17 @@
       "I2V": {
         "description": "Image-to-video (11 §10; D8 Wan 2.2 I2V-A14B fp8 experts + Lightning, FLF on the same weights; D9 LTX-2.3 distilled\nfp8 with keyframe beats). Sizes and frame counts snap to the model's rule in the compiler (Wan ×16 and 4n+1,\nLTX ×32 and 8n+1); `graphs.i2v_params` shows the UI what will run.",
         "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "beats": {
             "items": {
               "$ref": "#/components/schemas/Beat"
@@ -4702,6 +5005,17 @@
             ],
             "default": null,
             "title": "End Asset"
+          },
+          "extend_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtendFrom"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "fps": {
             "default": 16,
@@ -4770,7 +5084,8 @@
             "enum": [
               "draft",
               "motion",
-              "quality"
+              "quality",
+              "fast"
             ],
             "title": "Preset",
             "type": "string"
@@ -6394,6 +6709,126 @@
           "locations"
         ],
         "title": "LineageTree",
+        "type": "object"
+      },
+      "LipsyncBody": {
+        "properties": {
+          "audio_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Asset Id"
+          },
+          "image_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Asset Id"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "preset": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "fast"
+            ],
+            "title": "Preset",
+            "type": "string"
+          },
+          "prompt_text": {
+            "default": "the character speaks the line to the camera, calm, natural head motion, steady camera, soft light",
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "stage": {
+            "default": true,
+            "title": "Stage",
+            "type": "boolean"
+          }
+        },
+        "title": "LipsyncBody",
+        "type": "object"
+      },
+      "LipsyncQueued": {
+        "description": "D88 XL (experimental): the talking clip's job — it lands as a take on the shot version.",
+        "properties": {
+          "audio_asset_id": {
+            "title": "Audio Asset Id",
+            "type": "string"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "image_asset_id": {
+            "title": "Image Asset Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "staged": {
+            "title": "Staged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "model_id",
+          "frames",
+          "audio_asset_id",
+          "image_asset_id",
+          "staged",
+          "seconds"
+        ],
+        "title": "LipsyncQueued",
         "type": "object"
       },
       "Location": {
@@ -8836,6 +9271,17 @@
             "title": "Default For",
             "type": "array"
           },
+          "extend_lead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extend Lead"
+          },
           "flf": {
             "default": false,
             "title": "Flf",
@@ -8904,6 +9350,19 @@
             "default": false,
             "title": "Inpaint Hero",
             "type": "boolean"
+          },
+          "lipsync": {
+            "default": false,
+            "title": "Lipsync",
+            "type": "boolean"
+          },
+          "lipsync_languages": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Lipsync Languages",
+            "type": "array"
           },
           "mesh": {
             "default": false,
@@ -14916,6 +15375,59 @@
         ]
       }
     },
+    "/clips/{clip_id}/extend": {
+      "post": {
+        "description": "D88 XE (experimental): continue the clip on its own model, preset, size, fps and length — its last frame extracted as the start\n(`frame-extract` lineage), its last `extend_lead` frames pinned as the lead-in (LTX 9; Wan 1 = the start alone). 422 with the sentence.",
+        "operationId": "clip_extend_clips__clip_id__extend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clip_id",
+            "required": true,
+            "schema": {
+              "title": "Clip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtendQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clip Extend",
+        "tags": [
+          "clips"
+        ]
+      }
+    },
     "/clips/{clip_id}/extract": {
       "post": {
         "description": "Master frames → Catalogue images with `frame-extract` lineage from the clip's asset (11 §6).",
@@ -19470,6 +19982,68 @@
           }
         },
         "summary": "Shot Finalize",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/lipsync": {
+      "post": {
+        "description": "D88 XL (experimental): a talking clip of the version's frame (or any image) speaking a voiced line — one window (≤ 4.8 s at 16 fps),\nEnglish only (E18); it lands as a take on the version. 422 with the sentence.",
+        "operationId": "shot_lipsync_story_shots__sid__versions__vid__lipsync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LipsyncBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LipsyncQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Lipsync",
         "tags": [
           "story"
         ]

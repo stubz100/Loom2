@@ -17,6 +17,10 @@ engine/spikes/out/cn/voice/, the clip under engine/spikes/out/cn/animate/, the o
 
     orchestrator/.venv/Scripts/python.exe scripts/cn_acceptance.py --parts voice,animate,episode [--tier draft|cloning|both]
 
+`extend` / `lipsync` (D88, experimental — measured, not gated): an LTX clip of the hero continued through the app, the seam ratio
+and FaceSim at both ends (E17's metric); an English line voiced, Lip-sync at Fast (CN_LIPSYNC_PRESET) on a shot with the hero's frame,
+the take, the line in the proxy, the sync proxy (E18's metric). Copies under engine/spikes/out/cn/extend/ and lipsync/.
+
 `episode` (CN5): the animate part's clip as a shot bound to a Dialogue node with two lines voiced by a draft voice, on an Episode lane;
 the FCPXML carries both lines on the audio lane (lane −1, their WAVs on disk), the EDL their AX events, the SRT the text; copies of the
 three exports under engine/spikes/out/cn/episode/ for the author's Resolve import.
@@ -309,6 +313,124 @@ def episode_part(a, check, row: dict, tmp: Path) -> None:
     log(f"episode: {fx['path']} with {fx['audio']} voiced lines; copies in {dest} (the author's Resolve import check)")
 
 
+def extend_part(a, check, row: dict, tmp: Path) -> None:
+    """D88 XE (experimental): an LTX clip of the hero, then Extend through the app; the join scored as E17 did (the seam ratio: the first
+    new frame after the lead-in against the clip's own inter-frame difference) and FaceSim to the hero at both ends (advisory)."""
+    import numpy as np
+    from PIL import Image
+    sys.path.insert(0, str(ROOT / "engine" / "spikes"))
+    from loom2.tools.facesim import FaceSim
+    ex = api("GET", "/capabilities")["experimental"]["extend"]
+    ltx = next((m for m, lead in ex["models"].items() if lead > 1), None)
+    check(ltx is not None, f"an LTX model continues clips ({ex['models']})")
+    if not ltx:
+        return
+    hero = api("POST", "/assets/import", {"paths": [str(HERO)]})["items"][0]["id"]
+    base = {"kind": "i2v", "model_id": ltx, "start_asset": hero, "prompt_text": "the character walks slowly towards the camera, steady camera, soft light",
+            "frames": 121, "fps": 24, "width": 1024, "height": 576, "preset": "draft"}
+    j1 = wait_job(api("POST", "/jobs", {"recipe": base})["jobs"][0]["id"], timeout_s=1800)
+    check(j1["status"] == "done", f"the first clip: {j1['status']} {j1.get('error') or ''}")
+    if j1["status"] != "done":
+        return
+    c1 = j1["result"]["clip_id"]
+    t0 = time.time()
+    x = api("POST", f"/clips/{c1}/extend", {"prompt_text": "the character keeps walking towards the camera and stops, steady camera, soft light"})
+    j2 = wait_job(x["job_id"], timeout_s=1800)
+    check(j2["status"] == "done", f"the extension: {j2['status']} {j2.get('error') or ''} ({time.time() - t0:.0f} s wall)")
+    if j2["status"] != "done":
+        return
+    c2 = j2["result"]["clip_id"]
+    rec = next(c for c in api("GET", "/clips")["items"] if c["id"] == c2)
+    check(rec["chained_from"] == c1 and rec["overlap"] == x["lead"] == 9, f"the continuation records its parent and overlap ({rec['chained_from']}, {rec['overlap']})")
+    f1 = sorted((tmp / "proj" / "clips" / c1 / "master").glob("*.png"))
+    f2 = sorted((tmp / "proj" / "clips" / c2 / "master").glob("*.png"))
+    size = (256, 144)
+    g = lambda p: np.asarray(Image.open(p).convert("L").resize(size, Image.BILINEAR), dtype=np.float32)  # noqa: E731
+    within = float(np.median([np.mean(np.abs(g(f1[i]) - g(f1[i + 1]))) for i in range(len(f1) - 1)]))
+    lead = rec["overlap"]
+    seam = float(np.mean(np.abs(g(f2[lead - 1]) - g(f2[lead]))))
+    pinned = float(np.mean(np.abs(g(f1[-1]) - g(f2[lead - 1]))))
+    ratio = round(seam / max(1e-6, within), 2)
+    fs = FaceSim(Path(os.environ.get("LOOM2_MODELS", "F:/loom2-models")))
+
+    def emb(p):
+        arr = np.asarray(Image.open(p).convert("RGB"))
+        faces = fs.detect(arr)
+        return fs.embed(arr, max(faces, key=lambda z: z.area).kps) if faces else None
+    he = emb(HERO)
+    ends = []
+    for p in (f1[0], f2[-1]):
+        e = emb(p)
+        ends.append(round(fs.similarity(he, e), 3) if he is not None and e is not None else None)
+    log(f"extend: seam {seam:.2f} vs within {within:.2f} -> ratio {ratio} (E17 bar <= 1.5), pinned diff {pinned:.2f}; FaceSim start / end {ends} (advisory)")
+    row["extend"] = {"clip": c1, "continuation": c2, "seam_ratio": ratio, "pinned_diff": round(pinned, 2), "facesim_ends": ends, "wall_s": j2.get("wall_s")}
+    dest = OUT / "extend"
+    dest.mkdir(parents=True, exist_ok=True)
+    for cid, name in ((c1, "segment1.mp4"), (c2, "segment2.mp4")):
+        shutil.copy2(tmp / "proj" / "clips" / cid / "proxy.mp4", dest / name)
+
+
+def lipsync_part(a, check, row: dict, tmp: Path) -> None:
+    """D88 XL (experimental): an English line voiced (draft tier), a shot with the hero as its frame, Lip-sync through the app at Fast; the
+    clip scored as E18 did (the mouth crop's motion against the line's RMS envelope, best lag ±3) and FaceSim to the hero (advisory)."""
+    import numpy as np
+    import soundfile as sf
+    from PIL import Image
+    sys.path.insert(0, str(ROOT / "engine" / "spikes"))
+    from loom2.tools.facesim import FaceSim
+    from e18_lipsync import mouth_energy, rms_envelope, sync_score
+    lip = api("GET", "/capabilities")["experimental"]["lipsync"]
+    check(lip["available"], f"the lip-sync model is available ({lip.get('why')})")
+    if not lip["available"]:
+        return
+    hero = api("POST", "/assets/import", {"paths": [str(HERO)]})["items"][0]["id"]
+    voice = api("POST", "/story/voices", {"name": "Lip narrator", "tier": "draft", "voice": "af_heart"})
+    n = api("POST", "/story/flow/nodes", {"type": "dialogue", "title": "Mara speaks", "x": 0, "y": 600})
+    n = api("PATCH", f"/story/flow/nodes/{n['id']}", {"revision": n["revision"], "lines": [{"speaker": None, "text": "I came as soon as I heard. Tell me everything."}]})
+    tj = wait_job(api("POST", f"/story/flow/nodes/{n['id']}/lines/0/voice", {"voice_id": voice["id"]})["job_ids"][0])
+    check(tj["status"] == "done", "the line voiced")
+    sh = api("POST", "/story/shots", {"name": "Mara speaks", "frame_asset_id": hero})
+    api("POST", f"/story/flow/nodes/{n['id']}/bind", {"shot_id": sh["id"]})
+    preset = os.environ.get("CN_LIPSYNC_PRESET", "fast")
+    q = api("POST", f"/story/shots/{sh['id']}/versions/v1/lipsync", {"node_id": n["id"], "index": 0, "preset": preset, "stage": True})
+    check(q["staged"], f"the lip-sync job is staged ({q['frames']} frames, ≈ {q['seconds']} s at {preset})")
+    api("POST", f"/jobs/{q['job_id']}/release")
+    t0 = time.time()
+    j = wait_job(q["job_id"], timeout_s=3600)
+    check(j["status"] == "done", f"the lip-sync job: {j['status']} {j.get('error') or ''} ({time.time() - t0:.0f} s wall)")
+    if j["status"] != "done":
+        return
+    cid = j["result"]["clip_id"]
+    shot = api("GET", f"/story/shots/{sh['id']}")
+    check(any(tk["kind"] == "clip" and tk["id"] == cid for tk in shot["versions"][0]["takes"]), "the talking clip is a take on the version")
+    import av
+    proxy = tmp / "proj" / "clips" / cid / "proxy.mp4"
+    with av.open(str(proxy)) as c:
+        check(len(c.streams.audio) == 1, "the proxy carries the line")
+    frames = sorted((tmp / "proj" / "clips" / cid / "master").glob("*.png"))
+    line = api("GET", f"/assets/{q['audio_asset_id']}")
+    audio, sr = sf.read(str(tmp / "proj" / line["path"]), dtype="float32", always_2d=True)
+    fs = FaceSim(Path(os.environ.get("LOOM2_MODELS", "F:/loom2-models")))
+    motion, ok = mouth_energy(fs, frames)
+    env = rms_envelope(audio.mean(axis=1), sr, 16, len(frames))
+    r, lag = sync_score(motion, env) if ok else (None, None)
+
+    def emb(p):
+        arr = np.asarray(Image.open(p).convert("RGB"))
+        faces = fs.detect(arr)
+        return fs.embed(arr, max(faces, key=lambda z: z.area).kps) if faces else None
+    he = emb(HERO)
+    sims = []
+    for i in (0, len(frames) // 2, len(frames) - 1):
+        e = emb(frames[i])
+        sims.append(round(fs.similarity(he, e), 3) if he is not None and e is not None else None)
+    log(f"lipsync: {len(frames)} f, sync r {r} (lag {lag}; E18 bar >= 0.5), FaceSim {sims}, wall {j.get('wall_s')} s at {preset}")
+    row["lipsync"] = {"clip": cid, "frames": len(frames), "sync_r": r, "lag": lag, "facesim": sims, "wall_s": j.get("wall_s"), "preset": preset, "line_s": line.get("duration_s")}
+    dest = OUT / "lipsync"
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(proxy, dest / f"mara_{preset}.mp4")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--parts", default="voice")
@@ -317,7 +439,7 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="loom2-cn-"))
     from loom2.config import AppState
-    engine_port = 8188 if "animate" in a.parts else ENGINE_PORT                       # the voice part never starts the engine
+    engine_port = 8188 if any(x in a.parts for x in ("animate", "extend", "lipsync")) else ENGINE_PORT   # the voice part never starts the engine
     if engine_port == 8188:
         try:
             urllib.request.urlopen("http://127.0.0.1:8188/system_stats", timeout=3)
@@ -354,6 +476,10 @@ def main() -> int:
             animate_part(a, check, row, tmp)
         if "episode" in a.parts:
             episode_part(a, check, row, tmp)
+        if "extend" in a.parts:
+            extend_part(a, check, row, tmp)
+        if "lipsync" in a.parts:
+            lipsync_part(a, check, row, tmp)
     except Exception as e:  # noqa: BLE001
         check(False, f"exception: {type(e).__name__}: {e}")
     finally:

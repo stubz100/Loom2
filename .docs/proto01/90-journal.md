@@ -4009,3 +4009,18 @@ split by file so that no two hands touched the same module.
   10 steps, a take on the shot version, staged), both flagged *experimental* with E17 / E18's measured caveats. Out: the export weld, beats
   across a chain, S2V's extension, German. The S2V transformer and wav2vec2 (17 GB, Apache-2.0) are being fetched again
   (`fetch_weights.py --only e18`).
+
+## 2026-10-15 12:27 — D88 built: extension and lip-sync as experimental features (19 §7)
+- **Built** (19 §7's built note): `I2V.extend_from` / `I2V.audio`, the specs' `extend_lead` and the S2V spec (Draft 20 / Fast 10 steps,
+  English), the LTX lead-in guide and E18's S2V graph, the queue's sentences, the chain record (`chained_from` / `overlap`), the line in the
+  proxy, the lip-sync take on the shot version, `POST /clips/{id}/extend` and `POST /story/shots/{sid}/versions/{vid}/lipsync` (152 → 154
+  routes, openapi 118 / 258), `/capabilities.experimental` with the caveats, Animate's *Extend ▶ (experimental)*, the shot version's Lip-sync
+  block, the Episode lane's overlap trim, an *experimental* badge. The fake engine lists uploaded audio (LoadAudio) and decodes
+  `WanSoundImageToVideo`'s length. The proxy encoder adds the audio stream before any packet (PyAV refuses a stream added after the header).
+- **Tests:** `test_experimental_d88.py` (+3: the graphs, the extend and lip-sync jobs on the fake engine with their sentences, the routes and
+  capabilities), Vitest +1 (`chainIn`) — 317 offline, audits clean, lint 100, tsc and build clean, Vitest 207; the smoke's "experimental
+  extension and lip-sync" (Extend ▶ with the caveat → the continuation's parent and overlap; Lip-sync ▶ → staged → released → the take)
+  29 / 29 under full and open.
+- **Rig (`scripts/cn_acceptance.py --parts extend` and `--parts lipsync`):** extend — an LTX-2.3 clip of the hero (121 frames, 1024×576) continued through `POST /clips/{id}/extend`: the continuation in 156 s, `chained_from` / `overlap 9` recorded, the seam ratio 1.46 (E17's bar ≤ 1.5), FaceSim to the hero 0.97 at the start and 0.69 at the continuation's end (the character mid-frame, walking — E17's failure case is the character leaving the middle). Lip-sync — a 3.1 s English line voiced by the draft tier on a shot with the hero's frame, Lip-sync at Fast through the app: staged, released, 49 frames in 282 s wall (cold load included), the take on the version, the line in the proxy, sync r 0.635 (E18's bar ≥ 0.5), FaceSim 0.70–0.95.
+- **Experimental stays:** E17's case (the character leaving mid-frame) and E18's bars (≥ 0.5 on every line, ≤ 240 s, German) are not met;
+  the caveats say so beside the verbs.

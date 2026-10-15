@@ -235,10 +235,16 @@ class ClipFinisher:
         rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id=recipe.model_id, preset=recipe.preset, prompt=recipe.prompt_text,
                                       seed=job.seed, fps=int(ep.get("fps", recipe.fps)), start_asset_id=recipe.start_asset, end_asset_id=recipe.end_asset,
                                       beats=[b.model_dump() for b in recipe.beats], params={"recipe": recipe.model_dump(), "compiled": ep | {"graph_hash": compiled.graph_hash}},
-                                      timings={"engine_wall_s": q.wall_s(), "node_s": job.node_times})
+                                      timings={"engine_wall_s": q.wall_s(), "node_s": job.node_times},
+                                      chained_from=recipe.extend_from.clip_id if recipe.extend_from else None,
+                                      overlap=int(recipe.extend_from.lead) if recipe.extend_from else 0,
+                                      audio_asset_id=recipe.audio.asset_id if recipe.audio else None)
         q.progress(job, "encoding the proxy")
-        rec = await asyncio.to_thread(clips.encode_proxy, rec)
-        parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats] + ([recipe.guide.asset_id] if recipe.guide else [])
+        line = q.catalogue.get(recipe.audio.asset_id) if recipe.audio else None
+        rec = await asyncio.to_thread(clips.encode_proxy, rec, audio=q.catalogue.abs_path(line) if line else None)
+        prev = clips.get(recipe.extend_from.clip_id) if recipe.extend_from else None
+        parents = [recipe.start_asset] + ([recipe.end_asset] if recipe.end_asset else []) + [b.asset_id for b in recipe.beats] + ([recipe.guide.asset_id] if recipe.guide else []) \
+            + ([prev.asset_id] if prev and prev.asset_id else []) + ([recipe.audio.asset_id] if recipe.audio else [])
         parents = list(dict.fromkeys(parents))
         from_stage = bool(job.origin and job.origin.suite == "stage")
         asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
@@ -260,6 +266,8 @@ class ClipFinisher:
         cam = (job.origin.payload or {}).get("camera_id") if job.origin else None
         if from_stage and recipe.guide and job.origin and job.origin.ref and isinstance(cam, str):      # 17 §3c: the clip of every shot pointing at this camera
             await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id)
+        if job.origin and job.origin.surface == "lipsync" and job.origin.ref:   # D88 XL: a take on the shot version
+            await asyncio.to_thread(_lipsync_take, q, job.origin.ref, str((job.origin.payload or {}).get("version") or ""), rec.id)
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
 
@@ -302,6 +310,16 @@ def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:
         q.hub.broadcast("lora.changed", {"id": rec.id, "profile_id": rec.profile_id, "version": rec.version})
     except Exception as e:  # noqa: BLE001 — advisory
         q.hub.broadcast("lora.changed", {"id": str(payload.get("lora_id") or ""), "profile_id": None, "version": None, "error": str(e)})
+
+
+def _lipsync_take(q: JobQueue, shot_id: str, version: str, clip_id: str) -> None:
+    """D88 XL: the talking clip is a take on the shot version (never the version's clip until the author picks it)."""
+    from ..story import StoryStore
+    try:
+        s = StoryStore(q.ws).add_take(shot_id, version, "clip", clip_id, use=False)
+        q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
+    except Exception as e:                                                                      # never the job's failure
+        q.hub.broadcast("story.changed", {"kind": "shot", "id": shot_id, "revision": 0, "error": str(e)})
 
 
 def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:

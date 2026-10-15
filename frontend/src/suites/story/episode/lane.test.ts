@@ -1,7 +1,7 @@
 // P17 (D83): the single-lane model — positions, what shows at a tick (cuts, dissolves, a clip at another rate), the edits that keep
 // the invariants, and the EDL text the server writes (the parity fixture of orchestrator/tests/test_timeline_d83.py).
 import { describe, expect, it } from 'vitest'
-import { append, at, duration, len, move, remove, setOverlap, starts, tc, ticks, toEDL, trim, type Lane } from './lane'
+import { append, at, chainIn, duration, len, move, remove, setOverlap, starts, tc, ticks, toEDL, trim, type Lane } from './lane'
 
 const clip = (id: string, source: string, i: number, o: number, fps?: number) => ({ id, source, in: i, out: o, ...(fps ? { fps } : {}) })
 const lane: Lane = { fps: 24, clips: [clip('a', 'clp_aaaa0001', 0, 120), clip('b', 'clp_bbbb0002', 10, 110), clip('c', 'clp_cccc0003', 0, 48)], overlaps: [0, 12, 0] }
@@ -80,5 +80,17 @@ describe('export', () => {
     expect(tc(256, 24)).toBe('00:00:10:16')
     expect(tc(3600 * 24 + 25, 24)).toBe('01:00:01:01')
     expect(toEDL(lane, 'Parity')).toBe(PARITY_EDL)
+  })
+})
+
+describe('D88 XE: a continuation after its parent starts past the overlap', () => {
+  it('trims only when the lane ends on the clip it extends', () => {
+    const l: Lane = { fps: 24, clips: [clip('a', 'clp_parent', 0, 121)], overlaps: [0] }
+    expect(chainIn(l, 'clp_parent', 9, 121)).toBe(9)
+    expect(chainIn(l, 'clp_other', 9, 121)).toBe(0)
+    expect(chainIn(l, null, 9, 121)).toBe(0)
+    expect(chainIn({ ...l, clips: [] }, 'clp_parent', 9, 121)).toBe(0)
+    expect(chainIn(l, 'clp_parent', 121, 121)).toBe(0)                                            // never the whole clip
+    expect(chainIn(null, 'clp_parent', 1, 81)).toBe(0)
   })
 })

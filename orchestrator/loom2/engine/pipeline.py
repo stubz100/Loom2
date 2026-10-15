@@ -164,12 +164,24 @@ def _placeholder_video(object_info: dict) -> str:
     return names[0] if names else "loom2-guide.mp4"
 
 
+def _placeholder_audio(object_info: dict) -> str:
+    """D88 XL: an audio name the engine already lists (LoadAudio's enum) for the preview's compile of a lip-sync clip."""
+    try:
+        spec = object_info["LoadAudio"]["input"]["required"]["audio"]
+        names = list(spec[1]["options"]) if isinstance(spec[0], str) else list(spec[0])
+    except (KeyError, IndexError, TypeError):
+        names = []
+    return names[0] if names else "loom2-line.wav"
+
+
 def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
     """Inputs shaped like finalize()'s for the preview's compile."""
     img = _placeholder_image(object_info)
     if isinstance(recipe, I2V):
         return {"start": img, "end": img if recipe.end_asset else None, "beats": {b.asset_id: img for b in recipe.beats},
-                **({"guide": _placeholder_video(object_info)} if recipe.guide else {})}
+                **({"guide": _placeholder_video(object_info)} if recipe.guide else {}),
+                **({"lead": _placeholder_video(object_info)} if recipe.extend_from and recipe.extend_from.lead > 1 else {}),
+                **({"audio": _placeholder_audio(object_info)} if recipe.audio else {})}
     if isinstance(recipe, DOCUMENT_KINDS):
         return {"image": img, "mask": img, "w": 1024, "h": 576, "points": [], "box": None}
     if isinstance(recipe, Reangle):
@@ -480,6 +492,23 @@ async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any
             raise ValueError(f"the {recipe.guide.kind} guide ({recipe.guide.asset_id}) is missing from the Catalogue — render the sequence first")
         names["guide"] = await q.engine.client.upload_image(Path(src))
         job.log_tail.append(f"{recipe.guide.kind} guide uploaded: {a.frames} frames @ {a.fps} fps")
+    if recipe.extend_from and recipe.extend_from.lead > 1:              # D88 XE: the previous clip's last frames as an mp4 for LoadVideo
+        from ..clips import ClipStore
+        clips = ClipStore(q.ws)
+        prev = clips.get(recipe.extend_from.clip_id)
+        if prev is None:
+            raise ValueError(f"the clip to extend ({recipe.extend_from.clip_id}) is gone")
+        out = q.ws.temp_dir / "lead" / f"lead-{job.id}.mp4"
+        await asyncio.to_thread(clips.encode_tail, prev, recipe.extend_from.lead, out)
+        names["lead"] = await q.engine.client.upload_image(out)
+        job.log_tail.append(f"lead-in: the last {recipe.extend_from.lead} frames of {prev.id}")
+    if recipe.audio:                                                   # D88 XL: the line as it is (a WAV master); LoadAudio reads it by name
+        a = q.catalogue.get(recipe.audio.asset_id)
+        src = q.catalogue.abs_path(a) if a else None
+        if not src or not Path(src).is_file():
+            raise ValueError(f"the line ({recipe.audio.asset_id}) is missing from the Catalogue")
+        names["audio"] = await q.engine.client.upload_image(Path(src))
+        job.log_tail.append(f"line uploaded: {a.duration_s} s")
     job.log_tail.append("frames uploaded: start" + (", end" if names["end"] else "") + (f", {len(recipe.beats)} beat(s)" if recipe.beats else ""))
     return names
 

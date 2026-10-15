@@ -51,7 +51,7 @@ def _check(spec: ModelSpec) -> None:
         known(rid, k)
     if spec.sampling.turbo:
         known(spec.sampling.turbo.lora, "Turbo LoRA")
-    if (spec.recipes.i2v or spec.recipes.animate) and spec.video is None:
+    if (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) and spec.video is None:
         raise RegistryError(f"{spec.id}: an i2v model needs a [model.video] block (negative, presets)")
 
 
@@ -129,6 +129,11 @@ def image_specs() -> list[ModelSpec]:
 
 def video_specs() -> list[ModelSpec]:
     return [s for s in SPECS.values() if s.recipes.i2v]
+
+
+def lipsync_specs() -> list[ModelSpec]:
+    """D88 XL (experimental): the talking-clip models, by `order`."""
+    return sorted((s for s in SPECS.values() if s.recipes.lipsync), key=lambda s: s.order)
 
 
 def animate_specs() -> list[ModelSpec]:

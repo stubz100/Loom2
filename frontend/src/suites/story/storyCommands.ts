@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestTrainJob, sy, useStory, voicedLines, type ProfileClass } from './storyStore'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
@@ -109,6 +109,13 @@ const cmds: Command[] = [
   { id: 'story.shot.newVersion', scope: 'story', label: 'New version (copy)', icon: Copy, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
       void askConfirm({ title: `Copy ${s.name} ${v.id} into a new version?`, okLabel: 'Copy', text: 'The source, frame and clip pointers are copied (no files); the copy becomes the current version, open — a retake.' }).then((ok) => { if (ok) void sy().newShotVersion() }) } },
+  { id: 'story.shot.lipsync', scope: 'story', label: 'Lip-sync ▶ (experimental)', icon: Mic, placement: ['inspector', 'context'],
+    when: () => { const v = shotVersion(); const c = useSession.getState().capabilities?.experimental?.lipsync
+      return !!v && v.state === 'open' && !!v.frame_asset_id && !!c?.available && voicedLines(sy().flowNodes, shot()?.owner_node ?? null).length > 0 },
+    run: () => { const c = useSession.getState().capabilities?.experimental?.lipsync; const o = sy().lipsyncOpts; const p = c?.presets?.[o.preset] as { seconds?: number | null } | undefined
+      void askConfirm({ title: 'Lip-sync this version (experimental)?', okLabel: 'Stage the job',
+        text: `${c?.label ?? 'S2V'} · ${o.preset} — ≈ ${Math.round((p?.seconds ?? 0) / 60)} min with the engine. ${c?.caveat ?? ''}. The talking clip lands as a take on the version.` })
+        .then((ok) => { if (ok) void sy().lipsync() }) } },
   { id: 'story.shot.finalize', scope: 'story', label: 'Finalize the version', icon: Lock, placement: ['strip', 'inspector', 'context'], when: () => { const v = shotVersion(); return !!v && v.state === 'open' && !sy().finalizeWhy(v) },
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
       void askConfirm({ title: `Finalize ${s.name} ${v.id}?`, okLabel: 'Finalize', text: 'The clip becomes the one the Flow and the Episode bind; the frame and clip are fixed. A retake is a new version.' }).then((ok) => { if (ok) void sy().finalizeShot() }) } },

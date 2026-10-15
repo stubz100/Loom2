@@ -16,7 +16,7 @@ from ..fsio import new_id, utc_now
 from ..origin import JobOrigin
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
-from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
 from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
@@ -806,6 +806,67 @@ async def node_voice(svc: Svc, nid: str, body: LineVoiceBody):
     if n is None:
         raise HTTPException(404, "node not found")
     return await asyncio.to_thread(_voice_jobs, ws, q, store, n, list(range(len(n.lines))), body, False)
+
+
+# ---- lip-sync (D88 XL, experimental) ---------------------------------------------------------------------------------------------------
+class LipsyncBody(BaseModel):
+    node_id: str | None = None                    # a voiced Flow line: the node and the line's index …
+    index: int | None = None
+    audio_asset_id: str | None = None             # … or an audio asset directly
+    image_asset_id: str | None = None             # the face; the version's frame when absent
+    preset: Literal["draft", "fast"] = "draft"
+    prompt_text: str = "the character speaks the line to the camera, calm, natural head motion, steady camera, soft light"
+    stage: bool = True                            # ≈ 9–16 min: staged by default (an overnight job)
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/lipsync", response_model=LipsyncQueued)
+async def shot_lipsync(svc: Svc, sid: str, vid: str, body: LipsyncBody):
+    """D88 XL (experimental): a talking clip of the version's frame (or any image) speaking a voiced line — one window (≤ 4.8 s at 16 fps),
+    English only (E18); it lands as a take on the version. 422 with the sentence."""
+    import math
+    from ..models import registry
+    ws, cat, q = svc.require_project()
+    store = StoryStore(ws)
+    sh = await asyncio.to_thread(store.shot, sid)
+    if sh is None:
+        raise HTTPException(404, "shot not found")
+    v = next((x for x in sh.versions if x.id == vid), None)
+    if v is None:
+        raise HTTPException(404, f"the shot has no version {vid}")
+    audio_id = body.audio_asset_id
+    if audio_id is None and body.node_id is not None:
+        n = await asyncio.to_thread(store.flow_node, body.node_id)
+        if n is None or body.index is None or not 0 <= body.index < len(n.lines):
+            raise HTTPException(404, "that line is not in the flow")
+        audio_id = n.lines[body.index].audio_asset_id
+        if not audio_id:
+            raise HTTPException(422, "the line has no voice yet — voice it in the Flow (🎙) first")
+    if not audio_id:
+        raise HTTPException(422, "name a voiced line (node and index) or an audio asset")
+    image_id = body.image_asset_id or v.frame_asset_id
+    if not image_id:
+        raise HTTPException(422, "the version has no frame — give it one (or name an image)")
+    spec = next((s for s in registry.lipsync_specs()), None)
+    if spec is None:
+        raise HTTPException(422, "no lip-sync model in this build")
+    a = await asyncio.to_thread(cat.get, audio_id)
+    img = await asyncio.to_thread(cat.get, image_id)
+    if img is None:
+        raise HTTPException(422, f"the image {image_id} is not in the Catalogue")
+    fps, cap = int(spec.geometry.fps or 16), int(spec.geometry.frames or 77)
+    secs = float(a.duration_s or 0) if a else 0.0
+    frames = min(cap, 4 * math.ceil(max(1.0, secs * fps - 1) / 4) + 1)
+    w, h = (spec.geometry.size or [832, 480])[:2]
+    recipe = {"kind": "i2v", "model_id": spec.id, "start_asset": image_id, "prompt_text": body.prompt_text, "frames": frames, "fps": fps, "width": w, "height": h,
+              "preset": body.preset, "audio": {"asset_id": audio_id}}
+    origin = JobOrigin(suite="story", surface="lipsync", ref=sid, payload={"version": vid, "node_id": body.node_id, "index": body.index})
+    try:
+        job = q.submit(recipe, stage=body.stage, origin=origin)[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    p = spec.video.presets.get(body.preset) if spec.video else None
+    return {"job_id": job.id, "model_id": spec.id, "frames": frames, "audio_asset_id": audio_id, "image_asset_id": image_id, "staged": job.status == "staged",
+            "seconds": p.seconds if p else None}
 
 
 @router.post("/story/flow/validate", response_model=FlowProblems)

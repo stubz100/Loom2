@@ -1144,6 +1144,60 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   expect(audio.items.map((a) => a.id)).toContain(audioId)
 })
 
+test("experimental extension and lip-sync (D88): Animate's Extend ▶ continues a clip from its own end with the caveat shown; a shot version's Lip-sync ▶ stages a talking take from a voiced line, which lands on the version", async ({ page }) => {
+  test.setTimeout(150_000)
+  type JobLite = { id: string; status: string; error: string | null; result: { clip_id?: string } | null }
+  type ClipLite = { id: string; chained_from: string | null; overlap: number; audio_asset_id: string | null; model_id: string }
+  const jobDone = async (id: string) => expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === id)?.status, { timeout: 60_000 }).toBe('done')
+  const caps = await api<{ defaults: { i2v: string }; experimental: { extend: { models: Record<string, number>; caveat: string }; lipsync: { available: boolean } } }>('GET', '/capabilities')
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: img, width: 832, height: 480, frames: 17, fps: 16, prompt_text: 'she walks' } })).jobs[0]
+  await jobDone(job.id)
+  const parent = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result!.clip_id!
+  // Extend ▶ in the Animate Inspector: the dialog says experimental and the caveat; the continuation records its parent and overlap
+  await openApp(page, { suite: 'animate' })
+  type AnimateHook = { getState: () => { loadClips: () => Promise<void>; select: (id: string) => void } }
+  await page.evaluate(async (id) => { const an = (window as unknown as { __loom2Animate: AnimateHook }).__loom2Animate.getState(); await an.loadClips(); an.select(id) }, parent)
+  await expect(page.locator('.inspector .badge.experimental').first()).toBeVisible()
+  await page.locator('.inspector button[aria-label^="Extend"]').click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText('experimental')
+  await expect(dialog).toContainText(caps.experimental.extend.caveat.slice(0, 30))
+  await dialog.locator('input, textarea').first().fill('she keeps walking')
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await api<{ items: ClipLite[] }>('GET', '/clips')).items.find((c) => c.chained_from === parent)?.overlap ?? -1, { timeout: 60_000 })
+    .toBe(caps.experimental.extend.models[caps.defaults.i2v])
+  // lip-sync: a shot whose version has a frame, bound to a node with a voiced line (the fake runner); the verb stages the job; released, the take lands
+  const name = `Lip ${Date.now().toString(36)}`
+  const shot = await api<{ id: string }>('POST', '/story/shots', { name, frame_asset_id: img })
+  const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} node`, x: 1400, y: 1100 })
+  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: null, text: 'Hello there, nice to see you.' }] })
+  await api('POST', `/story/flow/nodes/${node.id}/bind`, { shot_id: shot.id })
+  const voice = await api<{ id: string }>('POST', '/story/voices', { name: `${name} voice`, voice: 'af_heart' })
+  const tts = await api<{ job_ids: string[] }>('POST', `/story/flow/nodes/${node.id}/lines/0/voice`, { voice_id: voice.id })
+  await jobDone(tts.job_ids[0])
+  await openApp(page, { suite: 'story', tab: 'shots' })
+  await page.locator(`.story-row.shot-row[data-id="${shot.id}"]`).click()
+  const block = page.locator('.inspector .lipsync')
+  await expect(block.locator('.badge.experimental')).toBeVisible()
+  await expect(block.locator('select[aria-label="lip-sync line"] option')).toContainText([`${name} node`])
+  await block.locator('select[aria-label="lip-sync preset"]').selectOption('fast')
+  await page.locator('.inspector button[aria-label^="Lip-sync"]').click()
+  await expect(dialog).toContainText('experimental')
+  await dialog.locator('button.primary').click()
+  type Lip = JobLite & { kind: string; recipe: { audio?: { asset_id: string }; preset: string }; origin: { surface: string; ref: string } | null }
+  const lipJob = async () => (await api<{ items: Lip[] }>('GET', '/jobs')).items.find((j) => j.origin?.surface === 'lipsync' && j.origin.ref === shot.id)
+  await expect.poll(async () => (await lipJob())?.status, { timeout: 15_000 }).toBe('staged')
+  expect((await lipJob())!.recipe.preset).toBe('fast')
+  await api('POST', `/jobs/${(await lipJob())!.id}/release`)
+  await jobDone((await lipJob())!.id)
+  const clipId = (await lipJob())!.result!.clip_id!
+  const lc = (await api<{ items: ClipLite[] }>('GET', '/clips')).items.find((c) => c.id === clipId)!
+  expect(lc.audio_asset_id).toBeTruthy()
+  type ShotLite = { versions: { id: string; clip_id: string | null; takes: { kind: string; id: string }[] }[] }
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${shot.id}`)).versions[0].takes.some((t) => t.kind === 'clip' && t.id === clipId), { timeout: 10_000 }).toBe(true)
+})
+
 test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file for Klein 4B, a slot with a strength rides the recipe, the job\'s compiled summary names the loader\'s file and the manifest records the slot', async ({ page }) => {
   await openApp(page, { suite: 'generate' })
   await page.locator('nav.rail button[title^="Model"]').click()

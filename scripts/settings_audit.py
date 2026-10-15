@@ -34,7 +34,8 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "models": ["recipe:T2I.model_id", "recipe:T2I.steps", "recipe:T2I.guidance", "recipe:T2I.cfg", "recipe:T2I.turbo", "recipe:T2I.sampler", "recipe:T2I.scheduler", "recipe:T2I.te_id"],
     "facesim": None,                                   # whether the face-similarity weights are installed (a panel badge)
     "train": ["recipe:TrainLora.model_id", "recipe:TrainLora.steps", "recipe:TrainLora.rank", "recipe:TrainLora.resolution", "recipe:TrainLora.lr"],   # LT2 (18 §4)
-    "voice": ["recipe:TTS.voice_id", "recipe:TTS.tier", "recipe:TTS.language", "recipe:TTS.speed"],   # CN2 (19 §3b): the tiers, their voices and languages, the pace
+    "voice": ["recipe:TTS.voice_id", "recipe:TTS.tier", "recipe:TTS.language", "recipe:TTS.speed"],
+    "experimental": ["recipe:I2V.extend_from", "recipe:I2V.audio", "recipe:I2V.preset"],   # D88: extend and lip-sync (experimental)   # CN2 (19 §3b): the tiers, their voices and languages, the pace
     "variant": ["settings:variant"],
     "vram_budget_gb": ["settings:vram_budget_gb"],
     "samplers": ["recipe:T2I.sampler"],
@@ -97,6 +98,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     # D45: matting.params_from copies the fields by name (getattr) into matting.RefineParams; the kernels read them there
     "RefineEdge": (("params", "self"), ["matting.py"]),
     "TtsItem": (("it",), ["voices.py", "engine/pipeline.py"]),      # CN2: `for it in recipe.items`
+    "ExtendFrom": (("ext",), ["queue.py"]),                        # D88 XE: `ext = recipe.extend_from` in _check_extend
 }
 
 

@@ -2,6 +2,7 @@
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
 import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, X } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
+import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 
@@ -39,6 +40,9 @@ registerCommands([
   { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Catalogue', icon: Download, keys: 'F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
   { id: 'anim.extractRange', scope: 'animate', label: 'Extract range (every k-th frame between in and out)', icon: Download, keys: 'Shift+F', placement: ['inspector', 'context'], when: hasClip, run: () => void an().extractRange() },
   { id: 'anim.sendToEdit', scope: 'animate', label: 'Send frame to Edit', icon: Sparkles, keys: 'E', placement: ['inspector', 'context'], when: hasClip, run: () => void an().sendFrameToEdit() },
+  { id: 'anim.extend', scope: 'animate', label: 'Extend ▶ (experimental)', icon: Clapperboard, placement: ['inspector', 'context'],
+    when: () => { const c = an().clip(); return !!c && !!useSession.getState().capabilities?.experimental?.extend.models[c.model_id] },
+    run: () => void extendClip() },
   { id: 'anim.useAsStart', scope: 'animate', label: 'Use frame as next start', icon: Clapperboard, placement: ['inspector', 'context'], when: hasClip, run: () => void an().useFrameAsStart() },
   // clip verbs
   { id: 'anim.keep', scope: 'animate', label: 'Keep', icon: Check, keys: 'Shift+K', placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('keep') },
@@ -55,13 +59,28 @@ registerCommands([
   { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
 
+/** D88 XE (experimental): continue the clip on its own model — the prompt is the clip's, editable; the caveat said before the job. */
+async function extendClip(): Promise<void> {
+  const c = an().clip(); const s = useSession.getState(); const ex = s.capabilities?.experimental?.extend
+  if (!c || !ex) return
+  const lead = ex.models[c.model_id]
+  const prompt = await askText({ title: 'Extend this clip (experimental)', initial: c.prompt, placeholder: 'what happens next',
+    text: `A continuation on ${s.capabilities?.i2v?.models[c.model_id]?.label ?? c.model_id}: ${c.frames} frames from this clip's ${lead === 1 ? 'last frame' : `last ${lead} frames`}. ${ex.caveat}.` })
+  if (prompt === null || prompt === undefined) return
+  try {
+    const r = await unwrap(http.POST('/clips/{clip_id}/extend', { params: { path: { clip_id: c.id } }, body: { prompt_text: prompt, stage: false } }))
+    await s.refreshAll()
+    s.toast(`Extension queued (experimental) — it continues ${c.id} from its last ${r.lead === 1 ? 'frame' : `${r.lead} frames`}`, 'success')
+  } catch (e) { s.toast(`Extend: ${(e as ApiError).detail ?? e}`, 'error') }
+}
+
 /** Right-click on the player / timeline. */
 export function playerMenu(): MenuItem[] {
   const s = an()
   return [
     { cmd: 'anim.play', label: s.playing ? 'Pause' : 'Play' }, { cmd: 'anim.stepBack' }, { cmd: 'anim.stepForward' }, { cmd: 'anim.home' }, { cmd: 'anim.end' }, sep,
     { cmd: 'anim.setIn' }, { cmd: 'anim.setOut' }, { cmd: 'anim.clearInOut' }, sep,
-    { cmd: 'anim.extractFrame' }, { cmd: 'anim.extractRange' }, { cmd: 'anim.sendToEdit' }, { cmd: 'anim.useAsStart' }, sep,
+    { cmd: 'anim.extractFrame' }, { cmd: 'anim.extractRange' }, { cmd: 'anim.sendToEdit' }, { cmd: 'anim.useAsStart' }, { cmd: 'anim.extend' }, sep,
     { label: 'Onion skin', checked: s.onion, run: () => useAnimate.setState({ onion: !s.onion }) }, { label: 'Loop', checked: s.loop, run: () => useAnimate.setState({ loop: !s.loop }) },
     { cmd: 'anim.view.compare', label: s.view === 'compare' ? 'Leave compare' : 'Compare…' }, sep,
     { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.toCatalogue' },

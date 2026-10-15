@@ -339,6 +339,7 @@ class Capabilities(Open):
     story: StoryCaps | None = None                # 17 (D85): the Cast tab's Expand model and presets
     train: TrainCaps | None = None                # 18 (D86): the LoRA trainer's bases and ranges
     voice: VoiceCaps | None = None                # 19 (D87) CN2: the TTS tiers, their voices and languages
+    experimental: ExperimentalCaps | None = None  # D88: extend and lip-sync, marked experimental
 
 
 class MissingWeight(Open):
@@ -720,6 +721,52 @@ class ClipExtracted(Out):
 # ---- jobs and queue --------------------------------------------------------------------------------------------------
 class JobList(Out):
     items: list[JobRecord]
+
+
+class ExtendQueued(Out):
+    """D88 XE (experimental): the continuation's job, its start (the clip's last frame, extracted) and the lead-in it pins."""
+    job_id: str
+    start_asset_id: str
+    lead: int
+    model_id: str
+    staged: bool
+
+
+class LipsyncQueued(Out):
+    """D88 XL (experimental): the talking clip's job — it lands as a take on the shot version."""
+    job_id: str
+    model_id: str
+    frames: int
+    audio_asset_id: str
+    image_asset_id: str
+    staged: bool
+    seconds: float | None = None
+
+
+class ExperimentalExtendCaps(Open):
+    models: dict[str, int]                         # the video models that continue clips → their lead-in frames
+    caveat: str
+
+
+class ExperimentalLipsyncCaps(Open):
+    available: bool
+    why: str | None = None
+    model_id: str | None = None
+    label: str | None = None
+    health: str | None = None
+    missing: list[str] = []
+    presets: dict[str, dict[str, Any]] = {}
+    frames_max: int | None = None
+    fps: int | None = None
+    seconds_max: float | None = None
+    languages: list[str] = []
+    caveat: str
+
+
+class ExperimentalCaps(Open):
+    """D88: features shipped before their bars are met — each with the caveat the UI shows beside its verb."""
+    extend: ExperimentalExtendCaps
+    lipsync: ExperimentalLipsyncCaps
 
 
 class JobsSubmitted(Out):

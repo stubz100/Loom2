@@ -163,3 +163,4 @@
 .seq-check { margin: 4px 0; padding-left: 16px; font-size: 12px; color: var(--fg2); }
 .seq-check li.ok { color: var(--ok, #4caf50); list-style: none; margin-left: -16px; }
 .seq-check li.warn { color: var(--warn, #c7a23a); }
+.badge.experimental { background: #6b4a12; color: #ffd98a; border-radius: 3px; padding: 0 5px; font-size: 11px; }   /* D88: shipped before its bars are met */

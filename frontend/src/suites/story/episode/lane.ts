@@ -70,6 +70,12 @@ export function clampOverlaps(lane: Lane): number[] {
 }
 
 /** Append a clip (whole, a cut). */
+/** D88 XE: where a continuation starts when it follows the clip it extends — past the frames it repeats (its overlap); else 0. */
+export function chainIn(lane: Lane | null, chainedFrom: string | null | undefined, overlap: number, frames: number): number {
+  const last = lane?.clips[lane.clips.length - 1]
+  return chainedFrom && last?.source === chainedFrom && overlap > 0 && overlap < frames ? overlap : 0
+}
+
 export function append(lane: Lane, c: LaneClip): Lane {
   return { ...lane, clips: [...lane.clips, c], overlaps: [...lane.overlaps, 0] }
 }

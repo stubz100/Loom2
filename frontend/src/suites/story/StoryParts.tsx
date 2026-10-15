@@ -16,6 +16,7 @@ import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, World
 import { coverageGrid, readiness, rowsCovered } from './coverage'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
+import { LipsyncBlock } from './LipsyncBlock'
 import { askExpand, rowMenu } from './storyCommands'
 import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
@@ -709,6 +710,7 @@ function ShotInspector() {
         <span>versions</span><span>{s.versions.length}</span>
       </div>
       {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
+      {v && v.state === 'open' && <LipsyncBlock v={v} ownerNode={s.owner_node ?? null} />}
       <div className="verbs"><CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
     </div>
   )

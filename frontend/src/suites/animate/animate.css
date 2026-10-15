@@ -124,3 +124,4 @@
 .seq-insp h4 { margin: 10px 0 4px; font-size: 12px; }
 .seq-insp .kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px; font-size: 12px; color: var(--fg2); margin: 2px 0; }
 .seq-insp .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.badge.experimental { background: #6b4a12; color: #ffd98a; border-radius: 3px; padding: 0 5px; font-size: 11px; }   /* D88: shipped before its bars are met */

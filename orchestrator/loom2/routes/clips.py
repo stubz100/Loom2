@@ -10,7 +10,8 @@ from pydantic import BaseModel
 
 from ..clips import ClipRecord, ClipStore, compute_identity
 from ..fsio import _tmp_for, replace
-from ..schemas import ClipExtracted, ClipList
+from ..origin import JobOrigin
+from ..schemas import ClipExtracted, ClipList, ExtendQueued
 from ..tools import facesim
 from .deps import Svc
 
@@ -20,6 +21,11 @@ IMMUTABLE = {"Cache-Control": "private, max-age=31536000, immutable"}
 
 class ClipExtract(BaseModel):
     frames: list[int]
+
+
+class ExtendBody(BaseModel):
+    prompt_text: str | None = None                # the clip's own prompt when absent
+    stage: bool = False
 
 
 @router.get("/clips", response_model=ClipList)
@@ -131,3 +137,46 @@ def _strip_thumb(src, out, size: int) -> None:
             tmp.unlink(missing_ok=True)
             if not out.is_file():
                 raise
+
+
+@router.post("/clips/{clip_id}/extend", response_model=ExtendQueued)
+async def clip_extend(svc: Svc, clip_id: str, body: ExtendBody):
+    """D88 XE (experimental): continue the clip on its own model, preset, size, fps and length — its last frame extracted as the start
+    (`frame-extract` lineage), its last `extend_lead` frames pinned as the lead-in (LTX 9; Wan 1 = the start alone). 422 with the sentence."""
+    from ..models import registry
+    ws, cat, q = svc.require_project()
+    store = ClipStore(ws)
+    rec = await asyncio.to_thread(store.get, clip_id)
+    if not rec:
+        raise HTTPException(404, "clip not found")
+    spec = registry.get(rec.model_id)
+    if spec is None or not spec.recipes.extend_lead:
+        raise HTTPException(422, f"{spec.label if spec else rec.model_id} does not continue clips")
+    prev = dict((rec.params or {}).get("recipe") or {})
+    n = rec.frames - 1
+    tmp = ws.temp_dir / "extract" / f"{rec.id}_{n:06d}.png"
+
+    def copy_last() -> None:
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(store.frame_path(rec.id, n).read_bytes())
+    await asyncio.to_thread(copy_last)
+    a = await asyncio.to_thread(cat.ingest_file, tmp, kind="image", move=True, suite="animate", lineage_kind="frame-extract", job_id=rec.job_id, batch_id=rec.batch_id,
+                                model_id=rec.model_id, seed=rec.seed, prompt_text=rec.prompt, parents=[rec.asset_id] if rec.asset_id else [],
+                                params={"clip_id": rec.id, "frame_index": n, "fps": rec.fps, "time_s": round(n / rec.fps, 3), "preset": rec.preset, "extend": True})
+    a = await asyncio.to_thread(cat.make_thumbs, a)
+    svc.hub.broadcast("asset.created", a.model_dump())
+    rec.extracted_asset_ids.append(a.id)
+    await asyncio.to_thread(store.save, rec)
+    recipe = {"kind": "i2v", "model_id": rec.model_id, "start_asset": a.id, "prompt_text": (body.prompt_text if body.prompt_text is not None else rec.prompt),
+              "frames": int(prev.get("frames") or rec.frames), "fps": rec.fps, "width": int(prev.get("width") or rec.w),
+              "height": int(prev.get("height") or rec.h), "preset": rec.preset,
+              "extend_from": {"clip_id": rec.id, "lead": int(spec.recipes.extend_lead)}}
+    for k in ("negative", "steps", "cfg", "shift", "size_policy"):
+        if prev.get(k) is not None:
+            recipe[k] = prev[k]
+    origin = JobOrigin(suite="animate", surface="extend", ref=rec.id, payload={"lead": int(spec.recipes.extend_lead)})
+    try:
+        job = q.submit(recipe, stage=body.stage, origin=origin)[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"job_id": job.id, "start_asset_id": a.id, "lead": int(spec.recipes.extend_lead), "model_id": rec.model_id, "staged": job.status == "staged"}

@@ -67,7 +67,7 @@ def capabilities(svc: Services) -> dict:
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
-            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
+            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant), "experimental": _experimental(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -181,6 +181,32 @@ def _voice(svc: Services, variant: str) -> dict:
             "cloning": {"model": s.voices.cloning_model, "cached": model_cached(s, s.voices.cloning_model), "languages": CLONING_LANGUAGES,
                         "reference_s": list(REFERENCE_S), **RATES["cloning"]},
             "speed": {"min": 0.5, "max": 2.0, "default": 1.0}}
+
+
+EXTEND_CAVEAT = ("experimental (E17): the join is seamless on LTX, but the character's face is not kept across it when they leave the middle "
+                 "of the frame; Wan continues from the last frame (a visible seam is possible)")
+LIPSYNC_CAVEAT = ("experimental (E18): English lines only, up to 4.8 s; the lips follow most English lines (sync 0.5–0.7) but not every one; "
+                  "≈ 16 min a line at Draft, ≈ 9 min at Fast — staged by default")
+
+
+def _experimental(svc: Services, variant: str) -> dict:
+    """D88: extend and lip-sync, shipped as experimental with E17 / E18's measured caveats (T8: the UI shows what was measured)."""
+    models = {s.id: int(s.recipes.extend_lead) for s in registry.video_specs() if s.recipes.extend_lead and _offered(s, variant)}
+    lip: dict = {"available": False, "why": "no lip-sync model in this build", "caveat": LIPSYNC_CAVEAT}
+    for spec in registry.lipsync_specs():
+        if not _offered(spec, variant):
+            continue
+        needs = spec.weights()
+        healths = {x: svc.roster.resolve(x).health for x in needs}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        presets = {k: {"label": p.label, "steps": p.steps, "seconds": p.seconds} for k, p in (spec.video.presets.items() if spec.video else [])}
+        fps, frames = spec.geometry.fps or 16, spec.geometry.frames or 77
+        lip = {"available": not missing, "why": f"weights missing: {', '.join(missing)} — Models › Fetch" if missing else None, "model_id": spec.id,
+               "label": spec.label, "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"),
+               "missing": missing, "presets": presets, "frames_max": frames, "fps": fps, "seconds_max": round(frames / fps, 2),
+               "languages": spec.recipes.lipsync_languages, "caveat": LIPSYNC_CAVEAT}
+        break
+    return {"extend": {"models": models, "caveat": EXTEND_CAVEAT}, "lipsync": lip}
 
 
 def _mesh(svc: Services, variant: str) -> dict:

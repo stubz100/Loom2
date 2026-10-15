@@ -106,7 +106,7 @@ by nearest frame, not conformed (D27). It lands in the Clips bin like any clip.
 
 ## 6. Inspector
 - **Clip**: model/format, frames/fps/size, seed, prompt, time, start/end thumbnails, Keep/Reject/Rate/Tags;
-  **Variations** (new seed), **Re-run**, **Try on LTX / Wan** (same inputs, other model), **Extend** (post-MVP — planned 2026-10-14 in `19-continuity-and-voice.md` CN1, D87; **dropped 2026-10-15: E17 NO-GO**, the face does not survive the joins:
+  **Variations** (new seed), **Re-run**, **Try on LTX / Wan** (same inputs, other model), **Extend** (post-MVP — planned 2026-10-14 in `19-continuity-and-voice.md` CN1, D87; dropped on E17's NO-GO, then **back as experimental 2026-10-15 (D88, 19 §7)** — *Extend ▶* in the clip Inspector:
   last frame → new clip; LTX-2.3 native extension later).
 - **Frames**: current frame readout, **Extract frame** (`F`) → asset in Catalogue with lineage
   `frame-extract` (from the PNG master, not the proxy), **Extract range** (every k-th between in/out, max 24),

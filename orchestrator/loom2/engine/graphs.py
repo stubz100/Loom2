@@ -93,7 +93,7 @@ def _te_loader(te_name: str, te_device: str | None) -> dict[str, Any]:
 # ---- image-to-video (M6; 11 §3b; D8 Wan 2.2, D9 LTX-2.3; recipes from the E4/E4b/E4c/E5b spikes) -------------
 def video_spec(model_id: str) -> ModelSpec:
     spec = registry.get(model_id)
-    if spec is None or not (spec.recipes.i2v or spec.recipes.animate) or spec.video is None:
+    if spec is None or not (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) or spec.video is None:
         raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
     return spec
 
@@ -126,7 +126,7 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
     out: dict[str, Any] = {"family": fam, "width": w, "height": h, "frames": frames, "fps": recipe.fps, "preset": recipe.preset,
                            "flf": bool(recipe.end_asset), "beats": len(recipe.beats)}
     p = presets[recipe.preset]
-    if spec.graph == "wan_animate":                                   # CN4: one window (E19: 77 frames), 4 steps at CFG 1 with the LightX2V LoRA
+    if spec.graph in ("wan_animate", "wan_s2v"):                      # CN4 / D88 XL: one window (77 frames)
         if geo.frames and frames > geo.frames:
             raise FieldError("frames", recipe.frames, [geo.frames], f"{spec.label} makes one window of up to {geo.frames} frames (E19); shorten the range")
         steps = recipe.steps or p.steps
@@ -143,7 +143,8 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
 
 
 def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_name: str, end_name: str | None = None,
-              beat_names: dict[str, str] | None = None, guide_name: str | None = None) -> Compiled:
+              beat_names: dict[str, str] | None = None, guide_name: str | None = None, lead_name: str | None = None,
+              audio_name: str | None = None) -> Compiled:
     """Wan: loaders → ModelSamplingSD3 ×2 → WanImageToVideo / WanFirstLastFrameToVideo → KSamplerAdvanced high → low → VAEDecode
     → SaveImage (one PNG per frame: the clip master; the proxy is encoded by the orchestrator). LTX: the E5 graph — joint
     audio-video latent, LTXVAddGuide for the end frame (frame_idx −1) and every beat — ending in SaveImage the same way. ST4 (D76): with
@@ -151,6 +152,17 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
     frame 0 — the E11 graph."""
     ep = i2v_params(recipe)
     spec = video_spec(recipe.model_id)
+    if recipe.extend_from and spec.recipes.extend_lead is None:
+        raise CompileError(f"{spec.label} does not continue clips (extend)")
+    if recipe.extend_from and recipe.extend_from.lead > 1 and not lead_name:
+        raise CompileError("the lead-in frames were not uploaded to the engine (pipeline.prepare_i2v)")
+    if spec.graph == "wan_s2v":                                       # D88 XL: the line is the whole point
+        if not recipe.audio or not audio_name:
+            raise CompileError(f"{spec.label} follows a spoken line — give it the line's audio")
+        if recipe.end_asset or recipe.beats or recipe.guide or recipe.extend_from:
+            raise CompileError(f"{spec.label} takes one image and one line — no end frame, beats, guide or extension")
+    elif recipe.audio:
+        raise CompileError(f"{spec.label} does not follow audio (lip-sync is the S2V model's)")
     if spec.graph == "wan_animate":                                   # CN4: the pose pass is the whole point
         if not recipe.guide or recipe.guide.kind != "pose":
             raise CompileError(f"{spec.label} performs the Stage's pose sequence — render the pose sequence and pass it as the guide")
@@ -198,6 +210,27 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g["14"] = {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["3", 0]}}
         out_node = "15"
         g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["14", 0], "filename_prefix": out_prefix}}
+    elif spec.graph == "wan_s2v":                                     # D88 XL (E18's graph): wav2vec2 on the line → WanSoundImageToVideo
+        _, unet = roster.require(spec.id)
+        _, te = roster.require(roles.te.default)
+        _, vae = roster.require(roles.vae)
+        _, aenc = roster.require(roles.extra["audio_encoder"])
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["4"] = {"class_type": "AudioEncoderLoader", "inputs": {"audio_encoder_name": aenc}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.prompt_text, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative if recipe.negative is not None else video.negative, "clip": ["2", 0]}}
+        g["8"] = {"class_type": "LoadAudio", "inputs": {"audio": audio_name}}
+        g["9"] = {"class_type": "AudioEncoderEncode", "inputs": {"audio_encoder": ["4", 0], "audio": ["8", 0]}}
+        g["10"] = {"class_type": "WanSoundImageToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames,
+                                                                    "batch_size": 1, "audio_encoder_output": ["9", 0], "ref_image": load_scaled("100", start_name)}}
+        g["11"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1", 0], "shift": ep["shift"]}}
+        g["12"] = {"class_type": "KSampler", "inputs": {"model": ["11", 0], "seed": seed, "steps": ep["steps"], "cfg": ep["cfg"], "sampler_name": "uni_pc", "scheduler": "simple",
+                                                        "positive": ["10", 0], "negative": ["10", 1], "latent_image": ["10", 2], "denoise": 1.0}}
+        g["13"] = {"class_type": "VAEDecode", "inputs": {"samples": ["12", 0], "vae": ["3", 0]}}
+        out_node = "14"
+        g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["13", 0], "filename_prefix": out_prefix}}
     elif spec.graph == "wan22":
         _, high = roster.require(spec.id)
         _, low = roster.require(roles.extra["low_expert"])
@@ -283,6 +316,13 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
                                                             "frame_idx": 0, "strength": float(recipe.guide.strength), "iclora_parameters": ["51", 0]}}
             pos, neg, lat = ["54", 0], ["54", 1], ["54", 2]
             model_link = ["50", 0]
+        if recipe.extend_from and lead_name:                               # D88 XE (E17 A): the previous clip's last frames pinned at frame 0, last in the chain
+            g["56"] = {"class_type": "LoadVideo", "inputs": {"file": lead_name}}
+            g["57"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["56", 0]}}
+            g["58"] = {"class_type": "ImageScale", "inputs": {"image": ["57", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+            g["59"] = {"class_type": "LTXVAddGuide", "inputs": {"positive": pos, "negative": neg, "vae": ["3", 0], "latent": lat, "image": ["58", 0],
+                                                            "frame_idx": 0, "strength": 1.0}}
+            pos, neg, lat = ["59", 0], ["59", 1], ["59", 2]
         g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1, "audio_vae": ["99", 0]}}
         g["13"] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": lat, "audio_latent": ["12", 0]}}
         g["14"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": pos}}
@@ -296,13 +336,17 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         out_node = "22"
         g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["21", 0], "filename_prefix": out_prefix}}
     summary = {"model_id": recipe.model_id, **{k: v for k, v in ep.items() if k != "label"}, "label": ep["label"],
-               **({"guide": recipe.guide.kind, "guide_strength": recipe.guide.strength} if recipe.guide else {})}
+               **({"guide": recipe.guide.kind, "guide_strength": recipe.guide.strength} if recipe.guide else {}),
+               **({"extend_from": recipe.extend_from.clip_id, "lead": recipe.extend_from.lead} if recipe.extend_from else {}),
+               **({"audio": recipe.audio.asset_id} if recipe.audio else {}), **({"experimental": True} if recipe.extend_from or recipe.audio else {})}
     return Compiled(graph=g, output_node=out_node, summary=summary, serialized_prompt=recipe.prompt_text)
 
 
 def estimate_i2v_seconds(recipe: I2V) -> dict[str, Any]:
     """The plain clip's estimate; a guided clip (ST4) is scaled by E11's measured ratio (guide_seconds over the Draft preset's seconds)."""
     est = _estimate_i2v_plain(recipe)
+    if recipe.audio:
+        return {**est, "source": "baseline (E18 2026-10-15: S2V, 77 frames at 832×480) — experimental"}
     if recipe.guide and (registry.get(recipe.model_id) or video_spec(recipe.model_id)).recipes.animate:
         return {**est, "source": "baseline (E19 2026-10-15: Animate Move, 77 frames at 832×480)"}     # its preset's seconds are the guided figure
     if recipe.guide:
@@ -1065,7 +1109,7 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         i = inputs or {}
         if "start" not in i:
             raise CompileError("i2v needs the uploaded start frame (queue._prepare_i2v_inputs)")
-        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"), i.get("guide"))
+        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"), i.get("guide"), i.get("lead"), i.get("audio"))
     elif isinstance(recipe, Reangle):
         i = inputs or {}
         if "image" not in i:

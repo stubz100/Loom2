@@ -87,6 +87,8 @@ LTX as the roster tags it today.
 
 The *Mix* mode (replace a person in a real video; needs SAM2 masks) is out of this wave.
 
+**Run 2026-10-14 / 15 (`engine/spikes/e19_animate.py`, journal) — GO for one character per pose pass; FaceSim advisory.** With Mara's hero **padded** into the 832×480 frame (a centre-cropped portrait was painted into the background as a ghost) and the score fixed (E11's keypoints mapped from its 1024×576 render into the scaled, cropped frame — the first scores of 0.0 compared two coordinate spaces): walk_dolly PCK 0.958, turn_orbit 0.805, wave_static 1.0, crouch_crane 0.972, each 77 f in 264–297 s (bar ≤ 300 s), no OOM — the LTX IC-LoRA baseline followed 3 / 5. **run_track fails (0.0):** its pass holds two small overlapping runners and Animate read them as hands over a close-up face — one character per pose pass. FaceSim to the hero is 0.38–0.49 where the face is big enough to score (turn, wave; the bar 0.45 missed narrowly) and meaningless on the wide shots (0.07–0.33); by eye the character holds (face, red braids, the green hood). CN4 shows FaceSim as advisory (as 18 §3h) and refuses a pose pass with more than one figure. VACE (C) is not needed.
+
 **Downloads and installs the spikes need (the author's approval, D87):** `wan2.2_s2v_14B_fp8_scaled` 15.3 GB + `wav2vec2_large_english_fp16`
 0.6 GB; `Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ` 17.1 GB + `clip_vision_h` 1.2 GB + the LightX2V I2V 4-step LoRA ≈ 0.7 GB (the relight LoRA
 1.3 GB only with *Mix*, later); Kokoro 0.3 GB; Qwen3-TTS-0.6B 2.3 GB; Chatterbox's English model ≈ 1–2 GB only if Qwen3 fails — **≈ 38 GB**,

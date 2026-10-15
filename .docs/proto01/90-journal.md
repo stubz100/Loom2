@@ -3915,3 +3915,30 @@ split by file so that no two hands touched the same module.
 - **Fix (the flow scenario):** each edge is connected and polled before the next; a missed drop is dragged again once (the same mouse path),
   and every drag ends with a pointermove over the target handle before the release. Playwright's `retries` stay 0 (a flake stays visible).
   The Edit boot and the socket-buffer failures are the runner's; they stay as they are and are named when they recur.
+
+## 2026-10-15 09:41 — E19 · pose-driven shots: GO for one character per pose pass (19 §2, D87)
+- **First run (2026-10-14 18:23, cut short when the session ended after two shots):** PCK 0.0 on both, and turn_orbit showed the hero's face
+  painted huge and translucent into the background. Two faults, both the spike's: (1) the score compared E11's keypoints in its 1024×576
+  render with SDPose's detections in the 832×480 output — the pose video reaches `WanAnimateToVideo` through `ImageScale` (cover, centre
+  crop), so the points need the same transform (`map_figs`); rescored, the first run's walk_dolly is 0.965 and the ghosted turn_orbit 0.609;
+  (2) the portrait hero was centre-cropped to landscape for `reference_image` — the model reproduced the crop as background. The reference is
+  now fitted inside the frame on its own edge colour (`padded_ref`, `--ref-mode pad`).
+- **Rerun (2026-10-15, padded, Wan2.2 Animate-14B fp8 KJ + LightX2V 4-step, 4 steps CFG 1, 77 f at 832×480):**
+
+  | shot | PCK@0.1 | FaceSim first / mid / last | exec |
+  | --- | --- | --- | --- |
+  | walk_dolly | 0.958 | 0.08 / 0.12 / 0.07 (a small face) | 264 s |
+  | turn_orbit | 0.805 | 0.38 / 0.49 / 0.40 | 283 s |
+  | wave_static | 1.0 | 0.41 / 0.45 / 0.39 | 297 s |
+  | run_track | 0.0 | 0.61 / 0.50 / 0.32 | 285 s |
+  | crouch_crane | 0.972 | 0.33 / 0.19 / — | 288 s |
+
+  Bars (19 §2): PCK ≥ 0.8 — 4 / 5 (the LTX IC-LoRA pose baseline followed 3 / 5); ≤ 300 s — 5 / 5; no OOM. **run_track** is a real failure: its
+  pose pass holds two small overlapping runners (a tracking shot from E11) and Animate rendered a close-up of a face behind two hands — one
+  character per pose pass. **FaceSim ≥ 0.45** is missed narrowly where the face is large enough to score (0.38–0.49) and meaningless on the wide
+  shots; by eye the character holds across every shot (the face, the red braids, the green hood) — ArcFace on a painted hero at medium distance
+  sits at the edge of its same-person band, as in E17.
+- **Verdict: GO** for CN4 with three conditions recorded in 19 §2: the reference padded into the frame, one figure per pose pass (CN4 refuses a
+  pass with two), FaceSim shown as advisory on the take (18 §3h's pattern). VACE stays unfetched. Nothing to delete (Animate is the winner;
+  `clip_vision_h` and the LightX2V LoRA are its parts). One cosmetic note: the walk clip carries a hallucinated CJK caption top right despite
+  the negative prompt's 字幕 — watch for it in CN4's rig run.

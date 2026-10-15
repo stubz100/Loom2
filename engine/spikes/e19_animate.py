@@ -95,6 +95,49 @@ def animate_graph(ref_name: str, pose_name: str, seed: int, prefix: str) -> tupl
     return g, "15"
 
 
+def map_figs(figs: list, src: tuple[int, int]) -> list:
+    """E11's keypoints are in its render's pixels (1024×576); the pose video reaches WanAnimateToVideo through ImageScale (cover, centre
+    crop) at W×H — the same transform on the points, or PCK compares two coordinate spaces (the first run's 0.0)."""
+    sw, sh = src
+    s = max(W / sw, H / sh)
+    ox, oy = (sw * s - W) / 2, (sh * s - H) / 2
+    out = []
+    for fig in figs:
+        g = np.array(fig, dtype=float)
+        g[:, 0] = g[:, 0] * s - ox
+        g[:, 1] = g[:, 1] * s - oy
+        out.append(g.tolist())
+    return out
+
+
+def padded_ref(src: Path, dest: Path) -> Path:
+    """The reference fitted inside W×H (no crop) on its own edge colour — the first run centre-cropped a portrait hero to landscape and the
+    model painted the cropped face into the background (turn_orbit's ghost)."""
+    im = Image.open(src).convert("RGB")
+    im.thumbnail((W, H), Image.LANCZOS)
+    a = np.asarray(im)
+    edge = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]).mean(axis=0).astype(int)
+    canvas = Image.new("RGB", (W, H), tuple(int(x) for x in edge))
+    canvas.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(dest)
+    return dest
+
+
+def score_pck(e: Engine, frames: list[Path], kp: dict, every: int) -> float | None:
+    gt = kp["frames"]
+    size = tuple(kp.get("size") or (W, H))
+    hit = tot = 0
+    for idx in range(0, len(frames), every):
+        if idx >= len(gt):
+            break
+        hp, _, _ = e.run(sdpose_graph(e.upload(frames[idx])))
+        people = json.loads(hp["outputs"]["6"]["text"][0])[0]["people"]
+        h_, t_ = pck(map_figs(gt[idx], size), people)
+        hit += h_; tot += t_
+    return round(hit / tot, 3) if tot else None
+
+
 def download_frames(e: Engine, h: dict, node: str, dest: Path) -> list[Path]:
     dest.mkdir(parents=True, exist_ok=True)
     out = []
@@ -143,6 +186,8 @@ def main() -> int:
     ap.add_argument("--shots", default="walk_dolly,turn_orbit,wave_static,run_track,crouch_crane")
     ap.add_argument("--ref", default=str(REPO / "bench" / "angles" / "07.jpg"))
     ap.add_argument("--every", type=int, default=10, help="score every n-th frame with SDPose")
+    ap.add_argument("--ref-mode", default="pad", choices=["pad", "crop"], help="fit the reference inside the frame (pad) or centre-crop it (the first run)")
+    ap.add_argument("--rescore", action="store_true", help="score the saved frames again (the keypoints mapped) — no Animate run")
     a = ap.parse_args()
     if engine_listening():
         print("an engine is already listening on 8188 — stop it first"); return 2
@@ -163,7 +208,19 @@ def main() -> int:
         fs = FaceSim(MODELS)
         ref = Path(a.ref)
         hero = largest_face(fs, ref)
-        ref_name = e.upload(ref)
+        ref_name = e.upload(padded_ref(ref, OUT / "ref_padded.png") if a.ref_mode == "pad" else ref)
+        if a.rescore:
+            for sid in [s for s in a.shots.split(",") if s]:
+                frames = sorted((OUT / sid).glob("*.png"))
+                kp_path = E11 / sid / "keypoints.json"
+                if not frames or not kp_path.is_file():
+                    continue
+                pck_v = score_pck(e, frames, json.loads(kp_path.read_text(encoding="utf-8")), a.every)
+                row = {"shot": sid, "rescored": True, "frames": len(frames), "pck": pck_v, "stamp": time.strftime("%Y-%m-%d %H:%M")}
+                with (OUT / "results_rescored.jsonl").open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(row) + chr(10))
+                log(f"  rescored {sid}: PCK {pck_v} ({len(frames)} frames)")
+            return 0
         rows = []
         for sid in [s for s in a.shots.split(",") if s]:
             pose = E11 / sid / "pose.mp4"
@@ -182,16 +239,7 @@ def main() -> int:
                 continue
             frames = download_frames(e, h, node, OUT / sid)
             encode(frames, OUT / f"{sid}.mp4")
-            gt = json.loads(kp_path.read_text(encoding="utf-8"))["frames"]
-            hit = tot = 0
-            for idx in range(0, len(frames), a.every):
-                if idx >= len(gt):
-                    break
-                hp, _, _ = e.run(sdpose_graph(e.upload(frames[idx])))
-                people = json.loads(hp["outputs"]["6"]["text"][0])[0]["people"]
-                h_, t_ = pck(gt[idx], people)
-                hit += h_; tot += t_
-            pck_v = round(hit / tot, 3) if tot else None
+            pck_v = score_pck(e, frames, json.loads(kp_path.read_text(encoding="utf-8")), a.every)
             sims = []
             for idx in (0, len(frames) // 2, len(frames) - 1):
                 emb = largest_face(fs, frames[idx])
@@ -199,7 +247,7 @@ def main() -> int:
             vals = [s for s in sims if s is not None]
             for idx in np.linspace(0, len(frames) - 1, 7).astype(int):
                 cells.append((frames[idx], f"{sid} f{idx}"))
-            row = {"shot": sid, "frames": len(frames), "exec_s": round(exec_s, 1), "pck": pck_v, "facesim": sims,
+            row = {"shot": sid, "ref_mode": a.ref_mode, "frames": len(frames), "exec_s": round(exec_s, 1), "pck": pck_v, "facesim": sims,
                    "bars": {"pck": pck_v is not None and pck_v >= BARS["pck"], "followed": pck_v is not None and pck_v >= BARS["followed"],
                             "facesim": bool(vals) and min(vals) >= BARS["facesim"], "time": exec_s <= BARS["time"]}, "stamp": time.strftime("%Y-%m-%d %H:%M")}
             rows.append(row)

@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → **CN4 built and rig-checked 2026-10-15**; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **closed 2026-10-15** (D87: CN2 voice and CN4 pose-driven shots built and accepted on the rig, 41 / 41 checks; CN1 extend and CN3 lip-sync dropped on E17 / E18's NO-GO). Was: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → **CN4 built and rig-checked 2026-10-15**; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -175,11 +175,13 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 | **CN2 · Voice** ✓ 2026-10-15 | the `audio` asset kind with player and waveform, the `voice` record, the `tts` job (two tiers), the Flow line's *Voice ▶*, the Episode's audio lane; tests (a fake TTS), smoke, rig | 4 |
 | ~~**CN3 · Lip-sync**~~ dropped 2026-10-15 (E18 NO-GO) | the `lipsync` job to a shot take, the Shots tab's verb and picker, the muxed proxy, FaceSim advisory; tests, smoke, rig | 3 |
 | **CN4 · Pose-driven shots** ✓ 2026-10-15 | the `animate` clip method on the Stage's pose pass with the Cast hero, the Shot tab's picker; tests, smoke, rig | 3 |
-| **CN5 · Acceptance and docs** | `scripts/cn_acceptance.py` (a chain of three, a voiced talking take, a pose-driven shot, the Episode export with audio and welded joins — through the app on the rig); 11 / 16 / 17 updated, D87 closed | 2 |
+| **CN5 · Acceptance and docs** ✓ 2026-10-15 (the parts that remain: voice, the pose-driven shot, the Episode's audio lane) | `scripts/cn_acceptance.py` (a chain of three, a voiced talking take, a pose-driven shot, the Episode export with audio and welded joins — through the app on the rig); 11 / 16 / 17 updated, D87 closed | 2 |
 
 ≈ 22 d. Gate: D87 approved; each spike's GO before its slice (E17 → CN1, E20 → CN2, E18 → CN3, E19 → CN4); CN2 before CN3.
 
 ## 5. Tests and acceptance
+
+*Run 2026-10-15 (`scripts/cn_acceptance.py --parts voice,animate,episode --tier both`, journal): 41 / 41 checks — the draft and cloning tiers, a Wan Animate clip performing E11's walk (PCK 0.993, 278 s), the clip as a shot on a Dialogue node whose two lines are voiced, the Episode's FCPXML / EDL with both lines on the audio lane and the SRT. The chain and the talking take left the wave with CN1 / CN3. Owed by the author: the Resolve import of `engine/spikes/out/cn/episode/cn_episode.fcpxml` and a listen to the voices.*
 
 - **Offline:** the chain arithmetic (beats across segments, overlaps), `extend_from` through the fake engine (the lead-in uploaded, the record
   linked), the `tts` job on a fake synthesiser (a WAV of the right length), the `lipsync` job on the fake engine (a take with lineage to the

@@ -15,7 +15,11 @@ orchestrator starts the engine). Needs the voices venv (scripts/voices-setup.ps1
 outputs under engine/spikes/out/e11 for the animate part. Results: engine/spikes/out/cn/results.jsonl, the WAVs under
 engine/spikes/out/cn/voice/, the clip under engine/spikes/out/cn/animate/, the orchestrator log.
 
-    orchestrator/.venv/Scripts/python.exe scripts/cn_acceptance.py --parts voice,animate [--tier draft|cloning|both]
+    orchestrator/.venv/Scripts/python.exe scripts/cn_acceptance.py --parts voice,animate,episode [--tier draft|cloning|both]
+
+`episode` (CN5): the animate part's clip as a shot bound to a Dialogue node with two lines voiced by a draft voice, on an Episode lane;
+the FCPXML carries both lines on the audio lane (lane −1, their WAVs on disk), the EDL their AX events, the SRT the text; copies of the
+three exports under engine/spikes/out/cn/episode/ for the author's Resolve import.
 """
 from __future__ import annotations
 
@@ -259,9 +263,50 @@ def animate_part(a, check, row: dict, tmp: Path) -> None:
         sims.append(round(fs.similarity(he, x), 3) if he is not None and x is not None else None)
     check(pck_v is not None and pck_v >= 0.8, f"the clip follows the pose: PCK@0.1 {pck_v} (bar >= 0.8)")
     engine_s = float((j.get("timings") or {}).get("engine_wall_s") or 0) or None
-    row["animate"] = {"job": j["id"], "frames": len(frames), "pck": pck_v, "facesim": sims, "wall_s": j.get("wall_s"), "engine_s": engine_s, "size": [W, H],
+    row["animate"] = {"clip_id": clip_id, "job": j["id"], "frames": len(frames), "pck": pck_v, "facesim": sims, "wall_s": j.get("wall_s"), "engine_s": engine_s, "size": [W, H],
                       "node_times": (j.get("node_times") or {})}
     log(f"animate: {len(frames)} f at {W}×{H}, PCK {pck_v}, FaceSim {sims} (advisory), wall {j.get('wall_s')} s")
+
+
+def episode_part(a, check, row: dict, tmp: Path) -> None:
+    """CN5: the Animate clip becomes a shot bound to a Dialogue node with two lines; the lines are voiced (draft); the Episode lane takes the
+    shot; the FCPXML carries the voiced lines on the audio lane at the SRT's ticks and the EDL their AX events; the WAVs exist."""
+    clip_id = (row.get("animate") or {}).get("clip_id")
+    if not clip_id:
+        check(False, "the episode part needs the animate part's clip (run --parts animate,episode)")
+        return
+    clip = next(c for c in api("GET", "/clips")["items"] if c["id"] == clip_id)
+    sh = api("POST", "/story/shots", {"name": "Mara walks in", "clip_id": clip_id})
+    n = api("POST", "/story/flow/nodes", {"type": "dialogue", "title": "Mara walks in", "x": 0, "y": 0})
+    n = api("PATCH", f"/story/flow/nodes/{n['id']}", {"revision": n["revision"], "lines": [{"speaker": None, "text": "I came as soon as I heard."},
+                                                                                            {"speaker": None, "text": "Tell me everything, slowly."}]})
+    api("POST", f"/story/flow/nodes/{n['id']}/bind", {"shot_id": sh["id"]})
+    voice = api("POST", "/story/voices", {"name": "Episode narrator", "tier": "draft", "voice": "bf_emma"})
+    r = api("POST", f"/story/flow/nodes/{n['id']}/voice", {"voice_id": voice["id"]})
+    j = wait_job(r["job_ids"][0])
+    check(j["status"] == "done" and len(j["result"]["asset_ids"]) == 2, f"both lines voiced ({j['status']}, {j.get('error') or ''})")
+    tl = api("POST", "/timelines", {"name": "CN episode", "fps": int(clip["fps"])})
+    body = {**tl, "clips": [{"id": "c1", "clip_id": clip_id, "in": 0, "out": int(clip["frames"]), "fps": None, "shot_id": sh["id"], "shot_version": "v1",
+                             "node_id": n["id"]}], "overlaps": [0]}
+    api("PUT", f"/timelines/{tl['id']}", body)
+    fx = api("POST", f"/timelines/{tl['id']}/export", {"format": "fcpxml"})
+    edl = api("POST", f"/timelines/{tl['id']}/export", {"format": "edl"})
+    srt = api("POST", f"/timelines/{tl['id']}/export", {"format": "srt"})
+    import re
+    srcs = re.findall(r'<asset id="au\d+"[^>]*><media-rep kind="original-media" src="file:///([^"]+)"', fx["text"])
+    from urllib.parse import unquote
+    files = [Path(unquote(s)) for s in srcs]
+    check(fx["audio"] == 2 and fx["text"].count('lane="-1"') == 2 and len(files) == 2 and all(f.is_file() for f in files),
+          f"the FCPXML: {fx['audio']} voiced lines on lane −1, their WAVs on disk ({[f.name for f in files]})")
+    check('value="Mara walks in"' in fx["text"], "the FCPXML's chapter marker names the node")
+    check(edl["audio"] == 2 and edl["text"].count("AX       A     C") == 2, "the EDL carries the two lines as AX audio events")
+    check(srt["text"].count("-->") == 2 and "slowly" in srt["text"], "the SRT carries the two lines")
+    dest = OUT / "episode"
+    dest.mkdir(parents=True, exist_ok=True)
+    for fmt, x in (("fcpxml", fx), ("edl", edl), ("srt", srt)):
+        (dest / f"cn_episode.{fmt}").write_text(x["text"], encoding="utf-8")
+    row["episode"] = {"timeline": tl["id"], "audio": fx["audio"], "files": [str(f) for f in files], "export": str(tmp / "proj" / fx["path"])}
+    log(f"episode: {fx['path']} with {fx['audio']} voiced lines; copies in {dest} (the author's Resolve import check)")
 
 
 def main() -> int:
@@ -307,6 +352,8 @@ def main() -> int:
             voice_part(a, check, row, tmp)
         if "animate" in a.parts:
             animate_part(a, check, row, tmp)
+        if "episode" in a.parts:
+            episode_part(a, check, row, tmp)
     except Exception as e:  # noqa: BLE001
         check(False, f"exception: {type(e).__name__}: {e}")
     finally:

@@ -27,7 +27,7 @@ author approves it; decisions and their status live in 13.
 | 16 | [Suite E · Stage UI](16-ui-suite-stage.md) | 3D blocking → control passes → image / clip (P13, ST1–ST4); proposed 2026-10-12, approval gates ST1 (D81) |
 | 17 | [Suite F · Story UI and plan](17-ui-suite-story.md) | bible → cast → shots → flow → episode on loom2's foundation (the refining session of 14 §4, slices SY0–SY5); proposed 2026-10-13, approval gates SY0 (D85) |
 | 18 | [Wave LT · LoRA training](18-lora-training.md) | D25's slots live + ai-toolkit on ROCm as a staged job from a Cast version's reference set (spike E16, slices LT1–LT3); proposed and built 2026-10-14, accepted on the rig (D86) |
-| 19 | [Wave CN · Continuity and voice](19-continuity-and-voice.md) | extension and keyframe chains, pose-driven shots, voice and lip-sync (03 §5 item 4; spikes E20 / E17 / E18 / E19, slices CN1–CN5); proposed 2026-10-14, approval gates the spikes (D87) |
+| 19 | [Wave CN · Continuity and voice](19-continuity-and-voice.md) | extension and keyframe chains, pose-driven shots, voice and lip-sync (03 §5 item 4; spikes E20 / E17 / E18 / E19, slices CN1–CN5); **closed 2026-10-15** — voice and pose-driven shots built, extension and lip-sync dropped on their spikes (D87) |
 
 Companions: [`90-journal.md`](90-journal.md) (append-only implementation journal with real timestamps — the measurements live
 there), [`bench/`](../../bench/README.md) (the binding benchmark prompts and tasks from 04 §6), `scripts/m*_acceptance.py` (the

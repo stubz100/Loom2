@@ -3981,3 +3981,17 @@ split by file so that no two hands touched the same module.
   clean; the smoke's "a pose-driven shot" (the method, the pose sequence at 480p on the 16-grid, the clip with lineage — both variants: Animate
   is Apache) and the 3D-prop scenario picking an image tile (the new clips had pushed one into its slot) — 28 / 28 under full and open.
 - **Rig (`scripts/cn_acceptance.py --parts animate`):** a stage with E11 walk_dolly pose sequence uploaded through the guide route (77 frames, one figure) and the hero as the character: the job ran cold in 299 s wall (engine start and loads included; sampling 4 × 22 s), 77 frames at 848×480, PCK@0.1 1.0 (bar ≥ 0.8), lineage to the hero and the pass, the reference padded, no caption artefact this time; FaceSim 0.08–0.21 (a small face, advisory as in E19); E11 run_track (two figures) refused with the sentence (422) — 6 checks ok.
+
+## 2026-10-15 11:29 — CN5 · wave CN accepted on the rig, D87 closed (19 §5)
+- **`scripts/cn_acceptance.py --parts voice,animate,episode --tier both` (11:22–11:29), one orchestrator, the engine started by the app:
+  41 / 41 checks.** Voice: draft lines 0.7–2.0 s (rtf 0.33, load 5 s; 21 s on the first, cold), cloning EN / DE 2.6–5.4 s at a 2.65 GB peak, the
+  422s (no fallback voice, no consent), stamps, lineage, delete. Animate: the two-figure pass refused; E11's walk performed by the hero in
+  278 s (warm-ish: the engine started for it), 77 frames at 848×480, PCK@0.1 0.993, the reference padded, lineage to the hero and the pass
+  (FaceSim 0.14–0.19 on a small face, advisory). Episode (new part): the Animate clip as a shot bound to a Dialogue node, its two lines
+  voiced by a draft voice in one job, one lane — the FCPXML has both lines as connected audio clips on lane −1 (their WAVs on disk) and the
+  node's chapter marker, the EDL two `AX` events, the SRT both lines; copies in `engine/spikes/out/cn/episode/`.
+- **D87 closed:** CN2 voice and CN4 pose-driven shots built and accepted; CN1 extend and CN3 lip-sync dropped on E17 / E18 (journal 11:16).
+  19 status / §4 / §5, 13 D87, 12 §8f, 08, 00 row 19 updated. CI: 81286a3 red on the runner (the Animate scenario's app boot timed out at
+  60 s — the runner class, docs-only commit), 0b27b43 running.
+- **Owed by the author:** the Resolve import of `engine/spikes/out/cn/episode/cn_episode.fcpxml` (with the EDL and SRT beside it), a listen
+  to the voices (`engine/spikes/out/cn/voice/`) and E18's muxed S2V clips if lip-sync is to be revisited.

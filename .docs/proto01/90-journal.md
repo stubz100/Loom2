@@ -4000,3 +4000,12 @@ split by file so that no two hands touched the same module.
 - 93ee175 went red on the full variant: "lora slots" read the job once, right after its asset appeared in Unprocessed, and found it still
   `running` (the finisher ingests the asset before it marks the job done). The scenario now polls the job to `done` (15 s). The open variant
   was green; 81286a3's red was the runner (the app boot over 60 s in the Animate scenario).
+
+## 2026-10-15 12:02 — D88: extension and lip-sync back as experimental features (the author)
+- The author, after the wave closed: "I'd like to revisit lip-sync, I think that in the long run we could refine it for better performance. I
+  also feel the same way about extensions. Let's put these features back and mark them as experimental for now." Recorded as **D88** (13)
+  and 19 §7 before the work: XE extend (`I2V.extend_from`, LTX guide frames / Wan last frame, `chained_from` / `overlap`, Animate's
+  *Extend ▶*, the Episode trims the overlap) and XL lip-sync (Wan2.2 S2V through `I2V.audio`, English, one window ≤ 4.8 s, Draft 20 / Fast
+  10 steps, a take on the shot version, staged), both flagged *experimental* with E17 / E18's measured caveats. Out: the export weld, beats
+  across a chain, S2V's extension, German. The S2V transformer and wav2vec2 (17 GB, Apache-2.0) are being fetched again
+  (`fetch_weights.py --only e18`).

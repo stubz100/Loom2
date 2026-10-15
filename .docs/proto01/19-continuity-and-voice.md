@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **closed 2026-10-15** (D87: CN2 voice and CN4 pose-driven shots built and accepted on the rig, 41 / 41 checks; CN1 extend and CN3 lip-sync dropped on E17 / E18's NO-GO). Was: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → **CN4 built and rig-checked 2026-10-15**; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **closed 2026-10-15; §7 reopens extension and lip-sync as experimental (D88)** (D87: CN2 voice and CN4 pose-driven shots built and accepted on the rig, 41 / 41 checks; CN1 extend and CN3 lip-sync dropped on E17 / E18's NO-GO). Was: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → **CN4 built and rig-checked 2026-10-15**; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -208,3 +208,30 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 8. **Both variants:** S2V, Animate, Kokoro, Qwen3-TTS, Chatterbox are Apache-2.0 / MIT; LTX paths keep the roster's tags.
 9. **Out (§1):** camera-control LoRAs, InfiniteTalk's video-to-video dubbing, singing, multi-speaker clips, the audio mix beyond one lane,
    lip-sync of clips not made here.
+
+## 7. Experimental return — extension and lip-sync (D88, 2026-10-15)
+
+The author asked for both back, to refine them over time rather than drop them. Their bars stay as E17 / E18 measured them; the features
+ship **marked experimental**: `/capabilities.experimental.{extend, lipsync}` carries `experimental: true` and the caveat sentence, and the
+UI shows an *experimental* badge and the caveat beside the verb (T8: what the user sees is what was measured).
+
+**XE · Extend.** `I2V.extend_from {clip_id, lead}`: LTX-2.3 clips continue with the previous clip's last `lead` = 9 frames pinned at frame
+0 by `LTXVAddGuide` (E17 A — seams 6 / 6, the face not kept when the character leaves mid-frame); Wan clips start on the previous clip's
+last frame (lead 1; E17 B's weld is out). The start image is the clip's last frame extracted (`frame-extract` lineage), the lead-in an
+mp4 of the master's last frames; the new `ClipRecord` carries `chained_from` and `overlap`, and its lineage reaches the previous clip.
+Animate's *Extend ▶* (the clip's Inspector and right-click menu) queues the continuation on the clip's own model, preset, size, fps and
+frame count with its prompt (editable in the confirm). The Episode lane, adding a clip right after the clip it extends, starts it at
+`in = overlap` so the repeated frames do not play twice.
+
+**XL · Lip-sync.** An S2V spec (`wan22-s2v-fp8`, graph `wan_s2v`: umT5, the Wan 2.1 VAE, wav2vec2-large-english via `AudioEncoderLoader` /
+`AudioEncoderEncode` → `WanSoundImageToVideo`, KSampler uni_pc CFG 6 shift 8 — E18's graph) reached through `I2V.audio {asset_id}` with the
+frame (the shot version's frame, or any image) as the start. One window: frames = the line's length at 16 fps on the 4n+1 grid, ≤ 77
+(4.8 s) — a longer line is refused with the sentence; English only (a line voiced in another language is refused: wav2vec2-large-english,
+E18). Presets: Draft 20 steps (E18: ≈ 950 s), Fast 10 steps (≈ 545 s, sync 0.35–0.72). The proxy carries the line's audio; the clip lands
+as a **take** on the shot version (`POST /story/shots/{id}/versions/{v}/lipsync {node_id, index | audio_asset_id, preset, stage}`; the
+Shots tab's *Lip-sync ▶* with the line picker), staged by default (an overnight job).
+
+**Out of this return:** the RIFE weld at export, beats across a chain, S2V's own extension for lines longer than one window, German.
+**Acceptance:** offline tests, smoke scenarios on the fake engine, and `scripts/cn_acceptance.py --parts extend,lipsync` on the rig
+(a chain of two LTX clips with the seam ratio, a lip-synced take with the sync proxy) — measured and recorded, not gated: both stay
+experimental until their bars are met.

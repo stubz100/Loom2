@@ -4035,3 +4035,55 @@ split by file so that no two hands touched the same module.
   recognise as a menu ("m5-acceptance-20261007" — the M5 rig run's project, reopened as the dev state's last project). It is now the first entry
   of the suite tabs: **Project** with the open project's name beside it, a separator, then Catalogue … Models; the menu itself is unchanged.
   The first smoke scenario checks its place and its items; 29 / 29, build clean, lint 100.
+
+## 2026-10-15 18:09 — D89 · wave CR (creative image models) accepted; CR0 fetch started
+- The author found FLUX.2 accurate but not creative and asked for a quick web study of creative t2i / i2i models: `.docs/creative_image/`
+  00–03 (candidates, levers, integration), then picked Krea 2 Turbo / Raw, Z-Image base and Chroma1-HD for t2i + i2i and SD 3.5 Large for
+  i2i only; the plan is 04 (wave CR, slices CR0–CR6). Answers to 04 §1: no content filter (Krea's duty is the author's), the Stability AI
+  Community licence accepted, the downloads with the Krea LoRAs, SD 3.5 Large → D89 accepted.
+- Found while planning: the pinned engine (v0.39.0) carries `Krea2`, `ZImage`, `Chroma` and `SD3` model classes and their Comfy templates
+  (`comfyui_workflow_templates_json`), so no custom node; Comfy-Org's `qwen_image_vae` in Krea-2 and `qwen_3_4b` in z_image_turbo have the
+  same sha256 as the files loom2 already holds (`qwen-image-vae`, `qwen3-4b`), so they are reused. The FLUX.1 `ae` the E10 note found in the
+  D: tree is not on F: (D80), so it is fetched.
+- CR0: `scripts/fetch_weights.py --only cr` (≈ 77 GB) started; the first run died on a cp1252 console encoding the "→" in its banner when
+  the output was redirected — rerun with `PYTHONIOENCODING=utf-8`.
+
+## 2026-10-15 21:22 — D89 built · wave CR (creative t2i / i2i) accepted on the rig
+- **CR0:** the 18 files (≈ 77 GB: Krea 2 Turbo / Raw fp8, Qwen3-VL-4B fp8, the nine style LoRAs + the style reference, Z-Image bf16, the
+  FLUX.1 ae, Chroma1-HD fp8mixed, T5-XXL fp8, the SD 3.5 Large fp8 bundle) fetched to F: at 15 MiB/s, every sha256 equal to the HF LFS oid.
+- **CR1:** `engine/image_families.py` — the per-`graph` node shapes (CLIPLoader type, empty latent, FluxGuidance or not, shift node, Chroma's
+  T5 options, SD 3.5's one checkpoint); `build_t2i` / `build_i2i` read it, `_image_loaders` beside `_flux2_loaders`, which now refuses a
+  non-FLUX graph (inpaint, tiled refine, Angle, Stage); `registry.FLUX_GRAPHS` vs `IMAGE_GRAPHS` with the registry rules (no inpaint, refs,
+  Stage, Angle, training or Turbo on the new families; a checkpoint graph has no te / vae). The 17 FLUX.2 / Klein parity graphs unchanged
+  without `--parity-update` (only the I2I summary's sampler / scheduler keys are limited to the new families to keep it so).
+- **CR2–CR4:** specs `krea2.toml`, `zimage.toml`, `chroma.toml`, `sd35.toml` from the pinned Comfy templates; 18 roster entries (Krea 2's
+  style LoRAs as slot LoRAs with base `krea2`, the style reference a preset); `/capabilities.models[id]` gains `guidance_node` and
+  `tiled_refine`, the preview's `guidance` is None without FluxGuidance (T8); Generate lists only `recipes.t2i` models and hides Guidance
+  where there is no node, the tiled-refine picker keeps to the FLUX family. Fixture recaptured from the running v0.39.0 engine (+
+  EmptyLatentImage, EmptySD3LatentImage, T5TokenizerOptions, the new files); `pin_review.recipes()` + 8 variants (parity 25: 8 added).
+- **Tests:** `test_creative_d89.py` (+17), the LT1 slot tests read Krea's LoRAs as `fits: false` — **334 offline under full and open**,
+  audits clean, Vitest 207, build clean, lint at its 3 warnings, smoke 29 / 29 (one flaky mentions run on the first pass, green alone and on
+  the rerun).
+- **Rig (`scripts/cr_acceptance.py`, three runs, 21:18 the last with 0 failures).** t2i at Draft 960×544, 3 bench prompts × 2 seeds, the
+  engine restarted per model (cold = load + sampling, the OS file cache warm):
+
+  | model | cold s | warm s (median) | peak GB | note |
+  | --- | --- | --- | --- | --- |
+  | Krea 2 Turbo | 15.4 | 14.1 | 13.85 | same prompt new seed 7.5 s; a new prompt ≈ 40 s (the encoder swap) |
+  | Krea 2 Raw | 43.7 | 72.9 | 13.45 | same prompt 35 s; a new prompt 229–242 s — the encoder on the CPU: 88–91 s (cold 151 s), peak 13.1 GB |
+  | Z-Image | 32.0 | 19.0 | 14.51 → **13.87 with fp8_e4m3fn** | bf16 missed the 14.5 GB bar by 0.01; the fp8 cast looks the same → the spec's `weight_dtype` |
+  | Chroma1-HD | 27.1 | 19.8 | 13.82 | |
+
+  Seed variety (one prompt × 8 seeds at Thumb; mean pairwise layout distance = 1 − the correlation of 32×32 greyscale thumbnails, colour =
+  mean ΔE of 8×8 Lab — pixel proxies, no DINO in loom2): **FLUX.2 dev 0.262 / 86**, Krea 2 Turbo 0.281 / 123, Klein 9B 0.472 / 118,
+  Krea 2 Raw 0.490 / 133, Chroma 0.648 / 154, **Z-Image 0.749 / 169** — the author's "FLUX.2 is not creative" in numbers.
+  Refine (a fresh document per job; layout similarity to the source at 0.3 / 0.55 / 0.75 on bench/inpaint/source.png, 0.55 on two angles
+  frames): Chroma 0.999 / 0.994 / 0.935 (39–53 s), Krea 2 Raw 0.976 / 0.891 / 0.698 (45–70 s), SD 3.5 Large 0.993 / 0.963 / 0.809
+  (18–21 s), Z-Image (fp8) 0.995 / 0.975 / 0.912 (25–28 s), Krea 2 Turbo 0.970 / 0.831 / 0.682 (11–15 s) — every model keeps the
+  composition at 0.3 (bar ≥ 0.8), peaks 13.2–14.2 GB. **Krea 2 Turbo's partial denoise holds** (an unprompted 0.55 re-imagines the alley
+  with the layout kept) → `recipes.i2i` on Turbo. Krea at 1280×720 is no better than at 960×544 → its Draft tier stays.
+- **Two acceptance-script bugs, fixed before the numbers above:** the first run reused one document per frame, so Refine (the *visible*
+  composite) refined the previous model's result layer — SD 3.5 and Z-Image "failed" 0.3 at 0.311 / 0.285 (Krea's 0.75 layer underneath);
+  and the Turbo probe built its Roster without `scan()`. Nothing deleted (D30): every model passed.
+- Measured `estimates` and hints into the specs (Krea 2 Raw's hint names the new-prompt cost and the CPU encoder). Owed: the author's look
+  at `engine/spikes/out/cr/` (t2i, variety, i2i, krea-size, zimage-dtype).

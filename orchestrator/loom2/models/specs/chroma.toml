@@ -1,0 +1,17 @@
+# Chroma1-HD (lodestones; D89, .docs/creative_image/04): FLUX.1-schnell retrained on 5 M images incl. artistic and niche styles; uncensored.
+# Graph from the pinned image_chroma_text_to_image template: T5-XXL fp8 (CLIPLoader chroma) with T5TokenizerOptions(0, 0), the FLUX.1 ae,
+# EmptySD3LatentImage, ModelSamplingAuraFlow 1, 26 steps at CFG 3.5, euler / beta. Apache-2.0 — `full` and `open`. Estimates from CR6.
+[[model]]
+id = "chroma1-hd-fp8mixed"
+family = "chroma"
+label = "Chroma1-HD"
+short = "chroma"
+hint = "artistic range, open licence; real CFG and negatives"
+order = 23
+graph = "chroma"
+roles.te = { default = "t5xxl-fp8-scaled" }
+roles.vae = "flux1-ae"
+sampling = { steps = 26, guidance = 0.0, cfg = 3.5, sampler = "euler", scheduler = "beta", json_prompt = false, model_shift = 1.0 }
+recipes = { t2i = true, i2i = true }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1344, 768] } }   # trained at about 1 MP
+estimates = { vram_gb = 13.9, base_seconds = 20.0, cold_seconds = 27.1, doc_seconds = 45.0 }

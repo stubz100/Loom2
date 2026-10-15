@@ -121,7 +121,7 @@ def unpublish(roster: Roster, models_root: Path, project_id: str, lid: str) -> N
     (Path(models_root) / "loras" / cache_name(project_id, lid)).unlink(missing_ok=True)
 
 PRESET_OWNERS = {"turbo": "the Turbo toggle", "lightning": "the Lightning preset", "angles": "the angles method", "stage": "the Stage pose method",
-                 "guide": "the guided clip"}
+                 "guide": "the guided clip", "style_reference": "Krea 2's style reference (CR+)"}
 
 
 def model_base(model_id: str | None) -> str | None:

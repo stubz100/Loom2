@@ -1,0 +1,18 @@
+# Z-Image base (Tongyi-MAI, 2026-01; D89, .docs/creative_image/04): the undistilled checkpoint — high seed diversity, real CFG, negatives.
+# Graph from the pinned image_z_image template: Qwen3-4B (CLIPLoader lumina2 — the Klein 4B file), the FLUX.1 ae, EmptySD3LatentImage,
+# ModelSamplingAuraFlow 3, 25 steps at CFG 4 with res_multistep. Apache-2.0 — `full` and `open`. Estimates from the CR6 rig run (journal
+# 2026-10-15 21:2x), the bf16 file cast to fp8 at load.
+[[model]]
+id = "zimage-bf16"
+family = "zimage"
+label = "Z-Image"
+short = "z-image"
+hint = "creative, open licence; real CFG and negatives"
+order = 22
+graph = "zimage"
+roles.te = { default = "qwen3-4b" }
+roles.vae = "flux1-ae"
+sampling = { steps = 25, guidance = 0.0, cfg = 4.0, sampler = "res_multistep", scheduler = "simple", weight_dtype = "fp8_e4m3fn", json_prompt = false, model_shift = 3.0, cfg_note = "Tongyi: 3–5" }   # CR6: bf16 cast to fp8 at load — peak 14.55 → 13.87 GB, the same look
+recipes = { t2i = true, i2i = true }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
+estimates = { vram_gb = 14.2, base_seconds = 22.0, cold_seconds = 30.0, doc_seconds = 27.0 }

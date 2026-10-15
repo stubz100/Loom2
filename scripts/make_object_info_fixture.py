@@ -44,6 +44,8 @@ CLASSES = [
     # wave CN (D87): Animate (CN4) and the lip-sync nodes (CN3) — merged from a v0.39.0 capture 2026-10-15
     "WanAnimateToVideo", "CLIPVisionEncode", "TrimVideoLatent", "AudioEncoderLoader", "AudioEncoderEncode", "WanSoundImageToVideo", "LoadAudio",
     "LTXVAudioVAEEncode",
+    # wave CR (D89): the creative families' T2I / I2I graphs (Krea 2, Z-Image, Chroma; SD 3.5 through CheckpointLoaderSimple)
+    "EmptyLatentImage", "EmptySD3LatentImage", "T5TokenizerOptions",
 ]
 
 

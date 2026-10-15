@@ -237,7 +237,7 @@ function ModelTab() {
   return (
     <div>
       <div className="model-grid">
-        {byOrder(caps?.models).map(([m, c]) => {
+        {byOrder(caps?.models).filter(([, c]) => c.recipes.t2i).map(([m, c]) => {   /* D89: Refine-only models (SD 3.5) are not Generate's */
           const r = models.find((x) => x.id === m)
           const off = !c.wired
           return (
@@ -254,9 +254,11 @@ function ModelTab() {
           {p.turbo && <span className="disabled-why"> · strength <input type="number" step={0.05} min={0} max={2} value={p.turbo_strength} onChange={(e) => g.set({ turbo_strength: Number(e.target.value) })} style={{ width: 64 }} /></span>}</div></>}
         <label>steps</label>
         <div><input type="number" min={1} max={200} value={p.steps ?? pv?.steps ?? cap?.steps ?? 20} disabled={!!cap?.distilled} onChange={(e) => g.set({ steps: Number(e.target.value) })} style={{ width: 90 }} />
-          {cap?.distilled ? <span className="disabled-why"> fixed at {cap.steps} for distilled {cap.label}</span> : <span className="disabled-why"> {p.turbo ? 'Turbo preset 8' : 'dev 20–28; base Klein 20–50'}{p.steps !== null && <button className="quiet" onClick={() => g.set({ steps: null })}>reset</button>}</span>}</div>
+          {cap?.distilled ? <span className="disabled-why"> fixed at {cap.steps} for distilled {cap.label}</span> : <span className="disabled-why"> {p.turbo ? 'Turbo preset 8' : cap && !cap.guidance_node ? `preset ${cap.steps}` : 'dev 20–28; base Klein 20–50'}{p.steps !== null && <button className="quiet" onClick={() => g.set({ steps: null })}>reset</button>}</span>}</div>
         <label>guidance</label>
-        <div><input type="number" step={0.1} min={0} max={10} value={p.guidance ?? pv?.guidance ?? cap?.guidance ?? 4} onChange={(e) => g.set({ guidance: Number(e.target.value) })} style={{ width: 90 }} /><span className="disabled-why"> dev 3–4.5 · Klein 1.0</span></div>
+        {cap && !cap.guidance_node   /* D89: no FluxGuidance in this model's graph — CFG is its only strength */
+          ? <span className="disabled-why">hidden: {cap.label} has no guidance node — CFG sets the strength</span>
+          : <div><input type="number" step={0.1} min={0} max={10} value={p.guidance ?? pv?.guidance ?? cap?.guidance ?? 4} onChange={(e) => g.set({ guidance: Number(e.target.value) })} style={{ width: 90 }} /><span className="disabled-why"> dev 3–4.5 · Klein 1.0</span></div>}
         <label>CFG</label>
         <div><input type="number" step={0.1} min={1} max={10} value={p.cfg ?? pv?.cfg ?? cap?.cfg ?? 1} disabled={!!cap?.distilled || !!cap?.cfg_fixed} onChange={(e) => g.set({ cfg: Number(e.target.value) })} style={{ width: 90 }} />
           <span className="disabled-why"> {cap?.distilled ? 'fixed at 1.0 (distilled)' : cap?.cfg_note ?? ''}</span></div>
@@ -362,8 +364,8 @@ function Panel({ tab }: { tab: string }) {
   // C3 (D26) / D65: no model yet, or a persisted one this build does not offer (dev under `open`) → the variant's t2i default, else the first listed
   useEffect(() => {
     const g = useGenerate.getState()
-    if (!caps || caps.models[g.panel.model_id]) return
-    const next = (caps.models[caps.defaults.t2i] ? caps.defaults.t2i : '') || byOrder(caps.models)[0]?.[0]
+    if (!caps || caps.models[g.panel.model_id]?.recipes.t2i) return
+    const next = (caps.models[caps.defaults.t2i] ? caps.defaults.t2i : '') || byOrder(caps.models).find(([, m]) => m.recipes.t2i)?.[0]
     if (next) g.set({ model_id: next, turbo: caps.models[next].turbo ? g.panel.turbo : false })
   }, [caps])
   if (!project?.open) return <span style={{ color: 'var(--fg3)' }}>Open or create a project.</span>

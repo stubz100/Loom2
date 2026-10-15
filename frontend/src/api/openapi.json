@@ -5610,6 +5610,10 @@
             "title": "Guidance",
             "type": "number"
           },
+          "guidance_node": {
+            "title": "Guidance Node",
+            "type": "boolean"
+          },
           "health": {
             "title": "Health",
             "type": "string"
@@ -5697,6 +5701,10 @@
             "title": "Te Options",
             "type": "array"
           },
+          "tiled_refine": {
+            "title": "Tiled Refine",
+            "type": "boolean"
+          },
           "turbo": {
             "title": "Turbo",
             "type": "boolean"
@@ -5750,7 +5758,9 @@
           "geometry",
           "short",
           "order",
-          "cfg_fixed"
+          "cfg_fixed",
+          "guidance_node",
+          "tiled_refine"
         ],
         "title": "ImageModelCaps",
         "type": "object"
@@ -11641,8 +11651,15 @@
             "$ref": "#/components/schemas/Estimate"
           },
           "guidance": {
-            "title": "Guidance",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance"
           },
           "height": {
             "title": "Height",

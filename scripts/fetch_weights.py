@@ -111,6 +111,18 @@ MANIFEST = [
     dict(spike="e19", repo="Kijai/WanVideo_comfy_fp8_scaled", file="Wan22Animate/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors", dest="diffusion_models", license="apache-2.0 (Kijai repack)"),
     dict(spike="e19", repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged", file="split_files/clip_vision/clip_vision_h.safetensors", dest="clip_vision", license="apache-2.0"),
     dict(spike="e19", repo="Kijai/WanVideo_comfy", file="Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", dest="loras", license="apache-2.0 (lightx2v; Kijai repack)"),
+    # ---- wave CR (D89, .docs/creative_image/04 §3): creative t2i / i2i — Krea 2 Turbo + Raw, Z-Image base, Chroma1-HD, SD 3.5 Large (Refine only).
+    #      Krea 2's VAE is the qwen_image_vae already here and Z-Image's encoder the Klein 4B qwen_3_4b (same sha256); the FLUX.1 ae serves Z-Image and Chroma.
+    dict(spike="cr", repo="Comfy-Org/Krea-2", file="diffusion_models/krea2_turbo_fp8_scaled.safetensors", dest="diffusion_models", license="krea-2-community"),
+    dict(spike="cr", repo="Comfy-Org/Krea-2", file="diffusion_models/krea2_raw_fp8_scaled.safetensors", dest="diffusion_models", license="krea-2-community"),
+    dict(spike="cr", repo="Comfy-Org/Krea-2", file="text_encoders/qwen3vl_4b_fp8_scaled.safetensors", dest="text_encoders", license="apache-2.0 (Qwen3-VL, Comfy-Org repack)"),
+    *[dict(spike="cr", repo="Comfy-Org/Krea-2", file=f"loras/krea2_{s}.safetensors", dest="loras", license="krea-2-community")
+      for s in ("darkbrush", "dotmatrix", "kidsdrawing", "neondrip", "rainywindow", "retroanime", "softwatercolor", "sunsetblur", "vintagetarot", "style_reference")],
+    dict(spike="cr", repo="Comfy-Org/z_image", file="split_files/diffusion_models/z_image_bf16.safetensors", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="cr", repo="Comfy-Org/z_image_turbo", file="split_files/vae/ae.safetensors", dest="vae", license="apache-2.0 (FLUX.1 VAE)"),
+    dict(spike="cr", repo="Comfy-Org/Chroma1-HD_repackaged", file="split_files/diffusion_models/Chroma1-HD-fp8mixed.safetensors", dest="diffusion_models", license="apache-2.0"),
+    dict(spike="cr", repo="comfyanonymous/flux_text_encoders", file="t5xxl_fp8_e4m3fn_scaled.safetensors", dest="text_encoders", license="apache-2.0 (T5)"),
+    dict(spike="cr", repo="Comfy-Org/stable-diffusion-3.5-fp8", file="sd3.5_large_fp8_scaled.safetensors", dest="checkpoints", license="stabilityai-ai-community"),
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),

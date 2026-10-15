@@ -46,6 +46,9 @@ def test_lora_files_and_options(models_tree: Path):
     assert L.model_base("klein-4b") == "klein-4b" == L.model_base("klein-base-4b") and L.model_base("klein-9b-kv") == "klein-9b" == L.model_base("klein-base-9b")
     assert L.model_base("nope") is None
     opts = L.lora_options(r, "klein-4b", "full")
+    other = [o for o in opts if o["source"] == "roster"]                   # D89: Krea 2's style LoRAs, listed with the sentence, never fitting Klein
+    assert other and all(not o["fits"] and o["base"] == "krea2" and o["why"].startswith("trained for Krea 2") for o in other)
+    opts = [o for o in opts if o["source"] != "roster"]
     assert [o["id"] for o in opts] == ["file:e16/mara.safetensors", "file:own.safetensors"]
     assert all(o["fits"] and o["source"] == "file" and o["base"] is None and "family not declared" in o["why"] for o in opts)
     assert "flux2-turbo-lora" not in {o["id"] for o in L.lora_options(r, "flux2-dev", "full")}        # the toggle's LoRA is not a slot
@@ -134,8 +137,9 @@ def test_loras_route(tmp_path: Path):
         r = cl.get("/loras", params={"model_id": "klein-4b"}, headers=H)
         assert r.status_code == 200
         body = r.json()
-        assert body["base"] == "klein-4b" and body["max_slots"] == 4 and [o["id"] for o in body["items"]] == ["file:e16/mara.safetensors", "file:own.safetensors"]
-        assert body["items"][0]["strength"] == 1.0 and body["items"][0]["fits"] is True
+        files = [o for o in body["items"] if o["source"] != "roster"]           # D89: Krea 2's style LoRAs ride along as `fits: false`
+        assert body["base"] == "klein-4b" and body["max_slots"] == 4 and [o["id"] for o in files] == ["file:e16/mara.safetensors", "file:own.safetensors"]
+        assert files[0]["strength"] == 1.0 and files[0]["fits"] is True
         assert cl.get("/loras", params={"model_id": "nope"}, headers=H).status_code == 422
         # the submission gate answers 422 with the sentence
         cl.post("/project", json={"path": str(tmp_path / "proj"), "name": "L", "size_cap_gb": 10}, headers=H)

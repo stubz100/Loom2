@@ -10,6 +10,7 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/06-architecture.md` §3
 | `supervisor.py` | `EngineSupervisor`: starts `engine/comfyui/main.py` from `engine/.venv` (lazily on the first job), health via `/system_stats`, Job Object + `taskkill` backstop, adopts an engine already on the port, restart policy, logs under `<state>/logs/engine-*.log` |
 | `client.py` | `ComfyClient`: REST (`/prompt`, `/history`, `/interrupt`, `/free`, `/upload/image`, `/view`, `/object_info`) and the `/ws` event stream (binary preview frames) |
 | `graphs.py` | the builders (they read `models/registry.py` specs — D65: no model constants or id comparisons here) `build_t2i`, `build_i2i`, `build_inpaint`, `build_upscale`, `build_segment`, `build_i2v`; `compile_recipe` dispatches and runs the contract check |
+| `image_families.py` | D89: the per-`graph` node shapes of T2I / I2I (CLIPLoader type, empty latent, FluxGuidance or not, shift node, T5 options, checkpoint loader) for the FLUX.2 family and the creative families (krea2, zimage, chroma, sd3) |
 | `contract.py` | `resolve_names` (basename → engine enum value) and `check_graph` (unknown class, missing input, enum value, link type) against `/object_info` |
 | `pipeline.py` | D64: `plan()` (pure: effective params, needs, weights, warm group, VRAM, ETA — `/recipes/preview` for every kind), `preview_problems()` (compile on placeholder inputs), `finalize()` (references, document region, i2v frames uploaded; compile + contract), `prepare_document` / `prepare_i2v` / `fit_reference`, `JobCancelled` |
 | `finishers.py` | D64: `finisher_for(recipe)` → `AssetFinisher` · `DocumentFinisher` (paste-back, upscale; `add_result_layer`) · `SelectionFinisher` · `ClipFinisher` (+ the identity side task); `run_quick_remove` (no engine) |
@@ -39,7 +40,9 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
    `icm_default`, upscale factor, segment modes, i2v / flf / beats, `default_for`), inputs, geometry (size multiple, tiers, video rules),
    estimates (VRAM, seconds), video presets. `registry.load()` validates it against the roster at import. Nothing else names the id:
    `scripts/model_literals_check.py` (CI) fails on a quoted roster id in the orchestrator's or the frontend's code.
-3. **Builder** — only for a new `graph` (a new family's node layout). Builders read the spec; they never compare model ids.
+3. **Builder** — only for a new `graph` (a new family's node layout). Builders read the spec; they never compare model ids. A new *image*
+   family that only needs T2I / I2I is a row in `image_families.py` plus the `Graph` literal and `registry.IMAGE_GRAPHS` (D89); inpaint, tiled
+   refine, Angle, Stage and references stay on `registry.FLUX_GRAPHS` (`_flux2_loaders` refuses anything else).
 4. **Fixture** — if the graph uses node classes the fixture lacks, capture `/object_info` from the running engine and rerun
    `scripts/make_object_info_fixture.py`.
 5. **Tests** — `test_registry_d65.py::test_sweep_every_spec_compiles` compiles every spec × tier / mode / preset against the fixture with
@@ -69,5 +72,8 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
 - SAM 3 box prompts read output 1 and need `editor_state {}` (review C32).
 - Models without `recipes.i2i` (the distilled ones) reject I2I and tiled refine. A spec's Turbo LoRA (`sampling.turbo`) is optional in
   t2i (the recipe's `turbo`) but always chained in the Edit graphs (`_flux2_loaders`), and `recipe_weights` lists it accordingly.
+- D89: `IMAGE_GRAPHS` (Generate and Refine) is wider than `FLUX_GRAPHS` (every Edit graph). The FLUX.2 graphs keep their node ids (`"1"`–`"11"`);
+  the creative families add `"21"` (T5 options) and `"22"` (the shift node), and SD 3.5's one checkpoint is `"1"` with outputs 0 / 1 / 2.
+  A real-CFG family encodes its negative even when it is empty (the Comfy templates'); guidance is `None` where there is no FluxGuidance.
 - A size or frame count off the grid is snapped **down** by default (D65 `size_policy`, D18): 950 × 540 runs at 944 × 528; `snap_up` or
   `error` (a 422 naming the field and the two values allowed) on request.

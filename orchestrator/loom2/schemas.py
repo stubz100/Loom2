@@ -138,6 +138,8 @@ class ImageModelCaps(Open):
     cfg_fixed: bool
     cfg_note: str | None = None
     model_shift: float | None = None
+    guidance_node: bool                            # D89: FluxGuidance in the graph — the Guidance field is shown only then
+    tiled_refine: bool                             # D89: the model refines tiles after an upscale (the FLUX.2 family's i2i models)
 
 
 class I2vModelCaps(Open):
@@ -381,7 +383,7 @@ class T2IPreview(Open):
     width: int
     height: int
     steps: int
-    guidance: float
+    guidance: float | None                         # D89: None on a family without FluxGuidance (nothing to show)
     cfg: float
     sampler: str
     scheduler: str

@@ -19,10 +19,11 @@ from ..models import registry
 from ..models.spec import ModelSpec
 from ..roster import Roster, ROSTER_BY_ID
 from .contract import check_graph, resolve_names
+from .image_families import family
 
 
 def image_spec(model_id: str, what: str = "T2I preset") -> ModelSpec:
-    """D65: the spec of a FLUX.2-family model (dev, Klein) — a CompileError for anything else."""
+    """D65: the spec of an image model (the FLUX.2 family; D89's creative families) — a CompileError for anything else."""
     spec = registry.get(model_id)
     if spec is None or spec.graph not in registry.IMAGE_GRAPHS:
         raise CompileError(f"no {what} for model '{model_id}'")
@@ -79,15 +80,16 @@ def recipe_te_id(recipe: T2I | I2I | Inpaint | Upscale | StageShot, variant: str
     return None if spec is None or spec.roles.te is None or spec.graph not in registry.IMAGE_GRAPHS else resolve_te_id(spec, recipe.te_id)
 
 
-def _te_loader(te_name: str, te_device: str | None) -> dict[str, Any]:
-    """Core CLIPLoader for safetensors; ComfyUI-GGUF's CLIPLoaderGGUF for a .gguf (no device input — it loads on the default device)."""
+def _te_loader(te_name: str, te_device: str | None, clip_type: str = "flux2") -> dict[str, Any]:
+    """Core CLIPLoader for safetensors; ComfyUI-GGUF's CLIPLoaderGGUF for a .gguf (no device input — it loads on the default device).
+    `clip_type` is the family's (D89: krea2, lumina2 for Z-Image, chroma)."""
     if te_device is not None and te_device not in TE_DEVICES:
         raise CompileError(f"unknown text-encoder device {te_device!r}")
     if te_name.lower().endswith(".gguf"):
         if te_device not in (None, "default"):
             raise CompileError("a GGUF text encoder loads on the default device (CLIPLoaderGGUF has no device input)")
-        return {"class_type": "CLIPLoaderGGUF", "inputs": {"clip_name": te_name, "type": "flux2"}}
-    return {"class_type": "CLIPLoader", "inputs": {"clip_name": te_name, "type": "flux2", "device": te_device or "default"}}
+        return {"class_type": "CLIPLoaderGGUF", "inputs": {"clip_name": te_name, "type": clip_type}}
+    return {"class_type": "CLIPLoader", "inputs": {"clip_name": te_name, "type": clip_type, "device": te_device or "default"}}
 
 
 # ---- image-to-video (M6; 11 §3b; D8 Wan 2.2, D9 LTX-2.3; recipes from the E4/E4b/E4c/E5b spikes) -------------
@@ -525,7 +527,8 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     steps = recipe.steps if recipe.steps else (sm.turbo.steps if turbo and sm.turbo else sm.steps)
     if sm.distilled:
         steps = sm.steps                                      # fixed for distilled variants (09 §3b)
-    guidance = recipe.guidance if recipe.guidance is not None else sm.guidance
+    fam = family(spec)
+    guidance = (recipe.guidance if recipe.guidance is not None else sm.guidance) if fam.flux_guidance else None   # D89: no FluxGuidance, no guidance
     cfg = sm.cfg if sm.distilled else (recipe.cfg if recipe.cfg is not None else sm.cfg)
     sampler = recipe.sampler or sm.sampler
     if sampler not in SAMPLERS:
@@ -533,6 +536,8 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     scheduler = recipe.scheduler or sm.scheduler
     if scheduler not in SCHEDULERS and scheduler != FLUX2_SCHEDULE:
         raise CompileError(f"unknown scheduler {scheduler!r}")
+    if scheduler == FLUX2_SCHEDULE and spec.graph not in registry.FLUX_GRAPHS:
+        raise CompileError(f"the {FLUX2_SCHEDULE} schedule is FLUX.2's; {spec.short or spec.label} takes one of the engine's schedulers")
     weight_dtype = recipe.weight_dtype or sm.weight_dtype
     if weight_dtype not in WEIGHT_DTYPES:
         raise CompileError(f"unknown weight dtype {weight_dtype!r}")
@@ -540,6 +545,8 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     if te_device not in TE_DEVICES:
         raise CompileError(f"unknown text-encoder device {te_device!r}")
     shift = recipe.base_shift is not None or recipe.max_shift is not None
+    if shift and not fam.flux_shift:
+        raise CompileError(f"base / max shift (ModelSamplingFlux) does not apply to {spec.short or spec.label}; its shift is {sm.model_shift}")
     base_shift = recipe.base_shift if recipe.base_shift is not None else (0.5 if shift else None)      # ModelSamplingFlux node defaults
     max_shift = recipe.max_shift if recipe.max_shift is not None else (1.15 if shift else None)
     mult = spec.geometry.size_mult
@@ -550,7 +557,7 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     if w * h > 4_200_000 or w < 64 or h < 64:
         raise CompileError(f"size {w}×{h} outside the 64 px – 4 MP range")
     text, mode = serialize_prompt(recipe, spec)
-    return {"model_id": recipe.model_id, "te_id": resolve_te_id(spec, recipe.te_id), "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
+    return {"model_id": recipe.model_id, "te_id": resolve_te_id(spec, recipe.te_id) if spec.roles.te else None, "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
             "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "turbo_strength": float(recipe.turbo_strength) if turbo else None,
             "distilled": sm.distilled, "negative_used": bool(recipe.negative) and not sm.distilled,
             "weight_dtype": weight_dtype, "te_device": te_device, "base_shift": base_shift, "max_shift": max_shift,
@@ -564,28 +571,23 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
 def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files: dict[str, str] | None = None) -> Compiled:
     spec = image_spec(recipe.model_id)
     ep = effective_params(recipe, roster)
-    _, unet = roster.require(recipe.model_id)
-    _, te = roster.require(ep["te_id"])
-    _, vae = roster.require(spec.roles.vae or "")
+    fam = family(spec)
     text = ep["serialized_prompt"]
     if not text.strip():
         raise CompileError("empty prompt")
     w, h = ep["width"], ep["height"]
 
-    g: dict[str, Any] = {
-        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": ep["weight_dtype"]}},
-        "2": _te_loader(te, ep["te_device"]),
-        "3": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
-        "5": {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}},
-        "8": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}},
-        "11": {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}},
-    }
+    g: dict[str, Any] = {}
+    model_link, clip, vae = _image_loaders(g, roster, spec, ep["te_id"], ep["te_device"], ep["weight_dtype"])
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": clip}}
+    g["8"] = {"class_type": fam.latent, "inputs": {"width": w, "height": h, "batch_size": 1}}
+    g["11"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
     # decode: plain, or tiled for headroom on the Full tier (D13)
     if ep["tiled_vae"]:
-        g["10"] = {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["9", 0], "vae": ["3", 0], "tile_size": int(ep["tile_size"]), "overlap": min(64, int(ep["tile_size"]) // 4),
+        g["10"] = {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["9", 0], "vae": vae, "tile_size": int(ep["tile_size"]), "overlap": min(64, int(ep["tile_size"]) // 4),
                                                               "temporal_size": 64, "temporal_overlap": 8}}
     else:
-        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
+        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": vae}}
     # reference images: LoadImage → (downscale) → VAEEncode → ReferenceLatent chained on the conditioning
     cond: list = ["5", 0]
     nid = 30
@@ -603,18 +605,20 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
             # ImageScale needs both sizes; the orchestrator pre-fits references to ≤ ref_max_px² before upload, so this is a no-op guard
             img = [str(nid), 0]
             nid += 1
-        g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": ["3", 0]}}
+        g[str(nid)] = {"class_type": "VAEEncode", "inputs": {"pixels": img, "vae": vae}}
         lat = [str(nid), 0]
         nid += 1
         g[str(nid)] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": cond, "latent": lat}}
         cond = [str(nid), 0]
         nid += 1
-    g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": cond, "guidance": float(ep["guidance"])}}
-    if ep["negative_used"]:
-        g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative, "clip": ["2", 0]}}
+    positive: list = cond
+    if fam.flux_guidance:
+        g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": cond, "guidance": float(ep["guidance"])}}
+        positive = ["6", 0]
+    if ep["negative_used"] or not (fam.flux_guidance or ep["distilled"]):       # D89: a real-CFG family encodes its negative, empty or not (the templates')
+        g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative, "clip": clip}}
     else:
         g["7"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
-    model_link: list = ["1", 0]
     if ep["base_shift"] is not None:                          # resolution-dependent shift instead of the model's constant (FLUX.2: 2.02)
         g["12"] = {"class_type": "ModelSamplingFlux", "inputs": {"model": model_link, "max_shift": float(ep["max_shift"]), "base_shift": float(ep["base_shift"]), "width": w, "height": h}}
         model_link = ["12", 0]
@@ -629,13 +633,13 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
         g["14"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": ep["sampler"]}}
         g["15"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": int(ep["steps"]), "width": w, "height": h}}
         if float(ep["cfg"]) > 1.0:
-            g["16"] = {"class_type": "CFGGuider", "inputs": {"model": model_link, "positive": ["6", 0], "negative": ["7", 0], "cfg": float(ep["cfg"])}}
+            g["16"] = {"class_type": "CFGGuider", "inputs": {"model": model_link, "positive": positive, "negative": ["7", 0], "cfg": float(ep["cfg"])}}
         else:
-            g["16"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": ["6", 0]}}
+            g["16"] = {"class_type": "BasicGuider", "inputs": {"model": model_link, "conditioning": positive}}
         g["9"] = {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["13", 0], "guider": ["16", 0], "sampler": ["14", 0], "sigmas": ["15", 0], "latent_image": ["8", 0]}}
     else:
         g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": int(ep["steps"]), "cfg": float(ep["cfg"]),
-                                                     "sampler_name": ep["sampler"], "scheduler": ep["scheduler"], "positive": ["6", 0], "negative": ["7", 0],
+                                                     "sampler_name": ep["sampler"], "scheduler": ep["scheduler"], "positive": positive, "negative": ["7", 0],
                                                      "latent_image": ["8", 0], "denoise": 1.0}}
     summary = {k: v for k, v in ep.items() if k != "serialized_prompt"}
     return Compiled(graph=g, output_node="11", summary=summary, serialized_prompt=text)
@@ -646,6 +650,8 @@ def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, spec: Model
                    te_id: str | None = None) -> list:
     """UNET / text encoder / VAE loaders for a FLUX.2-family model; returns the model link (the Turbo LoRA when the spec has one).
     `te_id` swaps in a listed alternate encoder (D31); a .gguf goes through CLIPLoaderGGUF."""
+    if spec.graph not in registry.FLUX_GRAPHS:                     # D89: inpaint, tiled refine, Angle and Stage are FLUX.2-family graphs
+        raise CompileError(f"{spec.short or spec.label} runs Generate and Refine only; this graph needs a FLUX.2-family model")
     if te_device is not None and te_device not in TE_DEVICES:
         raise CompileError(f"unknown text-encoder device {te_device!r}")
     _, unet = roster.require(model_id)
@@ -659,6 +665,34 @@ def _flux2_loaders(g: dict[str, Any], roster: Roster, model_id: str, spec: Model
         g["4"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora, "strength_model": 1.0}}
         return ["4", 0]
     return ["1", 0]
+
+
+def _image_loaders(g: dict[str, Any], roster: Roster, spec: ModelSpec, te_id: str | None, te_device: str | None,
+                   weight_dtype: str) -> tuple[list, list, list]:
+    """D89: the (model, clip, vae) links of a T2I / I2I graph for any image family — UNET + CLIP (the family's type) + VAE as "1" / "2" / "3"
+    (the FLUX.2 graphs' ids, unchanged), or one CheckpointLoaderSimple as "1" (SD 3.5); then Chroma's T5 options ("21") and the family's
+    shift node at the spec's `model_shift` ("22"). No Turbo LoRA — T2I chains it itself, the Edit graphs through `_flux2_loaders`."""
+    fam = family(spec)
+    _, main = roster.require(spec.id)
+    if fam.clip_type is None:
+        if te_id is not None or te_device not in (None, "default"):
+            raise CompileError(f"{spec.short or spec.label} carries its encoders in one checkpoint: no encoder choice or device")
+        g["1"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": main}}
+        model, clip, vae = ["1", 0], ["1", 1], ["1", 2]
+    else:
+        _, te = roster.require(resolve_te_id(spec, te_id))
+        _, vae_name = roster.require(spec.roles.vae or "")
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": main, "weight_dtype": weight_dtype}}
+        g["2"] = _te_loader(te, te_device, fam.clip_type)
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae_name}}
+        model, clip, vae = ["1", 0], ["2", 0], ["3", 0]
+    if fam.t5_options:
+        g["21"] = {"class_type": "T5TokenizerOptions", "inputs": {"clip": clip, "min_padding": 0, "min_length": 0}}
+        clip = ["21", 0]
+    if fam.shift_node and spec.sampling.model_shift is not None:
+        g["22"] = {"class_type": fam.shift_node, "inputs": {"model": model, "shift": float(spec.sampling.model_shift)}}
+        model = ["22", 0]
+    return model, clip, vae
 
 
 def build_inpaint(recipe: Inpaint, roster: Roster, seed: int, out_prefix: str, image_name: str, mask_name: str, w: int, h: int,
@@ -723,25 +757,39 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     sm = spec.sampling
     if not spec.recipes.i2i:
         raise CompileError("refine needs Klein base or FLUX.2 dev: distilled Klein cannot partial-denoise (04 §4)")
+    fam = family(spec)
+    flux = spec.graph in registry.FLUX_GRAPHS
     g: dict[str, Any] = {}
-    model_link = _flux2_loaders(g, roster, recipe.model_id, spec, recipe.te_device, recipe.te_id)
+    if flux:
+        model_link = _flux2_loaders(g, roster, recipe.model_id, spec, recipe.te_device, recipe.te_id)
+        clip, vae = ["2", 0], ["3", 0]
+        sampler, scheduler = "euler", "simple"
+    else:                                                                           # D89: the creative families, at their own sampler / scheduler
+        model_link, clip, vae = _image_loaders(g, roster, spec, recipe.te_id, recipe.te_device, sm.weight_dtype)
+        sampler, scheduler = sm.sampler, sm.scheduler
     model_link, _ = _lora_chain(g, model_link, recipe.loras, roster, 300)           # LT1: the slots
     steps = int(recipe.steps or (sm.edit_steps if sm.edit_steps is not None else sm.steps))
     strength = max(0.05, min(1.0, float(recipe.strength)))
     prompt = recipe.prompt_text.strip()
-    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
-    g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(sm.guidance)}}
-    if sm.edit_negative == "zero_out":
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
+    positive: list = ["5", 0]
+    if fam.flux_guidance:
+        g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(sm.guidance)}}
+        positive = ["6", 0]
+    if sm.edit_negative == "zero_out" or (not flux and sm.distilled):
         g["7"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
     else:
-        g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, text, watermark", "clip": ["2", 0]}}
+        g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, text, watermark", "clip": clip}}
     g["100"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
-    g["8"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": ["3", 0]}}
-    g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": steps, "cfg": float(sm.cfg), "sampler_name": "euler", "scheduler": "simple",
-                                                 "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["8", 0], "denoise": strength}}
-    g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
+    g["8"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["100", 0], "vae": vae}}
+    g["9"] = {"class_type": "KSampler", "inputs": {"model": model_link, "seed": int(seed), "steps": steps, "cfg": float(sm.cfg), "sampler_name": sampler, "scheduler": scheduler,
+                                                 "positive": positive, "negative": ["7", 0], "latent_image": ["8", 0], "denoise": strength}}
+    g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": vae}}
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
-    summary = {"model_id": recipe.model_id, "source": recipe.source, "strength": strength, "loras": loras_summary(recipe.loras, roster), "steps": steps, "cfg": float(sm.cfg), "guidance": float(sm.guidance), "width": w, "height": h, "seed": int(seed)}
+    summary = {"model_id": recipe.model_id, "source": recipe.source, "strength": strength, "loras": loras_summary(recipe.loras, roster), "steps": steps, "cfg": float(sm.cfg),
+               "guidance": float(sm.guidance) if fam.flux_guidance else None, "width": w, "height": h, "seed": int(seed)}
+    if not flux:
+        summary |= {"sampler": sampler, "scheduler": scheduler}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
@@ -1009,7 +1057,7 @@ def build_upscale(recipe: Upscale, roster: Roster, out_prefix: str, image_name: 
         if not (w and h):
             raise CompileError("tiled refine needs the input size")
         spec = registry.get(recipe.refine_model_id)
-        if spec is None or spec.graph not in registry.IMAGE_GRAPHS or not spec.recipes.i2i:
+        if spec is None or spec.graph not in registry.FLUX_GRAPHS or not spec.recipes.i2i:      # D89: the creative families refine, not tile
             raise CompileError("tiled refine needs Klein base or FLUX.2 dev (distilled Klein cannot partial-denoise)")
         sm = spec.sampling
         model_link = _flux2_loaders(g, roster, recipe.refine_model_id, spec, recipe.te_device, recipe.te_id)

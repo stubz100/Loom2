@@ -1,0 +1,15 @@
+# SD 3.5 Large (Stability AI, 2024-10; D89, .docs/creative_image/04): Refine only — a broad style range for re-imagining a board.
+# The Comfy-Org fp8 checkpoint carries CLIP-L, CLIP-G and T5 (CheckpointLoaderSimple, the pinned sd3.5_simple_example template): 20 steps
+# at CFG 4, euler / sgm_uniform, built-in shift 3. Stability AI Community licence (accepted by the author) — `full` only. Estimates from CR6 (≈ 19 s a Refine).
+[[model]]
+id = "sd35-large-fp8"
+family = "sd3"
+label = "SD 3.5 Large"
+short = "sd3.5"
+hint = "re-imagines in many styles; Refine only"
+order = 24
+graph = "sd3"
+sampling = { steps = 20, guidance = 0.0, cfg = 4.0, sampler = "euler", scheduler = "sgm_uniform", json_prompt = false }
+recipes = { i2i = true }
+geometry = { size_mult = 16 }
+estimates = { vram_gb = 14.2, doc_seconds = 19.0 }

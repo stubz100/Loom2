@@ -360,7 +360,8 @@ function AiTab() {
   const i2iIds = defaultFirst(byOrder(capModels).filter(([, m]) => m.recipes.i2i).map(([id]) => id), 'i2i', caps)
   const upIds = defaultFirst(byOrder(caps?.tools).filter(([, t]) => t.recipes.upscale_factor != null).map(([id]) => id), 'upscale', caps)
   const refineModel = resolveModel(p.refineModel, 'i2i', (id) => i2iIds.includes(id), caps)
-  const tiledModel = resolveModel(p.tiledModel, 'i2i', (id) => i2iIds.includes(id), caps)
+  const tiledIds = i2iIds.filter((id) => capModels?.[id]?.tiled_refine)       // D89: the creative families refine, they do not tile
+  const tiledModel = resolveModel(p.tiledModel, 'i2i', (id) => tiledIds.includes(id), caps)
   const upscaleModel = resolveModel(p.upscaleModel, 'upscale', (id) => upIds.includes(id), caps)
   const kleinId = resolveModel(null, 'inpaint', () => false, caps)                      // the variant's inpaint default
   const isHero = (id: string) => !!capModels?.[id]?.recipes.inpaint_hero
@@ -453,7 +454,7 @@ function AiTab() {
           <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
           <label>refine</label><label className="chk"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> tiled refine after the upscale (re-samples every tile at low strength)</label>
           {p.refineTiled && <>
-            <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{i2iIds.map((id) => <option key={id} value={id}>{i2iName(id, true)}</option>)}</select>
+            <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{tiledIds.map((id) => <option key={id} value={id}>{i2iName(id, true)}</option>)}</select>
             <EncoderPick model={tiledModel} />
             <Slider label="strength" value={p.tiledStrength} min={0.05} max={0.6} step={0.01} onChange={(v) => setP({ tiledStrength: v })} />
             <Slider label="tile" value={p.tile} min={512} max={2048} step={64} unit="px" onChange={(v) => setP({ tile: v })} />

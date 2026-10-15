@@ -5,6 +5,7 @@ and every model gains `recipes` / `inputs` / `geometry` blocks the panels gate t
 from __future__ import annotations
 
 from .engine.graphs import STAGE_HINTS, stage_pass_for, te_alternates, te_label, te_options
+from .engine.image_families import family
 from .models import registry
 from .models.spec import ModelSpec
 from .recipes import FLUX2_SCHEDULE, MOVES, SAMPLERS, SCHEDULERS, STAGE_PASSES, TE_DEVICES, WEIGHT_DTYPES, Reangle, reangle_method
@@ -249,6 +250,8 @@ def _image_models(svc: Services, variant: str) -> dict:
                            "max_refs": spec.inputs.refs_max, "sampler": sm.sampler, "scheduler": sm.scheduler, "vram_gb": spec.estimates.vram_gb,
                            "wired": spec.wired, "license": e.license, "variants": e.variants, "base": spec.base or spec.family,   # LT2: the adapter base it takes LoRAs for
                            "cfg_fixed": sm.cfg_fixed, "cfg_note": sm.cfg_note, "model_shift": sm.model_shift,
+                           # D89: guidance is a control only where the graph has FluxGuidance; tiled refine and the Edit graphs stay on the FLUX.2 family
+                           "guidance_node": family(spec).flux_guidance, "tiled_refine": spec.recipes.i2i and spec.graph in registry.FLUX_GRAPHS,
                            # D31: the encoder that runs by default and the alternates a recipe may name in `te_id` (the panels' picker)
                            "te_id": te_default,
                            "te_options": [{"id": t, "label": te_label(t) or ROSTER_BY_ID[t].name, "name": ROSTER_BY_ID[t].name, "health": svc.roster.resolve(t).health,

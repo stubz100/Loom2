@@ -1,0 +1,35 @@
+# Krea 2 (Krea AI, 2026-06; D89, .docs/creative_image/04): trained for creative and stylistic exploration. Graph from the pinned
+# image_krea2_turbo_t2i template: Qwen3-VL-4B encoder (CLIPLoader krea2), the Qwen-Image VAE, EmptyLatentImage, no FluxGuidance, built-in
+# shift 1.15. Turbo is guidance- and step-distilled (8 steps, CFG 1, the negative zeroed); Raw is the base (Krea's CLI: 28 steps, CFG 4.5;
+# their example 52 / 3.5). Krea 2 Community licence — `full` only. Estimates from the CR6 rig run (journal 2026-10-15 21:2x): the 13 GB
+# transformer and the 5 GB encoder do not fit together, so a *new prompt* swaps them (Turbo ≈ 40 s, Raw ≈ 240 s; the encoder on the CPU
+# brings Raw to ≈ 90 s); a new seed on the same prompt is Turbo 7.5 s, Raw 35 s.
+[[model]]
+id = "krea2-turbo-fp8"
+family = "krea2"
+label = "Krea 2 Turbo"
+short = "krea turbo"
+hint = "creative, fast; little variety across seeds"
+order = 20
+graph = "krea2"
+roles.te = { default = "qwen3vl-4b-fp8" }
+roles.vae = "qwen-image-vae"
+sampling = { steps = 8, guidance = 0.0, cfg = 1.0, sampler = "euler", scheduler = "simple", distilled = true, json_prompt = false, model_shift = 1.15 }
+recipes = { t2i = true, i2i = true }          # CR6: partial denoise holds at 8 steps (layout 0.97 at 0.3, a re-imagining at 0.55)
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
+estimates = { vram_gb = 14.2, base_seconds = 14.0, cold_seconds = 15.4, doc_seconds = 12.0 }
+
+[[model]]
+id = "krea2-raw-fp8"
+family = "krea2"
+label = "Krea 2 Raw"
+short = "krea raw"
+hint = "creative, real CFG and negatives; a new prompt ≈ 4 min (encoder on CPU ≈ 90 s)"
+order = 21
+graph = "krea2"
+roles.te = { default = "qwen3vl-4b-fp8" }
+roles.vae = "qwen-image-vae"
+sampling = { steps = 28, guidance = 0.0, cfg = 4.0, sampler = "euler", scheduler = "simple", json_prompt = false, model_shift = 1.15, cfg_note = "Krea: 3.5–4.5" }
+recipes = { t2i = true, i2i = true }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1344, 768] } }   # Raw is trained to about 1 MP
+estimates = { vram_gb = 14.2, base_seconds = 73.0, cold_seconds = 43.7, doc_seconds = 55.0 }

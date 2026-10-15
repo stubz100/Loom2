@@ -9,7 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Graph = Literal["flux2", "klein", "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # the builder: image, video, upscaler, subject matte, SAM, mesh
+Graph = Literal["flux2", "klein", "krea2", "zimage", "chroma", "sd3",                 # image: FLUX.2 family; D89 creative t2i / i2i families
+                "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # video, upscaler, subject matte, SAM, angles, mesh
 
 
 class Strict(BaseModel):

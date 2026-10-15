@@ -15,7 +15,9 @@ from ..roster import ROSTER, ROSTER_BY_ID, RosterEntry
 from .spec import ModelSpec
 
 SPEC_DIR = Path(__file__).parent / "specs"
-IMAGE_GRAPHS = ("flux2", "klein")
+FLUX_GRAPHS = ("flux2", "klein")                    # the FLUX.2 family: the only graphs with Edit (inpaint, tiled refine), Angle, Stage, references
+IMAGE_GRAPHS = FLUX_GRAPHS + ("krea2", "zimage", "chroma", "sd3")   # D89: Generate (T2I) and Refine (I2I) models
+CHECKPOINT_GRAPHS = ("sd3",)                        # one checkpoint carries the encoders and the VAE (no roles.te / roles.vae)
 
 
 class RegistryError(ValueError):
@@ -51,6 +53,15 @@ def _check(spec: ModelSpec) -> None:
         known(rid, k)
     if spec.sampling.turbo:
         known(spec.sampling.turbo.lora, "Turbo LoRA")
+    if spec.graph in IMAGE_GRAPHS and spec.graph not in FLUX_GRAPHS:
+        r = spec.recipes
+        if r.inpaint or r.inpaint_hero or r.icm_default or r.stage or r.reangle or r.train or spec.inputs.refs_max or spec.sampling.turbo:
+            raise RegistryError(f"{spec.id}: graph {spec.graph!r} runs t2i and i2i only (D89) — inpaint, Stage, Angle, training, references and "
+                                "Turbo are FLUX.2-family graphs")
+        if spec.graph in CHECKPOINT_GRAPHS and (spec.roles.te or spec.roles.vae):
+            raise RegistryError(f"{spec.id}: a {spec.graph!r} checkpoint carries its encoders and VAE — no roles.te / roles.vae")
+        if spec.graph not in CHECKPOINT_GRAPHS and not (spec.roles.te and spec.roles.vae):
+            raise RegistryError(f"{spec.id}: graph {spec.graph!r} needs roles.te and roles.vae")
     if (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) and spec.video is None:
         raise RegistryError(f"{spec.id}: an i2v model needs a [model.video] block (negative, presets)")
 

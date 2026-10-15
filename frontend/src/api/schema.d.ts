@@ -4433,6 +4433,8 @@ export interface components {
             geometry: components["schemas"]["Geometry"];
             /** Guidance */
             guidance: number;
+            /** Guidance Node */
+            guidance_node: boolean;
             /** Health */
             health: string;
             /** Hint */
@@ -4466,6 +4468,8 @@ export interface components {
              * @default []
              */
             te_options?: components["schemas"]["TeOption"][];
+            /** Tiled Refine */
+            tiled_refine: boolean;
             /** Turbo */
             turbo: boolean;
             /** Turbo Steps */
@@ -6956,7 +6960,7 @@ export interface components {
             distilled: boolean;
             estimate: components["schemas"]["Estimate"];
             /** Guidance */
-            guidance: number;
+            guidance: number | null;
             /** Height */
             height: number;
             /**

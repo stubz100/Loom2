@@ -130,7 +130,8 @@ def test_sweep_every_spec_compiles(tmp_path: Path, object_info: dict):
             ok(Inpaint(document_id="d", model_id=spec.id, mode=mode, prompt_text="x", outpaint={"right": 240} if mode == "outpaint" else None), img)
         if spec.recipes.i2i:
             ok(I2I(document_id="d", model_id=spec.id, source="visible", strength=0.3), img)
-            ok(Upscale(document_id="d", model_id=registry.default_model("upscale"), source="visible", refine=True, refine_model_id=spec.id), img)
+            if spec.graph in registry.FLUX_GRAPHS:                                    # D89: the creative families refine, they do not tile
+                ok(Upscale(document_id="d", model_id=registry.default_model("upscale"), source="visible", refine=True, refine_model_id=spec.id), img)
     ok(Inpaint(document_id="d", mode="fill_hero", prompt_text="x"), img)
     for spec in registry.SPECS.values():
         if spec.recipes.upscale_factor:

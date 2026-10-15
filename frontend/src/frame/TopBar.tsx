@@ -1,4 +1,4 @@
-import { ChevronDown, Menu } from 'lucide-react'
+import { ChevronDown, FolderOpen, Menu } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
@@ -82,14 +82,16 @@ export function TopBar() {
   return (
     <header className="top" ref={ref}>
       <nav className="tabs" aria-label="suites">
+        <button className={`tab project-tab${menu === 'project' ? ' active' : ''}`} onClick={() => setMenu(menu === 'project' ? null : 'project')} aria-label="project menu"
+          title={s.project?.open ? `Project: ${s.project.name} — new, open, close, recent` : 'Project: new, open, recent'}>
+          <FolderOpen size={14} style={{ verticalAlign: '-2px' }} /> Project <span className="project-name">{s.project?.open ? s.project.name : 'none open'}</span> <ChevronDown size={14} style={{ verticalAlign: '-2px' }} />
+        </button>
+        <span className="tabs-sep" aria-hidden="true" />
         {SUITES.map((t) => <SuiteTab key={t.id} t={t} active={s.ui.suite === t.id} onOpen={() => s.setSuite(t.id)} />)}
       </nav>
       <div className="spacer" />
-      <button className="quiet" onClick={() => setMenu(menu === 'project' ? null : 'project')} title="project">
-        {s.project?.open ? s.project.name : 'No project'} <ChevronDown size={14} style={{ verticalAlign: '-2px' }} />
-      </button>
       {menu === 'project' && (
-        <div className="menu" style={{ right: 330 }}>
+        <div className="menu project-menu" style={{ left: 8 }}>
           <button onClick={() => { setMenu(null); s.setProjectDialog('new') }}>New project…</button>
           <button onClick={() => { setMenu(null); s.setProjectDialog('open') }}>Open project…</button>
           {s.project?.open && <button onClick={() => { setMenu(null); void s.closeProject() }}>Close {s.project.name}</button>}

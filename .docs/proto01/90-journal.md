@@ -4029,3 +4029,9 @@ split by file so that no two hands touched the same module.
 - c4bacaa went red on the full variant: "a new angle" read the ninth Catalogue tile twice (to click it, then for its id), and an asset that
   landed in between (an earlier scenario's job) shifted the grid — the job's parent was the clicked tile, the test expected the other. The id
   is read once and the tile clicked by it. The open variant was green.
+
+## 2026-10-15 17:16 — UI · the Project menu leads the suite tabs
+- The author found the project menu (New / Open / Close / Recent), shown at the right of the top bar under the open project's name, hard to
+  recognise as a menu ("m5-acceptance-20261007" — the M5 rig run's project, reopened as the dev state's last project). It is now the first entry
+  of the suite tabs: **Project** with the open project's name beside it, a separator, then Catalogue … Models; the menu itself is unchanged.
+  The first smoke scenario checks its place and its items; 29 / 29, build clean, lint 100.

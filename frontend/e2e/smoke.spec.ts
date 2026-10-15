@@ -12,6 +12,16 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await expect(tiles(page).first()).toBeVisible()
   expect(await thumbsLoaded(page, 12)).toBeGreaterThanOrEqual(Math.min(12, env().assets))
   await expect(page.locator('.place-row', { hasText: 'Library' }).locator('.n')).toHaveText(/^\d+$/)
+  // the Project menu leads the suite tabs: the open project's name, New / Open / Close and the recents
+  const projectTab = page.locator('nav.tabs button.project-tab')
+  await expect(page.locator('nav.tabs > button').first()).toHaveClass(/project-tab/)
+  await expect(projectTab.locator('.project-name')).not.toHaveText('none open')
+  await projectTab.click()
+  await expect(page.locator('.menu.project-menu button', { hasText: 'New project' })).toBeVisible()
+  await expect(page.locator('.menu.project-menu button', { hasText: /^Close / })).toBeVisible()
+  await page.screenshot({ path: 'node_modules/.e2e/project-menu.png', clip: { x: 0, y: 0, width: 1100, height: 260 } })
+  await projectTab.click()
+  await expect(page.locator('.menu.project-menu')).toHaveCount(0)
 })
 
 test('Keep / Reject / Clear through the tile context menu change the tile and the asset', async ({ page }) => {

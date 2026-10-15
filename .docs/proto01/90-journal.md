@@ -3906,3 +3906,12 @@ split by file so that no two hands touched the same module.
   ~100 ms cliffs at some row counts (a 48×768 · 768×768 took 112 ms at 8 threads, 0.9 ms at one; flushing denormals and `OPENBLAS_CORETYPE` change
   nothing). Kokoro at **one thread** speaks every line 3–10× faster than at 4–16 (and leaves the cores to a running engine) — `voices/tts.py`
   sets it; E20's 13 s outlier was this, not machine load. Worth remembering for any CPU torch work in these venvs.
+
+## 2026-10-15 09:21 — CI · the smoke's red runs since 2026-10-13 sorted; the flow scenario connects one edge at a time
+- Of the last ten completed CI runs, seven failed, each on one Playwright scenario that passes locally: "a flow" twice (b345d85, 8d380e5 —
+  the handle drags made 1 or 2 of 3 edges: the slow Windows runner drops a drag whose pointer events outran React Flow), the Edit
+  chunk-failure scenario once (5f39bcf — the 90 s boot), "@mentions" once (c343696 — `net::ERR_NO_BUFFER_SPACE`, the runner out of socket
+  buffers), and the two already fixed (d4a99b6 the hub VAE, 9e3bfa2 the PermissionError).
+- **Fix (the flow scenario):** each edge is connected and polled before the next; a missed drop is dragged again once (the same mouse path),
+  and every drag ends with a pointermove over the target handle before the release. Playwright's `retries` stay 0 (a flake stays visible).
+  The Edit boot and the socket-buffer failures are the runner's; they stay as they are and are named when they recur.

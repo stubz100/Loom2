@@ -945,14 +945,23 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   await page.locator('.inspector input[aria-label="option 2"]').fill('Stay')
   await expect(choice.locator('.react-flow__handle.source')).toHaveCount(2)
   // connect by dragging handles: Start → Hello → Pick, Go → Hello (a loop); Stay leads nowhere (the end)
+  const edges = async () => (await api<FlowLite>('GET', '/story/flow')).graph.edges.length
   const drag = async (from: ReturnType<typeof page.locator>, to: ReturnType<typeof page.locator>) => {
     const a = await centre(from), b = await centre(to)
-    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(a.x + 24, a.y + 4, { steps: 4 }); await page.mouse.move(b.x, b.y, { steps: 16 }); await page.mouse.up()
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(a.x + 24, a.y + 4, { steps: 4 }); await page.mouse.move(b.x, b.y, { steps: 16 })
+    await page.mouse.move(b.x + 1, b.y + 1); await page.mouse.move(b.x, b.y)                        // a pointermove over the handle before the drop: React Flow snaps on it
+    await page.mouse.up()
   }
-  await drag(start.locator('.react-flow__handle.source'), dlg.locator('.react-flow__handle.target'))
-  await drag(dlg.locator('.react-flow__handle.source'), choice.locator('.react-flow__handle.target'))
-  await drag(choice.locator('.react-flow__handle.source').first(), dlg.locator('.react-flow__handle.target'))
-  await expect.poll(async () => (await api<FlowLite>('GET', '/story/flow')).graph.edges.length, { timeout: 10_000 }).toBe(3)
+  // one edge at a time: a slow runner (CI) can drop a drag whose pointer events outran React Flow — the second try is the same mouse path
+  const connect = async (from: ReturnType<typeof page.locator>, to: ReturnType<typeof page.locator>, want: number) => {
+    await drag(from, to)
+    if (await expect.poll(edges, { timeout: 4_000 }).toBe(want).then(() => true, () => false)) return
+    await drag(from, to)
+    await expect.poll(edges, { timeout: 10_000 }).toBe(want)
+  }
+  await connect(start.locator('.react-flow__handle.source'), dlg.locator('.react-flow__handle.target'), 1)
+  await connect(dlg.locator('.react-flow__handle.source'), choice.locator('.react-flow__handle.target'), 2)
+  await connect(choice.locator('.react-flow__handle.source').first(), dlg.locator('.react-flow__handle.target'), 3)
   const f = await api<FlowLite>('GET', '/story/flow')
   expect(f.graph.start).toBe(f.nodes.find((n) => n.type === 'start')!.id)
   expect(f.graph.edges.map((e) => (e.port.startsWith('opt:') ? 'opt' : e.port)).sort()).toEqual(['opt', 'out', 'out'])

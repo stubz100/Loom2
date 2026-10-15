@@ -67,7 +67,7 @@ def capabilities(svc: Services) -> dict:
             "content_aware": native.capabilities(),                            # D62: Quick Remove, the Remove pre-fill, Spot Healing
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
-            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
+            "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
 
 
 def _reangle(svc: Services, variant: str) -> dict:
@@ -155,6 +155,19 @@ def _train(svc: Services, variant: str) -> dict:
     why = trainer_available(svc.app.settings)
     return {"available": why is None and any(b["health"] in ("present", "verified") for b in bases), "why": why, "bases": bases,
             "steps": {"min": 100, "max": 5000, "default": 1000}, "ranks": [8, 16, 32], "resolutions": [512, 768], "lr": 1e-4, "min_refs": MIN_REFS}
+
+
+def _voice(svc: Services, variant: str) -> dict:
+    """CN2 (19 §3b): whether the TTS runner can run, the tiers with E20's figures and whether their models are cached (a first run fetches
+    them), the draft tier's voices, the languages, the pace range — T8: the Inspector offers exactly what the job runs."""
+    from .voices import CLONING_LANGUAGES, DRAFT_LANGUAGES, DRAFT_VOICES, RATES, REFERENCE_S, model_cached, voices_available
+    s = svc.app.settings
+    why = voices_available(s)
+    return {"available": why is None, "why": why,
+            "draft": {"model": s.voices.draft_model, "cached": model_cached(s, s.voices.draft_model), "languages": DRAFT_LANGUAGES, "voices": DRAFT_VOICES, **RATES["draft"]},
+            "cloning": {"model": s.voices.cloning_model, "cached": model_cached(s, s.voices.cloning_model), "languages": CLONING_LANGUAGES,
+                        "reference_s": list(REFERENCE_S), **RATES["cloning"]},
+            "speed": {"min": 0.5, "max": 2.0, "default": 1.0}}
 
 
 def _mesh(svc: Services, variant: str) -> dict:

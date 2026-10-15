@@ -12,7 +12,7 @@ export type GroupMode = 'none' | 'batch' | 'lineage' | 'session' | 'model'
 export type Sort = 'created_desc' | 'created_asc' | 'rating_desc' | 'model' | 'size_desc'
 
 export interface Query {
-  folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render'; suite?: string; model_id?: string
+  folder: Folder; state: 'all' | 'none' | 'keep' | 'reject'; kind?: 'image' | 'video' | 'mask' | 'document-render' | 'mesh' | 'audio'; suite?: string; model_id?: string
   rating_min: number; tags_any: string[]; aspect?: 'landscape' | 'portrait' | 'square'; has_children?: boolean; search: string
   sort: Sort; group: GroupMode; collection_id?: string; root_id?: string; created_from?: string; created_to?: string; batch_id?: string; session_id?: string
   group_id?: string; date_preset?: DatePreset; has_document?: boolean

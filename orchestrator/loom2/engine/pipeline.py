@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -60,10 +60,12 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora))
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS))
     needs: list[str] = []
     if isinstance(recipe, TrainLora):
         needs.append("reference set")
+    if isinstance(recipe, TTS):
+        needs.append("voice")
     if getattr(recipe, "refs", None):
         needs.append("refs")
     if isinstance(recipe, Render):
@@ -93,6 +95,11 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
                   "resolution": recipe.resolution, "lr": recipe.lr, "trigger": recipe.trigger, "profile_id": recipe.profile_id, "version": recipe.version}
         est = {"seconds": round(recipe.steps * tr.s_per_it) if tr.s_per_it else None,
                "source": "E16 2026-10-14: the base's measured s/it on this card at 512², plus the model loads"}
+    elif isinstance(recipe, TTS):                                     # CN2 (19 §3b): the tier's measured pace on this machine (E20)
+        from ..voices import RATES as TTS_RATES, estimate_seconds as tts_seconds
+        params = {"tier": recipe.tier, "voice_id": recipe.voice_id, "language": recipe.language, "speed": recipe.speed, "lines": len(recipe.items),
+                  "words": sum(len(it.text.split()) for it in recipe.items), "vram_gb": TTS_RATES[recipe.tier]["vram_gb"]}
+        est = {"seconds": tts_seconds(recipe), "source": "E20 2026-10-14: the tier's real-time factor on this machine, plus the model's load"}
     elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
         params = {"timeline_id": recipe.timeline_id}
         est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
@@ -134,7 +141,8 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     resolved = isinstance(recipe, (Reangle, StageShot))               # the model the method runs in this build, not the property's `full` answer
     return Plan(kind=recipe.kind, model_id=None if quick else str(params["model_id"]) if resolved else getattr(recipe, "model_id", None), engine=not quick,
                 warm_group=warm_group(recipe, variant), vram_gb=estimate_vram_gb(recipe, variant), estimate=est, params=params, needs=needs,
-                weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]), gpu=isinstance(recipe, TrainLora))
+                weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]),
+                gpu=isinstance(recipe, TrainLora) or (isinstance(recipe, TTS) and recipe.tier == "cloning"))   # CN2: the cloning tier takes the card (2.6 GB, the engine stopped)
 
 
 def _placeholder_image(object_info: dict) -> str:

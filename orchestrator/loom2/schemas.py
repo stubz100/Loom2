@@ -331,6 +331,7 @@ class Capabilities(Open):
     mesh: MeshCaps                                 # P18 (D84)
     story: StoryCaps | None = None                # 17 (D85): the Cast tab's Expand model and presets
     train: TrainCaps | None = None                # 18 (D86): the LoRA trainer's bases and ranges
+    voice: VoiceCaps | None = None                # 19 (D87) CN2: the TTS tiers, their voices and languages
 
 
 class MissingWeight(Open):
@@ -696,10 +697,12 @@ class StageList(Out):
 
 
 class TimelineExported(Out):
-    """P17: an export written from the sequence document — the file inside the project and its text."""
+    """P17: an export written from the sequence document — the file inside the project and its text; `audio` (CN2) the spoken lines the
+    FCPXML / EDL carry on their audio lane."""
     format: str
     path: str
     text: str
+    audio: int = 0
 
 
 class ClipExtracted(Out):
@@ -833,6 +836,61 @@ class TrainCaps(Open):
     resolutions: list[int]
     lr: float
     min_refs: int
+
+
+class VoiceRecordOut(Open):
+    """CN2 (19 §3b): a voice of the project (story/voices/): the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with
+    its transcript and the consent note."""
+    id: str
+    name: str
+    tier: str
+    voice: str | None = None
+    language: str
+    reference_asset_id: str | None = None
+    reference_text: str = ""
+    speaker: str = ""
+    consent: str = ""
+    created_at: str
+    updated_at: str
+    measured: dict[str, Any] = {}
+
+
+class VoiceList(Out):
+    items: list[VoiceRecordOut]
+
+
+class TtsQueued(Out):
+    """CN2: the voice jobs of a line or of a node's lines — one job per voice."""
+    job_ids: list[str]
+    lines: int
+    voice_ids: list[str]
+    staged: bool
+
+
+class DraftVoice(Open):
+    id: str
+    label: str
+
+
+class VoiceTierCaps(Open):
+    model: str
+    cached: bool
+    languages: list[str]
+    rtf: float
+    load_s: float
+    vram_gb: float
+    voices: list[DraftVoice] = []
+    reference_s: list[float] = []
+
+
+class VoiceCaps(Open):
+    """CN2 (19 §3b): whether the TTS runner can run, the tiers with E20's figures (and whether their models are cached), the draft voices,
+    the languages, the pace range."""
+    available: bool
+    why: str | None = None
+    draft: VoiceTierCaps
+    cloning: VoiceTierCaps
+    speed: dict[str, float]
 
 
 class LoraChanged(Open):

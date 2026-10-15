@@ -1575,6 +1575,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/flow/nodes/{nid}/lines/{i}/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Line Voice
+         * @description CN2 (19 §3b): one line spoken — a `tts` job (the draft tier on the CPU beside the engine, the cloning tier with it stopped) whose
+         *     result lands on the line as an audio asset.
+         */
+        post: operations["line_voice_story_flow_nodes__nid__lines__i__voice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/flow/nodes/{nid}/shot": {
         parameters: {
             query?: never;
@@ -1606,6 +1627,26 @@ export interface paths {
         put?: never;
         /** Flow Unbind */
         post: operations["flow_unbind_story_flow_nodes__nid__unbind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/flow/nodes/{nid}/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Node Voice
+         * @description Every non-empty line of the node, grouped by voice (each speaker's own; the body's as the fallback) — one job per voice.
+         */
+        post: operations["node_voice_story_flow_nodes__nid__voice_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1918,6 +1959,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Voices List */
+        get: operations["voices_list_story_voices_get"];
+        put?: never;
+        /**
+         * Voice Create
+         * @description A voice of the project: the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with its transcript and the note
+         *     of whose voice it is and that they consented — 422 with the sentence.
+         */
+        post: operations["voice_create_story_voices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/voices/{vid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Voice Get */
+        get: operations["voice_get_story_voices__vid__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Voice Delete
+         * @description The record goes (its spoken lines stay in the Catalogue); every profile that had it loses its voice.
+         */
+        delete: operations["voice_delete_story_voices__vid__delete"];
+        options?: never;
+        head?: never;
+        /** Voice Patch */
+        patch: operations["voice_patch_story_voices__vid__patch"];
+        trace?: never;
+    };
     "/story/world": {
         parameters: {
             query?: never;
@@ -2210,6 +2295,8 @@ export interface components {
             created_at: string;
             /** Duplicate Of */
             duplicate_of: string | null;
+            /** Duration S */
+            duration_s: number | null;
             /** Format */
             format: string | null;
             /** Fps */
@@ -2232,7 +2319,7 @@ export interface components {
              * @default image
              * @enum {string}
              */
-            kind: "image" | "video" | "mask" | "document-render" | "mesh";
+            kind: "image" | "video" | "mask" | "document-render" | "mesh" | "audio";
             /** Lineage Kind */
             lineage_kind: string | null;
             /** Model Id */
@@ -2393,6 +2480,7 @@ export interface components {
             train?: components["schemas"]["TrainCaps"] | null;
             /** Variant */
             variant: string;
+            voice?: components["schemas"]["VoiceCaps"] | null;
             /** Vram Budget Gb */
             vram_budget_gb: number;
             /** Weight Dtypes */
@@ -2972,6 +3060,15 @@ export interface components {
              */
             w: number;
         };
+        /** DraftVoice */
+        DraftVoice: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** EnginePin */
         EnginePin: {
             /** Pin */
@@ -3317,6 +3414,10 @@ export interface components {
          * @description One line of a Dialogue node: the speaker is a profile (its mention), the text the line (loom R152: the subtitles come from these).
          */
         FlowLine: {
+            /** Audio Asset Id */
+            audio_asset_id: string | null;
+            /** Audio Text */
+            audio_text: string | null;
             /** Speaker */
             speaker: string | null;
             /**
@@ -4584,6 +4685,21 @@ export interface components {
             /** Revision */
             revision: number;
         };
+        /** LineVoiceBody */
+        LineVoiceBody: {
+            /**
+             * Speed
+             * @default 1
+             */
+            speed?: number;
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
+            /** Voice Id */
+            voice_id?: string | null;
+        };
         /** Lineage */
         Lineage: {
             /** Children */
@@ -5205,6 +5321,8 @@ export interface components {
             updated_at: string;
             /** Versions */
             versions: components["schemas"]["ProfileVersion"][];
+            /** Voice Id */
+            voice_id: string | null;
         };
         /** ProfileCreate */
         ProfileCreate: {
@@ -5929,6 +6047,7 @@ export interface components {
              * @enum {string}
              */
             variant: "full" | "open";
+            voices: components["schemas"]["VoicesSettings"];
             /**
              * Vram Budget Gb
              * @default 16
@@ -6791,9 +6910,15 @@ export interface components {
         };
         /**
          * TimelineExported
-         * @description P17: an export written from the sequence document — the file inside the project and its text.
+         * @description P17: an export written from the sequence document — the file inside the project and its text; `audio` (CN2) the spoken lines the
+         *     FCPXML / EDL carry on their audio lane.
          */
         TimelineExported: {
+            /**
+             * Audio
+             * @default 0
+             */
+            audio: number;
             /** Format */
             format: string;
             /** Path */
@@ -7009,6 +7134,20 @@ export interface components {
             /** Trashed */
             trashed: string[];
         };
+        /**
+         * TtsQueued
+         * @description CN2: the voice jobs of a line or of a node's lines — one job per voice.
+         */
+        TtsQueued: {
+            /** Job Ids */
+            job_ids: string[];
+            /** Lines */
+            lines: number;
+            /** Staged */
+            staged: boolean;
+            /** Voice Ids */
+            voice_ids: string[];
+        };
         /** Ungrouped */
         Ungrouped: {
             /** Parent */
@@ -7188,6 +7327,182 @@ export interface components {
             /** Steps */
             steps: number;
         };
+        /** VoiceBody */
+        VoiceBody: {
+            /**
+             * Consent
+             * @default
+             */
+            consent?: string;
+            /**
+             * Language
+             * @default English
+             */
+            language?: string;
+            /** Name */
+            name: string;
+            /** Reference Asset Id */
+            reference_asset_id?: string | null;
+            /**
+             * Reference Text
+             * @default
+             */
+            reference_text?: string;
+            /**
+             * Speaker
+             * @default
+             */
+            speaker?: string;
+            /**
+             * Tier
+             * @default draft
+             * @enum {string}
+             */
+            tier?: "draft" | "cloning";
+            /** Voice */
+            voice?: string | null;
+        };
+        /**
+         * VoiceCaps
+         * @description CN2 (19 §3b): whether the TTS runner can run, the tiers with E20's figures (and whether their models are cached), the draft voices,
+         *     the languages, the pace range.
+         */
+        VoiceCaps: {
+            /** Available */
+            available: boolean;
+            cloning: components["schemas"]["VoiceTierCaps"];
+            draft: components["schemas"]["VoiceTierCaps"];
+            /** Speed */
+            speed: {
+                [key: string]: number;
+            };
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** VoiceList */
+        VoiceList: {
+            /** Items */
+            items: components["schemas"]["VoiceRecordOut"][];
+        };
+        /** VoicePatch */
+        VoicePatch: {
+            /** Consent */
+            consent?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Reference Asset Id */
+            reference_asset_id?: string | null;
+            /** Reference Text */
+            reference_text?: string | null;
+            /** Speaker */
+            speaker?: string | null;
+            /** Voice */
+            voice?: string | null;
+        };
+        /**
+         * VoiceRecordOut
+         * @description CN2 (19 §3b): a voice of the project (story/voices/): the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with
+         *     its transcript and the consent note.
+         */
+        VoiceRecordOut: {
+            /**
+             * Consent
+             * @default
+             */
+            consent?: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Language */
+            language: string;
+            /**
+             * Measured
+             * @default {}
+             */
+            measured?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Reference Asset Id */
+            reference_asset_id?: string | null;
+            /**
+             * Reference Text
+             * @default
+             */
+            reference_text?: string;
+            /**
+             * Speaker
+             * @default
+             */
+            speaker?: string;
+            /** Tier */
+            tier: string;
+            /** Updated At */
+            updated_at: string;
+            /** Voice */
+            voice?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** VoiceTierCaps */
+        VoiceTierCaps: {
+            /** Cached */
+            cached: boolean;
+            /** Languages */
+            languages: string[];
+            /** Load S */
+            load_s: number;
+            /** Model */
+            model: string;
+            /**
+             * Reference S
+             * @default []
+             */
+            reference_s?: number[];
+            /** Rtf */
+            rtf: number;
+            /**
+             * Voices
+             * @default []
+             */
+            voices?: components["schemas"]["DraftVoice"][];
+            /** Vram Gb */
+            vram_gb: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * VoicesSettings
+         * @description CN2 (19 §3b): the TTS tiers in their own venv `voices/.venv` — never the engine's (scripts/voices-setup.ps1, voices/AGENTS.md).
+         */
+        VoicesSettings: {
+            /**
+             * Cloning Model
+             * @default Qwen/Qwen3-TTS-12Hz-0.6B-Base
+             */
+            cloning_model: string;
+            /**
+             * Draft Model
+             * @default hexgrad/Kokoro-82M
+             */
+            draft_model: string;
+            /**
+             * Python
+             * @default <repo>\voices\.venv\Scripts\python.exe
+             */
+            python: string;
+            /**
+             * Run
+             * @default <repo>\voices\tts.py
+             */
+            run: string;
+        };
         /**
          * VramPressure
          * @description D69: a GPU job was admitted while the engine had less free VRAM than its reserve + 1 GB — the UI releases hidden GPU stages.
@@ -7264,7 +7579,7 @@ export interface operations {
         parameters: {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
-                kind?: ("image" | "video" | "mask" | "document-render" | "mesh") | null;
+                kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
@@ -7411,7 +7726,7 @@ export interface operations {
         parameters: {
             query?: {
                 folder?: "all" | "unprocessed" | "today" | "last_session" | "images" | "clips" | "documents" | "imported" | "rejected" | "trash";
-                kind?: ("image" | "video" | "mask" | "document-render" | "mesh") | null;
+                kind?: ("image" | "video" | "mask" | "document-render" | "mesh" | "audio") | null;
                 suite?: string | null;
                 state?: ("none" | "keep" | "reject") | "all";
                 model_id?: string | null;
@@ -10486,6 +10801,42 @@ export interface operations {
             };
         };
     };
+    line_voice_story_flow_nodes__nid__lines__i__voice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+                i: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LineVoiceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     flow_spawn_story_flow_nodes__nid__shot_post: {
         parameters: {
             query?: never;
@@ -10539,6 +10890,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeShot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    node_voice_story_flow_nodes__nid__voice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LineVoiceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsQueued"];
                 };
             };
             /** @description Validation Error */
@@ -11244,6 +11630,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voices_list_story_voices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceList"];
+                };
+            };
+        };
+    };
+    voice_create_story_voices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceRecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voice_get_story_voices__vid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceRecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voice_delete_story_voices__vid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voice_patch_story_voices__vid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoicePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceRecordOut"];
                 };
             };
             /** @description Validation Error */

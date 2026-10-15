@@ -367,8 +367,28 @@ class TrainLora(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])   # one job (the queue's seed loop); the training seed is `seed`
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora
+class TtsItem(BaseModel):
+    """One line to speak; `node_id` + `index` name the Flow line it lands on (a free line has neither)."""
+    text: str
+    node_id: str | None = None
+    index: int | None = None
+
+
+class TTS(BaseModel):
+    """19 §3b (CN2, D87): lines spoken by one of the project's voices — a CPU job on the draft tier (Kokoro beside a running engine), a GPU
+    job on the cloning tier (Qwen3-TTS with the engine stopped, as training is); every line an `audio` asset placed on its Flow line.
+    `tier` is stamped from the voice record at submission and checked against it (the queue stops the engine by it)."""
+    kind: Literal["tts"] = "tts"
+    voice_id: str
+    tier: Literal["draft", "cloning"] = "draft"
+    language: str = "English"
+    speed: float = Field(1.0, ge=0.5, le=2.0)     # the draft tier's pace (Kokoro); the cloning tier speaks at its own
+    items: list[TtsItem] = Field(min_length=1)
+    seeds: list[int] = Field(default_factory=lambda: [0])   # one job (the queue's seed loop)
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS
 
 
 class RecipeEnvelope(BaseModel):
@@ -408,4 +428,6 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return "cpu"                               # P17: the draft render never touches the engine
     if isinstance(recipe, TrainLora):
         return "trainer"                           # LT2: the engine is stopped for it; no weights of the engine's stay warm
+    if isinstance(recipe, TTS):
+        return "voices"                            # CN2: the runner in its own venv; the cloning tier stops the engine
     return recipe.model_id

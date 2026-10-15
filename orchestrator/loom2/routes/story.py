@@ -12,13 +12,14 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ..fsio import new_id
+from ..fsio import new_id, utc_now
 from ..origin import JobOrigin
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
-from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued
+from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
 from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
 router = APIRouter(tags=["story"])
@@ -651,6 +652,160 @@ async def flow_spawn(svc: Svc, nid: str, body: SpawnBody):
     svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})
     _flow_changed(svc, nid)
     return {"node": n.model_dump(), "shot": sh.model_dump()}
+
+
+# ---- voices (CN2, 19 §3b, D87) ---------------------------------------------------------------------------------------------------------
+class VoiceBody(BaseModel):
+    name: str
+    tier: Literal["draft", "cloning"] = "draft"
+    voice: str | None = None                      # draft: one of /capabilities.voice.draft.voices
+    language: str = "English"
+    reference_asset_id: str | None = None         # cloning: an audio asset of 3–10 s (a recording, or a draft line)
+    reference_text: str = ""                      # cloning: its transcript
+    speaker: str = ""                             # cloning: whose voice
+    consent: str = ""                             # cloning: the consent note (required)
+
+
+class VoicePatch(BaseModel):
+    name: str | None = None
+    voice: str | None = None
+    language: str | None = None
+    reference_asset_id: str | None = None
+    reference_text: str | None = None
+    speaker: str | None = None
+    consent: str | None = None
+
+
+class LineVoiceBody(BaseModel):
+    voice_id: str | None = None                   # the speaker's voice (the profile's `voice_id`) when absent
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    stage: bool = False
+
+
+def _voice_changed(svc, vid: str) -> None:
+    svc.hub.broadcast("story.changed", {"kind": "voice", "id": vid, "revision": 0})
+
+
+@router.get("/story/voices", response_model=VoiceList)
+async def voices_list(svc: Svc):
+    ws, _, _ = svc.require_project()
+    return {"items": [r.model_dump() for r in await asyncio.to_thread(VoiceStore(ws).list)]}
+
+
+@router.post("/story/voices", response_model=VoiceRecordOut)
+async def voice_create(svc: Svc, body: VoiceBody):
+    """A voice of the project: the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with its transcript and the note
+    of whose voice it is and that they consented — 422 with the sentence."""
+    ws, cat, _ = svc.require_project()
+    rec = VoiceRecord(**body.model_dump())
+    ref = await asyncio.to_thread(cat.get, rec.reference_asset_id) if rec.reference_asset_id else None
+    try:
+        check_voice(rec, ref.model_dump() if ref else None)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await asyncio.to_thread(VoiceStore(ws).save, rec)
+    _voice_changed(svc, rec.id)
+    return rec.model_dump()
+
+
+@router.get("/story/voices/{vid}", response_model=VoiceRecordOut)
+async def voice_get(svc: Svc, vid: str):
+    ws, _, _ = svc.require_project()
+    rec = await asyncio.to_thread(VoiceStore(ws).get, vid)
+    if rec is None:
+        raise HTTPException(404, "voice not found")
+    return rec.model_dump()
+
+
+@router.patch("/story/voices/{vid}", response_model=VoiceRecordOut)
+async def voice_patch(svc: Svc, vid: str, body: VoicePatch):
+    ws, cat, _ = svc.require_project()
+    store = VoiceStore(ws)
+    rec = await asyncio.to_thread(store.get, vid)
+    if rec is None:
+        raise HTTPException(404, "voice not found")
+    rec = rec.model_copy(update={**body.model_dump(exclude_none=True), "updated_at": utc_now()})
+    ref = await asyncio.to_thread(cat.get, rec.reference_asset_id) if rec.reference_asset_id else None
+    try:
+        check_voice(rec, ref.model_dump() if ref else None)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await asyncio.to_thread(store.save, rec)
+    _voice_changed(svc, vid)
+    return rec.model_dump()
+
+
+@router.delete("/story/voices/{vid}", response_model=Deleted)
+async def voice_delete(svc: Svc, vid: str):
+    """The record goes (its spoken lines stay in the Catalogue); every profile that had it loses its voice."""
+    ws, _, _ = svc.require_project()
+    if not await asyncio.to_thread(VoiceStore(ws).delete, vid):
+        raise HTTPException(404, "voice not found")
+    for p in await asyncio.to_thread(StoryStore(ws).clear_voice, vid):
+        _changed(svc, p)
+    _voice_changed(svc, vid)
+    return {"deleted": vid}
+
+
+def _voice_jobs(ws, q, store: StoryStore, n: FlowNode, indexes: list[int], body: LineVoiceBody, picked: bool) -> dict:
+    """One `tts` job per voice: a line's voice is its speaker's (the profile's `voice_id`), the body's standing in where the speaker has
+    none — or, `picked` (one line, chosen by hand), the body's first; a line with neither is the sentence. The job's result lands on
+    the lines (`audio_asset_id`) as audio assets."""
+    voices = VoiceStore(ws)
+    profiles = {p.id: p for p in store.profiles()}
+    groups: dict[str, list[dict]] = {}
+    missing: list[int] = []
+    for i in indexes:
+        ln = n.lines[i]
+        if not ln.text.strip():
+            continue
+        own = profiles[ln.speaker].voice_id if ln.speaker in profiles else None
+        vid = (body.voice_id or own) if picked else (own or body.voice_id)
+        if not vid:
+            missing.append(i + 1)
+            continue
+        groups.setdefault(vid, []).append({"text": ln.text.strip(), "node_id": n.id, "index": i})
+    if missing:
+        raise HTTPException(422, f"line{'s' if len(missing) > 1 else ''} {', '.join(map(str, missing))}: no voice — give the speaker one in Cast, or pick one here")
+    if not groups:
+        raise HTTPException(422, "nothing to say: the lines are empty")
+    jobs = []
+    for vid, items in groups.items():
+        rec = voices.get(vid)
+        if rec is None:
+            raise HTTPException(422, f"unknown voice {vid!r}")
+        recipe = {"kind": "tts", "voice_id": vid, "tier": rec.tier, "language": rec.language, "speed": body.speed, "items": items}
+        origin = JobOrigin(suite="story", surface="voice", ref=n.id, payload={"indexes": [it["index"] for it in items], "voice_id": vid})
+        try:
+            jobs.append(q.submit(recipe, stage=body.stage, origin=origin)[0])
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+    return {"job_ids": [j.id for j in jobs], "lines": sum(len(v) for v in groups.values()), "voice_ids": list(groups), "staged": all(j.status == "staged" for j in jobs)}
+
+
+@router.post("/story/flow/nodes/{nid}/lines/{i}/voice", response_model=TtsQueued)
+async def line_voice(svc: Svc, nid: str, i: int, body: LineVoiceBody):
+    """CN2 (19 §3b): one line spoken — a `tts` job (the draft tier on the CPU beside the engine, the cloning tier with it stopped) whose
+    result lands on the line as an audio asset."""
+    ws, _, q = svc.require_project()
+    store = StoryStore(ws)
+    n = await asyncio.to_thread(store.flow_node, nid)
+    if n is None:
+        raise HTTPException(404, "node not found")
+    if not 0 <= i < len(n.lines):
+        raise HTTPException(404, f"the node has no line {i}")
+    return await asyncio.to_thread(_voice_jobs, ws, q, store, n, [i], body, True)
+
+
+@router.post("/story/flow/nodes/{nid}/voice", response_model=TtsQueued)
+async def node_voice(svc: Svc, nid: str, body: LineVoiceBody):
+    """Every non-empty line of the node, grouped by voice (each speaker's own; the body's as the fallback) — one job per voice."""
+    ws, _, q = svc.require_project()
+    store = StoryStore(ws)
+    n = await asyncio.to_thread(store.flow_node, nid)
+    if n is None:
+        raise HTTPException(404, "node not found")
+    return await asyncio.to_thread(_voice_jobs, ws, q, store, n, list(range(len(n.lines))), body, False)
 
 
 @router.post("/story/flow/validate", response_model=FlowProblems)

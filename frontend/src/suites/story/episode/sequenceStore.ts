@@ -146,7 +146,7 @@ export const useSequence = create<SequenceState>()((set, get) => ({
     try {
       const r = await unwrap(http.POST('/timelines/{tl_id}/export', { params: { path: { tl_id: cur.id } }, body: { format } }))
       set({ lastExport: { format, path: r.path } })
-      useSession.getState().toast(`${format.toUpperCase()} written: ${r.path}`, 'success')
+      useSession.getState().toast(`${format.toUpperCase()} written: ${r.path}${r.audio ? ` · ${r.audio} spoken line${r.audio === 1 ? '' : 's'} on the audio lane` : ''}`, 'success')
     } catch (e) { useSession.getState().toast(`Export failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   render: async () => {

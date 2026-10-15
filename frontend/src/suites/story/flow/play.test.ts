@@ -13,7 +13,7 @@ const VARS = [{ name: 'met', type: 'bool' as const, values: [], default: false }
 
 describe('play (17 §3d)', () => {
   const nodes: Record<string, FlowNode> = Object.fromEntries([
-    node('s', 'start'), node('hello', 'dialogue', { lines: [{ speaker: null, text: 'Hi.' }] }),
+    node('s', 'start'), node('hello', 'dialogue', { lines: [{ speaker: null, audio_asset_id: null, audio_text: null, text: 'Hi.' }] }),
     node('pick', 'choice', { options: [{ id: 'go', label: 'Go', require: null, set: [{ var: 'met', value: true }] }, { id: 'stay', label: 'Stay', require: { var: 'met', value: true }, set: [] }] }),
     node('q', 'condition', { cond: { var: 'met', op: 'eq', value: true } }), node('yes', 'shot'), node('no', 'shot'), node('act', 'action', { set: [{ var: 'door', value: 'open' }] }),
     node('jump', 'jump', { target: 'hello' }), node('note', 'comment'),

@@ -155,6 +155,7 @@ class Profile(BaseModel):
     cls: ProfileClass = "character"
     current: str
     versions: list[ProfileVersion] = Field(default_factory=list)
+    voice_id: str | None = None                   # CN2: the character's voice (story/voices/) — the Flow's lines of this speaker take it
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -266,6 +267,8 @@ class FlowLine(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     speaker: str | None = None
     text: str = ""
+    audio_asset_id: str | None = None             # CN2 (19 §3b): the spoken line — an audio asset, set by the tts job
+    audio_text: str | None = None                 # the text it was spoken from (≠ text: stale — voice it again)
 
 
 class FlowOption(BaseModel):
@@ -707,6 +710,10 @@ class _FlowMixin:
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         n = FlowNode.model_validate(merged)
+        if "lines" in data:                                             # CN2: a client that did not see the tts job's stamp keeps it on a line whose text it left alone
+            for i, ln in enumerate(n.lines):
+                if i < len(cur.lines) and ln.audio_asset_id is None and cur.lines[i].audio_asset_id and cur.lines[i].text == ln.text:
+                    ln.audio_asset_id, ln.audio_text = cur.lines[i].audio_asset_id, cur.lines[i].audio_text
         if n.type not in NODE_TYPES:
             raise ValueError(f"unknown node type {n.type!r}")
         self.save_node(n)
@@ -715,6 +722,28 @@ class _FlowMixin:
         if len(edges) != len(g.edges):
             self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
         return n
+
+    def set_line_audio(self, nid: str, index: int, asset_id: str | None, text: str | None) -> FlowNode:
+        """CN2: the tts job's stamp on a line (the audio asset and the text it spoke) — server-side, no revision bump: the line's words are
+        the client's, the voice is the job's (patch_node keeps the stamp a client did not see)."""
+        cur = self.flow_node(nid)
+        if cur is None:
+            raise KeyError(nid)
+        if not 0 <= index < len(cur.lines):
+            raise KeyError(f"{nid} has no line {index}")
+        lines = [ln.model_copy() for ln in cur.lines]
+        lines[index].audio_asset_id, lines[index].audio_text = asset_id, text
+        n = cur.model_copy(update={"lines": lines, "updated_at": utc_now()})
+        self.save_node(n)
+        return n
+
+    def clear_voice(self, vid: str) -> list[Profile]:
+        """CN2: a deleted voice leaves every profile that had it."""
+        out = []
+        for p in self.profiles():
+            if p.voice_id == vid:
+                out.append(self.patch_profile(p.id, {"voice_id": None}))
+        return out
 
     def delete_node(self, nid: str) -> Shot | None:
         """The node file goes, its placement and edges with it; its shot is released (not deleted) and returned."""
@@ -885,7 +914,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
             for k in ("stub", "hero_asset_id"):
                 if k in patch:
                     setattr(v, k, patch[k])
-        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current")}, "versions": [v.model_dump() for v in versions],
+        merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current", "voice_id")}, "versions": [v.model_dump() for v in versions],
                   "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         p = Profile.model_validate(merged)
         check_profile(p)

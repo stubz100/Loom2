@@ -355,7 +355,7 @@ alpha acceptance on the rig 2026-10-14 (journal).**
 
 ## 8f. Continuity and voice E20 / E17 / E18 / E19 + CN1–CN5 (from `19-continuity-and-voice.md`, D87)
 
-03 §5 item 4 with lip-sync (the author, 2026-10-14): E20 voice (1 d) → E17 extend (2 d) → E18 lip-sync (2 d) → E19 pose-driven shots (2 d) → CN1 extend (3 d) → CN2 voice (4 d) → CN3 lip-sync (3 d) → CN4 the animate method (3 d) → CN5 acceptance (2 d), ≈ 22 d. Gate: 19 §6 approved (D87); each spike's GO before its slice. **Proposed 2026-10-14.**
+03 §5 item 4 with lip-sync (the author, 2026-10-14): E20 voice (1 d) → E17 extend (2 d) → E18 lip-sync (2 d) → E19 pose-driven shots (2 d) → CN1 extend (3 d) → CN2 voice (4 d) → CN3 lip-sync (3 d) → CN4 the animate method (3 d) → CN5 acceptance (2 d), ≈ 22 d. Gate: 19 §6 approved (D87); each spike's GO before its slice. **Accepted 2026-10-14; E20 GO, CN2 built 2026-10-15.**
 
 ## 9. Totals and parallelism
 

@@ -142,9 +142,10 @@ def reel(clip_id: str) -> str:
     return clip_id.removeprefix("clp_")[:8].ljust(8)
 
 
-def to_edl(tl: Timeline, title: str) -> str:
+def to_edl(tl: Timeline, title: str, audio_of: Callable[[TimelineClip], list[AudioCue | None]] | None = None) -> str:
     """CMX 3600: one event per clip; a dissolve event ("D nnn") where a clip overlaps the previous one. Source times are in the
-    clip's own frames at its own rate; record times are lane ticks."""
+    clip's own frames at its own rate; record times are lane ticks. `audio_of` (CN2): the clips' spoken lines as audio events on
+    reel AX at the lines' ticks (the SRT's layout), named by their files — Resolve links them by clip name."""
     s = starts(tl)
     lines = [f"TITLE: {title}", "FCM: NON-DROP FRAME", ""]
     for i, c in enumerate(tl.clips):
@@ -162,6 +163,18 @@ def to_edl(tl: Timeline, title: str) -> str:
             lines.append(f"{n}  {reel(c.clip_id)} V     C        {tc(c.in_, rate)} {tc(c.out, rate)} {tc(rec_in, tl.fps)} {tc(rec_out, tl.fps)}")
         lines.append(f"* FROM CLIP NAME: {c.clip_id}")
         lines.append("")
+    ev = len(tl.clips)
+    for i, c in enumerate(tl.clips):
+        cues = audio_of(c) if audio_of else []
+        for (a0, _), cue in zip(line_spans(ticks(tl, c), len(cues)), cues):
+            if not cue:
+                continue
+            ev += 1
+            dur = max(1, round(float(cue["duration_s"]) * tl.fps))
+            rec_in = s[i] + a0
+            lines.append(f"{ev:03d}  AX       A     C        {tc(0, tl.fps)} {tc(dur, tl.fps)} {tc(rec_in, tl.fps)} {tc(rec_in + dur, tl.fps)}")
+            lines.append(f"* FROM CLIP NAME: {cue['name']}")
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -174,6 +187,16 @@ def srt_tc(frames: int, fps: int) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+def line_spans(span: int, n: int) -> list[tuple[int, int]]:
+    """Where `n` lines sit across a clip of `span` ticks, laid evenly — the SRT's and the audio lane's shared layout (CN2): [(from, to)]
+    relative to the clip's start, the last line running to the end."""
+    per = max(1, span // max(1, n))
+    return [(k * per, span if k == n - 1 else (k + 1) * per) for k in range(n)]
+
+
+AudioCue = dict[str, Any]           # CN2: {name, src (a file URL), duration_s} — a spoken line; None where a line has no voice yet
+
+
 def to_srt(tl: Timeline, lines_of: Callable[[TimelineClip], list[str]]) -> str:
     """SubRip (loom R152): each lane clip's node lines laid evenly across the clip's ticks (a dissolve's overlap shortens the first)."""
     s = starts(tl)
@@ -183,12 +206,8 @@ def to_srt(tl: Timeline, lines_of: Callable[[TimelineClip], list[str]]) -> str:
         lines = [x.strip() for x in lines_of(c) if x and x.strip()]
         if not lines:
             continue
-        span = ticks(tl, c)
-        t0 = s[i]
-        per = max(1, span // len(lines))
-        for k, text in enumerate(lines):
-            a = t0 + k * per
-            b = t0 + span if k == len(lines) - 1 else t0 + (k + 1) * per
+        for (a0, b0), text in zip(line_spans(ticks(tl, c), len(lines)), lines):
+            a, b = s[i] + a0, s[i] + b0
             n += 1
             out += [str(n), f"{srt_tc(a, tl.fps)} --> {srt_tc(max(a + 1, b), tl.fps)}", text, ""]
     return "\n".join(out)
@@ -209,11 +228,17 @@ def _esc(x: str) -> str:
     return x.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
 
 
-def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, int, int]], name_of: Callable[[TimelineClip], str | None] | None = None) -> str:
+def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, int, int]], name_of: Callable[[TimelineClip], str | None] | None = None,
+              audio_of: Callable[[TimelineClip], list[AudioCue | None]] | None = None) -> str:
     """FCPXML 1.10: a format per frame rate, one asset per clip (`media(clip_id)` → name, src URL, frames, fps), a spine of
-    asset-clips with a cross dissolve where clips overlap; `name_of` gives a chapter marker at a clip's head (loom R158 — Resolve reads them)."""
+    asset-clips with a cross dissolve where clips overlap; `name_of` gives a chapter marker at a clip's head (loom R158 — Resolve reads them);
+    `audio_of` (CN2, 19 §3b) gives a clip's spoken lines ({name, src, duration_s} or None per line, in the SRT's order) — each a
+    connected audio clip on lane −1 at its line's tick: the audio lane."""
     def t(fr: int, fps: int) -> str:
         return f"{fr}/{fps}s"
+
+    def ms(seconds: float) -> str:
+        return f"{max(1, round(float(seconds) * 1000))}/1000s"
     clip_ids = list(dict.fromkeys(c.clip_id for c in tl.clips))
     infos = {cid: media(cid) for cid in clip_ids}
     rates = sorted({tl.fps, *(info[3] for info in infos.values())})
@@ -221,6 +246,8 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
     assets = [f'    <asset id="a{k}" name="{_esc(name)}" start="0s" duration="{t(frames, fps)}" hasVideo="1" format="f{fps}">'
               f'<media-rep kind="original-media" src="{_esc(src)}"/></asset>'
               for k, (name, src, frames, fps) in ((clip_ids.index(cid), info) for cid, info in infos.items())]
+    audio_assets: list[str] = []
+    audio_ids: dict[str, int] = {}
     s = starts(tl)
     spine: list[str] = []
     for i, c in enumerate(tl.clips):
@@ -230,16 +257,31 @@ def to_fcpxml(tl: Timeline, title: str, media: Callable[[str], tuple[str, str, i
         if ov > 0:
             spine.append(f'            <transition name="Cross Dissolve" offset="{t(s[i], tl.fps)}" duration="{t(ov, tl.fps)}"/>')
         marker = name_of(c) if name_of else None
+        children: list[str] = []
+        if marker:
+            children.append(f'                <marker start="{t(c.in_, fps)}" duration="{t(1, fps)}" value="{_esc(marker)}"/>')
+        cues = audio_of(c) if audio_of else []
+        for (a0, _), cue in zip(line_spans(ticks(tl, c), len(cues)), cues):
+            if not cue:
+                continue
+            src = str(cue["src"])
+            if src not in audio_ids:
+                audio_ids[src] = len(audio_ids)
+                audio_assets.append(f'    <asset id="au{audio_ids[src]}" name="{_esc(str(cue["name"]))}" start="0s" duration="{ms(cue["duration_s"])}" hasAudio="1" '
+                                    f'audioSources="1" audioChannels="1"><media-rep kind="original-media" src="{_esc(src)}"/></asset>')
+            rel = round(a0 * fps / tl.fps)                                          # the line's tick in the clip's own frames
+            children.append(f'                <asset-clip ref="au{audio_ids[src]}" lane="-1" offset="{t(c.in_ + rel, fps)}" name="{_esc(str(cue["name"]))}" '
+                            f'start="0s" duration="{ms(cue["duration_s"])}" audioRole="dialogue"/>')
         head = (f'            <asset-clip ref="a{k}" name="{_esc(name)}" offset="{t(s[i], tl.fps)}" start="{t(c.in_, fps)}" '
                 f'duration="{t(c.length, fps)}" format="f{fps}" tcFormat="NDF"')
-        if marker:
+        if children:
             spine.append(head + ">")
-            spine.append(f'                <marker start="{t(c.in_, fps)}" duration="{t(1, fps)}" value="{_esc(marker)}"/>')
+            spine.extend(children)
             spine.append("            </asset-clip>")
         else:
             spine.append(head + "/>")
     return "\n".join([
-        '<?xml version="1.0" encoding="UTF-8"?>', "<!DOCTYPE fcpxml>", '<fcpxml version="1.10">', "  <resources>", *formats, *assets,
+        '<?xml version="1.0" encoding="UTF-8"?>', "<!DOCTYPE fcpxml>", '<fcpxml version="1.10">', "  <resources>", *formats, *assets, *audio_assets,
         "  </resources>", "  <library>", f'    <event name="{_esc(title)}">', f'      <project name="{_esc(title)}">',
         f'        <sequence format="f{tl.fps}" duration="{t(duration(tl), tl.fps)}" tcStart="0s" tcFormat="NDF">', "          <spine>",
         *spine, "          </spine>", "        </sequence>", "      </project>", "    </event>", "  </library>", "</fcpxml>", "",
@@ -303,17 +345,19 @@ class TimelineStore:
         return True
 
     def export(self, tl: Timeline, fmt: str, clips: dict[str, ClipRecord], name_of: Callable[[TimelineClip], str | None] | None = None,
-               lines_of: Callable[[TimelineClip], list[str]] | None = None) -> tuple[Path, str]:
+               lines_of: Callable[[TimelineClip], list[str]] | None = None,
+               audio_of: Callable[[TimelineClip], list[AudioCue | None]] | None = None) -> tuple[Path, str]:
         """Write the EDL, FCPXML or SRT beside the document (`timelines/<id>/<name>.<ext>`); the FCPXML names each clip's proxy by file URL and
-        carries a chapter marker per named clip (`name_of`), written to `markers.txt` beside it too; the SRT takes each clip's lines (`lines_of`)."""
+        carries a chapter marker per named clip (`name_of`), written to `markers.txt` beside it too; the SRT takes each clip's lines (`lines_of`);
+        the FCPXML and the EDL carry the lines' voices (`audio_of`, CN2) on an audio lane at the lines' ticks."""
         if fmt == "edl":
-            text = to_edl(tl, tl.name)
+            text = to_edl(tl, tl.name, audio_of)
         elif fmt == "fcpxml":
             def media(cid: str) -> tuple[str, str, int, int]:
                 rec = clips[cid]
                 src = (self.ws.path / rec.proxy_path).resolve().as_uri() if rec.proxy_path else cid
                 return cid, src, rec.frames, int(rec.fps)
-            text = to_fcpxml(tl, tl.name, media, name_of)
+            text = to_fcpxml(tl, tl.name, media, name_of, audio_of)
         elif fmt == "srt":
             text = to_srt(tl, lines_of or (lambda c: []))
         else:

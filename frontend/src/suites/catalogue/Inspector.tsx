@@ -208,7 +208,8 @@ function One({ a }: { a: Asset }) {
   return (
     <div className="insp">
       <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" onDoubleClick={() => runCommand('cat.loupe')} />
-      <div className="meta-line">{a.model_id ?? a.suite} · {a.w}×{a.h} · {relTime(a.created_at)}</div>
+      {a.kind === 'audio' && <audio className="insp-audio" controls src={api.assetUrl(a.id)} aria-label="the spoken line" />}
+      <div className="meta-line">{a.model_id ?? a.suite} · {a.kind === 'audio' ? `${a.duration_s ?? '?'} s` : `${a.w}×${a.h}`} · {relTime(a.created_at)}</div>
       <Judge ids={ids} a={a} />
       <Section id="tags" title="Tags"><Tags ids={ids} shared={a.tags} recs={[a]} /></Section>
       <Section id="location" title="Location">

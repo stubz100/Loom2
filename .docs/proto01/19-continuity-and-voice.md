@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); the spikes in progress, each gating its slice. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E17 / E18 / E19 in progress, each gating its slice. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -111,6 +111,25 @@ speed; the draft tier on the CPU, the cloning tier with the engine stopped) plac
 node Inspector's *Voice ▶* per line and *Voice all lines*; the Episode's FCPXML / EDL gain an audio lane from the nodes' lines at their
 ticks, the SRT unchanged. Loom R95: voice is per node line, never a project-wide track.
 
+**Built 2026-10-15 (CN2, journal).** `AssetKind` + `audio` (a 16-bit WAV master, `duration_s` probed at ingest, the waveform drawn as the
+thumbnail — no Opus proxy: a line is a few hundred kB and the browser plays the WAV; the Catalogue's 🔊 badge, Type · Audio, the
+Inspector's `<audio>` player; WAV / FLAC importable as a recorded reference). `orchestrator/loom2/voices.py`: `VoiceRecord` in
+`story/voices/<id>.json` (draft: one of ten Kokoro voices, English only; cloning: the reference asset of 3–10 s, its transcript, the
+speaker and the **required** consent note — one sentence each at creation and submission), the `tts` recipe (`voice_id`, `tier`
+stamped from the record and checked against it, `language`, `speed`, `items` [{text, node_id, index}]), the job running
+`voices/tts.py` in `voices/.venv` (`Settings.voices`) with its lines on the job card and its log in `state/logs/tts-<job>.log`, the
+cloning tier behind `plan().gpu` (the engine stopped, 2.6 GB), every line an audio asset (lineage `voice-clone` to the reference)
+stamped on its line (`FlowLine.audio_asset_id` + `audio_text`; a changed text shows the ▶ as stale; a client patch that never saw the
+stamp keeps it on an unchanged line). `Profile.voice_id`: a character's voice, which its lines take; the request's voice is the fallback
+for a speakerless line (*Voice all lines*: one job per voice) and the choice for a single line. Routes `GET/POST /story/voices`,
+`GET/PATCH/DELETE /story/voices/{id}`, `POST /story/flow/nodes/{id}/lines/{i}/voice`, `POST /story/flow/nodes/{id}/voice`;
+`/capabilities.voice` (the tiers with their figures, whether the models are cached, the voices, the languages). The exports: the
+SRT's line layout (`timelines.line_spans`) places each voiced line as an FCPXML connected audio clip on lane −1 and an EDL `AX` event;
+the reply counts them. UI: the Cast Inspector's Voice block (*speaks with*, *New voice…* with the tier's form and estimate, *Delete the
+voice*), the Flow Inspector's ▶ / 🎙 per line, the fallback voice and *Voice all lines* (also in the node's right-click menu).
+**One finding:** the ROCm wheel's OpenBLAS has 100 ms cliffs on small threaded multiplies — a 2 s Kokoro line took 7–8 s at 4–16 threads
+(E20's 13 s outlier) and 0.8 s at one; the draft tier runs on **one CPU thread** (0.34 s per second of speech).
+
 ### 3c. Lip-sync (CN3)
 The `lipsync` job (`kind: lipsync`: shot id + version, the frame (the version's frame or the profile's hero), the line's audio asset, the
 method from E18) → a **take** on the shot version (SY2's takes: `kind: clip`, `lipsync: true`, lineage to the frame and the audio) — never an
@@ -134,7 +153,7 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 | --- | --- | --- |
 | **E20 · E17 · E18 · E19** | the spikes (§2) | 1 + 2 + 2 + 2 |
 | **CN1 · Extend** | `extend_from`, the lead-in upload, the chain record and lineage, Animate's *Extend ▶* and the transport's chain, beats across a chain, the Episode's seam weld at export; tests (the fake engine; the chain arithmetic), the smoke scenario, the rig | 3 |
-| **CN2 · Voice** | the `audio` asset kind with player and waveform, the `voice` record, the `tts` job (two tiers), the Flow line's *Voice ▶*, the Episode's audio lane; tests (a fake TTS), smoke, rig | 4 |
+| **CN2 · Voice** ✓ 2026-10-15 | the `audio` asset kind with player and waveform, the `voice` record, the `tts` job (two tiers), the Flow line's *Voice ▶*, the Episode's audio lane; tests (a fake TTS), smoke, rig | 4 |
 | **CN3 · Lip-sync** | the `lipsync` job to a shot take, the Shots tab's verb and picker, the muxed proxy, FaceSim advisory; tests, smoke, rig | 3 |
 | **CN4 · Pose-driven shots** | the `animate` clip method on the Stage's pose pass with the Cast hero, the Shot tab's picker; tests, smoke, rig | 3 |
 | **CN5 · Acceptance and docs** | `scripts/cn_acceptance.py` (a chain of three, a voiced talking take, a pose-driven shot, the Episode export with audio and welded joins — through the app on the rig); 11 / 16 / 17 updated, D87 closed | 2 |

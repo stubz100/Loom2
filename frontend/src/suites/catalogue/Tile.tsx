@@ -31,6 +31,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
         {stateBadge && <span className={`badge-dot ${a.state}`}>{stateBadge}</span>}
         {a.kind === 'video' && <span className="badge-dot" title="clip">🎬</span>}
         {a.kind === 'mesh' && <span className="badge-dot" title="3D prop (GLB)">🧊</span>}
+        {a.kind === 'audio' && <span className="badge-dot" title="a spoken line (audio)">🔊</span>}
         {a.has_document && <span className="badge-dot" title="has document">✎</span>}
         {derived && (onLineage
           ? <button className="badge-dot lin" title="derived from another asset: show the lineage" aria-label="Show lineage" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onLineage(a.id) }}>⤷</button>

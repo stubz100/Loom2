@@ -12,6 +12,7 @@ dependencies = [
     "pillow>=10.4",
     "numpy>=2.0",
     "av>=13",
+    "soundfile>=0.13",
     "huggingface_hub>=0.30",
     "onnxruntime>=1.20",
 ]

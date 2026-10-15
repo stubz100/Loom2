@@ -102,7 +102,7 @@ async def timeline_render(svc: Svc, tl_id: str):
 
 @router.post("/timelines/{tl_id}/export", response_model=TimelineExported)
 async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
-    ws, _, _ = svc.require_project()
+    ws, cat, _ = svc.require_project()
     store, clips = TimelineStore(ws), ClipStore(ws)
     tl = await asyncio.to_thread(store.get, tl_id)
     if tl is None:
@@ -112,20 +112,29 @@ async def timeline_export(svc: Svc, tl_id: str, body: TimelineExport):
     if missing:
         raise HTTPException(422, f"clips missing from the project: {', '.join(missing)}")
     try:
-        names, lines = await asyncio.to_thread(_story_lookup, ws)
-        path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines)
+        names, lines, audio = await asyncio.to_thread(_story_lookup, ws, cat)
+        path, text = await asyncio.to_thread(store.export, tl, body.format, recs, names, lines, audio)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"format": body.format, "path": path.relative_to(ws.path).as_posix(), "text": text}
+    cues = sum(1 for c in tl.clips for cue in audio(c) if cue) if body.format in ("fcpxml", "edl") else 0     # CN2: the audio lane's spoken lines
+    return {"format": body.format, "path": path.relative_to(ws.path).as_posix(), "text": text, "audio": cues}
 
 
-def _story_lookup(ws):
-    """17 §3e: a lane clip's chapter name (its node's title, else its shot's name) and its Dialogue lines, from the Story records."""
+def _story_lookup(ws, cat=None):
+    """17 §3e: a lane clip's chapter name (its node's title, else its shot's name), its Dialogue lines and (CN2) the lines' voices — the
+    audio assets as cues in the SRT's order, None where a line has no voice yet — from the Story records and the Catalogue."""
+    from pathlib import Path
     from ..story import StoryStore
     from ..timelines import TimelineClip
     store = StoryStore(ws)
     shots = {sh.id: sh for sh in store.shots()}
     nodes = store.flow_nodes()
+
+    def node_for(c: TimelineClip):
+        n = nodes.get(c.node_id) if c.node_id else None
+        if n is None and c.shot_id:
+            n = next((x for x in nodes.values() if x.shot_id == c.shot_id), None)
+        return n
 
     def name_of(c: TimelineClip) -> str | None:
         n = nodes.get(c.node_id) if c.node_id else None
@@ -135,8 +144,18 @@ def _story_lookup(ws):
         return sh.name if sh is not None else None
 
     def lines_of(c: TimelineClip) -> list[str]:
-        n = nodes.get(c.node_id) if c.node_id else None
-        if n is None and c.shot_id:
-            n = next((x for x in nodes.values() if x.shot_id == c.shot_id), None)
+        n = node_for(c)
         return [ln.text for ln in n.lines] if n is not None else []
-    return name_of, lines_of
+
+    def audio_of(c: TimelineClip) -> list:
+        n = node_for(c)
+        if n is None or cat is None:
+            return []
+        out = []
+        for ln in n.lines:
+            if not ln.text.strip():
+                continue
+            rec = cat.get(ln.audio_asset_id) if ln.audio_asset_id else None
+            out.append({"name": Path(rec.path).name, "src": (ws.path / rec.path).resolve().as_uri(), "duration_s": float(rec.duration_s)} if rec and rec.duration_s else None)
+        return out
+    return name_of, lines_of, audio_of

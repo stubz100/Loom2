@@ -1038,9 +1038,64 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   const srt = await api<{ text: string }>('POST', `/timelines/${tl.id}/export`, { format: 'srt' })
   expect(srt.text).toContain('Open the gate.')
   expect(srt.text).toContain('00:00:00,000 -->')
+  // CN2: the line voiced on the fake runner rides the FCPXML's audio lane
+  const voice = await api<{ id: string }>('POST', '/story/voices', { name: `Ep voice ${name}`, voice: 'af_heart' })
+  const tts = await api<{ job_ids: string[] }>('POST', `/story/flow/nodes/${node.id}/lines/0/voice`, { voice_id: voice.id })
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === tts.job_ids[0])?.status, { timeout: 60_000 }).toBe('done')
+  const fx2 = await api<{ text: string; audio: number }>('POST', `/timelines/${tl.id}/export`, { format: 'fcpxml' })
+  expect(fx2.audio).toBe(1)
+  expect(fx2.text).toContain('lane="-1"')
+  expect(fx2.text).toContain('hasAudio="1"')
   // the Animate rail no longer has the tab
   await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
   await expect(page.locator('nav.rail button[title^="Sequence"]')).toHaveCount(0)
+})
+
+test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form speaks for the character; the Flow Inspector voices a line on the fake runner — the line gets its ▶, an audio asset with a waveform thumbnail lands, "Voice all lines" takes the fallback voice for the speakerless line', async ({ page }) => {
+  test.setTimeout(120_000)
+  // a character with a hero and a Dialogue node with two lines (through the API; the Cast and Flow scenarios cover those mouse paths)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const name = `Vo ${Date.now().toString(36)}`
+  const prof = await api<{ id: string; revision: number }>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: img, stub: 'a courier' })
+  const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} says`, x: 1200, y: 900 })
+  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: prof.id, text: 'Hi there, come in.' }, { speaker: null, text: 'Thank you.' }] })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.story-row.profile-row[data-id="${prof.id}"]`).click()
+  const voices = page.locator('.inspector .voices')
+  await expect(voices.locator('select[aria-label="profile voice"]')).toHaveValue('')
+  await page.locator('.inspector button[title^="New voice"]').click()                                   // the form (D32: a button)
+  const form = voices.locator('[aria-label="new voice"]')
+  await form.locator('input[aria-label="voice name"]').fill(`Narrator ${name}`)
+  await expect(form.locator('select[aria-label="kokoro voice"] option')).not.toHaveCount(0)
+  await form.locator('select[aria-label="kokoro voice"]').selectOption('am_adam')
+  await form.locator('button[aria-label="create voice"]').click()
+  await expect(form).toHaveCount(0)
+  await expect(voices.locator('select[aria-label="profile voice"] option:checked')).toContainText(`Narrator ${name} · draft`)   // the character speaks with its first voice
+  await expect(voices).toContainText('am_adam')
+  // the Flow Inspector: 🎙 on line 1 → the fake runner speaks it → ▶ and the audio asset
+  await openApp(page, { suite: 'story', tab: 'flow' })
+  await page.locator(`.story-row.node-row[data-id="${node.id}"]`).click()
+  await expect(page.locator('.inspector input[aria-label="line 1"]')).toHaveValue('Hi there, come in.')
+  await expect(page.locator('.inspector button[aria-label="play line 1"]')).toHaveCount(0)
+  await page.locator('.inspector button[aria-label="voice line 1"]').click()
+  await expect(page.locator('.inspector button[aria-label="play line 1"]')).toBeVisible({ timeout: 60_000 })
+  type Line = { text: string; audio_asset_id: string | null; audio_text: string | null }
+  const lines = async () => (await api<{ nodes: { id: string; lines: Line[] }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.lines
+  expect((await lines())[0]).toMatchObject({ text: 'Hi there, come in.', audio_text: 'Hi there, come in.' })
+  const audioId = (await lines())[0].audio_asset_id!
+  const asset = await api<{ kind: string; duration_s: number | null; thumb_status: string; parents: string[] }>('GET', `/assets/${audioId}`)
+  expect(asset.kind).toBe('audio')
+  expect(asset.duration_s).toBeGreaterThan(0.5)
+  expect(asset.thumb_status).toBe('done')
+  // line 2 has no speaker: "Voice all lines" is refused until a fallback voice is picked, then both lines are covered (line 1 again by its speaker's voice)
+  const sel = page.locator('.inspector select[aria-label="fallback voice"]')
+  await sel.selectOption({ label: `Narrator ${name} · draft` })
+  await page.locator('.inspector button[title^="Voice all lines"]').click()
+  await expect(page.locator('.inspector button[aria-label="play line 2"]')).toBeVisible({ timeout: 60_000 })
+  await expect.poll(async () => (await lines())[1].audio_asset_id).toBeTruthy()
+  // the Catalogue lists it under Type · Audio with its badge
+  const audio = await api<{ items: { id: string }[] }>('GET', '/assets?kind=audio&limit=10')
+  expect(audio.items.map((a) => a.id)).toContain(audioId)
 })
 
 test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file for Klein 4B, a slot with a strength rides the recipe, the job\'s compiled summary names the loader\'s file and the manifest records the slot', async ({ page }) => {

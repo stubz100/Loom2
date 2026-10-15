@@ -25,7 +25,7 @@ from pydantic import BaseModel  # noqa: E402
 from loom2 import config, recipes  # noqa: E402
 
 # the code path that runs jobs (recipe fields must be read here)
-JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "trainer.py", "loras.py", "mentions.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py", "mentions.py"]
+JOB_CODE = ["queue.py", "engine/pipeline.py", "engine/finishers.py", "engine/graphs.py", "engine/client.py", "engine/supervisor.py", "trainer.py", "loras.py", "voices.py", "mentions.py", "edit_ai.py", "matting.py", "poisson.py", "tone.py", "maskops.py", "clips.py", "mentions.py"]
 
 # /capabilities keys → what they parameterise ("recipe:Model.field", "settings:field") or None for informational keys
 CAPABILITIES: dict[str, list[str] | None] = {
@@ -34,6 +34,7 @@ CAPABILITIES: dict[str, list[str] | None] = {
     "models": ["recipe:T2I.model_id", "recipe:T2I.steps", "recipe:T2I.guidance", "recipe:T2I.cfg", "recipe:T2I.turbo", "recipe:T2I.sampler", "recipe:T2I.scheduler", "recipe:T2I.te_id"],
     "facesim": None,                                   # whether the face-similarity weights are installed (a panel badge)
     "train": ["recipe:TrainLora.model_id", "recipe:TrainLora.steps", "recipe:TrainLora.rank", "recipe:TrainLora.resolution", "recipe:TrainLora.lr"],   # LT2 (18 §4)
+    "voice": ["recipe:TTS.voice_id", "recipe:TTS.tier", "recipe:TTS.language", "recipe:TTS.speed"],   # CN2 (19 §3b): the tiers, their voices and languages, the pace
     "variant": ["settings:variant"],
     "vram_budget_gb": ["settings:vram_budget_gb"],
     "samplers": ["recipe:T2I.sampler"],
@@ -95,6 +96,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "Mention": (("m",), None),                                      # D73: mentions.py `for m in todo`
     # D45: matting.params_from copies the fields by name (getattr) into matting.RefineParams; the kernels read them there
     "RefineEdge": (("params", "self"), ["matting.py"]),
+    "TtsItem": (("it",), ["voices.py", "engine/pipeline.py"]),      # CN2: `for it in recipe.items`
 }
 
 

@@ -26,7 +26,7 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
-from ..recipes import I2I, I2V, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -386,6 +386,9 @@ async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
     if isinstance(recipe, TrainLora):                                 # LT2: ai-toolkit in its venv, the engine stopped by the queue
         from ..trainer import run_train
         return await run_train(job, recipe, q)
+    if isinstance(recipe, TTS):                                       # CN2: the TTS runner in the voices venv (the cloning tier with the engine stopped)
+        from ..voices import run_tts
+        return await run_tts(job, recipe, q)
     if isinstance(recipe, Inpaint):
         return await run_quick_remove(job, recipe, q)
     raise ValueError(f"no CPU path for recipe kind {recipe.kind!r}")

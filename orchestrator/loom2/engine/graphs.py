@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -1053,6 +1053,9 @@ def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, vari
     if isinstance(recipe, TrainLora):                                 # LT2: E16's measured peak of the base (the engine is stopped for it)
         spec = registry.get(recipe.model_id)
         return float(spec.recipes.train.vram_gb) if spec and spec.recipes.train else 14.0
+    if isinstance(recipe, TTS):                                       # CN2: E20's peak of the cloning tier; the draft tier never touches the card
+        from ..voices import RATES
+        return float(RATES[recipe.tier]["vram_gb"])
     if isinstance(recipe, Upscale) and recipe.refine:
         return _vram(recipe.refine_model_id)
     if isinstance(recipe, Inpaint):
@@ -1068,6 +1071,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
     """Every roster id a recipe would load — the open-variant gate (C3, D26) and the admission estimate read this."""
     if isinstance(recipe, TrainLora):
         return [recipe.model_id]                                      # LT2: the base's transformer (its encoder comes from HF_HOME, its VAE from the hub)
+    if isinstance(recipe, TTS):
+        return []                                                     # CN2: the TTS models live in HF_HOME, not the roster
     if isinstance(recipe, ImageToMesh):
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet

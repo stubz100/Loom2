@@ -26,7 +26,7 @@ from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, Inpaint, Render, TrainLora, parse_recipe, warm_group
+from .recipes import T2I, I2V, Inpaint, Render, TTS, TrainLora, parse_recipe, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .loras import LoraRegistry, check_recipe_loras, publish
@@ -387,6 +387,10 @@ class JobQueue:
             raise ValueError(f"{what} needs the native extension (uv sync --project orchestrator --extra native)")
         if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
             return                       # R3 / P17: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
+        if isinstance(recipe, TTS):                                          # CN2 (19 §3b): the venv, the voice record, the tier, the language, the lines
+            from .voices import validate_tts
+            validate_tts(self, recipe)
+            return
         for mid in [recipe.model_id, *([recipe.te_id] if getattr(recipe, "te_id", None) else [])]:
             if mid not in ROSTER_BY_ID:
                 raise ValueError(f"unknown model id {mid!r}")

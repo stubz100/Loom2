@@ -3882,3 +3882,27 @@ split by file so that no two hands touched the same module.
 - **Verdict: GO** — the draft tier on the CPU beside a running engine, the cloning tier on the GPU (2.6 GB fits beside an idle engine; the plan keeps
   it behind `plan().gpu` for the engine-stopped case). CN2's `tts` job runs `voices/.venv`'s python (`Settings.voices`). 19 §2 run line, §6 item 3
   amended, 13 D87 marked.
+
+## 2026-10-15 09:17 — CN2 · voice: the audio asset kind, voice records, the `tts` job, the lines' voices, the exports' audio lane (19 §3b, D87)
+- **Built** (19 §3b's built note has the detail): `AssetKind` + `audio` (WAV master, `duration_s`, the waveform as thumbnail, the Catalogue's
+  badge / Type · Audio / player, WAV and FLAC importable); `orchestrator/loom2/voices.py` — `VoiceRecord` in `story/voices/` (draft: ten Kokoro
+  voices, English; cloning: a 3–10 s reference asset + transcript + speaker + a required consent note), the `tts` recipe and job running
+  `voices/tts.py` in `voices/.venv` (`Settings.voices`; the cloning tier behind `plan().gpu`), every line an audio asset stamped on its Flow line
+  (`audio_asset_id` / `audio_text`, lineage `voice-clone` to the reference); `Profile.voice_id`; seven routes (145 → 152); `/capabilities.voice`;
+  the FCPXML's connected audio clips on lane −1 and the EDL's `AX` events at the SRT's line ticks (`timelines.line_spans`, shared with the SRT);
+  the Cast Inspector's Voice block, the Flow Inspector's ▶ / 🎙 per line, the fallback voice and *Voice all lines*; `soundfile` joins the
+  orchestrator's dependencies (uv.lock); `orchestrator/tests/fake_tts.py` stands in for the runner; `scripts/cn_acceptance.py --parts voice`.
+- **Tests:** `test_voice_cn2.py` (+5: the audio kind end to end, the records' sentences, the job on the fake runner — draft without the engine,
+  cloning with the engine stopped and the reference as parent, a crash, a cancel, the stamp kept across a stale client patch — the audio lane,
+  the routes and the capabilities); 310 offline, audits clean, openapi 116 / 248, lint 100, tsc and build clean, Vitest 206; the smoke's new
+  "a voice" scenario (the Cast form → a draft voice → 🎙 on a line → ▶, the audio asset, *Voice all lines* with the fallback) and the episode
+  scenario's audio lane — 27 / 27 under full and open.
+- **Rig (`scripts/cn_acceptance.py --parts voice --tier both`, then `--tier draft` again after the fix):** draft (Kokoro, CPU) — 5.4 / 2.3 / 4.6 s
+  lines spoken in 1.9 / 0.8 / 1.4 s, load 5 s, rtf 0.34; cloning (Qwen3-TTS-0.6B, GPU, the engine stopped) — a clone from a 5.4 s draft line,
+  two German lines of 4.6 / 3.8 s in 4.6 / 3.8 s, load 11 s, peak 2.59 GB; the 422s (no fallback voice for a speakerless line, a clone without
+  consent), the stamps, the lineage, the delete — all ok.
+- **Finding:** the first draft run failed its bar on one line ("Thank you, that is kind of you.": 7.4–10 s for 2.3 s of speech while a 5.4 s line
+  took 3 s). Profiled: 98 % in `addmm` — the ROCm Windows wheel's BLAS is OpenBLAS (`BLAS_INFO=open`), whose threaded small multiplies have
+  ~100 ms cliffs at some row counts (a 48×768 · 768×768 took 112 ms at 8 threads, 0.9 ms at one; flushing denormals and `OPENBLAS_CORETYPE` change
+  nothing). Kokoro at **one thread** speaks every line 3–10× faster than at 4–16 (and leaves the cores to a running engine) — `voices/tts.py`
+  sets it; E20's 13 s outlier was this, not machine load. Worth remembering for any CPU torch work in these venvs.

@@ -385,6 +385,17 @@
             ],
             "title": "Duplicate Of"
           },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
           "format": {
             "anyOf": [
               {
@@ -456,7 +467,8 @@
               "video",
               "mask",
               "document-render",
-              "mesh"
+              "mesh",
+              "audio"
             ],
             "title": "Kind",
             "type": "string"
@@ -660,6 +672,7 @@
           "h",
           "frames",
           "fps",
+          "duration_s",
           "created_at",
           "job_id",
           "batch_id",
@@ -926,6 +939,16 @@
           "variant": {
             "title": "Variant",
             "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "vram_budget_gb": {
             "title": "Vram Budget Gb",
@@ -2404,6 +2427,25 @@
         "title": "DocumentPutReply",
         "type": "object"
       },
+      "DraftVoice": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "DraftVoice",
+        "type": "object"
+      },
       "EnginePin": {
         "additionalProperties": true,
         "properties": {
@@ -3265,6 +3307,28 @@
       "FlowLine": {
         "description": "One line of a Dialogue node: the speaker is a profile (its mention), the text the line (loom R152: the subtitles come from these).",
         "properties": {
+          "audio_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Asset Id"
+          },
+          "audio_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Text"
+          },
           "speaker": {
             "anyOf": [
               {
@@ -3284,7 +3348,9 @@
         },
         "required": [
           "speaker",
-          "text"
+          "text",
+          "audio_asset_id",
+          "audio_text"
         ],
         "title": "FlowLine",
         "type": "object"
@@ -6181,6 +6247,35 @@
         "title": "LayoutReply",
         "type": "object"
       },
+      "LineVoiceBody": {
+        "properties": {
+          "speed": {
+            "default": 1.0,
+            "maximum": 2.0,
+            "minimum": 0.5,
+            "title": "Speed",
+            "type": "number"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          }
+        },
+        "title": "LineVoiceBody",
+        "type": "object"
+      },
       "Lineage": {
         "properties": {
           "children": {
@@ -7775,6 +7870,17 @@
             },
             "title": "Versions",
             "type": "array"
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
           }
         },
         "required": [
@@ -7784,6 +7890,7 @@
           "cls",
           "current",
           "versions",
+          "voice_id",
           "revision",
           "created_at",
           "updated_at"
@@ -9412,6 +9519,9 @@
             "title": "Variant",
             "type": "string"
           },
+          "voices": {
+            "$ref": "#/components/schemas/VoicesSettings"
+          },
           "vram_budget_gb": {
             "default": 16.0,
             "title": "Vram Budget Gb",
@@ -9427,6 +9537,7 @@
           "hf_home",
           "engine",
           "trainer",
+          "voices",
           "api_host",
           "api_port",
           "thumbnail_sizes",
@@ -11505,8 +11616,13 @@
         "type": "object"
       },
       "TimelineExported": {
-        "description": "P17: an export written from the sequence document — the file inside the project and its text.",
+        "description": "P17: an export written from the sequence document — the file inside the project and its text; `audio` (CN2) the spoken lines the\nFCPXML / EDL carry on their audio lane.",
         "properties": {
+          "audio": {
+            "default": 0,
+            "title": "Audio",
+            "type": "integer"
+          },
           "format": {
             "title": "Format",
             "type": "string"
@@ -11523,7 +11639,8 @@
         "required": [
           "format",
           "path",
-          "text"
+          "text",
+          "audio"
         ],
         "title": "TimelineExported",
         "type": "object"
@@ -11980,6 +12097,41 @@
         "title": "Trashed",
         "type": "object"
       },
+      "TtsQueued": {
+        "description": "CN2: the voice jobs of a line or of a node's lines — one job per voice.",
+        "properties": {
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "staged": {
+            "title": "Staged",
+            "type": "boolean"
+          },
+          "voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Voice Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_ids",
+          "lines",
+          "voice_ids",
+          "staged"
+        ],
+        "title": "TtsQueued",
+        "type": "object"
+      },
       "Ungrouped": {
         "properties": {
           "parent": {
@@ -12379,6 +12531,385 @@
         "title": "VideoPreset",
         "type": "object"
       },
+      "VoiceBody": {
+        "properties": {
+          "consent": {
+            "default": "",
+            "title": "Consent",
+            "type": "string"
+          },
+          "language": {
+            "default": "English",
+            "title": "Language",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reference_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Asset Id"
+          },
+          "reference_text": {
+            "default": "",
+            "title": "Reference Text",
+            "type": "string"
+          },
+          "speaker": {
+            "default": "",
+            "title": "Speaker",
+            "type": "string"
+          },
+          "tier": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "cloning"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "VoiceBody",
+        "type": "object"
+      },
+      "VoiceCaps": {
+        "additionalProperties": true,
+        "description": "CN2 (19 §3b): whether the TTS runner can run, the tiers with E20's figures (and whether their models are cached), the draft voices,\nthe languages, the pace range.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "cloning": {
+            "$ref": "#/components/schemas/VoiceTierCaps"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/VoiceTierCaps"
+          },
+          "speed": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Speed",
+            "type": "object"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "available",
+          "draft",
+          "cloning",
+          "speed"
+        ],
+        "title": "VoiceCaps",
+        "type": "object"
+      },
+      "VoiceList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceRecordOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "VoiceList",
+        "type": "object"
+      },
+      "VoicePatch": {
+        "properties": {
+          "consent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reference_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Asset Id"
+          },
+          "reference_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Text"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          }
+        },
+        "title": "VoicePatch",
+        "type": "object"
+      },
+      "VoiceRecordOut": {
+        "additionalProperties": true,
+        "description": "CN2 (19 §3b): a voice of the project (story/voices/): the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with\nits transcript and the consent note.",
+        "properties": {
+          "consent": {
+            "default": "",
+            "title": "Consent",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "measured": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Measured",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reference_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Asset Id"
+          },
+          "reference_text": {
+            "default": "",
+            "title": "Reference Text",
+            "type": "string"
+          },
+          "speaker": {
+            "default": "",
+            "title": "Speaker",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tier",
+          "language",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "VoiceRecordOut",
+        "type": "object"
+      },
+      "VoiceTierCaps": {
+        "additionalProperties": true,
+        "properties": {
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "load_s": {
+            "title": "Load S",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "reference_s": {
+            "default": [],
+            "items": {
+              "type": "number"
+            },
+            "title": "Reference S",
+            "type": "array"
+          },
+          "rtf": {
+            "title": "Rtf",
+            "type": "number"
+          },
+          "voices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DraftVoice"
+            },
+            "title": "Voices",
+            "type": "array"
+          },
+          "vram_gb": {
+            "title": "Vram Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "cached",
+          "languages",
+          "rtf",
+          "load_s",
+          "vram_gb"
+        ],
+        "title": "VoiceTierCaps",
+        "type": "object"
+      },
+      "VoicesSettings": {
+        "description": "CN2 (19 §3b): the TTS tiers in their own venv `voices/.venv` — never the engine's (scripts/voices-setup.ps1, voices/AGENTS.md).",
+        "properties": {
+          "cloning_model": {
+            "default": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+            "title": "Cloning Model",
+            "type": "string"
+          },
+          "draft_model": {
+            "default": "hexgrad/Kokoro-82M",
+            "title": "Draft Model",
+            "type": "string"
+          },
+          "python": {
+            "default": "<repo>\\voices\\.venv\\Scripts\\python.exe",
+            "title": "Python",
+            "type": "string"
+          },
+          "run": {
+            "default": "<repo>\\voices\\tts.py",
+            "title": "Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "python",
+          "run",
+          "draft_model",
+          "cloning_model"
+        ],
+        "title": "VoicesSettings",
+        "type": "object"
+      },
       "VramPressure": {
         "description": "D69: a GPU job was admitted while the engine had less free VRAM than its reserve + 1 GB — the UI releases hidden GPU stages.",
         "properties": {
@@ -12556,7 +13087,8 @@
                     "video",
                     "mask",
                     "document-render",
-                    "mesh"
+                    "mesh",
+                    "audio"
                   ],
                   "type": "string"
                 },
@@ -13180,7 +13712,8 @@
                     "video",
                     "mask",
                     "document-render",
-                    "mesh"
+                    "mesh",
+                    "audio"
                   ],
                   "type": "string"
                 },
@@ -17685,6 +18218,68 @@
         ]
       }
     },
+    "/story/flow/nodes/{nid}/lines/{i}/voice": {
+      "post": {
+        "description": "CN2 (19 §3b): one line spoken — a `tts` job (the draft tier on the CPU beside the engine, the cloning tier with it stopped) whose\nresult lands on the line as an audio asset.",
+        "operationId": "line_voice_story_flow_nodes__nid__lines__i__voice_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "i",
+            "required": true,
+            "schema": {
+              "title": "I",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineVoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtsQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Line Voice",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/flow/nodes/{nid}/shot": {
       "post": {
         "description": "A new, empty shot owned by the node (the handoff to the Shots tab, loom R134).",
@@ -17775,6 +18370,59 @@
           }
         },
         "summary": "Flow Unbind",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/flow/nodes/{nid}/voice": {
+      "post": {
+        "description": "Every non-empty line of the node, grouped by voice (each speaker's own; the body's as the fallback) — one job per voice.",
+        "operationId": "node_voice_story_flow_nodes__nid__voice_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "nid",
+            "required": true,
+            "schema": {
+              "title": "Nid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineVoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtsQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Node Voice",
         "tags": [
           "story"
         ]
@@ -18749,6 +19397,200 @@
           }
         },
         "summary": "Shot Take",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/voices": {
+      "get": {
+        "operationId": "voices_list_story_voices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Voices List",
+        "tags": [
+          "story"
+        ]
+      },
+      "post": {
+        "description": "A voice of the project: the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with its transcript and the note\nof whose voice it is and that they consented — 422 with the sentence.",
+        "operationId": "voice_create_story_voices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceRecordOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Create",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/voices/{vid}": {
+      "delete": {
+        "description": "The record goes (its spoken lines stay in the Catalogue); every profile that had it loses its voice.",
+        "operationId": "voice_delete_story_voices__vid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Delete",
+        "tags": [
+          "story"
+        ]
+      },
+      "get": {
+        "operationId": "voice_get_story_voices__vid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceRecordOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Get",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "voice_patch_story_voices__vid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceRecordOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Patch",
         "tags": [
           "story"
         ]

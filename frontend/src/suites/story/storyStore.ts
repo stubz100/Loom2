@@ -4,8 +4,8 @@
 // its candidates another), the selected version's pages, curation and Expand. Shots (SY2) and the flow (SY3) join here. Generate reads
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
-import { type ApiError, http, unwrap } from '../../api/client'
-import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, World, WorldStyle } from '../../api/types'
+import { type ApiError, api, http, unwrap } from '../../api/client'
+import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { useSession } from '../../store/session'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 
@@ -19,6 +19,18 @@ export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character
 
 export interface TrainOpts { model_id: string | null; steps: number; rank: number; resolution: number; name: string; setting: string; stage: boolean }
 const DEFAULT_TRAIN: TrainOpts = { model_id: null, steps: 1000, rank: 16, resolution: 512, name: '', setting: '', stage: true }
+/** CN2 (19 §3b): a new voice — the draft tier's fixed Kokoro voice, or the cloning tier's reference clip with its transcript and the consent note. */
+export type VoiceBody = { name: string; tier: 'draft' | 'cloning'; voice: string | null; language: string; reference_asset_id: string | null; reference_text: string; speaker: string; consent: string }
+/** A voice's label in the pickers: its name, tier and (when not English) language. */
+export function voiceLabel(v: { name: string; tier: string; language: string }): string {
+  return `${v.name} · ${v.tier}${v.language !== 'English' ? ` · ${v.language}` : ''}`
+}
+/** The newest `tts` job that speaks a Flow line (the line's state in the Inspector). */
+export function ttsJobFor(jobs: Record<string, Job>, nodeId: string, index: number): Job | undefined {
+  type Items = { items?: { node_id?: string | null; index?: number | null }[] }
+  return Object.values(jobs).filter((j) => j.kind === 'tts' && ((j.recipe as Items).items ?? []).some((it) => it.node_id === nodeId && it.index === index))
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+}
 /** The newest training job of a profile version (the Inspector's state line; the verbs' `when`). */
 export function latestTrainJob(jobs: Record<string, Job>, profileId: string, versionId: string): Job | undefined {
   return Object.values(jobs).filter((j) => j.kind === 'train_lora' && (j.recipe as { profile_id?: string }).profile_id === profileId && (j.recipe as { version?: string }).version === versionId)
@@ -44,6 +56,18 @@ export interface StoryState {
   /** 18 §3h: the identity check — eight images with / without the LoRA, FaceSim against the hero (advisory). */
   checkLora: (id: string) => Promise<{ job_ids: string[] } | null>
   onLoraChanged: (data: { id?: string; profile_id?: string | null; deleted?: boolean } | null) => void
+  /** CN2 (19 §3b): the project's voices, the Flow Inspector's fallback voice (lines whose speaker has none), the Cast Inspector's new-voice form. */
+  voices: VoiceRecord[]
+  voiceId: string | null
+  voiceForm: boolean
+  loadVoices: () => Promise<void>
+  setVoiceId: (id: string | null) => void
+  setVoiceForm: (open: boolean) => void
+  createVoice: (body: VoiceBody) => Promise<VoiceRecord | null>
+  deleteVoice: (id: string) => Promise<void>
+  voiceLine: (nodeId: string, index: number) => Promise<void>
+  voiceNode: (nodeId: string) => Promise<void>
+  playLine: (assetId: string) => void
   castFilter: ProfileClass | 'all'; castSearch: string
   picked: string[]; expanding: boolean; busy: boolean
   // SY2 · Shots
@@ -82,7 +106,7 @@ export interface StoryState {
   profile: () => Profile | undefined
   version: () => ProfileVersion | undefined
   createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => Promise<Profile | null>
-  patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string }) => Promise<void>
+  patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string; voice_id?: string | null }) => Promise<void>
   setStub: (stub: string) => void
   setHero: (assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
@@ -191,7 +215,7 @@ export const useStory = create<StoryState>()((set, get) => {
   return {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
-    loras: [], trainOpts: DEFAULT_TRAIN,
+    loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false,
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null,
@@ -269,6 +293,7 @@ export const useStory = create<StoryState>()((set, get) => {
         return
       }
       if (data?.kind === 'shot') { void get().loadShots(); return }          // SY2: a take arrived, a finalize, a copy
+      if (data?.kind === 'voice') { void get().loadVoices(); return }        // CN2: a voice made, changed, measured or deleted
       if (data?.kind === 'flow') { if (graphPending === 0 && nodeSaving === 0) void get().loadFlow(); return }   // SY3: a node or the index moved on the server (not while ours are pending)
       if (data?.kind && data.kind !== 'world') return
       const w = get().world
@@ -283,6 +308,7 @@ export const useStory = create<StoryState>()((set, get) => {
     // ---- SY1 · Cast
     loadProfiles: async () => {
       void get().loadLoras()                                                                     // LT2: the records the versions point at
+      void get().loadVoices()                                                                    // CN2: the voices the speakers point at
       try {
         const r = await unwrap(http.GET('/story/profiles'))
         set({ profiles: r.items, profilesLoaded: true })
@@ -411,6 +437,48 @@ export const useStory = create<StoryState>()((set, get) => {
       catch (e) { toast(`Resume: ${detail(e)}`) }
     },
     onLoraChanged: () => { void get().loadLoras(); void get().loadProfiles() },
+    loadVoices: async () => {
+      try { set({ voices: (await unwrap(http.GET('/story/voices'))).items }) } catch { set({ voices: [] }) }
+    },
+    setVoiceId: (id) => set({ voiceId: id }),
+    setVoiceForm: (open) => set({ voiceForm: open }),
+    createVoice: async (body) => {
+      try {
+        const r = await unwrap(http.POST('/story/voices', { body }))
+        await get().loadVoices()
+        const p = get().profile()
+        if (p && p.cls === 'character' && !p.voice_id) await get().patchProfile({ voice_id: r.id })                // the character speaks with its first voice
+        toast(`Voice ${r.name} added (${r.tier})`, 'info')
+        return r
+      } catch (e) { toast(`New voice: ${detail(e)}`); return null }
+    },
+    deleteVoice: async (id) => {
+      try {
+        await unwrap(http.DELETE('/story/voices/{vid}', { params: { path: { vid: id } } }))
+        if (get().voiceId === id) set({ voiceId: null })
+        await get().loadVoices(); await get().loadProfiles()
+        toast('Voice deleted — its spoken lines stay in the Catalogue', 'info')
+      } catch (e) { toast(`Delete voice: ${detail(e)}`) }
+    },
+    voiceLine: async (nodeId, index) => {                                                           // the speaker's voice, else the fallback picked under the lines
+      try {
+        const r = await unwrap(http.POST('/story/flow/nodes/{nid}/lines/{i}/voice', { params: { path: { nid: nodeId, i: index } }, body: { voice_id: get().voiceId, speed: 1, stage: false } }))
+        await useSession.getState().refreshAll()
+        const v = get().voices.find((x) => x.id === r.voice_ids[0])
+        toast(`Line ${index + 1} queued${v ? ` — ${v.name} (${v.tier}${v.tier === 'cloning' ? ', the engine stops for it' : ''})` : ''}`, 'info')
+      } catch (e) { toast(`Voice: ${detail(e)}`) }
+    },
+    voiceNode: async (nodeId) => {
+      try {
+        const r = await unwrap(http.POST('/story/flow/nodes/{nid}/voice', { params: { path: { nid: nodeId } }, body: { voice_id: get().voiceId, speed: 1, stage: false } }))
+        await useSession.getState().refreshAll()
+        toast(`${r.lines} line${r.lines === 1 ? '' : 's'} queued in ${r.job_ids.length} job${r.job_ids.length === 1 ? '' : 's'}`, 'info')
+      } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
+    },
+    playLine: (assetId) => {
+      const a = new Audio(api.assetUrl(assetId))
+      void a.play().catch(() => toast('Could not play the line'))
+    },
     expand: async (preset, seeds, tier) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return null
       set({ expanding: true })

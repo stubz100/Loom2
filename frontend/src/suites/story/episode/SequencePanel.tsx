@@ -89,7 +89,7 @@ export function SequenceInspector() {
       <h4>Export</h4>
       <div className="verbs"><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
-      <p className="hint">Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and `markers.txt` lists them; the SRT takes the nodes' Dialogue lines. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed — D27).</p>
+      <p className="hint">Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and `markers.txt` lists them; the SRT takes the nodes' Dialogue lines; the FCPXML and the EDL carry the lines' voices on an audio lane at the lines' ticks (CN2). The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed — D27).</p>
       {c && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

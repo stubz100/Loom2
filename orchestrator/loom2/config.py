@@ -53,6 +53,15 @@ class TrainerSettings(BaseModel):
     quantize: str = "qfloat8"              # Quanto on the transformer and the encoder (E16: 13.6 GB on the 4B base)
 
 
+class VoicesSettings(BaseModel):
+    """CN2 (19 §3b): the TTS tiers in their own venv `voices/.venv` — never the engine's (scripts/voices-setup.ps1, voices/AGENTS.md)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    python: str = str(REPO_ROOT / "voices" / ".venv" / "Scripts" / "python.exe")
+    run: str = str(REPO_ROOT / "voices" / "tts.py")
+    draft_model: str = "hexgrad/Kokoro-82M"                  # Apache-2.0; the CPU beside a running engine (E20: 2.5–4.7 s a line)
+    cloning_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"     # Apache-2.0; the GPU with the engine stopped (E20: 3–5 s a line at a 2.6 GB peak)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = APP_SCHEMA_VERSION
@@ -63,6 +72,7 @@ class Settings(BaseModel):
     hf_home: str = os.environ.get("HF_HOME", "F:/HF_HOME")
     engine: EngineSettings = Field(default_factory=EngineSettings)
     trainer: TrainerSettings = Field(default_factory=TrainerSettings)   # LT2 (D86)
+    voices: VoicesSettings = Field(default_factory=VoicesSettings)      # CN2 (D87)
     api_host: str = "127.0.0.1"
     api_port: int = 8765
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])

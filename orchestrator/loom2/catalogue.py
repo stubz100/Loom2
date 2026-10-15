@@ -29,7 +29,7 @@ ASSET_SCHEMA_VERSION = 2                     # D66: `origin` (a version-1 manife
 INDEX_SCHEMA_VERSION = 2
 log = logging.getLogger(__name__)
 
-AssetKind = Literal["image", "video", "mask", "document-render", "mesh"]     # mesh: P18 (D84), a GLB
+AssetKind = Literal["image", "video", "mask", "document-render", "mesh", "audio"]     # mesh: P18 (D84), a GLB; audio: CN2 (D87), a WAV master
 AssetState = Literal["none", "keep", "reject"]
 GroupMode = Literal["none", "batch", "lineage", "session", "model"]
 Folder = Literal["all", "unprocessed", "today", "last_session", "images", "clips", "documents", "imported", "rejected", "trash"]
@@ -46,6 +46,7 @@ class AssetRecord(BaseModel):
     h: int | None = None
     frames: int | None = None
     fps: float | None = None
+    duration_s: float | None = None             # CN2: an audio asset's length (a clip's is frames / fps)
     created_at: str = Field(default_factory=utc_now)
     job_id: str | None = None
     batch_id: str | None = None
@@ -162,6 +163,28 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS placements (asset_id TEXT PRIMARY KEY, group_id TEXT);
 """
 _FTS = "CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(id UNINDEXED, text, tokenize='unicode61 remove_diacritics 2')"
+
+
+def waveform_image(path: Path, w: int = 1024, h: int = 256) -> Image.Image:
+    """CN2: an audio asset's thumbnail — the waveform's envelope per column (min / max), drawn on the Catalogue's dark tile."""
+    import soundfile as sf
+    from PIL import ImageDraw
+    data, _ = sf.read(str(path), dtype="float32", always_2d=True)
+    mono = data.mean(axis=1) if data.shape[1] > 1 else data[:, 0]
+    im = Image.new("RGB", (w, h), (27, 30, 36))
+    d = ImageDraw.Draw(im)
+    mid = h // 2
+    d.line([(0, mid), (w, mid)], fill=(58, 64, 76))
+    n = len(mono)
+    if n:
+        per = max(1, n // w)
+        for x in range(w):
+            seg = mono[x * per:(x + 1) * per]
+            if len(seg) == 0:
+                break
+            lo, hi = float(seg.min()), float(seg.max())
+            d.line([(x, mid - int(hi * (mid - 4))), (x, mid - int(lo * (mid - 4)))], fill=(127, 179, 255))
+    return im
 
 
 def sha256_file(path: Path) -> str:
@@ -301,6 +324,13 @@ class Catalogue:
                     rec.fps = rec.fps or (float(s.average_rate) if s.average_rate else None)
             except Exception:  # noqa: BLE001 — a probe failure never blocks an import
                 pass
+        if kind == "audio" and rec.duration_s is None:                           # CN2: a spoken line's length
+            try:
+                import soundfile as sf
+                info = sf.info(str(dest))
+                rec.duration_s = round(info.frames / info.samplerate, 3)
+            except Exception:  # noqa: BLE001 — a probe failure never blocks an ingest
+                pass
         if rec.parents:
             parent = self.get(rec.parents[0])
             rec.root_id = (parent.root_id or parent.id) if parent else rec.parents[0]
@@ -333,7 +363,7 @@ class Catalogue:
             if poster and poster.is_file():
                 src = poster
         try:
-            with Image.open(src) as im:
+            with (waveform_image(src) if rec.kind == "audio" else Image.open(src)) as im:          # CN2: an audio asset's thumbnail is its waveform
                 # B11: transparent sources (edit flattens) keep their alpha in WebP; opaque ones stay RGB (smaller)
                 im = im.convert("RGBA" if im.mode in ("RGBA", "LA") or "transparency" in im.info else "RGB")
                 for size in self.thumb_sizes:

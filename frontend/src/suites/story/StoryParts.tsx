@@ -15,8 +15,9 @@ import { useSession } from '../../store/session'
 import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
 import { coverageGrid, readiness, rowsCovered } from './coverage'
 import { TrainingBlock } from './TrainingBlock'
+import { VoicesBlock } from './VoicesBlock'
 import { askExpand, rowMenu } from './storyCommands'
-import { CLASS_LABEL, SECTIONS, sy, useStory, type ProfileClass, type Section } from './storyStore'
+import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
 import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
 import { SequenceStage } from './episode/SequenceStage'
@@ -678,6 +679,7 @@ function CastInspector() {
         <div className="verbs"><CommandButton id="story.cast.expand" text /><CommandButton id="story.cast.lock" text /><CommandButton id="story.cast.newVersion" text /></div>
         <div className="verbs"><CommandButton id="story.cast.openGroup" text /><CommandButton id="story.cast.openCandidates" text /></div>
         <TrainingBlock p={p} v={v} />
+        {p.cls === 'character' && <VoicesBlock p={p} />}
         {picked.length > 0 && <><h4>{picked.length} candidate{picked.length === 1 ? '' : 's'} selected</h4><div className="verbs"><CommandButton id="story.cast.keep" text /><CommandButton id="story.cast.reject" text /><CommandButton id="story.cast.setHero" text /></div></>}
       </>}
       <div className="verbs"><CommandButton id="story.cast.delete" text /></div>
@@ -733,6 +735,9 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
 
 function LinesEditor({ n }: { n: FlowNode }) {
   const profiles = useStory((s) => s.profiles)
+  const voices = useStory((s) => s.voices)
+  const voiceId = useStory((s) => s.voiceId)
+  const caps = useSession((s) => s.capabilities?.voice)
   const setLines = (lines: FlowNode['lines']) => void sy().patchNode(n.id, { lines })
   return (
     <div className="lines-editor">
@@ -742,11 +747,37 @@ function LinesEditor({ n }: { n: FlowNode }) {
             <option value="">(no speaker)</option>{profiles.filter((p) => p.cls === 'character').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <input type="text" value={l.text} aria-label={`line ${i + 1}`} placeholder="the line" onChange={(e) => setLines(n.lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} />
+          <LineVoice n={n} i={i} l={l} available={!!caps?.available} />
           <button className="quiet" title="Remove the line" aria-label={`remove line ${i + 1}`} onClick={() => setLines(n.lines.filter((_, k) => k !== i))}>✕</button>
         </div>
       ))}
-      <button className="quiet" onClick={() => setLines([...n.lines, { speaker: null, text: '' }])} title="Add a line">+ line</button>
+      <button className="quiet" onClick={() => setLines([...n.lines, { speaker: null, text: '', audio_asset_id: null, audio_text: null }])} title="Add a line">+ line</button>
+      {caps?.available && n.lines.length > 0 && (
+        <div className="voice-row">
+          <select aria-label="fallback voice" value={voiceId ?? ''} title="The voice for lines whose speaker has none (a character's own voice is set in Cast)" onChange={(e) => sy().setVoiceId(e.target.value || null)}>
+            <option value="">voice for lines without a speaker's own…</option>{voices.map((v) => <option key={v.id} value={v.id}>{voiceLabel(v)}</option>)}
+          </select>
+          <CommandButton id="story.flow.voiceAll" text />
+        </div>
+      )}
     </div>
+  )
+}
+
+/** CN2: a line's voice — ▶ plays the spoken line (marked when the words changed since), 🎙 speaks it (its speaker's voice, else the fallback). */
+function LineVoice({ n, i, l, available }: { n: FlowNode; i: number; l: FlowNode['lines'][number]; available: boolean }) {
+  const jobs = useSession((s) => s.jobs)
+  const job = ttsJobFor(jobs, n.id, i)
+  const busy = !!job && ['staged', 'queued', 'running'].includes(job.status)
+  const stale = !!l.audio_asset_id && l.audio_text !== l.text
+  const audio = l.audio_asset_id
+  return (
+    <span className="line-voice">
+      {audio && <button className={`quiet play${stale ? ' stale' : ''}`} title={stale ? 'Play the spoken line — the words changed since; voice it again' : 'Play the spoken line'} aria-label={`play line ${i + 1}`} onClick={() => sy().playLine(audio)}>▶</button>}
+      <button className="quiet" disabled={busy || !available || !l.text.trim()} aria-label={`voice line ${i + 1}`}
+        title={busy ? `speaking… (${job?.status}${job?.progress_text ? ` · ${job.progress_text}` : ''})` : job?.status === 'failed' ? `the last voice job failed: ${job.error ?? ''} — try again` : audio ? 'Voice this line again' : "Voice this line (its speaker's voice, else the voice picked below)"}
+        onClick={() => void sy().voiceLine(n.id, i)}>{busy ? '…' : '🎙'}</button>
+    </span>
   )
 }
 
@@ -796,7 +827,7 @@ function NodeInspector() {
   const problems = useStory((s) => s.problems)
   const world = useStory((s) => s.world)
   const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
-  markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.unbind'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit')
+  markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.unbind'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit'); markUsed('story.flow.voiceAll')
   for (const t of ['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
   const n = nodeId ? flowNodes[nodeId] : undefined
   const mine = problems?.filter((p) => !n || p.node_id === n.id || (!p.node_id && !n)) ?? []

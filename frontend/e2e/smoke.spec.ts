@@ -1173,8 +1173,9 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   const newest = (await api<{ items: Made[] }>('GET', '/assets?folder=unprocessed&sort=created_desc&limit=1')).items[0]
   expect(newest.params.recipe.loras).toEqual([{ model_id: 'file:smoke/mara_smoke.safetensors', strength: 0.7 }])
   type JobLite = { id: string; status: string; result: { compiled?: { loras?: { model_id: string; strength: number; lora_name: string | null }[] } } | null }
-  const job = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)!
-  expect(job.status).toBe('done')
+  const jobOf = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)!
+  await expect.poll(async () => (await jobOf()).status, { timeout: 15_000 }).toBe('done')         // the asset lands a moment before its job is marked done
+  const job = await jobOf()
   expect(job.result?.compiled?.loras?.[0]).toEqual({ model_id: 'file:smoke/mara_smoke.safetensors', strength: 0.7, lora_name: 'smoke/mara_smoke.safetensors' })
   // the slot is cleared by its own select; a model the file does not fit never lists it under the open variant (the backend's 422 covers the rest)
   await page.locator('nav.rail button[title^="Model"]').click()

@@ -3995,3 +3995,8 @@ split by file so that no two hands touched the same module.
   60 s — the runner class, docs-only commit), 0b27b43 running.
 - **Owed by the author:** the Resolve import of `engine/spikes/out/cn/episode/cn_episode.fcpxml` (with the EDL and SRT beside it), a listen
   to the voices (`engine/spikes/out/cn/voice/`) and E18's muxed S2V clips if lip-sync is to be revisited.
+
+## 2026-10-15 11:40 — CI · the lora slots scenario waits for its job
+- 93ee175 went red on the full variant: "lora slots" read the job once, right after its asset appeared in Unprocessed, and found it still
+  `running` (the finisher ingests the asset before it marks the job done). The scenario now polls the job to `done` (15 s). The open variant
+  was green; 81286a3's red was the runner (the app boot over 60 s in the Animate scenario).

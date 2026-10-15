@@ -3942,3 +3942,29 @@ split by file so that no two hands touched the same module.
   pass with two), FaceSim shown as advisory on the take (18 §3h's pattern). VACE stays unfetched. Nothing to delete (Animate is the winner;
   `clip_vision_h` and the LightX2V LoRA are its parts). One cosmetic note: the walk clip carries a hallucinated CJK caption top right despite
   the negative prompt's 字幕 — watch for it in CN4's rig run.
+
+## 2026-10-15 11:16 — E17 extend and E18 lip-sync: NO-GO on both; CN1 and CN3 leave the wave (19 §2, §6 item 1, D87)
+- **E17 (`engine/spikes/e17_extend.py`; the hybrid and `--rescore` ran 10:20–10:37):** three chains × three segments, scored by the seam ratio
+  (bar ≤ 1.5× the clip's own inter-frame difference), FaceSim to the start frame at both ends (≥ 0.45, the end now at the last frame *with a
+  face*, and a per-segment curve), time ≤ 1.3× a plain clip.
+
+  | method | worst join alley / cabin / rooftop | FaceSim at the end (cabin / rooftop) | time |
+  | --- | --- | --- | --- |
+  | A · LTX guide frames (last 9 frames as `LTXVAddGuide`) | 1.06 / 0.31 / 0.95 ✓ | 0.075 / 0.056 ✗ | 1.1× ✓ |
+  | B · Wan last frame + RIFE weld | 1.21 / 1.71 / 2.11 (4 / 6) | 0.545 ✓ / 0.371 ✗ | — |
+  | hybrid · Wan, then LTX guide extensions | 0.76 / 0.84 / — ✓ | 0.336 ✗ | — |
+
+  The per-segment curves say where it breaks: LTX loses the face at the first join (cabin 0.82 → none → 0.085: the continuation invents a
+  person once the character leaves mid-frame — the by-eye note of 2026-10-14), Wan keeps it longest (cabin 0.88 → 0.85 → 0.77 → 0.69 → 0.66 →
+  0.55) at the price of visible seams. The alley chain ends with the character turned away (no face to score). **NO-GO** on the bars: CN1
+  leaves the wave. Kept for later: LTX guide frames are a clean *scene* continuation; a character's long take is worth a spike of chained
+  Animate windows (`continue_motion` with the same reference each window).
+- **E18 (`engine/spikes/e18_lipsync.py`; the 10-step S2V follow-up ran 09:40–10:17):** six lines (four EN, two DE from E20's tiers) on two
+  faces; sync = Pearson r of the lower face's motion against the audio envelope at the best lag ±3 (bar ≥ 0.5), FaceSim ≥ 0.45, ≤ 240 s.
+  LTX-2.3 IA2V (distilled 1.1): r 0.09–0.29 on 6 / 6, 118–152 s, FaceSim 0.84–0.97 (the face barely moves). Wan2.2 S2V-14B fp8, 20 steps CFG 6:
+  EN 0.49 / 0.71 / 0.60 / 0.67, DE 0.37 / 0.32 (wav2vec2-large-*english*), FaceSim 0.56–0.96, 906–999 s; 10 steps: EN 0.35 / 0.61 / 0.53 / 0.72
+  in 520–566 s. By eye the S2V mouths open and close through the lines (the muxed clips for the author's ear in `engine/spikes/out/e18/`).
+  **NO-GO**: the only method that follows the audio is English-only at 2–4× the time bar. CN3 leaves the wave; the S2V transformer (16.4 GB)
+  and wav2vec2 (0.6 GB) deleted from F:/loom2-models (19 §6 item 2; `fetch_weights.py --only e18` brings them back), the roster entries kept.
+- **The wave now:** CN2 voice (built), CN4 pose-driven shots (built, rig next), CN5 acceptance and docs. 19 §2 run lines, §4 rows, 13 D87,
+  12 §8f, 08, 11 §3d and 17 §13 updated.

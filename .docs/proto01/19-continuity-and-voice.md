@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E17 / E18 / E19 in progress, each gating its slice. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → CN4; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -66,6 +66,8 @@ Bench: three chains × three segments at the Draft tier from `bench/i2v` (alley-
 one motion prompt per chain; scored by the seam metric, FaceSim and nine sheets by eye (motion continuity ≥ 7 / 9). The winner is CN1's
 `extend_from`; a loser that passes stays as the model's own path (Wan clips chain by B, LTX by A) if both pass.
 
+**Run 2026-10-14 / 15 (`engine/spikes/e17_extend.py`, journal) — NO-GO: no method keeps the face across a three-segment chain.** Seam ratio (worst join, bar ≤ 1.5): A · LTX guide frames 1.06 / 0.31 / 0.95 — 6 / 6 joins; B · Wan + RIFE weld 1.21 / 1.71 / 2.11 — 4 / 6; the hybrid (Wan segment 1, LTX guide extensions) 0.76 / 0.84 — 4 / 4. FaceSim to the start frame at the chain's last frame with a face (bar ≥ 0.45; the alley chain ends with the character turned away): A 0.075 (cabin) / 0.056 (rooftop) — the per-segment curve shows the face lost at the *first* join (the continuation invents a new person when the character is not mid-frame); B 0.545 / 0.371 (cabin 0.88 → 0.85 → 0.77 → 0.69 → 0.66 → 0.55); hybrid 0.336. Time: A ≤ 1.1× a plain clip ✓. What works: LTX guide frames make a seamless continuation of a *scene* (camera, light, motion); what does not: the character across joins. The idea worth a later spike: chained Animate windows (`continue_motion` with the same reference image each window — E19's method keeps the reference) for a character's long take.
+
 ### E18 · Lip-sync (2 d)
 
 | Method | Weights | How | Bar |
@@ -76,6 +78,8 @@ one motion prompt per chain; scored by the seam metric, FaceSim and nine sheets 
 Inputs: six lines (four EN, two DE) from E20's draft tier, two faces (Mara's hero from E16's run and `portrait-grief`), fixed seeds; the
 sheets and the clips with audio muxed (`ffmpeg`, as the proxies are) for the author's ear and eye. Licences: S2V Apache (both variants);
 LTX as the roster tags it today.
+
+**Run 2026-10-14 / 15 (`engine/spikes/e18_lipsync.py`, journal) — NO-GO.** Sync (Pearson r of the lower-face motion against the audio envelope, best lag ±3, bar ≥ 0.5), FaceSim (bar ≥ 0.45), time (bar ≤ 240 s per 5-s line): **A · LTX-2.3 IA2V on the distilled 1.1** — r 0.09–0.29 on 6 / 6 lines (the face barely moves: FaceSim 0.84–0.97), 118–152 s; **B · Wan2.2 S2V-14B fp8** at 20 steps — EN r 0.49 / 0.71 / 0.60 / 0.67, DE 0.37 / 0.32 (wav2vec2-large-english hears English only), FaceSim 0.56–0.96, **906–999 s**; at 10 steps — EN 0.35 / 0.61 / 0.53 / 0.72 in 520–566 s. By eye the S2V mouths open and close through the line (the muxed clips under `engine/spikes/out/e18/` for the author's ear). S2V is the only method that follows the audio, English only, at 2–4× the time bar: a possible overnight take later, not this wave. Its weights (16.4 GB + 0.6 GB) deleted (§6 item 2); `scripts/fetch_weights.py --only e18` fetches them again.
 
 ### E19 · Pose-driven shots (2 d)
 
@@ -154,9 +158,9 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 | Slice | What | Days |
 | --- | --- | --- |
 | **E20 · E17 · E18 · E19** | the spikes (§2) | 1 + 2 + 2 + 2 |
-| **CN1 · Extend** | `extend_from`, the lead-in upload, the chain record and lineage, Animate's *Extend ▶* and the transport's chain, beats across a chain, the Episode's seam weld at export; tests (the fake engine; the chain arithmetic), the smoke scenario, the rig | 3 |
+| ~~**CN1 · Extend**~~ dropped 2026-10-15 (E17 NO-GO) | `extend_from`, the lead-in upload, the chain record and lineage, Animate's *Extend ▶* and the transport's chain, beats across a chain, the Episode's seam weld at export; tests (the fake engine; the chain arithmetic), the smoke scenario, the rig | 3 |
 | **CN2 · Voice** ✓ 2026-10-15 | the `audio` asset kind with player and waveform, the `voice` record, the `tts` job (two tiers), the Flow line's *Voice ▶*, the Episode's audio lane; tests (a fake TTS), smoke, rig | 4 |
-| **CN3 · Lip-sync** | the `lipsync` job to a shot take, the Shots tab's verb and picker, the muxed proxy, FaceSim advisory; tests, smoke, rig | 3 |
+| ~~**CN3 · Lip-sync**~~ dropped 2026-10-15 (E18 NO-GO) | the `lipsync` job to a shot take, the Shots tab's verb and picker, the muxed proxy, FaceSim advisory; tests, smoke, rig | 3 |
 | **CN4 · Pose-driven shots** | the `animate` clip method on the Stage's pose pass with the Cast hero, the Shot tab's picker; tests, smoke, rig | 3 |
 | **CN5 · Acceptance and docs** | `scripts/cn_acceptance.py` (a chain of three, a voiced talking take, a pose-driven shot, the Episode export with audio and welded joins — through the app on the rig); 11 / 16 / 17 updated, D87 closed | 2 |
 

@@ -60,6 +60,7 @@ BARS = {"sync": 0.5, "facesim": 0.45, "time": 240.0}
 FACES = {"mara": REPO / "bench" / "angles" / "07.jpg", "grief": REPO / "bench" / "i2v" / "frames" / "portrait-grief_s20261004.png"}
 LINE_WAV = {"en1": "en1_draft.wav", "en2": "en2_draft.wav", "en3": "en3_draft.wav", "en4": "en4_draft.wav", "de1": "de1_clone.wav", "de2": "de2_clone.wav"}
 SPEC = {"ltx_ia2v": {"frames": 121, "fps": 24, "w": 1024, "h": 576}, "wan_s2v": {"frames": 77, "fps": 16, "w": 832, "h": 480}}
+SPEC["wan_s2v10"] = {**SPEC["wan_s2v"], "steps": 10}            # E18 follow-up 2026-10-15: half the steps — does the sync hold at half the time?
 S2V = {"unet": "wan2.2_s2v_14B_fp8_scaled.safetensors", "te": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "vae": "wan_2.1_vae.safetensors", "audio": "wav2vec2_large_english_fp16.safetensors"}
 NEG_WAN = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，"
            "画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走")
@@ -207,7 +208,7 @@ def s2v_graph(face_name: str, audio_name: str, sp: dict, seed: int, prefix: str)
         "10": {"class_type": "WanSoundImageToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": sp["w"], "height": sp["h"], "length": sp["frames"],
                                                                 "batch_size": 1, "audio_encoder_output": ["9", 0], "ref_image": ["7s", 0]}},
         "11": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1", 0], "shift": 8.0}},
-        "12": {"class_type": "KSampler", "inputs": {"model": ["11", 0], "seed": seed, "steps": 20, "cfg": 6.0, "sampler_name": "uni_pc", "scheduler": "simple",
+        "12": {"class_type": "KSampler", "inputs": {"model": ["11", 0], "seed": seed, "steps": sp.get("steps", 20), "cfg": 6.0, "sampler_name": "uni_pc", "scheduler": "simple",
                                                     "positive": ["10", 0], "negative": ["10", 1], "latent_image": ["10", 2], "denoise": 1.0}},
         "13": {"class_type": "VAEDecode", "inputs": {"samples": ["12", 0], "vae": ["3", 0]}},
         "14": {"class_type": "SaveImage", "inputs": {"images": ["13", 0], "filename_prefix": prefix}},

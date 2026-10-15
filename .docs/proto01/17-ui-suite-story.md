@@ -291,7 +291,7 @@ after 3 of 36 Expand jobs, relaunched with the project, the queue paused with 33
 - **LT · LoRA training** (03 §5 item 2, loom P2): ai-toolkit on ROCm as a staged job from a locked version's ref set, template
   captions from `coverage_cell`, the readiness meter (advisory), promote into the version's `lora` + `trigger`; a spike first.
   **Planned 2026-10-14 → `18-lora-training.md` (spike E16, slices LT1–LT3, D86 proposed).**
-- **SV · Voice and lip-sync** (03 §5 item 4, loom P3 §9): out of v1 (loom R95). **Voice built 2026-10-15 (CN2, 19 §3b: a voice per character, ▶ / 🎙 per Flow line, the exports' audio lane); lip-sync waits on E18.** Planned 2026-10-14 in wave CN → `19-continuity-and-voice.md` (E20 voice, E18 lip-sync, CN2 / CN3; D87 proposed).**
+- **SV · Voice and lip-sync** (03 §5 item 4, loom P3 §9): out of v1 (loom R95). **Voice built 2026-10-15 (CN2, 19 §3b: a voice per character, ▶ / 🎙 per Flow line, the exports' audio lane); lip-sync dropped 2026-10-15: E18 NO-GO (19 §2).** Planned 2026-10-14 in wave CN → `19-continuity-and-voice.md` (E20 voice, E18 lip-sync, CN2 / CN3; D87 proposed).**
 - **SM · Muse** (03 §5 item 5, loom P4 §7–§13): spike **E15** (a local VLM as a queue job on this rig — a llama.cpp sidecar the
   orchestrator starts and stops around jobs vs a ComfyUI node; Qwen3-VL-4B; licence vs D17 / D26), then propose-and-approve
   assistants (prompt drafting, captions, the project digest) as queued jobs that run only when the engine is idle; the Inspector's

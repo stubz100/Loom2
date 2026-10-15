@@ -3968,3 +3968,16 @@ split by file so that no two hands touched the same module.
   and wav2vec2 (0.6 GB) deleted from F:/loom2-models (19 §6 item 2; `fetch_weights.py --only e18` brings them back), the roster entries kept.
 - **The wave now:** CN2 voice (built), CN4 pose-driven shots (built, rig next), CN5 acceptance and docs. 19 §2 run lines, §4 rows, 13 D87,
   12 §8f, 08, 11 §3d and 17 §13 updated.
+
+## 2026-10-15 11:21 — CN4 · pose-driven shots: the Stage's Wan Animate method (19 §3d, D87)
+- **Built** (19 §3d's built note): the Animate spec in `wan22.toml` (`recipes.animate`, graph `wan_animate`, E19's figures), reached through
+  the `I2V` recipe with a pose guide; E19's graph in `graphs.build_i2v`; one window of ≤ 77 frames (`i2v_params` refuses more); the
+  reference padded into the clip before upload (`pipeline.pad_reference`); the queue's sentences (a pose sequence required, one figure per
+  pass from the stored keypoints, no end frame or beats); `/capabilities.stage.animate`; the Shot tab's clip method (IC-LoRA · Wan Animate)
+  with the guide's grid, size and kind following it. The object_info fixture gains Animate's and the lip-sync nodes from a v0.39.0 capture
+  (merged, the loader lists unioned; `make_object_info_fixture.py` lists them); the fake engine decodes `WanAnimateToVideo`'s length.
+- **Tests:** `test_animate_cn4.py` (+4: the spec and the graph, the weights / estimate / padding, the submission's sentences and a clip on the
+  fake engine with the padded upload and lineage, the capabilities); 314 offline, audits clean, openapi 116 / 249, lint 100, tsc and build
+  clean; the smoke's "a pose-driven shot" (the method, the pose sequence at 480p on the 16-grid, the clip with lineage — both variants: Animate
+  is Apache) and the 3D-prop scenario picking an image tile (the new clips had pushed one into its slot) — 28 / 28 under full and open.
+- **Rig (`scripts/cn_acceptance.py --parts animate`):** a stage with E11 walk_dolly pose sequence uploaded through the guide route (77 frames, one figure) and the hero as the character: the job ran cold in 299 s wall (engine start and loads included; sampling 4 × 22 s), 77 frames at 848×480, PCK@0.1 1.0 (bar ≥ 0.8), lineage to the hero and the pass, the reference padded, no caption artefact this time; FaceSim 0.08–0.21 (a small face, advisory as in E19); E11 run_track (two figures) refused with the sentence (422) — 6 checks ok.

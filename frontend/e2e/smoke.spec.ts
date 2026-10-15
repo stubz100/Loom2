@@ -606,9 +606,46 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await page.screenshot({ path: 'node_modules/.e2e/stage-clip.png' })
 })
 
+test("a pose-driven shot (19 / CN4, D87): the Shot tab's Animate method takes the pose sequence on Wan's grid, and the fake engine performs it with the picked result as the character — lineage to both, in both variants", async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  const name = `Perform ${Date.now().toString(36)}`
+  await dialog.locator('input').fill(name)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
+  await page.locator('nav.rail button[title^="Shot"]').click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 15_000 })
+  await go.click()
+  await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
+  await page.locator('.shot-tab .shot-thumb').first().click()                                               // the character: the picked result
+  const rangeEnd = page.locator('.stage-timeline .range-field input').nth(1)
+  await rangeEnd.fill('8'); await rangeEnd.dispatchEvent('change')                                          // 9 frames: 4n + 1 on Wan's grid
+  // the method: Animate — the guide is the pose sequence (Depth is disabled), at the model's grid
+  await page.locator('.shot-tab button[aria-label="clip method animate"]').click()
+  await expect(page.locator('.shot-tab button[aria-label="clip method animate"]')).toHaveClass(/active/)
+  await expect(page.locator('.shot-tab .segmented button', { hasText: /^Depth$/ })).toBeDisabled()
+  await expect(page.locator('.shot-tab .clip-section .hint').last()).toContainText('77 frames (E19)')
+  type Doc = { id: string; name: string; passes: { guides?: Record<string, { asset_id: string; frames: number; size: { w: number; h: number } }> }[] }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === name)!
+  await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
+  await expect.poll(async () => (await doc()).passes[0]?.guides?.pose?.frames ?? 0, { timeout: 60_000 }).toBe(9)
+  const guide = (await doc()).passes[0].guides!.pose
+  expect(guide.size.w % 16).toBe(0); expect(guide.size.h).toBe(480)                                        // Wan's 480p, on the 16 grid
+  await page.locator('.shot-tab button', { hasText: /^Animate/ }).click()
+  await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
+  type Clip = AssetLite & { kind: string; parents: string[]; model_id: string | null; frames: number | null; params: { recipe: { guide: { kind: string } } } }
+  const caps = await api<{ stage: { animate: { model_id: string } } }>('GET', '/capabilities')
+  const clips = (await api<{ items: Clip[] }>('GET', '/assets?kind=video&suite=stage&sort=created_desc&limit=20')).items.filter((a) => a.model_id === caps.stage.animate.model_id)
+  expect(clips.length).toBeGreaterThanOrEqual(1)
+  expect(clips[0].frames).toBe(9); expect(clips[0].params.recipe.guide.kind).toBe('pose'); expect(clips[0].parents).toContain(guide.asset_id)
+})
+
 test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fake engine answers with a GLB, the mesh asset lands with lineage and a thumbnail, and the Stage library places it', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
-  const src = tiles(page).nth(5)
+  const src = tiles(page).filter({ hasNot: page.locator('.badge-dot[title="clip"], .badge-dot[title^="a spoken"], .badge-dot[title^="3D prop"]') }).nth(5)   // an image: earlier scenarios add clips and lines at the top
   await src.click()
   const srcId = await src.getAttribute('data-id')
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D17 / D26: DINOv3 keeps Pixal3D full-only

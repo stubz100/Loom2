@@ -44,6 +44,7 @@ def fake_models(root: Path) -> list[str]:
         specs.append(i2v)
     specs += [s for s in registry.video_specs() if s.recipes.guide_lora]  # ST4: the clip model with its IC-LoRA (LTX-2.3)
     specs += registry.mesh_specs()                                     # P18: Pixal3D and its encoders (the fake engine writes a GLB)
+    specs += registry.animate_specs()                                  # CN4: Wan2.2 Animate, CLIP vision, the LightX2V LoRA (the Stage's animate method)
     specs += [s for s in registry.image_specs() if s.recipes.train]     # LT2: the LoRA bases (the fake trainer never loads them)
     for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else [])]):
         e = ROSTER_BY_ID[rid]

@@ -98,7 +98,7 @@ class FakeComfy:
             return
         for v in (1, 2):
             await self._send({"type": "progress", "data": {"prompt_id": pid, "value": v, "max": 2, "node": "1"}})
-        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo")), None)
+        vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo")), None)
         if vid:                                                  # M6: a video graph decodes `length` frames; SaveImage writes one PNG each
             w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
         else:

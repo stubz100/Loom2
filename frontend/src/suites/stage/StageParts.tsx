@@ -14,7 +14,7 @@ import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
 import type { Asset, StageCamera } from '../../api/types'
-import { clipFrames, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
+import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu } from './stageCommands'
@@ -259,22 +259,28 @@ function ClipSection({ clips }: { clips: Asset[] }) {
   const rendering = useStage((s) => s.rendering)
   const rendered = useStage((s) => s.rendered)
   const shotStart = useStage((s) => s.shotStart)
-  const clipCap = useSession((s) => s.capabilities?.stage?.clip)
+  const method = useStage((s) => s.clipMethod)
+  const caps = useSession((s) => s.capabilities?.stage)
+  const clipCap = method === 'animate' ? caps?.animate : caps?.clip
   const [gw, gh] = st().guideSize()
-  const n = clipFrames(current.range.start, current.range.end, clipCap?.frame_step ?? 8)
+  const n = st().guideFrames()
   const stale = !!g && (g.range.start !== current.range.start || g.frames !== n || current.revision > g.revision + 1)
   markUsed('stage.clip.guide'); markUsed('stage.clip.animate')
   return (
     <div className="clip-section">
       <h4>Clip · frames {current.range.start}–{current.range.end}</h4>
-      {!clipCap && <span className="hint">No clip model in this build (LTX-2.3 with its IC-LoRA is full-variant).</span>}
-      <div className="kv"><span>guide</span><span className="segmented"><button className={kind === 'depth' ? 'active' : ''} onClick={() => st().setGuideKind('depth')} title="the depth sequence (E11: the pose followed 4/5)">Depth</button><button className={kind === 'pose' ? 'active' : ''} onClick={() => st().setGuideKind('pose')} title="the pose sequence (E11: 3/5)">Pose</button></span></div>
+      <div className="kv"><span>method</span><span className="segmented">
+        <button className={method === 'guided' ? 'active' : ''} aria-label="clip method guided" disabled={!caps?.clip} onClick={() => st().setClipMethod('guided')} title={caps?.clip ? `${caps.clip.label}: the IC-LoRA follows the depth or pose sequence from the picked frame (ST4)` : 'not in this build (LTX-2.3 with its IC-LoRA is full-variant)'}>IC-LoRA</button>
+        <button className={method === 'animate' ? 'active' : ''} aria-label="clip method animate" disabled={!caps?.animate} onClick={() => st().setClipMethod('animate')} title={caps?.animate ? `${caps.animate.label}: the picked character performs the pose sequence — one figure, up to ${caps.animate.frames_max ?? 77} frames (E19)` : 'not in this build'}>Wan Animate</button>
+      </span></div>
+      {!clipCap && <span className="hint">{method === 'animate' ? 'No pose-driven clip model in this build.' : 'No clip model in this build (LTX-2.3 with its IC-LoRA is full-variant).'}</span>}
+      <div className="kv"><span>guide</span><span className="segmented"><button className={kind === 'depth' ? 'active' : ''} disabled={method === 'animate'} onClick={() => st().setGuideKind('depth')} title={method === 'animate' ? 'Animate performs the pose sequence' : 'the depth sequence (E11: the pose followed 4/5)'}>Depth</button><button className={kind === 'pose' ? 'active' : ''} onClick={() => st().setGuideKind('pose')} title="the pose sequence (E11: 3/5)">Pose</button></span></div>
       <div className="guide-state">
         {rendering && rendered ? `rendering ${rendered.done} / ${rendered.total || n}…` : g ? `${kind} sequence · ${g.frames} frames · ${g.size.w}×${g.size.h} · ${g.fps} fps${stale ? ' · from an earlier range or revision — render again' : ' · current'}` : `no ${kind} sequence yet · ${n} frames at ${gw}×${gh} (8n + 1 for the clip model)`}
       </div>
       <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /><CommandButton id="stage.clip.animate" text label="Animate ▶" /></div>
       {!shotStart && <p className="disabled-why">Click one of the results above to start the clip from it.</p>}
-      {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for 121 frames (E11){clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}</p>}
+      {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames (E19) · one figure in the camera · the picked result is the character' : '121 frames (E11)'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}</p>}
       {clips.length > 0 && <><h4>Clips · {clips.length}</h4>
         <div className="clip-results">{clips.slice(0, 9).map((a) => <span key={a.id} className="clip-thumb"><img className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.frames ?? '?'} frames · ${a.model_id ?? ''}`} /><span className="n">{a.frames ?? '?'} f</span></span>)}</div></>}
     </div>

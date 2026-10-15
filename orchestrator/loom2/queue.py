@@ -377,6 +377,23 @@ class JobQueue:
         return {"paused": self.paused, "running": self._running_id, "counts": self.counts(), "last_warm_group": self._last_group,
                 "resumed_unclean": self.resumed_unclean, "recovery": list(self.recovery) + list(getattr(self.catalogue, "recovery", []) or [])}
 
+    def _check_animate(self, recipe: Any, spec: Any) -> None:
+        """CN4: Animate performs the Stage's pose sequence with the start image as the character — one figure per pass (E19's two small
+        runners came back as hands over a face), no end frame, no beats."""
+        if not recipe.guide or recipe.guide.kind != "pose":
+            raise ValueError(f"{spec.label} performs the Stage's pose sequence — render the pose sequence (Shot tab · guide Pose) first")
+        if recipe.end_asset or recipe.beats:
+            raise ValueError(f"{spec.label} takes one reference image — no end frame, no beats")
+        g = self.catalogue.get(recipe.guide.asset_id)
+        if g is None or g.kind != "video":
+            raise ValueError(f"the pose sequence ({recipe.guide.asset_id}) is missing from the Catalogue — render it again")
+        kp = (g.params or {}).get("keypoints") or []
+        most = max((len(f) for f in kp if isinstance(f, list)), default=0)
+        cap = spec.recipes.guide_figures
+        if cap and most > cap:
+            raise ValueError(f"the pose sequence holds {most} figures; {spec.label} performs one character per pass (E19) — keep one figure in the camera, "
+                             "or use the IC-LoRA method")
+
     def _validate_models(self, recipe: Any) -> None:
         """B11: an unknown roster id fails at submission (HTTP 422), not minutes later after the engine has started.
         C3 (D26): under the `open` variant every weight the recipe would load must carry the `open` tag — the UI hides them, the
@@ -407,7 +424,9 @@ class JobQueue:
                 recipe_te_id(recipe, self.app.settings.variant)          # the encoder must pair with the model (TE_ALTERNATES)
             except CompileError as e:
                 raise ValueError(str(e))
-        if isinstance(recipe, I2V):
+        if isinstance(recipe, I2V) and spec is not None and spec.recipes.animate:   # CN4 (19 §3d, E19): the pose pass, one figure
+            self._check_animate(recipe, spec)
+        elif isinstance(recipe, I2V):
             if spec is None or not spec.recipes.i2v:
                 raise ValueError(f"{recipe.model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
             if recipe.beats and not spec.recipes.beats:

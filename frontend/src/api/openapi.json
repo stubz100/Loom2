@@ -8818,6 +8818,11 @@
       "Recipes": {
         "additionalProperties": false,
         "properties": {
+          "animate": {
+            "default": false,
+            "title": "Animate",
+            "type": "boolean"
+          },
           "beats": {
             "default": false,
             "title": "Beats",
@@ -8835,6 +8840,17 @@
             "default": false,
             "title": "Flf",
             "type": "boolean"
+          },
+          "guide_figures": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Figures"
           },
           "guide_lora": {
             "anyOf": [
@@ -10003,6 +10019,115 @@
         "title": "Stage",
         "type": "object"
       },
+      "StageAnimateCaps": {
+        "additionalProperties": true,
+        "description": "CN4: Wan2.2 Animate on the pose pass — one window (`frames_max`), one figure per pass (`figures_max`).",
+        "properties": {
+          "approx_gb": {
+            "title": "Approx Gb",
+            "type": "number"
+          },
+          "figures_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Figures Max"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "frame_step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Step"
+          },
+          "frames_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frames Max"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "size": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "label",
+          "health",
+          "missing",
+          "kinds",
+          "size",
+          "approx_gb"
+        ],
+        "title": "StageAnimateCaps",
+        "type": "object"
+      },
       "StageCamera": {
         "properties": {
           "focal_mm": {
@@ -10059,6 +10184,16 @@
       "StageCaps": {
         "additionalProperties": true,
         "properties": {
+          "animate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageAnimateCaps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "clip": {
             "anyOf": [
               {

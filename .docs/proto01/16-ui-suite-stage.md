@@ -168,6 +168,9 @@ takes as image 1 and how many references follow (clay: `refs_max − 1`; refcont
 lines at the project aspect, snapped to 16) or Full. No `GET /stages/{id}/thumb` yet (the Library rows name counts, not pictures).*
 
 ## 8. Shots → clip (ST4)
+
+*CN4 (19 §3d, D87, 2026-10-15): the clip section's method — IC-LoRA (this section) or **Wan Animate** (the picked result performs
+the pose sequence, one figure, ≤ 77 frames; E19).*
 Keyframes on the camera and objects (position, rotation, pose preset, linear or ease), a frame range at the project's fps (D18:
 24), **Render sequence** → the depth pass per frame (the E11 guide) and the first frame's clay pass → the `I2V` recipe gains
 `guide {asset_ids[], kind: depth}` → LTX-2.3 with its IC-LoRA Union (`GetICLoRAParameters` + `LTXVAddGuide`, D76) and the start frame

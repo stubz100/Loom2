@@ -5,11 +5,17 @@ German line → the audio assets with their length and waveform thumbnails, the 
 E20's bars (a draft line ≤ 5 s on the CPU, a cloned line ≤ 15 s on the GPU, the clone's peak ≤ 4 GB). The Episode export's audio lane
 is covered offline and in the smoke; CN5's chain gives it real clips on the rig.
 
-Never touches the engine: the orchestrator it starts points its engine at a free port and queues no engine job, so a spike's engine on
-8188 is left alone. Needs the voices venv (scripts/voices-setup.ps1) and the TTS models in HF_HOME (fetched on first use).
-Results: engine/spikes/out/cn/results.jsonl, the WAVs under engine/spikes/out/cn/voice/, the orchestrator log.
+`animate` (CN4): a stage with one camera, E11's walk_dolly pose sequence (77 frames, one figure) uploaded through the app's guide route
+with its keypoints, the hero (bench/angles/07.jpg) as the character -> an `i2v` job on the Stage's animate method through the queue -> the
+clip scored as E19 did (PCK@0.1 with SDPose against the mapped keypoints >= 0.8, FaceSim to the hero advisory, <= 300 s warm); the
+reference padded; E11's run_track pass (two figures) refused with the sentence (422).
 
-    orchestrator/.venv/Scripts/python.exe scripts/cn_acceptance.py --parts voice [--tier draft|cloning|both]
+The voice part never touches the engine (its orchestrator points the engine at a free port). The animate part needs port 8188 free (the
+orchestrator starts the engine). Needs the voices venv (scripts/voices-setup.ps1) and the TTS models in HF_HOME (fetched on first use); E11's
+outputs under engine/spikes/out/e11 for the animate part. Results: engine/spikes/out/cn/results.jsonl, the WAVs under
+engine/spikes/out/cn/voice/, the clip under engine/spikes/out/cn/animate/, the orchestrator log.
+
+    orchestrator/.venv/Scripts/python.exe scripts/cn_acceptance.py --parts voice,animate [--tier draft|cloning|both]
 """
 from __future__ import annotations
 
@@ -160,6 +166,104 @@ def voice_part(a, check, row: dict, tmp: Path) -> None:
     check(len(audio) >= 1, f"{len(audio)} audio assets in the Catalogue")
 
 
+def animate_part(a, check, row: dict, tmp: Path) -> None:
+    import hashlib
+    import av
+    import numpy as np
+    from PIL import Image
+    sys.path.insert(0, str(ROOT / "engine" / "spikes"))
+    from e10_stage import pck, sdpose_graph
+    from e12_angles import Engine
+    from loom2.tools.facesim import FaceSim
+    caps = api("GET", "/capabilities")["stage"].get("animate")
+    check(bool(caps) and caps["health"] != "missing", f"the Stage's animate method is offered with its weights ({caps and caps['model_id']}, {caps and caps['missing']})")
+    if not caps:
+        return
+    e11 = ROOT / "engine" / "spikes" / "out" / "e11"
+    hero = api("POST", "/assets/import", {"paths": [str(HERO)]})["items"][0]["id"]
+    st = api("POST", "/stages", {"name": "CN4 walk"})
+    cam = st["cameras"][0]["id"]
+
+    def upload_guide(shot: str, revision: int) -> tuple[dict, dict]:
+        kp = json.loads((e11 / shot / "keypoints.json").read_text(encoding="utf-8"))
+        n = min(int(caps["frames_max"] or 77), len(kp["frames"]))
+        shas = []
+        with av.open(str(e11 / shot / "pose.mp4")) as c:
+            for i, fr in enumerate(c.decode(video=0)):
+                if i >= n:
+                    break
+                buf = tmp / f"pose_{shot}_{i:03d}.png"
+                fr.to_image().save(buf)
+                data = buf.read_bytes()
+                sha = hashlib.sha256(data).hexdigest()
+                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/blobs/{sha}", data=data, method="PUT", headers={"X-Loom-Token": TOKEN})
+                urllib.request.urlopen(req, timeout=60).read()
+                shas.append(sha)
+        w, h = kp["size"]
+        doc = api("POST", f"/stages/{st['id']}/guide", {"camera_id": cam, "revision": revision, "kind": "pose", "fps": int(kp.get("fps") or 24), "size": {"w": w, "h": h},
+                                                         "range": {"start": 0, "end": n - 1}, "frames": shas, "keypoints": kp["frames"][:n]})
+        entry = next(x for x in doc["passes"] if x["camera_id"] == cam)
+        return doc, {**entry["guides"]["pose"], "kp": kp, "n": n}
+
+    doc, g2 = upload_guide("run_track", st["revision"])
+    two = {"kind": "i2v", "model_id": caps["model_id"], "start_asset": hero, "prompt_text": "the runner sprints along the street", "frames": g2["n"], "fps": 24,
+           "width": 848, "height": 480, "preset": "draft", "guide": {"asset_id": g2["asset_id"], "kind": "pose"}}
+    try:
+        api("POST", "/jobs", {"recipe": two})
+        check(False, "a two-figure pose pass is refused")
+    except urllib.error.HTTPError as ex:
+        body = ex.read().decode("utf-8", "replace")
+        check(ex.code == 422 and "figures" in body, f"a two-figure pose pass is refused (422: {body[:140]})")
+    doc, g = upload_guide("walk_dolly", doc["revision"])
+    recipe = {**two, "prompt_text": "the character walks towards the camera through a bright empty room, steady camera", "frames": g["n"],
+              "guide": {"asset_id": g["asset_id"], "kind": "pose"}}
+    t0 = time.time()
+    job = api("POST", "/jobs", {"recipe": recipe, "origin": {"suite": "stage", "surface": "clip", "ref": st["id"], "payload": {"camera_id": cam}}})["jobs"][0]
+    j = wait_job(job["id"], timeout_s=3600)
+    check(j["status"] == "done", f"the Animate job: {j['status']} {j.get('error') or ''} ({time.time() - t0:.0f} s wall)")
+    if j["status"] != "done":
+        return
+    check(any("reference padded into 848×480" in x for x in j.get("log_tail", [])), "the reference was padded into the clip (never cropped)")
+    clip_id = j["result"]["clip_id"]
+    asset = api("GET", f"/assets/{j['result']['asset_ids'][0]}")
+    check(set(asset["parents"]) == {hero, g["asset_id"]} and asset["frames"] == g["n"], f"the clip: {asset['frames']} frames, lineage to the hero and the pose pass")
+    frames = sorted((tmp / "proj" / "clips" / clip_id / "master").glob("*.png"))
+    dest = OUT / "animate"
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(tmp / "proj" / asset["path"], dest / "walk_dolly.mp4")
+    eng = Engine("127.0.0.1:8188")                                                   # SDPose on the orchestrator's own engine (a plain prompt)
+    kp = g["kp"]
+    sw, sh = kp["size"]
+    W, H = Image.open(frames[0]).size
+    s = max(W / sw, H / sh)
+    ox, oy = (sw * s - W) / 2, (sh * s - H) / 2
+    hit = tot = 0
+    for idx in range(0, len(frames), 10):
+        hp, _, _ = eng.run(sdpose_graph(eng.upload(frames[idx])))
+        people = json.loads(hp["outputs"]["6"]["text"][0])[0]["people"]
+        figs = [[[x * s - ox, y * s - oy, v] for x, y, v in fig] for fig in kp["frames"][idx]]
+        h_, t_ = pck(figs, people)
+        hit += h_
+        tot += t_
+    pck_v = round(hit / tot, 3) if tot else None
+    fs = FaceSim(Path(os.environ.get("LOOM2_MODELS", "F:/loom2-models")))
+
+    def emb(p):
+        arr = np.asarray(Image.open(p).convert("RGB"))
+        faces = fs.detect(arr)
+        return fs.embed(arr, max(faces, key=lambda x: x.area).kps) if faces else None
+    he = emb(HERO)
+    sims = []
+    for i in (0, len(frames) // 2, len(frames) - 1):
+        x = emb(frames[i])
+        sims.append(round(fs.similarity(he, x), 3) if he is not None and x is not None else None)
+    check(pck_v is not None and pck_v >= 0.8, f"the clip follows the pose: PCK@0.1 {pck_v} (bar >= 0.8)")
+    engine_s = float((j.get("timings") or {}).get("engine_wall_s") or 0) or None
+    row["animate"] = {"job": j["id"], "frames": len(frames), "pck": pck_v, "facesim": sims, "wall_s": j.get("wall_s"), "engine_s": engine_s, "size": [W, H],
+                      "node_times": (j.get("node_times") or {})}
+    log(f"animate: {len(frames)} f at {W}×{H}, PCK {pck_v}, FaceSim {sims} (advisory), wall {j.get('wall_s')} s")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--parts", default="voice")
@@ -168,13 +272,21 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="loom2-cn-"))
     from loom2.config import AppState
+    engine_port = 8188 if "animate" in a.parts else ENGINE_PORT                       # the voice part never starts the engine
+    if engine_port == 8188:
+        try:
+            urllib.request.urlopen("http://127.0.0.1:8188/system_stats", timeout=3)
+            print("an engine is already listening on 8188: stop it (scripts/engine-stop.ps1)")
+            return 2
+        except Exception:
+            pass
     AppState(tmp / "state").update_settings({"models_root": os.environ.get("LOOM2_MODELS", "F:/loom2-models"), "mounted_model_trees": [], "variant": "full",
-                                             "engine": {"port": ENGINE_PORT}})
+                                             "engine": {"port": engine_port}})
     env = {**os.environ, "LOOM2_TOKEN": TOKEN, "PYTHONIOENCODING": "utf-8"}
     orch_log = (OUT / "orchestrator.log").open("w", encoding="utf-8")
     argv = [sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")]
     orch = subprocess.Popen(argv, cwd=str(ROOT / "orchestrator"), env=env, stdout=orch_log, stderr=subprocess.STDOUT, text=True)
-    log(f"orchestrator on {PORT}, state {tmp} (engine port {ENGINE_PORT}: never started)")
+    log(f"orchestrator on {PORT}, state {tmp} (engine port {engine_port})")
     failures: list[str] = []
     row: dict = {"stamp": time.strftime("%Y-%m-%d %H:%M"), "parts": a.parts, "tier": a.tier}
 
@@ -193,6 +305,8 @@ def main() -> int:
         api("POST", "/project", {"path": str(tmp / "proj"), "name": "CN", "size_cap_gb": 60})
         if "voice" in a.parts:
             voice_part(a, check, row, tmp)
+        if "animate" in a.parts:
+            animate_part(a, check, row, tmp)
     except Exception as e:  # noqa: BLE001
         check(False, f"exception: {type(e).__name__}: {e}")
     finally:

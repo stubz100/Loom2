@@ -23,6 +23,9 @@ const snap16 = (v: number) => Math.max(16, Math.round(v / 16) * 16)
 const snap32 = (v: number) => Math.max(32, Math.round(v / 32) * 32)
 // ---- ST4 (16 §8): keyframes and the clip ----
 export type GuideKind = 'depth' | 'pose'
+/** CN4 (19 §3d): how the stage becomes a clip — LTX-2.3's IC-LoRA on a pass sequence (ST4), or Wan2.2 Animate performing the pose pass. */
+export type ClipMethod = 'guided' | 'animate'
+type ClipCaps = { model_id: string; label: string; health: string; seconds?: number | null; kinds: string[]; fps?: number | null; frame_step?: number | null; size: number[]; frames_max?: number | null; figures_max?: number | null }
 /** A rendered pass sequence recorded under a camera's passes entry (`guides[kind]`). */
 export interface GuideEntry { asset_id: string; frames: number; fps: number; size: { w: number; h: number }; range: { start: number; end: number }; revision: number; rendered_at?: string }
 export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][] }>
@@ -89,6 +92,7 @@ interface StageState {
   frame: number
   playing: boolean
   guideKind: GuideKind
+  clipMethod: ClipMethod
   shotStart: string | null                                  // the shot (a stage-shot image) the clip starts from
   rendered: { done: number; total: number } | null         // sequence progress
   sequenceRenderer: SequenceRenderer | null                 // the mounted viewport registers it
@@ -102,6 +106,11 @@ interface StageState {
   keyObject: (id: string) => void
   removeKeyAt: (frame: number) => void
   setGuideKind: (k: GuideKind) => void
+  setClipMethod: (m: ClipMethod) => void
+  /** The chosen method's capabilities (model, size, frame step, frames_max …), or null when this build has none. */
+  clipCaps: () => ClipCaps | null
+  /** Frames the next sequence covers: the range on the method's frame grid, capped at its window. */
+  guideFrames: () => number
   setShotStart: (id: string | null) => void
   guideEntry: () => GuideEntry | null
   guideSize: () => [number, number]                         // the clip model's grid at the project's aspect
@@ -179,7 +188,7 @@ export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
-  frame: 0, playing: false, guideKind: 'depth', shotStart: null, rendered: null, sequenceRenderer: null,
+  frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null,
   meshes: [],
 
   // ---- P18: mesh props ----
@@ -220,15 +229,25 @@ export const useStage = create<StageState>()((set, get) => ({
     const objects = Object.fromEntries(Object.entries(k.objects).map(([id, ks]) => [id, withoutKey(ks, frame)]).filter(([, ks]) => (ks as ObjectKey[]).length))
     return { ...d, keyframes: { camera, objects } }
   }, 'remove keys'),
-  setGuideKind: (guideKind) => set({ guideKind }),
+  setGuideKind: (guideKind) => set({ guideKind: get().clipMethod === 'animate' ? 'pose' : guideKind }),
+  setClipMethod: (clipMethod) => set({ clipMethod, guideKind: clipMethod === 'animate' ? 'pose' : get().guideKind }),     // Animate performs the pose pass
+  clipCaps: () => { const st = useSession.getState().capabilities?.stage; return ((get().clipMethod === 'animate' ? st?.animate : st?.clip) ?? null) as ClipCaps | null },
+  guideFrames: () => {
+    const cur = get().current, c = get().clipCaps()
+    if (!cur) return 0
+    const step = c?.frame_step ?? 8
+    const n = clipFrames(cur.range.start, cur.range.end, step)
+    const max = (c as { frames_max?: number | null } | null)?.frames_max
+    return max ? Math.min(n, Math.floor((max - 1) / step) * step + 1) : n                     // Animate: one window (E19: 77 frames)
+  },
   setShotStart: (shotStart) => set({ shotStart }),
   guideEntry: () => { const e = get().passesEntry() as (PassesEntry & { guides?: Record<string, GuideEntry> }) | null; return e?.guides?.[get().guideKind] ?? null },
   guideSize: () => {
     const cur = get().current
     const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : 16 / 9
-    const base = useSession.getState().capabilities?.stage?.clip?.size
+    const base = get().clipCaps()?.size
     const h = base && base.length === 2 ? base[1] : 576
-    return [snap32(h * aspect), snap32(h)]
+    return get().clipMethod === 'animate' ? [snap16(h * aspect), snap16(h)] : [snap32(h * aspect), snap32(h)]   // Wan's grid is 16, LTX's 32
   },
   renderGuide: async () => {
     const s = useSession.getState()
@@ -242,7 +261,7 @@ export const useStage = create<StageState>()((set, get) => ({
       if (!doc) return false
       const kind = get().guideKind
       const { start } = doc.range
-      const n = clipFrames(doc.range.start, doc.range.end, 8)
+      const n = get().guideFrames()
       const frames = Array.from({ length: n }, (_, i) => { const d = sampleDoc(doc, start + i); return { cam: d.cameras.find((c) => c.id === cam.id) ?? cam, doc: d } })
       const [w, h] = get().guideSize()
       const out = await render(frames, w, h, kind, sampleDoc(doc, get().frame), (done, total) => set({ rendered: { done, total } }))
@@ -262,13 +281,14 @@ export const useStage = create<StageState>()((set, get) => ({
   animateShot: async () => {
     const s = useSession.getState()
     const cur = get().current, cam = get().activeCamera(), g = get().guideEntry(), start = get().shotStart
-    const model = s.capabilities?.stage?.clip?.model_id
-    if (!cur || !cam || !g || !start || !model) { s.toast(!g ? 'Render the sequence first' : !start ? 'Pick a shot to start from (click one of the results)' : 'No clip model in this build', 'error'); return null }
+    const method = get().clipMethod
+    const model = get().clipCaps()?.model_id
+    if (!cur || !cam || !g || !start || !model) { s.toast(!g ? 'Render the sequence first' : !start ? (method === 'animate' ? 'Pick the character to perform it (click one of the results)' : 'Pick a shot to start from (click one of the results)') : 'No clip model in this build', 'error'); return null }
     const recipe = { kind: 'i2v', model_id: model, start_asset: start, prompt_text: get().shot.prompt_text.trim(), frames: g.frames, fps: g.fps, width: g.size.w, height: g.size.h,
       preset: 'draft', guide: { asset_id: g.asset_id, kind: get().guideKind, strength: 1.0 }, seeds: [0] }
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'clip', ref: cur.id, payload: { camera_id: cam.id } } } }))
-      s.toast(`Queued the clip of ${cam.name}: ${g.frames} frames on the ${get().guideKind} sequence`, 'success')
+      s.toast(method === 'animate' ? `Queued ${cam.name} performed by the picked character: ${g.frames} frames (Animate)` : `Queued the clip of ${cam.name}: ${g.frames} frames on the ${get().guideKind} sequence`, 'success')
       return jobs.jobs
     } catch (e) { s.toast(`Animate failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },

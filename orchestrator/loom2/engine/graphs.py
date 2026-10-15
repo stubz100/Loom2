@@ -93,9 +93,15 @@ def _te_loader(te_name: str, te_device: str | None) -> dict[str, Any]:
 # ---- image-to-video (M6; 11 §3b; D8 Wan 2.2, D9 LTX-2.3; recipes from the E4/E4b/E4c/E5b spikes) -------------
 def video_spec(model_id: str) -> ModelSpec:
     spec = registry.get(model_id)
-    if spec is None or not spec.recipes.i2v or spec.video is None:
+    if spec is None or not (spec.recipes.i2v or spec.recipes.animate) or spec.video is None:
         raise CompileError(f"{model_id!r} is not an image-to-video model (Wan 2.2 or LTX-2.3)")
     return spec
+
+
+def animate_pad_size(recipe: I2V) -> tuple[int, int]:
+    """CN4: the size the reference is padded to before upload (the clip's own, after the grid) — E19: never cropped."""
+    ep = i2v_params(recipe)
+    return int(ep["width"]), int(ep["height"])
 
 
 def i2v_family(model_id: str) -> str:
@@ -120,7 +126,13 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
     out: dict[str, Any] = {"family": fam, "width": w, "height": h, "frames": frames, "fps": recipe.fps, "preset": recipe.preset,
                            "flf": bool(recipe.end_asset), "beats": len(recipe.beats)}
     p = presets[recipe.preset]
-    if spec.graph == "wan22":
+    if spec.graph == "wan_animate":                                   # CN4: one window (E19: 77 frames), 4 steps at CFG 1 with the LightX2V LoRA
+        if geo.frames and frames > geo.frames:
+            raise FieldError("frames", recipe.frames, [geo.frames], f"{spec.label} makes one window of up to {geo.frames} frames (E19); shorten the range")
+        steps = recipe.steps or p.steps
+        out |= {"steps": steps, "cfg": recipe.cfg if recipe.cfg is not None else (p.cfg_high or 1.0), "shift": recipe.shift if recipe.shift is not None else (p.shift or 8.0),
+                "label": p.label}
+    elif spec.graph == "wan22":
         steps = recipe.steps or p.steps
         out |= {"steps": steps, "split": max(1, min(steps - 1, round(steps * p.split / p.steps))), "cfg_high": recipe.cfg if recipe.cfg is not None else p.cfg_high,
                 "cfg_low": p.cfg_low, "shift": recipe.shift if recipe.shift is not None else p.shift, "lora_high": p.lora_high, "lora_low": p.lora_low, "label": p.label}
@@ -139,7 +151,12 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
     frame 0 — the E11 graph."""
     ep = i2v_params(recipe)
     spec = video_spec(recipe.model_id)
-    if recipe.guide and (spec.graph != "ltx23" or not spec.recipes.guide_lora):
+    if spec.graph == "wan_animate":                                   # CN4: the pose pass is the whole point
+        if not recipe.guide or recipe.guide.kind != "pose":
+            raise CompileError(f"{spec.label} performs the Stage's pose sequence — render the pose sequence and pass it as the guide")
+        if recipe.end_asset or recipe.beats:
+            raise CompileError(f"{spec.label} takes one reference image — no end frame, no beats")
+    elif recipe.guide and (spec.graph != "ltx23" or not spec.recipes.guide_lora):
         raise CompileError(f"a pass-sequence guide needs LTX-2.3 with its IC-LoRA; {spec.label} has none")
     if recipe.guide and not guide_name:
         raise CompileError("the guide video was not uploaded to the engine (pipeline.prepare_i2v)")
@@ -153,7 +170,35 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g[nid + "s"] = {"class_type": "ImageScale", "inputs": {"image": [nid, 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
         return [nid + "s", 0]
 
-    if spec.graph == "wan22":
+    if spec.graph == "wan_animate":                                   # CN4 (E19's graph): the reference padded by prepare_i2v, the pose pass scaled to the clip
+        _, unet = roster.require(spec.id)
+        _, lora = roster.require(roles.extra["lightning"])
+        _, cv = roster.require(roles.extra["clip_vision"])
+        _, te = roster.require(roles.te.default)
+        _, vae = roster.require(roles.vae)
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["1l"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora, "strength_model": 1.0}}
+        g["1s"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1l", 0], "shift": ep["shift"]}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["4"] = {"class_type": "CLIPVisionLoader", "inputs": {"clip_name": cv}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.prompt_text, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.negative if recipe.negative is not None else video.negative, "clip": ["2", 0]}}
+        ref = load_scaled("100", start_name)
+        g["8"] = {"class_type": "CLIPVisionEncode", "inputs": {"clip_vision": ["4", 0], "image": ref, "crop": "center"}}
+        g["52"] = {"class_type": "LoadVideo", "inputs": {"file": guide_name}}
+        g["53"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["52", 0]}}
+        g["54"] = {"class_type": "ImageScale", "inputs": {"image": ["53", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        g["11"] = {"class_type": "WanAnimateToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames,
+                                                                "batch_size": 1, "clip_vision_output": ["8", 0], "reference_image": ref, "pose_video": ["54", 0],
+                                                                "continue_motion_max_frames": 5, "video_frame_offset": 0}}
+        g["12"] = {"class_type": "KSampler", "inputs": {"model": ["1s", 0], "seed": seed, "steps": ep["steps"], "cfg": ep["cfg"], "sampler_name": "euler", "scheduler": "simple",
+                                                        "positive": ["11", 0], "negative": ["11", 1], "latent_image": ["11", 2], "denoise": 1.0}}
+        g["13"] = {"class_type": "TrimVideoLatent", "inputs": {"samples": ["12", 0], "trim_amount": ["11", 3]}}
+        g["14"] = {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["3", 0]}}
+        out_node = "15"
+        g[out_node] = {"class_type": "SaveImage", "inputs": {"images": ["14", 0], "filename_prefix": out_prefix}}
+    elif spec.graph == "wan22":
         _, high = roster.require(spec.id)
         _, low = roster.require(roles.extra["low_expert"])
         _, te = roster.require(roles.te.default)
@@ -258,6 +303,8 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
 def estimate_i2v_seconds(recipe: I2V) -> dict[str, Any]:
     """The plain clip's estimate; a guided clip (ST4) is scaled by E11's measured ratio (guide_seconds over the Draft preset's seconds)."""
     est = _estimate_i2v_plain(recipe)
+    if recipe.guide and (registry.get(recipe.model_id) or video_spec(recipe.model_id)).recipes.animate:
+        return {**est, "source": "baseline (E19 2026-10-15: Animate Move, 77 frames at 832×480)"}     # its preset's seconds are the guided figure
     if recipe.guide:
         spec = registry.get(recipe.model_id)
         draft = (spec.video.presets.get("draft").seconds if spec and spec.video and spec.video.presets.get("draft") else None) if spec else None

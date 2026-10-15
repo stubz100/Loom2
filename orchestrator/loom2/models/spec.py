@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Graph = Literal["flux2", "klein", "wan22", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # the builder: image, video, upscaler, subject matte, SAM, mesh
+Graph = Literal["flux2", "klein", "wan22", "wan_animate", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # the builder: image, video, upscaler, subject matte, SAM, mesh
 
 
 class Strict(BaseModel):
@@ -82,6 +82,9 @@ class Recipes(Strict):
     stage_cfg: float | None = None
     guide_lora: str | None = None                  # P13 ST4 (D76): the IC-LoRA a video model takes a pass sequence through (I2V.guide)
     guide_seconds: float | None = None             # E11's measured seconds for a guided Draft clip (121 frames at 1024×576)
+    animate: bool = False                          # CN4 (D87, E19): a pose-driven clip model — I2V with the Stage's pose pass as the guide, the start
+                                                   # image as the character's reference; not an I2V model of the Animate suite
+    guide_figures: int | None = None               # CN4: the most figures a pose pass may hold (E19: two small runners failed)
     mesh: bool = False                             # P18 (D84): image → mesh (the Pixal3D graph)
     train: Train | None = None                     # LT2 (D86): a LoRA base ai-toolkit trains on this card
 

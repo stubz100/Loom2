@@ -2,6 +2,8 @@
  "system": null,
  "classes": [
   "ApplyTextureToMesh",
+  "AudioEncoderEncode",
+  "AudioEncoderLoader",
   "BakeAmbientOcclusion",
   "BakeNormalMapFromMesh",
   "BakeTextureFromVoxel",
@@ -12,6 +14,7 @@
   "CLIPLoader",
   "CLIPLoaderGGUF",
   "CLIPTextEncode",
+  "CLIPVisionEncode",
   "CLIPVisionLoader",
   "CheckpointLoaderSimple",
   "ConditioningZeroOut",
@@ -44,6 +47,7 @@
   "KSamplerAdvanced",
   "KSamplerSelect",
   "LTXVAddGuide",
+  "LTXVAudioVAEEncode",
   "LTXVConcatAVLatent",
   "LTXVConditioning",
   "LTXVCropGuides",
@@ -56,6 +60,7 @@
   "LanPaint_ImageEncode",
   "LanPaint_KSampler",
   "LanPaint_SamplerCustomAdvanced",
+  "LoadAudio",
   "LoadBackgroundRemovalModel",
   "LoadImage",
   "LoadImageMask",
@@ -92,6 +97,7 @@
   "Trellis2ShapeStage",
   "Trellis2TextureStage",
   "Trellis2UpsampleStage",
+  "TrimVideoLatent",
   "UNETLoader",
   "UnetLoaderGGUF",
   "UnwrapMesh",
@@ -103,8 +109,10 @@
   "VaeDecodeShapeTrellis",
   "VaeDecodeStructureTrellis2",
   "VaeDecodeTextureTrellis",
+  "WanAnimateToVideo",
   "WanFirstLastFrameToVideo",
-  "WanImageToVideo"
+  "WanImageToVideo",
+  "WanSoundImageToVideo"
  ],
  "missing_at_capture": [],
  "object_info": {
@@ -124,7 +132,9 @@
        "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
        "rt_detr_v4-x-hgnet_fp16.safetensors",
        "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
-       "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+       "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+       "Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
+       "wan2.2_s2v_14B_fp8_scaled.safetensors"
       ]
      ],
      "weight_dtype": [
@@ -499,7 +509,9 @@
        "Wan2.2-I2V-A14B-Lightning-4steps-high.safetensors",
        "Wan2.2-I2V-A14B-Lightning-4steps-low.safetensors",
        "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
-       "refcontrol_v2_poses.safetensors"
+       "refcontrol_v2_poses.safetensors",
+       "e16\\4b_1000.safetensors",
+       "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
       ]
      ],
      "strength_model": [
@@ -5828,7 +5840,8 @@
     "required": {
      "clip_name": [
       [
-       "dino_v3_L_naf_fp32.safetensors"
+       "dino_v3_L_naf_fp32.safetensors",
+       "clip_vision_h.safetensors"
       ]
      ]
     }
@@ -8480,6 +8493,626 @@
    "description": "",
    "python_module": "comfy_extras.nodes_post_processing",
    "category": "image/upscaling",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "WanAnimateToVideo": {
+   "input": {
+    "required": {
+     "positive": [
+      "CONDITIONING",
+      {}
+     ],
+     "negative": [
+      "CONDITIONING",
+      {}
+     ],
+     "vae": [
+      "VAE",
+      {}
+     ],
+     "width": [
+      "INT",
+      {
+       "default": 832,
+       "min": 16,
+       "max": 16384,
+       "step": 16
+      }
+     ],
+     "height": [
+      "INT",
+      {
+       "default": 480,
+       "min": 16,
+       "max": 16384,
+       "step": 16
+      }
+     ],
+     "length": [
+      "INT",
+      {
+       "default": 77,
+       "min": 1,
+       "max": 16384,
+       "step": 4
+      }
+     ],
+     "batch_size": [
+      "INT",
+      {
+       "default": 1,
+       "min": 1,
+       "max": 4096
+      }
+     ],
+     "continue_motion_max_frames": [
+      "INT",
+      {
+       "default": 5,
+       "min": 1,
+       "max": 16384,
+       "step": 4
+      }
+     ],
+     "video_frame_offset": [
+      "INT",
+      {
+       "tooltip": "The amount of frames to seek in all the input videos. Used for generating longer videos by chunk. Connect to the video_frame_offset output of the previous node for extending a video.",
+       "default": 0,
+       "min": 0,
+       "max": 16384,
+       "step": 1
+      }
+     ]
+    },
+    "optional": {
+     "clip_vision_output": [
+      "CLIP_VISION_OUTPUT",
+      {}
+     ],
+     "reference_image": [
+      "IMAGE",
+      {}
+     ],
+     "face_video": [
+      "IMAGE",
+      {}
+     ],
+     "pose_video": [
+      "IMAGE",
+      {}
+     ],
+     "background_video": [
+      "IMAGE",
+      {}
+     ],
+     "character_mask": [
+      "MASK",
+      {}
+     ],
+     "continue_motion": [
+      "IMAGE",
+      {}
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "positive",
+     "negative",
+     "vae",
+     "width",
+     "height",
+     "length",
+     "batch_size",
+     "continue_motion_max_frames",
+     "video_frame_offset"
+    ],
+    "optional": [
+     "clip_vision_output",
+     "reference_image",
+     "face_video",
+     "pose_video",
+     "background_video",
+     "character_mask",
+     "continue_motion"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "CONDITIONING",
+    "CONDITIONING",
+    "LATENT",
+    "INT",
+    "INT",
+    "INT"
+   ],
+   "output_is_list": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+   ],
+   "output_name": [
+    "positive",
+    "negative",
+    "latent",
+    "trim_latent",
+    "trim_image",
+    "video_frame_offset"
+   ],
+   "output_tooltips": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "WanAnimateToVideo",
+   "display_name": null,
+   "description": "",
+   "python_module": "comfy_extras.nodes_wan",
+   "category": "model/conditioning/wan/animate",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": true,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "CLIPVisionEncode": {
+   "input": {
+    "required": {
+     "clip_vision": [
+      "CLIP_VISION"
+     ],
+     "image": [
+      "IMAGE"
+     ],
+     "crop": [
+      [
+       "center",
+       "none"
+      ]
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "clip_vision",
+     "image",
+     "crop"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "CLIP_VISION_OUTPUT"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "CLIP_VISION_OUTPUT"
+   ],
+   "name": "CLIPVisionEncode",
+   "display_name": "CLIP Vision Encode",
+   "description": "",
+   "python_module": "nodes",
+   "category": "model/conditioning",
+   "output_node": false,
+   "has_intermediate_output": false,
+   "search_aliases": []
+  },
+  "TrimVideoLatent": {
+   "input": {
+    "required": {
+     "samples": [
+      "LATENT",
+      {}
+     ],
+     "trim_amount": [
+      "INT",
+      {
+       "default": 0,
+       "min": 0,
+       "max": 99999
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "samples",
+     "trim_amount"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "LATENT"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "LATENT"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "TrimVideoLatent",
+   "display_name": "Trim Video Latent",
+   "description": "",
+   "python_module": "comfy_extras.nodes_wan",
+   "category": "model/latent",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "AudioEncoderLoader": {
+   "input": {
+    "required": {
+     "audio_encoder_name": [
+      "COMBO",
+      {
+       "multiselect": false,
+       "options": [
+        "wav2vec2_large_english_fp16.safetensors"
+       ]
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "audio_encoder_name"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "AUDIO_ENCODER"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "AUDIO_ENCODER"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "AudioEncoderLoader",
+   "display_name": "Load Audio Encoder",
+   "description": "",
+   "python_module": "comfy_extras.nodes_audio_encoder",
+   "category": "model/loaders",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "AudioEncoderEncode": {
+   "input": {
+    "required": {
+     "audio_encoder": [
+      "AUDIO_ENCODER",
+      {}
+     ],
+     "audio": [
+      "AUDIO",
+      {}
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "audio_encoder",
+     "audio"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "AUDIO_ENCODER_OUTPUT"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "AUDIO_ENCODER_OUTPUT"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "AudioEncoderEncode",
+   "display_name": null,
+   "description": "",
+   "python_module": "comfy_extras.nodes_audio_encoder",
+   "category": "model/conditioning",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "WanSoundImageToVideo": {
+   "input": {
+    "required": {
+     "positive": [
+      "CONDITIONING",
+      {}
+     ],
+     "negative": [
+      "CONDITIONING",
+      {}
+     ],
+     "vae": [
+      "VAE",
+      {}
+     ],
+     "width": [
+      "INT",
+      {
+       "default": 832,
+       "min": 16,
+       "max": 16384,
+       "step": 16
+      }
+     ],
+     "height": [
+      "INT",
+      {
+       "default": 480,
+       "min": 16,
+       "max": 16384,
+       "step": 16
+      }
+     ],
+     "length": [
+      "INT",
+      {
+       "default": 77,
+       "min": 1,
+       "max": 16384,
+       "step": 4
+      }
+     ],
+     "batch_size": [
+      "INT",
+      {
+       "default": 1,
+       "min": 1,
+       "max": 4096
+      }
+     ]
+    },
+    "optional": {
+     "audio_encoder_output": [
+      "AUDIO_ENCODER_OUTPUT",
+      {}
+     ],
+     "ref_image": [
+      "IMAGE",
+      {}
+     ],
+     "control_video": [
+      "IMAGE",
+      {}
+     ],
+     "ref_motion": [
+      "IMAGE",
+      {}
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "positive",
+     "negative",
+     "vae",
+     "width",
+     "height",
+     "length",
+     "batch_size"
+    ],
+    "optional": [
+     "audio_encoder_output",
+     "ref_image",
+     "control_video",
+     "ref_motion"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "CONDITIONING",
+    "CONDITIONING",
+    "LATENT"
+   ],
+   "output_is_list": [
+    false,
+    false,
+    false
+   ],
+   "output_name": [
+    "positive",
+    "negative",
+    "latent"
+   ],
+   "output_tooltips": [
+    null,
+    null,
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "WanSoundImageToVideo",
+   "display_name": null,
+   "description": "",
+   "python_module": "comfy_extras.nodes_wan",
+   "category": "model/conditioning/wan/sound",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": null,
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "LoadAudio": {
+   "input": {
+    "required": {
+     "audio": [
+      "COMBO",
+      {
+       "multiselect": false,
+       "options": [
+        "alley_ltx_guide_s1_lead.mp4",
+        "alley_ltx_guide_s2_lead.mp4",
+        "alley_ltx_guide_s3_lead.mp4",
+        "cabin_ltx_guide_s1_lead.mp4",
+        "cabin_ltx_guide_s2_lead.mp4",
+        "cabin_ltx_guide_s3_lead.mp4",
+        "cam_b1643d62-depth-r3.mp4",
+        "de1_ltx_ia2v_5041ms.wav",
+        "de1_wan_s2v_4812ms.wav",
+        "e11_crouch_crane_depth.mp4",
+        "e11_crouch_crane_pose.mp4",
+        "e11_run_track_depth.mp4",
+        "e11_run_track_pose.mp4",
+        "e11_turn_orbit_depth.mp4",
+        "e11_turn_orbit_pose.mp4",
+        "e11_walk_dolly_depth.mp4",
+        "e11_walk_dolly_pose.mp4",
+        "e11_wave_static_depth.mp4",
+        "e11_wave_static_pose.mp4",
+        "en1_ltx_ia2v_5041ms.wav",
+        "en1_wan_s2v10_4812ms.wav",
+        "en1_wan_s2v_4812ms.wav",
+        "en3_ltx_ia2v_5041ms.wav",
+        "en3_wan_s2v_4812ms.wav",
+        "pose.mp4",
+        "rooftop_ltx_guide_s1_lead.mp4",
+        "rooftop_ltx_guide_s2_lead.mp4",
+        "rooftop_ltx_guide_s3_lead.mp4"
+       ],
+       "audio_upload": true
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "audio"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "AUDIO"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "AUDIO"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "LoadAudio",
+   "display_name": "Load Audio",
+   "description": "",
+   "python_module": "comfy_extras.nodes_audio",
+   "category": "audio",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": [
+    "import audio",
+    "open audio",
+    "audio file"
+   ],
+   "essentials_category": "Audio",
+   "has_intermediate_output": false
+  },
+  "LTXVAudioVAEEncode": {
+   "input": {
+    "required": {
+     "audio": [
+      "AUDIO",
+      {
+       "tooltip": "The audio to be encoded."
+      }
+     ],
+     "audio_vae": [
+      "VAE",
+      {
+       "display_name": "Audio VAE",
+       "tooltip": "The Audio VAE model to use for encoding."
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "audio",
+     "audio_vae"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "LATENT"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "Audio Latent"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "LTXVAudioVAEEncode",
+   "display_name": "LTXV Audio VAE Encode",
+   "description": "",
+   "python_module": "comfy_extras.nodes_lt_audio",
+   "category": "model/latent/ltxv",
    "output_node": false,
    "deprecated": false,
    "experimental": false,

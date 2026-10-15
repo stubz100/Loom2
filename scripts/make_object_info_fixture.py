@@ -41,6 +41,9 @@ CLASSES = [
     "UpscaleModelLoader", "ImageUpscaleWithModel",
     # P14 (D82): Qwen-Image-Edit 2509 + the angles LoRA
     "TextEncodeQwenImageEditPlus", "ModelSamplingAuraFlow", "CFGNorm", "ImageScaleToTotalPixels",
+    # wave CN (D87): Animate (CN4) and the lip-sync nodes (CN3) — merged from a v0.39.0 capture 2026-10-15
+    "WanAnimateToVideo", "CLIPVisionEncode", "TrimVideoLatent", "AudioEncoderLoader", "AudioEncoderEncode", "WanSoundImageToVideo", "LoadAudio",
+    "LTXVAudioVAEEncode",
 ]
 
 

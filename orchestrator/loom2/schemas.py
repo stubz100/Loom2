@@ -266,11 +266,18 @@ class StageClipCaps(Open):
     approx_gb: float
 
 
+class StageAnimateCaps(StageClipCaps):
+    """CN4: Wan2.2 Animate on the pose pass — one window (`frames_max`), one figure per pass (`figures_max`)."""
+    frames_max: int | None = None
+    figures_max: int | None = None
+
+
 class StageCaps(Open):
     methods: dict[str, StageMethodCaps]
     passes: list[str]
     default: str | None = None
     clip: StageClipCaps | None = None
+    animate: StageAnimateCaps | None = None        # CN4 (D87, E19): the pose-driven clip method
 
 
 class StoryPresetCaps(Out):

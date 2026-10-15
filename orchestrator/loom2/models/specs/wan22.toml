@@ -21,3 +21,28 @@ negative = "色调艳丽，过曝，静态，细节模糊不清，字幕，风�
 draft = { label = "Draft · Lightning 2 + 2 (≈ 4 min at 480p)", steps = 4, split = 2, cfg_high = 1.0, cfg_low = 1.0, shift = 5.0, lora_high = true, lora_low = true, seconds = 236.0 }
 motion = { label = "Motion · undistilled high expert at CFG 3.5 (≈ 8 min)", steps = 8, split = 4, cfg_high = 3.5, cfg_low = 1.0, shift = 5.0, lora_low = true, seconds = 495.0 }
 quality = { label = "Quality · 10 + 10 steps, no LoRA (slow)", steps = 20, split = 10, cfg_high = 3.5, cfg_low = 3.5, shift = 8.0, seconds = 900.0 }
+
+# Wan 2.2 Animate-14B (CN4, D87): Move — the character in the reference image performs the Stage's pose pass. One window of 77 frames;
+# 4 steps at CFG 1 with the LightX2V I2V distillation LoRA, shift 8 (the ComfyUI template). E19 (journal 2026-10-15): PCK 0.81–1.0 on four
+# one-figure shots in 264–297 s at 832×480; a pass with two figures fails; the reference is padded into the frame, never cropped.
+[[model]]
+id = "wan22-animate-fp8"
+family = "wan22"
+label = "Wan 2.2 Animate-14B · pose-driven"
+short = "Animate"
+hint = "the character in the start image performs the Stage's pose pass (one figure)"
+order = 5
+graph = "wan_animate"
+roles.te = { default = "umt5-xxl-fp8" }
+roles.vae = "wan21-vae"
+roles.extra = { clip_vision = "clip-vision-h", lightning = "lightx2v-i2v-4step" }
+recipes = { animate = true, guide_seconds = 285.0, guide_figures = 1 }
+geometry = { size_mult = 16, frame_step = 4, fps = 16, frames = 77, size = [832, 480] }
+estimates = { vram_gb = 14.5 }
+
+[model.video]
+label = "Wan 2.2 Animate-14B · pose-driven"
+negative = "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+
+[model.video.presets]
+draft = { label = "Draft · LightX2V 4 steps (≈ 5 min for 77 frames at 480p)", steps = 4, cfg_high = 1.0, shift = 8.0, seconds = 285.0 }

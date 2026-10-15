@@ -5704,6 +5704,11 @@ export interface components {
         /** Recipes */
         Recipes: {
             /**
+             * Animate
+             * @default false
+             */
+            animate?: boolean;
+            /**
              * Beats
              * @default false
              */
@@ -5718,6 +5723,8 @@ export interface components {
              * @default false
              */
             flf?: boolean;
+            /** Guide Figures */
+            guide_figures?: number | null;
             /** Guide Lora */
             guide_lora?: string | null;
             /** Guide Seconds */
@@ -6217,6 +6224,38 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /**
+         * StageAnimateCaps
+         * @description CN4: Wan2.2 Animate on the pose pass — one window (`frames_max`), one figure per pass (`figures_max`).
+         */
+        StageAnimateCaps: {
+            /** Approx Gb */
+            approx_gb: number;
+            /** Figures Max */
+            figures_max?: number | null;
+            /** Fps */
+            fps?: number | null;
+            /** Frame Step */
+            frame_step?: number | null;
+            /** Frames Max */
+            frames_max?: number | null;
+            /** Health */
+            health: string;
+            /** Kinds */
+            kinds: string[];
+            /** Label */
+            label: string;
+            /** Missing */
+            missing: string[];
+            /** Model Id */
+            model_id: string;
+            /** Seconds */
+            seconds?: number | null;
+            /** Size */
+            size: number[];
+        } & {
+            [key: string]: unknown;
+        };
         /** StageCamera */
         StageCamera: {
             /**
@@ -6248,6 +6287,7 @@ export interface components {
         };
         /** StageCaps */
         StageCaps: {
+            animate?: components["schemas"]["StageAnimateCaps"] | null;
             clip?: components["schemas"]["StageClipCaps"] | null;
             /** Default */
             default?: string | null;

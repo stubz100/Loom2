@@ -282,6 +282,23 @@ def fit_reference(q: JobQueue, src: Path, max_px: int, key: str) -> Path:
     return out
 
 
+def pad_reference(q: JobQueue, src: Path, w: int, h: int, key: str) -> Path:
+    """CN4 (E19): the reference fitted inside w × h on its own mean edge colour — a portrait centre-cropped to landscape came back as a ghost
+    in the background of the Animate clip."""
+    out_dir = q.ws.temp_dir / "refs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"loom2ref-{key[:24]}-{w}x{h}.png"
+    with Image.open(src) as im:
+        im = im.convert("RGB")
+        im.thumbnail((w, h), Image.LANCZOS)
+        a = np.asarray(im)
+        edge = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]).mean(axis=0).astype(int)
+        canvas = Image.new("RGB", (w, h), tuple(int(x) for x in edge))
+        canvas.paste(im, ((w - im.width) // 2, (h - im.height) // 2))
+        canvas.save(out, "PNG")
+    return out
+
+
 # ---- M5 document jobs (10 §4, D7): the region in ----------------------------------------------------------------------------------
 async def prepare_document(job: JobRecord, recipe: Inpaint | I2I | Upscale | Segment, q: JobQueue) -> dict[str, Any]:
     """Crop/scale the document's composite (and mask) for the engine, upload them and keep the plan (edit_ai)."""
@@ -440,7 +457,19 @@ async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any
         fitted = await asyncio.to_thread(fit_reference, q, Path(src), 0, f"i2v-{asset_id}")
         return await q.engine.client.upload_image(fitted)
 
-    names["start"] = await up(recipe.start_asset, "start")
+    spec = registry.get(recipe.model_id)
+    if spec is not None and spec.recipes.animate:                      # CN4 (E19): the reference fitted inside the clip, never cropped
+        a = q.catalogue.get(recipe.start_asset)
+        src = q.catalogue.abs_path(a) if a else None
+        if not src or not Path(src).is_file():
+            raise ValueError(f"the reference image ({recipe.start_asset}) is missing from the Catalogue")
+        from .graphs import animate_pad_size
+        w, h = animate_pad_size(recipe)
+        padded = await asyncio.to_thread(pad_reference, q, Path(src), w, h, f"anim-{recipe.start_asset}")
+        names["start"] = await q.engine.client.upload_image(padded)
+        job.log_tail.append(f"reference padded into {w}×{h}")
+    else:
+        names["start"] = await up(recipe.start_asset, "start")
     names["end"] = await up(recipe.end_asset, "end") if recipe.end_asset else None
     for b in recipe.beats:
         names["beats"][b.asset_id] = await up(b.asset_id, f"beat {b.frame}")

@@ -1,6 +1,6 @@
 # 19 · Wave CN — Continuity and voice: extension, keyframe chains, pose-driven shots, lip-sync — plan
 
-Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → CN4; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
+Status: **accepted 2026-10-14** (D87, the author: §6 as written, the four spikes and the downloads); E20 GO → **CN2 built and rig-checked 2026-10-15**; E19 GO → **CN4 built and rig-checked 2026-10-15**; **E17 and E18 NO-GO 2026-10-15** (§2's run lines) — CN1 and CN3 leave the wave by §6 item 1; the wave is CN2 + CN4 + CN5. 03 §5 item 4 ("video extension, keyframe chains, pose/VACE control,
 lip-sync; fps conform per spike E9"), 11 §3d's *Extend*, 13 §… item 6 (Animate: native LTX extension, camera control), 17 §13's SV line
 (voice and lip-sync, out of the Story v1 by loom R95 — the author asked for it in this wave, 2026-10-14), loom P3 (02 §2: "continuity is
 unsolved", the make-or-break R&D; two TTS tiers + lip-sync as node-level voice).
@@ -147,6 +147,19 @@ muxed with the audio (the proxy carries it; the master stays PNG + WAV). FaceSim
 camera's "character" binding, or the version's frame) beside `guided` (LTX IC-LoRA); the Shot tab's method picker with E19's measured
 seconds; the result lands as a take as ST4's do. `WanAnimateToVideo.continue_motion_max_frames` for a chain of pose-driven segments (E17 C).
 
+**Built 2026-10-15 (CN4, journal).** No new recipe: the `I2V` recipe on a spec with `recipes.animate` (`wan22-animate-fp8` in
+`wan22.toml`, graph `wan_animate`: the transformer, umT5, the Wan 2.1 VAE, `clip_vision_h`, the LightX2V 4-step LoRA; one window of ≤ 77
+frames on the 4n+1 grid, 4 steps CFG 1 shift 8; `guide_seconds` 285 and `guide_figures` 1 from E19) with `guide.kind = pose` — the
+start image is the character's reference. The spec stays out of the Animate suite's I2V list (`registry.animate_specs`). The graph is
+E19's; `prepare_i2v` pads the reference into the clip on its own edge colour before upload (`pad_reference` — never cropped); the queue
+refuses with a sentence a pass that is not a pose sequence, a pose sequence with more than one figure in any frame (its keypoints, as
+the guide route stored them), an end frame or beats. `/capabilities.stage.animate` (model, health, seconds, size, frame step,
+`frames_max`, `figures_max`). The Shot tab's clip section gains the method — **IC-LoRA** · **Wan Animate** — the guide's size, frame grid
+and kind follow it (Animate: the pose sequence on Wan's 16-grid at 480p, the range capped at one window); *Animate ▶* queues on the
+chosen method; the picked result is the character. The clip lands as ST4's do (lineage to the reference and the pose pass). The
+Cast-hero binding of the camera is not built: the picked result (or any image placed as the start) is the reference.
+**Rig:** a stage with E11 walk_dolly pose sequence uploaded through the guide route (77 frames, one figure) and the hero as the character: the job ran cold in 299 s wall (engine start and loads included; sampling 4 × 22 s), 77 frames at 848×480, PCK@0.1 1.0 (bar ≥ 0.8), lineage to the hero and the pass, the reference padded, no caption artefact this time; FaceSim 0.08–0.21 (a small face, advisory as in E19); E11 run_track (two figures) refused with the sentence (422) — 6 checks ok.
+
 ### 3e. Data and API (sketch; the slices fix them)
 `I2V.extend_from`, `ClipRecord.chained_from / overlap`, `AssetKind` + `audio`, `story/voices/`, `FlowLine.audio_asset_id`, `TTS` / `Lipsync`
 recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`, `StageShot.method = "animate"`; routes `POST /story/voices`,
@@ -161,7 +174,7 @@ recipes with `plan().engine` False and `plan().gpu` per tier, `ShotTake.lipsync`
 | ~~**CN1 · Extend**~~ dropped 2026-10-15 (E17 NO-GO) | `extend_from`, the lead-in upload, the chain record and lineage, Animate's *Extend ▶* and the transport's chain, beats across a chain, the Episode's seam weld at export; tests (the fake engine; the chain arithmetic), the smoke scenario, the rig | 3 |
 | **CN2 · Voice** ✓ 2026-10-15 | the `audio` asset kind with player and waveform, the `voice` record, the `tts` job (two tiers), the Flow line's *Voice ▶*, the Episode's audio lane; tests (a fake TTS), smoke, rig | 4 |
 | ~~**CN3 · Lip-sync**~~ dropped 2026-10-15 (E18 NO-GO) | the `lipsync` job to a shot take, the Shots tab's verb and picker, the muxed proxy, FaceSim advisory; tests, smoke, rig | 3 |
-| **CN4 · Pose-driven shots** | the `animate` clip method on the Stage's pose pass with the Cast hero, the Shot tab's picker; tests, smoke, rig | 3 |
+| **CN4 · Pose-driven shots** ✓ 2026-10-15 | the `animate` clip method on the Stage's pose pass with the Cast hero, the Shot tab's picker; tests, smoke, rig | 3 |
 | **CN5 · Acceptance and docs** | `scripts/cn_acceptance.py` (a chain of three, a voiced talking take, a pose-driven shot, the Episode export with audio and welded joins — through the app on the rig); 11 / 16 / 17 updated, D87 closed | 2 |
 
 ≈ 22 d. Gate: D87 approved; each spike's GO before its slice (E17 → CN1, E20 → CN2, E18 → CN3, E19 → CN4); CN2 before CN3.

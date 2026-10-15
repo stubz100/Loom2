@@ -344,9 +344,8 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
 test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
   const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
   await openApp(page, { suite: 'catalogue' })
-  const src = tiles(page).nth(8)
-  await src.click()
-  const srcId = await src.getAttribute('data-id')
+  const srcId = await tiles(page).nth(8).getAttribute('data-id')                                     // pinned by id: a late asset can reorder the grid between two reads
+  await page.locator(`.tile[data-id="${srcId}"]`).click()
   await page.locator('.insp .quick-card', { hasText: 'New angle' }).click()
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
   await expect(page.locator('nav.rail button.active[title^="New angle"]')).toBeVisible()

@@ -4024,3 +4024,8 @@ split by file so that no two hands touched the same module.
 - **Rig (`scripts/cn_acceptance.py --parts extend` and `--parts lipsync`):** extend — an LTX-2.3 clip of the hero (121 frames, 1024×576) continued through `POST /clips/{id}/extend`: the continuation in 156 s, `chained_from` / `overlap 9` recorded, the seam ratio 1.46 (E17's bar ≤ 1.5), FaceSim to the hero 0.97 at the start and 0.69 at the continuation's end (the character mid-frame, walking — E17's failure case is the character leaving the middle). Lip-sync — a 3.1 s English line voiced by the draft tier on a shot with the hero's frame, Lip-sync at Fast through the app: staged, released, 49 frames in 282 s wall (cold load included), the take on the version, the line in the proxy, sync r 0.635 (E18's bar ≥ 0.5), FaceSim 0.70–0.95.
 - **Experimental stays:** E17's case (the character leaving mid-frame) and E18's bars (≥ 0.5 on every line, ≤ 240 s, German) are not met;
   the caveats say so beside the verbs.
+
+## 2026-10-15 12:42 — CI · the new-angle scenario pins its source tile by id
+- c4bacaa went red on the full variant: "a new angle" read the ninth Catalogue tile twice (to click it, then for its id), and an asset that
+  landed in between (an earlier scenario's job) shifted the grid — the job's parent was the clicked tile, the test expected the other. The id
+  is read once and the tile clicked by it. The open variant was green.

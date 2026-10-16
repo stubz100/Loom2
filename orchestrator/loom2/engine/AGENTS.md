@@ -10,7 +10,7 @@ Verified at 07cb440 on 2026-10-10. Specs: `.docs/proto01/06-architecture.md` §3
 | `supervisor.py` | `EngineSupervisor`: starts `engine/comfyui/main.py` from `engine/.venv` (lazily on the first job), health via `/system_stats`, Job Object + `taskkill` backstop, adopts an engine already on the port, restart policy, logs under `<state>/logs/engine-*.log` |
 | `client.py` | `ComfyClient`: REST (`/prompt`, `/history`, `/interrupt`, `/free`, `/upload/image`, `/view`, `/object_info`) and the `/ws` event stream (binary preview frames) |
 | `graphs.py` | the builders (they read `models/registry.py` specs — D65: no model constants or id comparisons here) `build_t2i`, `build_i2i`, `build_inpaint`, `build_upscale`, `build_segment`, `build_i2v`; `compile_recipe` dispatches and runs the contract check |
-| `image_families.py` | D89: the per-`graph` node shapes of T2I / I2I (CLIPLoader type, empty latent, FluxGuidance or not, shift node, T5 options, checkpoint loader) for the FLUX.2 family and the creative families (krea2, zimage, chroma, sd3) |
+| `image_families.py` | D89: the per-`graph` node shapes of T2I / I2I (CLIPLoader type, empty latent, FluxGuidance or not, shift node, T5 options, checkpoint loader) for the FLUX.2 family and the creative families (krea2, zimage, chroma, sd3; D91: lumina2 — a checkpoint with ModelSamplingAuraFlow, its system prompt the spec's `sampling.prompt_prefix` on the positive only) |
 | `contract.py` | `resolve_names` (basename → engine enum value) and `check_graph` (unknown class, missing input, enum value, link type) against `/object_info` |
 | `pipeline.py` | D64: `plan()` (pure: effective params, needs, weights, warm group, VRAM, ETA — `/recipes/preview` for every kind), `preview_problems()` (compile on placeholder inputs), `finalize()` (references, document region, i2v frames uploaded; compile + contract), `prepare_document` / `prepare_i2v` / `fit_reference`, `JobCancelled` |
 | `finishers.py` | D64: `finisher_for(recipe)` → `AssetFinisher` · `DocumentFinisher` (paste-back, upscale; `add_result_layer`) · `SelectionFinisher` · `ClipFinisher` (+ the identity side task); `run_quick_remove` (no engine) |
@@ -37,7 +37,7 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
    registry adds it to the roster at load). Fetch it into the models root (`scripts/fetch_weights.py`, sha256 into `roster.index.json`).
 2. **Spec** — a `[[model]]` in `orchestrator/loom2/models/specs/<family>.toml` (or a file in a folder named by `LOOM2_MODEL_SPECS`):
    `graph` (the builder), roles (encoder + alternates, VAE, extras), sampling, recipes it runs (`t2i`, `i2i`, inpaint modes, `inpaint_hero`,
-   `icm_default`, upscale factor, segment modes, i2v / flf / beats, `default_for`), inputs, geometry (size multiple, tiers, video rules),
+   `icm_default`, upscale factor, segment modes, i2v / flf / beats, `default_for`, D91 `sample` — a style-sample / swatch model, sized by `geometry.sample_px`), inputs, geometry (size multiple, tiers, video rules),
    estimates (VRAM, seconds), video presets. `registry.load()` validates it against the roster at import. Nothing else names the id:
    `scripts/model_literals_check.py` (CI) fails on a quoted roster id in the orchestrator's or the frontend's code.
 3. **Builder** — only for a new `graph` (a new family's node layout). Builders read the spec; they never compare model ids. A new *image*

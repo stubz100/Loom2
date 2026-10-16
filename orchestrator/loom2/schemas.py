@@ -318,12 +318,27 @@ class MeshCaps(Open):
     why: str | None = None
 
 
+class SampleModelCaps(Open):
+    """D91: a model Settings › Samples may pick for the style samples and the preset swatches (the default first)."""
+    id: str
+    label: str
+    short: str
+    health: str                                    # every weight it loads: verified · present · missing
+    missing: list[str]
+    default: bool                                  # the default swatch model (the setting's None)
+    style_px: int                                  # the style sample's square size
+    swatch_px: int                                 # a preset swatch's square size
+    license: str
+    seconds: float | None = None                   # the spec's Draft estimate (the rig's warm figure once measured)
+
+
 class Capabilities(Open):
     recipes: list[str]
     i2v: I2vCaps
     models: dict[str, ImageModelCaps]
     tools: dict[str, ToolCaps]
     defaults: dict[str, str]                       # D65: the default model per recipe kind
+    sample_models: list[SampleModelCaps] = []      # D91: Settings › Samples' choices, the default first
     facesim: FaceSimCaps
     variant: str
     vram_budget_gb: float

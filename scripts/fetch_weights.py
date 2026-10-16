@@ -123,6 +123,9 @@ MANIFEST = [
     dict(spike="cr", repo="Comfy-Org/Chroma1-HD_repackaged", file="split_files/diffusion_models/Chroma1-HD-fp8mixed.safetensors", dest="diffusion_models", license="apache-2.0"),
     dict(spike="cr", repo="comfyanonymous/flux_text_encoders", file="t5xxl_fp8_e4m3fn_scaled.safetensors", dest="text_encoders", license="apache-2.0 (T5)"),
     dict(spike="cr", repo="Comfy-Org/stable-diffusion-3.5-fp8", file="sd3.5_large_fp8_scaled.safetensors", dest="checkpoints", license="stabilityai-ai-community"),
+    # ---- D91 sample models: Lumina Image 2.0 (all-in-one: Gemma 2B encoder + VAE inside) and SD 3.5 Medium (its CLIP-L / CLIP-G / T5 fp8 inside) ----
+    dict(spike="sm", repo="Comfy-Org/Lumina_Image_2.0_Repackaged", file="all_in_one/lumina_2.safetensors", dest="checkpoints", license="apache-2.0"),
+    dict(spike="sm", repo="Comfy-Org/stable-diffusion-3.5-fp8", file="sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors", dest="checkpoints", license="stabilityai-ai-community"),
     # ---- open variant: Klein 4B text encoder (transformer already present) ----
     dict(spike="klein4b", repo="Comfy-Org/flux2-klein-4B", file="split_files/text_encoders/qwen_3_4b.safetensors",
          dest="text_encoders", license="apache-2.0"),

@@ -1184,7 +1184,7 @@ export interface paths {
         put?: never;
         /**
          * Preset Icons Make
-         * @description One t2i job per item on the variant's swatch model (`/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;
+         * @description One t2i job per item on the sample model (D91: Settings › Samples' when offered, else `/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;
          *     the finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there.
          */
         post: operations["preset_icons_make_preset_icons_make_post"];
@@ -2575,6 +2575,11 @@ export interface components {
             /** Recipes */
             recipes: string[];
             refine_edge: components["schemas"]["RefineEdgeCaps"];
+            /**
+             * Sample Models
+             * @default []
+             */
+            sample_models?: components["schemas"]["SampleModelCaps"][];
             /** Samplers */
             samplers: string[];
             /** Schedulers */
@@ -3792,6 +3797,7 @@ export interface components {
             frame_step?: number | null;
             /** Frames */
             frames?: number | null;
+            sample_px?: components["schemas"]["SamplePx"];
             /** Size */
             size?: number[] | null;
             /**
@@ -6168,6 +6174,11 @@ export interface components {
              */
             reangle_moves?: string[];
             /**
+             * Sample
+             * @default false
+             */
+            sample?: boolean;
+            /**
              * Segment
              * @default []
              */
@@ -6306,12 +6317,58 @@ export interface components {
             restored: string[];
         };
         /**
+         * SampleModelCaps
+         * @description D91: a model Settings › Samples may pick for the style samples and the preset swatches (the default first).
+         */
+        SampleModelCaps: {
+            /** Default */
+            default: boolean;
+            /** Health */
+            health: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** License */
+            license: string;
+            /** Missing */
+            missing: string[];
+            /** Seconds */
+            seconds?: number | null;
+            /** Short */
+            short: string;
+            /** Style Px */
+            style_px: number;
+            /** Swatch Px */
+            swatch_px: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * SamplePx
+         * @description D91: the square sizes a sample model renders at — the style sample and a preset swatch (a size the model handles well).
+         */
+        SamplePx: {
+            /**
+             * Style
+             * @default 768
+             */
+            style?: number;
+            /**
+             * Swatch
+             * @default 512
+             */
+            swatch?: number;
+        };
+        /**
          * SampleSettings
          * @description D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look
          *     preset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it
          *     appended. Changing them does not remake existing samples.
          */
         SampleSettings: {
+            /** Model Id */
+            model_id: string | null;
             /**
              * Style Prompt
              * @default a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her

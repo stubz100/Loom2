@@ -33,9 +33,9 @@ def _by_class(g: dict, cls: str) -> list[dict]:
 
 def test_the_wave_is_registered():
     graphs = {registry.get(m).graph for m in CREATIVE_T2I + CREATIVE_I2I}
-    assert graphs == {"krea2", "zimage", "chroma", "sd3"}
-    assert len(CREATIVE_T2I) == 4 and len(CREATIVE_I2I) == 5                       # SD 3.5 i2i only; Turbo refines since CR6 (partial denoise held)
-    assert all(registry.get(m).graph != "sd3" for m in CREATIVE_T2I)
+    assert graphs == {"krea2", "zimage", "chroma", "sd3", "lumina2"}              # D91: + Lumina 2 and SD 3.5 Medium (the sample models)
+    assert len(CREATIVE_T2I) == 6 and len(CREATIVE_I2I) == 6                       # SD 3.5 Large i2i only; Turbo refines since CR6; Lumina 2 t2i only
+    assert [registry.get(m).graph for m in CREATIVE_I2I if m not in CREATIVE_T2I] == ["sd3"]
     for kind in ("t2i", "i2i", "inpaint"):                                       # the defaults did not move
         assert registry.get(registry.default_model(kind)).graph in registry.FLUX_GRAPHS
 
@@ -45,8 +45,11 @@ def test_t2i_follows_the_template(model_id, roster, object_info):
     spec = registry.get(model_id)
     c = compile_recipe(T2I(model_id=model_id, prompt_text="a lighthouse in a storm", negative="blurry"), roster, object_info, 7, "loom2/t")
     g = c.graph
-    clip = _by_class(g, "CLIPLoader")[0]["inputs"]
-    assert clip["type"] == {"krea2": "krea2", "zimage": "lumina2", "chroma": "chroma"}[spec.graph]
+    if spec.graph in registry.CHECKPOINT_GRAPHS:                                 # one checkpoint: model, clip, vae from node 1
+        assert len(_by_class(g, "CheckpointLoaderSimple")) == 1 and not _by_class(g, "CLIPLoader")
+    else:
+        clip = _by_class(g, "CLIPLoader")[0]["inputs"]
+        assert clip["type"] == {"krea2": "krea2", "zimage": "lumina2", "chroma": "chroma"}[spec.graph]
     assert _by_class(g, {"krea2": "EmptyLatentImage"}.get(spec.graph, "EmptySD3LatentImage"))
     assert not _by_class(g, "FluxGuidance") and not _by_class(g, "EmptyFlux2LatentImage") and not _by_class(g, "ReferenceLatent")
     ks = _by_class(g, "KSampler")[0]["inputs"]
@@ -57,9 +60,11 @@ def test_t2i_follows_the_template(model_id, roster, object_info):
         assert neg["class_type"] == "ConditioningZeroOut" and c.summary["negative_used"] is False
     else:
         assert neg["class_type"] == "CLIPTextEncode" and neg["inputs"]["text"] == "blurry"
-    assert g[ks["positive"][0]]["class_type"] == "CLIPTextEncode"
+    pos = g[ks["positive"][0]]
+    assert pos["class_type"] == "CLIPTextEncode" and pos["inputs"]["text"] == (sm.prompt_prefix or "") + "a lighthouse in a storm"   # D91: Lumina 2's system prompt
+    assert c.serialized_prompt == "a lighthouse in a storm" and c.summary.get("prompt_prefix") == sm.prompt_prefix   # the asset keeps the author's prompt
     shift = _by_class(g, "ModelSamplingAuraFlow")
-    assert [n["inputs"]["shift"] for n in shift] == ({"zimage": [3.0], "chroma": [1.0]}.get(spec.graph, []))
+    assert [n["inputs"]["shift"] for n in shift] == ({"zimage": [3.0], "chroma": [1.0], "lumina2": [6.0]}.get(spec.graph, []))
     assert bool(_by_class(g, "T5TokenizerOptions")) == (spec.graph == "chroma")
     assert c.summary["guidance"] is None                                         # T8: nothing to show
     # a real-CFG family encodes its negative even when the recipe leaves it empty (the templates' CLIPTextEncode(""))
@@ -83,7 +88,7 @@ def test_refine_runs_at_the_spec_sampler(model_id, roster, object_info):
 
 
 def test_sd35_is_refine_only(roster, object_info):
-    sd = next(m for m in CREATIVE_I2I if registry.get(m).graph == "sd3")
+    sd = next(m for m in CREATIVE_I2I if m not in CREATIVE_T2I)                  # SD 3.5 Large (Medium also runs t2i, D91)
     with pytest.raises(CompileError, match="no T2I preset"):
         compile_recipe(T2I(model_id=sd, prompt_text="x"), roster, object_info, 1, "loom2/t")
     with pytest.raises(CompileError, match="one checkpoint"):                    # no separate encoder to move or swap
@@ -143,7 +148,7 @@ def test_capabilities_list_them_by_licence(variant, tmp_path: Path):
         caps = cl.get("/capabilities").json()
     assert caps["variant"] == variant
     models = caps["models"]
-    offered = {m for m in CREATIVE_T2I + CREATIVE_I2I if variant == "full" or registry.get(m).graph in ("zimage", "chroma")}
+    offered = {m for m in CREATIVE_T2I + CREATIVE_I2I if variant == "full" or registry.get(m).graph in ("zimage", "chroma", "lumina2")}
     assert offered <= set(models) and not (set(CREATIVE_T2I + CREATIVE_I2I) - offered) & set(models)
     for m in offered:
         c = models[m]

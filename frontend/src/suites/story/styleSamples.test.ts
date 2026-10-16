@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AlbumNode, Job, WorldStyle } from '../../api/types'
-import { DEFAULT_ID, NONE_ID, SAMPLE_SEED, findNode, pickerId, pickerItems, pickerValue, sampleDrop, sampleJob, sampleRecipe, styleFace, styleGroupName } from './styleSamples'
+import { DEFAULT_ID, NONE_ID, SAMPLE_PX, SAMPLE_SEED, findNode, pickSampleModel, pickerId, pickerItems, pickerValue, sampleDrop, sampleJob, sampleOptions, sampleRecipe, sampleValue, styleFace, styleGroupName } from './styleSamples'
 
 const node = (id: string, cover: string[] = [], children: AlbumNode[] = []): AlbumNode => ({ id, name: id, children, cover_ids: cover, assets: cover.length, groups: children.length, total: cover.length, revision: 1 })
 const tree = node('album', [], [node('g1', ['a1', 'a2']), node('g2', [], [node('g3', ['a9'])])])
@@ -53,5 +53,33 @@ describe('D90 styles as images', () => {
     expect(items[2]).toMatchObject({ badge: '★', hint: 'ink and wash', img: 't/a1' })
     expect(items[3]).toMatchObject({ badge: undefined, img: null, hint: 'no prompt fragment yet' })
     expect(pickerItems(styles, null, () => null, (id) => id)[0].label).toBe('Default · none')
+  })
+})
+
+describe('D91 the sample model', () => {
+  const m = (id: string, extra: Partial<{ default: boolean; health: string; style_px: number; label: string }> = {}) =>
+    ({ id, label: extra.label ?? id.toUpperCase(), short: id, health: extra.health ?? 'verified', missing: [], default: !!extra.default, style_px: extra.style_px ?? 768, swatch_px: 512, license: 'apache-2.0' })
+  const caps = { defaults: { swatch: 'small', t2i: 'big' }, sample_models: [m('small', { default: true, label: 'Small' }), m('quick', { style_px: 1024 }), m('slow', { health: 'missing' })] }
+
+  it('uses the setting when the build offers it, else the default — as the server does for the swatches', () => {
+    expect(pickSampleModel(caps, 'quick')).toMatchObject({ id: 'quick', style_px: 1024 })
+    expect(pickSampleModel(caps, null)?.id).toBe('small')
+    expect(pickSampleModel(caps, 'gone')?.id).toBe('small')                        // not offered here (another variant, a removed spec)
+    expect(pickSampleModel({ defaults: { swatch: 'small' }, sample_models: [] }, 'quick')).toMatchObject({ id: 'small', style_px: SAMPLE_PX })   // an older server
+    expect(pickSampleModel(null, 'quick')).toBeNull()
+  })
+
+  it("renders the style sample at the model's size", () => {
+    const r = sampleRecipe('sty_1', 'quick', true, null, 1024)
+    expect([r.width, r.height]).toEqual([1024, 1024])
+  })
+
+  it('lists "default · <label>" first, the others after, a missing one marked; the value maps the setting', () => {
+    expect(sampleOptions(caps.sample_models)).toEqual([{ value: '', label: 'default · Small' }, { value: 'quick', label: 'QUICK' }, { value: 'slow', label: 'SLOW (not fetched)' }])
+    expect(sampleOptions([])).toEqual([{ value: '', label: 'default' }])
+    expect(sampleValue('quick', caps.sample_models)).toBe('quick')
+    expect(sampleValue('small', caps.sample_models)).toBe('')                       // the default is the empty choice
+    expect(sampleValue('gone', caps.sample_models)).toBe('')
+    expect(sampleValue(null, caps.sample_models)).toBe('')
   })
 })

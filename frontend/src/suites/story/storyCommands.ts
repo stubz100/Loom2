@@ -4,18 +4,17 @@ import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, CircleHelp, Clapperboar
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { defaultModel } from '../../store/modelCaps'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestTrainJob, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget } from './makeFor'
-import { findNode, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
+import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
 const selStyle = () => selected()?.kind === 'style'
 const selBeat = () => selected()?.kind === 'beat'
 const style = () => { const s = selected(); return s?.kind === 'style' ? sy().world?.styles.find((x) => x.id === s.id) : undefined }
-const sampleModel = () => { const c = useSession.getState().capabilities; return defaultModel('swatch', c) || defaultModel('t2i', c) }
+const sampleModel = () => { const ss = useSession.getState(); return pickSampleModel(ss.capabilities, ss.settings?.samples?.model_id) }   // D91: Settings › Samples' model, else the default
 const profile = () => sy().profile()
 const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
@@ -101,7 +100,7 @@ export async function makeStyleSample(id: string): Promise<void> {
     await sy().flush()
     const s = sy().world?.styles.find((x) => x.id === id)
     const first = !(findNode(useAlbum.getState().tree, gid)?.total)
-    await ss.submitJob(sampleRecipe(id, model, first, ss.settings?.samples?.style_prompt), {   // D90: the scene of Settings › Samples
+    await ss.submitJob(sampleRecipe(id, model.id, first, ss.settings?.samples?.style_prompt, model.style_px), {   // D90: the scene of Settings › Samples; D91: its model
       suite: 'story', surface: 'style', ref: id, payload: { group_id: gid } })
     ss.toast(`Sample queued for ${s?.name ?? 'the style'} — it lands in "${findNode(useAlbum.getState().tree, gid)?.name ?? styleGroupName(s?.name ?? '')}"`, 'info')
   } catch (e) { ss.toast(`Sample not queued: ${(e as { detail?: string }).detail ?? String(e)}`) }

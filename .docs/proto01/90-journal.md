@@ -4224,3 +4224,60 @@ split by file so that no two hands touched the same module.
   "Make a sample image" with the saved style scene. Existing samples and icons are not remade (a tile's right-click remakes one).
 - Tests: offline 343 (the swatch test checks a changed scene reaches the job, the `{value}` append and the blank reset), Vitest 263
   (the recipe takes the setting, blank = default), settings audit 228 fields clean, contract regenerated, smoke 30 / 30, lint 88.
+
+## 2026-10-16 21:50 — D91 · a sample-model choice; Lumina Image 2.0 and SD 3.5 Medium to be added
+
+- The author asked for a model drop-down for the samples (style samples, preset icons) — Klein 4B and at least two smaller models — and
+  picked **Lumina Image 2.0** (2.6B, Apache-2.0, both builds) and **SD 3.5 Medium** (2.5B, Stability AI Community, `full`) from four
+  offered (SDXL base and Z-Image Turbo not taken). → D91. Work: specs + roster + fetch entries, the graphs from the pinned templates, a
+  Sample model setting with the choices from the specs, fetch and sha256, the rig run.
+
+## 2026-10-16 23:03 — D91 built · the sample-model choice; Lumina Image 2.0 and SD 3.5 Medium accepted on the rig
+
+- **Fetch:** `scripts/fetch_weights.py --only sm` (two new entries, licences `apache-2.0` / `stabilityai-ai-community`) into
+  `F:/loom2-models/checkpoints/`: `lumina_2.safetensors` 10 620 240 765 B, sha256 `b703b020…6b186`; `sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors`
+  11 638 004 202 B, sha256 `1778e885…79bacf` — both equal to the HF LFS oid, both in `roster.index.json` (health `verified`). The line
+  ran at 2–9 MiB/s (≈ 2 MiB/s through most of it); the first run died again on the cp1252 "→" (rerun with `PYTHONIOENCODING=utf-8`).
+  SD 3.5 Medium went in a second process to share the line, and the first was stopped once Lumina was indexed (it would have fetched Medium
+  again: its index is read at start). The Medium transfer **stalled** at 8.25 GB from 22:43 to ≈ 22:47 (an open connection, no bytes —
+  the coordinator saw it hang) and then resumed by itself; it finished at 22:50 without a restart and the sha256 matched. Owed, not done:
+  a stall timeout in `fetch_weights.py` (restart on no growth for 120 s).
+- **Graphs:** the pinned templates carry no Lumina Image 2.0 graph (only its NetaYume fine-tune, the same shape) and no SD 3.5 Medium
+  one; Lumina's is the engine's own example (`ComfyUI_examples/lumina2`, the workflow embedded in `lumina2_basic_example.png`):
+  CheckpointLoaderSimple → ModelSamplingAuraFlow 6 → KSampler 25 steps, CFG 4, res_multistep / simple, EmptySD3LatentImage, the
+  positive prefixed with the "superior" system prompt + `<Prompt Start>` (the text the core `CLIPTextEncodeLumina2` builds), the negative
+  plain. A new image family `lumina2` in `image_families.py` (a checkpoint graph with the AuraFlow shift), `registry.IMAGE_GRAPHS` /
+  `CHECKPOINT_GRAPHS`; the system prompt is spec data (`sampling.prompt_prefix`), applied in the graph only — the asset's
+  `serialized_prompt` stays the author's text, the summary records `prompt_prefix`. SD 3.5 Medium runs loom2's `sd3` graph (the
+  sd3.5_simple_example shape, built-in shift 3) at Stability's card values, 40 steps, CFG 4.5, euler / sgm_uniform (Skip Layer Guidance,
+  which the card also suggests, is not in the graph); t2i **and** Refine (the same graph; Refine 0.3 measured below).
+- **Specs / roster:** `specs/lumina2.toml` (`lumina-image-2`, family `lumina2`, `full` + `open`) and a second `[[model]]` in `sd35.toml`
+  (`sd35-medium-fp8`, `full`); both `recipes = { t2i, sample }`, Medium also `i2i`; Generate tiers 896×512 / 960×544 / 1920×1088 (the
+  `sd3` family's tiers now on SD 3.5 Large's entry, the first of its family). `ModelSpec` gains `recipes.sample` (a sample model must run
+  t2i; the default swatch model must be one) and `geometry.sample_px = { style = 768, swatch = 512 }` (the defaults; a spec may say
+  otherwise — none needed to: both new models read well at 768² and 512²). Klein 4B gets `sample = true` and stays `default_for = ["swatch"]`.
+- **Choice:** `registry.sample_specs(variant)` (the default first, then by `order`) and `registry.sample_model(id, variant)` (the
+  setting's when it names an offered sample model, else the default). `/capabilities.sample_models` = `[{id, label, short, health,
+  missing, default, style_px, swatch_px, license, seconds}]` — full: Klein 4B · Lumina 2 · SD 3.5 Medium; open: Klein 4B · Lumina 2.
+  `Settings.samples.model_id` (None = the default; blank → None); `swatch_recipe` / `POST /preset-icons/make` use it at the model's swatch
+  size; the style sample (`styleSamples.pickSampleModel`, the same rule) at its style size. **Settings › Samples › Sample model** — a
+  `<select>`: "default · Klein 4B", then the others, "(not fetched)" when a weight is missing; saved with the other sample settings.
+- **Tests:** `test_sample_models_d91.py` (+8: licences / variants, the list and the fallback, the registry rules, Lumina's example graph,
+  Medium's t2i + Refine, the swatch recipe, capabilities + the make route under full and open); D89's tests widened for the two models;
+  the fixture's `CheckpointLoaderSimple` list gains the two files from a v0.39.0 capture (no new node classes); `pin_review.recipes()` + 3
+  (parity 28 — the 25 earlier graphs unchanged). **Offline 354 under full and open**, settings audit 229 clean (`sample_models` mapped),
+  model literals 0, agents check clean, contract regenerated, **Vitest 266** (+3: the rule, the size, the options), lint 88, build clean,
+  **smoke 30 / 30 under full and open**.
+- **Rig (`scripts/sm_acceptance.py`, 22:51–22:54, 0 failures)** — the engine restarted per model (cold = load + sampling, the file
+  cache warm); the swatches through the real route (Settings › Samples set, `/preset-icons/make`, the icons stored with the model as
+  lineage); peak = the engine's VRAM in use during the part:
+
+  | model | style 768² cold s | warm s | 3 swatches 512² s | Draft 960×544 s | Refine 0.3 | peak GB (style / swatch / draft) |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Klein 4B (default) | 11.3 | 3.5 | 2.7 · 2.3 · 2.2 | 3.6 | — | 12.08 / 13.04 / 11.84 |
+  | Lumina 2 | 16.2 | 9.1 – 9.4 | 4.1 · 3.8 · 4.1 | 7.8 | — | 10.49 / 10.50 / 10.49 |
+  | SD 3.5 Medium | 17.2 | 8.9 – 9.4 | 5.1 · 5.7 · 4.3 | 9.7 | 19.3 s, layout 0.993 | 12.19 / 12.18 / 12.50 (Refine 11.69) |
+
+  All within the 14.5 GB bar; an earlier run at 22:21 (Klein 4B + Lumina) agreed within a second. The images are under
+  `engine/spikes/out/sm/` (style samples, swatches, drafts, the Refine): the three style samples are the same scene in recognisably
+  different hands, the swatches read their value at 512² on all three. Measured estimates into the specs. Owed: the author's look.

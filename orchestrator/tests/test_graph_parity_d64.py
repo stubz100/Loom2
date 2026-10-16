@@ -40,7 +40,7 @@ def compile_all(tmp_path: Path, object_info: dict) -> dict[str, dict]:
 
 def test_graph_parity(tmp_path: Path, object_info: dict, request: pytest.FixtureRequest) -> None:
     got = compile_all(tmp_path, object_info)
-    assert len(got) == 25                                                       # D89: + 4 t2i and 4 i2i on the creative families
+    assert len(got) == 28                                                       # D89: + 4 t2i and 4 i2i on the creative families; D91: + 2 t2i, 1 i2i (the sample models)
     if request.config.getoption("--parity-update"):
         SNAPSHOT.write_text(json.dumps(got, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         pytest.skip("snapshot rewritten")

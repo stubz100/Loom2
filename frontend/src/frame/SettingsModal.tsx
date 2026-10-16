@@ -2,6 +2,7 @@ import { KeyboardSettings } from './KeyboardSettings'
 import { Fragment, useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
+import { sampleOptions, sampleValue } from '../suites/story/styleSamples'
 import { About } from './About'
 import { THEMES, type Theme } from './theme'
 
@@ -74,6 +75,11 @@ export function SettingsModal() {
           <span className="hint">Pen pressure curve appears when a pen is detected (D19). Project format defaults arrive with their suites.</span>
           <h4 id="settings-samples">Samples</h4>
           {/* D90 (02 §4.1, §6.3): the scenes the style samples and the look-preset icons are rendered on; blank = the default again */}
+          <label>Sample model</label>
+          <select aria-label="sample model" value={sampleValue(draft.samples.model_id, s.capabilities?.sample_models)} onChange={(e) => set({ samples: { ...draft.samples, model_id: e.target.value || null } })}>
+            {sampleOptions(s.capabilities?.sample_models).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <span className="hint">the model "Make a sample image" and the look-preset icons render on (D91) — a small, quick one is enough to show a look; one this build does not offer falls back to the default</span>
           <label>Style sample</label>
           <textarea rows={2} aria-label="style sample prompt" value={draft.samples.style_prompt} onChange={(e) => set({ samples: { ...draft.samples, style_prompt: e.target.value } })} />
           <span className="hint">the scene every style is rendered on by "Make a sample image" — its fragment is appended; the same scene for every style keeps the samples comparable</span>

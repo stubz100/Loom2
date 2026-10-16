@@ -60,6 +60,7 @@ def capabilities(svc: Services) -> dict:
     return {"recipes": RECIPES, "i2v": {"models": _i2v_models(svc, variant), **i2v_sizes()}, "models": _image_models(svc, variant),
             "tools": _tools(svc, variant),
             "defaults": {kind: registry.default_model(kind, variant) for kind in [*RECIPES, "swatch"]},   # D90 (02 §6.3): + the preset swatch pack's t2i model
+            "sample_models": _sample_models(svc, variant),                       # D91: Settings › Samples › Sample model
             "facesim": {"available": facesim.available(svc.app.settings.models_root), "dir": str(facesim.weights_dir(svc.app.settings.models_root))},
             "variant": variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
             "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
@@ -69,6 +70,21 @@ def capabilities(svc: Services) -> dict:
             "reangle": _reangle(svc, variant),                                 # P14 (D82): the Angle tab's moves and methods
             "stage": _stage(svc, variant),                                     # P13 ST3 (D78): the Shot tab's methods and passes
             "mesh": _mesh(svc, variant), "story": _story(svc, variant), "train": _train(svc, variant), "voice": _voice(svc, variant), "experimental": _experimental(svc, variant)}   # LT2 (D86): the LoRA trainer                                       # P18 (D84): image → mesh props
+
+
+def _sample_models(svc: Services, variant: str) -> list[dict]:
+    """D91: the sample models this build offers — the default swatch model first, then by order — with the health of every weight each
+    loads (the picker marks a missing one "not fetched") and the square sizes it renders the style sample and a swatch at."""
+    default = registry.default_model("swatch", variant)
+    out = []
+    for spec in registry.sample_specs(variant):
+        healths = {x: svc.roster.resolve(x).health for x in spec.weights()}
+        missing = [ROSTER_BY_ID[x].name for x, hh in healths.items() if hh in ("missing", "retired")]
+        out.append({"id": spec.id, "label": spec.label, "short": spec.short or spec.label, "default": spec.id == default,
+                    "health": "missing" if missing else ("verified" if all(h == "verified" for h in healths.values()) else "present"), "missing": missing,
+                    "style_px": spec.geometry.sample_px.style, "swatch_px": spec.geometry.sample_px.swatch, "license": ROSTER_BY_ID[spec.id].license,
+                    "seconds": spec.estimates.base_seconds})
+    return out
 
 
 def _reangle(svc: Services, variant: str) -> dict:

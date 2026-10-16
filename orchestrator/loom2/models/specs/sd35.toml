@@ -11,5 +11,22 @@ order = 24
 graph = "sd3"
 sampling = { steps = 20, guidance = 0.0, cfg = 4.0, sampler = "euler", scheduler = "sgm_uniform", json_prompt = false }
 recipes = { i2i = true }
-geometry = { size_mult = 16 }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }   # D91: the sd3 family's Generate tiers (SD 3.5 Medium; the first spec of a family stands for it)
 estimates = { vram_gb = 14.2, doc_seconds = 19.0 }
+
+# SD 3.5 Medium (Stability AI, 2024-10; D91): 2.5B MMDiT-X — small and quick, a sample model and a Generate / Refine model. The Comfy-Org
+# fp8 checkpoint with CLIP-L, CLIP-G and T5 fp8 inside, on the same sd3 graph as Large (the pinned sd3.5_simple_example: euler /
+# sgm_uniform, built-in shift 3); 40 steps at CFG 4.5 from Stability's model card (Skip Layer Guidance, which the card also suggests, is not
+# in the graph). Stability AI Community licence (accepted for SD 3.5 Large, D89) — `full` only.
+[[model]]
+id = "sd35-medium-fp8"
+family = "sd3"
+label = "SD 3.5 Medium"
+short = "sd3.5m"
+hint = "small and quick, many styles"
+order = 27
+graph = "sd3"
+sampling = { steps = 40, guidance = 0.0, cfg = 4.5, sampler = "euler", scheduler = "sgm_uniform", json_prompt = false }
+recipes = { t2i = true, i2i = true, sample = true }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
+estimates = { vram_gb = 12.5, base_seconds = 9.7, cold_seconds = 17.2, doc_seconds = 19.3 }   # D91 rig (sm_acceptance 2026-10-16): Draft 960×544 warm 9.7 s, a 768² style sample cold 17.2 s / warm 9.2 s, Refine 0.3 19.3 s, peak 12.5 GB

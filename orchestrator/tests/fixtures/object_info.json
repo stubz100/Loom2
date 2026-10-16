@@ -3116,8 +3116,10 @@
     "required": {
      "ckpt_name": [
       [
+       "lumina_2.safetensors",
        "sam3.pt",
        "sd3.5_large_fp8_scaled.safetensors",
+       "sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors",
        "sdpose_wholebody_fp16.safetensors"
       ],
       {

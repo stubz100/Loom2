@@ -1,7 +1,7 @@
 """D89: the node shapes in which the image families' T2I and I2I graphs differ (`.docs/creative_image/04` §2), keyed by the spec's `graph`.
 
 Read from the pinned engine's Comfy templates (`comfyui_workflow_templates_json`: image_krea2_turbo_t2i, image_z_image,
-image_chroma_text_to_image, sd3.5_simple_example). Shapes only — steps, CFG, sampler, scheduler and shift stay in the spec (D65).
+image_chroma_text_to_image, sd3.5_simple_example; D91: the Lumina 2 example workflow). Shapes only — steps, CFG, sampler, scheduler and shift stay in the spec (D65).
 """
 from __future__ import annotations
 
@@ -27,6 +27,10 @@ FAMILIES: dict[str, Family] = {
     "zimage": Family("lumina2", "EmptySD3LatentImage", flux_guidance=False, flux_shift=False, shift_node="ModelSamplingAuraFlow"),
     "chroma": Family("chroma", "EmptySD3LatentImage", flux_guidance=False, flux_shift=False, shift_node="ModelSamplingAuraFlow", t5_options=True),
     "sd3": Family(None, "EmptySD3LatentImage", flux_guidance=False, flux_shift=False),          # built-in shift 3.0
+    # D91: Lumina Image 2.0 — the engine's own example (ComfyUI_examples/lumina2, lumina2_basic_example.png; the pinned templates carry only
+    # its NetaYume fine-tune, the same shape): one all-in-one checkpoint, ModelSamplingAuraFlow, EmptySD3LatentImage; the system prompt is
+    # the spec's `sampling.prompt_prefix`
+    "lumina2": Family(None, "EmptySD3LatentImage", flux_guidance=False, flux_shift=False, shift_node="ModelSamplingAuraFlow"),
 }
 
 

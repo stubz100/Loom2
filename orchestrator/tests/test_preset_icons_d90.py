@@ -80,7 +80,7 @@ def test_make_plans_one_staged_job_per_item(tmp_path: Path, variant: str):
             assert job["status"] == "staged" and job["batch_id"] == out["batch_id"] and job["seed"] == preset_icons.SWATCH_SEED
             assert job["origin"] == {"suite": "generate", "surface": "swatch", "ref": it["key"], "payload": {"key": it["key"], **asked}}
             rec = job["recipe"]
-            assert rec["kind"] == "t2i" and rec["model_id"] == swatch and rec["width"] == rec["height"] == preset_icons.SWATCH_PX
+            assert rec["kind"] == "t2i" and rec["model_id"] == swatch and rec["width"] == rec["height"] == registry.get(swatch).geometry.sample_px.swatch
             assert asked["value"] in rec["prompt_text"]
         assert out["jobs"][0]["recipe"]["prompt_text"] == "a simple still life of a white sphere on a table, golden hour"
         assert out["jobs"][2]["recipe"]["prompt_text"] == "wet asphalt"                     # an unknown field: the value alone

@@ -16,6 +16,7 @@ export type I2vCaps = S['I2vCaps']
 export type I2vModelCaps = S['I2vModelCaps']
 export type ImageModelCaps = S['ImageModelCaps']          // D65: generated from the model specs
 export type ToolCaps = S['ToolCaps']
+export type SampleModelCaps = S['SampleModelCaps']        // D91: Settings › Samples › Sample model
 export type VideoPreset = S['VideoPreset']
 export type ProjectFormat = S['ProjectFormat']
 export type ProjectInfo = S['ProjectInfo']

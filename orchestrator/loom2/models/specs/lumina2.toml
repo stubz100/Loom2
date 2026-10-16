@@ -1,0 +1,17 @@
+# Lumina Image 2.0 (Alpha-VLLM, 2025-01; D91): a 2.6B flow model with a Gemma 2B encoder — small and quick, a sample model and a Generate
+# model. The Comfy-Org all-in-one checkpoint (CheckpointLoaderSimple: the model, Gemma 2B and the FLUX.1 VAE). Graph and sampling from the
+# engine's own example workflow (ComfyUI_examples/lumina2, lumina2_basic_example.png — the pinned templates carry only the NetaYume
+# fine-tune, the same shape): ModelSamplingAuraFlow 6, EmptySD3LatentImage, 25 steps at CFG 4, res_multistep / simple, the "superior"
+# system prompt before the positive (the core CLIPTextEncodeLumina2's text), the negative plain. Apache-2.0 — `full` and `open`.
+[[model]]
+id = "lumina-image-2"
+family = "lumina2"
+label = "Lumina 2"
+short = "lumina2"
+hint = "small and quick, open licence; real CFG and negatives"
+order = 26
+graph = "lumina2"
+sampling = { steps = 25, guidance = 0.0, cfg = 4.0, sampler = "res_multistep", scheduler = "simple", json_prompt = false, model_shift = 6.0, prompt_prefix = "You are an assistant designed to generate superior images with the superior degree of image-text alignment based on textual prompts or user prompts. <Prompt Start> " }
+recipes = { t2i = true, sample = true }
+geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
+estimates = { vram_gb = 10.5, base_seconds = 8.1, cold_seconds = 16.8 }   # D91 rig (sm_acceptance 2026-10-16): Draft 960×544 warm 8.1 s, a 768² style sample cold 16.8 s / warm 8.9 s, peak 10.47 GB

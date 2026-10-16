@@ -16,8 +16,8 @@ from .spec import ModelSpec
 
 SPEC_DIR = Path(__file__).parent / "specs"
 FLUX_GRAPHS = ("flux2", "klein")                    # the FLUX.2 family: the only graphs with Edit (inpaint, tiled refine), Angle, Stage, references
-IMAGE_GRAPHS = FLUX_GRAPHS + ("krea2", "zimage", "chroma", "sd3")   # D89: Generate (T2I) and Refine (I2I) models
-CHECKPOINT_GRAPHS = ("sd3",)                        # one checkpoint carries the encoders and the VAE (no roles.te / roles.vae)
+IMAGE_GRAPHS = FLUX_GRAPHS + ("krea2", "zimage", "chroma", "sd3", "lumina2")   # D89: Generate (T2I) and Refine (I2I) models; D91: Lumina 2
+CHECKPOINT_GRAPHS = ("sd3", "lumina2")              # one checkpoint carries the encoders and the VAE (no roles.te / roles.vae)
 
 
 class RegistryError(ValueError):
@@ -62,6 +62,10 @@ def _check(spec: ModelSpec) -> None:
             raise RegistryError(f"{spec.id}: a {spec.graph!r} checkpoint carries its encoders and VAE — no roles.te / roles.vae")
         if spec.graph not in CHECKPOINT_GRAPHS and not (spec.roles.te and spec.roles.vae):
             raise RegistryError(f"{spec.id}: graph {spec.graph!r} needs roles.te and roles.vae")
+    if spec.recipes.sample and not spec.recipes.t2i:
+        raise RegistryError(f"{spec.id}: a sample model renders t2i — recipes.sample needs recipes.t2i (D91)")
+    if "swatch" in spec.recipes.default_for and not spec.recipes.sample:
+        raise RegistryError(f"{spec.id}: the default swatch model must be a sample model (recipes.sample, D91)")
     if (spec.recipes.i2v or spec.recipes.animate or spec.recipes.lipsync) and spec.video is None:
         raise RegistryError(f"{spec.id}: an i2v model needs a [model.video] block (negative, presets)")
 
@@ -98,7 +102,7 @@ def get(model_id: str | None) -> ModelSpec | None:
 
 RUNS = {"t2i": lambda s: s.recipes.t2i, "i2i": lambda s: s.recipes.i2i, "inpaint": lambda s: bool(s.recipes.inpaint),
         "upscale": lambda s: s.recipes.upscale_factor is not None, "segment": lambda s: bool(s.recipes.segment), "i2v": lambda s: s.recipes.i2v,
-        "mesh": lambda s: s.recipes.mesh, "swatch": lambda s: s.recipes.t2i}   # D90 (02 §6.3): the preset swatch pack is a t2i job
+        "mesh": lambda s: s.recipes.mesh, "swatch": lambda s: s.recipes.sample}   # D90 (02 §6.3): the preset swatch pack is a t2i job; D91: on a sample model
 
 
 def offered(spec: ModelSpec, variant: str | None) -> bool:
@@ -117,6 +121,22 @@ def default_model(kind: str, variant: str | None = None) -> str:
         if runs(s) and offered(s, variant):
             return s.id
     raise RegistryError(f"no spec is the default for {kind!r}")
+
+
+def sample_specs(variant: str | None = None) -> list[ModelSpec]:
+    """D91: the models Settings › Samples may pick for the style samples and the preset swatches — the variant's default swatch model
+    first, then the other offered sample models by `order`."""
+    default = default_model("swatch", variant)
+    rest = sorted((s for s in SPECS.values() if s.recipes.sample and offered(s, variant) and s.id != default), key=lambda s: s.order)
+    return [SPECS[default], *rest]
+
+
+def sample_model(model_id: str | None, variant: str | None = None) -> ModelSpec:
+    """D91: the sample model a job runs — the setting's when it names a sample model this variant offers, else the default swatch model."""
+    spec = SPECS.get(model_id or "")
+    if spec is not None and spec.recipes.sample and offered(spec, variant):
+        return spec
+    return SPECS[default_model("swatch", variant)]
 
 
 def reangle_specs() -> list[ModelSpec]:

@@ -77,6 +77,10 @@ def recipes() -> list[tuple[str, object, dict]]:
         ("i2i z-image", I2I(document_id="d", model_id="zimage-bf16", source="visible", strength=0.55, seeds=[1]), img),
         ("i2i chroma", I2I(document_id="d", model_id="chroma1-hd-fp8mixed", source="visible", strength=0.55, seeds=[1]), img),
         ("i2i sd3.5 large", I2I(document_id="d", model_id="sd35-large-fp8", source="visible", strength=0.55, seeds=[1]), img),
+        # D91: the sample models — Lumina 2 (T2I) and SD 3.5 Medium (T2I and Refine)
+        ("t2i lumina 2", T2I(model_id="lumina-image-2", prompt_mode="text", prompt_text="a cat", negative="blurry ugly bad", seeds=[1]), {}),
+        ("t2i sd3.5 medium", T2I(model_id="sd35-medium-fp8", prompt_mode="text", prompt_text="a cat", seeds=[1]), {}),
+        ("i2i sd3.5 medium", I2I(document_id="d", model_id="sd35-medium-fp8", source="visible", strength=0.55, seeds=[1]), img),
         ("segment birefnet", Segment(document_id="d", mode="subject"), img),
         ("segment sam3 text", Segment(document_id="d", model_id="sam3", mode="text", text="a woman"), img),
         ("i2v wan draft", I2V(start_asset="a"), {"start": "alley-rain_s20261004.png"}),

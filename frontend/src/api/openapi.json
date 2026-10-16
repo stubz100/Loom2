@@ -879,6 +879,14 @@
           "refine_edge": {
             "$ref": "#/components/schemas/RefineEdgeCaps"
           },
+          "sample_models": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SampleModelCaps"
+            },
+            "title": "Sample Models",
+            "type": "array"
+          },
           "samplers": {
             "items": {
               "type": "string"
@@ -3993,6 +4001,9 @@
               }
             ],
             "title": "Frames"
+          },
+          "sample_px": {
+            "$ref": "#/components/schemas/SamplePx"
           },
           "size": {
             "anyOf": [
@@ -9665,6 +9676,11 @@
             "title": "Reangle Moves",
             "type": "array"
           },
+          "sample": {
+            "default": false,
+            "title": "Sample",
+            "type": "boolean"
+          },
           "segment": {
             "default": [],
             "items": {
@@ -10023,9 +10039,107 @@
         "title": "Restored",
         "type": "object"
       },
+      "SampleModelCaps": {
+        "additionalProperties": true,
+        "description": "D91: a model Settings › Samples may pick for the style samples and the preset swatches (the default first).",
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "short": {
+            "title": "Short",
+            "type": "string"
+          },
+          "style_px": {
+            "title": "Style Px",
+            "type": "integer"
+          },
+          "swatch_px": {
+            "title": "Swatch Px",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "short",
+          "health",
+          "missing",
+          "default",
+          "style_px",
+          "swatch_px",
+          "license"
+        ],
+        "title": "SampleModelCaps",
+        "type": "object"
+      },
+      "SamplePx": {
+        "additionalProperties": false,
+        "description": "D91: the square sizes a sample model renders at — the style sample and a preset swatch (a size the model handles well).",
+        "properties": {
+          "style": {
+            "default": 768,
+            "title": "Style",
+            "type": "integer"
+          },
+          "swatch": {
+            "default": 512,
+            "title": "Swatch",
+            "type": "integer"
+          }
+        },
+        "title": "SamplePx",
+        "type": "object"
+      },
       "SampleSettings": {
         "description": "D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look\npreset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it\nappended. Changing them does not remake existing samples.",
         "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "style_prompt": {
             "default": "a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her",
             "title": "Style Prompt",
@@ -10041,7 +10155,8 @@
         },
         "required": [
           "style_prompt",
-          "swatch_prompts"
+          "swatch_prompts",
+          "model_id"
         ],
         "title": "SampleSettings",
         "type": "object"
@@ -18069,7 +18184,7 @@
     },
     "/preset-icons/make": {
       "post": {
-        "description": "One t2i job per item on the variant's swatch model (`/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;\nthe finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there.",
+        "description": "One t2i job per item on the sample model (D91: Settings › Samples' when offered, else `/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;\nthe finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there.",
         "operationId": "preset_icons_make_preset_icons_make_post",
         "requestBody": {
           "content": {

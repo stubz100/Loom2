@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Graph = Literal["flux2", "klein", "krea2", "zimage", "chroma", "sd3",                 # image: FLUX.2 family; D89 creative t2i / i2i families
+Graph = Literal["flux2", "klein", "krea2", "zimage", "chroma", "sd3", "lumina2",      # image: FLUX.2 family; D89 creative t2i / i2i families; D91 Lumina 2
                 "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d"]      # video, upscaler, subject matte, SAM, angles, mesh
 
 
@@ -50,6 +50,7 @@ class Sampling(Strict):
     model_shift: float | None = None               # the model's constant shift (shown in Generate · Advanced)
     cfg_fixed: bool = False                        # CFG stays at `cfg` although the model is not distilled (dev is guidance-distilled)
     cfg_note: str | None = None                    # why, or how to use it — the panel's hint next to CFG
+    prompt_prefix: str | None = None               # D91: the system prompt the positive CLIPTextEncode text starts with (Lumina 2's "<Prompt Start>")
 
 
 class Train(Strict):
@@ -91,6 +92,7 @@ class Recipes(Strict):
     lipsync_languages: list[str] = []              # the languages its audio encoder hears (E18: wav2vec2-large-english)
     mesh: bool = False                             # P18 (D84): image → mesh (the Pixal3D graph)
     train: Train | None = None                     # LT2 (D86): a LoRA base ai-toolkit trains on this card
+    sample: bool = False                           # D91: may render the style samples and the preset swatches (Settings › Samples › Sample model)
 
 
 class RefsSuggest(Strict):
@@ -104,6 +106,12 @@ class Inputs(Strict):
     refs_suggest: RefsSuggest | None = None
 
 
+class SamplePx(Strict):
+    """D91: the square sizes a sample model renders at — the style sample and a preset swatch (a size the model handles well)."""
+    style: int = 768
+    swatch: int = 512
+
+
 class Geometry(Strict):
     size_mult: int = 16
     frame_step: int | None = None                  # video: 4n+1 / 8n+1
@@ -111,6 +119,7 @@ class Geometry(Strict):
     frames: int | None = None
     size: list[int] | None = None                  # video: the Draft size
     tiers: dict[str, list[int]] = {}               # image: thumb / draft / full; video: draft / hd / portrait / square
+    sample_px: SamplePx = Field(default_factory=SamplePx)   # D91: a sample model's style-sample and swatch sizes
 
 
 class VideoPreset(Strict):

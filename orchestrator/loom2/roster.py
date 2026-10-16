@@ -221,6 +221,14 @@ ROSTER: list[RosterEntry] = [
                 repo="Comfy-Org/stable-diffusion-3.5-fp8", file="sd3.5_large_fp8_scaled.safetensors", approx_gb=14.93,
                 license="stabilityai-ai-community (commercial use under USD 1 M revenue; accepted by the author, D89)",
                 note="SD 3.5 Large with CLIP-L, CLIP-G and T5 fp8 in one checkpoint (CheckpointLoaderSimple); Refine only"),
+    # ---- D91 sample models: small t2i models for the style samples and the preset swatches (also in Generate) ----
+    RosterEntry(id="lumina-image-2", name="lumina_2.safetensors", folder="checkpoints", family="lumina2", role="transformer",
+                repo="Comfy-Org/Lumina_Image_2.0_Repackaged", file="all_in_one/lumina_2.safetensors", license="apache-2.0", variants=["full", "open"], approx_gb=10.62,
+                note="Lumina Image 2.0 (Alpha-VLLM, 2.6B) with its Gemma 2B encoder and the FLUX.1 VAE in one checkpoint (CheckpointLoaderSimple)"),
+    RosterEntry(id="sd35-medium-fp8", name="sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors", folder="checkpoints", family="sd3", role="transformer",
+                repo="Comfy-Org/stable-diffusion-3.5-fp8", file="sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors", approx_gb=11.64,
+                license="stabilityai-ai-community (commercial use under USD 1 M revenue; accepted by the author, D89 / D91)",
+                note="SD 3.5 Medium (2.5B) with CLIP-L, CLIP-G and T5 fp8 in one checkpoint (CheckpointLoaderSimple)"),
     # ---- retired by spikes (D30: deleted, re-fetchable) ----
     RosterEntry(id="flux1-fill-dev", name="flux1-fill-dev.safetensors", folder="diffusion_models", family="flux1", role="transformer",
                 repo="black-forest-labs/FLUX.1-Fill-dev", file="flux1-fill-dev.safetensors", license="flux-nc (gated)", approx_gb=22.2, retired="E8 2026-10-05"),

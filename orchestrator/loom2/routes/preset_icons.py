@@ -41,7 +41,7 @@ async def preset_icons_list(svc: Svc):
 
 @router.post("/preset-icons/make", response_model=PresetIconsMade)
 async def preset_icons_make(svc: Svc, body: MakeBody):
-    """One t2i job per item on the variant's swatch model (`/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;
+    """One t2i job per item on the sample model (D91: Settings › Samples' when offered, else `/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;
     the finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there."""
     if not (svc.ws and svc.catalogue and svc.queue):
         raise HTTPException(409, "open a project to make preset swatches — their jobs run in its queue")
@@ -53,7 +53,8 @@ async def preset_icons_make(svc: Svc, body: MakeBody):
         for it in body.items:
             key = icon_key(it.field, it.value)
             origin = JobOrigin(suite="generate", surface=SURFACE, ref=key, payload={"key": key, "field": it.field, "value": it.value})
-            made = q.submit(swatch_recipe(it.field, it.value, variant, body.seed, svc.app.settings.samples.swatch_prompts), stage=body.stage, origin=origin, batch_id=batch)   # D90: the scenes of Settings › Samples
+            samples = svc.app.settings.samples                                   # D90: the scenes of Settings › Samples; D91: its sample model
+            made = q.submit(swatch_recipe(it.field, it.value, variant, body.seed, samples.swatch_prompts, samples.model_id), stage=body.stage, origin=origin, batch_id=batch)
             jobs += made
             items.append({"key": key, "field": it.field, "value": it.value, "job_id": made[0].id})
     except FieldError as e:

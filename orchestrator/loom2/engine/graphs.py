@@ -579,7 +579,8 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
 
     g: dict[str, Any] = {}
     model_link, clip, vae = _image_loaders(g, roster, spec, ep["te_id"], ep["te_device"], ep["weight_dtype"])
-    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": clip}}
+    prefix = spec.sampling.prompt_prefix or ""                                  # D91: Lumina 2's system prompt leads the positive (its example's)
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prefix + text, "clip": clip}}
     g["8"] = {"class_type": fam.latent, "inputs": {"width": w, "height": h, "batch_size": 1}}
     g["11"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
     # decode: plain, or tiled for headroom on the Full tier (D13)
@@ -642,6 +643,8 @@ def build_t2i(recipe: T2I, roster: Roster, seed: int, out_prefix: str, ref_files
                                                      "sampler_name": ep["sampler"], "scheduler": ep["scheduler"], "positive": positive, "negative": ["7", 0],
                                                      "latent_image": ["8", 0], "denoise": 1.0}}
     summary = {k: v for k, v in ep.items() if k != "serialized_prompt"}
+    if prefix:
+        summary["prompt_prefix"] = prefix                                           # the manifest keeps what the encoder saw before the prompt
     return Compiled(graph=g, output_node="11", summary=summary, serialized_prompt=text)
 
 
@@ -771,7 +774,7 @@ def build_i2i(recipe: I2I, roster: Roster, seed: int, out_prefix: str, image_nam
     steps = int(recipe.steps or (sm.edit_steps if sm.edit_steps is not None else sm.steps))
     strength = max(0.05, min(1.0, float(recipe.strength)))
     prompt = recipe.prompt_text.strip()
-    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
+    g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": (sm.prompt_prefix or "") + prompt, "clip": clip}}   # D91: a system prompt first (Lumina 2)
     positive: list = ["5", 0]
     if fam.flux_guidance:
         g["6"] = {"class_type": "FluxGuidance", "inputs": {"conditioning": ["5", 0], "guidance": float(sm.guidance)}}

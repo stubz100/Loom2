@@ -1,14 +1,14 @@
 // D90 (02 §4.1): styles as images — a style's face is the cover of its group (`StoryStyle.group_id`); "Make a sample image" renders the
-// style on a fixed preview scene (a person, a place and an object in one frame) as one Draft t2i on the open-licence swatch model, its
+// style on a fixed preview scene (a person, a place and an object in one frame) as one t2i on the sample model (D91: Settings › Samples), its
 // fragment appended by the server (story.resolve_style); an image dropped on a style tile becomes a sample and the cover. Pure: tested.
-import type { AlbumNode, Job, WorldStyle } from '../../api/types'
+import type { AlbumNode, Capabilities, Job, SampleModelCaps, WorldStyle } from '../../api/types'
 import type { DragItem, DragPayload, DropVerdict } from '../../frame/drag'
 import type { PresetIcon } from '../../frame/PresetIcons'
 
 /** The preview scene every style is shown on, so samples compare across styles — the default; Settings › Samples may change it (D90). */
 export const SAMPLE_PROMPT = 'a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her'
 export const SAMPLE_SEED = 90                                 // the first sample of every style shares a seed (a set, as the swatch pack); later ones 0 = random
-export const SAMPLE_PX = 768                                  // square, a multiple of 16: big enough to read a look at 108 px and in the Inspector
+export const SAMPLE_PX = 768                                  // square, a multiple of 16: big enough to read a look at 108 px and in the Inspector (a spec may say otherwise, D91)
 export const DEFAULT_ID = '__default'
 export const NONE_ID = '__none'
 
@@ -33,9 +33,36 @@ export function sampleJob(jobs: Record<string, Job>, styleId: string): Job | und
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
 }
 
-/** The one-image t2i a sample runs: text mode, the swatch model, square Draft size, the style id (its fragment appended at submit). */
-export function sampleRecipe(styleId: string, modelId: string, first: boolean, prompt?: string | null): Record<string, unknown> {
-  return { kind: 't2i', model_id: modelId, prompt_mode: 'text', prompt_text: prompt?.trim() || SAMPLE_PROMPT, width: SAMPLE_PX, height: SAMPLE_PX, seeds: [first ? SAMPLE_SEED : 0], style_id: styleId }
+/** D91: the model a sample renders on — Settings › Samples' model when this build offers it (`caps.sample_models`), else the default
+ *  swatch model (the list's `default`, the server's `defaults.swatch`); the same rule as the server's preset swatches. null before caps. */
+export function pickSampleModel(caps: Pick<Capabilities, 'sample_models' | 'defaults'> | null | undefined, settingId?: string | null): Pick<SampleModelCaps, 'id' | 'style_px' | 'swatch_px'> | null {
+  const list = caps?.sample_models ?? []
+  const hit = (settingId && list.find((m) => m.id === settingId)) || list.find((m) => m.default) || list[0]
+  if (hit) return hit
+  const id = caps?.defaults?.swatch || caps?.defaults?.t2i
+  return id ? { id, style_px: SAMPLE_PX, swatch_px: 512 } : null
+}
+
+const fetched = (m: Pick<SampleModelCaps, 'health'>) => (m.health === 'missing' ? ' (not fetched)' : '')
+
+/** D91: Settings › Samples › Sample model's options — "default · <the default's label>" (value '' = the setting's null), then the other
+ *  sample models by the server's order; a model whose weights are not on disk says "(not fetched)". */
+export function sampleOptions(list: Pick<SampleModelCaps, 'id' | 'label' | 'default' | 'health'>[] | null | undefined): { value: string; label: string }[] {
+  const all = list ?? []
+  const def = all.find((m) => m.default)
+  return [{ value: '', label: def ? `default · ${def.label}${fetched(def)}` : 'default' },
+    ...all.filter((m) => !m.default).map((m) => ({ value: m.id, label: `${m.label}${fetched(m)}` }))]
+}
+
+/** The select's value for a saved setting: '' for none, the default model or one this build does not offer (it falls back to the default). */
+export function sampleValue(settingId: string | null | undefined, list: Pick<SampleModelCaps, 'id' | 'default'>[] | null | undefined): string {
+  const m = settingId ? (list ?? []).find((x) => x.id === settingId) : undefined
+  return m && !m.default ? m.id : ''
+}
+
+/** The one-image t2i a sample runs: text mode, the sample model, a square size (the model's, D91), the style id (its fragment appended at submit). */
+export function sampleRecipe(styleId: string, modelId: string, first: boolean, prompt?: string | null, px: number = SAMPLE_PX): Record<string, unknown> {
+  return { kind: 't2i', model_id: modelId, prompt_mode: 'text', prompt_text: prompt?.trim() || SAMPLE_PROMPT, width: px, height: px, seeds: [first ? SAMPLE_SEED : 0], style_id: styleId }
 }
 
 /** A drop on a style tile: images become samples (copies — the originals stay where they are), the first the cover; clips are refused. */

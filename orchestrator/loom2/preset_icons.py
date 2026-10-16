@@ -1,6 +1,7 @@
 """D90 (02 §6.3): the preset swatch pack — one small generated image per *look* preset (Generate's prompt-field presets and the user's
-snippets), made locally once as a staged t2i job on the spec named `default_for = ["swatch"]` (an open-licence model, so both variants
-make it), kept in **app state**, not in the project, and re-made per item.
+snippets), made locally once as a staged t2i job on the sample model (D91: Settings › Samples › Sample model, else the spec named
+`default_for = ["swatch"]` — an open-licence model, so both variants make it) at its `geometry.sample_px.swatch`, kept in **app
+state**, not in the project, and re-made per item.
 
     <state>/preset_icons/index.json      {schema_version, items: {key: PresetIcon}}  — the record of what each file shows
     <state>/preset_icons/<key>.webp      the swatch, ICON_PX on its long side
@@ -28,7 +29,6 @@ from .models import registry
 
 PRESET_ICONS_SCHEMA_VERSION = 1
 ICON_PX = 256                                   # the stored swatch's long side (the tiles draw at ≈ 40–64 px, 2× dpr and a hover loupe)
-SWATCH_PX = 512                                 # the job's square size: the smallest that still reads as a look on Klein 4B
 SWATCH_SEED = 90                                # a pack reads as a set when its swatches share a seed; 0 asks the queue for a random one
 KEY_RE = re.compile(r"^[0-9a-f]{16}$")
 SURFACE = "swatch"                              # JobOrigin.surface of a swatch job (the finisher's hook)
@@ -63,10 +63,14 @@ def swatch_prompt(field: str, value: str, prompts: dict[str, str] | None = None)
     return (prompts or PROMPTS).get(field, "{value}").replace("{value}", value)
 
 
-def swatch_recipe(field: str, value: str, variant: str | None, seed: int = SWATCH_SEED, prompts: dict[str, str] | None = None) -> dict:
-    """One square Draft t2i on the variant's swatch model (D65: the spec says which), its own sampling preset otherwise."""
-    return {"kind": "t2i", "model_id": registry.default_model("swatch", variant), "prompt_mode": "text", "prompt_text": swatch_prompt(field, value, prompts),
-            "width": SWATCH_PX, "height": SWATCH_PX, "seeds": [seed]}
+def swatch_recipe(field: str, value: str, variant: str | None, seed: int = SWATCH_SEED, prompts: dict[str, str] | None = None,
+                  model_id: str | None = None) -> dict:
+    """One square t2i on the sample model (D91: Settings › Samples' when this variant offers it, else the spec named the default swatch
+    model — D65), at that model's swatch size, its own sampling preset otherwise."""
+    spec = registry.sample_model(model_id, variant)
+    px = spec.geometry.sample_px.swatch
+    return {"kind": "t2i", "model_id": spec.id, "prompt_mode": "text", "prompt_text": swatch_prompt(field, value, prompts),
+            "width": px, "height": px, "seeds": [seed]}
 
 
 class PresetIconStore:

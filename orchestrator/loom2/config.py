@@ -80,6 +80,12 @@ class SampleSettings(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     style_prompt: str = STYLE_SAMPLE_PROMPT
     swatch_prompts: dict[str, str] = Field(default_factory=lambda: dict(SWATCH_PROMPTS))
+    model_id: str | None = None                  # D91: the sample model (`/capabilities.sample_models`); None — or one this build does not offer — = the default swatch model
+
+    @field_validator("model_id")
+    @classmethod
+    def _model(cls, v: str | None) -> str | None:
+        return (v or "").strip() or None
 
     @field_validator("style_prompt")
     @classmethod

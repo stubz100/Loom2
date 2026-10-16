@@ -64,8 +64,8 @@ export function AngleTab() {
         </div>
         <label>keep</label>
         <input value={a.prompt_text} onChange={(e) => g.setAngle({ prompt_text: e.target.value })} placeholder="optional: what the scene is, what must stay (one sentence)" />
-        <label>candidates</label>
-        <div className="angle-count"><button onClick={() => g.setAngle({ count: Math.max(1, a.count - 1) })} disabled={a.count <= 1} title="fewer candidates">−</button><span>{a.count}</span><button onClick={() => g.setAngle({ count: Math.min(4, a.count + 1) })} disabled={a.count >= 4} title="more candidates (up to 4)">+</button></div>
+        <label>count</label>
+        <div className="angle-count"><button onClick={() => g.setAngle({ count: Math.max(1, a.count - 1) })} disabled={a.count <= 1} title="fewer">−</button><span>{a.count}</span><button onClick={() => g.setAngle({ count: Math.min(4, a.count + 1) })} disabled={a.count >= 4} title="more (up to 4)">+</button></div>
       </div>
       {!a.asset_id && <p className="disabled-why">Pick a source: right-click a Catalogue tile → Start from this image → New angle…, or drop a tile on the slot.</p>}
       {g.anglePreviewError && <p className="disabled-why">{g.anglePreviewError}</p>}

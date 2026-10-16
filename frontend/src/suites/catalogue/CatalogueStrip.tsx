@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
-import { markUsed, runCommand } from '../../frame/commands'
+import { command, markUsed, runCommand } from '../../frame/commands'
 import { isTauri, pickFiles, pickFolder } from '../../shell/tauri'
 import { askText, useSession } from '../../store/session'
 import { ALBUM_ID, useAlbum } from './albumStore'
@@ -36,7 +36,8 @@ export function EmptyTrashButton() {
   const c = useCat()
   const [armed, setArmed] = useState(false)
   useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 4000); return () => clearTimeout(t) }, [armed])
-  markUsed('cat.emptyTrash')
+  markUsed('cat.emptyTrash')                                             // the command's two-step home (its menu entry asks once instead)
+  const cmd = command('cat.emptyTrash')
   const n = c.counts.trash ?? c.total ?? 0
   if (!n && !c.purging) return null
   const run = () => {
@@ -46,7 +47,7 @@ export function EmptyTrashButton() {
       .catch((e) => useSession.getState().toast(`Empty trash failed: ${(e as Error).message}`, 'error'))
   }
   return (
-    <button className={`danger small${armed ? ' armed' : ''}`} disabled={c.purging} onClick={run} title={armed ? 'Click again to delete permanently' : `Delete all ${n} trashed items permanently`}>
+    <button className={`danger small${armed ? ' armed' : ''}`} disabled={c.purging} onClick={run} title={armed ? 'Click again to delete permanently' : `${cmd?.label ?? 'Empty trash…'} — all ${n} trashed items, permanently (two clicks)`}>
       {c.purging ? 'Emptying…' : armed ? `Click again: delete ${n}` : 'Empty trash'}
     </button>
   )
@@ -100,7 +101,7 @@ function SplitButton() {
   const Icon = mode === 'side' ? Columns2 : mode === 'stacked' ? Rows2 : Square
   const set = (m: 'single' | 'stacked' | 'side') => useSplit.getState().setMode(m)
   return (
-    <button className="split-pick" title="Split the Stage: two places at once" aria-label="Split" onClick={(e) => showMenu(e, [
+    <button className="split-pick" title="Split the view: two places at once" aria-label="Split" onClick={(e) => showMenu(e, [
       { label: 'Single', icon: Square, checked: mode === 'single', run: () => set('single') },
       { label: 'Stacked', icon: Rows2, checked: mode === 'stacked', run: () => set('stacked') },
       { label: 'Side by side', icon: Columns2, checked: mode === 'side', run: () => set('side') },
@@ -115,7 +116,7 @@ export function CatalogueStrip() {
   const s = useSession()
   if (!s.project?.open) return <span>Catalogue</span>
   if (c.loupe || c.compareOpen || c.lineage) return (                           // R8: the loupe and compare bring their own bar
-    <div className="cstrip"><button className="quiet" onClick={() => runCommand('cat.closeLoupe')}><ArrowLeft size={14} /> Back</button><PlaceSlot /></div>
+    <div className="cstrip"><button className="quiet" onClick={() => runCommand('cat.closeLoupe')}><ArrowLeft size={14} /> Back (Esc)</button><PlaceSlot /></div>
   )
   const nSel = c.selected.length
   return (

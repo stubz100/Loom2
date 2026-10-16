@@ -15,7 +15,7 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
   models: [{ id: 'roster', label: 'Roster', icon: <Boxes size={18} /> }, { id: 'engine', label: 'Engine', icon: <Cpu size={18} /> }],
   // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses came with ST2, Shot with ST3
   stage: [{ id: 'library', label: 'Library', icon: <Shapes size={18} /> }, { id: 'outliner', label: 'Outliner', icon: <ListTree size={18} /> }, { id: 'cameras', label: 'Cameras', icon: <Camera size={18} /> },
-    { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }, { id: 'shot', label: 'Shot', icon: <Aperture size={18} /> }],
+    { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }, { id: 'shot', label: 'Render', icon: <Aperture size={18} /> }],
   // 17 (D85): the Story suite loads lazily; World came with SY0, Cast with SY1, Shots with SY2, Flow with SY3; Episode comes with SY4
   story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }, { id: 'shots', label: 'Shots', icon: <Clapperboard size={18} /> },
     { id: 'flow', label: 'Flow', icon: <GitBranch size={18} /> }, { id: 'episode', label: 'Episode', icon: <Film size={18} /> }],   // SY4: the single-lane timeline (P17, D83) lives here now

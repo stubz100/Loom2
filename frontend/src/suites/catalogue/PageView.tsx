@@ -350,7 +350,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
         })}
       </div>
       {marquee && <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
-      {page && !items.length && <div className="page-empty"><div><h2>{page.group.name} is empty</h2><p>Drag photos here from Unprocessed: split the Stage (<Columns2 size={12} style={{ verticalAlign: '-2px' }} /> in the strip) to see both, or drop tiles on this group in the Places panel.</p></div></div>}
+      {page && !items.length && <div className="page-empty"><div><h2>{page.group.name} is empty</h2><p>Drag photos here from Unprocessed: split the view (<Columns2 size={12} style={{ verticalAlign: '-2px' }} /> in the strip) to see both, or drop tiles on this group in the Places panel.</p></div></div>}
       {!page && <div className="page-empty"><div>loading…</div></div>}
     </div>
   )

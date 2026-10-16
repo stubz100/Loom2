@@ -593,7 +593,7 @@ export const useEditor = create<EditorState>()(
             const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
             set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null, candPreview: null })
-            s.toast(stage ? `Staged ${jobs.length} AI job${jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
+            s.toast(stage ? `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} for later — Run now in the Dock` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
             void s.refreshAll()
           } catch (e) { s.toast(`AI job failed to start: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
         },

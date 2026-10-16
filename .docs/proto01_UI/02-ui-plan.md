@@ -1,6 +1,6 @@
 # 02 · A more usable loom2: the UI plan
 
-Status: **proposal, 2026-10-16. Not built and not yet decided.** It reorganises the UI the inventory in
+Status: **accepted as D90 and built, 2026-10-16** (waves UI0–UI6, journal 19:28 → the UI5 entry; commits 6f5e5f9, 5d7065d, 3eeed73 and the UI5 commit). Not built: takes as a Catalogue group and the groups' "used by" line (§4.2 — an asset lives on one page, D34), Edit's Flatten (needs a server-side flatten), For contexts for profiles and styles (§5 — shots only). Owed to the rig: the preset swatch pack and a style sample. The text below is the plan as accepted. It reorganises the UI the inventory in
 [01](01-function-inventory.md) describes, following the author's direction of 2026-10-16 (§1). It changes the shape of the app, so it
 needs a decision in [13](../proto01/13-decision-log-and-open-questions.md) before any work. That would be **D90**: §12 lists what D90
 has to settle. It revises [03](../proto01/03-vision-scope-and-mvp.md) T3 ("suites, not stages"), [07](../proto01/07-ui-frame.md) §1–§2

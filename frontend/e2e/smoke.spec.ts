@@ -127,11 +127,11 @@ test('Animate: the tile menu fills the start and the end slots', async ({ page }
   await openApp(page, { suite: 'catalogue' })
   const [a, b] = [tiles(page).nth(6), tiles(page).nth(7)]
   const [idA, idB] = [await a.getAttribute('data-id'), await b.getAttribute('data-id')]
-  await contextChoose(page, a, 'Animate from this frame (start)')
+  await contextChoose(page, a, 'Animate from this frame')
   const slots = page.locator('.slots .slot')
   await expect(slots.nth(0).locator('img')).toBeVisible()
   await openCatalogue(page)
-  await contextChoose(page, page.locator(`.cat-grid .tile[data-id="${idB}"]`), 'Use as the end frame in Animate')
+  await contextChoose(page, page.locator(`.cat-grid .tile[data-id="${idB}"]`), 'Use as the end frame')
   await expect(slots.nth(1).locator('img')).toBeVisible()
   for (const [k, id] of [[0, idA], [1, idB]] as const) {
     await expect.poll(() => slots.nth(k).locator('img').evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true)
@@ -218,7 +218,7 @@ test('the loupe is the send-to hub (D71): every verb on its bar; narrow, the sec
   for (const label of ['Keep', 'Reject', 'Rate', 'Edit', 'Reference', 'Animate', 'Re-run (same seed)', 'Variations (new seeds)', 'Duplicate', 'Move to group', 'Show lineage', 'Reveal in folder', 'More'])
     await expect(hub.getByRole('button', { name: label, exact: true })).toBeVisible()
   await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a press menu: click opens it
-  await expect(page.locator('.ctx-menu button.item', { hasText: 'As the end frame' })).toBeVisible()
+  await expect(page.locator('.ctx-menu button.item', { hasText: 'Use as the end frame' })).toBeVisible()
   await hub.getByRole('button', { name: 'Animate', exact: true }).click()               // a second press on the button closes it (Esc would close the loupe too)
   await expect(page.locator('.ctx-menu')).toHaveCount(0)
   await page.setViewportSize({ width: 900, height: 800 })
@@ -232,10 +232,10 @@ type EdWin = { __loom2Editor?: { getState: () => { doc?: { id: string }; tool: s
 const editorTool = (page: import('@playwright/test').Page) => page.evaluate(() => { const w = window as unknown as EdWin; const ed = w.__loom2Editor?.getState(); const ai = w.__loom2AiPanel?.getState()
   return ed ? { doc: !!ed.doc, tool: ed.tool, op: ai?.op, sel: ai?.selMode } : null })
 
-test('quick actions (D71): "Remove background" in the Inspector reaches Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
+test('quick actions (D71): "Select subject" in the Inspector reaches Edit with AI Select · Subject in one click; the deep link does too', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   await tiles(page).nth(8).click()
-  const card = page.locator('.insp .quick-card', { hasText: 'Remove background' })
+  const card = page.locator('.insp .quick-card', { hasText: 'Select subject' })
   await expect(card).toBeEnabled()
   await card.click()
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toEqual({ doc: true, tool: 'ai', op: 'select', sel: 'subject' })
@@ -395,14 +395,14 @@ test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the
 
 test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine clip goes on a new lane from the bin, the document saves with its revision, the EDL is written', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
-  await contextChoose(page, tiles(page).nth(6), 'Animate from this frame (start)')
+  await contextChoose(page, tiles(page).nth(6), 'Animate from this frame')
   const go = page.locator('.panel .foot button.primary', { hasText: /^Animate/ })
   await expect(go).toBeEnabled({ timeout: 20_000 })
   await go.click()
   await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()                 // 17 SY4 (D85): the lane lives in Story · Episode now
   await page.locator('nav.rail button[title^="Episode"]').click()
   await expect(page.locator('.seq-bin:not(.shots-bin) .seq-clip-card')).toHaveCount(1, { timeout: 120_000 })    // the clip lands when its proxy is ready (clip.ready)
-  await page.locator('.seq-list-head button[title^="New sequence"]').click()
+  await page.locator('.seq-list-head button[title^="New cut"]').click()
   const dialog = page.locator('.modal.ask')
   await dialog.locator('input').fill('Reel one')
   await dialog.locator('button.primary').click()
@@ -531,7 +531,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
   await page.locator('.lib-grid button', { hasText: /Adult/ }).click()
-  await page.locator('nav.rail button[title^="Shot"]').click()
+  await page.locator('nav.rail button[title^="Render"]').click()
   await expect(page.locator('.shot-tab .method.active b')).toHaveText('Clay reference')
   await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
   type Doc = { id: string; name: string; revision: number; group_id: string | null; passes: { camera_id: string; revision: number; assets: Record<string, string>; keypoints: number[][][]; legend: Record<string, string> }[] }
@@ -552,7 +552,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await expect(page.locator('.shot-tab .pass-side .hint')).toContainText('current')
   // the shot: Generate ▶ queues the StageShot job with the passes as they are; the fake engine answers; the result carries the lineage
   await page.locator('.shot-tab .shot-prompt').fill('a sunlit courtyard, a woman in a red coat')
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -575,8 +575,8 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
   // a shot first (the clip starts from it)
-  await page.locator('nav.rail button[title^="Shot"]').click()
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await page.locator('nav.rail button[title^="Render"]').click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -600,7 +600,7 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   expect((Object.values((await doc()).keyframes.camera)[0])[1].pos[2]).toBe(2)
   expect(tl.locator('.key-mark')).toHaveCount(2)
   // the sequence: nine depth frames become one video asset on the album page, recorded under the camera's passes entry
-  await page.locator('nav.rail button[title^="Shot"]').click()
+  await page.locator('nav.rail button[title^="Render"]').click()
   await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
   await expect.poll(async () => (await doc()).passes[0]?.guides?.depth?.frames ?? 0, { timeout: 60_000 }).toBe(9)
   const guide = (await doc()).passes[0].guides!.depth
@@ -608,7 +608,7 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   expect(gasset.kind).toBe('video'); expect(gasset.lineage_kind).toBe('stage-pass'); expect(gasset.frames).toBe(9); expect(gasset.params.pass).toBe('depth-sequence'); expect(gasset.params.keypoints).toHaveLength(9)
   await expect(page.locator('.shot-tab .guide-state')).toContainText('9 frames')
   // Animate ▶: the I2V job with the guide; the fake engine decodes nine frames; the clip carries lineage to the shot and the guide
-  const animate = page.locator('.shot-tab button', { hasText: /^Animate/ })
+  const animate = page.locator('.shot-tab button', { hasText: /^Render clip/ })
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: LTX-2.3 is full-only — the section says so
     await expect(page.locator('.shot-tab .clip-section')).toContainText('No clip model in this build')
     await expect(animate).toBeDisabled()
@@ -626,7 +626,7 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await page.screenshot({ path: 'node_modules/.e2e/stage-clip.png' })
 })
 
-test("a pose-driven shot (19 / CN4, D87): the Shot tab's Animate method takes the pose sequence on Wan's grid, and the fake engine performs it with the picked result as the character — lineage to both, in both variants", async ({ page }) => {
+test("a pose-driven shot (19 / CN4, D87): the Render tab's Animate method takes the pose sequence on Wan's grid, and the fake engine performs it with the picked result as the character — lineage to both, in both variants", async ({ page }) => {
   await openApp(page, { suite: 'stage' })
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
   const dialog = page.locator('.modal.ask')
@@ -635,8 +635,8 @@ test("a pose-driven shot (19 / CN4, D87): the Shot tab's Animate method takes th
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
-  await page.locator('nav.rail button[title^="Shot"]').click()
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await page.locator('nav.rail button[title^="Render"]').click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
@@ -654,7 +654,7 @@ test("a pose-driven shot (19 / CN4, D87): the Shot tab's Animate method takes th
   await expect.poll(async () => (await doc()).passes[0]?.guides?.pose?.frames ?? 0, { timeout: 60_000 }).toBe(9)
   const guide = (await doc()).passes[0].guides!.pose
   expect(guide.size.w % 16).toBe(0); expect(guide.size.h).toBe(480)                                        // Wan's 480p, on the 16 grid
-  await page.locator('.shot-tab button', { hasText: /^Animate/ }).click()
+  await page.locator('.shot-tab button', { hasText: /^Render clip/ }).click()
   await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
   type Clip = AssetLite & { kind: string; parents: string[]; model_id: string | null; frames: number | null; params: { recipe: { guide: { kind: string } } } }
   const caps = await api<{ stage: { animate: { model_id: string } } }>('GET', '/capabilities')
@@ -793,7 +793,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   const first = page.locator('.cand-card').first()
   const keptId = (await first.getAttribute('data-id'))!
   await first.hover()
-  await first.locator('button[aria-label="keep"]').click()
+  await first.locator('button[aria-label="add to the reference set"]').click()
   await expect(page.locator('.cand-card')).toHaveCount(r.cells - 1)
   await expect(page.locator('.cov-grid td.one, .cov-grid td.full')).toHaveCount(1)
   expect((await api<{ group: { items: { id: string }[] } }>('GET', `/groups/${gid}`)).group.items.map((i) => i.id)).toContain(keptId)
@@ -808,13 +808,13 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await expect(page.locator('.cand-card')).toHaveCount(r.cells - 5)
   // the bootstrap strip and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
   await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(2)  // Cast ✓ · Expand ✓
-  await page.locator('.story-strip button[title^="Lock the version"]').click()
-  await expect(dialog).toContainText(/Lock/)
+  await page.locator('.story-strip button[title^="Mark final"]').click()
+  await expect(dialog).toContainText(/Mark .* final/)
   await dialog.locator('button.primary').click()
   await expect(page.locator('.story-strip .lock-badge')).toBeVisible()
   await expect.poll(async () => (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)?.versions[0].state).toBe('final')
   await expect(api('POST', '/groups/move', { items: [{ kind: 'asset', id: keptId }], to: null })).rejects.toThrow(/423/)
-  await expect(page.locator('.panel .foot .estimate')).toContainText(/locked/)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/is final/)
   // LT2 (18 §3c): Train from the Inspector — the readiness line, 100 steps on the fake trainer, staged → Release → the version holds the LoRA
   const training = page.locator('.inspector .training')
   await expect(training.locator('.readiness')).toContainText(/\d+ · (thin|good|strong)/)
@@ -828,7 +828,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   type JobLite2 = { id: string; kind: string; status: string; result: { lora_id?: string; trigger?: string } | null }
   const trainJob = async () => (await api<{ items: JobLite2[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'train_lora').sort((a, b) => (a.id < b.id ? 1 : -1))[0]
   expect((await trainJob()).status).toBe('staged')
-  await page.locator('.inspector button[title^="Release the training job"]').click()
+  await page.locator('.inspector .train-job button[title^="Run now"]').click()
   await expect.poll(async () => (await trainJob()).status, { timeout: 60_000 }).toBe('done')
   const lora = (await trainJob()).result!
   expect(lora.lora_id).toMatch(/^lora_/)
@@ -900,10 +900,10 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   await expect(page.locator('.panel .foot .estimate')).toContainText(/no clip yet/)
   // back in Stage: the Shot tab renders the passes and generates (the fake engine answers) → the result lands on the shot as its frame
   await page.locator('nav.tabs button.tab', { hasText: 'Stage' }).click()
-  await page.locator('nav.rail button[title^="Shot"]').click()
+  await page.locator('nav.rail button[title^="Render"]').click()
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
   await page.locator('.shot-tab .shot-prompt').fill('a gatehouse at dawn')
-  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 30_000 })
   await go.click()
   const shotOf = async () => (await api<Shot>('GET', `/story/shots/${shot.id}`))
@@ -939,16 +939,16 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   const fmt = (await api<{ format: { width: number; height: number } }>('GET', '/project')).format
   await expect(page.locator('.shot-board .shot-player video')).toBeVisible()
   await expect(page.locator('.panel .foot .estimate')).toContainText(`Draft ${clip.w}×${clip.h} — the format is ${fmt.width}×${fmt.height}`)
-  await expect(page.locator('.story-strip button[aria-label^="Finalize"]')).toBeDisabled()
+  await expect(page.locator('.story-strip button[aria-label^="Mark final"]')).toBeDisabled()
   await expect(api('POST', `/story/shots/${shot2.id}/versions/v1/finalize`)).rejects.toThrow(/422/)
   // a clip at the format (the fake engine, nine frames) used as the clip → Finalize through the strip → final
   const fullClip = await submit(fmt.width, fmt.height)
   type Hook = { useTake: (kind: 'image' | 'clip', id: string) => Promise<void> }
   await page.evaluate((id) => (window as unknown as { __loom2Story: Hook }).__loom2Story.useTake('clip', id), fullClip)
   await expect(page.locator('.shot-board .take-card')).toHaveCount(2)
-  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to finalize/)
-  await page.locator('.story-strip button[aria-label^="Finalize"]').click()
-  await expect(dialog).toContainText(/Finalize/)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to mark final/)
+  await page.locator('.story-strip button[aria-label^="Mark final"]').click()
+  await expect(dialog).toContainText(/Mark .* final/)
   await dialog.locator('button.primary').click()
   await expect(page.locator('.story-strip .lock-badge')).toContainText('final')
   await expect.poll(async () => (await api<Shot>('GET', `/story/shots/${shot2.id}`)).versions[0].state).toBe('final')
@@ -959,7 +959,7 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   await dialog.locator('button.primary').click()
   await expect(page.locator('.story-strip select[aria-label="shot version"]')).toHaveValue('v2')
   await expect.poll(async () => (await api<Shot>('GET', `/story/shots/${shot2.id}`)).versions.length).toBe(2)
-  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to finalize/)
+  await expect(page.locator('.panel .foot .estimate')).toContainText(/ready to mark final/)
   // the stage moves (a focal change through the API) → the version is marked stale on the strip (advisory, loom R62)
   const stg = (await api<{ items: { id: string; revision: number; cameras: { id: string; focal_mm: number }[] }[] }>('GET', '/stages')).items.find((x) => x.id === shot.versions[0].stage_id)!
   await api('PUT', `/stages/${stg.id}`, { ...stg, cameras: [{ ...stg.cameras[0], focal_mm: 50 }] })
@@ -1082,7 +1082,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await openApp(page, { suite: 'animate', tab: 'sequence' })
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
   await expect(page.locator('nav.rail button.active[title^="Episode"]')).toBeVisible()
-  await page.locator('.seq-list-head button[title^="New sequence"]').click()
+  await page.locator('.seq-list-head button[title^="New cut"]').click()
   const dialog = page.locator('.modal.ask')
   await dialog.locator('input').fill(name)
   await dialog.locator('button.primary').click()
@@ -1103,7 +1103,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   await expect(page.locator('.panel .foot .estimate')).toContainText('1 of 2 clips not final shots')
   // Export ▶ (the panel foot): the checklist asks, then the FCPXML carries the marker; markers.txt and the SRT follow
   await page.locator('.panel .foot button.primary', { hasText: /^Export/ }).click()
-  await expect(dialog).toContainText(/1 of 2 clips not finalized shots/)
+  await expect(dialog).toContainText(/1 of 2 clips not final shots/)
   await dialog.locator('button.primary').click()
   await expect(page.locator('.seq-insp .hint', { hasText: 'last:' })).toContainText('.fcpxml')
   const fx = await api<{ text: string; path: string }>('POST', `/timelines/${tl.id}/export`, { format: 'fcpxml' })

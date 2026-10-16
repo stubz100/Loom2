@@ -29,6 +29,36 @@ const chordsOf = (c: Command) => [c.keys, ...(c.alt ?? [])].filter((k): k is str
 function missingPlacement(cmds: Command[]): string[] {
   return cmds.filter((c) => !Array.isArray(c.placement) || c.placement.length === 0 || c.placement.some((p) => !PLACEMENTS.includes(p))).map((c) => c.id)
 }
+// D90 (01 §11.3, 02 §8.3): declared placements against the sources. A right-click menu names its entries as `{ cmd: 'id' }` /
+// `cmdItem('id')` (or a template such as `edit.tool.${t}`), so a command that declares `context` must be named so somewhere. This is a
+// static check — it cannot tell whether the menu is reachable in some state — but it is exact about what it checks and never flaky.
+// The other placements are not checked here: buttons render ids from tables and templates (`global.suite.${id}`, `edit.ai.${op}`) that
+// a source scan cannot resolve honestly; the dev build's `unusedCommands` covers them at run time.
+/** Commands a context menu cannot name, each with the reason. */
+const NO_MENU: Record<string, string> = {
+  'global.contextMenu': 'it is the key that opens the focused element\'s context menu (Shift+F10 / the Menu key), not an entry in one',
+}
+/** The command ids the sources name as menu entries: literals, and the prefixes of template ids. */
+function menuRefs(text: string): { ids: Set<string>; prefixes: string[] } {
+  return { ids: new Set([...text.matchAll(/(?:\bcmd:\s*|\bcmdItem\(\s*)'([^']+)'/g)].map((m) => m[1])),
+    prefixes: [...text.matchAll(/(?:\bcmd:\s*|\bcmdItem\(\s*)`([^`$]+)\$\{/g)].map((m) => m[1]).filter((p) => p.length > 3) }
+}
+/** Commands that declare `context` but no menu names (minus NO_MENU). */
+function contextOrphans(cmds: Command[], refs: ReturnType<typeof menuRefs>): string[] {
+  return cmds.filter((c) => c.placement.includes('context') && !NO_MENU[c.id] && !refs.ids.has(c.id) && !refs.prefixes.some((p) => c.id.startsWith(p))).map((c) => c.id)
+}
+/** `markUsed('id')` by hand in a file that never renders, runs or lists that id itself — a placement claimed, not made (01 §11.3: Story
+ *  and Stage marked commands used that nothing showed). The id must occur in the same file as a literal outside the markUsed call. */
+function handMarks(sources: Record<string, string>): string[] {
+  const out: string[] = []
+  for (const [path, s] of Object.entries(sources)) for (const m of s.matchAll(/\bmarkUsed\('([^']+)'\)/g)) {
+    const lit = (re: string) => [...s.matchAll(new RegExp(re, 'g'))].length
+    const esc = m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (lit(`['"\`]${esc}['"\`]`) - lit(`\\bmarkUsed\\('${esc}'\\)`) < 1) out.push(`${path}: ${m[1]}`)
+  }
+  return [...new Set(out)]
+}
+
 /** Every chord two commands can both answer to — same scope, or either is global (D72) — as `scope chord: id, id` (the suite's scope). */
 function sharedChords(cmds: Command[], parse: (s: string) => Chord): { scope: Scope; chord: string; ids: string[] }[] {
   const out = new Map<string, { scope: Scope; chord: string; ids: string[] }>()
@@ -98,5 +128,33 @@ describe('D32 command audit', () => {
       expect(a.why.length).toBeGreaterThan(20)
       if (!a.byDispatch) for (const id of a.ids) expect(commands.command(id)?.when, `${id} needs a when`).toBeTypeOf('function')
     }
+  })
+
+  it('names every command that declares `context` in some right-click menu (D90, 01 §11.3)', () => {
+    expect(contextOrphans(all, menuRefs(Object.values(SOURCES).join('\n')))).toEqual([])
+    for (const [id, why] of Object.entries(NO_MENU)) { expect(commands.command(id)?.placement, `${id} is not registered`).toContain('context'); expect(why.length).toBeGreaterThan(20) }
+  })
+
+  it('flags a declared context home no menu names (the check itself)', () => {
+    const cmd = (id: string, placement: Command['placement']) => ({ id, scope: 'edit', label: id, placement, run: () => undefined }) satisfies Command
+    const refs = menuRefs("[{ cmd: 'x.listed' }, cmdItem('x.item'), { cmd: `x.tool.${t}` }, cmd('x.notAMenu')]")
+    expect(contextOrphans([cmd('x.listed', ['context']), cmd('x.item', ['context']), cmd('x.tool.brush', ['context']), cmd('x.notAMenu', ['context']), cmd('x.button', ['toolbar'])], refs)).toEqual(['x.notAMenu'])
+  })
+
+  it('gives the three transports one key set (D90, 02 §8.2): Animate, the Stage timeline, the Episode lane', () => {
+    const TRANSPORT: Record<string, [string, string, string]> = {                // normalised chord (' ' is Space): Animate · Stage · Episode
+      ' ': ['anim.play', 'stage.anim.play', 'story.episode.play'],
+      'arrowleft': ['anim.stepBack', 'stage.anim.prev', 'story.episode.stepBack'], 'arrowright': ['anim.stepForward', 'stage.anim.next', 'story.episode.stepForward'],
+      'shift+arrowleft': ['anim.back10', 'stage.anim.back10', 'story.episode.back10'], 'shift+arrowright': ['anim.fwd10', 'stage.anim.fwd10', 'story.episode.fwd10'],
+      'home': ['anim.home', 'stage.anim.first', 'story.episode.home'], 'end': ['anim.end', 'stage.anim.last', 'story.episode.end'],
+    }
+    const own = (id: string) => commands.defaultKeysOf(id)
+    for (const [chord, ids] of Object.entries(TRANSPORT)) for (const id of ids) expect(norm(commands.parseChord(own(id)?.keys ?? '')), id).toBe(chord)
+    for (const [id, chord] of [['anim.setIn', 'i'], ['anim.setOut', 'o'], ['stage.anim.setStart', 'i'], ['stage.anim.setEnd', 'o']]) expect(norm(commands.parseChord(own(id)?.keys ?? '')), id).toBe(chord)
+  })
+
+  it('marks a command used by hand only where the same file renders, runs or lists it (D90, 01 §11.3)', () => {
+    expect(handMarks(SOURCES)).toEqual([])
+    expect(handMarks({ 'a.tsx': "markUsed('x.shown'); <CommandButton id=\"x.shown\" /> markUsed('x.claimed')", 'b.tsx': "markUsed('y.run'); runCommand('y.run')" })).toEqual(['a.tsx: x.claimed'])
   })
 })

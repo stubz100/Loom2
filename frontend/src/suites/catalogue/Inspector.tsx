@@ -8,7 +8,8 @@ import { persist } from 'zustand/middleware'
 import { api, http, unwrap } from '../../api/client'
 import type { Asset, LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
-import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, markUsed, runCommand, titleFor, type MenuItem } from '../../frame/commands'
+import { useKeymap } from '../../frame/keymap'
 import { CommandCard } from '../../frame/CommandButton'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum, type PathStep } from './albumStore'
@@ -58,6 +59,15 @@ export function relTime(iso: string): string {
   if (diff === 0) return `today ${hm}`
   if (diff === 1) return `yesterday ${hm}`
   return d.getFullYear() === now.getFullYear() ? `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${hm}` : d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** D90 (01 §11.2): an Inspector button bound to a registry command (enabled by its `when`, its key in the tooltip, marked for the audit). */
+function CmdBtn({ id, icon, label }: { id: string; icon?: ReactNode; label?: string }) {
+  useKeymap((k) => k.version)
+  const cmd = command(id)
+  if (!cmd) return null
+  markUsed(id)
+  return <Btn icon={icon} label={label ?? cmd.label} run={() => runCommand(id)} disabled={!isEnabled(cmd)} title={titleFor(cmd, cmd.hint ? `${label ?? cmd.label}: ${cmd.hint}` : undefined)} />
 }
 
 function Btn({ icon, label, run, disabled, danger, title }: { icon?: ReactNode; label: string; run: (e: React.MouseEvent) => void; disabled?: boolean; danger?: boolean; title?: string }) {
@@ -217,7 +227,6 @@ function One({ a }: { a: Asset }) {
   const loc = useLocations(ids)
   const here = loc?.[a.id]
   const open = useOpenPlace()
-  const loadInGenerate = () => void import('../generate/generateStore').then((m) => { m.useGenerate.getState().loadFromAsset(a, false); useSession.getState().setSuite('generate') })
   return (
     <div className="insp">
       <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" onDoubleClick={() => runCommand('cat.loupe')} />
@@ -228,7 +237,7 @@ function One({ a }: { a: Asset }) {
       <Section id="location" title="Location">
         <div className="loc">{a.trashed_at ? <span className="muted">In Trash{here ? ' (back on its page when restored)' : ''}</span> : here ? <Crumbs path={here.path} /> : <span className="crumbs-i"><Inbox size={13} /><button className="link" onClick={() => open('unprocessed')}>Unprocessed</button></span>}</div>
         {!a.trashed_at && <div className="row-btns">
-          <Btn icon={<FolderInput size={14} />} label="Move to" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
+          <Btn icon={<FolderInput size={14} />} label="Move to group" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
           {here && <ToUnprocessed />}
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => runCommand('cat.duplicate')} title="Duplicate (Ctrl+D): a second copy you can place elsewhere" />
         </div>}
@@ -240,22 +249,21 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<Images size={14} />} label="Reference" run={() => runCommand('cat.reference')} title="Use as reference in Generate (R)" />
           <Btn icon={<RotateCcw size={14} />} label="Re-run" run={() => runCommand('cat.rerun')} disabled={!a.params?.recipe} title="Re-run with the same seed (Ctrl+R)" />
           <Btn icon={<Shuffle size={14} />} label="Variations" run={() => runCommand('cat.variations')} disabled={!a.params?.recipe} title="New seeds (V)" />
-          <Btn icon={<Wand2 size={14} />} label="Load in Generate" run={loadInGenerate} disabled={!a.params?.recipe} title="Put this asset's prompt and parameters into Generate's panel" />
-          <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? `Pinned C${c.compare.indexOf(a.id) + 1}` : 'Pin'} run={() => runCommand('cat.pin')} title="Pin for compare (C)" />
+          <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Generate" />
+          <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? 'Unpin' : 'Pin for compare'} run={() => runCommand('cat.pin')} title={c.compare.includes(a.id) ? `Unpin (C${c.compare.indexOf(a.id) + 1}, C)` : 'Pin for compare (C)'} />
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
         </div>
       </Section>
       {a.kind === 'image' && <Section id="start" title="Start from this image">
         <div className="quick-cards compact">
-          <CommandCard id="cat.start.removeBg" label="Remove background" hint="Edit · AI Select · Subject" />
+          <CommandCard id="cat.start.removeBg" label="Select subject" hint="Edit · AI Select · Subject" />
           <CommandCard id="cat.start.upscale" label="Upscale" hint="Edit · AI Upscale" />
           <CommandCard id="cat.start.angle" label="New angle" hint="Generate · Angle" />
           <CommandCard id="cat.start.mesh" label="3D prop" hint="Pixal3D · a background job" />
           <CommandCard id="cat.start.character" label="Character" hint="Story · Cast — the hero of a profile" />
           <CommandCard id="cat.start.place" label="Place" hint="Story · Cast" />
           <CommandCard id="cat.start.prop" label="Prop" hint="Story · Cast" />
-          <CommandCard id="cat.animate" label="Animate from here" hint="the start frame" />
-          <CommandCard id="cat.variations" label="Variations" hint="new seeds" />
+          <CommandCard id="cat.animate" label="Animate from this frame" hint="the start frame" />
         </div>
       </Section>}
       <Section id="lineage" title="Lineage" right={<button className="link" onClick={() => c.openLineage(a.id)}><GitBranch size={12} /> Open tree</button>}><LineagePath a={a} /></Section>
@@ -286,7 +294,7 @@ function Many({ recs }: { recs: Asset[] }) {
         <div className="loc">{!loc ? '…' : onePage ? <Crumbs path={loc[ids[0]]!.path} /> : places!.size === 1 ? <span className="crumbs-i"><Inbox size={13} />all in Unprocessed</span> : <span className="muted">in {places!.size} places</span>}</div>
         <div className="row-btns">
           {onePage && <button className="primary" onClick={groupThese}><Layers size={14} /> Group these</button>}
-          <Btn icon={<FolderInput size={14} />} label="Move to" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
+          <Btn icon={<FolderInput size={14} />} label="Move to group" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
           {places && !places.has('') && <ToUnprocessed />}
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => runCommand('cat.duplicate')} />
         </div>

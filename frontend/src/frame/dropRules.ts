@@ -71,7 +71,7 @@ export function laneDrop<C extends { id: string; asset_id?: string | null }>(p: 
   if (!items.length) return { take: [], verdict: { ok: false } }
   const take = items.map((i) => clips.find((c) => c.asset_id === i.id || c.id === i.id)).filter((c): c is C => !!c)
   if (!take.length) return { take, verdict: { ok: false, reason: 'Only clips go on the lane' } }
-  return { take, verdict: { ok: true, label: take.length === 1 ? 'Add to the end of the sequence' : `Add ${take.length} clips to the sequence` } }
+  return { take, verdict: { ok: true, label: take.length === 1 ? 'Add to the end of the cut' : `Add ${take.length} clips to the cut` } }
 }
 
 /** P14: the Angle tab's source slot — one image; several drop the first; a clip is refused. */

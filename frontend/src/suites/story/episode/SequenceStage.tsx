@@ -214,7 +214,7 @@ export function SequenceStage() {
   const byId = useMemo(() => new Map(clips.map((c) => [c.id, c])), [clips])
   usePlayback(lane)
   if (!current || !lane) {
-    return <div className="anim-empty"><h2>Sequence</h2>pick a sequence in the panel, or make one — clips from the bin go on one lane; a clip dragged over the one before it dissolves.</div>
+    return <div className="anim-empty"><h2>Episode</h2>pick a cut in the panel, or make one — shots and clips from the bin go on one lane; a clip dragged over the one before it dissolves.</div>
   }
   const total = duration(lane)
   const what = at(lane, playhead, starts(lane))
@@ -224,7 +224,7 @@ export function SequenceStage() {
         {lane.clips.length ? <Preview lane={lane} w={current.w} h={current.h} byId={byId} /> : <div className="anim-empty">an empty lane — drag a shot or a clip from the panel onto the lane below, or press + on its card</div>}
       </div>
       <div className="transport">
-        <CommandRow ids={['story.episode.home', 'story.episode.stepBack', 'story.episode.play', 'story.episode.stepForward', 'story.episode.end']} labels={{ 'story.episode.play': playing ? 'Pause' : 'Play' }} />
+        <CommandRow ids={['story.episode.home', 'story.episode.back10', 'story.episode.stepBack', 'story.episode.play', 'story.episode.stepForward', 'story.episode.fwd10', 'story.episode.end']} labels={{ 'story.episode.play': playing ? 'Pause' : 'Play' }} />
         <span className="counter">{tc(playhead, lane.fps)} / {tc(total, lane.fps)} · tick {playhead}{what ? ` · ${lane.clips[what.a.i].source.replace(/^clp_/, '')} f${what.a.local}${what.b ? ` ⇢ ${lane.clips[what.b.i].source.replace(/^clp_/, '')} f${what.b.local} (${Math.round((what.mix ?? 0) * 100)} %)` : ''}` : ''}</span>
         <span className="spacer" />
         <CommandRow ids={['story.episode.undo', 'story.episode.redo', 'gap', 'story.episode.zoomOut', 'story.episode.zoomIn']} />

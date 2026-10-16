@@ -74,9 +74,9 @@ async function save(get: () => SequenceState, set: (p: Partial<SequenceState>) =
   } catch (e) {
     const err = e as ApiError
     if (err.status === 409) {                                                  // the document moved under us: take the server's, drop the edit
-      useSession.getState().toast('The sequence changed elsewhere — reloaded; your last change was not saved', 'error')
+      useSession.getState().toast('The cut changed elsewhere — reloaded; your last change was not saved', 'error')
       await get().open(current.id)
-    } else useSession.getState().toast(`Sequence not saved: ${err.detail ?? e}`, 'error')
+    } else useSession.getState().toast(`Cut not saved: ${err.detail ?? e}`, 'error')
   } finally { if (seq === saveSeq) set({ saving: false }) }
 }
 
@@ -92,14 +92,14 @@ export const useSequence = create<SequenceState>()((set, get) => ({
       set({ timelines: [tl, ...get().timelines] })
       await get().open(tl.id)
       return tl
-    } catch (e) { useSession.getState().toast(`New sequence failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
+    } catch (e) { useSession.getState().toast(`New cut failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
     if (!id) { set({ current: null, lane: null, selected: null, playhead: 0, playing: false, undo: [], redo: [] }); return }
     try {
       const tl = await unwrap(http.GET('/timelines/{tl_id}', { params: { path: { tl_id: id } } }))
       set({ current: tl, lane: laneOf(tl), selected: null, playhead: 0, playing: false, undo: [], redo: [], timelines: get().timelines.some((t) => t.id === tl.id) ? get().timelines.map((t) => (t.id === tl.id ? tl : t)) : [tl, ...get().timelines] })
-    } catch (e) { useSession.getState().toast(`Open sequence failed: ${(e as ApiError).detail ?? e}`, 'error') }
+    } catch (e) { useSession.getState().toast(`Open cut failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   rename: async (name) => {
     const cur = get().current

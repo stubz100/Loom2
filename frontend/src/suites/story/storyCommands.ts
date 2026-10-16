@@ -1,12 +1,12 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
-import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { defaultModel } from '../../store/modelCaps'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestTrainJob, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget } from './makeFor'
 import { findNode, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 
@@ -41,6 +41,18 @@ function openStageAt(stageId: string, cam: string | null): void {
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
+/** D90 (01 §11.2): the item a per-item command acts on — the take or the line whose button or menu ran it (commands take no
+ *  arguments; the button sets this first). A run clears it, so the palette never acts on a stale one. */
+export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number } } = {}
+/** Run `id` on an item (a take card's ✓ use, a line's 🎙). */
+export function runOnItem(item: Partial<typeof storyItem>, id: string): boolean {
+  Object.assign(storyItem, item)
+  try { return runCommand(id) } finally { for (const k of Object.keys(item) as (keyof typeof storyItem)[]) delete storyItem[k] }
+}
+const takeUsable = () => { const t = storyItem.take; const v = shotVersion(); return !!t && !!v && v.state === 'open' && (t.kind === 'clip' ? v.clip_id !== t.id : v.frame_asset_id !== t.id) }
+const lineVoicable = () => { const l = storyItem.line; const n = l ? sy().flowNodes[l.node] : undefined; const j = l ? ttsJobFor(useSession.getState().jobs, l.node, l.index) : undefined
+  return !!n && !!n.lines[l!.index]?.text.trim() && !!useSession.getState().capabilities?.voice?.available && !['staged', 'queued', 'running'].includes(j?.status ?? '') }
+const playing = () => sy().play
 export const flowView: { fit?: () => void; centre?: () => { x: number; y: number } | null; toFlow?: (x: number, y: number) => { x: number; y: number } } = {}
 
 /** The Cast tab's Expand: the cost said first (D79's pattern), then one queued job per cell of the preset. */
@@ -62,7 +74,7 @@ export async function askTrain(): Promise<void> {
   const base = caps.bases.find((b) => b.model_id === (o.model_id ?? caps.bases.find((x) => x.health !== 'missing')?.model_id))
   const secs = base?.s_per_it ? Math.round(o.steps * base.s_per_it) : 0
   const mins = secs ? `about ${Math.max(1, Math.round(secs / 60))} min of steps plus the model loads` : 'time unknown'
-  const ok = await askConfirm({ title: `Train ${p.name} ${v.id}?`, okLabel: o.stage ? 'Stage the job' : 'Train now',
+  const ok = await askConfirm({ title: `Train ${p.name} ${v.id}?`, okLabel: o.stage ? 'Queue the job' : 'Train now',
     text: `${base?.label ?? 'the base'}${base?.offload ? ' (offloaded)' : ''} · ${o.steps} steps at ${o.resolution}² · rank ${o.rank} · ${refsCount()} references — ${mins} on this card; the engine stops while it runs${o.stage ? '. Staged: release it when the rig is free.' : '.'}` })
   if (ok) await sy().train()
 }
@@ -137,21 +149,21 @@ const cmds: Command[] = [
   { id: 'story.world.beatDown', scope: 'story', label: 'Move the beat later', icon: ArrowDown, keys: 'Ctrl+ArrowDown', placement: ['inspector', 'context'], when: selBeat, run: () => { const s = selected(); if (s) sy().moveBeat(s.id, 1) } },
   { id: 'story.world.remove', scope: 'story', label: 'Remove', icon: Trash2, keys: 'Delete', placement: ['inspector', 'context'], when: () => !!selected(), danger: true, run: () => sy().removeSelected() },
   // SY1 · Cast
-  { id: 'story.cast.new', scope: 'story', label: 'New profile…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('character') },
-  { id: 'story.cast.newPlace', scope: 'story', label: 'New place…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('place') },
-  { id: 'story.cast.newProp', scope: 'story', label: 'New prop…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('prop') },
+  { id: 'story.cast.new', scope: 'story', label: 'New character…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('character') },
+  { id: 'story.cast.newPlace', scope: 'story', label: 'New place…', icon: MapPinPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('place') },
+  { id: 'story.cast.newProp', scope: 'story', label: 'New prop…', icon: PackagePlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('prop') },
   { id: 'story.cast.expand', scope: 'story', label: 'Expand…', icon: Sparkles, keys: 'Ctrl+Enter', placement: ['panel', 'inspector', 'context'],
     when: () => openVersion() && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.story?.model_id && !sy().expanding,
     run: () => void askExpand(sy().world ? 'full' : 'full', 1, 'draft') },
-  { id: 'story.cast.keep', scope: 'story', label: 'Keep (into the reference set)', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
+  { id: 'story.cast.keep', scope: 'story', label: 'Add to the reference set', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
     run: () => void sy().curate(picked(), 'keep') },
   { id: 'story.cast.reject', scope: 'story', label: 'Reject', icon: X, keys: 'X', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
     run: () => void sy().curate(picked(), 'reject') },
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,
     run: () => void sy().setHero(picked()[0]) },
-  { id: 'story.cast.lock', scope: 'story', label: 'Lock the version', icon: Lock, placement: ['strip', 'inspector', 'context'], when: () => openVersion() && !!version()?.hero_asset_id && !sy().busy,
+  { id: 'story.cast.lock', scope: 'story', label: 'Mark final', icon: Lock, hint: 'the version\'s reference set becomes read-only; a retake is a new version', placement: ['strip', 'inspector', 'context'], when: () => openVersion() && !!version()?.hero_asset_id && !sy().busy,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
-      void askConfirm({ title: `Lock ${p.name} ${v.id}?`, okLabel: 'Lock', text: 'The reference set becomes read-only (the album refuses changes on its page) and the stub is fixed; @mentions keep resolving to it. A retake is a new version.' }).then((ok) => { if (ok) void sy().lockVersion() }) } },
+      void askConfirm({ title: `Mark ${p.name} ${v.id} final?`, okLabel: 'Mark final', text: 'The reference set becomes read-only (the album refuses changes on its page) and the stub is fixed; @mentions keep resolving to it. A retake is a new version.' }).then((ok) => { if (ok) void sy().lockVersion() }) } },
   { id: 'story.cast.newVersion', scope: 'story', label: 'New version (copy)', icon: Copy, placement: ['strip', 'inspector', 'context'], when: () => !!version() && !sy().busy,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
       void askConfirm({ title: `Copy ${p.name} ${v.id} into a new version?`, okLabel: 'Copy', text: 'The reference set is duplicated (its images copied — an image lives on one page), the stub and hero copied; the copy becomes the current version, open.' }).then((ok) => { if (ok) void sy().newVersion() }) } },
@@ -165,7 +177,7 @@ const cmds: Command[] = [
     run: () => void sy().checkLora(version()!.lora!) },
   { id: 'story.cast.deleteLora', scope: 'story', label: 'Delete the LoRA', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!version()?.lora,
     run: async () => { const v = version(); if (!v?.lora) return; if (await askConfirm({ title: 'Delete the LoRA?', okLabel: 'Delete', text: 'The file, its record and the engine\'s cached copy go; the version keeps its trigger for a retrain.' })) await sy().deleteLora(v.lora) } },
-  { id: 'story.cast.releaseTrain', scope: 'story', label: 'Release the training job', icon: Play, placement: ['inspector'], when: () => trainJob()?.status === 'staged',
+  { id: 'story.cast.releaseTrain', scope: 'story', label: 'Run now', icon: Play, hint: 'the training job waiting in the queue', placement: ['inspector'], when: () => trainJob()?.status === 'staged',
     run: () => { const j = trainJob(); if (j) void useSession.getState().releaseJob(j.id) } },
   { id: 'story.cast.resumeTrain', scope: 'story', label: 'Resume the training job', icon: RotateCcw, placement: ['inspector'], when: () => trainJob()?.status === 'failed' && !!trainJob()?.resumable,
     run: () => { const j = trainJob(); if (j) void sy().requeueTrain(j.id) } },
@@ -186,12 +198,15 @@ const cmds: Command[] = [
     when: () => { const v = shotVersion(); const c = useSession.getState().capabilities?.experimental?.lipsync
       return !!v && v.state === 'open' && !!v.frame_asset_id && !!c?.available && sy().lipsyncLines().some((l) => !l.too_long) },   // D90 (B6): a line within the window
     run: () => { const c = useSession.getState().capabilities?.experimental?.lipsync; const o = sy().lipsyncOpts; const p = c?.presets?.[o.preset] as { seconds?: number | null } | undefined
-      void askConfirm({ title: 'Lip-sync this version (experimental)?', okLabel: 'Stage the job',
+      void askConfirm({ title: 'Lip-sync this version (experimental)?', okLabel: 'Queue the job',
         text: `${c?.label ?? 'S2V'} · ${o.preset} — ≈ ${Math.round((p?.seconds ?? 0) / 60)} min with the engine. ${c?.caveat ?? ''}. The talking clip lands as a take on the version.` })
         .then((ok) => { if (ok) void sy().lipsync() }) } },
-  { id: 'story.shot.finalize', scope: 'story', label: 'Finalize the version', icon: Lock, placement: ['strip', 'inspector', 'context'], when: () => { const v = shotVersion(); return !!v && v.state === 'open' && !sy().finalizeWhy(v) },
+  { id: 'story.shot.finalize', scope: 'story', label: 'Mark final', icon: Lock, hint: 'the clip becomes the one the Flow and the Episode bind; a retake is a new version', placement: ['strip', 'inspector', 'context'], when: () => { const v = shotVersion(); return !!v && v.state === 'open' && !sy().finalizeWhy(v) },
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
-      void askConfirm({ title: `Finalize ${s.name} ${v.id}?`, okLabel: 'Finalize', text: 'The clip becomes the one the Flow and the Episode bind; the frame and clip are fixed. A retake is a new version.' }).then((ok) => { if (ok) void sy().finalizeShot() }) } },
+      void askConfirm({ title: `Mark ${s.name} ${v.id} final?`, okLabel: 'Mark final', text: 'The clip becomes the one the Flow and the Episode bind; the frame and clip are fixed. A retake is a new version.' }).then((ok) => { if (ok) void sy().finalizeShot() }) } },
+  // D90 (01 §11.2): a take becomes the version's frame or clip (the take card's ✓ use and its right-click)
+  { id: 'story.shot.useTake', scope: 'story', label: 'Use this take', icon: Check, placement: ['toolbar', 'context'], hint: 'a frame take becomes the version\'s frame, a clip take its clip', when: takeUsable,
+    run: () => { const t = storyItem.take; storyItem.take = undefined; if (t) void sy().useTake(t.kind, t.id) } },
   { id: 'story.shot.openStage', scope: 'story', label: 'Open in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
     run: () => { const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
   // D90 (02 §5): Make frame ▸ / Make clip ▸ — the maker opens with the For chip and its results come back as this version's takes; the
@@ -215,7 +230,7 @@ const cmds: Command[] = [
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
       useSession.getState().setSuite('animate')
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); void an.loadClips().then(() => an.select(cid)) }) } },
-  { id: 'story.shot.release', scope: 'story', label: 'Release from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!shot()?.owner_node,
+  { id: 'story.shot.release', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!shot()?.owner_node,
     run: () => void sy().patchShot({ owner_node: null }) },
   { id: 'story.shot.delete', scope: 'story', label: 'Delete shot', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!shot(),
     run: () => { const s = shot(); if (!s) return
@@ -236,8 +251,8 @@ const cmds: Command[] = [
   { id: 'story.flow.duplicate', scope: 'story', label: 'Duplicate node', icon: Copy, placement: ['inspector', 'context'], when: () => !!node() && !sy().play, run: () => { const n = node(); if (n) void sy().duplicateNode(n.id) } },
   { id: 'story.flow.newShot', scope: 'story', label: 'New shot for this node…', icon: Plus, placement: ['inspector', 'context'], when: () => visual() && !sy().play,
     run: () => { const n = node(); if (!n) return
-      void askText({ title: 'New shot for this node', text: 'An empty shot owned by this node (loom R146: one node, one shot); fill it in Shots, Stage or Animate.', initial: n.title || NODE_LABEL[n.type], placeholder: 'shot name' }).then((name) => { if (name?.trim()) void sy().spawnShot(n.id, name.trim()) }) } },
-  { id: 'story.flow.unbind', scope: 'story', label: 'Release the shot', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
+      void askText({ title: 'New shot for this node', text: 'An empty shot owned by this node (one node, one shot); fill it in Shots, Stage or Animate.', initial: n.title || NODE_LABEL[n.type], placeholder: 'shot name' }).then((name) => { if (name?.trim()) void sy().spawnShot(n.id, name.trim()) }) } },
+  { id: 'story.flow.unbind', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
@@ -251,6 +266,9 @@ const cmds: Command[] = [
     run: () => { const n = node(); if (!n?.board_group_id) return; const was = n.board_group_id
       void sy().patchNode(n.id, { board_group_id: null })
       useSession.getState().toast('Board removed from the node', 'info', () => void sy().patchNode(n.id, { board_group_id: was })) } },
+  // D90 (01 §11.2): one line's voice, the 🎙 beside it (the line is the item it was pressed on)
+  { id: 'story.flow.voiceLine', scope: 'story', label: 'Voice this line', icon: Mic, placement: ['inspector'], hint: 'its speaker\'s voice, else the voice picked under the lines', when: lineVoicable,
+    run: () => { const l = storyItem.line; storyItem.line = undefined; if (l) void sy().voiceLine(l.node, l.index) } },
   { id: 'story.flow.voiceAll', scope: 'story', label: 'Voice all lines', icon: Volume2, placement: ['inspector', 'context'],
     when: () => node()?.type === 'dialogue' && (node()?.lines.some((l) => l.text.trim()) ?? false) && !!useSession.getState().capabilities?.voice?.available && !sy().play,
     run: () => { const n = node(); if (n) void sy().voiceNode(n.id) } },
@@ -261,23 +279,29 @@ const cmds: Command[] = [
       void askConfirm({ title: `Delete the voice ${v?.name ?? vid}?`, okLabel: 'Delete', danger: true, text: 'The record goes; its spoken lines stay in the Catalogue; every character that had it loses it.' }).then((ok) => { if (ok) void sy().deleteVoice(vid) }) } },
   { id: 'story.flow.validate', scope: 'story', label: 'Validate', icon: ListChecks, placement: ['strip', 'context'], when: () => !!useSession.getState().project?.open, run: () => void sy().validate() },
   { id: 'story.flow.play', scope: 'story', label: 'Play', icon: Play, keys: 'P', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => sy().playStart() },
+  // D90 (01 §11.2): play mode's own controls
+  { id: 'story.flow.next', scope: 'story', label: 'Next ▸', icon: Play, placement: ['toolbar'], hint: 'play mode: on to the next node (a Choice asks with its options)', when: () => { const p = playing(); return !!p && !p.ended && (p.node ? sy().flowNodes[p.node]?.type : null) !== 'choice' }, run: () => sy().playNext() },
+  { id: 'story.flow.restart', scope: 'story', label: 'Restart', icon: RotateCcw, placement: ['toolbar'], hint: 'play mode: from the Start node again', when: () => !!playing(), run: () => sy().playStart() },
   { id: 'story.flow.stop', scope: 'story', label: 'Stop playing', icon: Square, placement: ['strip'], when: () => !!sy().play, run: () => sy().playStop() },
   { id: 'story.flow.fit', scope: 'story', label: 'Fit the graph', icon: Maximize, keys: 'F', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => flowView.fit?.() },
   { id: 'story.world.beatToNode', scope: 'story', label: 'Make a Flow node from this beat', icon: GitBranch, placement: ['inspector', 'context'], when: selBeat,
     run: () => { const s = selected(); if (s?.kind === 'beat') void sy().nodeFromBeat(s.id) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
-      void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (unlocked). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },
+      void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },
 ]
 registerCommands(cmds)
 
 /** The right-click menu of a row in the World editor: the row is selected first, so the Inspector shows it too. */
+/** The right-click menu of a Cast profile row (the profile is selected first). D90 (01 §11.3): the training and new-profile verbs too. */
+export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
+  { cmd: 'story.cast.train' }, { cmd: 'story.cast.useLora' }, { cmd: 'story.cast.checkLora' }, { cmd: 'story.cast.deleteLora' }, sep, { cmd: 'story.cast.new' }, { cmd: 'story.cast.newPlace' }, { cmd: 'story.cast.newProp' }, sep, { cmd: 'story.cast.delete' }]
 export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], id: string) {
   useStory.getState().select({ kind, id })
   const items: ({ cmd: string } | 'sep')[] = []
   if (kind === 'style') items.push({ cmd: 'story.world.styleSample' }, { cmd: 'story.world.openStyleGroup' }, 'sep', { cmd: 'story.world.defaultStyle' })
   if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' })
-  items.push({ cmd: 'story.world.remove' })
+  items.push({ cmd: 'story.world.remove' }, 'sep', kind === 'style' ? { cmd: 'story.world.addStyle' } : kind === 'beat' ? { cmd: 'story.world.addBeat' } : { cmd: 'story.world.addVariable' })   // D90 (01 §11.3): Add … where its row is
   return items
 }
 
@@ -296,6 +320,6 @@ export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', la
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {
   return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,
-    { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }]
+    { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }, sep, { cmd: 'story.shot.new' }]
 }
 const sepItem = { sep: true } as const

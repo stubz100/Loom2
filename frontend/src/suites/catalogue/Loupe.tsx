@@ -4,7 +4,7 @@ import { Ellipsis, Film, FolderInput, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Asset } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { handleKeyFor, runCommand } from '../../frame/commands'
+import { handleKeyFor, runCommand, sep } from '../../frame/commands'
 import { catView } from './viewKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { moveToMenu, rateMenu, tileMenu } from './catalogueCommands'
@@ -64,7 +64,7 @@ export function Loupe({ asset }: { asset: Asset }) {
   const m = loupeMedia(asset)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input, textarea')) return
+      if ((e.target as HTMLElement)?.closest('input, textarea, .modal')) return          // D90: a modal (Models & engine) owns its keys
       if (e.key === 'Escape') c.openLoupe(null)
       else if (e.ctrlKey && handleKeyFor('catalogue', e)) return                     // D72: Ctrl+0 / Ctrl+1 are cat.loupe.fit / .one
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') handleKeyFor('catalogue', e)
@@ -78,7 +78,7 @@ export function Loupe({ asset }: { asset: Asset }) {
   const pinned = c.compare.indexOf(asset.id) + 1
   const subItems = (m: MenuItem): MenuItem[] => ('items' in m ? m.items : [])
   return (
-    <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, tileMenu()) }}>
+    <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, [{ cmd: 'cat.prev' }, { cmd: 'cat.next' }, { cmd: 'cat.closeLoupe' }, sep, ...tileMenu()]) }}>
       <div className={`view${m.zoom ? '' : ' play'}`} ref={ref} {...(m.zoom ? handlers : {})}>
         {m.zoom ? <img src={m.src} alt="" style={style(xf)} draggable={false} /> : <Playable m={m} />}
       </div>
@@ -93,7 +93,7 @@ export function Loupe({ asset }: { asset: Asset }) {
         <span className="spacer" />
         {m.zoom ? <><span>{Math.round(xf.s * 100)}%</span><CommandButton id="cat.loupe.fit" text label="Fit" /><CommandButton id="cat.loupe.one" text label="1:1" /></>
           : m.kind === 'video' && m.clipId ? <CommandButton id="cat.animate" text label="Play in Animate" /> : null}
-        <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
+        <button className="quiet" onClick={() => c.openLoupe(null)}>Back (Esc)</button>
       </div>
       {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.
           The verbs act on the selection, so a press here selects the loupe's asset first (as its right-click and keys do). */}
@@ -105,12 +105,12 @@ export function Loupe({ asset }: { asset: Asset }) {
         <CommandButton id="cat.edit" text label="Edit" />
         <CommandButton id="cat.reference" text label="Reference" />
         <CommandButton id="cat.start.angle" text label="New angle" />
-        <MenuButton label="Animate" icon={Film} text items={() => [{ cmd: 'cat.animate', label: 'As the start frame' }, { cmd: 'cat.animateEnd', label: 'As the end frame' }]} />
+        <MenuButton label="Animate" icon={Film} text items={() => [{ cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }]} />
         <span className="gap secondary" />
         <span className="secondary"><CommandRow ids={['cat.rerun', 'cat.variations', 'cat.duplicate']} /></span>
         <span className="secondary"><MenuButton label="Move to group" icon={FolderInput} items={() => subItems(moveToMenu())} /></span>
         <span className="secondary"><CommandRow ids={['cat.lineage', 'cat.reveal']} /></span>
-        <span className="secondary"><CommandButton id="cat.pin" text label={pinned ? `Unpin C${pinned}` : 'Pin'} /></span>
+        <span className="secondary"><CommandButton id="cat.pin" text label={pinned ? 'Unpin' : 'Pin for compare'} /></span>
         <span className="spacer" />
         <MenuButton label="More" icon={Ellipsis} items={tileMenu} />
       </div>

@@ -4189,3 +4189,28 @@ split by file so that no two hands touched the same module.
   `edit_headed_check.py heal` picks the tool by command.
 - Tests: offline 343 under full and open (+3), Vitest 259 (+24), smoke 30 / 30 under full and open (+1: Make frame for a shot → the For
   chip → takes), lint 88, build clean, audits clean.
+
+## 2026-10-16 21:23 — D90 · wave UI5 (one vocabulary, one transport, every action a command) built — D90 complete
+
+- **One word per concept (02 §8.1)** in labels, tooltips, toasts and hints (command ids, tab ids and fields unchanged, so key overrides
+  survive): the run-later button is **Queue** (Generate, Animate, Edit AI; the Dock's **Run now**); the Stage suite's Shot tab is
+  **Render** with **Render frame** / **Render clip ▶**; Cast's Lock and Shots' Finalize are one **Mark final** with one badge **final**;
+  Episode holds **cuts**; **count** everywhere; **Unbind from its node** for both shot/node releases, **Run now** for a staged training;
+  Cast's keep is **Add to the reference set**, Edit's is **Use candidate N** / **Use all**; tiled refine shows as **Upscale (detailed)**;
+  the Catalogue's **Select subject…** (was "Remove background…"), **Back (Esc)**, "Pin for compare" / "Unpin", one wording for the Animate
+  verbs, "Move to group", no duplicate Variations / Animate in *Start from this image ▸*, "Make a shot from this clip…" at the top of a
+  clip's menu; Story without spec jargon in its text, node titles instead of ids, **New character…** with distinct character / place /
+  prop icons; Edit's **Save**, one **Quick mask**, "Add mask: …" in one vocabulary, "Close the shape".
+- **One transport (02 §8.2):** Space play, ← / → frame, Shift+← / → ±10, Home / End first / last in Animate, the Stage timeline and the
+  Episode lane (Animate keeps , . as alternates; the Stage's key jumps moved to Alt+← / →, its range to I / O with [ ] kept, Frame
+  everything to Shift+F); a Vitest keeps the three transports' keys equal. Animate's frame step is now a fixed key (a plain arrow), so a
+  remap of it no longer applies — as Settings › Keyboard treats every fixed key.
+- **Every action a command:** Models & engine (`models.rescan`, `.fetchAll`, `.fetch`, `.verify`, `.reveal`, `.engine.*`, with keys while
+  the sheet is open and a right-click per roster row), Story (`story.shot.useTake`, `story.flow.voiceLine`, `story.episode.addShot` /
+  `addClip`, `story.flow.next` / `restart`), `cat.loadInGenerate`, `gen.fetchMissing`.
+- **The audit catches drift now:** every command that declares `context` must be referenced by a menu in the sources (26 were not — each
+  added to its menu or its false placement dropped), and a hand-written `markUsed` must name a command the file renders or runs (two
+  fixed). The non-context placements are not checked statically; why is written in `commandAudit.test.ts` and `frame/AGENTS.md`.
+- Tests: Vitest 263 (+4), smoke 30 / 30 under full and open, lint 88, build clean, settings and agents audits clean; offline suite
+  unchanged (343, no Python touched but `edit_headed_check.py`'s strings). **D90 is complete** except what 02's status line lists; owed:
+  the rig run of the swatch pack and a style sample, and the author's click-through of the new layout.

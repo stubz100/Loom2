@@ -18,7 +18,7 @@ import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
 import { StyleEditor, StyleGrid } from './StyleWorld'
-import { askExpand, makeClipItems, makeFrameItems, rowMenu, shotMenu } from './storyCommands'
+import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnItem, shotMenu, storyItem } from './storyCommands'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
@@ -82,7 +82,7 @@ function WorldTab() {
       </div>
       <h4>Add</h4>
       <div className="verbs"><CommandButton id="story.world.addStyle" text /><CommandButton id="story.world.addBeat" text /><CommandButton id="story.world.addVariable" text /></div>
-      <span className="hint">The styles reach Generate's Style picker; a beat becomes a Flow node by hand (SY3); the variables drive the Flow's conditions.</span>
+      <span className="hint">The styles reach Generate's Style picker; a beat becomes a Flow node by hand; the variables drive the Flow's conditions.</span>
     </div>
   )
 }
@@ -106,14 +106,14 @@ function CastTab() {
           const v = p.versions.find((x) => x.id === p.current)
           return (
             <button key={p.id} className={`story-row profile-row${profileId === p.id ? ' active' : ''}`} role="listitem" data-id={p.id} onClick={() => sy().selectProfile(p.id)}
-              onContextMenu={(e) => { sy().selectProfile(p.id); showMenu(e, [{ cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep, { cmd: 'story.cast.delete' }]) }}>
+              onContextMenu={(e) => { sy().selectProfile(p.id); showMenu(e, profileMenu()) }}>
               {v?.hero_asset_id ? <img className="pthumb" src={api.thumbUrl(v.hero_asset_id, 256)} alt="" /> : <span className="pthumb empty" />}
               <span className="pname">{p.name}<span className="muted"> · {CLASS_LABEL[p.cls]}</span></span>
-              <span className="n">{p.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'locked' : 'open'} /></span>
+              <span className="n">{p.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'final' : 'open'} /></span>
             </button>
           )
         })}
-        {!shown.length && <div className="empty hint">{profiles.length ? 'No profile matches.' : 'No profiles yet — "Make a character…" on a Catalogue tile, or New profile…'}</div>}
+        {!shown.length && <div className="empty hint">{profiles.length ? 'No profile matches.' : 'No profiles yet — "Make a character…" on a Catalogue tile, or New character…'}</div>}
       </div>
       <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /></div>
     </div>
@@ -121,6 +121,8 @@ function CastTab() {
 }
 
 // ------------------------------------------------------------------ Panel · Shots
+/** D90 (01 §11.6): a Flow node as the user knows it — its title, else its first line or its type; never the raw id. */
+const nodeName = (nodes: Record<string, FlowNode>, id: string): string => { const n = nodes[id]; return n ? n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 30) : '') || `${NODE_LABEL[n.type]} node` : 'a Flow node' }
 const shotThumb = (s: Shot, clipsById: Record<string, { asset_id: string | null }>): string | null => {
   const v = s.versions.find((x) => x.id === s.current)
   if (!v) return null
@@ -133,6 +135,7 @@ function ShotsTab() {
   const shots = useStory((s) => s.shots)
   const shotId = useStory((s) => s.shotId)
   const clipsById = useStory((s) => s.clipsById)
+  const flowNodes = useStory((s) => s.flowNodes)
   const groups = new Map<string, Shot[]>()
   for (const s of shots) { const k = s.owner_node ?? ''; groups.set(k, [...(groups.get(k) ?? []), s]) }
   const keys = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
@@ -141,7 +144,7 @@ function ShotsTab() {
       <div className="story-list" role="list">
         {keys.map((k) => (
           <div key={k || 'unbound'} className="shot-group">
-            <h4>{k ? `node ${k}` : 'Unbound'}<span className="n"> · {groups.get(k)!.length}</span></h4>
+            <h4>{k ? nodeName(flowNodes, k) : 'Unbound'}<span className="n"> · {groups.get(k)!.length}</span></h4>
             {groups.get(k)!.map((s) => {
               const v = s.versions.find((x) => x.id === s.current)
               const thumb = shotThumb(s, clipsById)
@@ -234,8 +237,8 @@ export function PrimaryAction() {
     return (
       <div>
         {seqCurrent ? <button className="primary" disabled={!n} onClick={() => runCommand('story.episode.exportFcpxml')} title="FCPXML with chapter markers (and markers.txt beside it); the checklist asks first when a clip is not a final shot">Export ▶</button>
-          : <button className="primary" onClick={() => runCommand('story.episode.new')}>New sequence…</button>}
-        <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no sequence open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }}>{issues} of {n} clips not final shots</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
+          : <button className="primary" onClick={() => runCommand('story.episode.new')}>New cut…</button>}
+        <div className="estimate">{!seqCurrent ? <span style={{ color: 'var(--fg3)' }}>no cut open</span> : !n ? <span style={{ color: 'var(--fg3)' }}>the lane is empty</span> : issues ? <span style={{ color: 'var(--fg3)' }}>{issues} of {n} clips not final shots</span> : <><span className="dot ok" />{n} clip{n === 1 ? '' : 's'} · every one a final shot</>}</div>
       </div>
     )
   }
@@ -256,13 +259,13 @@ export function PrimaryAction() {
     return (
       <div>
         <button className="primary" onClick={() => runCommand('story.shot.new')} title="An empty shot; its takes come from Stage, Animate or the board">New shot…</button>
-        <div className="estimate">{!s || !v ? <span style={{ color: 'var(--fg3)' }}>pick a shot</span> : v.state === 'final' ? <><span className="dot ok" />{v.id} final</> : why ? <span style={{ color: 'var(--fg3)' }}>{why}</span> : <><span className="dot ok" />{v.id} ready to finalize</>}</div>
+        <div className="estimate">{!s || !v ? <span style={{ color: 'var(--fg3)' }}>pick a shot</span> : v.state === 'final' ? <><span className="dot ok" />{v.id} final</> : why ? <span style={{ color: 'var(--fg3)' }}>{why}</span> : <><span className="dot ok" />{v.id} ready to mark final</>}</div>
       </div>
     )
   }
   if (tab === 'cast') {
     const p = profiles.find((x) => x.id === profileId); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
-    const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is locked — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
+    const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is final — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
     const secs = (caps?.seconds ?? 0) * (caps?.presets.full?.cells ?? 0)
     return (
       <div>
@@ -289,9 +292,9 @@ function Bootstrap({ p }: { p: Profile }) {
   const steps: { id: string; label: string; done: boolean; hint: string; run?: string }[] = [
     { id: 'cast', label: 'Cast', done: !!v?.hero_asset_id, hint: v?.hero_asset_id ? 'the hero is set' : 'make an image the hero ("Make a character…" on a tile, or pick a candidate)' },
     { id: 'expand', label: 'Expand', done: Object.keys(candPage?.assets ?? {}).length > 0, hint: 'one job per coverage cell with the hero as the reference', run: 'story.cast.expand' },
-    { id: 'curate', label: 'Curate', done: curated, hint: curated ? 'every shot-size row has a reference' : 'keep candidates until every shot-size row has one (advisory)' },
-    { id: 'train', label: 'Train', done: !!v?.lora, hint: v?.lora ? `the version holds a LoRA (trigger ${v.trigger})` : `readiness ${ready.score} · ${ready.summary} — ${ready.lines[0]}; a LoRA from the reference set (advisory, 18 §3d)`, run: 'story.cast.train' },
-    { id: 'lock', label: 'Lock', done: v?.state === 'final', hint: 'the version becomes read-only; a retake is a new version', run: 'story.cast.lock' },
+    { id: 'curate', label: 'Curate', done: curated, hint: curated ? 'every shot-size row has a reference' : 'add candidates to the reference set until every shot-size row has one (advisory)' },
+    { id: 'train', label: 'Train', done: !!v?.lora, hint: v?.lora ? `the version holds a LoRA (trigger ${v.trigger})` : `readiness ${ready.score} · ${ready.summary} — ${ready.lines[0]}; a LoRA from the reference set (advisory)`, run: 'story.cast.train' },
+    { id: 'lock', label: 'Final', done: v?.state === 'final', hint: 'the version becomes read-only; a retake is a new version', run: 'story.cast.lock' },
   ]
   return (
     <span className="bootstrap" aria-label="bootstrap">
@@ -353,7 +356,7 @@ export function Strip() {
           {s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.id === s.current ? ' · current' : ''}{x.state === 'final' ? ' · final' : ''}</option>)}
         </select>
         <CommandButton id="story.shot.newVersion" />
-        {v?.state === 'final' ? <span className="lock-badge" title={`finalized ${v.finalized_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.shot.finalize" />}
+        {v?.state === 'final' ? <span className="lock-badge" title={`marked final ${v.finalized_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.shot.finalize" />}
         {stale && <span className="stale-badge" title="The stage moved after this version's frame / clip was taken — still usable (advisory)">stale</span>}
         <span className="spacer" />
         {stageName && <span className="hint">{stageName}</span>}
@@ -370,10 +373,10 @@ export function Strip() {
       <div className="story-strip">
         <b>{p.name}</b>
         <select aria-label="version" value={v?.id ?? p.current} onChange={(e) => sy().selectProfile(p.id, e.target.value)} title="The version shown (mentions use the current one unless pinned)">
-          {p.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.id === p.current ? ' · current' : ''}{x.state === 'final' ? ' · locked' : ''}</option>)}
+          {p.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.id === p.current ? ' · current' : ''}{x.state === 'final' ? ' · final' : ''}</option>)}
         </select>
         <CommandButton id="story.cast.newVersion" />
-        {v?.state === 'final' ? <span className="lock-badge" title={`locked ${v.locked_at ?? ''}`}><Lock size={12} /> locked</span> : <CommandButton id="story.cast.lock" />}
+        {v?.state === 'final' ? <span className="lock-badge" title={`marked final ${v.locked_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.cast.lock" />}
         <span className="spacer" />
         <Bootstrap p={p} />
       </div>
@@ -444,7 +447,7 @@ function WorldEditor() {
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
       </section>
       <section id="story-sec-spine">
-        <h3>Spine<span className="hint">the beats in order; a Flow node is made from a beat by hand (SY3)</span></h3>
+        <h3>Spine<span className="hint">the beats in order; a Flow node is made from a beat by hand</span></h3>
         <div className="rows">
           {world.spine.map((b, i) => <BeatRow key={b.id} b={b} i={i} active={selected?.kind === 'beat' && selected.id === b.id} />)}
           {!world.spine.length && <div className="empty">No beats yet.</div>}
@@ -452,7 +455,7 @@ function WorldEditor() {
         <div className="adder"><CommandButton id="story.world.addBeat" text /></div>
       </section>
       <section id="story-sec-variables">
-        <h3>Variables<span className="hint">bool or enum flags the Flow's conditions read (SY3)</span></h3>
+        <h3>Variables<span className="hint">bool or enum flags the Flow's conditions read</span></h3>
         <div className="rows">
           {world.variables.map((v) => <VarRow key={v.name} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}
           {!world.variables.length && <div className="empty">No variables yet.</div>}
@@ -479,7 +482,7 @@ function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
       <img src={api.thumbUrl(a.id, 256)} alt="" />
       {cell && <span className="cell">{cell.shot} · {cell.angle}</span>}
       <span className="tools">
-        <button className="quiet" title="Keep: into the reference set" aria-label="keep" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'keep') }}>✓</button>
+        <button className="quiet" title="Add to the reference set" aria-label="add to the reference set" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'keep') }}>✓</button>
         <button className="quiet" title="Reject" aria-label="reject" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'reject') }}>✕</button>
       </span>
     </div>
@@ -508,7 +511,7 @@ function CastPage() {
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
-          <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {v.id} ({open ? 'open' : 'locked'})</span></h2>
+          <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {v.id} ({open ? 'open' : 'final'})</span></h2>
           <label className="stub"><span>prompt stub</span>
             <textarea rows={2} value={v.stub} aria-label="prompt stub" readOnly={!open} placeholder="the clause a @mention carries into a prompt — e.g. Mara, a wiry courier in a grey coat" onChange={(e) => sy().setStub(e.target.value)} />
           </label>
@@ -526,8 +529,8 @@ function CastPage() {
         {grid.uncelled > 0 && <span className="hint">{grid.uncelled} reference{grid.uncelled === 1 ? '' : 's'} without a cell (the hero, imports).</span>}
       </section>
       <section>
-        <h3>Candidates <span className="hint">newest first · ✓ keeps into the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
-        {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is locked.'}</div>}
+        <h3>Candidates <span className="hint">newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
+        {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
         <div className="cand-strip" role="list">
           {cands.map((a) => <Candidate key={a.id} a={a} picked={picked.includes(a.id)} />)}
         </div>
@@ -540,11 +543,13 @@ function CastPage() {
 function Take({ kind, id, current, clipsById }: { kind: 'image' | 'clip'; id: string; current: boolean; clipsById: Record<string, { asset_id: string | null; frames: number; w: number; h: number }> }) {
   const c = kind === 'clip' ? clipsById[id] : undefined
   const thumb = kind === 'image' ? id : c?.asset_id ?? null
+  markUsed('story.shot.useTake')
   return (
-    <div className={`take-card${current ? ' current' : ''}`} data-kind={kind} data-id={id} title={kind === 'clip' ? (c ? `${c.frames} f · ${c.w}×${c.h}` : id) : id}>
+    <div className={`take-card${current ? ' current' : ''}`} data-kind={kind} data-id={id} title={kind === 'clip' ? (c ? `${c.frames} f · ${c.w}×${c.h}` : id) : id}
+      onContextMenu={(e) => { storyItem.take = { kind, id }; showMenu(e, [{ cmd: 'story.shot.useTake' }]) }}>
       {thumb ? <img src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="empty">{kind}</span>}
       <span className="cell">{kind === 'clip' ? <><Film size={10} /> {c ? `${c.frames} f · ${c.w}×${c.h}` : 'clip'}</> : 'frame'}{current ? ' · in use' : ''}</span>
-      {!current && <span className="tools"><button className="quiet" title={kind === 'clip' ? 'Use as the clip' : 'Use as the frame'} aria-label={`use ${kind}`} onClick={() => void sy().useTake(kind, id)}>✓ use</button></span>}
+      {!current && <span className="tools"><button className="quiet" title={kind === 'clip' ? 'Use as the clip' : 'Use as the frame'} aria-label={`use ${kind}`} onClick={() => runOnItem({ take: { kind, id } }, 'story.shot.useTake')}>✓ use</button></span>}
     </div>
   )
 }
@@ -585,7 +590,7 @@ function ShotBoard() {
             : v.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the version's frame" />
             : <span className="hint">No frame or clip yet — Make frame ▸ / Make clip ▸ below (Generate, Animate or the stage camera), or use a take.</span>}
         </div>
-        <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to finalize</span>}</div>
+        <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to mark final</span>}</div>
         <div className="make-row"><MakeMenus /><span className="hint">{v.state === 'open' ? 'Generate or Animate open for this version; what they make comes back here as takes' : 'final — make a new version for more takes'}</span></div>
       </section>
       <section>
@@ -601,6 +606,7 @@ function ShotBoard() {
 
 // ------------------------------------------------------------------ Stage: play mode (no model is ever invoked — loom R143)
 function PlayView() {
+  markUsed('story.flow.next'); markUsed('story.flow.restart'); markUsed('story.flow.stop')
   const play = useStory((s) => s.play)
   const flowNodes = useStory((s) => s.flowNodes)
   const shots = useStory((s) => s.shots)
@@ -621,10 +627,10 @@ function PlayView() {
       </div>
       {n?.type === 'dialogue' && n.lines.length > 0 && <div className="play-lines">{n.lines.map((l, i) => <p key={i}>{speaker(l.speaker) && <b>{speaker(l.speaker)}: </b>}{l.text}</p>)}</div>}
       <div className="play-controls">
-        {play.ended ? <button className="primary restart" onClick={() => sy().playStart()}>Restart</button>
+        {play.ended ? <button className="primary restart" onClick={() => runCommand('story.flow.restart')}>Restart</button>
           : n?.type === 'choice' ? optionsAvailable(n, play.vars).map((o: FlowOption) => <button key={o.id} className="option primary" onClick={() => sy().playNext(o.id)}>{o.label || '…'}</button>)
-          : <button className="primary next" onClick={() => sy().playNext()}>Next ▸</button>}
-        <button onClick={() => sy().playStop()}>Stop</button>
+          : <button className="primary next" onClick={() => runCommand('story.flow.next')}>Next ▸</button>}
+        {!play.ended && <CommandButton id="story.flow.restart" />}<button onClick={() => runCommand('story.flow.stop')}>Stop</button>
         <span className="hint">{play.trail.length} step{play.trail.length === 1 ? '' : 's'} · {Object.entries(play.vars).map(([k, val]) => `${k} = ${String(val)}`).join(' · ') || 'no variables'}</span>
       </div>
     </div>
@@ -691,6 +697,7 @@ function ShotInspector() {
   const shotVersionId = useStory((s) => s.shotVersionId)
   const clipsById = useStory((s) => s.clipsById)
   const stagesLite = useStory((s) => s.stagesLite)
+  const flowNodes = useStory((s) => s.flowNodes)
   const s = shots.find((x) => x.id === shotId)
   if (!s) return <span className="hint">Nothing selected.</span>
   const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
@@ -701,7 +708,7 @@ function ShotInspector() {
       <h4>{s.name}</h4>
       <div className="kv">
         <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => sy().renameShot(e.target.value)} />
-        <span>owner</span><span>{s.owner_node ? `node ${s.owner_node}` : 'unbound (the Flow binds, SY3)'}</span>
+        <span>owner</span><span>{s.owner_node ? nodeName(flowNodes, s.owner_node) : 'unbound (a Flow node binds it)'}</span>
         <span>current</span>
         <select value={s.current} aria-label="current shot version" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
         <span>versions</span><span>{s.versions.length}</span>
@@ -724,7 +731,7 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
         <span>takes</span><span>{v.takes.length}</span>
         <span>from</span><span>{v.derived_from ?? '—'}</span>
         <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
-        {v.finalized_at && <><span>finalized</span><span>{v.finalized_at.slice(0, 16).replace('T', ' ')}</span></>}
+        {v.finalized_at && <><span>marked final</span><span>{v.finalized_at.slice(0, 16).replace('T', ' ')}</span></>}
       </div>
       <div className="verbs"><CommandButton id="story.shot.finalize" text /><CommandButton id="story.shot.newVersion" text /></div>
       <div className="verbs"><MakeMenus /></div>
@@ -766,6 +773,7 @@ function LinesEditor({ n }: { n: FlowNode }) {
 
 /** CN2: a line's voice — ▶ plays the spoken line (marked when the words changed since), 🎙 speaks it (its speaker's voice, else the fallback). */
 function LineVoice({ n, i, l, available }: { n: FlowNode; i: number; l: FlowNode['lines'][number]; available: boolean }) {
+  markUsed('story.flow.voiceLine')
   const jobs = useSession((s) => s.jobs)
   const job = ttsJobFor(jobs, n.id, i)
   const busy = !!job && ['staged', 'queued', 'running'].includes(job.status)
@@ -776,7 +784,7 @@ function LineVoice({ n, i, l, available }: { n: FlowNode; i: number; l: FlowNode
       {audio && <button className={`quiet play${stale ? ' stale' : ''}`} title={stale ? 'Play the spoken line — the words changed since; voice it again' : 'Play the spoken line'} aria-label={`play line ${i + 1}`} onClick={() => sy().playLine(audio)}>▶</button>}
       <button className="quiet" disabled={busy || !available || !l.text.trim()} aria-label={`voice line ${i + 1}`}
         title={busy ? `speaking… (${job?.status}${job?.progress_text ? ` · ${job.progress_text}` : ''})` : job?.status === 'failed' ? `the last voice job failed: ${job.error ?? ''} — try again` : audio ? 'Voice this line again' : "Voice this line (its speaker's voice, else the voice picked below)"}
-        onClick={() => void sy().voiceLine(n.id, i)}>{busy ? '…' : '🎙'}</button>
+        onClick={() => runOnItem({ line: { node: n.id, index: i } }, 'story.flow.voiceLine')}>{busy ? '…' : '🎙'}</button>
     </span>
   )
 }
@@ -918,7 +926,7 @@ export function Inspector() {
     <div className="story-insp">
       <h4>World</h4>
       <div className="kv">
-        <span>format</span><span title="Fixed at the project's creation (R45); the finalize gate of a shot's clip (17 §3c)">{fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]} · ${fmt.width}×${fmt.height} · ${fmt.fps} fps` : '—'}</span>
+        <span>format</span><span title="Fixed at the project's creation; a shot's clip must be at this size to be marked final">{fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]} · ${fmt.width}×${fmt.height} · ${fmt.fps} fps` : '—'}</span>
         <span>styles</span><span>{world.styles.length}</span>
         <span>beats</span><span>{world.spine.length}</span>
         <span>variables</span><span>{world.variables.length}</span>

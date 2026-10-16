@@ -18,7 +18,7 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
   { scope: 'edit', chord: 'ctrl+2', ids: ['edit.view.200', 'global.suite.generate'], byDispatch: true, why: 'as Ctrl+1: 200 % in Edit with a document open, the suite switch everywhere else' },
   // D72: keys that lived outside the registry until now
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.sel.polyClose'], why: 'with AI candidates showing, Enter keeps the visible one (it is registered first, as useEditKeys did before D72); else it closes an open polygon' },
-  { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.transform.apply'], why: 'Keep the visible candidate is disabled while a transform is open, Apply only while one is' },
+  { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.transform.apply'], why: 'Use the shown candidate is disabled while a transform is open, Apply only while one is' },
   // D90 (B9): Apply crop needs the Crop tool and a selection, no open transform, polygon or magnetic border
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.crop.apply'], why: 'with AI candidates showing, Enter keeps the visible one first (registered first); the next Enter applies the crop' },
   { scope: 'edit', chord: 'enter', ids: ['edit.crop.apply', 'edit.sel.polyClose'], why: 'Apply crop is disabled while a polygon or magnetic border is open, and needs the Crop tool, which never has one' },

@@ -324,7 +324,7 @@ export const useGenerate = create<GenerateState>()(
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
-          s.toast((stage ? `Staged ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`) + (f ? ` for ${forLabel(f)} — they land as its takes` : ''), 'success')
+          s.toast((stage ? `Queued ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''} for later` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`) + (f ? ` for ${forLabel(f)} — they land as its takes` : ''), 'success')
           await s.refreshAll()
           if (get().panel.seed_mode === 'increment') get().set({ seed: get().panel.seed + get().panel.count })
           return jobs.jobs

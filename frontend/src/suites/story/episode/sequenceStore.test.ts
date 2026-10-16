@@ -30,7 +30,7 @@ describe('sequence conversions', () => {
   })
   it('the bin drop takes clips by asset or clip id and refuses everything else', () => {
     const clips = [clip('clp_a', 24, 10), clip('clp_b', 16, 20)]
-    expect(laneDrop({ items: [{ kind: 'asset', id: 'ast_clp_a', media: 'video' }] }, clips)).toEqual({ take: [clips[0]], verdict: { ok: true, label: 'Add to the end of the sequence' } })
+    expect(laneDrop({ items: [{ kind: 'asset', id: 'ast_clp_a', media: 'video' }] }, clips)).toEqual({ take: [clips[0]], verdict: { ok: true, label: 'Add to the end of the cut' } })
     expect(laneDrop({ items: [{ kind: 'asset', id: 'clp_b' }, { kind: 'asset', id: 'ast_clp_a' }] }, clips).take.map((c) => c.id)).toEqual(['clp_b', 'clp_a'])
     expect(laneDrop({ items: [{ kind: 'asset', id: 'ast_image', media: 'image' }] }, clips).verdict).toEqual({ ok: false, reason: 'Only clips go on the lane' })
     expect(laneDrop({ items: [{ kind: 'group', id: 'g' }] }, clips).verdict).toEqual({ ok: false })

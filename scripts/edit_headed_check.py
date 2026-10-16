@@ -1494,7 +1494,7 @@ def main() -> int:
             time.sleep(0.5)
             check(cdp.eval(f"{S}.transform") is None, "Ctrl+Enter applies the free transform")
             cdp.eval(f"{S}.setTool('lasso'); {S}.setView({{ lassoKind: 'polygon' }}); {S}.setLassoPoly([{{ x: 10, y: 10 }}, {{ x: 60, y: 10 }}]); 1"); time.sleep(0.3)
-            check(bool(cdp.eval("!!document.querySelector('.panel-strip button[aria-label=\"Close polygon\"], button[aria-label=\"Close polygon\"]')")), "an open polygon shows its ✓ / ⊘ in the strip")
+            check(bool(cdp.eval("!!document.querySelector('.panel-strip button[aria-label=\"Close the shape\"], button[aria-label=\"Close the shape\"]')")), "an open polygon shows its ✓ / ⊘ in the strip")
             cdp.eval(f"{S}.setLassoPoly(null); {S}.setView({{ lassoKind: 'free' }}); {S}.setTool('brush'); 1")
             # menu audit over every tool and state (D55, PhotoCraft context-menu contract rules 3 and 5)
             audit = cdp.eval(f"""(() => {{
@@ -2361,7 +2361,7 @@ def main() -> int:
             hist = cdp.eval(f"JSON.stringify({STORE}.history.map(h => h.label))")
             d1 = region_diff(before, after, band)
             check(d1 > 5, f"brush stroke is visible on the stage: band changed by {d1:.1f}/255 (history {hist})")
-            added = cdp.eval("(() => { const b = document.querySelector('button[aria-label=\"Add mask\"]'); if (!b) return false; b.click(); return true })()")
+            added = cdp.eval("(() => { const b = document.querySelector('button[aria-label=\"Add mask: reveal all\"]'); if (!b) return false; b.click(); return true })()")
             time.sleep(0.5)
             check(bool(added) and bool(cdp.eval(f"{STORE}.editingMask")), "Add mask (Layers toolbar) adds a mask and switches to editing it")
             before2 = cdp.shot(OUT / f"{mode}{tag}-mask0.png")                # D54: on a mask the brush paints the mask pair's black

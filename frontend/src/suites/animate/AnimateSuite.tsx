@@ -30,19 +30,20 @@ function Slot({ which }: { which: 'start' | 'end' }) {
   const id = useAnimate((s) => s.panel[which])
   const asset = useAnimate((s) => (id ? s.assets[id] : undefined))
   const set = (v: string | null) => (which === 'start' ? an().setStart(v) : an().setEnd(v))
+  markUsed(which === 'start' ? 'anim.clearStart' : 'anim.clearEnd')     // D90 (01 §11.3): the ✕ and the slot's right-click run the command
   const verdict = (p: DragPayload) => (which === 'start' ? startDrop(p) : endDrop(p))   // D71: clips are not frames; the ghost says so
   const { ref, over } = useDropTarget((p) => onlyAssets(p) && verdict(p).verdict.ok, (p) => {
     if (which === 'end') { set(endDrop(p).end ?? null); return }
     const r = startDrop(p); set(r.start ?? null); if (r.end && !an().panel.end) an().setEnd(r.end)
   }, (p) => verdict(p).verdict)
   return (
-    <div ref={ref} className={`slot${over ? ' over' : ''}`}
+    <div ref={ref} className={`slot${over ? ' over' : ''}`} onContextMenu={(e) => { if (id) showMenu(e, [which === 'start' ? { cmd: 'anim.clearStart' } : { cmd: 'anim.clearEnd' }, { cmd: 'anim.swap' }]) }}
       title={which === 'start' ? 'Start frame: drop a Catalogue tile, or Shift+A on a tile in the Catalogue' : 'End frame (optional): drop a tile, or Shift+Z in the Catalogue — enables first/last-frame mode'}>
       <span className="tag">{which === 'start' ? 'S' : 'E'}</span>
       {id ? <>
         <img src={api.thumbUrl(id, 512)} alt="" />
         <span className="meta">{asset ? `${asset.w}×${asset.h}${asset.kind === 'video' ? ' · a clip (use a frame)' : ''}` : id}</span>
-        <button className="quiet x" title={`Clear ${which} frame`} aria-label={`Clear ${which} frame`} onClick={() => set(null)}><X size={14} /></button>
+        <button className="quiet x" title={`Clear ${which} frame`} aria-label={`Clear ${which} frame`} onClick={() => runCommand(which === 'start' ? 'anim.clearStart' : 'anim.clearEnd')}><X size={14} /></button>
       </> : <span className="cap">{which === 'start' ? 'start frame' : 'end frame (optional)'}<br /><small>{which === 'start' ? 'drop a tile · Shift+A' : 'drop a tile · Shift+Z'}</small></span>}
     </div>
   )
@@ -182,7 +183,7 @@ function LengthTab() {
         <div className="segmented">{(['random', 'fixed', 'increment'] as const).map((m) => <button key={m} className={p.seed_mode === m ? 'active' : ''} onClick={() => an().set({ seed_mode: m })}>{m}</button>)}</div>
         {p.seed_mode !== 'random' && <input type="number" min={1} value={p.seed} onChange={num('seed', 1, 2 ** 31)} />}
       </div>
-      <label>clips</label>
+      <label>count</label>
       <div className="row"><input type="number" min={1} max={8} value={p.count} onChange={num('count', 1, 8)} /><span className="hint" style={{ margin: 0 }}>variations per Animate (new seeds)</span></div>
       <div className="full"><EstimateLine /></div>
     </div>
@@ -258,7 +259,7 @@ function PrimaryAction() {
   return (
     <div>
       <button className="primary" disabled={!!reason} onClick={() => runCommand('anim.animate')} title={`Animate (Ctrl+Enter) ${eta}`}>Animate {p.count > 1 ? `${p.count} ` : ''}▶ {eta}</button>
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button disabled={!!reason} onClick={() => runCommand('anim.stage')} title="Stage: add to the queue, run later (Ctrl+Shift+Enter)">Stage</button>{reason && <span className="disabled-why">{reason}</span>}</div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button disabled={!!reason} onClick={() => runCommand('anim.stage')} title="Queue: add to the queue and run it later — Run now in the Dock (Ctrl+Shift+Enter)">Queue</button>{reason && <span className="disabled-why">{reason}</span>}</div>
     </div>
   )
 }
@@ -268,6 +269,7 @@ export function useAnimateKeys() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'animate') return
+      if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
       if (inField(e)) { if (primaryInField(e, ['anim.animate', 'anim.stage'])) e.stopImmediatePropagation(); return }   // D90 (B8): Ctrl+Enter from the prompt
       if (handleKeyFor('animate', e)) e.stopImmediatePropagation()
     }

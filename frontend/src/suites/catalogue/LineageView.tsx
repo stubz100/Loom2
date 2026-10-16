@@ -70,7 +70,7 @@ export function LineageView({ id }: { id: string }) {
     <div className="lineage-view">
       <div className="lin-bar">
         {/* D90 (B13): Back, as the Catalogue strip's (cat.closeLoupe) */}
-        {!inPane && <button className="quiet" title="Back (Esc)" onClick={() => runCommand('cat.closeLoupe')}><ArrowLeft size={14} /> Back</button>}
+        {!inPane && <button className="quiet" title="Back (Esc)" onClick={() => runCommand('cat.closeLoupe')}><ArrowLeft size={14} /> Back (Esc)</button>}
         <GitBranch size={14} /><b>Lineage</b>
         <span className="muted">{tree.items.length} asset{tree.items.length === 1 ? '' : 's'} · {lay.rows} branch{lay.rows === 1 ? '' : 'es'} · in {new Set(tree.items.map((a) => tree.locations[a.id]?.group_id ?? 'unprocessed')).size} place{new Set(tree.items.map((a) => tree.locations[a.id]?.group_id ?? 'u')).size === 1 ? '' : 's'}</span>
       </div>

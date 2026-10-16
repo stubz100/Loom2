@@ -11,7 +11,8 @@ import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
 import { useSequence } from './sequenceStore'
 import { useStory } from '../storyStore'
-import { laneChecklist } from './sequenceCommands'
+import { binItem, laneChecklist } from './sequenceCommands'
+import { markUsed, runCommand } from '../../../frame/commands'
 import { shotRows } from './bin'
 
 export function SequencePanel() {
@@ -24,10 +25,11 @@ export function SequencePanel() {
   const load = useSequence((s) => s.load)
   useEffect(() => { if (project?.open) { void load(); void useAnimate.getState().loadClips(); void useStory.getState().loadShots(); void useStory.getState().loadFlow() } }, [project?.path, load]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
+  markUsed('story.episode.addShot'); markUsed('story.episode.addClip')    // the bins' + run them on their entry
   return (
     <div className="seq-panel">
       <div className="seq-list">
-        <div className="seq-list-head"><b>Sequences</b><CommandButton id="story.episode.new" /></div>
+        <div className="seq-list-head"><b>Cuts</b><CommandButton id="story.episode.new" /></div>
         {!timelines.length && <span className="hint">None yet.</span>}
         {timelines.map((t) => (
           <button key={t.id} className={`seq-row${current?.id === t.id ? ' active' : ''}`} onClick={() => void useSequence.getState().open(t.id)} title={`${t.fps} fps · ${t.w}×${t.h} · revision ${t.revision}`}>
@@ -36,7 +38,7 @@ export function SequencePanel() {
         ))}
       </div>
       <div className="seq-bin shots-bin">
-        <div className="seq-list-head"><b>Shots</b><span className="hint">{current ? 'a shot\'s final version (else its current one), stamped — drag onto the lane, or +' : 'open a sequence first'}</span></div>
+        <div className="seq-list-head"><b>Shots</b><span className="hint">{current ? 'a shot\'s final version (else its current one), stamped — drag onto the lane, or +' : 'open a cut first'}</span></div>
         {(() => {
           const rows = shotRows(shots, clips).map((r) => ({ ...r, node: r.sh.owner_node ? flowNodes[r.sh.owner_node] : undefined }))
           if (!rows.length) return <span className="hint">No shot has a clip yet — Story · Shots.</span>
@@ -45,20 +47,20 @@ export function SequencePanel() {
               onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: c.asset_id ?? c.id, media: 'video' }], from: 'shots-bin', thumb: c.asset_id ? api.thumbUrl(c.asset_id, 256) : undefined, label: sh.name }))}>
               {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" draggable={false} /> : <span className="ph" />}
               <span className="t">{sh.name} · {v.id}{v.state === 'final' ? '' : ' · open'}<br /><small>{node ? node.title || node.type : 'unbound'}</small></span>
-              <button className="quiet" disabled={!current} title={current ? 'Add to the end of the episode (stamped with the shot)' : 'open a sequence first'} aria-label={`add shot ${sh.name}`} onClick={() => useSequence.getState().addShot(c, { id: sh.id, version: v.id, node: sh.owner_node ?? null })}><Plus size={14} /></button>
+              <button className="quiet" disabled={!current} title={current ? 'Add to the end of the cut (stamped with the shot)' : 'open a cut first'} aria-label={`add shot ${sh.name}`} onClick={() => { binItem.shot = { clip: c, ref: { id: sh.id, version: v.id, node: sh.owner_node ?? null } }; runCommand('story.episode.addShot'); binItem.shot = undefined }}><Plus size={14} /></button>
             </div>
           ))
         })()}
       </div>
       <div className="seq-bin">
-        <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a sequence first'}</span></div>
+        <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a cut first'}</span></div>
         {!clips.length && <span className="hint">No clips in this project yet — Animate makes them.</span>}
         {clips.map((c) => (
           <div key={c.id} className="seq-clip-card" title={`${c.frames} frames @ ${c.fps} fps · ${c.w}×${c.h}`}
             onPointerDown={(e) => beginDrag(e, () => ({ items: [{ kind: 'asset', id: c.asset_id ?? c.id, media: 'video' }], from: 'sequence-bin', thumb: c.asset_id ? api.thumbUrl(c.asset_id, 256) : undefined, label: c.id }))}>
             {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" draggable={false} /> : <span className="ph" />}
             <span className="t">{c.model_id.split('-')[0]} · {c.frames}f @ {c.fps}</span>
-            <button className="quiet" disabled={!current} title={current ? 'Add to the end of the sequence' : 'open a sequence first'} onClick={() => useSequence.getState().addClip(c)}><Plus size={14} /></button>
+            <button className="quiet" disabled={!current} title={current ? 'Add to the end of the cut' : 'open a cut first'} aria-label={`add clip ${c.id}`} onClick={() => { binItem.clip = c; runCommand('story.episode.addClip'); binItem.clip = undefined }}><Plus size={14} /></button>
           </div>
         ))}
       </div>
@@ -73,7 +75,7 @@ export function SequenceInspector() {
   const saving = useSequence((s) => s.saving)
   const lastExport = useSequence((s) => s.lastExport)
   const clips = useAnimate((s) => s.clips)
-  if (!current || !lane) return <span className="hint">No sequence open.</span>
+  if (!current || !lane) return <span className="hint">No cut open.</span>
   const c = selected !== null ? lane.clips[selected] : null
   const clip = c ? clips.find((x) => x.id === c.source) : null
   return (
@@ -87,7 +89,7 @@ export function SequenceInspector() {
       <h4>Export</h4>
       <div className="verbs"><CommandButton id="story.episode.exportEdl" text label="EDL" /><CommandButton id="story.episode.exportFcpxml" text label="FCPXML + markers" /><CommandButton id="story.episode.exportSrt" text label="SRT" /><CommandButton id="story.episode.render" text label="Render draft" /></div>
       {lastExport && <p className="hint">last: {lastExport.path}</p>}
-      <p className="hint">Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and `markers.txt` lists them; the SRT takes the nodes' Dialogue lines; the FCPXML and the EDL carry the lines' voices on an audio lane at the lines' ticks (CN2). The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed — D27).</p>
+      <p className="hint">Resolve conforms each clip at its own rate; the FCPXML carries a chapter marker per shot (its node's title) and `markers.txt` lists them; the SRT takes the nodes' Dialogue lines; the FCPXML and the EDL carry the lines' voices on an audio lane at the lines' ticks. The draft render is a CPU job: frames from the masters, dissolves blended, a clip at another rate mapped by nearest frame (not conformed).</p>
       {c && <>
         <h4>Clip {selected! + 1}</h4>
         <div className="kv"><span>source</span><span>{clip ? `${clip.model_id} · ${clip.frames}f @ ${clip.fps}` : `${c.source} (missing)`}</span></div>

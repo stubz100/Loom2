@@ -458,7 +458,7 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return
       set({ busy: true })
       try { replaceProfile(await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/lock', { params: { path: { pid: p.id, vid: v.id } } }))) }
-      catch (e) { toast(`Lock: ${detail(e)}`) } finally { set({ busy: false }) }
+      catch (e) { toast(`Mark final: ${detail(e)}`) } finally { set({ busy: false }) }
     },
     deleteProfile: async () => {
       const p = get().profile(); if (!p) return
@@ -487,7 +487,7 @@ export const useStory = create<StoryState>()((set, get) => {
           body: { version: v.id, model_id, steps: o.steps, rank: o.rank, resolution: o.resolution, name: o.name, setting: o.setting, stage: o.stage } }))
         await get().loadProfiles()
         await useSession.getState().refreshAll()
-        toast(r.staged ? `Training ${p.name} ${v.id} staged — release it when the rig is free (trigger ${r.trigger})` : `Training ${p.name} ${v.id} queued (trigger ${r.trigger})`, 'info')
+        toast(r.staged ? `Training ${p.name} ${v.id} queued for later — Run now when the rig is free (trigger ${r.trigger})` : `Training ${p.name} ${v.id} queued (trigger ${r.trigger})`, 'info')
         return r
       } catch (e) { toast(`Train: ${detail(e)}`); return null }
     },
@@ -585,7 +585,7 @@ export const useStory = create<StoryState>()((set, get) => {
         const r = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/lipsync', { params: { path: { sid: s.id, vid: v.id } },
           body: { node_id: line.node_id, index: line.index, preset: o.preset, stage: true } as never }))
         await useSession.getState().refreshAll()
-        toast(`Lip-sync staged (experimental): ${r.frames} frames, ≈ ${Math.round((r.seconds ?? 0) / 60)} min — release it when the rig is free; it lands as a take`, 'info')
+        toast(`Lip-sync queued for later (experimental): ${r.frames} frames, ≈ ${Math.round((r.seconds ?? 0) / 60)} min — Run now in the Dock when the rig is free; it lands as a take`, 'info')
       } catch (e) { toast(`Lip-sync: ${detail(e)}`) }
     },
     playLine: (assetId) => {
@@ -669,9 +669,9 @@ export const useStory = create<StoryState>()((set, get) => {
       try {
         const next = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/finalize', { params: { path: { sid: s.id, vid: v.id } } }))
         set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
-        toast(`${s.name} ${v.id} finalized`, 'info')
+        toast(`${s.name} ${v.id} marked final`, 'info')
         return true
-      } catch (e) { toast(`Finalize: ${detail(e)}`); return false }
+      } catch (e) { toast(`Mark final: ${detail(e)}`); return false }
     },
     useTake: async (kind, id) => {
       const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return
@@ -688,7 +688,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     finalizeWhy: (v) => {
       if (v.state === 'final') return null
-      if (!v.clip_id) return 'no clip yet — animate the shot (Stage · Shot or Animate) and use the result as its clip'
+      if (!v.clip_id) return 'no clip yet — animate the shot (Stage · Render or Animate) and use the result as its clip'
       const c = get().clipsById[v.clip_id]
       const fmt = useSession.getState().project?.format
       if (!c) return `clip ${v.clip_id} is not loaded`

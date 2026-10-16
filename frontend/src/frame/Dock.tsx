@@ -18,7 +18,7 @@ function JobRow({ j }: { j: Job }) {
     { label: 'Go to origin', icon: LocateFixed, disabled: !hasOrigin, run: () => goToOrigin(j) },
     sep,
     { label: 'Cancel job', icon: X, disabled: !live, run: () => void cancelJob(j.id) },
-    { label: 'Run now (release staged)', icon: Play, disabled: j.status !== 'staged', run: () => void releaseJob(j.id) },
+    { label: 'Run now', icon: Play, disabled: j.status !== 'staged', run: () => void releaseJob(j.id) },
     { label: 'Remove from the list', icon: X, disabled: live, run: () => void deleteJob(j.id) },
     sep,
     { label: 'Copy job id', icon: ClipboardCopy, run: () => void navigator.clipboard?.writeText(j.id) },

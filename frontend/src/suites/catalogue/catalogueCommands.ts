@@ -1,7 +1,7 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Box, Check, Clapperboard, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftRight, Wand2, Box, Check, Clapperboard, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
@@ -44,13 +44,16 @@ registerCommands([
   { id: 'cat.reference', scope: 'catalogue', label: 'Use as reference in Generate', icon: Images, keys: 'R', placement: ['context', 'inspector', 'strip'], when: hasSel, run: () => { const list = ids(); void gen().then((g) => g.addRefs(list)) } },   // D90 (B12): up to the model's max_refs, one toast for the rest
   { id: 'cat.rerun', scope: 'catalogue', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.rerun(a, o)) } },
   { id: 'cat.variations', scope: 'catalogue', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.variations(a, undefined, o)) } },
+  // D90 (01 §11.2): the asset's prompt and parameters into Generate's panel (was an Inspector-only button)
+  { id: 'cat.loadInGenerate', scope: 'catalogue', label: 'Load in Generate', icon: Wand2, placement: ['context', 'inspector'], hint: 'this asset\'s prompt and parameters into Generate\'s panel', when: () => !!primary()?.params?.recipe,
+    run: () => { const a = primary(); if (a) void gen().then((g) => { g.loadFromAsset(a, false); useSession.getState().setSuite('generate') }) } },
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
   { id: 'cat.compare', scope: 'catalogue', label: 'Open compare', icon: Columns2, keys: 'Shift+C', placement: ['context', 'strip'], when: () => cat().compare.length >= 2, run: () => cat().setCompareOpen(true) },
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },
-  { id: 'cat.animate', scope: 'catalogue', label: 'Animate from this frame (start)', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (!a) return
+  { id: 'cat.animate', scope: 'catalogue', label: 'Animate from this frame', icon: Film, keys: 'Shift+A', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (!a) return
       void import('../animate/animateStore').then((m) => { const an = m.useAnimate.getState(); const clipId = (a.params as { clip_id?: string }).clip_id
         if (a.kind === 'video' && clipId) { useSession.getState().setSuite('animate'); void an.loadClips().then(() => an.select(clipId)) } else an.setStart(a.id, true) }) } },
-  { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame in Animate', icon: Film, keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind === 'image', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
+  { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame', icon: Film, hint: 'in Animate', keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind === 'image', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
   { id: 'cat.reveal', scope: 'catalogue', label: 'Reveal in folder', icon: ExternalLink, keys: 'Ctrl+Shift+R', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (a) void revealPath(a.path) } },
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),
     run: () => void cat().trash(ids()) },                         // D90 (B5): the store's trash toasts once, with Undo, for every caller
@@ -76,9 +79,9 @@ registerCommands([
   { id: 'cat.import', scope: 'catalogue', label: 'Import…', icon: Upload, placement: ['strip', 'context'], run: () => void import('./CatalogueStrip').then((m) => m.importInteractive(cat(), 'files')) },
   { id: 'cat.prev', scope: 'catalogue', label: 'Previous image', icon: ChevronLeft, keys: 'ArrowLeft', placement: ['strip', 'context'], when: () => loupeIndex() > 0, run: () => { const c = cat(); c.openLoupe(c.visibleOrder()[loupeIndex() - 1]) } },
   { id: 'cat.next', scope: 'catalogue', label: 'Next image', icon: ChevronRight, keys: 'ArrowRight', placement: ['strip', 'context'], when: () => { const i = loupeIndex(); return i >= 0 && i < cat().visibleOrder().length - 1 }, run: () => { const c = cat(); c.openLoupe(c.visibleOrder()[loupeIndex() + 1]) } },
-  { id: 'cat.closeLoupe', scope: 'catalogue', label: 'Back', icon: X, placement: ['strip', 'context'], when: () => !!cat().loupe || cat().compareOpen || !!cat().lineage, run: () => { const c = cat(); if (c.loupe) c.openLoupe(null); else if (c.lineage) c.openLineage(null); else c.setCompareOpen(false) } },
+  { id: 'cat.closeLoupe', scope: 'catalogue', label: 'Back (Esc)', icon: X, placement: ['strip', 'context'], when: () => !!cat().loupe || cat().compareOpen || !!cat().lineage, run: () => { const c = cat(); if (c.loupe) c.openLoupe(null); else if (c.lineage) c.openLineage(null); else c.setCompareOpen(false) } },
   // D71 (P15): "Start from this image" — Edit with the right AI tool already chosen
-  { id: 'cat.start.removeBg', scope: 'catalogue', label: 'Remove background…', icon: Eraser, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind === 'image',
+  { id: 'cat.start.removeBg', scope: 'catalogue', label: 'Select subject…', icon: Eraser, hint: 'opens Edit with AI Select · Subject (it selects; Inpaint or a mask does the rest)', placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'edit', aiOp: 'select', selMode: 'subject' }) } },
   { id: 'cat.start.upscale', scope: 'catalogue', label: 'Upscale in Edit…', icon: ImageUpscale, placement: ['inspector', 'context'], when: () => !!primary() && primary()!.kind === 'image',
     run: () => { const a = primary(); if (a) void openWith(a.id, { suite: 'edit', aiOp: 'upscale' }) } },
@@ -145,15 +148,17 @@ export function moveToMenu(): MenuItem {
   ] }
 }
 
+/** D90 (01 §11.4): a clip's tile — Make a shot sits at the menu's top level and the image starts are left out. */
+const clipTile = () => primary()?.kind === 'video'
 /** Right-click on a tile (the tile has been made primary / selected by the caller). */
 export function tileMenu(): MenuItem[] {
   return [
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
-    { cmd: 'cat.reference' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, sep,
-    { label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, { cmd: 'cat.animate' }, { cmd: 'cat.variations' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }, { cmd: 'cat.start.shot' }] }, sep,
-    { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin from compare' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
+    { cmd: 'cat.reference' }, { cmd: 'cat.loadInGenerate' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, ...(clipTile() ? [{ cmd: 'cat.start.shot' }] : []), sep,
+    ...(clipTile() ? [] : [{ label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }] } as MenuItem, sep]),
+    { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,
     ...(inTrash() ? [{ cmd: 'cat.restore' }, { cmd: 'cat.purge' }, { cmd: 'cat.emptyTrash' }] : [{ cmd: 'cat.trash' }]),
   ]

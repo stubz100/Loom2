@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { WorldStyle } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
-import { markUsed, sep, type MenuItem } from '../../frame/commands'
+import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { useDropTarget } from '../../frame/drag'
 import { monogram } from '../../frame/presetGlyphs'
@@ -53,7 +53,7 @@ export function StyleGrid() {
   const world = useStory((s) => s.world)
   const selected = useStory((s) => s.selected)
   useEffect(() => { if (!useAlbum.getState().tree) void useAlbum.getState().load() }, [])   // once: the faces need the tree (group.changed reloads it)
-  markUsed('story.world.styleSample'); markUsed('story.world.openStyleGroup'); markUsed('story.world.defaultStyle')
+  markUsed('story.world.styleSample'); markUsed('story.world.openStyleGroup')
   if (!world) return null
   return (
     <div className="style-grid" role="group" aria-label="styles">
@@ -68,6 +68,7 @@ export function StyleEditor({ s, isDefault }: { s: WorldStyle; isDefault: boolea
   const { face, busy } = useFace(s)
   const { ref, over } = useSampleDrop(s)
   const [open, setOpen] = useState(!s.fragment.trim())
+  markUsed('story.world.defaultStyle')                                   // D90 (01 §11.3): the ★ box runs the command (the editor shows the selected style)
   return (
     <>
       <h4>Style · {s.name}</h4>
@@ -78,7 +79,7 @@ export function StyleEditor({ s, isDefault }: { s: WorldStyle; isDefault: boolea
       <div className="kv">
         <span>name</span><input type="text" value={s.name} aria-label="selected style name" onChange={(e) => sy().setStyle(s.id, { name: e.target.value })} />
         <span>default</span>
-        <label className="check" title="The style Generate, Expand and Stage preselect (★)"><input type="checkbox" checked={isDefault} aria-label="the default style" onChange={(e) => sy().setDefaultStyle(e.target.checked ? s.id : null)} /> ★ the project's default</label>
+        <label className="check" title="The style Generate, Expand and Stage preselect (★)"><input type="checkbox" checked={isDefault} aria-label="the default style" onChange={(e) => { if (e.target.checked) runCommand('story.world.defaultStyle'); else sy().setDefaultStyle(null) }} /> ★ the project's default</label>
       </div>
       <details className="style-fragment" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary>prompt fragment</summary>

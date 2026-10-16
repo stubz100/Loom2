@@ -35,7 +35,7 @@ export function LipsyncBlock({ v, ownerNode }: { v: ShotVersion; ownerNode: stri
             {Object.entries(caps.presets ?? {}).map(([k, p]) => <option key={k} value={k}>{(p as { label?: string }).label ?? k}</option>)}
           </select>
           <span>face</span><span>{v.frame_asset_id ? 'the version\'s frame' : '— the version needs a frame'}</span>
-          <span>estimate</span><span>{preset?.seconds ? `≈ ${Math.round(preset.seconds / 60)} min · staged (release it when the rig is free)` : '—'}</span>
+          <span>estimate</span><span>{preset?.seconds ? `≈ ${Math.round(preset.seconds / 60)} min · queued for later (Run now in the Dock when the rig is free)` : '—'}</span>
         </div>
       )}
       <div className="verbs"><CommandButton id="story.shot.lipsync" text /></div>

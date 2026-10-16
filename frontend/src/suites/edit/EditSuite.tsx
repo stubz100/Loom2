@@ -254,7 +254,7 @@ function SelectionTab() {
       <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.sel.all', 'edit.sel.none', 'edit.sel.invert', 'edit.sel.fromLayer'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <ValueField label="amount" value={px} min={1} max={500} step={1} unit="px" onChange={(v) => ed().setView({ selModifyPx: v })} />
       <label>modify</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['expand', 'contract', 'border', 'smooth', 'feather'].map((op) => <CommandButton key={op} id={`edit.sel.${op}`} text label={op[0].toUpperCase() + op.slice(1)} />)}</div>
-      <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
+      <label>Quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
       <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.mask.fromSelection', 'edit.mask.load', 'edit.sel.crop'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       {/* D90 (01 §11.3): the clipboard's panel home (also the canvas menu); Ctrl+V still arrives as the browser's paste event (D46) */}
       <label>clipboard</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.copy', 'edit.cut', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.layer.viaCopy', 'edit.layer.viaCut'].map((id) => <CommandButton key={id} id={id} text />)}</div>
@@ -333,7 +333,7 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
       <Slider label="expand" value={p.selExpand} min={-64} max={64} step={1} unit="px" onChange={(v) => setP({ selExpand: v })} />
       <Slider label="feather" value={p.selFeather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ selFeather: v })} />
       <label /><label className="chk" title="soft, image-aware edges after the mask joins the selection — the Selection panel's Refine edge settings"><input type="checkbox" checked={p.selRefine} onChange={(e) => setP({ selRefine: e.target.checked })} /> refine edge</label>
-      <label /><div style={{ display: 'flex', gap: 6 }}><AiRunButton id="edit.ai.select" reason={reason} className="primary" title="AI Select">Select ▶</AiRunButton>{!compact && <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue as staged">Stage</AiRunButton>}</div>
+      <label /><div style={{ display: 'flex', gap: 6 }}><AiRunButton id="edit.ai.select" reason={reason} className="primary" title="AI Select">Select ▶</AiRunButton>{!compact && <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue and run it later — Run now in the Dock">Queue</AiRunButton>}</div>
       {reason && <span className="hint full">{reason}</span>}
       <span className="hint full">{sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'}</span>
     </div>
@@ -441,7 +441,7 @@ function AiTab() {
           <label>model</label><select value={upscaleModel} onChange={(e) => setP({ upscaleModel: e.target.value })}>{upIds.map((id) => <option key={id} value={id}>{caps?.tools[id]?.label ?? id} {health(id) === 'missing' ? '(not fetched)' : ''}</option>)}</select>
           <label>on</label><div className="segmented">{(['visible', 'active'] as const).map((s) => <button key={s} className={p.upscaleSource === s ? 'active' : ''} onClick={() => setP({ upscaleSource: s })}>{s}</button>)}</div>
           <label>result</label><label className="chk"><input type="checkbox" checked={p.asLayer} onChange={(e) => setP({ asLayer: e.target.checked })} /> also add a 1× detail layer (the full-size image goes to the Catalogue)</label>
-          <label>refine</label><label className="chk"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> tiled refine after the upscale (re-samples every tile at low strength)</label>
+          <label>detail</label><label className="chk" title="re-samples every tile of the upscale at low strength (a tiled refine)"><input type="checkbox" checked={p.refineTiled} onChange={(e) => setP({ refineTiled: e.target.checked })} /> Upscale (detailed) — re-samples every tile at low strength</label>
           {p.refineTiled && <>
             <label>model</label><select value={tiledModel} onChange={(e) => setP({ tiledModel: e.target.value })}>{tiledIds.map((id) => <option key={id} value={id}>{i2iName(id, true)}</option>)}</select>
             <EncoderPick model={tiledModel} />
@@ -452,13 +452,13 @@ function AiTab() {
           </>}
         </>}
         {p.op !== 'upscale' && <>
-          <Slider label="candidates" value={p.candidates} min={1} max={4} step={1} onChange={(v) => setP({ candidates: v })} />
+          <Slider label="count" value={p.candidates} min={1} max={4} step={1} onChange={(v) => setP({ candidates: v })} />
           <label>seed</label><div><div className="segmented">{(['random', 'fixed'] as const).map((m) => <button key={m} className={p.seedMode === m ? 'active' : ''} onClick={() => setP({ seedMode: m })}>{m}</button>)}</div>{p.seedMode === 'fixed' && <input type="number" value={p.seed} onChange={(e) => setP({ seed: Number(e.target.value) })} style={{ width: 120, marginLeft: 6 }} />}</div>
         </>}
       </div>}
       {p.op !== 'select' && <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <AiRunButton id={`edit.ai.${p.op}`} reason={reason} className="primary">AI ▶ {AI_OP_LABEL[p.op]}{p.op !== 'upscale' ? ` ×${p.candidates}` : ''}</AiRunButton>
-        <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue as staged">Stage</AiRunButton>
+        <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue and run it later — Run now in the Dock">Queue</AiRunButton>
         {running.length > 0 && <span className="kind">{running.filter((j) => j.status === 'running').length ? `running · ${Math.round((running.find((j) => j.status === 'running')?.progress ?? 0) * 100)} %` : `${running.length} queued`}</span>}
       </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
@@ -481,16 +481,16 @@ function CandidateStrip() {
   const g = findNode(doc, cands.group)
   return (
     <div className="cand-strip">
-      <span className="muted">{g?.name ?? 'candidates'} — pick one (1–4, Enter keeps the one shown) or keep all:</span>
+      <span className="muted">{g?.name ?? 'candidates'} — use one (1–4, Enter uses the one shown) or use all:</span>
       {cands.ids.map((id, i) => { const n = findNode(doc, id), cid = `edit.cand.${i + 1}`, c = command(cid), on = preview ? preview === id : !!n?.visible; if (c) markUsed(cid); return (
         // D90 (B18): hovering previews through `candPreview` (view only: no history, nothing dirty); a click runs the command (1–4, remappable)
-        <button key={id} className={`cand${on ? ' on' : ''}`} title={`${c ? titleFor(c) : `Keep candidate ${i + 1}`} · seed ${(n?.recipe as { seed?: number } | undefined)?.seed ?? '?'}`}
+        <button key={id} className={`cand${on ? ' on' : ''}`} title={`${c ? titleFor(c) : `Use candidate ${i + 1}`} · seed ${(n?.recipe as { seed?: number } | undefined)?.seed ?? '?'}`}
           onMouseEnter={() => ed().previewCandidate(id)} onMouseLeave={() => ed().previewCandidate(null)} onClick={() => { if (c) runCommand(cid); else ed().pickCandidate(id) }}>
           {thumbs.get(id) ? <img src={thumbs.get(id)} alt="" /> : <span className="muted">…</span>}<b>{i + 1}</b>
         </button>
       ) })}
-      <CommandButton id="edit.cand.keep" text label="Keep shown" />
-      <button className="quiet" onClick={() => ed().pickCandidate(null)}>Keep all</button>
+      <CommandButton id="edit.cand.keep" text label="Use shown" />
+      <button className="quiet" title="Use all: keep every candidate as a layer (the others hidden)" onClick={() => ed().pickCandidate(null)}>Use all</button>
     </div>
   )
 }
@@ -646,7 +646,7 @@ function Strip() {
       <button className={`quiet${before ? ' active' : ''}`} aria-pressed={before} onPointerDown={beforeDown} onPointerUp={beforeUp} onPointerLeave={() => { if (held.current) { held.current = null; ed().setView({ before: false }) } }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); runCommand('edit.view.before') } }}
         disabled={!doc} title={`${beforeCmd ? titleFor(beforeCmd) : 'Before'}: a click toggles; press and hold (or hold the key) to peek`}>before</button>
-      <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => { markUsed('edit.sel.quickMask'); runCommand('edit.sel.quickMask') }} disabled={!doc} title="Quick mask (Q)">quick mask</button>
+      <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => { markUsed('edit.sel.quickMask'); runCommand('edit.sel.quickMask') }} disabled={!doc} title="Quick mask (Q)">Quick mask</button>
       <span className="spacer" />
       {cursor && <span className="mono">{cursor.x}, {cursor.y}</span>}
       {/* D90 (01 §11.6): the renderer badge is developer-facing — dev builds only; everyone has it in Info › Diagnostics */}

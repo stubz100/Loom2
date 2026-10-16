@@ -1,7 +1,7 @@
 // Generate suite (09; D90 02 §6): one scrolling Panel column (GenerateColumn.tsx — saved panels, prompt, references, look, camera, model,
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
-import { ArrowDownFromLine, Boxes, Bookmark, Camera, Images, Orbit, Palette, RotateCcw, RotateCw, SlidersHorizontal, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, RotateCcw, RotateCw, SlidersHorizontal, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
@@ -36,7 +36,7 @@ function Panel({ tab }: { tab: string }) {
 function PrimaryAction() {
   const g = useGenerate()
   const s = useSession()
-  markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset')
+  markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset'); markUsed('gen.fetchMissing')
   const pv = g.preview
   const missing = pv?.missing ?? []
   const reason = submitBlock(g, !!s.project?.open)                  // D90 (B4): the same reason gates Ctrl+Enter and the palette
@@ -44,9 +44,9 @@ function PrimaryAction() {
     <div>
       <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (Ctrl+Enter)">Generate {g.panel.count} ▶</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-        <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Stage: add to the queue, run later (Ctrl+Shift+Enter)">Stage</button>
+        <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Queue: add to the queue and run it later — Run now in the Dock (Ctrl+Shift+Enter)">Queue</button>
         <PreviewButton />
-        {missing.length > 0 && <button onClick={() => s.openModels({ missing: true })}>Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button>}
+        {missing.length > 0 && <button onClick={() => runCommand('gen.fetchMissing')} title="Fetch the missing weights: Models & engine, on the missing entries">Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button>}
       </div>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * g.panel.count)} s · {pv?.width}×{pv?.height} · {pv?.steps} st{pv?.turbo ? ' turbo' : ''}{pv?.scheduler === 'flux2' ? ' · flux2 schedule' : ''}</>}</div>
     </div>
@@ -90,7 +90,7 @@ function Interim() {
           <div className="img">{previews[j.id] ? <img src={previews[j.id]} alt="" /> : <span style={{ color: 'var(--fg3)' }}>{j.status === 'running' ? j.progress_text || 'starting' : j.status}</span>}</div>
           <div className="bar"><i style={{ width: `${Math.round((j.progress ?? 0) * 100)}%` }} /></div>
           <div className="t"><span>{shortName((j.recipe as { model_id?: string }).model_id, caps)} · {j.seed}</span>
-            <span>{j.status === 'staged' ? <button className="quiet" onClick={() => void release(j.id)}>run</button> : <button className="quiet" onClick={() => void cancel(j.id)}>✕</button>}</span></div>
+            <span>{j.status === 'staged' ? <button className="quiet" title="Run now" onClick={() => void release(j.id)}>run now</button> : <button className="quiet" onClick={() => void cancel(j.id)}>✕</button>}</span></div>
         </div>
       ))}
     </div>
@@ -115,7 +115,7 @@ const withResults = (C: React.ComponentType) => function Wrapped() { return <Cat
 const canSubmit = () => !submitBlock(useGenerate.getState(), !!useSession.getState().project?.open)   // D90 (B4): what disables the Foot's buttons
 registerCommands([
   { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(false) },
-  { id: 'gen.stage', scope: 'generate', label: 'Stage (add to the queue, run later)', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(true) },
+  { id: 'gen.stage', scope: 'generate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(true) },
   // P14 (D82): the Angle tab — the five moves are buttons on the pad; the verb has no key (Ctrl+Enter stays Generate's)
   { id: 'gen.angle.generate', scope: 'generate', label: 'New angle', icon: Orbit, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id,
     run: () => void useGenerate.getState().generateAngle().then((jobs) => { if (jobs) useGenerate.setState({ angleOpen: false }) }) },   // D90: the sheet closes once queued
@@ -126,6 +126,8 @@ registerCommands([
   { id: 'gen.angle.wide', scope: 'generate', label: 'Wide', icon: ZoomOut, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'wide' }) },
   { id: 'gen.angle.clear', scope: 'generate', label: 'Remove the source', icon: X, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id, run: () => useGenerate.getState().setAngle({ asset_id: null }) },
   { id: 'gen.savePreset', scope: 'generate', label: 'Save panel preset…', icon: Bookmark, keys: 'Ctrl+S', placement: ['panel'], run: () => { const g = useGenerate.getState(); void askText({ title: 'Save panel preset', text: 'Saves every field of the panel under this name; an existing preset of the same name is replaced.', initial: g.lastPreset ?? '', placeholder: 'preset name' }).then((n) => { if (n) void g.savePreset(n) }) } },
+  // D90 (01 §11.2): the Foot's Fetch — Models & engine on the missing weights of the model picked
+  { id: 'gen.fetchMissing', scope: 'generate', label: 'Fetch the missing weights…', icon: HardDriveDownload, placement: ['panel'], when: () => (useGenerate.getState().preview?.missing.length ?? 0) > 0, run: () => useSession.getState().openModels({ missing: true }) },
   { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
 ])
 
@@ -133,6 +135,7 @@ export function useGenerateKeys() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'generate') return
+      if ((e.target as HTMLElement | null)?.closest?.('.modal')) return     // D90: a modal (Models & engine) owns its keys
       handleKeyFor('generate', e)
     }
     window.addEventListener('keydown', h)

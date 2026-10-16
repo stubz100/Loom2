@@ -13,16 +13,16 @@ const hasStart = () => !!an().panel.start
 registerCommands([
   // render
   { id: 'anim.animate', scope: 'animate', label: 'Animate', icon: Clapperboard, keys: 'Ctrl+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(false) },
-  { id: 'anim.stage', scope: 'animate', label: 'Stage (add to the queue, run later)', icon: Layers, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(true) },
+  { id: 'anim.stage', scope: 'animate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Layers, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(true) },
   { id: 'anim.swap', scope: 'animate', label: 'Swap start and end', icon: ArrowLeftRight, placement: ['panel'], when: () => !!an().panel.end, run: () => an().swap() },
   { id: 'anim.clearStart', scope: 'animate', label: 'Clear start frame', icon: X, placement: ['panel', 'context'], when: hasStart, run: () => an().setStart(null) },
   { id: 'anim.clearEnd', scope: 'animate', label: 'Clear end frame', icon: X, placement: ['panel', 'context'], when: () => !!an().panel.end, run: () => an().setEnd(null) },
-  // transport
+  // transport — D90 (02 §8.2): the one key set of Animate, the Stage timeline and the Episode lane; `,` `.` and Shift+, / Shift+. stay as alternates
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
-  { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: ',', placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
-  { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: '.', placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },
-  { id: 'anim.back10', scope: 'animate', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+,', alt: ['<'], placement: ['toolbar'], when: hasClip, run: () => an().step(-10) },
-  { id: 'anim.fwd10', scope: 'animate', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+.', alt: ['>'], placement: ['toolbar'], when: hasClip, run: () => an().step(10) },
+  { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
+  { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },
+  { id: 'anim.back10', scope: 'animate', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+ArrowLeft', alt: ['Shift+,', '<'], placement: ['toolbar'], when: hasClip, run: () => an().step(-10) },
+  { id: 'anim.fwd10', scope: 'animate', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', alt: ['Shift+.', '>'], placement: ['toolbar'], when: hasClip, run: () => an().step(10) },
   { id: 'anim.home', scope: 'animate', label: 'First frame', icon: ChevronFirst, keys: 'Home', placement: ['toolbar', 'context'], when: hasClip, run: () => { an().togglePlay(false); an().setFrame(0) } },
   { id: 'anim.end', scope: 'animate', label: 'Last frame', icon: ChevronLast, keys: 'End', placement: ['toolbar', 'context'], when: hasClip, run: () => { an().togglePlay(false); an().setFrame((an().clip()?.frames ?? 1) - 1) } },
   { id: 'anim.shuttleBack', scope: 'animate', label: 'Shuttle backward (J)', icon: SkipBack, keys: 'J', placement: ['context'], when: hasClip, run: () => { const s = an(); useAnimate.setState({ speed: s.speed > 0 ? -1 : Math.max(-4, s.speed * 2) }); s.togglePlay(true) } },
@@ -54,7 +54,7 @@ registerCommands([
   // 17 SY2 (D85): the clip becomes a Story shot's clip (version 1)
   { id: 'anim.toShot', scope: 'animate', label: 'Make a shot from this clip…', icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], when: hasClip,
     run: () => { const c = an().clip(); if (!c) return
-      void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip; finalize it there once it is at the project format.', initial: (c.prompt || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
+      void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip; mark it final there once it is at the project format.', initial: (c.prompt || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
   // D90 (02 §9, A8): a clip goes to the Trash as in the Catalogue (Undo in the toast; Empty trash deletes it)
   { id: 'anim.trash', scope: 'animate', label: 'Move to trash', icon: Trash, danger: true, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().trashClip() },

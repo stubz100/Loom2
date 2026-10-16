@@ -46,6 +46,13 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   Keyboard is `KeyboardSettings.tsx`.
 - The dev build marks rendered commands (`markUsed`) and can list commands with no mouse home (`unusedCommands`); `window.__loom2Commands`
   exposes the registry to the headed checks.
+- **Per-item commands (D90).** Commands take no arguments: a button on one item of a list (a take's ✓ use, a line's 🎙, a bin's +, a
+  roster row's Fetch) sets the item first and runs the command (`storyItem` / `runOnItem` in `storyCommands.ts`, `binItem` in
+  `sequenceCommands.ts`, the selected model for `models.*`); the run clears it, so the palette never acts on a stale item.
+- **A modal owns its keys.** Every key hook skips targets inside `.modal`; a modal with commands of its own (Models & engine,
+  `ModelsSheet.tsx`) takes the focus when it opens and dispatches its scope from its own `onKeyDown`.
+- **One transport (D90, 02 §8.2).** Animate, the Stage timeline and the Episode lane: Space play / pause, ← / → one frame, Shift+← / →
+  ten, Home / End first / last, I / O in / out where there is a range (Stage's previous / next key is Alt+← / →, Frame everything Shift+F).
 
 ## Rule 2 — drags go through `drag.ts`, never HTML5 drag and drop
 
@@ -99,7 +106,9 @@ and replies come from `frontend/src/api/schema.d.ts`, generated from the orchest
 ## Checks
 
 `npm run build` (tsc + vite), `npm run lint`, **`npm test`** (Vitest + jsdom, `src/**/*.test.ts(x)`, ≈ 2 s — incl. `commandAudit.test.ts`, the
-D32 audit: every registered command needs a mouse placement, a chord shared within a scope needs an allow-list entry with its reason)
+D32 audit: every registered command needs a mouse placement, a chord shared within a scope needs an allow-list entry with its reason;
+D90: a command that declares `context` must be named as `{ cmd: 'id' }` / `cmdItem('id')` in some menu, a hand `markUsed('id')` needs the
+id rendered or run in the same file, and Animate, the Stage timeline and the Episode lane keep one transport key set)
 and **`npm run build:e2e && npm run test:e2e`** (Playwright on Edge, WebGL2, against `vite preview` of `dist-e2e/`, a real orchestrator
 and `orchestrator/tests/fake_comfy.py` as a process — `e2e/global-setup.ts`; dev hooks stay in the e2e build through `src/devHooks.ts`).
 `npm run perf` measures startup, suite switches, Edit re-entry and scroll pacing over 10 000 assets into `bench/perf/<date>.json`;

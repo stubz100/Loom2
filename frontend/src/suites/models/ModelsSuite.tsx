@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react'
-import { create } from 'zustand'
+import { useEffect } from 'react'
 import type { ModelEntry } from '../../api/types'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
-import { revealPath } from '../../shell/tauri'
+import { CommandButton } from '../../frame/CommandButton'
+import { markUsed, runCommand, titleFor, command } from '../../frame/commands'
+import { showMenu } from '../../frame/ContextMenu'
 import { useSession } from '../../store/session'
-
-interface ModelsUi { family: string; showRetired: boolean; search: string; missingOnly: boolean; set: (p: Partial<ModelsUi>) => void }
-const useModelsUi = create<ModelsUi>()((set) => ({ family: 'all', showRetired: false, search: '', missingOnly: false, set: (p) => set(p) }))
-const fetchable = (m: ModelEntry) => m.health !== 'present' && m.health !== 'verified' && !!m.repo && !m.retired
+import { rowMenu, useModelsUi } from './modelsCommands'   // D90 (01 §11.2): the sheet's actions are commands
 
 const gb = (n: number | null | undefined) => (n == null ? '—' : `${(n / 2 ** 30).toFixed(2)} GB`)
 
@@ -33,10 +31,7 @@ function ModelsPanel({ tab }: { tab: string }) {
           {e?.last_error && <><dt>last error</dt><dd style={{ color: 'var(--error)' }}>{e.last_error}</dd></>}
         </dl>
         <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-          <button onClick={() => void s.engineAction('start')} disabled={e?.running}>Start</button>
-          <button onClick={() => void s.engineAction('stop')} disabled={!e?.running}>Stop</button>
-          <button onClick={() => void s.engineAction('restart')}>Restart</button>
-          <button onClick={() => void s.engineAction('free')} disabled={!e?.running} title="unload models, free VRAM">Free VRAM</button>
+          <CommandButton id="models.engine.start" text label="Start" /><CommandButton id="models.engine.stop" text label="Stop" /><CommandButton id="models.engine.restart" text label="Restart" /><CommandButton id="models.engine.free" text />
         </div>
       </div>
     )
@@ -64,9 +59,8 @@ function ModelsStrip() {
     <>
       <span>Roster: {n.length} entries · <span className="badge verified">{counts.verified} verified</span> <span className="badge present">{counts.present} present</span> <span className="badge missing">{counts.missing} missing</span></span>
       <span className="spacer" />
-      {counts.missing > 0 && <button onClick={() => { for (const m of n.filter(fetchable)) if (!['queued', 'downloading', 'hashing'].includes(s.fetches[m.id]?.status ?? '')) void s.fetchModel(m.id) }}
-        title="fetch every missing roster entry (D90: one button instead of one per row)">Fetch all missing</button>}
-      <button onClick={() => void s.scanModels()}>Rescan disk</button>
+      {counts.missing > 0 && <CommandButton id="models.fetchAll" text />}
+      <CommandButton id="models.rescan" text />
     </>
   )
 }
@@ -77,6 +71,7 @@ function ModelsStage() {
   const rows = s.models.filter((m) => (ui.showRetired || !m.retired) && (!ui.missingOnly || m.health === 'missing') && (ui.family === 'all' || m.family === ui.family) &&
     (!ui.search || `${m.name} ${m.repo} ${m.role} ${m.id}`.toLowerCase().includes(ui.search.toLowerCase())))
   if (!s.models.length) return <div className="placeholder"><div><h2>No roster loaded</h2>waiting for the orchestrator…</div></div>
+  const fetchCmd = command('models.fetch'); markUsed('models.fetch')                // each row's Fetch runs the command on that row
   return (
     <div>
     <table className="grid">
@@ -86,7 +81,7 @@ function ModelsStage() {
           const f = s.fetches[m.id]
           const fetching = f && ['queued', 'downloading', 'hashing'].includes(f.status)
           return (
-            <tr key={m.id} className={s.selectedModel === m.id ? 'selected' : ''} onClick={() => s.selectModel(m.id)}>
+            <tr key={m.id} className={s.selectedModel === m.id ? 'selected' : ''} data-id={m.id} onClick={() => s.selectModel(m.id)} onContextMenu={(e) => { s.selectModel(m.id); showMenu(e, rowMenu()) }}>
               <td><div>{m.name}</div><div className="mono" style={{ color: 'var(--fg3)', fontSize: 11 }}>{m.id}</div></td>
               <td>{m.family} / {m.role}</td>
               <td>{m.license}{m.variants.includes('open') && <> <span className="badge open">open</span></>}</td>
@@ -97,7 +92,7 @@ function ModelsStage() {
                 {f?.status === 'failed' && <span style={{ color: 'var(--error)' }}> {f.error}</span>}
               </td>
               <td style={{ whiteSpace: 'nowrap' }}>
-                {m.health !== 'present' && m.health !== 'verified' && m.repo && !fetching && <button onClick={(e) => { e.stopPropagation(); void s.fetchModel(m.id) }}>Fetch{m.approx_gb ? ` ${m.approx_gb} GB` : ''}</button>}
+                {m.health !== 'present' && m.health !== 'verified' && m.repo && !fetching && <button title={fetchCmd ? titleFor(fetchCmd, `Fetch ${m.name}`) : undefined} onClick={(e) => { e.stopPropagation(); s.selectModel(m.id); runCommand('models.fetch') }}>Fetch{m.approx_gb ? ` ${m.approx_gb} GB` : ''}</button>}
               </td>
             </tr>
           )
@@ -112,7 +107,7 @@ function ModelsStage() {
 function ModelsInspector() {
   const s = useSession()
   const m: ModelEntry | undefined = s.models.find((x) => x.id === s.selectedModel)
-  const [verify, setVerify] = useState<string | null>(null)
+  const verify = useModelsUi((u) => (u.verify?.id === s.selectedModel ? u.verify.text : null))
   if (!m) return <span style={{ color: 'var(--fg3)' }}>Select a roster entry.</span>
   return (
     <div>
@@ -132,8 +127,7 @@ function ModelsInspector() {
         {m.retired && <><dt>retired</dt><dd>{m.retired}</dd></>}
       </dl>
       <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-        {m.path && <button onClick={() => void s.verifyModel(m.id).then((r) => setVerify(`${r.sha256.slice(0, 16)}… ${r.matches_ledger === null ? '(no ledger entry)' : r.matches_ledger ? 'matches the ledger' : 'DIFFERS from the ledger'}`))}>Verify sha256</button>}
-        {m.path && <button onClick={() => void revealPath(m.path!)}>Reveal</button>}
+        {m.path ? <><CommandButton id="models.verify" text /><CommandButton id="models.reveal" text /></> : <CommandButton id="models.fetch" text />}
       </div>
       {verify && <div className="mono" style={{ marginTop: 8 }}>{verify}</div>}
     </div>

@@ -283,14 +283,14 @@ export const useStage = create<StageState>()((set, get) => ({
     const cur = get().current, cam = get().activeCamera(), g = get().guideEntry(), start = get().shotStart
     const method = get().clipMethod
     const model = get().clipCaps()?.model_id
-    if (!cur || !cam || !g || !start || !model) { s.toast(!g ? 'Render the sequence first' : !start ? (method === 'animate' ? 'Pick the character to perform it (click one of the results)' : 'Pick a shot to start from (click one of the results)') : 'No clip model in this build', 'error'); return null }
+    if (!cur || !cam || !g || !start || !model) { s.toast(!g ? 'Render the sequence first' : !start ? (method === 'animate' ? 'Pick the character to perform it (click one of the results)' : 'Pick a frame to start from (click one of the results)') : 'No clip model in this build', 'error'); return null }
     const recipe = { kind: 'i2v', model_id: model, start_asset: start, prompt_text: get().shot.prompt_text.trim(), frames: g.frames, fps: g.fps, width: g.size.w, height: g.size.h,
       preset: 'draft', guide: { asset_id: g.asset_id, kind: get().guideKind, strength: 1.0 }, seeds: [0] }
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'clip', ref: cur.id, payload: { camera_id: cam.id } } } }))
       s.toast(method === 'animate' ? `Queued ${cam.name} performed by the picked character: ${g.frames} frames (Animate)` : `Queued the clip of ${cam.name}: ${g.frames} frames on the ${get().guideKind} sequence`, 'success')
       return jobs.jobs
-    } catch (e) { s.toast(`Animate failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
+    } catch (e) { s.toast(`Render clip failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
 
   // ---- ST3: the Shot tab ----
@@ -363,9 +363,9 @@ export const useStage = create<StageState>()((set, get) => ({
       refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'shot', ref: cur.id, payload: { camera_id: cam.id } } } }))
-      s.toast(`Queued ${jobs.jobs.length} shot${jobs.jobs.length > 1 ? 's' : ''} of ${cam.name}`, 'success')
+      s.toast(`Queued ${jobs.jobs.length} frame${jobs.jobs.length > 1 ? 's' : ''} of ${cam.name}`, 'success')
       return jobs.jobs
-    } catch (e) { s.toast(`Shot failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
+    } catch (e) { s.toast(`Render frame failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   loadShots: async () => {
     const cur = get().current

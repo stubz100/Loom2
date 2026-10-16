@@ -297,7 +297,7 @@ export const useAnimate = create<AnimateState>()(
           const origin = clipOrigin(get().current)
           const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage, origin } }))
           const n = r.jobs.length
-          s.toast((stage ? `${n} clip${n > 1 ? 's' : ''} staged` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`) + forTail(origin), 'success')
+          s.toast((stage ? `${n} clip${n > 1 ? 's' : ''} queued for later — Run now in the Dock` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`) + forTail(origin), 'success')
           if (p.seed_mode === 'increment') get().set({ seed: p.seed + n })
         } catch (e) { s.toast(`Animate failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },

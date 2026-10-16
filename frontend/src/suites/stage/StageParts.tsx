@@ -193,13 +193,13 @@ function ShotTab() {
   const room = Math.max(0, (method?.max_refs ?? 3) - sh.refs.length)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && shotRefDrop(d, room).ok,
     (d) => { d.items.filter((i) => i.kind === 'asset' && i.media !== 'video').slice(0, room).forEach((i) => st().addShotRef(i.id)) }, (d) => shotRefDrop(d, room))
-  markUsed('stage.shot.generate'); markUsed('stage.shot.passes'); markUsed('stage.shot.clearRefs')
+  markUsed('stage.shot.generate'); markUsed('stage.shot.passes')
   if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
   const image1 = method?.image1 ?? 'clay'
   const passId = entry?.assets[image1]
   return (
     <div className="stage-panel shot-tab">
-      <div className="head"><b>Shot</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" /></div>
+      <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" /></div>
       <h4>Method</h4>
       <div className="method-list">
         {caps && Object.entries(caps.methods).map(([id, m]) => (
@@ -224,7 +224,7 @@ function ShotTab() {
           {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
         </div>
       </div>
-      <h4>References{method ? ` · up to ${method.max_refs}` : ''}</h4>
+      <h4>References{method ? ` · up to ${method.max_refs}` : ''}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</h4>
       <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
         {sh.refs.map((r, i) => (
           <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2}`}>
@@ -239,13 +239,13 @@ function ShotTab() {
       <h4>Prompt</h4>
       <textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} />
       <div className="kv"><span>size</span><span className="segmented"><button className={sh.tier === 'draft' ? 'active' : ''} onClick={() => st().setShot({ tier: 'draft' })}>Draft</button><button className={sh.tier === 'full' ? 'active' : ''} onClick={() => st().setShot({ tier: 'full' })}>Full</button><span className="hint"> {w}×{h}</span></span></div>
-      <div className="kv"><span>candidates</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
+      <div className="kv"><span>count</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
       {pv?.params?.prompt ? <p className="hint prompt-preview">{String(pv.params.prompt)}</p> : null}
       {err && <p className="disabled-why">{err}</p>}
       {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
       <h4>Results{stills.length ? ` · ${stills.length}` : ''}</h4>
-      {!stills.length && <span className="hint">None yet — the shots of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
-      <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this shot`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
+      {!stills.length && <span className="hint">None yet — the frames of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
+      <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
       <ClipSection clips={clips} />
     </div>
   )
@@ -279,7 +279,7 @@ function ClipSection({ clips }: { clips: Asset[] }) {
       <div className="guide-state">
         {rendering && rendered ? `rendering ${rendered.done} / ${rendered.total || n}…` : g ? `${kind} sequence · ${g.frames} frames · ${g.size.w}×${g.size.h} · ${g.fps} fps${stale ? ' · from an earlier range or revision — render again' : ' · current'}` : `no ${kind} sequence yet · ${n} frames at ${gw}×${gh} (8n + 1 for the clip model)`}
       </div>
-      <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /><CommandButton id="stage.clip.animate" text label="Animate ▶" /></div>
+      <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /><CommandButton id="stage.clip.animate" text label="Render clip ▶" /></div>
       {!shotStart && <p className="disabled-why">Click one of the results above to start the clip from it.</p>}
       {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames (E19) · one figure in the camera · the picked result is the character' : '121 frames (E11)'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}</p>}
       {clips.length > 0 && <><h4>Clips · {clips.length}</h4>
@@ -315,7 +315,7 @@ export function PrimaryAction() {
     const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
     return (
       <div>
-        <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the shot (Ctrl+Enter)">Generate{count > 1 ? ` ×${count}` : ''} ▶</button>
+        <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the frame (Ctrl+Enter)">Render frame{count > 1 ? ` ×${count}` : ''} ▶</button>
         <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
       </div>
     )
@@ -328,6 +328,7 @@ export function Strip() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'stage') return
+      if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
       if (inField(e)) { primaryInField(e, ['stage.shot.generate']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
       handleKeyFor('stage', e)
     }
@@ -361,10 +362,10 @@ function Timeline() {
   const keyed = keyedFramesOf(keyframesOf(current), current.active_camera)        // derived from `current` (subscribed): a selector must not return a fresh array
   const { start, end } = current.range
   const span = Math.max(1, end - start)
-  markUsed('stage.anim.play'); markUsed('stage.anim.prev'); markUsed('stage.anim.next'); markUsed('stage.anim.prevKey'); markUsed('stage.anim.nextKey'); markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey'); markUsed('stage.anim.setStart'); markUsed('stage.anim.setEnd')
+  markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey'); markUsed('stage.anim.setStart'); markUsed('stage.anim.setEnd')
   return (
     <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>
-      <CommandRow ids={['stage.anim.prevKey', 'stage.anim.prev', 'stage.anim.play', 'stage.anim.next', 'stage.anim.nextKey']} active={playing ? 'stage.anim.play' : undefined} />
+      <CommandRow ids={['stage.anim.first', 'stage.anim.prevKey', 'stage.anim.back10', 'stage.anim.prev', 'stage.anim.play', 'stage.anim.next', 'stage.anim.fwd10', 'stage.anim.nextKey', 'stage.anim.last']} active={playing ? 'stage.anim.play' : undefined} />
       <input className="frame-field" type="number" min={0} value={frame} onChange={(e) => st().setFrame(Number(e.target.value) || 0)} title="the frame the viewport shows" />
       <div className="scrub-wrap">
         <div className="key-marks">{keyed.filter((f) => f >= start && f <= end).map((f) => <i key={f} className={`key-mark${f === frame ? ' here' : ''}`} style={{ left: `${((f - start) / span) * 100}%` }} title={`key at frame ${f}`} />)}</div>

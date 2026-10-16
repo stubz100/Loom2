@@ -1,7 +1,7 @@
 // LT2 (18 §3c / §3d / §5): the Cast Inspector's training block — the readiness line (advisory, D10), the trigger and the LoRA the version
 // holds (with the measured figures), the options the next job runs with (the base and E16's figures from /capabilities.train, steps,
 // resolution, rank, name, the setting word, staged or not), the verbs as commands (D32), and the newest training job's state with its
-// Release / Resume / Cancel.
+// Run now / Resume / Cancel.
 import { CommandButton } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
 import type { Profile, ProfileVersion } from '../../api/types'
@@ -57,7 +57,7 @@ export function TrainingBlock({ p, v }: { p: Profile; v: ProfileVersion }) {
           <select aria-label="train rank" value={opts.rank} onChange={(e) => set({ rank: Number(e.target.value) })}>{caps.ranks.map((r) => <option key={r} value={r}>{r}</option>)}</select>
           <span>name</span><input type="text" aria-label="lora name" value={opts.name} placeholder={`${p.name} ${v.id}`} onChange={(e) => set({ name: e.target.value })} />
           <span>setting</span><input type="text" aria-label="train setting" value={opts.setting} placeholder="e.g. plain studio background — captioned, so it stays out of the LoRA" onChange={(e) => set({ setting: e.target.value })} />
-          <span>stage</span><label><input type="checkbox" aria-label="train staged" checked={opts.stage} onChange={(e) => set({ stage: e.target.checked })} /> stage it — release when the rig is free</label>
+          <span>queue</span><label><input type="checkbox" aria-label="train staged" checked={opts.stage} onChange={(e) => set({ stage: e.target.checked })} /> queue it for later — Run now when the rig is free</label>
           <span>estimate</span><span>{secs ? `≈ ${Math.max(1, Math.round(secs / 60))} min of steps + the loads` : '—'}{refs.length < (caps.min_refs ?? 4) ? ` · ${refs.length} of ${caps.min_refs} references` : ''}</span>
         </div>
       )}
@@ -65,7 +65,7 @@ export function TrainingBlock({ p, v }: { p: Profile; v: ProfileVersion }) {
       {job && (
         <div className={`train-job ${job.status}`} aria-label="train job">
           <span className={`badge ${job.status}`}>{job.status}</span>
-          <span className="mono">{job.status === 'failed' ? job.error : job.progress_text || (job.status === 'staged' ? 'staged — release it when the rig is free' : '')}</span>
+          <span className="mono">{job.status === 'failed' ? job.error : job.progress_text || (job.status === 'staged' ? 'waiting (queued for later) — Run now when the rig is free' : '')}</span>
           <div className="verbs"><CommandButton id="story.cast.releaseTrain" text /><CommandButton id="story.cast.resumeTrain" text /><CommandButton id="story.cast.cancelTrain" text /></div>
         </div>
       )}

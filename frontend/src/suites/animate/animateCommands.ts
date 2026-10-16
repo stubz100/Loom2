@@ -1,6 +1,6 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
-import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, X } from 'lucide-react'
+import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
@@ -56,6 +56,8 @@ registerCommands([
     run: () => { const c = an().clip(); if (!c) return
       void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip; finalize it there once it is at the project format.', initial: (c.prompt || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
+  // D90 (02 §9, A8): a clip goes to the Trash as in the Catalogue (Undo in the toast; Empty trash deletes it)
+  { id: 'anim.trash', scope: 'animate', label: 'Move to trash', icon: Trash, danger: true, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().trashClip() },
   { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
 
@@ -74,15 +76,24 @@ async function extendClip(): Promise<void> {
   } catch (e) { s.toast(`Extend: ${(e as ApiError).detail ?? e}`, 'error') }
 }
 
-/** Right-click on the player / timeline. */
+/** Right-click on the player / timeline. D90 (A1, A3): J / K / L under Shuttle; Onion and Loop are their commands (the toggles' state
+ *  checked); Make a shot and Measure identity are here as their placements say. */
 export function playerMenu(): MenuItem[] {
   const s = an()
   return [
-    { cmd: 'anim.play', label: s.playing ? 'Pause' : 'Play' }, { cmd: 'anim.stepBack' }, { cmd: 'anim.stepForward' }, { cmd: 'anim.home' }, { cmd: 'anim.end' }, sep,
+    { cmd: 'anim.play', label: s.playing ? 'Pause' : 'Play' }, { cmd: 'anim.stepBack' }, { cmd: 'anim.stepForward' }, { cmd: 'anim.home' }, { cmd: 'anim.end' },
+    { label: 'Shuttle', icon: SkipForward, items: [{ cmd: 'anim.shuttleBack' }, { cmd: 'anim.shuttleStop' }, { cmd: 'anim.shuttleFwd' }] }, sep,
     { cmd: 'anim.setIn' }, { cmd: 'anim.setOut' }, { cmd: 'anim.clearInOut' }, sep,
     { cmd: 'anim.extractFrame' }, { cmd: 'anim.extractRange' }, { cmd: 'anim.sendToEdit' }, { cmd: 'anim.useAsStart' }, { cmd: 'anim.extend' }, sep,
-    { label: 'Onion skin', checked: s.onion, run: () => useAnimate.setState({ onion: !s.onion }) }, { label: 'Loop', checked: s.loop, run: () => useAnimate.setState({ loop: !s.loop }) },
+    { cmd: 'anim.onion', checked: s.onion }, { cmd: 'anim.loop', checked: s.loop },
     { cmd: 'anim.view.compare', label: s.view === 'compare' ? 'Leave compare' : 'Compare…' }, sep,
-    { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.toCatalogue' },
+    { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.identity' }, sep,
+    { cmd: 'anim.toShot' }, { cmd: 'anim.toCatalogue' },
   ]
+}
+
+/** D90 (02 §9, A16): right-click on a row of the Clips tab (the clip is selected first). */
+export function clipMenu(id: string): MenuItem[] {
+  if (an().current !== id) an().select(id)
+  return [{ cmd: 'anim.toCatalogue' }, sep, { cmd: 'anim.keep' }, { cmd: 'anim.reject' }, sep, { cmd: 'anim.toShot' }, sep, { cmd: 'anim.trash' }]
 }

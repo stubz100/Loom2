@@ -1,20 +1,22 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
 // Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
-import { Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
+import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
 import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand, titleFor } from '../../frame/commands'
+import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand, titleFor, type MenuItem } from '../../frame/commands'
 import { useKeymap } from '../../frame/keymap'
-import { showMenu } from '../../frame/ContextMenu'
+import { openPressMenu, showMenu } from '../../frame/ContextMenu'
+import { DEV_HOOKS } from '../../devHooks'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
-import { byOrder, defaultFirst, heroModel, resolveModel, segmentTool } from '../../store/modelCaps'
+import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
-import { adjustmentMenu, filterMenu, layerMenu, TOOLS as TOOL_TABLE } from './editCommands'
-import { BlendSelect, LatchButton, ValueField } from './widgets'
+import { adjustmentMenu, filterMenu, layerMenu, MORE_TOOLS, TOOLS as TOOL_TABLE } from './editCommands'
+import { AI_OP_LABEL, aiModels, aiReason, aiRecipe, opCandidates, selectPlan, type AiCtx } from './aiRecipes'
+import { AiRunButton, BlendSelect, LatchButton, RendererButton, ValueField } from './widgets'
 import { blendLabel, typeLabel } from './labels'
 import { ColorBalanceEditor, CurvesEditor, LevelsEditor, Section } from './propsEditors'
 import { readout, rotateAboutPivot, scaleAboutPivot, type Interp, type TransformMode } from './transform'
@@ -106,11 +108,22 @@ function MagneticOptions() {
   )
 }
 
+/** D90 (02 §9, §10): the storyboard essentials up front; Magic wand, Spot healing and Eyedropper behind More tools, whose slot shows the
+ * active tool when it is one of them. Every tool keeps its key and its place in the canvas menu's Tool ▸. */
 function Toolbox() {
   const tool = useEditor((s) => s.tool)
+  useKeymap((k) => k.version)                                          // D72: the tooltips follow a remap
+  const label = (x: (typeof TOOLS)[number]) => { const c = command(`edit.tool.${x.tool}`); return c ? titleFor(c, x.label) : x.label }
+  const more = TOOLS.filter((x) => MORE_TOOLS.includes(x.tool)), shown = more.find((x) => x.tool === tool)
+  const moreMenu = (): MenuItem[] => more.map((x) => ({ cmd: `edit.tool.${x.tool}`, label: x.label, checked: x.tool === tool }))
   return (
     <div className="toolbox">
-      {TOOLS.map((x) => { markUsed(`edit.tool.${x.tool}`); return <button key={x.tool} className={`tool${tool === x.tool ? ' active' : ''}`} title={x.key ? `${x.label} (${x.key})` : x.label} onClick={() => runCommand(`edit.tool.${x.tool}`)}><b>{x.key || <x.icon size={14} />}</b><span>{x.label}</span></button> })}
+      {TOOLS.filter((x) => !MORE_TOOLS.includes(x.tool)).map((x) => { markUsed(`edit.tool.${x.tool}`); return <button key={x.tool} className={`tool${tool === x.tool ? ' active' : ''}`} title={label(x)} onClick={() => runCommand(`edit.tool.${x.tool}`)}><b>{x.key || <x.icon size={14} />}</b><span>{x.label}</span></button> })}
+      <button type="button" className={`tool more${shown ? ' active' : ''}`} aria-haspopup="menu" title={`${shown ? `${label(shown)} · ` : ''}More tools: ${more.map((x) => x.label).join(', ')} — press and drag to one, or click`}
+        onPointerDown={(e) => openPressMenu(e, moreMenu)} onContextMenu={(e) => e.preventDefault()}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') openPressMenu({ button: 0, currentTarget: e.currentTarget, preventDefault: () => e.preventDefault() }, moreMenu, true) }}>
+        <b>{shown ? shown.key || <shown.icon size={14} /> : <Ellipsis size={14} />}</b><span>{shown ? shown.label : 'More tools'} ▾</span>
+      </button>
     </div>
   )
 }
@@ -235,6 +248,7 @@ function BrushesTab() {
 function SelectionTab() {
   const quickMask = useEditor((s) => s.quickMask)
   const px = useEditor((s) => s.selModifyPx)
+  useEditor((s) => `${!!s.selection}${s.activeId}${!!s.clipboard}${!!s.transform}`)   // D90: the buttons' enabled state follows what their commands read
   return (
     <div className="tool-opts">
       <label>select</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.sel.all', 'edit.sel.none', 'edit.sel.invert', 'edit.sel.fromLayer'].map((id) => <CommandButton key={id} id={id} text />)}</div>
@@ -242,6 +256,8 @@ function SelectionTab() {
       <label>modify</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['expand', 'contract', 'border', 'smooth', 'feather'].map((op) => <CommandButton key={op} id={`edit.sel.${op}`} text label={op[0].toUpperCase() + op.slice(1)} />)}</div>
       <label>quick mask</label><button className={quickMask ? 'active' : ''} onClick={() => runCommand('edit.sel.quickMask')} title="Quick mask (Q)">{quickMask ? 'painting the selection (red = unselected)' : 'paint the selection with the brush'}</button>
       <label>mask</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.mask.fromSelection', 'edit.mask.load', 'edit.sel.crop'].map((id) => <CommandButton key={id} id={id} text />)}</div>
+      {/* D90 (01 §11.3): the clipboard's panel home (also the canvas menu); Ctrl+V still arrives as the browser's paste event (D46) */}
+      <label>clipboard</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.copy', 'edit.cut', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.layer.viaCopy', 'edit.layer.viaCut'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <RefineEdgeControls />
       <span className="hint full">expand / contract grow round by the amount; border makes a band that wide around the edge; smooth removes specks and jaggies; feather softens with Photoshop's radius. Every change, and every selection tool, is one undo step.</span>
     </div>
@@ -275,35 +291,36 @@ function RefineEdgeControls() {
 // AI panel settings live in aiPanelStore.ts (shared with the A-tool options)
 
 /** AI Select (10 §4, M5 slice 2): shared by the AI tab's Select operation and the A tool's options. */
-function SelectControls({ compact = false }: { compact?: boolean }) {
+/** D90 (02 §9): the AI tab's inputs, reactive — the same AiCtx the `edit.ai.*` commands build from getState (editCommands.ts aiCtx), so a
+ * button and its command agree on the reason and the recipe (aiRecipes.ts). */
+function useAiCtx(): AiCtx & { p: ReturnType<typeof useAiPanel.getState>; doc: DocumentStack | null } {
   const p = useAiPanel()
-  const setP = p.set
+  const caps = useSession((s) => s.capabilities)
   const models = useSession((s) => s.models)
-  const aiPrompt = useEditor((s) => s.aiPrompt)
   const doc = useEditor((s) => s.doc)
-  const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
+  const hasSel = useEditor((s) => !!s.selection)
+  const activeId = useEditor((s) => s.activeId)
+  const aiPrompt = useEditor((s) => s.aiPrompt)
+  return { p, caps, health: (id) => models.find((m) => m.id === id)?.health ?? 'missing', doc, hasSel, activeId, activeKind: findNode(doc, activeId)?.kind ?? null, aiPrompt, refineParams: () => ({ ...ed().refineParams() }) }
+}
+function SelectControls({ compact = false }: { compact?: boolean }) {
+  const c = useAiCtx()
+  const { p, caps, aiPrompt } = c
+  const setP = p.set
   // D65: the AI Select tools come from /capabilities.tools (recipes.segment); the subject matte is the default, a prompted tool
   // (text / points / box — SAM 3, full only under C3 / D26) appears where this build offers one
-  const caps = useSession((s) => s.capabilities)
   const tools = byOrder(caps?.tools).filter(([, t]) => (t.recipes.segment ?? []).length > 0)
-  const subjectId = segmentTool('subject', caps), promptId = segmentTool('text', caps)
-  const toolId = resolveModel(p.selModel, 'segment', (id) => !!caps?.tools[id]?.recipes.segment?.length, caps) || subjectId || ''
-  const toolModes = caps?.tools[toolId]?.recipes.segment ?? []
-  const sam = toolModes.some((m) => m !== 'subject')                      // a prompted tool: text / points / box
+  const { subjectId, promptId, toolId, toolModes, sam, reason } = selectPlan(c)
   const promptModes = (['text', 'points', 'box'] as const).filter((m) => toolModes.includes(m))
   const pos = aiPrompt.points.filter((q) => q.label === 1).length, neg = aiPrompt.points.length - pos
-  const reason = !doc ? 'no document' : !toolId ? 'no AI Select model offered' : health(toolId) === 'missing' ? `weights missing: fetch ${toolId} in Models`
-    : sam && p.selMode === 'text' && !p.selText.trim() ? 'type what to select in find' : sam && p.selMode === 'points' && !pos ? 'click the subject on the canvas (Alt-click excludes)'
-    : sam && p.selMode === 'box' && !aiPrompt.box ? 'drag a box on the canvas' : null
-  const run = (stage = false) => void ed().runAi({ kind: 'segment', model_id: toolId, mode: sam ? p.selMode : 'subject', text: p.selText, points: aiPrompt.points, box: aiPrompt.box,
-    threshold: p.selThreshold, op: p.selOp, expand: p.selExpand, feather: p.selFeather, edge_refine: p.selRefine ? ed().refineParams() : null, seeds: [0] }, stage)
+  const run = () => runCommand('edit.ai.select')
   // D63: the find field leads — typing selects by prompt (SAM 3 text), clearing it in text mode goes back to the main subject
   const find = (text: string) => setP(text.trim() && promptId ? { selText: text, selModel: promptId, selMode: 'text' } : p.selMode === 'text' ? { selText: text, selModel: subjectId, selMode: 'subject' } : { selText: text })
   return (
     <div className="tool-opts">
       {promptId && <><label>find</label><input type="text" className="sel-find" value={p.selText} placeholder='what to select, e.g. "the crates" · empty: the main subject'
         title="SAM 3 finds what you describe · Enter runs Select" onChange={(e) => find(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && !reason) { e.preventDefault(); run(false) } }} /></>}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !reason) { e.preventDefault(); run() } }} /></>}
       <label>model</label><div className="segmented">{tools.map(([id, t]) => { const modes = t.recipes.segment ?? []
         return <button key={id} className={toolId === id ? 'active' : ''} onClick={() => setP({ selModel: id, selMode: (modes.includes('subject') ? 'subject' : modes.includes(p.selMode) ? p.selMode : modes[0]) as AiPanelState['selMode'] })}>{t.label}</button> })}</div>
       {sam && <>
@@ -316,7 +333,7 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
       <Slider label="expand" value={p.selExpand} min={-64} max={64} step={1} unit="px" onChange={(v) => setP({ selExpand: v })} />
       <Slider label="feather" value={p.selFeather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ selFeather: v })} />
       <label /><label className="chk" title="soft, image-aware edges after the mask joins the selection — the Selection panel's Refine edge settings"><input type="checkbox" checked={p.selRefine} onChange={(e) => setP({ selRefine: e.target.checked })} /> refine edge</label>
-      <label /><div style={{ display: 'flex', gap: 6 }}><button className="primary" disabled={!!reason} onClick={() => run(false)} title="AI Select">Select ▶</button>{!compact && <button disabled={!!reason} onClick={() => run(true)}>Stage</button>}</div>
+      <label /><div style={{ display: 'flex', gap: 6 }}><AiRunButton id="edit.ai.select" reason={reason} className="primary" title="AI Select">Select ▶</AiRunButton>{!compact && <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue as staged">Stage</AiRunButton>}</div>
       {reason && <span className="hint full">{reason}</span>}
       <span className="hint full">{sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'}</span>
     </div>
@@ -340,34 +357,16 @@ function useDocPreview(recipe: DocumentRecipe | null): DocumentPreview | null {
 }
 
 function AiTab() {
-  const p = useAiPanel()
+  const c = useAiCtx()
+  const { p, doc, caps } = c
   const setP = p.set
-  const doc = useEditor((s) => s.doc)
-  const hasSel = useEditor((s) => !!s.selection)
-  const activeId = useEditor((s) => s.activeId)
-  const active = findNode(doc, activeId)
-  const models = useSession((s) => s.models)
   const jobs = useSession((s) => s.jobs)
   const running = useMemo(() => Object.values(jobs).filter((j) => (j.recipe as { document_id?: string }).document_id === doc?.id && ['running', 'queued', 'staged'].includes(j.status)), [jobs, doc?.id])
-  const health = (id: string) => models.find((m) => m.id === id)?.health ?? 'missing'
-  const seeds = () => { const n = Math.max(1, Math.min(4, p.candidates)); return Array.from({ length: n }, (_, i) => (p.seedMode === 'random' ? Math.floor(Math.random() * 2 ** 31) : p.seed + i)) }
-  // C3 (D26) / D65: every model comes from /capabilities — the defaults are the variant's (open: Klein 4B, no hero, no SAM 3)
-  const caps = useSession((s) => s.capabilities)
-  const contentAware = !!caps?.content_aware?.available                                  // D62: the native extension is installed
+  const health = c.health
+  // C3 (D26) / D65: every model comes from /capabilities — the defaults are the variant's (open: Klein 4B, no hero, no SAM 3); aiRecipes.ts
   const capModels = caps?.models
-  const heroId = heroModel(caps)                                                          // Fill Hero / Outpaint hero (recipes.inpaint_hero)
-  const mode = (!heroId && p.mode === 'fill_hero') || (!contentAware && p.mode === 'quick_remove') ? 'fill' : p.mode
-  const teId = (mid: string) => (p.teId && capModels?.[mid]?.te_options?.some((o) => o.id === p.teId) ? p.teId : undefined)   // D31: only where it pairs
-  const i2iIds = defaultFirst(byOrder(capModels).filter(([, m]) => m.recipes.i2i).map(([id]) => id), 'i2i', caps)
-  const upIds = defaultFirst(byOrder(caps?.tools).filter(([, t]) => t.recipes.upscale_factor != null).map(([id]) => id), 'upscale', caps)
-  const refineModel = resolveModel(p.refineModel, 'i2i', (id) => i2iIds.includes(id), caps)
-  const tiledIds = i2iIds.filter((id) => capModels?.[id]?.tiled_refine)       // D89: the creative families refine, they do not tile
-  const tiledModel = resolveModel(p.tiledModel, 'i2i', (id) => tiledIds.includes(id), caps)
-  const upscaleModel = resolveModel(p.upscaleModel, 'upscale', (id) => upIds.includes(id), caps)
-  const kleinId = resolveModel(null, 'inpaint', () => false, caps)                      // the variant's inpaint default
-  const isHero = (id: string) => !!capModels?.[id]?.recipes.inpaint_hero
-  const hero = !!heroId && (p.op === 'inpaint' ? p.mode === 'fill_hero' : p.op === 'outpaint' ? p.outpaintHero : p.op === 'refine' ? isHero(refineModel) : false)
-  const outpaintId = hero && heroId ? heroId : kleinId
+  const { contentAware, heroId, mode, i2iIds, upIds, refineModel, tiledIds, tiledModel, upscaleModel, kleinId, isHero, outpaintId } = aiModels(c)
+  const hero = aiModels(c).heroFor(p.op)
   /** A refine model's name in the lists: the label's first part, + Turbo where the spec has one, the base models' CFG note. */
   const i2iName = (id: string, tiled = false) => { const m = capModels?.[id]; if (!m) return id
     const name = m.label.split(' · ')[0] + (m.turbo ? ' + Turbo' : '')
@@ -388,26 +387,15 @@ function AiTab() {
     const w = Math.min(d.w, Math.ceil((x1 + 1 - x0 + 2 * m) / 16) * 16), h = Math.min(d.h, Math.ceil((y1 + 1 - y0 + 2 * m) / 16) * 16)
     return planSize(w, h, p.minSize, 2048)
   }, [revision, p.op, p.margin, p.minSize, p.pad]) // eslint-disable-line react-hooks/exhaustive-deps
-  const reason = !doc ? 'no document' : p.op === 'select' ? null : p.op === 'inpaint' && !hasSel ? 'select the region to repaint first (M, L, W, Q or AI select)'
-    : p.op === 'refine' && p.refineSource === 'selection' && !hasSel ? 'no selection' : (p.op === 'refine' || p.op === 'upscale') && (p.op === 'refine' ? p.refineSource : p.upscaleSource) === 'active' && active?.kind !== 'raster' ? 'the active layer is not a raster layer'
-    : p.op === 'upscale' && !upscaleModel ? 'no upscaler offered' : p.op === 'upscale' && health(upscaleModel) === 'missing' ? `weights missing: fetch ${upscaleModel} in Models` : p.op === 'outpaint' && !Object.values(p.pad).some((v) => v > 0) ? 'set at least one side' : null
-  /** The recipe the AI button sends — the same object the preview plans (D64). */
-  const recipeNow = (): DocumentRecipe => {
-    const base = { seeds: seeds(), prompt_text: p.prompt }
-    if (p.op === 'inpaint') return { kind: 'inpaint', mode, model_id: kleinId, te_id: teId(kleinId), margin_pct: p.margin, min_size: p.minSize, feather: p.feather, expand: p.expand, blend: p.blend, prompt_mode: p.promptMode, prefill: mode === 'remove' && p.prefill && contentAware, ...base } as DocumentRecipe
-    if (p.op === 'outpaint') return { kind: 'inpaint', mode: 'outpaint', model_id: outpaintId, te_id: teId(outpaintId), outpaint: p.pad, feather: p.feather, prompt_mode: p.promptMode, ...base } as DocumentRecipe
-    if (p.op === 'refine') return { kind: 'i2i', model_id: refineModel, te_id: teId(refineModel), source: p.refineSource, layer_id: activeId, strength: p.strength, margin_pct: p.margin, feather: p.feather, match_colour: p.matchColour, ...base } as DocumentRecipe
-    return { kind: 'upscale', model_id: upscaleModel, source: p.upscaleSource, layer_id: activeId, as_layer: p.asLayer, seeds: p.refineTiled ? seeds().slice(0, 1) : [0],
-      refine: p.refineTiled, refine_model_id: tiledModel, te_id: p.refineTiled ? teId(tiledModel) : undefined, strength: p.tiledStrength, tile: p.tile, overlap: p.overlap, prompt_text: p.prompt } as DocumentRecipe
-  }
-  const run = (stage = false) => { void ed().runAi(recipeNow(), stage) }
-  const preview = useDocPreview(p.op === 'select' || !doc ? null : recipeNow())
-  const ops: [AiOp, string][] = [['select', 'Select'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['outpaint', 'Outpaint']]
+  const reason = p.op === 'select' ? (doc ? null : 'no document') : aiReason(c, p.op)      // Select shows its own reason (SelectControls)
+  /** D64: the recipe the preview plans — the one the run command sends (aiRecipes.ts; its random seeds don't re-plan). */
+  const preview = useDocPreview(p.op === 'select' || !doc ? null : aiRecipe(c, p.op))
+  const ops = Object.entries(AI_OP_LABEL) as [AiOp, string][]
   /** The tuning controls of an operation: a collapsible Advanced section (closed until opened; it remembers), its own label grid. */
   const advanced = (id: string, body: ReactNode) => <div className="full ai-advanced"><Section id={`ai-advanced-${id}`} title="Advanced" defaultOpen={false}><div className="tool-opts">{body}</div></Section></div>
   return (
     <div>
-      <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => setP({ op: k, candidates: k === 'inpaint' || k === 'outpaint' || k === 'refine' ? (hero ? 2 : 4) : 1 })}>{l}</button>)}</div>
+      <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => { if (k !== p.op) setP({ op: k, candidates: opCandidates(c, k) }) }}>{l}</button>)}</div>
       {p.op === 'select' && <SelectControls />}
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
@@ -469,8 +457,8 @@ function AiTab() {
         </>}
       </div>}
       {p.op !== 'select' && <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="primary" disabled={!!reason} onClick={() => run(false)} title="run on the engine; the results arrive as candidate layers">AI ▶ {ops.find(([k]) => k === p.op)?.[1]}{p.op !== 'upscale' ? ` ×${p.candidates}` : ''}</button>
-        <button disabled={!!reason} onClick={() => run(true)} title="add to the queue as staged">Stage</button>
+        <AiRunButton id={`edit.ai.${p.op}`} reason={reason} className="primary">AI ▶ {AI_OP_LABEL[p.op]}{p.op !== 'upscale' ? ` ×${p.candidates}` : ''}</AiRunButton>
+        <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue as staged">Stage</AiRunButton>
         {running.length > 0 && <span className="kind">{running.filter((j) => j.status === 'running').length ? `running · ${Math.round((running.find((j) => j.status === 'running')?.progress ?? 0) * 100)} %` : `${running.length} queued`}</span>}
       </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
@@ -627,6 +615,14 @@ function Strip() {
   const rendererPref = useEditor((s) => s.rendererPref)
   const transforming = useEditor((s) => !!s.transform)
   const polyOpen = useEditor((s) => !!s.lassoPoly)
+  const magneticOpen = useEditor((s) => !!s.lassoPoly && s.tool === 'lasso' && s.lassoKind === 'magnetic')   // D59: the border syncs lassoPoly
+  const held = useRef<{ t: number; was: boolean } | null>(null)
+  useKeymap((k) => k.version)
+  const beforeCmd = command('edit.view.before')
+  if (beforeCmd) markUsed(beforeCmd.id)
+  // D90 (01 §11.3): the before button is the command — a click toggles; pressed and held (> 300 ms) it peeks until released
+  const beforeDown = () => { held.current = { t: Date.now(), was: ed().before }; ed().setView({ before: true }) }
+  const beforeUp = () => { const h = held.current; held.current = null; if (!h) return; if (Date.now() - h.t > 300) ed().setView({ before: false }); else { ed().setView({ before: h.was }); runCommand('edit.view.before') } }
   const cropping = useEditor((s) => s.tool === 'crop' && !!s.selection && !s.transform)   // D90 (B9)
   const latched = useEditor((s) => s.latched)
   const [zt, setZt] = useState<string | null>(null)
@@ -635,7 +631,7 @@ function Strip() {
     <>
       <span>{doc ? `${doc.name} · ${doc.w}×${doc.h}${dirty ? ' •' : ''}` : 'Edit'}</span>
       {transforming && <TransformBar />}
-      {polyOpen && <><span style={{ color: 'var(--accent)' }}>polygon</span><CommandRow ids={['edit.sel.polyClose', 'edit.sel.polyCancel']} /></>}
+      {polyOpen && <><span style={{ color: 'var(--accent)' }}>{magneticOpen ? 'magnetic lasso' : 'polygon'}</span><CommandRow ids={magneticOpen ? ['edit.sel.polyClose', 'edit.sel.magBack', 'edit.sel.polyCancel'] : ['edit.sel.polyClose', 'edit.sel.polyCancel']} /></>}
       {cropping && !polyOpen && <><span style={{ color: 'var(--accent)' }}>crop</span><CommandRow ids={['edit.crop.apply', 'edit.crop.cancel']} /></>}
       <span className="latches" title="Latched modifiers: each stays on for every canvas gesture until clicked again (no keyboard needed)">
         {(['shift', 'ctrl', 'alt'] as const).map((k) => <LatchButton key={k} on={latched[k]} label={k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}
@@ -647,14 +643,14 @@ function Strip() {
       <CommandButton id="edit.view.100" text />
       <label className="chk" title="Pixel grid (shown from 800 %)"><input type="checkbox" checked={pixelGrid} onChange={() => { markUsed('edit.view.grid'); runCommand('edit.view.grid') }} /> pixel grid</label>
       <label className="chk" title="Mask overlay (Alt+\)"><input type="checkbox" checked={overlay} onChange={() => { markUsed('edit.view.overlay'); runCommand('edit.view.overlay') }} /> mask overlay</label>
-      <button className={`quiet${before ? ' active' : ''}`} onPointerDown={() => ed().setView({ before: true })} onPointerUp={() => ed().setView({ before: false })} onPointerLeave={() => { if (before) ed().setView({ before: false }) }} disabled={!doc} title="Before: hold to hide the active layer (hold \)">before</button>
+      <button className={`quiet${before ? ' active' : ''}`} aria-pressed={before} onPointerDown={beforeDown} onPointerUp={beforeUp} onPointerLeave={() => { if (held.current) { held.current = null; ed().setView({ before: false }) } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); runCommand('edit.view.before') } }}
+        disabled={!doc} title={`${beforeCmd ? titleFor(beforeCmd) : 'Before'}: a click toggles; press and hold (or hold the key) to peek`}>before</button>
       <button className={`quiet${quickMask ? ' active' : ''}`} onClick={() => { markUsed('edit.sel.quickMask'); runCommand('edit.sel.quickMask') }} disabled={!doc} title="Quick mask (Q)">quick mask</button>
       <span className="spacer" />
       {cursor && <span className="mono">{cursor.x}, {cursor.y}</span>}
-      <button className="quiet badge-renderer" onClick={() => ed().setRendererPref(rendererPref === 'auto' ? 'webgl' : rendererPref === 'webgl' ? 'webgpu' : 'auto')}
-        title={`Renderer: ${renderer || 'starting…'} · preference ${rendererPref} — click to cycle auto → WebGL2 → WebGPU (auto probes WebGPU and falls back to WebGL2 when it draws nothing)`}>
-        {renderer || '…'}{rendererPref !== 'auto' ? ` · ${rendererPref === 'webgl' ? 'forced WebGL2' : 'forced WebGPU'}` : ''}
-      </button>
+      {/* D90 (01 §11.6): the renderer badge is developer-facing — dev builds only; everyone has it in Info › Diagnostics */}
+      {DEV_HOOKS && <RendererButton className="quiet badge-renderer" renderer={renderer} pref={rendererPref} onCycle={ed().setRendererPref} />}
     </>
   )
 }
@@ -802,7 +798,8 @@ function LayersTab() {
         onDoubleClick={() => runCommand('edit.layer.rename')} onContextMenu={(e) => { if (!(multi && selectedIds.includes(n.id))) ed().selectLayer(n.id); showMenu(e, layerMenu()) }}>
         <button className={`eye${n.visible ? ' on' : ''}`} title="visibility · drag down the eyes to sweep · Alt-click: solo" onPointerDown={(e) => startEyeSweep(e, n)}
           onClick={(e) => { e.stopPropagation(); if (e.detail === 0) ed().updateNode(n.id, { visible: !n.visible }, n.visible ? 'hide layer' : 'show layer') }}>{n.visible ? <Eye size={14} /> : <EyeOff size={14} />}</button>
-        <button className={`lock${n.locked ? ' on' : ''}`} title="lock" onClick={(e) => { e.stopPropagation(); ed().updateNode(n.id, { locked: !n.locked }) }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
+        <button className={`lock${n.locked ? ' on' : ''}`} title={multi && selectedIds.includes(n.id) ? `${n.locked ? 'unlock' : 'lock'} the ${ed().targetIds().length} selected layers` : 'lock'}
+          onClick={(e) => { e.stopPropagation(); const ids = multi && selectedIds.includes(n.id) ? ed().targetIds() : [n.id]; ed().setPropsFor(ids, { locked: !n.locked }, n.locked ? 'unlock layers' : 'lock layers') }}>{n.locked ? <Lock size={12} /> : <LockOpen size={12} />}</button>
         {n.kind === 'raster' ? <img className={`thumb${n.mask && n.id === activeId && !editingMask ? ' target' : ''}`} src={thumbs.get(n.id)} alt="" title={n.mask ? 'click: paint the pixels · Ctrl-click: select layer transparency' : 'Ctrl-click: select layer transparency'} onClick={(e) => { e.stopPropagation(); if (lm(e).ctrl) ed().selectLayerAlpha(n.id); else { ed().setActive(n.id, false); ed().setView({ maskView: 'off' }) } }} /> : <span className="thumb kind-box">{n.kind === 'group' ? '▣' : n.kind === 'adjustment' ? '◐' : 'fx'}</span>}
         <span className="name">{n.name}<br /><span className="kind">{n.kind === 'raster' ? `${n.w}×${n.h}` : n.kind === 'group' ? `${n.children?.length ?? 0} · ${n.passthrough ? 'pass-through' : 'isolated'}` : typeLabel(n.type)}{n.clip ? ' · clip' : ''}{n.blend !== 'normal' ? ` · ${blendLabel(n.blend)}` : ''}{n.opacity < 1 ? ` · ${Math.round(n.opacity * 100)} %` : ''}</span></span>
         {n.mask && <button className={`mask-link${n.mask.linked ? ' on' : ''}`} title={n.mask.linked ? 'linked: the mask moves and transforms with the layer · click to unlink' : 'unlinked: the mask stays put · click to link'} onClick={(e) => { e.stopPropagation(); ed().toggleMaskLink(n.id) }}>{n.mask.linked ? <Link2 size={11} /> : <Unlink2 size={11} />}</button>}
@@ -950,10 +947,8 @@ function PropertiesTab() {
       )}
       {n.kind === 'raster' && n.recipe && (
         <Section id="recipe" title="AI recipe">
-          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-            <button onClick={() => { const r = { ...n.recipe } as Record<string, unknown>; delete r.seed; delete r.job_id; delete r.batch_id; delete r.region; delete r.document_id; void ed().runAi({ ...r, seeds: [Math.floor(Math.random() * 2 ** 31)] }) }} title="runs the same recipe on the current document with a new seed (the selection must still cover the region)">Re-run (new seed)</button>
-            <button className="quiet" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2))}>Copy JSON</button>
-          </div>
+          {/* D90 (01 §11.2): commands, also in the layer menu of an AI layer */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}><CommandButton id="edit.ai.rerun" text /><CommandButton id="edit.ai.copyRecipe" text /></div>
           <pre className="recipe">{JSON.stringify(n.recipe, null, 1)}</pre>
         </Section>
       )}
@@ -985,6 +980,7 @@ function HistoryTab() {
 function InfoTab() {
   const doc = useEditor((s) => s.doc)!
   const renderer = useEditor((s) => s.renderer)
+  const rendererPref = useEditor((s) => s.rendererPref)
   const cursor = useEditor((s) => s.cursor)
   const dirty = useEditor((s) => s.docDirty)
   const revision = useEditor((s) => s.revision)
@@ -992,19 +988,27 @@ function InfoTab() {
   const mem = useMemo(() => { const st = ed(); let b = 0; st.pixels.forEach((lp) => { b += lp.width * lp.height * 4 }); st.masks.forEach((lp) => { b += lp.width * lp.height * 4 }); if (st.selection) b += st.selection.width * st.selection.height * 4; return b }, [revision]) // eslint-disable-line react-hooks/exhaustive-deps
   let total = 0; walk(doc.layers, () => { total++ })
   return (
-    <dl className="kv">
-      <dt>document</dt><dd className="mono">{doc.id}</dd>
-      <dt>name</dt><dd>{doc.name}</dd>
-      <dt>size</dt><dd>{doc.w}×{doc.h} · background {doc.background}</dd>
-      <dt>layers</dt><dd>{countRasters(doc)} raster · {total} nodes</dd>
-      <dt>source</dt><dd>{doc.source_asset_id ? <><img className="insp-thumb" src={api.thumbUrl(doc.source_asset_id, 256)} alt="" /><span className="mono">{doc.source_asset_id}</span></> : '—'}</dd>
-      <dt>saved</dt><dd>{doc.saved_at ? new Date(doc.saved_at).toLocaleString() : 'never'}{dirty ? ' · unsaved changes' : ''}</dd>
-      <dt>colour</dt><dd>sRGB · 8-bit layers (16-bit later)</dd>
-      <dt>memory</dt><dd>{(mem / 1048576).toFixed(0)} MB CPU canvases + the GPU copies</dd>
-      <dt>renderer</dt><dd>{renderer || '—'}</dd>
-      <dt>cursor</dt><dd className="mono">{cursor ? `${cursor.x}, ${cursor.y}` : '—'}</dd>
-      <dt>preview vs exact</dt><dd><CommandButton id="edit.compare" text />{cmp && <div className="kind">RGB mean {cmp.rgb_mean.toFixed(2)} · p99 {cmp.rgb_p99} · max {cmp.rgb_max} · with alpha p99 {cmp.p99} · {new Date(cmp.at).toLocaleTimeString()}</div>}</dd>
-    </dl>
+    <div>
+      <dl className="kv">
+        <dt>name</dt><dd>{doc.name}</dd>
+        <dt>size</dt><dd>{doc.w}×{doc.h} · background {doc.background}</dd>
+        <dt>layers</dt><dd>{countRasters(doc)} raster · {total} nodes</dd>
+        <dt>source</dt><dd>{doc.source_asset_id ? <img className="insp-thumb" src={api.thumbUrl(doc.source_asset_id, 256)} alt="" /> : '—'}</dd>
+        <dt>saved</dt><dd>{doc.saved_at ? new Date(doc.saved_at).toLocaleString() : 'never'}{dirty ? ' · unsaved changes' : ''}</dd>
+        <dt>colour</dt><dd>sRGB · 8-bit layers (16-bit later)</dd>
+      </dl>
+      {/* D90 (01 §11.6): ids, memory, the renderer and the exact-flatten check are developer-facing — folded (open in dev builds) */}
+      <Section id="info-diagnostics" title="Diagnostics" defaultOpen={DEV_HOOKS}>
+        <dl className="kv">
+          <dt>document</dt><dd className="mono">{doc.id}</dd>
+          {doc.source_asset_id && <><dt>source id</dt><dd className="mono">{doc.source_asset_id}</dd></>}
+          <dt>memory</dt><dd>{(mem / 1048576).toFixed(0)} MB CPU canvases + the GPU copies</dd>
+          <dt>renderer</dt><dd><RendererButton className="quiet" renderer={renderer} pref={rendererPref} onCycle={ed().setRendererPref} /></dd>
+          <dt>cursor</dt><dd className="mono">{cursor ? `${cursor.x}, ${cursor.y}` : '—'}</dd>
+          {DEV_HOOKS && <><dt>preview vs exact</dt><dd><CommandButton id="edit.compare" text />{cmp && <div className="kind">RGB mean {cmp.rgb_mean.toFixed(2)} · p99 {cmp.rgb_p99} · max {cmp.rgb_max} · with alpha p99 {cmp.p99} · {new Date(cmp.at).toLocaleTimeString()}</div>}</dd></>}
+        </dl>
+      </Section>
+    </div>
   )
 }
 

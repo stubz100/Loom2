@@ -19,6 +19,7 @@ import { dropRefs, honoursNegative, refDropFor, useGenerate, type ModelCap, type
 import { LoraSlots } from './LoraSlots'
 import { RefExtras, TextPrompt } from './RefExtras'
 import { StylePicker } from './StylePicker'
+import { ForChip } from '../story/ForChip'
 import { SWATCH_FIELDS, useSwatches } from './swatches'
 import { useMentions } from './useMentions'
 
@@ -455,6 +456,7 @@ export function GenerateColumn({ tab }: { tab: string }) {
   }, [])
   return (
     <div ref={host} className="gen-column">
+      <ForChip maker="generate" />{/* D90 (02 §5): opened for a shot — the results come back as its takes */}
       <SavedSection />
       <PromptSection />
       <RefsSection />

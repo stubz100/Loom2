@@ -1,11 +1,13 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
-import { registerCommands, type Command } from '../../frame/commands'
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
+import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { defaultModel } from '../../store/modelCaps'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
+import { makeClipFor, makeFrameFor, makeTarget } from './makeFor'
 import { findNode, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 
 const hasWorld = () => !!sy().world
@@ -25,6 +27,17 @@ const shot = () => sy().shot()
 const shotVersion = () => sy().shotVersion()
 const node = () => sy().node()
 const visual = () => { const n = node(); return !!n && (n.type === 'dialogue' || n.type === 'shot') }
+const projectOpen = () => !!useSession.getState().project?.open
+/** D90 (02 §5): the open version Make ▸ works for — the shown one (Shots), or the one a node pins (Flow); null when final (a retake first). */
+const shotTarget = () => makeTarget(shot(), shotVersion()?.id)
+const nodeShot = () => { const n = node(); return n?.shot_id ? sy().shots.find((x) => x.id === n.shot_id) : undefined }
+const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
+const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
+/** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). */
+function openStageAt(stageId: string, cam: string | null): void {
+  useSession.getState().setSuite('stage')
+  void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) })
+}
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
@@ -164,7 +177,7 @@ const cmds: Command[] = [
     run: () => { const g = version()?.candidates_group_id; if (g) openGroupPage(g) } },
   // SY2 · Shots
   { id: 'story.shot.new', scope: 'story', label: 'New shot…', icon: Clapperboard, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
-    run: () => void askText({ title: 'New shot', text: 'An empty shot: its frame and clip come from a Stage camera ("New shot from this camera") or from Animate ("Make a shot from this clip"), or pick takes here.', placeholder: 'shot name' })
+    run: () => void askText({ title: 'New shot', text: 'An empty shot: Make frame ▸ / Make clip ▸ on its board open Generate, Animate or a Stage camera for it, and what they make comes back as takes.', placeholder: 'shot name' })
       .then((n) => { if (n?.trim()) void sy().createShot(n.trim()) }) },
   { id: 'story.shot.newVersion', scope: 'story', label: 'New version (copy)', icon: Copy, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
@@ -180,9 +193,24 @@ const cmds: Command[] = [
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
       void askConfirm({ title: `Finalize ${s.name} ${v.id}?`, okLabel: 'Finalize', text: 'The clip becomes the one the Flow and the Episode bind; the frame and clip are fixed. A retake is a new version.' }).then((ok) => { if (ok) void sy().finalizeShot() }) } },
   { id: 'story.shot.openStage', scope: 'story', label: 'Open in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
-    run: () => { const v = shotVersion(); if (!v?.stage_id) return; const sid = v.stage_id, cam = v.camera_id
-      useSession.getState().setSuite('stage')
-      void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === sid ? Promise.resolve() : st.open(sid); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) } },
+    run: () => { const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
+  // D90 (02 §5): Make frame ▸ / Make clip ▸ — the maker opens with the For chip and its results come back as this version's takes; the
+  // Stage routes open the version's camera (its results already become takes of the shots pointing at it)
+  { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Generate', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
+    run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeFrameFor(s, v) } },
+  { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make frame in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
+    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
+  { id: 'story.shot.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
+    run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeClipFor(s, v) } },
+  { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
+    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
+  // the For chip's verbs in the makers' Panels (D32: a command each)
+  { id: 'gen.for.back', scope: 'generate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], when: () => !!useMakeFor.getState().generate, run: () => goBack('generate') },
+  { id: 'gen.for.clear', scope: 'generate', label: 'Stop making for the shot (results stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().generate,
+    run: () => useMakeFor.getState().set('generate', null) },
+  { id: 'anim.for.back', scope: 'animate', label: 'Back to the shot', icon: ArrowLeft, placement: ['panel'], when: () => !!useMakeFor.getState().animate, run: () => goBack('animate') },
+  { id: 'anim.for.clear', scope: 'animate', label: 'Stop making for the shot (clips stay in the Catalogue only)', icon: X, placement: ['panel'], when: () => !!useMakeFor.getState().animate,
+    run: () => useMakeFor.getState().set('animate', null) },
   { id: 'story.shot.openAnimate', scope: 'story', label: 'Open in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.clip_id,
     run: () => { const v = shotVersion(); if (!v?.clip_id) return; const cid = v.clip_id
       useSession.getState().setSuite('animate')
@@ -212,6 +240,17 @@ const cmds: Command[] = [
   { id: 'story.flow.unbind', scope: 'story', label: 'Release the shot', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
+  // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
+  { id: 'story.flow.makeFrame', scope: 'story', label: 'Make frame in Generate', icon: ImagePlus, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
+    run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeFrameFor(s, v, n.id) } },
+  { id: 'story.flow.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
+    run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeClipFor(s, v, n.id) } },
+  { id: 'story.flow.openBoard', scope: 'story', label: 'Open the board in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!board(),
+    run: () => { const g = node()?.board_group_id; if (g) openGroupPage(g) } },
+  { id: 'story.flow.clearBoard', scope: 'story', label: 'Remove the board (the group stays)', icon: ImageOff, placement: ['inspector', 'context'], when: () => !!node()?.board_group_id && !sy().play,
+    run: () => { const n = node(); if (!n?.board_group_id) return; const was = n.board_group_id
+      void sy().patchNode(n.id, { board_group_id: null })
+      useSession.getState().toast('Board removed from the node', 'info', () => void sy().patchNode(n.id, { board_group_id: was })) } },
   { id: 'story.flow.voiceAll', scope: 'story', label: 'Voice all lines', icon: Volume2, placement: ['inspector', 'context'],
     when: () => node()?.type === 'dialogue' && (node()?.lines.some((l) => l.text.trim()) ?? false) && !!useSession.getState().capabilities?.voice?.available && !sy().play,
     run: () => { const n = node(); if (n) void sy().voiceNode(n.id) } },
@@ -247,6 +286,16 @@ export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.delet
 
 /** The right-click menu of a Flow node (the node is selected first). */
 export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
-  return [{ cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
+  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, sepItem,
+    { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
+}
+
+/** D90 (02 §5): the entries of "Make frame ▸" and "Make clip ▸" (the shot board, the Strip, the Inspector, the shot row's menu). */
+export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Generate' }, { cmd: 'story.shot.makeFrameStage', label: 'in Stage (the camera)' }]
+export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'in Stage (the camera)' }, sep, { cmd: 'story.shot.lipsync' }]
+/** The right-click menu of a shot row (the shot is selected first). */
+export function shotMenu(): MenuItem[] {
+  return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,
+    { cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }]
 }
 const sepItem = { sep: true } as const

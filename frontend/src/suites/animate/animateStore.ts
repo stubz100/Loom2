@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
 import { isI2VPreview, type Asset, type Clip, type ClipReadyData, type ClipUpdatedData, type I2VPreview, type I2VRecipe, type JobOrigin } from '../../api/types'
 import { byOrder, resolveModel } from '../../store/modelCaps'
+import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { DEV_HOOKS } from '../../devHooks'
 
@@ -74,6 +75,21 @@ export function recipeFor(p: AnimPanel & { start: string }, seeds?: number[]): I
   }
 }
 
+/** D90 (02 §9, X12): the Clips tab's filter — words of the prompt, and the Catalogue's keep / reject state ('none' = unmarked). */
+export interface ClipFilter { q: string; state: 'all' | 'keep' | 'reject' | 'none' }
+/** The clips the Clips tab lists: trashed ones hidden once the live set is known (`live`: the asset ids of the clips not in the Trash),
+ *  then the filter; a clip whose asset state is not loaded yet counts as unmarked. */
+export function visibleClips(clips: Clip[], assets: Record<string, Asset>, live: Record<string, true> | null, f: ClipFilter): Clip[] {
+  const words = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  return clips.filter((c) => {
+    if (live && c.asset_id && !live[c.asset_id]) return false
+    const st = (c.asset_id ? assets[c.asset_id]?.state : undefined) ?? 'none'
+    if (f.state !== 'all' && st !== f.state) return false
+    const text = `${c.prompt} ${c.model_id} seed ${c.seed}`.toLowerCase()
+    return words.every((w) => text.includes(w))
+  })
+}
+
 export const fmtTime = (frame: number, fps: number): string => { const s = frame / Math.max(1, fps); const m = Math.floor(s / 60); return `${String(m).padStart(2, '0')}:${(s - m * 60).toFixed(2).padStart(5, '0')}` }
 
 interface AnimateState {
@@ -82,6 +98,12 @@ interface AnimateState {
   clips: Clip[]; current: string | null; assets: Record<string, Asset>; pins: Record<string, { frame: number; asset_id: string }[]>
   view: AnimView; compareWith: string | null; playing: boolean; frame: number; speed: number; loop: boolean; onion: boolean
   inPoint: number | null; outPoint: number | null; extractEvery: number; busy: string | null
+  /** D90 (02 §9): the asset ids of the clips not in the Trash (null until asked), and the Clips tab's filter. */
+  clipLive: Record<string, true> | null; clipFilter: ClipFilter
+  loadClipStates: () => Promise<void>
+  setClipFilter: (patch: Partial<ClipFilter>) => void
+  /** The Catalogue's trash semantics (C, D90 B5): the clip's asset goes to the Trash, the toast offers Undo; Empty trash deletes the clip. */
+  trashClip: (id?: string | null) => Promise<void>
   set: (patch: Partial<AnimPanel>) => void
   setModel: (model_id: string) => void
   setTier: (tier: AnimPanel['tier'], orientation?: AnimPanel['orientation']) => void
@@ -122,7 +144,9 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let previewSeq = 0
 
 /** D66: an Animate submission names the clip on screen when it was made (null: none), so a finished clip knows which view it belongs to. */
-const clipOrigin = (ref: string | null): JobOrigin => ({ suite: 'animate', surface: 'clip', ref })
+const clipOrigin = (ref: string | null): JobOrigin => originFor('animate', { suite: 'animate', surface: 'clip', ref })   // D90 (02 §5): or the For chip's shot
+/** The toast's tail when a submission is made for a shot (the For chip). */
+const forTail = (o: JobOrigin): string => { const f = o.surface === FOR_SHOT ? useMakeFor.getState().animate : null; return f ? ` for ${forLabel(f)} — they land as its takes` : '' }
 /** The last automatic switch: from the clip a job was started on to the clip it produced (a batch of clips plays through in turn). */
 let followed: { from: string | null; to: string } | null = null
 
@@ -132,6 +156,7 @@ export const useAnimate = create<AnimateState>()(
       panel: DEFAULT_PANEL, presets: [], lastPreset: null, preview: null, previewError: null,
       clips: [], current: null, assets: {}, pins: {},
       view: 'player', compareWith: null, playing: false, frame: 0, speed: 1, loop: true, onion: false, inPoint: null, outPoint: null, extractEvery: 8, busy: null,
+      clipLive: null, clipFilter: { q: '', state: 'all' },
 
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); get().refreshPreview() },
       setModel: (model_id) => {
@@ -186,7 +211,28 @@ export const useAnimate = create<AnimateState>()(
           set({ clips, current: cur })
           if (cur && cur !== get().current) get().select(cur)
           for (const c of clips.slice(0, 12)) if (c.asset_id) void get().loadAsset(c.asset_id)
+          void get().loadClipStates()
         } catch { /* no project */ }
+      },
+      loadClipStates: async () => {
+        try {
+          const r = await unwrap(http.GET('/assets', { params: { query: { folder: 'clips', limit: 2000 } } }))          // videos not in the Trash, with their state
+          set({ assets: { ...get().assets, ...Object.fromEntries(r.items.map((a) => [a.id, a])) }, clipLive: Object.fromEntries(r.items.map((a) => [a.id, true as const])) })
+        } catch { /* the list shows every clip */ }
+      },
+      setClipFilter: (patch) => set({ clipFilter: { ...get().clipFilter, ...patch } }),
+      trashClip: async (id) => {
+        const c = get().clips.find((x) => x.id === (id ?? get().current))
+        const s = useSession.getState()
+        if (!c?.asset_id) return
+        const aid = c.asset_id
+        try {
+          await unwrap(http.POST('/assets/trash', { body: { ids: [aid] } }))
+          const live = { ...(get().clipLive ?? {}) }; delete live[aid]
+          set({ clipLive: get().clipLive ? live : null })
+          if (get().current === c.id) { const next = visibleClips(get().clips, get().assets, get().clipLive, get().clipFilter)[0]; get().select(next?.id ?? null) }
+          s.toast('Clip moved to Trash', 'info', () => void unwrap(http.POST('/assets/restore', { body: { ids: [aid] } })).then(() => get().loadClipStates()))
+        } catch (e) { s.toast(`Could not trash the clip: ${(e as ApiError).detail ?? e}`, 'error') }
       },
       select: (id) => {
         const c = get().clips.find((x) => x.id === id)
@@ -248,9 +294,10 @@ export const useAnimate = create<AnimateState>()(
         if (!p.start) { s.toast('Set a start frame first (drop a Catalogue tile on the slot, or Shift+A in the Catalogue)', 'info'); return }
         if (get().preview?.missing.length) { s.toast(`Weights missing: ${get().preview!.missing.map((m) => m.model_id).join(', ')} — fetch them in Models`, 'error'); return }
         try {
-          const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage, origin: clipOrigin(get().current) } }))
+          const origin = clipOrigin(get().current)
+          const r = await unwrap(http.POST('/jobs', { body: { recipe: recipeFor({ ...p, start: p.start }), stage, origin } }))
           const n = r.jobs.length
-          s.toast(stage ? `${n} clip${n > 1 ? 's' : ''} staged` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`, 'success')
+          s.toast((stage ? `${n} clip${n > 1 ? 's' : ''} staged` : `Animating ${n} clip${n > 1 ? 's' : ''} — ≈ ${Math.round((get().preview?.estimate.seconds ?? 300) / 60)} min each`) + forTail(origin), 'success')
           if (p.seed_mode === 'increment') get().set({ seed: p.seed + n })
         } catch (e) { s.toast(`Animate failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },

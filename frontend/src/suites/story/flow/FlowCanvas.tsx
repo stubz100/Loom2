@@ -2,13 +2,18 @@
 // from the index; a drag moves (saved on drop), a handle-to-handle drag connects (one edge per out-port), a right-click on the pane adds
 // a node there, on a node opens its verbs. The node card shows the type, the title, the speaker and first line, and the bound shot.
 // D90: an edge is selected by a click and goes by its right-click menu or Delete (B3); the canvas takes the Flow tab's keys (B2); "Add a
-// node here" maps the pointer through the viewport (B11); a Shot node shows its text — a beat's line (B19).
+// node here" maps the pointer through the viewport (B11); a Shot node shows its text — a beat's line (B19). UI4 (02 §4.2): a node's board
+// (an album group) shows as its cover, name and count; a group card dropped on a node becomes its board (makeFor.boardDrop).
 import { Background, Controls, Handle, MiniMap, Position, ReactFlow, applyNodeChanges, useReactFlow, type Connection, type Edge, type Node, type NodeChange, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import type { FlowNode } from '../../../api/types'
 import { sep, type MenuItem } from '../../../frame/commands'
+import { useDropTarget } from '../../../frame/drag'
+import { useAlbum } from '../../catalogue/albumStore'
+import { boardDrop } from '../makeFor'
+import { findNode } from '../styleSamples'
 import { showMenu, useMenu } from '../../../frame/ContextMenu'
 import { CLASS_LABEL, sy, useStory } from '../storyStore'
 import { edgeMenu, flowView, nodeMenu } from '../storyCommands'
@@ -17,14 +22,17 @@ import { NODE_LABEL } from './types'
 
 const NODE_W = 220
 
-interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null }
+interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null
+  board: { name: string; cover: string | null; total: number } | null }
 type StoryNodeT = Node<StoryData, 'story'>
 
 function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
   const n = data.node
+  const name = n.title || NODE_LABEL[n.type]
+  const { ref, over } = useDropTarget((p) => boardDrop(p, name).verdict.ok, (p) => { const g = boardDrop(p, name).group; if (g) void sy().patchNode(n.id, { board_group_id: g }) }, (p) => boardDrop(p, name).verdict)
   const ports = n.type === 'choice' ? n.options.map((o) => ({ id: `opt:${o.id}`, label: o.label || '…' })) : n.type === 'condition' ? [{ id: 'then', label: 'then' }, { id: 'else', label: 'else' }] : n.type === 'jump' || n.type === 'comment' ? [] : [{ id: 'out', label: '' }]
   return (
-    <div className={`flow-node t-${n.type}${selected ? ' selected' : ''}${data.problem ? ' problem' : ''}`} data-id={id} style={{ width: NODE_W }} title={data.problem ?? undefined}>
+    <div ref={ref} className={`flow-node t-${n.type}${selected ? ' selected' : ''}${data.problem ? ' problem' : ''}${over ? ' drop-over' : ''}`} data-id={id} style={{ width: NODE_W }} title={data.problem ?? undefined}>
       {n.type !== 'start' && <Handle type="target" position={Position.Left} />}
       <div className="head"><span className="type">{NODE_LABEL[n.type]}</span><span className="title">{n.title || (n.type === 'dialogue' ? n.lines[0]?.text?.slice(0, 24) : '')}</span></div>
       {n.type === 'dialogue' && n.lines.length > 0 && <div className="line">{data.speaker && <b>{data.speaker}: </b>}{n.lines[0].text}</div>}
@@ -35,6 +43,8 @@ function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
       {(n.type === 'dialogue' || n.type === 'shot') && (
         <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}</div>
       )}
+      {n.board_group_id && <div className="board" title={data.board ? `board: ${data.board.name} — its images seed Make frame's references` : 'its board group was deleted'}>
+        {data.board?.cover ? <img src={api.thumbUrl(data.board.cover, 256)} alt="" /> : <span className="empty" />}<span>{data.board ? `${data.board.name} · ${data.board.total}` : 'board gone'}</span></div>}
       {ports.map((p, i) => (
         <div key={p.id} className="port" style={{ top: ports.length === 1 ? '50%' : `${40 + i * 18}px` }}>
           {ports.length > 1 && <span className="plabel">{p.label}</span>}
@@ -68,6 +78,8 @@ export function FlowCanvas() {
   const profiles = useStory((s) => s.profiles)
   const problems = useStory((s) => s.problems)
   const edgeSel = useStory((s) => s.edge)
+  const tree = useAlbum((a) => a.tree)
+  useEffect(() => { if (!useAlbum.getState().tree) void useAlbum.getState().load() }, [])   // the boards' covers
   // B11: a pane menu dismissed without adding leaves no stale point for the next Strip add (an add reads it before the menu closes)
   useEffect(() => useMenu.subscribe((m, prev) => { if (prev.open && !m.open && sy().addAt) sy().setAddAt(null) }), [])
   const [nodes, setNodes] = useState<StoryNodeT[]>([])
@@ -82,9 +94,11 @@ export function FlowCanvas() {
       const v = sh?.versions.find((x) => x.id === (n.shot_version ?? sh.current))
       const thumb = v?.frame_asset_id ?? (v?.clip_id ? clipsById[v.clip_id]?.asset_id ?? null : null)
       const sp = n.lines[0]?.speaker ? profiles.find((x) => x.id === n.lines[0].speaker) : undefined
-      return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null } }
+      const g = findNode(tree, n.board_group_id)
+      return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null,
+        board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null } }
     })
-  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems])
+  }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree])
   if (from !== built) { setFrom(built); setNodes(built) }                                      // derived state, synced in render (not an effect)
   const edges = useMemo<Edge[]>(() => (graph?.edges ?? []).filter((e) => flowNodes[e.from] && flowNodes[e.to]).map((e) => {
     const n = flowNodes[e.from]

@@ -1,12 +1,14 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, ClipboardPaste, Copy, Crop, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Lasso, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, ClipboardCopy, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
 import { typeLabel } from './labels'
 import { DEV_HOOKS } from '../../devHooks'
+import { useAiPanel, type AiOp } from './aiPanelStore'
+import { aiReason, aiRecipe, opCandidates, rerunRecipe, subjectPlan, type AiCtx } from './aiRecipes'
 
 const ed = () => useEditor.getState()
 const hasDoc = () => !!ed().doc
@@ -15,6 +17,30 @@ const activeRaster = () => { const n = active(); return !!n && n.kind === 'raste
 const hasSel = () => !!ed().selection
 const setTool = (t: Tool) => () => ed().setTool(t)
 const cropOpen = () => ed().tool === 'crop' && hasSel() && !ed().transform && !ed().lassoPoly && !magnetic.active
+/** D90 (02 §9): the AI tab's inputs as they are now — what the `edit.ai.*` commands' `when`s and runs read (aiRecipes.ts). */
+export const aiCtx = (): AiCtx => {
+  const st = ed(), s = useSession.getState()
+  return { p: useAiPanel.getState(), caps: s.capabilities, health: (id) => s.models.find((m) => m.id === id)?.health ?? 'missing', doc: st.doc, hasSel: !!st.selection,
+    activeId: st.activeId, activeKind: active()?.kind ?? null, aiPrompt: st.aiPrompt, refineParams: () => ({ ...st.refineParams() }) }
+}
+/** Run an AI operation with the AI tab's settings (or stage it: queued for later). */
+const runAiOp = (op: AiOp, stage = false) => { const c = aiCtx(); if (!aiReason(c, op)) void ed().runAi(aiRecipe(c, op), stage) }
+/** Panel › AI on an operation (the canvas menu's AI ▸ entries that need more input: a prompt, a model, the sides to grow). */
+const showAiOp = (op: AiOp) => {
+  const a = useAiPanel.getState()
+  if (a.op !== op) a.set({ op, candidates: opCandidates(aiCtx(), op) })
+  void import('../../frame/suiteRegistry').then((m) => m.setRailTab('edit', 'ai'))   // dynamic, as frame/openWith.ts: the registry imports the suites
+}
+const AI_RUNS: [AiOp, string, typeof Hand, string][] = [
+  ['select', 'AI select ▶', ScanFace, 'with the AI tab\'s model and prompt; the mask joins the selection'],
+  ['inpaint', 'Inpaint the selection ▶', Sparkles, 'with the AI tab\'s mode and prompt; results arrive as candidate layers'],
+  ['refine', 'Refine ▶', Wand2, 'image to image with the AI tab\'s model and strength; results arrive as candidate layers'],
+  ['upscale', 'Upscale ▶', ImageUpscale, 'with the AI tab\'s upscaler (and tiled refine)'],
+  ['outpaint', 'Outpaint ▶', Expand, 'grows the canvas by the AI tab\'s sides; results arrive as candidate layers'],
+]
+const AI_SHOW: [Exclude<AiOp, 'select'>, string, typeof Hand][] = [['inpaint', 'Inpaint the selection…', Sparkles], ['refine', 'Refine…', Wand2], ['upscale', 'Upscale…', ImageUpscale], ['outpaint', 'Outpaint…', Expand]]
+/** D90 (02 §9, §10): the toolbox shows the storyboard essentials; these sit behind its More tools button (keys and Tool ▸ unchanged). */
+export const MORE_TOOLS: Tool[] = ['wand', 'heal', 'eyedropper']
 /** The tools: id, label, accelerator, icon — the toolbox (EditSuite) and the canvas menu's Tool submenu both read this. */
 export const TOOLS: [Tool, string, string, typeof Hand][] = [
   ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['heal', 'Spot healing', 'J', Bandage], ['ai', 'AI select', 'A', Sparkles],
@@ -31,8 +57,8 @@ registerCommands([
   { id: 'edit.cand.keep', scope: 'edit', label: 'Keep the visible candidate', icon: Check, keys: 'Enter', placement: ['strip'], when: () => !!ed().candidates && !ed().transform,
     // D90 (B18): the one the canvas shows — the strip's hovered candidate first
     run: () => { const st = ed(); if (!st.candidates) return; st.pickCandidate(st.candPreview ?? st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]) } },
-  ...OPACITY_DIGITS.map((n) => ({ id: `edit.brush.opacity.${n}`, scope: 'edit' as const, label: `Brush opacity ${n === 0 ? 100 : n * 10} %`, keys: String(n), placement: ['panel'] as ['panel'],
-    hint: 'or the Opacity slider in Tool options', when: () => !(n >= 1 && n <= 4 && ed().candidates), run: () => ed().setBrush({ opacity: n === 0 ? 1 : n / 10 }) })),
+  ...OPACITY_DIGITS.map((n) => ({ id: `edit.brush.opacity.${n}`, scope: 'edit' as const, label: `Brush opacity ${n === 0 ? 100 : n * 10} %`, keys: String(n), placement: ['context'] as ['context'],
+    hint: 'the canvas menu\'s Opacity ▸ while painting, or the Opacity field in Tool options', when: () => !(n >= 1 && n <= 4 && ed().candidates), run: () => ed().setBrush({ opacity: n === 0 ? 1 : n / 10 }) })),
   // history / files
   { id: 'edit.undo', scope: 'edit', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['strip', 'context'], when: () => ed().history.length > 0, run: () => ed().undo() },
   { id: 'edit.redo', scope: 'edit', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', alt: ['Ctrl+Y'], placement: ['strip', 'context'], when: () => ed().future.length > 0, run: () => ed().redo() },
@@ -41,7 +67,8 @@ registerCommands([
   { id: 'edit.exportPng', scope: 'edit', label: 'Export PNG', icon: FileImage, keys: 'Ctrl+Shift+E', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPng() },
   { id: 'edit.exportPsd', scope: 'edit', label: 'Export PSD', icon: FileDown, placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPsd() },
   { id: 'edit.close', scope: 'edit', label: 'Close document', icon: X, placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and Save (Ctrl+S) to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
-  { id: 'edit.compare', scope: 'edit', label: 'Compare preview with the exact flatten', icon: Scan, placement: ['inspector', 'context'], when: hasDoc, run: () => void ed().compareWithExact() },
+  // D90 (01 §11.6): a developer check — registered in dev builds only, shown in Info › Diagnostics
+  ...(DEV_HOOKS ? [{ id: 'edit.compare', scope: 'edit' as const, label: 'Compare preview with the exact flatten', icon: Scan, placement: ['inspector'] as ['inspector'], when: hasDoc, run: () => void ed().compareWithExact() }] : []),
   // layers
   { id: 'edit.layer.new', scope: 'edit', label: 'New layer', icon: Plus, keys: 'Ctrl+Shift+N', placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('raster') } },
   { id: 'edit.layer.newGroup', scope: 'edit', label: 'New empty group', icon: FolderPlus, placement: ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('group') } },
@@ -49,6 +76,11 @@ registerCommands([
   { id: 'edit.layer.group', scope: 'edit', label: 'Group layers', icon: Group, keys: 'Ctrl+G', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().groupNodes(ed().targetIds()) },
   { id: 'edit.layer.ungroup', scope: 'edit', label: 'Ungroup', icon: Group, placement: ['context', 'inspector'], when: () => active()?.kind === 'group', hint: 'the group\'s layers take its place', run: () => ed().ungroupNode(ed().activeId!) },
   { id: 'edit.layer.duplicate', scope: 'edit', label: 'Duplicate layer', icon: Copy, keys: 'Ctrl+J', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().duplicateNodes(ed().targetIds()) },
+  // D90 (01 §5 E46): Merge visible — the visible top-level pixel layers into the bottom one (merge down's canvas blends; hidden ones stay)
+  { id: 'edit.layer.mergeVisible', scope: 'edit', label: 'Merge visible', icon: Layers2, placement: ['context'], when: () => !ed().transform && (ed().doc?.layers.filter((n) => n.visible).length ?? 0) > 1, hint: 'pixel layers only — Save to Catalogue flattens everything exactly', run: () => {
+      const shown = ed().doc!.layers.filter((n) => n.visible)
+      if (shown.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge visible merges pixel layers only: hide the groups, adjustment and filter layers first (Save to Catalogue flattens everything exactly)', 'info'); return }
+      ed().mergeNodes(shown.map((n) => n.id)) } },
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },
@@ -76,7 +108,7 @@ registerCommands([
   { id: 'edit.mask.toggle', scope: 'edit', label: 'Enable / disable mask', placement: ['context'], when: () => !!active()?.mask, hint: 'Shift-click the mask thumbnail', run: () => { const n = active(); if (n?.mask) ed().updateNode(n.id, { mask: { ...n.mask, enabled: !n.mask.enabled } }, 'toggle mask') } },
   { id: 'edit.mask.edit', scope: 'edit', label: 'Edit mask / edit pixels', placement: ['context'], when: () => !!active()?.mask, hint: 'click the mask thumbnail', run: () => { const st = ed(); st.setActive(st.activeId, !st.editingMask) } },
   { id: 'edit.mask.link', scope: 'edit', label: 'Link / unlink mask', icon: Link, placement: ['context'], when: () => !!active()?.mask, hint: 'click the chain left of the mask thumbnail', run: () => ed().toggleMaskLink(ed().activeId!) },
-  { id: 'edit.mask.apply', scope: 'edit', label: 'Apply mask', placement: ['panel', 'context'], when: () => active()?.kind === 'raster' && !!active()?.mask, run: () => ed().applyMask(ed().activeId!) },
+  { id: 'edit.mask.apply', scope: 'edit', label: 'Apply mask', placement: ['inspector', 'context'], when: () => active()?.kind === 'raster' && !!active()?.mask, run: () => ed().applyMask(ed().activeId!) },
   { id: 'edit.mask.fromTransparency', scope: 'edit', label: 'Mask from transparency', placement: ['context'], when: () => active()?.kind === 'raster' && !active()?.mask, run: () => ed().maskFromTransparency(ed().activeId!) },
   { id: 'edit.mask.load', scope: 'edit', label: 'Load mask as selection', placement: ['panel', 'context'], when: () => !ed().transform && (() => !!active()?.mask)(), run: () => ed().loadSelectionFromMask() },
   // selection
@@ -99,22 +131,22 @@ registerCommands([
   // D51 painting modifiers with a mouse path; D50 lock transparency
   { id: 'edit.brush.line', scope: 'edit', label: 'Straight lines', icon: Minus, placement: ['panel'], when: hasDoc, hint: 'drag draws a straight line (or Shift-click from the last stroke)', run: () => ed().setView({ brushLine: !ed().brushLine }) },
   { id: 'edit.brush.pick', scope: 'edit', label: 'Pick colour', icon: Pipette, placement: ['panel', 'context'], when: hasDoc, hint: 'the next click on the canvas picks the colour (or Alt-click while painting)', run: () => ed().setView({ pickOnce: !ed().pickOnce }) },
-  { id: 'edit.layer.lockAlpha', scope: 'edit', label: 'Lock transparency', icon: Lock, placement: ['panel', 'context'], when: activeRaster, hint: 'painting changes the colour but keeps the layer\'s transparency', run: () => { const n = active(); if (n) ed().updateNode(n.id, { lock_alpha: !n.lock_alpha }, n.lock_alpha ? 'unlock transparency' : 'lock transparency') } },
-  { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['panel', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink', run: () => ed().inkFromWhite() },
+  { id: 'edit.layer.lockAlpha', scope: 'edit', label: 'Lock transparency', icon: Lock, placement: ['inspector', 'context'], when: activeRaster, hint: 'painting changes the colour but keeps the layer\'s transparency', run: () => { const n = active(); if (n) ed().updateNode(n.id, { lock_alpha: !n.lock_alpha }, n.lock_alpha ? 'unlock transparency' : 'lock transparency') } },
+  { id: 'edit.layer.inkFromWhite', scope: 'edit', label: 'Ink from white', icon: Sparkles, placement: ['inspector', 'context'], when: activeRaster, hint: 'Colour to Alpha with white: line art on paper becomes transparent ink', run: () => ed().inkFromWhite() },
   { id: 'edit.sel.refine', scope: 'edit', label: 'Refine edge', icon: Sparkles, placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), hint: 'soft, image-aware edges with the Selection panel\'s settings', run: () => void ed().refineSelection() },
   { id: 'edit.sel.fromLayer', scope: 'edit', label: 'Select layer transparency', icon: SquareDashed, placement: ['panel', 'context'], when: () => !ed().transform && (activeRaster)(), hint: 'or Ctrl-click the layer thumbnail', run: () => ed().selectLayerAlpha(ed().activeId!) },
   { id: 'edit.sel.polyClose', scope: 'edit', label: 'Close polygon', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: () => magnetic.active || (ed().lassoPoly?.length ?? 0) >= 3, hint: 'or click the first corner, or double-click', run: () => magnetic.active ? void magnetic.close() : ed().closeLassoPoly() },
   { id: 'edit.sel.polyCancel', scope: 'edit', label: 'Cancel polygon', icon: X, keys: 'Escape', placement: ['panel', 'strip', 'context'], when: () => !!ed().lassoPoly || magnetic.active, run: () => { if (magnetic.active) magnetic.cancel(); else ed().setLassoPoly(null) } },
   { id: 'edit.sel.quickMask', scope: 'edit', label: 'Quick mask', keys: 'Q', placement: ['strip', 'panel', 'context'], when: hasDoc, run: () => ed().setView({ quickMask: !ed().quickMask }) },
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !ed().transform && (() => activeRaster() || (ed().editingMask && !!active()?.mask))(), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
-  { id: 'edit.sel.magBack', scope: 'edit', label: 'Remove the last point', icon: Undo2, keys: 'Backspace', alt: ['Delete'], placement: ['strip', 'context'], when: () => magnetic.active, hint: 'magnetic lasso', run: () => void magnetic.removeLast() },   // D59
+  { id: 'edit.sel.magBack', scope: 'edit', label: 'Remove the last point', icon: Undo2, keys: 'Backspace', alt: ['Delete'], placement: ['panel', 'strip', 'context'], when: () => magnetic.active, hint: 'magnetic lasso', run: () => void magnetic.removeLast() },   // D59
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), run: () => ed().cropToSelection() },
   // D90 (B9): the Crop tool's rectangle is the selection; Enter applies it (after a candidate / polygon / transform, which exclude it), Esc
   // deselects (useEditKeys)
   { id: 'edit.crop.apply', scope: 'edit', label: 'Apply crop', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: cropOpen, hint: 'or double-click inside the rectangle', run: () => ed().cropToSelection() },
   { id: 'edit.crop.cancel', scope: 'edit', label: 'Cancel crop', icon: X, placement: ['panel', 'strip', 'context'], when: cropOpen, hint: 'or Esc', run: () => ed().deselect() },
   // free transform (10 §4)
-  { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
+  { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'inspector'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
   // D58: Edit › Transform modes — start a box, or switch the open one (PhotoCraft TransformMode)
   ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({
     id: `edit.transform.mode.${m}`, scope: 'edit' as const, label: m === 'free' ? 'Free transform (scale / rotate)' : m[0].toUpperCase() + m.slice(1), placement: ['context'] as ['context'],
@@ -136,7 +168,7 @@ registerCommands([
   { id: 'edit.view.200', scope: 'edit', label: 'Zoom 200 %', keys: 'Ctrl+2', placement: ['context'], when: hasDoc, run: () => ed().zoomTo(2) },
   { id: 'edit.view.grid', scope: 'edit', label: 'Pixel grid', placement: ['strip', 'context'], run: () => ed().setView({ pixelGrid: !ed().pixelGrid }) },
   { id: 'edit.view.overlay', scope: 'edit', label: 'Mask overlay', keys: 'Alt+\\', placement: ['strip', 'context'], run: () => ed().setView({ overlay: !ed().overlay }) },
-  { id: 'edit.view.before', scope: 'edit', label: 'Before (hide the active layer)', keys: '\\', placement: ['strip'], hint: 'hold the key; a click toggles', when: hasDoc, run: () => ed().setView({ before: !ed().before }) },   // D72: useEditKeys holds it
+  { id: 'edit.view.before', scope: 'edit', label: 'Before (hide the active layer)', keys: '\\', placement: ['strip', 'context'], hint: 'a click toggles; hold the key, or press and hold the strip\'s before button, to peek', when: hasDoc, run: () => ed().setView({ before: !ed().before }) },   // D72: useEditKeys holds it; D90 (01 §11.3): View ▸ and the strip toggle it
   // colours and brush
   { id: 'edit.colour.swap', scope: 'edit', label: 'Swap colours', icon: Shuffle, keys: 'X', placement: ['panel'], run: () => { const b = ed().brush; ed().setBrush({ color: b.background, background: b.color }) } },
   { id: 'edit.colour.default', scope: 'edit', label: 'Default colours', icon: RotateCcw, keys: 'D', placement: ['panel'], run: () => ed().setBrush({ color: '#000000', background: '#ffffff' }) },
@@ -146,10 +178,24 @@ registerCommands([
   { id: 'edit.brush.harder', scope: 'edit', label: 'Harder brush', icon: Circle, keys: 'Shift+]', alt: ['Shift+}'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.min(1, Math.round((ed().brush.hardness + 0.1) * 100) / 100) }) },
   { id: 'edit.brush.softer', scope: 'edit', label: 'Softer brush', icon: CircleDashed, keys: 'Shift+[', alt: ['Shift+{'], placement: ['panel'], run: () => ed().setBrush({ hardness: Math.max(0, Math.round((ed().brush.hardness - 0.1) * 100) / 100) }) },
   // tools
-  ...TOOLS.map(([tool, label, key, icon]) => ({ id: `edit.tool.${tool}`, scope: 'edit' as const, label: `${label} tool`, icon, keys: key, placement: ['toolbar'] as ['toolbar'], run: setTool(tool) })),
+  ...TOOLS.map(([tool, label, key, icon]) => ({ id: `edit.tool.${tool}`, scope: 'edit' as const, label: `${label} tool`, icon, keys: key, placement: ['toolbar', 'context'] as ['toolbar', 'context'],
+    hint: MORE_TOOLS.includes(tool) ? 'in the toolbox\'s More tools' : undefined, run: setTool(tool) })),
   // layers of a kind, by type
   ...Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ id: `edit.layer.adjustment.${t}`, scope: 'edit' as const, label: `Add ${typeLabel(t)} adjustment`, icon: SlidersHorizontal, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('adjustment', { type: t }) } })),
   ...Object.keys(FILTER_DEFAULTS).map((t) => ({ id: `edit.layer.filter.${t}`, scope: 'edit' as const, label: `Add ${typeLabel(t)} filter`, icon: Sparkles, placement: ['toolbar', 'context'] as ['toolbar', 'context'], when: hasDoc, run: () => { ed().addLayer('filter', { type: t }) } })),
+  // D90 (02 §9, 01 §11.2): the AI runs are commands — the AI tab's buttons run them; each is enabled exactly when the tab's button is
+  // (aiReason), so Ctrl+K, the keyboard map and the canvas menu never start a run the tab would refuse
+  ...AI_RUNS.map(([op, label, icon, hint]) => ({ id: `edit.ai.${op}`, scope: 'edit' as const, label, icon, placement: ['panel'] as ['panel'], hint, when: () => !aiReason(aiCtx(), op), run: () => runAiOp(op) })),
+  { id: 'edit.ai.stage', scope: 'edit', label: 'Stage the AI job', icon: Hourglass, placement: ['panel'], hint: 'the AI tab\'s operation, added to the queue as staged (run it later from the Dock)', when: () => !aiReason(aiCtx(), useAiPanel.getState().op), run: () => runAiOp(useAiPanel.getState().op, true) },
+  { id: 'edit.ai.subject', scope: 'edit', label: 'Select subject', icon: ScanFace, placement: ['context'], hint: 'the main subject\'s matte joins the selection (the AI tab\'s combine, expand and feather)', when: () => !subjectPlan(aiCtx()).reason,
+    run: () => { const c = aiCtx(), s = subjectPlan(c); if (!s.reason) void ed().runAi(s.recipe()) } },
+  ...AI_SHOW.map(([op, label, icon]) => ({ id: `edit.ai.show.${op}`, scope: 'edit' as const, label, icon, placement: ['context'] as ['context'], hint: `opens the AI tab on ${op}`,
+    when: op === 'inpaint' ? () => hasDoc() && hasSel() : hasDoc, run: () => showAiOp(op) })),
+  // Properties › AI recipe (01 §5 E80), also in the layer menu of an AI layer
+  { id: 'edit.ai.rerun', scope: 'edit', label: 'Re-run (new seed)', icon: Dices, placement: ['inspector', 'context'], hint: 'the same recipe on the current document with a new seed (the selection must still cover the region)',
+    when: () => activeRaster() && !!active()?.recipe, run: () => { const n = active(); if (n?.recipe) void ed().runAi(rerunRecipe(n.recipe, Math.floor(Math.random() * 2 ** 31))) } },
+  { id: 'edit.ai.copyRecipe', scope: 'edit', label: 'Copy recipe JSON', icon: ClipboardCopy, placement: ['inspector', 'context'], when: () => !!active()?.recipe,
+    run: () => { const n = active(); if (n?.recipe) void navigator.clipboard?.writeText(JSON.stringify(n.recipe, null, 2)).then(() => useSession.getState().toast('Recipe copied', 'success'), () => useSession.getState().toast('Could not copy the recipe', 'error')) } },
 ])
 
 export const adjustmentMenu = (): MenuItem[] => Object.keys(ADJUSTMENT_DEFAULTS).map((t) => ({ cmd: `edit.layer.adjustment.${t}`, label: typeLabel(t) }))
@@ -171,10 +217,11 @@ export function layerMenu(): MenuItem[] {
   return [
     { cmd: 'edit.layer.rename' }, sep,
     { cmd: 'edit.layer.visibility', label: many ? (n.visible ? 'Hide layers' : 'Show layers') : visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: many ? (n.locked ? 'Unlock layers' : 'Lock layers') : lockLabel() }, sep,
-    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
+    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,
+    ...(n.recipe ? [{ cmd: 'edit.ai.rerun' }, { cmd: 'edit.ai.copyRecipe' }, sep] : []),
     { cmd: 'edit.layer.delete', label: ed().editingMask && n.mask ? 'Delete layer mask' : many ? 'Delete layers' : undefined },
   ]
 }
@@ -188,16 +235,22 @@ export function canvasMenu(): MenuItem[] {
   const px = st.selModifyPx
   const modify: MenuItem[] = (['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({ cmd: `edit.sel.${op}`, label: `${op[0].toUpperCase()}${op.slice(1)} by ${px} px` }))
   const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.refine' }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
-  const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
-  const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { label: 'Pixel grid', checked: st.pixelGrid, run: () => st.setView({ pixelGrid: !st.pixelGrid }) }, { label: 'Mask overlay', keys: 'Alt+\\', checked: st.overlay, run: () => st.setView({ overlay: !st.overlay }) }]
-  const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.compare' }, { cmd: 'edit.close' }]
+  const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.newGroup' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
+  const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { cmd: 'edit.view.grid', checked: st.pixelGrid }, { cmd: 'edit.view.overlay', checked: st.overlay }, { cmd: 'edit.view.before', checked: st.before }]
+  const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.close' }]   // D90 (01 §11.6): Compare moved to Info › Diagnostics
   const tools: MenuItem[] = TOOLS.map(([tool, label]) => ({ cmd: `edit.tool.${tool}`, label, checked: st.tool === tool }))
+  // D90 (02 §9): AI ▸ beside the selection — Select subject runs at once, the others open the AI tab on their operation
+  const ai: MenuItem = { label: 'AI', icon: Sparkles, items: [{ cmd: 'edit.ai.subject' }, ...AI_SHOW.map(([op]) => ({ cmd: `edit.ai.show.${op}` }))] }
+  // D90 (01 §11.3): with a brush tool, the mouse homes of Pick colour and the 0–9 opacity keys
+  const brush: MenuItem[] = st.tool === 'brush' || st.tool === 'eraser' ? [{ heading: st.tool }, { cmd: 'edit.brush.pick', checked: st.pickOnce }, { cmd: 'edit.brush.line', checked: st.brushLine },
+    { label: 'Opacity', icon: CircleDashed, items: OPACITY_DIGITS.map((n) => ({ cmd: `edit.brush.opacity.${n}`, label: `${n === 0 ? 100 : n * 10} %`, checked: Math.round(st.brush.opacity * 10) === (n === 0 ? 10 : n) })) }, sep] : []
   return [
     ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1), checked: st.transform!.mode === m })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
     ...(cropOpen() ? [{ heading: 'crop' }, { cmd: 'edit.crop.apply' }, { cmd: 'edit.crop.cancel' }, sep] : []),
     ...(st.lassoPoly || magnetic.active ? [{ heading: magnetic.active ? 'magnetic lasso' : 'polygonal lasso' }, { cmd: 'edit.sel.polyClose', label: magnetic.active ? 'Close the border' : undefined }, ...(magnetic.active ? [{ cmd: 'edit.sel.magBack' }] : []), { cmd: 'edit.sel.polyCancel' }, sep] : []),
+    ...brush,
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
-    ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),
+    ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, ai, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }, ai]),
     ...(hasSel() ? [{ heading: 'clipboard' }, { cmd: 'edit.layer.viaCopy' }, { cmd: 'edit.layer.viaCut' }, { cmd: 'edit.copy' }, { cmd: 'edit.cut' }, { cmd: 'edit.copyMerged' }, { cmd: 'edit.paste' }, { cmd: 'edit.pasteInPlace' }, sep]
       : [{ label: 'Clipboard', icon: ClipboardPaste, items: [{ cmd: 'edit.copy' }, { cmd: 'edit.copyMerged' }, { cmd: 'edit.paste' }, { cmd: 'edit.pasteInPlace' }] }]),
     { label: 'Layer', icon: Copy, items: layer }, { label: 'View', icon: Maximize, items: view }, { label: 'Tool', icon: MousePointer2, items: tools }, { label: 'Document', icon: Save, items: files },

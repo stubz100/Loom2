@@ -570,6 +570,11 @@ async def flow_node_create(svc: Svc, body: NodeCreate):
 @router.patch("/story/flow/nodes/{nid}", response_model=FlowNode)
 async def flow_node_patch(svc: Svc, nid: str, body: dict):
     ws, _, _ = svc.require_project()
+    board = body.get("board_group_id")
+    if board is not None and (not isinstance(board, str) or board not in svc.require_groups().groups):   # D90 (02 §4.2): a board is an album group
+        cur = await asyncio.to_thread(StoryStore(ws).flow_node, nid)
+        if cur is None or board != cur.board_group_id:                    # a board deleted since stays until it is changed (other saves pass)
+            raise HTTPException(422, f"the board {board!r} is not a group of the album")
     try:
         n = await asyncio.to_thread(StoryStore(ws).patch_node, nid, body)
     except KeyError:

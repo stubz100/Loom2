@@ -1187,6 +1187,7 @@ test("experimental extension and lip-sync (D88): Animate's Extend ▶ continues 
   type AnimateHook = { getState: () => { loadClips: () => Promise<void>; select: (id: string) => void } }
   await page.evaluate(async (id) => { const an = (window as unknown as { __loom2Animate: AnimateHook }).__loom2Animate.getState(); await an.loadClips(); an.select(id) }, parent)
   await expect(page.locator('.inspector .badge.experimental').first()).toBeVisible()
+  await page.locator('.inspector .anim-exp > summary').click()                                                // D90 (02 §9): Extend sits under the Experimental fold
   await page.locator('.inspector button[aria-label^="Extend"]').click()
   const dialog = page.locator('.modal.ask')
   await expect(dialog).toContainText('experimental')
@@ -1264,4 +1265,56 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   await page.locator('nav.rail button[title^="Model"]').click()
   await page.locator('.panel select[aria-label="LoRA slot 1"]').selectOption('')
   await expect(page.locator('.panel input[aria-label="LoRA strength 1"]')).toHaveCount(0)
+})
+
+test('makers in context (D90 · UI4): "Make frame ▸ in Generate" on a Story shot opens Generate with the For chip, the node\'s line and the board\'s image as a reference; the fake engine\'s images land as the version\'s takes, and Back returns to the shot', async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `For ${Date.now().toString(36)}`
+  type ShotLite = { id: string; name: string; versions: { id: string; frame_asset_id: string | null; takes: { kind: string; id: string }[] }[] }
+  // a Shot node with a line, its shot spawned by the node, a board (a group holding a copy of an image) on the node — all through the API
+  const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'shot', title: name, x: 1600, y: 1300 })
+  await api('POST', `/story/flow/nodes/${node.id}/shot`, { name })
+  const shot = (await api<{ items: ShotLite[] }>('GET', '/story/shots')).items.find((s) => s.name === name)!
+  const src = (await api<{ items: (AssetLite & { kind: string })[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const copy = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  const board = await api<Group>('POST', '/groups', { name: `${name} board` })
+  await api('POST', '/groups/move', { items: [{ kind: 'asset', id: copy }], to: board.id })
+  const rev = (await api<{ nodes: { id: string; revision: number }[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!.revision   // the spawn moved it on
+  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: rev, text: 'a gatehouse at dawn, wide shot', board_group_id: board.id })
+  // Generate on Klein 4B first (it takes references), then Story · Shots → the shot → Make frame ▸ in Generate (a press menu: click, then the entry)
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await expect(page.locator('.panel [data-testid="for-chip"]')).toHaveCount(0)                                // opened from its tab: no chip
+  await openApp(page, { suite: 'story', tab: 'shots' })                                                       // the panel keeps Klein 4B (persisted)
+  await page.locator(`.story-row.shot-row[data-id="${shot.id}"]`).click()
+  await page.locator('.shot-board .make-row button[aria-label="Make frame"]').click()
+  await page.locator('.ctx-menu button.item', { hasText: 'in Generate' }).click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
+  const chip = page.locator('.panel [data-testid="for-chip"]')
+  await expect(chip).toContainText(`For: ${name} · v1`)
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await expect(page.locator('.text-prompt textarea')).toHaveValue('a gatehouse at dawn, wide shot')              // the node's line
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
+  await go.click()
+  // the takes arrive on v1 (the first fills the empty frame); the jobs carry the for_shot origin and the board's image as reference 1
+  await expect.poll(async () => (await api<ShotLite>('GET', `/story/shots/${shot.id}`)).versions[0].takes.length, { timeout: 60_000 }).toBe(count)
+  const v1 = (await api<ShotLite>('GET', `/story/shots/${shot.id}`)).versions[0]
+  expect(v1.takes.every((t) => t.kind === 'image')).toBe(true)
+  expect(v1.frame_asset_id).toBe(v1.takes[0].id)
+  type JobLite = { id: string; recipe: { refs?: { asset_id: string }[] }; origin: { surface: string; payload: Record<string, unknown> | null } | null; result: { asset_ids?: string[] } | null }
+  const job = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.result?.asset_ids?.includes(v1.takes[0].id))!
+  expect(job.origin?.surface).toBe('for_shot')
+  expect(job.origin?.payload).toMatchObject({ shot_id: shot.id, version: 'v1', node_id: node.id })
+  expect(job.recipe.refs?.[0]?.asset_id).toBe(copy)
+  // ← Back: Story · Shots on the shot, its takes on the board; ✕ ends the context (Generate works as from its tab)
+  await chip.locator('button[aria-label^="Back to"]').click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('.story-strip b')).toHaveText(name)
+  await expect(page.locator('.shot-board .take-card')).toHaveCount(count)
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await chip.locator('button[aria-label^="Stop making for the shot"]').click()
+  await expect(chip).toHaveCount(0)
 })

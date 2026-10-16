@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..origin import JobOrigin
 from ..engine.graphs import FieldError
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from ..queue import JobRecord
 from ..schemas import Cancelled, Deleted, JobList, JobsSubmitted, QueueState, Released
+from ..story import FOR_SHOT, StoryStore, check_for_shot
 from .deps import Svc
 
 router = APIRouter(tags=["jobs"])
@@ -25,7 +27,12 @@ class JobSubmit(BaseModel):
 
 @router.post("/jobs", response_model=JobsSubmitted)
 async def jobs_submit(svc: Svc, body: JobSubmit):
-    _, _, q = svc.require_project()
+    ws, _, q = svc.require_project()
+    if body.origin and body.origin.surface == FOR_SHOT:                       # D90 (02 §5): its results become takes of an open shot version
+        try:
+            await asyncio.to_thread(check_for_shot, StoryStore(ws), body.origin.payload)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
     try:
         jobs = q.submit(body.recipe, stage=body.stage, origin=body.origin)
     except FieldError as e:

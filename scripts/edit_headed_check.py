@@ -2072,8 +2072,8 @@ def main() -> int:
             run("edit.layer.new"); time.sleep(0.3)
             js("const lp = s.pixels.get(s.activeId); for (let x = 0; x < lp.width; x += 8) { lp.ctx.fillStyle = (x / 8) % 2 ? '#5a7a3a' : '#6d8c48'; lp.ctx.fillRect(x, 0, 8, lp.height) } lp.ctx.fillStyle = '#ff00ff'; lp.ctx.fillRect(296, 196, 12, 12); lp.refresh(); lp.dirty = true; s.touch(); s.bump(); return 1"); time.sleep(0.4)
             base = js("return s.activeId")
-            cdp.eval("[...document.querySelectorAll('.tool')].find((b) => b.textContent.includes('Spot healing'))?.click(); 1"); time.sleep(0.2)
-            check(cdp.eval(f"{S}.tool") == "heal" and bool(cdp.eval("!!document.querySelector('.tool-opts input.vfield-num[aria-label=\"size\"]')")), "the toolbox's Spot healing button picks the tool (J)")
+            cdp.eval("window.__loom2Commands.runCommand('edit.tool.heal'); 1"); time.sleep(0.2)   # D90: Spot healing sits behind the toolbox's More tools
+            check(cdp.eval(f"{S}.tool") == "heal" and bool(cdp.eval("!!document.querySelector('.tool-opts input.vfield-num[aria-label=\"size\"]')")), "the Spot healing tool (J, More tools) is picked")
             js("s.setView({ healSize: 24, healSampleAll: true }); return 1")
             h0 = cdp.eval(f"{S}.history.length")
             for kind, (x, y) in (("mouseMoved", (295, 202)), ("mousePressed", (295, 202))):

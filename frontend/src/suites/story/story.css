@@ -191,3 +191,10 @@
 /* D90: the lane takes drops (B7); the Flow and Episode stages hold focus for their keys (B2) without a focus ring on the whole stage */
 .seq-lane-wrap[data-over] .seq-lane { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .flow-host:focus, .seq-stage:focus { outline: none; }
+/* D90 (02 §5, §4.2): Make ▸ on the shot board, a Flow node's board on its card (and the drop over it) */
+.make-menus { display: inline-flex; gap: 4px; }
+.shot-board .make-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.flow-node .board { display: flex; align-items: center; gap: 6px; margin: 0 8px 6px; padding: 2px; border: 1px dashed var(--line2); border-radius: 4px; color: var(--fg2); font-size: 11px; overflow: hidden; }
+.flow-node .board img, .flow-node .board .empty { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; background: var(--bg3); flex: none; }
+.flow-node .board span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-node.drop-over { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }

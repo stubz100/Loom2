@@ -304,6 +304,7 @@ class FlowNode(BaseModel):
     text: str = ""
     shot_id: str | None = None
     shot_version: str | None = None
+    board_group_id: str | None = None             # D90 (02 §4.2): the node's board — an album group (references, mood, places); its cover on the card
     colour: str | None = None
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
@@ -630,6 +631,34 @@ class _ShotMixin:
         return out
 
 
+# ---- makers in context (D90, 02 §5) ----------------------------------------------------------------------------------------------
+FOR_SHOT = "for_shot"                             # origin.surface of a job made for a shot version ("Make frame ▸" / "Make clip ▸"); payload {shot_id, version}
+
+
+def for_shot_target(payload: dict[str, Any] | None) -> tuple[str, str] | None:
+    """The shot and version a for-shot origin names, or None when its payload does not."""
+    p = payload or {}
+    sid, vid = p.get("shot_id"), p.get("version")
+    return (sid, vid) if isinstance(sid, str) and sid and isinstance(vid, str) and vid else None
+
+
+def check_for_shot(store: StoryStore, payload: dict[str, Any] | None) -> Shot:
+    """At submit: the results of a for-shot job become takes of an open version — the shot and the version exist, the version is open."""
+    t = for_shot_target(payload)
+    if t is None:
+        raise ValueError("a job made for a shot names the shot and its version (origin.payload {shot_id, version})")
+    s = store.shot(t[0])
+    if s is None:
+        raise ValueError(f"shot {t[0]} does not exist")
+    try:
+        v = s.version(t[1])
+    except KeyError as e:
+        raise ValueError(str(e.args[0])) from None
+    if v.state != "open":
+        raise ValueError(f"{s.name} {v.id} is final — its frame and clip are fixed; make a new version for more takes")
+    return s
+
+
 # ---- the store ---------------------------------------------------------------------------------------------------------------------
 class _FlowMixin:
     """StoryStore's flow records: one file per node under `story/flow/nodes/`, the index `story/flow/graph.json`."""
@@ -706,7 +735,7 @@ class _FlowMixin:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour")
+        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         n = FlowNode.model_validate(merged)

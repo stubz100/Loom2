@@ -10,6 +10,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { parseNum } from './parseNum'
+import { command, markUsed, runCommand, titleFor } from '../../frame/commands'
+import { useKeymap } from '../../frame/keymap'
 
 const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const SLIDER_W = 160
@@ -208,4 +210,22 @@ export function BlendSelect({ value, options, onChoose, onPreview, disabled }: {
 /** A latched-modifier toggle for the strip (D55). */
 export function LatchButton({ on, label, title, onToggle }: { on: boolean; label: ReactNode; title: string; onToggle: () => void }) {
   return <button type="button" className={`quiet latch${on ? ' active' : ''}`} aria-pressed={on} title={title} onClick={onToggle}>{label}</button>
+}
+
+/** An AI run's button: runs the command (D90), disabled for the reason the panel shows. */
+export function AiRunButton({ id, reason, className, title, children }: { id: string; reason: string | null; className?: string; title?: string; children: ReactNode }) {
+  useKeymap((k) => k.version)                                          // D72: the tooltip follows a remap
+  const c = command(id)
+  if (c) markUsed(id)
+  return <button type="button" className={className} disabled={!!reason} title={c ? titleFor(c, title ?? c.label) : title} onClick={() => runCommand(id)}>{children}</button>
+}
+
+/** D3: the renderer and its preference; a click cycles auto → WebGL2 → WebGPU (the strip badge in dev builds, Info › Diagnostics everywhere). */
+export function RendererButton({ className, renderer, pref, onCycle }: { className: string; renderer: string; pref: 'auto' | 'webgpu' | 'webgl'; onCycle: (next: 'auto' | 'webgpu' | 'webgl') => void }) {
+  return (
+    <button type="button" className={className} onClick={() => onCycle(pref === 'auto' ? 'webgl' : pref === 'webgl' ? 'webgpu' : 'auto')}
+      title={`Renderer: ${renderer || 'starting…'} · preference ${pref} — click to cycle auto → WebGL2 → WebGPU (auto probes WebGPU and falls back to WebGL2 when it draws nothing)`}>
+      {renderer || '…'}{pref !== 'auto' ? ` · ${pref === 'webgl' ? 'forced WebGL2' : 'forced WebGPU'}` : ''}
+    </button>
+  )
 }

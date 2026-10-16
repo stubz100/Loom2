@@ -28,6 +28,7 @@ from ..fsio import StateError, new_id
 from ..models import registry
 from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
+from ..story import FOR_SHOT
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from .pipeline import AnyRecipe, Submission
@@ -98,6 +99,8 @@ class AssetFinisher:
             await asyncio.to_thread(_lora_check_result, q, job.origin.payload or {}, assets[0].id)
         if assets and job.origin and job.origin.surface == preset_icons.SURFACE:              # D90 (02 §6.3): the swatch pack, in app state
             await _swatch_result(job, assets[0], compiled.summary.get("model_id", getattr(recipe, "model_id", None)), q)
+        if assets and job.origin and job.origin.surface == FOR_SHOT:                         # D90 (02 §5): made for a shot version → its takes
+            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "image", [a.id for a in assets], None)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -269,7 +272,9 @@ class ClipFinisher:
         if from_stage and recipe.guide and job.origin and job.origin.ref and isinstance(cam, str):      # 17 §3c: the clip of every shot pointing at this camera
             await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id)
         if job.origin and job.origin.surface == "lipsync" and job.origin.ref:   # D88 XL: a take on the shot version
-            await asyncio.to_thread(_lipsync_take, q, job.origin.ref, str((job.origin.payload or {}).get("version") or ""), rec.id)
+            await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False)
+        if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
+            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "clip", [rec.id], None)
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
 
@@ -332,14 +337,21 @@ def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:
         q.hub.broadcast("lora.changed", {"id": str(payload.get("lora_id") or ""), "profile_id": None, "version": None, "error": str(e)})
 
 
-def _lipsync_take(q: JobQueue, shot_id: str, version: str, clip_id: str) -> None:
-    """D88 XL: the talking clip is a take on the shot version (never the version's clip until the author picks it)."""
-    from ..story import StoryStore
+def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool | None) -> None:
+    """Results recorded as takes of a shot version (payload {shot_id, version}): D88 XL's talking clip with `use=False` (never the version's
+    clip until the author picks it); D90 (02 §5) a frame or clip made for the shot with `use=None` (it fills an empty slot, as a stage
+    camera's result does). Never the job's failure: a version finalized meanwhile, or a shot deleted, leaves the results in the Catalogue."""
+    from ..story import StoryStore, for_shot_target
+    t = for_shot_target(payload)
     try:
-        s = StoryStore(q.ws).add_take(shot_id, version, "clip", clip_id, use=False)
+        if t is None:
+            raise ValueError("the origin names no shot version")
+        store = StoryStore(q.ws)
+        for ref in ids:
+            s = store.add_take(t[0], t[1], kind, ref, use=use)
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
-        q.hub.broadcast("story.changed", {"kind": "shot", "id": shot_id, "revision": 0, "error": str(e)})
+        q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
 
 
 def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:

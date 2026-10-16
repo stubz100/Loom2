@@ -3653,6 +3653,17 @@
       "FlowNode": {
         "description": "One node of the flow, one file (loom R139). The fields a type uses: Dialogue `lines` (+ a bound shot), Shot a bound shot, Choice\n`options`, Condition `cond`, Action `set`, Jump `target`, Comment `text`; Start and Hub carry a title. `shot_id` / `shot_version`\nare set by binding only (loom R146: sole ownership).",
         "properties": {
+          "board_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board Group Id"
+          },
           "colour": {
             "anyOf": [
               {
@@ -3791,6 +3802,7 @@
           "text",
           "shot_id",
           "shot_version",
+          "board_group_id",
           "colour",
           "revision",
           "created_at",

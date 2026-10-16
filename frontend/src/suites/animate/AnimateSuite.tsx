@@ -14,8 +14,9 @@ import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
 import { askText, useSession } from '../../store/session'
-import { playerMenu } from './animateCommands'
-import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, type AnimPanel } from './animateStore'
+import { clipMenu, playerMenu } from './animateCommands'
+import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
+import { ForChip } from '../story/ForChip'
 import { Player } from './Player'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
@@ -82,7 +83,7 @@ function InputsTab() {
             </div>)}
           </div>
           <div ref={beatRef} className={`slot${beatOver ? ' over' : ''}`} style={{ aspectRatio: 'auto', minHeight: 40, marginTop: 6 }}>
-            drop frames here as mid-clip keyframes (strength 0.3–1.0, drag the marker on the timeline)
+            drop frames here as mid-clip keyframes (strength 0.3–1.0; set each one's frame in its number field — the ♦ on the timeline shows where)
           </div>
         </div>
       </>}
@@ -204,21 +205,33 @@ function PresetsTab() {
   )
 }
 
+// D90 (02 §9, A16): the clips not in the Trash, filtered by words of the prompt and the keep / reject state; a row's right-click has the
+// clip verbs, Move to trash among them (the Catalogue's semantics: Undo in the toast)
+const STATES: { id: ClipFilter['state']; label: string }[] = [{ id: 'all', label: 'all' }, { id: 'keep', label: 'kept' }, { id: 'reject', label: 'rejected' }, { id: 'none', label: 'unmarked' }]
 function ClipsTab() {
   const caps = useSession((s) => s.capabilities)
   const clips = useAnimate((s) => s.clips)
   const current = useAnimate((s) => s.current)
   const assets = useAnimate((s) => s.assets)
+  const live = useAnimate((s) => s.clipLive)
+  const filter = useAnimate((s) => s.clipFilter)
+  useEffect(() => { void an().loadClipStates() }, [])                     // the states and the Trash may have moved in the Catalogue
+  const shown = useMemo(() => visibleClips(clips, assets, live, filter), [clips, assets, live, filter])
+  const total = live ? clips.filter((c) => !c.asset_id || live[c.asset_id]).length : clips.length
   return (
     <div className="clip-list">
-      {clips.map((c) => {
+      <div className="clip-filter">
+        <input type="search" value={filter.q} aria-label="search clips" placeholder="search the prompts" onChange={(e) => an().setClipFilter({ q: e.target.value })} />
+        <div className="segmented" aria-label="clip state">{STATES.map((x) => <button key={x.id} className={filter.state === x.id ? 'active' : ''} onClick={() => an().setClipFilter({ state: x.id })}>{x.label}</button>)}</div>
+      </div>
+      {shown.map((c) => {
         const a = c.asset_id ? assets[c.asset_id] : undefined
-        return <button key={c.id} className={`clip-row${c.id === current ? ' active' : ''}`} onClick={() => an().select(c.id)} title={c.prompt}>
+        return <button key={c.id} className={`clip-row${c.id === current ? ' active' : ''}`} data-id={c.id} onClick={() => an().select(c.id)} onContextMenu={(e) => showMenu(e, clipMenu(c.id))} title={`${c.prompt} — right-click for its verbs`}>
           {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
           <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
         </button>
       })}
-      {!clips.length && <span className="hint">No clips in this project yet.</span>}
+      {!total ? <span className="hint">No clips in this project yet.</span> : !shown.length ? <span className="hint">No clip matches — {total} in all.</span> : null}
     </div>
   )
 }
@@ -231,11 +244,7 @@ function Panel({ tab }: { tab: string }) {
   const def = useSession((s) => s.capabilities?.defaults.i2v)
   useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  if (tab === 'model') return <ModelTab />
-  if (tab === 'length') return <LengthTab />
-  if (tab === 'presets') return <PresetsTab />
-  if (tab === 'clips') return <ClipsTab />
-  return <InputsTab />
+  return <><ForChip maker="animate" />{tab === 'model' ? <ModelTab /> : tab === 'length' ? <LengthTab /> : tab === 'presets' ? <PresetsTab /> : tab === 'clips' ? <ClipsTab /> : <InputsTab />}</>   // D90 (02 §5): the For chip on every tab
 }
 
 function PrimaryAction() {
@@ -280,7 +289,7 @@ function Strip() {
       <span className="spacer" />
       {clip && <span className="counter" style={{ fontFamily: 'var(--mono)' }}>frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)} · {clip.frames} f · {clip.w}×{clip.h} @ {clip.fps} fps</span>}
       <span className="spacer" />
-      <label>speed <select value={String(speed)} onChange={(e) => useAnimate.setState({ speed: Number(e.target.value) })}>{[-2, -1, 0.25, 0.5, 1, 1.5, 2].map((v) => <option key={v} value={String(v)}>{v < 0 ? `◀ ${-v}×` : `${v}×`}</option>)}</select></label>
+      <label>speed <select value={String(speed)} onChange={(e) => useAnimate.setState({ speed: Number(e.target.value) })}>{[-4, -2, -1, 0.25, 0.5, 1, 1.5, 2, 4].map((v) => <option key={v} value={String(v)}>{v < 0 ? `◀ ${-v}×` : `${v}×`}</option>)}</select></label>
       <CommandButton id="anim.loop" active={loop} />
       <CommandButton id="anim.onion" active={onion} />
     </>
@@ -465,7 +474,7 @@ function ClipTab({ clip }: { clip: Clip }) {
   const wall = (clip.timings as { wall_s?: number }).wall_s
   return (
     <div>
-      <div className="verbs">{['anim.keep', 'anim.reject', 'anim.variations', 'anim.rerun', 'anim.tryOther', 'anim.toCatalogue'].map((id) => <CommandButton key={id} id={id} text />)}</div>
+      <div className="verbs">{['anim.keep', 'anim.reject', 'anim.variations', 'anim.rerun', 'anim.tryOther', 'anim.toCatalogue', 'anim.trash'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <dl className="kv">
         <dt>state</dt><dd>{asset ? <span className={`badge ${asset.state}`}>{asset.state}</span> : '—'}</dd>
         <dt>model</dt><dd>{caps?.models[clip.model_id]?.label ?? clip.model_id} · {clip.preset}</dd>
@@ -484,11 +493,18 @@ function ClipTab({ clip }: { clip: Clip }) {
           {' '}<CommandButton id="anim.identity" text />
         </dd>
         <dt>clip</dt><dd className="mono">{clip.id}{clip.job_id ? ` · job ${clip.job_id}` : ''}</dd>
-        <dt>extend</dt><dd><CommandButton id="anim.extend" text /> <CommandButton id="anim.useAsStart" text />{' '}
-          {experimental?.extend.models[clip.model_id] ? <span className="hint"><span className="badge experimental">experimental</span> {experimental.extend.caveat}</span> : <span className="hint">this model does not continue clips</span>}</dd>
-        {clip.chained_from && <><dt>continues</dt><dd className="mono">{clip.chained_from} · its first {clip.overlap} frame{clip.overlap === 1 ? '' : 's'} repeat the end of it</dd></>}
-        {clip.audio_asset_id && <><dt>line</dt><dd><span className="badge experimental">lip-sync · experimental</span> the proxy carries the line</dd></>}
+        <dt>next</dt><dd><CommandButton id="anim.useAsStart" text /></dd>
       </dl>
+      {/* D90 (02 §9, X3): the experimental features together — Extend here, Lip-sync on the shot (Story · Shots: Make clip ▸ / the Inspector) */}
+      <details className="anim-exp" open={!!clip.chained_from || !!clip.audio_asset_id}>
+        <summary><span className="badge experimental">experimental</span> Extend · lip-sync</summary>
+        <dl className="kv">
+          <dt>extend</dt><dd><CommandButton id="anim.extend" text />{' '}
+            {experimental?.extend.models[clip.model_id] ? <span className="hint">{experimental.extend.caveat}</span> : <span className="hint">this model does not continue clips</span>}</dd>
+          {clip.chained_from && <><dt>continues</dt><dd className="mono">{clip.chained_from} · its first {clip.overlap} frame{clip.overlap === 1 ? '' : 's'} repeat the end of it</dd></>}
+          <dt>lip-sync</dt><dd>{clip.audio_asset_id ? <><span className="badge experimental">lip-sync</span> the proxy carries the line</> : <span className="hint">made from a shot version with a voiced line: Story · Shots › Make clip ▸ Lip-sync</span>}</dd>
+        </dl>
+      </details>
     </div>
   )
 }

@@ -1,0 +1,6 @@
+/* D90 (02 §5): the For chip at the top of a maker's Panel */
+.for-chip { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0 0 8px; padding: 4px 6px; border: 1px solid var(--accent-dim); border-radius: var(--radius); background: var(--bg2); }
+.for-chip .for-what { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg2); }
+.for-chip .for-what b { color: var(--fg); }
+.for-chip .for-what svg { color: var(--accent); flex: none; }
+.for-chip .cmd-btn { min-height: 24px; padding: 2px 6px; }

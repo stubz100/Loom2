@@ -8,6 +8,7 @@ import type { components } from '../../api/schema'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
 import { refDrop } from '../../frame/dropRules'
+import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { styleFor } from '../story/storyStore'
 
@@ -207,7 +208,8 @@ export interface GenerateState {
   treeToJson: () => void
   jsonToTree: () => boolean
   refreshPreview: () => Promise<void>
-  /** `origin` (D66) says where the request was made; the panel's own submissions default to Generate's results. */
+  /** `origin` (D66) says where the request was made; the panel's own submissions default to Generate's results — or, while the For chip
+   *  is set (D90, 02 §5), to the shot version it names. */
   generate: (stage?: boolean, origin?: JobOrigin) => Promise<Job[] | null>
   variations: (asset: Asset, n?: number, origin?: JobOrigin) => Promise<void>
   rerun: (asset: Asset, origin?: JobOrigin) => Promise<void>
@@ -314,13 +316,15 @@ export const useGenerate = create<GenerateState>()(
         } finally { if (seq === previewSeq) set({ previewing: false }) }
       },
 
-      generate: async (stage = false, origin = GENERATE_ORIGIN) => {
+      generate: async (stage = false, asked) => {
         const s = useSession.getState()
+        const origin = asked ?? originFor('generate', GENERATE_ORIGIN)            // D90 (02 §5): the For chip's shot gets the results as takes
+        const f = origin.surface === FOR_SHOT ? useMakeFor.getState().generate : null
         try {
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
-          s.toast(stage ? `Staged ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`, 'success')
+          s.toast((stage ? `Staged ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`) + (f ? ` for ${forLabel(f)} — they land as its takes` : ''), 'success')
           await s.refreshAll()
           if (get().panel.seed_mode === 'increment') get().set({ seed: get().panel.seed + get().panel.count })
           return jobs.jobs

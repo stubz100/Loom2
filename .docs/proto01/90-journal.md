@@ -4161,3 +4161,31 @@ split by file so that no two hands touched the same module.
   world scenario makes a sample and picks the style by its tile, the LoRA scenario opens the LoRAs fold), lint 88 warnings (100 at
   D90's start), build clean; `scripts/sy_acceptance.py` reads `.style-tile`. **Rig owed:** the swatch pack (64 look presets at 512² on
   Klein 4B) and a style sample, measured and looked at.
+
+## 2026-10-16 20:48 — D90 · waves UI4 (makers in context) and UI6 (Edit, Animate) built
+
+- **UI4 (02 §5, §4.2).** A shot can make its own frame and clip: **Make frame ▸** (in Generate · in Stage) and **Make clip ▸** (in Animate
+  · in Stage · Lip-sync) on the shot's Strip, board, Inspector and right-click, and on a Flow node with a bound shot. Generate and
+  Animate opened this way show a **For** chip ("For: Shot 12 · v1 ✕ · ← Back to Shot 12", `story/ForChip.tsx`, `origin.useMakeFor`), are
+  pre-filled (a Shot node's line or title, a Dialogue node's speakers as @mentions, the node's board as references within the model's
+  limit; the version's frame as Animate's start) and submit with origin surface `for_shot` — the finisher adds the results to the version
+  as **takes** (`_shot_takes`, shared with lip-sync; the first fills an empty frame / clip), `POST /jobs` refuses a missing or final
+  version (422). ✕ drops the context; a maker opened from its tab has none. **Flow boards:** a node carries `board_group_id` (an album
+  group; Inspector select, a group card dropped on the node, its cover on the card; open / remove commands). **Go to origin** lands on the
+  object for Expand, training, the LoRA check, lip-sync, shot takes, voices and style samples. Not built: takes as a Catalogue group (an
+  asset lives on one page, D34 — moving takes would pull them off their pages) and the groups' "used by" line.
+- **UI6 Animate (02 §9).** Extend, the continuation and the lip-sync line under one *Experimental* fold; the Clips tab has a search and a
+  state filter, hides trashed clips and has a right-click per clip (Show in Catalogue, Keep, Reject, Make a shot…, Move to trash —
+  `anim.trash`); J / K / L in a Shuttle submenu of the player menu (with ±4× in the speed select), Loop / Onion as checked commands,
+  Identity and Make a shot there too; the beats hint no longer promises draggable markers.
+- **UI6 Edit (02 §9).** The AI runs are commands (`edit.ai.select|inpaint|refine|upscale|outpaint|stage`, their `when`s from the tab's own
+  reasons in `edit/aiRecipes.ts`, tested), an **AI ▸** group in the canvas menu (Select subject runs at once; Inpaint / Refine / Upscale /
+  Outpaint open the tab on that operation), Re-run (new seed) and Copy recipe JSON as commands; the toolbox shows the storyboard
+  essentials with Magic wand, Spot healing and Eyedropper behind **More tools** (keys and Tool ▸ unchanged); *Compare preview* and the
+  renderer badge are dev-build diagnostics (Info › Diagnostics); declared placements made true (new group, pick colour, opacity ▸, the
+  magnetic lasso's back step, the clipboard row in the Selection tab, Before as toggle + hold); **Merge visible**; the row lock acts on the
+  selection and is undoable. Flatten is owed (it needs a server-side flatten that keeps the layers).
+- Frame: Help lists the gestures of Animate, Stage and Story too; the Catalogue's grid menu always has **Group by ▸** (G's mouse home);
+  `edit_headed_check.py heal` picks the tool by command.
+- Tests: offline 343 under full and open (+3), Vitest 259 (+24), smoke 30 / 30 under full and open (+1: Make frame for a shot → the For
+  chip → takes), lint 88, build clean, audits clean.

@@ -125,3 +125,8 @@
 .seq-insp .kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px; font-size: 12px; color: var(--fg2); margin: 2px 0; }
 .seq-insp .verbs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .badge.experimental { background: #6b4a12; color: #ffd98a; border-radius: 3px; padding: 0 5px; font-size: 11px; }   /* D88: shipped before its bars are met */
+/* D90 (02 §9): the Clips tab's filter and the clip Inspector's Experimental fold */
+.clip-list .clip-filter { display: grid; gap: 4px; margin-bottom: 6px; }
+.clip-list .clip-filter input[type=search] { width: 100%; }
+.anim-exp { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.anim-exp > summary { cursor: pointer; color: var(--fg2); display: flex; align-items: center; gap: 6px; }

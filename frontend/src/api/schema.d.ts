@@ -3668,6 +3668,8 @@ export interface components {
          *     are set by binding only (loom R146: sole ownership).
          */
         FlowNode: {
+            /** Board Group Id */
+            board_group_id: string | null;
             /** Colour */
             colour: string | null;
             cond: components["schemas"]["FlowCondition"] | null;

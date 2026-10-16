@@ -3,10 +3,10 @@
 // finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90). SY1: the Cast tab — Panel: the profiles by class; Strip: the
 // version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
-import { Film, Lock } from 'lucide-react'
+import { Film, ImagePlus, Lock } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../../api/client'
-import { CommandButton } from '../../frame/CommandButton'
+import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
@@ -18,7 +18,9 @@ import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
 import { StyleEditor, StyleGrid } from './StyleWorld'
-import { askExpand, rowMenu } from './storyCommands'
+import { askExpand, makeClipItems, makeFrameItems, rowMenu, shotMenu } from './storyCommands'
+import { flatGroups, useAlbum } from '../catalogue/albumStore'
+import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
 import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
@@ -145,7 +147,7 @@ function ShotsTab() {
               const thumb = shotThumb(s, clipsById)
               return (
                 <button key={s.id} className={`story-row shot-row${shotId === s.id ? ' active' : ''}`} role="listitem" data-id={s.id} onClick={() => sy().selectShot(s.id)}
-                  onContextMenu={(e) => { sy().selectShot(s.id); showMenu(e, [{ cmd: 'story.shot.finalize' }, { cmd: 'story.shot.newVersion' }, sep, { cmd: 'story.shot.openStage' }, { cmd: 'story.shot.openAnimate' }, sep, { cmd: 'story.shot.release' }, { cmd: 'story.shot.delete' }]) }}>
+                  onContextMenu={(e) => { sy().selectShot(s.id); showMenu(e, shotMenu()) }}>
                   {thumb ? <img className="pthumb" src={api.thumbUrl(thumb, 256)} alt="" /> : <span className="pthumb empty" />}
                   <span className="pname">{s.name}<span className="muted"> · {v?.stage_id ? 'stage' : v?.clip_id ? 'clip' : 'empty'}</span></span>
                   <span className="n">{s.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'final' : 'open'} /></span>
@@ -303,6 +305,11 @@ function Bootstrap({ p }: { p: Profile }) {
   )
 }
 
+/** D90 (02 §5): "Make frame ▸" and "Make clip ▸" — press menus of the registry's commands (the Strip, the board, the Inspector). */
+function MakeMenus() {
+  return <span className="make-menus"><MenuButton label="Make frame" icon={ImagePlus} items={makeFrameItems} text size={14} /><MenuButton label="Make clip" icon={Film} items={makeClipItems} text size={14} /></span>
+}
+
 export function Strip() {
   const world = useStory((s) => s.world)
   const project = useSession((s) => s.project)
@@ -316,6 +323,7 @@ export function Strip() {
   const { active: tab } = useSuiteRail()
   const play = useStory((s) => s.play)
   const problems = useStory((s) => s.problems)
+  for (const id of ['story.shot.makeFrame', 'story.shot.makeFrameStage', 'story.shot.makeClip', 'story.shot.makeClipStage']) markUsed(id)   // in the Make ▸ menus
   markUsed('story.cast.lock'); markUsed('story.cast.newVersion'); markUsed('story.shot.finalize'); markUsed('story.shot.newVersion'); markUsed('story.shot.openStage'); markUsed('story.shot.openAnimate')
   if (tab === 'episode') {
     return <div className="story-strip"><span>Episode</span><span className="spacer" /><span className="hint">the hand-built render list: shots from the Shots bin, clips from the Clips bin; every join a cut or a dissolve</span></div>
@@ -349,6 +357,7 @@ export function Strip() {
         {stale && <span className="stale-badge" title="The stage moved after this version's frame / clip was taken — still usable (advisory)">stale</span>}
         <span className="spacer" />
         {stageName && <span className="hint">{stageName}</span>}
+        <MakeMenus />
         <CommandButton id="story.shot.openStage" /><CommandButton id="story.shot.openAnimate" />
       </div>
     )
@@ -574,9 +583,10 @@ function ShotBoard() {
         <div className="shot-player">
           {clip ? <video controls src={api.fileUrl(`/clips/${clip.id}/proxy.mp4`)} aria-label="the version's clip" />
             : v.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the version's frame" />
-            : <span className="hint">No frame or clip yet — generate from the stage camera, animate in Animate, or use a take below.</span>}
+            : <span className="hint">No frame or clip yet — Make frame ▸ / Make clip ▸ below (Generate, Animate or the stage camera), or use a take.</span>}
         </div>
         <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to finalize</span>}</div>
+        <div className="make-row"><MakeMenus /><span className="hint">{v.state === 'open' ? 'Generate or Animate open for this version; what they make comes back here as takes' : 'final — make a new version for more takes'}</span></div>
       </section>
       <section>
         <h3>Takes <span className="hint">everything tried for this version · ✓ use makes one the frame or the clip</span></h3>
@@ -717,6 +727,7 @@ function ShotVersionFields({ v, clip, stage }: { v: ShotVersion; clip?: { frames
         {v.finalized_at && <><span>finalized</span><span>{v.finalized_at.slice(0, 16).replace('T', ' ')}</span></>}
       </div>
       <div className="verbs"><CommandButton id="story.shot.finalize" text /><CommandButton id="story.shot.newVersion" text /></div>
+      <div className="verbs"><MakeMenus /></div>
       <div className="verbs"><CommandButton id="story.shot.openStage" text /><CommandButton id="story.shot.openAnimate" text /></div>
     </>
   )
@@ -809,6 +820,29 @@ function SetsEditor({ n, sets, onChange }: { n: FlowNode; sets: Record<string, u
   )
 }
 
+/** D90 (02 §4.2): the node's board — an album group (picked here, or a group card dropped on the node), its cover and count; a Dialogue or
+ *  Shot node's board gives Make frame its references. */
+function BoardField({ n }: { n: FlowNode }) {
+  const tree = useAlbum((a) => a.tree)
+  useEffect(() => { if (!useAlbum.getState().tree) void useAlbum.getState().load() }, [])
+  const g = findNode(tree, n.board_group_id)
+  return (
+    <>
+      <h4>Board <span className="hint">references, mood, places — a group of the album</span></h4>
+      <div className="kv board-field">
+        <span>group</span>
+        <select value={n.board_group_id ?? ''} aria-label="board" onChange={(e) => void sy().patchNode(n.id, { board_group_id: e.target.value || null })}>
+          <option value="">(no board)</option>
+          {n.board_group_id && !g && <option value={n.board_group_id}>(a deleted group)</option>}
+          {flatGroups(tree).map(({ node, depth }) => <option key={node.id} value={node.id}>{`${'\u00a0\u00a0'.repeat(depth)}${node.name} · ${node.total}`}</option>)}
+        </select>
+        {g && <><span>cover</span><span>{g.cover_ids[0] ? <img className="insp-thumb small" src={api.thumbUrl(g.cover_ids[0], 256)} alt="" /> : <span className="hint">an empty group</span>}</span></>}
+      </div>
+      <div className="verbs"><CommandButton id="story.flow.openBoard" text /><CommandButton id="story.flow.clearBoard" text /></div>
+    </>
+  )
+}
+
 function NodeInspector() {
   const nodeId = useStory((s) => s.nodeId)
   const flowNodes = useStory((s) => s.flowNodes)
@@ -816,6 +850,7 @@ function NodeInspector() {
   const problems = useStory((s) => s.problems)
   const world = useStory((s) => s.world)
   const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
+  markUsed('story.flow.makeFrame'); markUsed('story.flow.makeClip'); markUsed('story.flow.openBoard'); markUsed('story.flow.clearBoard')
   markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.unbind'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit'); markUsed('story.flow.voiceAll')
   for (const t of ['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
   const n = nodeId ? flowNodes[nodeId] : undefined
@@ -855,7 +890,9 @@ function NodeInspector() {
           <span>version</span><select value={n.shot_version ?? sh.current} aria-label="bound version" onChange={(e) => void sy().bindShot(n.id, sh.id, e.target.value)}>{sh.versions.map((v) => <option key={v.id} value={v.id}>{v.id}{v.state === 'final' ? ' · final' : ''}</option>)}</select></div>
           : <div className="kv"><span>bind</span><select value="" aria-label="bind shot" onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">an unbound shot…</option>{unbound.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
         <div className="verbs"><CommandButton id="story.flow.newShot" text /><CommandButton id="story.flow.openShot" text /><CommandButton id="story.flow.unbind" text /></div>
+        <div className="verbs"><CommandButton id="story.flow.makeFrame" text /><CommandButton id="story.flow.makeClip" text /></div>
       </>}
+      <BoardField n={n} />
       {mine.length > 0 && <><h4>Problems</h4><ul className="flow-problems">{mine.map((p, i) => <li key={i} className={p.code}>{p.message}</li>)}</ul></>}
       <div className="verbs"><CommandButton id="story.flow.duplicate" text /><CommandButton id="story.flow.delete" text /></div>
     </div>

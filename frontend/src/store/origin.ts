@@ -1,12 +1,74 @@
 // D66 "Go to origin": a job's `origin {suite, surface, ref?, payload?}` names where it was started; this switches to that suite and shows
 // the thing it was started on. Like `applyEvent`, it reaches the suite stores through dynamic imports, so the frame (the Dock) stays
 // ignorant of suite internals.
-import type { Job } from '../api/types'
+// D90 (02 §5): makers in context — a maker opened *for* a Story object ("Make frame ▸" on a shot) holds a For context; while it is set,
+// its submissions carry a `for_shot` origin (the server records the results as takes of that version), its Panel shows the chip with
+// "← Back", and "Go to origin" on such a job goes to the same place. Opened from its own tab, a maker has none and works as before.
+import { create } from 'zustand'
+import type { Job, JobOrigin } from '../api/types'
 import { useSession } from './session'
 
 type Origin = NonNullable<Job['origin']>
 
 const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', story: 'Story', api: 'API' }
+
+/** D90 (02 §5): `origin.surface` of a job made for a shot version (the server's `story.FOR_SHOT`). */
+export const FOR_SHOT = 'for_shot'
+export type Maker = 'generate' | 'animate'
+/** What a maker was opened for: a shot version (its name for the chip; the owner node when Make came from the Flow). */
+export interface MakeFor { kind: 'shot'; shot_id: string; version: string; name: string; node_id?: string | null }
+
+interface ForState { generate: MakeFor | null; animate: MakeFor | null; set: (maker: Maker, f: MakeFor | null) => void }
+/** The For context of each maker (session only: a reload starts without one). */
+export const useMakeFor = create<ForState>()((set) => ({ generate: null, animate: null, set: (maker, f) => set({ [maker]: f } as Partial<ForState>) }))
+useSession.subscribe((s, prev) => { if (s.project?.path !== prev.project?.path) useMakeFor.setState({ generate: null, animate: null }) })   // another project: no shot of it
+
+/** The chip's words: "Shot 12 · v3". */
+export const forLabel = (f: MakeFor): string => `${f.name} · ${f.version}`
+/** The origin a maker's job carries for a shot version; `ref` stays the maker's own (Animate: the clip on screen, so the player follows). */
+export function forOrigin(f: MakeFor, suite: Maker, ref: string | null = null): JobOrigin {
+  return { suite, surface: FOR_SHOT, ref, payload: { shot_id: f.shot_id, version: f.version, ...(f.node_id ? { node_id: f.node_id } : {}) } }
+}
+/** The origin a maker submits with: the For origin while its chip is set, else its own (`fallback`). */
+export function originFor(maker: Maker, fallback: JobOrigin): JobOrigin {
+  const f = useMakeFor.getState()[maker]
+  return f ? forOrigin(f, maker, fallback.ref ?? null) : fallback
+}
+
+/** Where a Story job's result is shown (inventory F24): the tab and the thing to select there; null when the origin names none. */
+export type StoryPlace = { tab: 'world' | 'cast' | 'shots' | 'flow'; id: string; version?: string | null }
+export function storyPlace(o: Pick<Origin, 'suite' | 'surface' | 'ref' | 'payload'>): StoryPlace | null {
+  const p = o.payload ?? {}
+  const ver = typeof p.version === 'string' ? p.version : null
+  if (o.surface === FOR_SHOT) return typeof p.shot_id === 'string' ? { tab: 'shots', id: p.shot_id, version: ver } : null
+  if (o.suite !== 'story' || !o.ref) return null
+  switch (o.surface) {
+    case 'expand': case 'train': case 'lora_check': return { tab: 'cast', id: o.ref, version: ver }   // a profile version
+    case 'lipsync': return { tab: 'shots', id: o.ref, version: ver }                                   // a shot version
+    case 'voice': return { tab: 'flow', id: o.ref }                                                     // the node whose lines were spoken
+    case 'style': return { tab: 'world', id: o.ref }                                                    // a style's sample
+    default: return null
+  }
+}
+
+/** Story at a place: the tab, then the profile / shot / node / style selected (records loaded first when they are not yet). */
+export function goToStory(place: StoryPlace): void {
+  useSession.getState().setSuite('story')
+  void Promise.all([import('../suites/story/storyStore'), import('../frame/suiteRegistry')]).then(async ([m, reg]) => {
+    reg.setRailTab('story', place.tab)
+    const st = m.useStory.getState()
+    if (place.tab === 'cast') { if (!st.profilesLoaded) await st.loadProfiles(); m.useStory.getState().selectProfile(place.id, place.version) }
+    else if (place.tab === 'shots') { if (!st.shotsLoaded) await st.loadShots(); m.useStory.getState().selectShot(place.id, place.version) }
+    else if (place.tab === 'flow') { if (!st.flowLoaded) await st.loadFlow(); m.useStory.getState().selectNode(place.id) }
+    else { m.useStory.getState().setSection('styles'); m.useStory.getState().select({ kind: 'style', id: place.id }) }
+  })
+}
+
+/** The chip's "← Back": the shot version the maker works for. */
+export function goBack(maker: Maker): void {
+  const f = useMakeFor.getState()[maker]
+  if (f) goToStory({ tab: 'shots', id: f.shot_id, version: f.version })
+}
 
 /** False for jobs without an origin (queued before D66) and for jobs submitted through the API by a script (no suite to go to). */
 export const canGoToOrigin = (j: Pick<Job, 'origin'>): boolean => !!j.origin && j.origin.suite !== 'api'
@@ -14,6 +76,7 @@ export const canGoToOrigin = (j: Pick<Job, 'origin'>): boolean => !!j.origin && 
 /** A short description for tooltips: "Generate · results", "Edit · ai · doc_…". */
 export function originLabel(o: Origin | null | undefined): string {
   if (!o) return 'no origin (queued before origins were recorded)'
+  if (o.surface === FOR_SHOT) return `${SUITE_LABEL[o.suite]} · for a shot · ${String(o.payload?.shot_id ?? '')} ${String(o.payload?.version ?? '')}`.trim()
   return [SUITE_LABEL[o.suite], o.surface, o.ref].filter(Boolean).join(' · ')
 }
 
@@ -21,6 +84,8 @@ export function goToOrigin(j: Job): void {
   const o = j.origin
   if (!o || !canGoToOrigin(j)) return
   const s = useSession.getState()
+  const place = storyPlace(o)                                     // D90 (F24): Story jobs and jobs made for a shot go to their Story object
+  if (place) { goToStory(place); return }
   switch (o.suite) {
     case 'generate':                                              // the job's batch in Generate's results ("this batch")
       s.setSuite('generate')
@@ -49,10 +114,8 @@ export function goToOrigin(j: Job): void {
       if (o.ref) { const ref = o.ref; const cam = typeof o.payload?.camera_id === 'string' ? o.payload.camera_id : null
         void import('../suites/stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === ref ? Promise.resolve() : st.open(ref); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) }) }
       break
-    case 'story':                                                 // 17 (D85): the profile an Expand was about, on the Cast tab at that version
+    case 'story':                                                 // a Story job storyPlace does not place: the suite
       s.setSuite('story')
-      if (o.surface === 'expand' && o.ref) { const ref = o.ref; const ver = typeof o.payload?.version === 'string' ? o.payload.version : null
-        void Promise.all([import('../suites/story/storyStore'), import('../frame/suiteRegistry')]).then(([m, reg]) => { reg.setRailTab('story', 'cast'); const st = m.useStory.getState(); const go = st.profilesLoaded ? Promise.resolve() : st.loadProfiles(); void go.then(() => m.useStory.getState().selectProfile(ref, ver)) }) }
       break
     default: break
   }

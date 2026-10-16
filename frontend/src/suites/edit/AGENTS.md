@@ -21,6 +21,7 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 | `selectionOps.ts` | selection value (red × alpha), tile diffs for selection history, EDT, expand / contract / border / smooth / feather, combine by mode (D43, D44) |
 | `transform.ts` | D58: PhotoCraft's free transform — `Homography` (rect → quad, inverse), `warpRaster` (nearest / bilinear / Catmull-Rom on premultiplied pixels, area prefilter below 50 %), `warpGray` (masks, the selection, flattened onto their default), split / composite for selection lifts, `hitTest` / `applyDrag` for the box |
 | `aiPanelStore.ts` | AI panel UI state (op, mode, prompt, candidates, encoder `teId`) |
+| `aiRecipes.ts` | D90: the AI tab's disabled reasons (`aiReason`), recipes (`aiRecipe`, `selectPlan`, `subjectPlan`) and models (`aiModels`) as pure functions — the tab and the `edit.ai.*` commands (`editCommands.ts aiCtx`) read the same ones, so a command is enabled exactly when its button is (`aiRecipes.test.ts`) |
 | `psdExport.ts` | PSD export via ag-psd (lazy-loaded): adjustment layers, fill, clip, locks, pass-through (D41); `fixLevelsBlocks` repairs ag-psd's Levels block in place; checked by `edit_headed_check.py psd` with psd-tools |
 | `editCommands.ts` / `EditSuite.tsx` | commands, tool table, panels, the AI tab |
 

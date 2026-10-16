@@ -131,7 +131,7 @@ registerCommands([
 function loupeIndex(): number { const c = cat(); return c.loupe ? c.visibleOrder().indexOf(c.loupe) : -1 }
 
 export const rateMenu = (): MenuItem => ({ label: 'Rate', icon: Star, items: [5, 4, 3, 2, 1, 0].map((n) => ({ cmd: `cat.rate.${n}` })) })
-export const groupMenu = (): MenuItem => ({ label: 'Group by', icon: ListTree, items: GROUP_MODES.map(([g, l]) => ({ label: l, checked: cat().q.group === g, run: () => void cat().setQuery({ group: g }) })) })
+export const groupMenu = (): MenuItem => ({ label: 'Group by', icon: ListTree, items: [...GROUP_MODES.map(([g, l]): MenuItem => ({ label: l, checked: cat().q.group === g, run: () => void cat().setQuery({ group: g }) })), sep, { cmd: 'cat.groupCycle' }] })   // D90 (C20): G's mouse home
 
 /** "Move to group ▸": every group of the Album, plus a new one (D34). */
 export function moveToMenu(): MenuItem {
@@ -161,7 +161,7 @@ export function tileMenu(): MenuItem[] {
 /** Right-click on empty grid space. */
 export function gridMenu(): MenuItem[] {
   const grouped = cat().q.group !== 'none'                         // Generate's results still group by batch (§9)
-  return [{ cmd: 'cat.import' }, sep, { cmd: 'cat.selectAll' }, { cmd: 'cat.clearSelection' }, sep, ...(grouped ? [groupMenu(), { cmd: 'cat.expandAll' }, { cmd: 'cat.collapseAll' }, sep] : []), { cmd: 'cat.search' }, { cmd: 'cat.unpinAll' }]
+  return [{ cmd: 'cat.import' }, sep, { cmd: 'cat.selectAll' }, { cmd: 'cat.clearSelection' }, sep, groupMenu(), ...(grouped ? [{ cmd: 'cat.expandAll' }, { cmd: 'cat.collapseAll' }] : []), sep, { cmd: 'cat.search' }, { cmd: 'cat.unpinAll' }]   // D90 (C20): grouping is reachable by mouse, not only by G
 }
 /** Right-click on a group header. */
 export function headerMenu(key: string): MenuItem[] {

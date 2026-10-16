@@ -111,10 +111,12 @@ export function matchesCommand(e: KeyboardEvent, c: Command): boolean {
 }
 
 /** Run the first enabled command of the scope whose shortcut matches; returns true when one ran. Disabled matches are skipped, so two
- * commands can share a key with exclusive `when`s (Enter closes a polygon lasso or applies a transform). */
-export function handleKeyFor(scope: Scope, e: KeyboardEvent): boolean {
+ * commands can share a key with exclusive `when`s (Enter closes a polygon lasso or applies a transform). `only` narrows the scope to the
+ * commands of one place (D90 B2: a Story tab answers to its own commands only). */
+export function handleKeyFor(scope: Scope, e: KeyboardEvent, only?: (c: Command) => boolean): boolean {
   for (const c of commandsFor(scope)) {
     if (!c.keys && !c.alt) continue
+    if (only && !only(c)) continue
     if (!matchesCommand(e, c)) continue
     if (!isEnabled(c)) continue
     e.preventDefault()

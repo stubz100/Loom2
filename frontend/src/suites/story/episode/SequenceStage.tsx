@@ -1,13 +1,19 @@
 // P17 (D83): the Sequence stage — the preview (Mediabunny sinks per clip, the frame the lane shows at the playhead, two frames mixed
 // mid-dissolve), the transport, and the lane itself: a ruler, one block per clip (px per tick), the dissolve shaded, trim handles at
 // both edges, a dissolve grip, the playhead; Ctrl+wheel zooms. Lifted from the E13 view (frontend/src/spikes/e13Timeline.ts).
+// D90: the lane is the drop target — a clip goes to the end, a Shots-bin card stamped (B7, episode/bin.ts); the stage takes the
+// Episode tab's keys, Ctrl+Z / Ctrl+Shift+Z among them (B2).
 import { ALL_FORMATS, CanvasSink, Input, UrlSource } from 'mediabunny'
-import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../../api/client'
 import type { Clip } from '../../../api/types'
 import { CommandRow } from '../../../frame/CommandButton'
 import { showMenu } from '../../../frame/ContextMenu'
+import { useDropTarget } from '../../../frame/drag'
 import { useAnimate } from '../../animate/animateStore'
+import { useStory } from '../storyStore'
+import { storyKey } from '../storyKeys'
+import { laneTake } from './bin'
 import { at, duration, starts, tc, ticks, type Lane } from './lane'
 import { laneMenu } from './sequenceCommands'
 import { useSequence } from './sequenceStore'
@@ -93,6 +99,12 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
   const ppf = useSequence((s) => s.pxPerFrame)
   const selected = useSequence((s) => s.selected)
   const playhead = useSequence((s) => s.playhead)
+  const clips = useAnimate((st) => st.clips)
+  const shots = useStory((st) => st.shots)
+  const { ref: dropRef, over } = useDropTarget((d) => laneTake(d, clips, shots).verdict.ok,
+    (d) => { const sq = useSequence.getState(); for (const t of laneTake(d, clips, shots).take) { if (t.shot) sq.addShot(t.clip, t.shot); else sq.addClip(t.clip) } },
+    (d) => laneTake(d, clips, shots).verdict)
+  const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; dropRef(el) }, [dropRef])
   const s = starts(lane)
   const total = duration(lane)
   const tickAt = (clientX: number) => { const r = ref.current!.getBoundingClientRect(); return Math.max(0, Math.min(total - 1, Math.round((clientX - r.left + ref.current!.scrollLeft) / ppf))) }
@@ -163,7 +175,7 @@ function LaneView({ lane, byId }: { lane: Lane; byId: Map<string, Clip> }) {
   const marks: number[] = []
   for (let f = 0; f <= total; f += major) marks.push(f)
   return (
-    <div className="seq-lane-wrap" ref={ref} onWheel={(e) => { if (e.ctrlKey) { e.preventDefault(); useSequence.getState().zoom(e.deltaY < 0 ? 1.25 : 0.8) } }}
+    <div className="seq-lane-wrap" ref={setRef} data-over={over || undefined} onWheel={(e) => { if (e.ctrlKey) { e.preventDefault(); useSequence.getState().zoom(e.deltaY < 0 ? 1.25 : 0.8) } }}
       onContextMenu={(e) => { e.preventDefault(); showMenu(e, laneMenu(false)) }}>
       <div className="seq-ruler" style={{ width: Math.max(1, total * ppf) }} onPointerDown={scrub}>
         {marks.map((f) => <div key={f} className="tick" style={{ left: f * ppf }}><span>{tc(f, lane.fps)}</span></div>)}
@@ -207,9 +219,9 @@ export function SequenceStage() {
   const total = duration(lane)
   const what = at(lane, playhead, starts(lane))
   return (
-    <div className="anim-stage seq-stage">
+    <div className="anim-stage seq-stage" tabIndex={0} onKeyDown={(e) => { storyKey('episode', e.nativeEvent) }}>
       <div className="anim-view">
-        {lane.clips.length ? <Preview lane={lane} w={current.w} h={current.h} byId={byId} /> : <div className="anim-empty">an empty lane — add a clip from the Clips bin (the panel), or <b>Add the current clip</b></div>}
+        {lane.clips.length ? <Preview lane={lane} w={current.w} h={current.h} byId={byId} /> : <div className="anim-empty">an empty lane — drag a shot or a clip from the panel onto the lane below, or press + on its card</div>}
       </div>
       <div className="transport">
         <CommandRow ids={['story.episode.home', 'story.episode.stepBack', 'story.episode.play', 'story.episode.stepForward', 'story.episode.end']} labels={{ 'story.episode.play': playing ? 'Pause' : 'Play' }} />

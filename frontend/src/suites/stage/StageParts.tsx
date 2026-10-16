@@ -5,6 +5,7 @@ import { Camera, Eye, EyeOff, Lock, LockOpen } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { shotRefDrop } from '../../frame/dropRules'
@@ -325,7 +326,11 @@ export function PrimaryAction() {
 // ------------------------------------------------------------------ Strip
 export function Strip() {
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (useSession.getState().ui.suite === 'stage') handleKeyFor('stage', e) }
+    const h = (e: KeyboardEvent) => {
+      if (useSession.getState().ui.suite !== 'stage') return
+      if (inField(e)) { primaryInField(e, ['stage.shot.generate']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
+      handleKeyFor('stage', e)
+    }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [])

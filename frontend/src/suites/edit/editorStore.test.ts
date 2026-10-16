@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setBackend } from '../../api/client'
 import { useSession } from '../../store/session'
-import { countRasters, findNode, useEditor, walk, type DocumentStack, type Node } from './editorStore'
+import { countRasters, findNode, useEditor, viewDoc, walk, type DocumentStack, type Node } from './editorStore'
 
 vi.mock('./layerPixels', async (importOriginal) => {
   const real = await importOriginal<typeof import('./layerPixels')>()
@@ -124,5 +124,41 @@ describe('mergeServerLayers (C20: merge into the local stack, never adopt the se
     await useEditor.getState().mergeServerLayers(['lyr_ai'])
     expect(useEditor.getState().doc).toBeNull()
     expect(useEditor.getState().history).toEqual([])
+  })
+})
+
+describe('candidate hover preview (D90 B18: view only)', () => {
+  const cands = { group: 'grp_ai', ids: ['cand_1', 'cand_2'] }
+  beforeEach(() => {
+    useEditor.setState({ doc: stack([group('grp_ai', [raster('cand_1'), raster('cand_2', { visible: false })]), raster('lyr_a')]), docDirty: false, history: [], future: [], candidates: cands, candPreview: null, blendPreview: null, revision: 5 })
+  })
+
+  it('hovering a candidate leaves the document, dirty and history unchanged; the canvas shows it alone', () => {
+    const doc = useEditor.getState().doc
+    useEditor.getState().previewCandidate('cand_2')
+    const st = useEditor.getState()
+    expect(st.candPreview).toBe('cand_2')
+    expect(st.doc).toBe(doc)
+    expect(findNode(st.doc, 'cand_1')!.visible).toBe(true)
+    expect(st.docDirty).toBe(false)
+    expect(st.history).toEqual([])
+    expect(st.revision).toBe(5)
+    const shown = viewDoc(st.doc, st.blendPreview, st.candPreview, st.candidates)!
+    expect([findNode(shown, 'cand_1')!.visible, findNode(shown, 'cand_2')!.visible, findNode(shown, 'lyr_a')!.visible]).toEqual([false, true, true])
+    st.previewCandidate(null)
+    expect(viewDoc(st.doc, null, useEditor.getState().candPreview, st.candidates)).toBe(doc)
+  })
+
+  it('ignores ids that are not candidates; picking clears the preview and records one step', () => {
+    useEditor.getState().previewCandidate('lyr_a')
+    expect(useEditor.getState().candPreview).toBeNull()
+    useEditor.getState().previewCandidate('cand_2')
+    useEditor.getState().pickCandidate('cand_2')
+    const st = useEditor.getState()
+    expect(st.candPreview).toBeNull()
+    expect(st.candidates).toBeNull()
+    expect(findNode(st.doc, 'grp_ai')!.children!.map((n) => `${n.id}:${n.visible}`)).toEqual(['cand_2:true'])
+    expect(st.history.map((h) => h.label)).toEqual(['pick candidate'])
+    expect(st.docDirty).toBe(true)
   })
 })

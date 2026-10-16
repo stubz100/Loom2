@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { CLASS_LABEL, latestTrainJob, sy, useStory, voicedLines, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
@@ -22,8 +22,8 @@ const node = () => sy().node()
 const visual = () => { const n = node(); return !!n && (n.type === 'dialogue' || n.type === 'shot') }
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
-/** The viewport registers its fit and its centre in flow coordinates (the canvas is not a store). */
-export const flowView: { fit?: () => void; centre?: () => { x: number; y: number } | null } = {}
+/** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
+export const flowView: { fit?: () => void; centre?: () => { x: number; y: number } | null; toFlow?: (x: number, y: number) => { x: number; y: number } } = {}
 
 /** The Cast tab's Expand: the cost said first (D79's pattern), then one queued job per cell of the preset. */
 export async function askExpand(preset: string, seeds: number, tier: 'draft' | 'full'): Promise<void> {
@@ -111,7 +111,7 @@ const cmds: Command[] = [
       void askConfirm({ title: `Copy ${s.name} ${v.id} into a new version?`, okLabel: 'Copy', text: 'The source, frame and clip pointers are copied (no files); the copy becomes the current version, open — a retake.' }).then((ok) => { if (ok) void sy().newShotVersion() }) } },
   { id: 'story.shot.lipsync', scope: 'story', label: 'Lip-sync ▶ (experimental)', icon: Mic, placement: ['inspector', 'context'],
     when: () => { const v = shotVersion(); const c = useSession.getState().capabilities?.experimental?.lipsync
-      return !!v && v.state === 'open' && !!v.frame_asset_id && !!c?.available && voicedLines(sy().flowNodes, shot()?.owner_node ?? null).length > 0 },
+      return !!v && v.state === 'open' && !!v.frame_asset_id && !!c?.available && sy().lipsyncLines().some((l) => !l.too_long) },   // D90 (B6): a line within the window
     run: () => { const c = useSession.getState().capabilities?.experimental?.lipsync; const o = sy().lipsyncOpts; const p = c?.presets?.[o.preset] as { seconds?: number | null } | undefined
       void askConfirm({ title: 'Lip-sync this version (experimental)?', okLabel: 'Stage the job',
         text: `${c?.label ?? 'S2V'} · ${o.preset} — ≈ ${Math.round((p?.seconds ?? 0) / 60)} min with the engine. ${c?.caveat ?? ''}. The talking clip lands as a take on the version.` })
@@ -140,6 +140,11 @@ const cmds: Command[] = [
   { id: 'story.flow.delete', scope: 'story', label: 'Delete node', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!node() && !sy().play,
     run: () => { const n = node(); if (!n) return
       void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: n.shot_id ? 'Its edges go with it; its shot is released (not deleted).' : 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }) } },
+  // D90 (B3): an edge goes by its right-click menu or Delete / Backspace on the canvas while it is selected (nodes keep their confirm)
+  { id: 'story.flow.deleteEdge', scope: 'story', label: 'Delete the connection', icon: Unlink, keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !!sy().edge && !sy().play,
+    run: () => { const e = sy().edge; if (!e) return; const to = sy().flowGraph?.edges.find((x) => x.from === e.from && x.port === e.port)?.to
+      void sy().disconnect(e.from, e.port)
+      if (to) useSession.getState().toast('Connection deleted', 'info', () => void sy().connect(e.from, e.port, to)) } },
   { id: 'story.flow.duplicate', scope: 'story', label: 'Duplicate node', icon: Copy, placement: ['inspector', 'context'], when: () => !!node() && !sy().play, run: () => { const n = node(); if (n) void sy().duplicateNode(n.id) } },
   { id: 'story.flow.newShot', scope: 'story', label: 'New shot for this node…', icon: Plus, placement: ['inspector', 'context'], when: () => visual() && !sy().play,
     run: () => { const n = node(); if (!n) return
@@ -176,6 +181,9 @@ export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], 
   items.push({ cmd: 'story.world.remove' })
   return items
 }
+
+/** The right-click menu of a Flow edge (the edge is selected first). */
+export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.deleteEdge' }] }
 
 /** The right-click menu of a Flow node (the node is selected first). */
 export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {

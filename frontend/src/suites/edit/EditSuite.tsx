@@ -6,7 +6,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
 import { isDocumentPreview, type DocumentPreview, type DocumentRecipe } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand } from '../../frame/commands'
+import { command, handleKeyFor, isEnabled, markUsed, matchesCommand, parseChord, runCommand, titleFor } from '../../frame/commands'
+import { useKeymap } from '../../frame/keymap'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
@@ -123,7 +124,7 @@ function ToolOptions() {
   const tolerance = useEditor((s) => s.tolerance)
   const fillMode = useEditor((s) => s.fillMode)
   const doc = useEditor((s) => s.doc)
-  const hasSel = useEditor((s) => !!s.selection)
+  useEditor((s) => !!s.selection)                                      // D90 (B9): the crop commands' enabled state follows the selection
   const activeId = useEditor((s) => s.activeId)
   const transforming = useEditor((s) => !!s.transform)
   const [cv, setCv] = useState({ w: 0, h: 0, ax: 0.5, ay: 0.5 })
@@ -171,8 +172,8 @@ function ToolOptions() {
           <ValueField label="width" value={cv.w} min={1} max={16384} step={1} unit="px" onChange={(v) => setCv({ ...cv, w: v })} />
           <ValueField label="height" value={cv.h} min={1} max={16384} step={1} unit="px" onChange={(v) => setCv({ ...cv, h: v })} />
           <label>anchor</label><div className="anchor">{[0, 0.5, 1].map((ay) => [0, 0.5, 1].map((ax) => <button key={`${ax}-${ay}`} className={cv.ax === ax && cv.ay === ay ? 'active' : ''} onClick={() => setCv({ ...cv, ax, ay })}>•</button>))}</div>
-          <label /><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button disabled={!doc || transforming || (cv.w === doc.w && cv.h === doc.h)} onClick={() => ed().resizeCanvas(cv.w, cv.h, cv.ax, cv.ay)}>Resize canvas</button><button disabled={!hasSel || transforming} onClick={() => ed().cropToSelection()}>Crop to selection</button></div>
-          <span className="hint full">layers keep their pixels; a smaller canvas only hides what lies outside</span>
+          <label /><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button disabled={!doc || transforming || (cv.w === doc.w && cv.h === doc.h)} onClick={() => ed().resizeCanvas(cv.w, cv.h, cv.ax, cv.ay)}>Resize canvas</button><CommandButton id="edit.crop.apply" text /><CommandButton id="edit.crop.cancel" text /></div>
+          <span className="hint full">drag on the canvas to draw the crop rectangle (any selection crops too); Enter or a double-click inside applies it, Esc cancels — or set the canvas size above. Layers keep their pixels; a smaller canvas only hides what lies outside</span>
         </div>
       )}
       {tool === 'eyedropper' && <p className="hint">Click the canvas to pick the composited colour into the foreground swatch.</p>}
@@ -483,6 +484,8 @@ function AiTab() {
 
 function CandidateStrip() {
   const cands = useEditor((s) => s.candidates)
+  const preview = useEditor((s) => s.candPreview)
+  useKeymap((k) => k.version)                                          // D72: the tooltips follow a remap
   const revision = useEditor((s) => s.revision)
   const doc = useEditor((s) => s.doc)
   const thumbs = useMemo(() => { const st = ed(); const m = new Map<string, string>(); cands?.ids.forEach((id) => { const lp = st.pixels.get(id); if (lp) m.set(id, lp.thumbnail(96)) }); return m }, [cands, revision]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -490,12 +493,15 @@ function CandidateStrip() {
   const g = findNode(doc, cands.group)
   return (
     <div className="cand-strip">
-      <span className="muted">{g?.name ?? 'candidates'} — pick one (1–4, Enter keeps the visible one) or keep all:</span>
-      {cands.ids.map((id, i) => { const n = findNode(doc, id); return (
-        <button key={id} className={`cand${n?.visible ? ' on' : ''}`} title={`candidate ${i + 1} · seed ${(n?.recipe as { seed?: number } | undefined)?.seed ?? '?'}`} onMouseEnter={() => { const st = ed(); st.updateNode(id, { visible: true }); cands.ids.filter((o) => o !== id).forEach((o) => st.updateNode(o, { visible: false })) }} onClick={() => ed().pickCandidate(id)}>
+      <span className="muted">{g?.name ?? 'candidates'} — pick one (1–4, Enter keeps the one shown) or keep all:</span>
+      {cands.ids.map((id, i) => { const n = findNode(doc, id), cid = `edit.cand.${i + 1}`, c = command(cid), on = preview ? preview === id : !!n?.visible; if (c) markUsed(cid); return (
+        // D90 (B18): hovering previews through `candPreview` (view only: no history, nothing dirty); a click runs the command (1–4, remappable)
+        <button key={id} className={`cand${on ? ' on' : ''}`} title={`${c ? titleFor(c) : `Keep candidate ${i + 1}`} · seed ${(n?.recipe as { seed?: number } | undefined)?.seed ?? '?'}`}
+          onMouseEnter={() => ed().previewCandidate(id)} onMouseLeave={() => ed().previewCandidate(null)} onClick={() => { if (c) runCommand(cid); else ed().pickCandidate(id) }}>
           {thumbs.get(id) ? <img src={thumbs.get(id)} alt="" /> : <span className="muted">…</span>}<b>{i + 1}</b>
         </button>
       ) })}
+      <CommandButton id="edit.cand.keep" text label="Keep shown" />
       <button className="quiet" onClick={() => ed().pickCandidate(null)}>Keep all</button>
     </div>
   )
@@ -621,6 +627,7 @@ function Strip() {
   const rendererPref = useEditor((s) => s.rendererPref)
   const transforming = useEditor((s) => !!s.transform)
   const polyOpen = useEditor((s) => !!s.lassoPoly)
+  const cropping = useEditor((s) => s.tool === 'crop' && !!s.selection && !s.transform)   // D90 (B9)
   const latched = useEditor((s) => s.latched)
   const [zt, setZt] = useState<string | null>(null)
   const apply = () => { if (zt !== null) { const v = parseFloat(zt); if (v > 0) ed().zoomTo(v / 100) } setZt(null) }
@@ -629,6 +636,7 @@ function Strip() {
       <span>{doc ? `${doc.name} · ${doc.w}×${doc.h}${dirty ? ' •' : ''}` : 'Edit'}</span>
       {transforming && <TransformBar />}
       {polyOpen && <><span style={{ color: 'var(--accent)' }}>polygon</span><CommandRow ids={['edit.sel.polyClose', 'edit.sel.polyCancel']} /></>}
+      {cropping && !polyOpen && <><span style={{ color: 'var(--accent)' }}>crop</span><CommandRow ids={['edit.crop.apply', 'edit.crop.cancel']} /></>}
       <span className="latches" title="Latched modifiers: each stays on for every canvas gesture until clicked again (no keyboard needed)">
         {(['shift', 'ctrl', 'alt'] as const).map((k) => <LatchButton key={k} on={latched[k]} label={k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}
           title={`Latch ${k === 'shift' ? 'Shift' : k === 'ctrl' ? 'Ctrl' : 'Alt'}: canvas gestures act as if it were held, until clicked again`} onToggle={() => { markUsed(`edit.latch.${k}`); runCommand(`edit.latch.${k}`) }} />)}

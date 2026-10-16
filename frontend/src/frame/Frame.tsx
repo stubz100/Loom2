@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from '../store/session'
 import { AskDialog } from './AskDialog'
 import { Banner } from './Banner'
@@ -7,6 +7,8 @@ import { unusedCommands, type Scope } from './commands'
 import { ContextMenuHost } from './ContextMenu'
 import { Dock } from './Dock'
 import { HelpOverlay } from './HelpOverlay'
+import { ModelsSheet } from './ModelsSheet'
+import { frameWidths } from './panelWidth'
 import { Inspector } from './Inspector'
 import { Panel } from './Panel'
 import { ProjectDialog } from './ProjectDialog'
@@ -28,6 +30,8 @@ export function Frame() {
   const projectDialog = useSession((s) => s.projectDialog)
   const helpOpen = useSession((s) => s.helpOpen)
   const wide = !!useSuite().wideStrip
+  const [vw, setVw] = useState(window.innerWidth)                       // D90: Generate's default Panel is 30 % of the window
+  useEffect(() => { const h = () => setVw(window.innerWidth); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h) }, [])
   useKeyboardMap()
   useEffect(() => { void init() }, [init])
   useEffect(() => { document.body.classList.toggle('density-compact', ui.density === 'compact') }, [ui.density])
@@ -59,7 +63,8 @@ export function Frame() {
     }, 3000)
     return () => clearTimeout(t)
   }, [])
-  const style = { '--panel-w': `${ui.panelWidth}px`, '--inspector-w': `${ui.inspectorWidth}px` } as React.CSSProperties
+  const w = frameWidths(ui, ui.suite, vw)                                // D90 (02 §3.1): per suite, dragged or default
+  const style = { '--panel-w': `${w.panel}px`, '--inspector-w': `${w.inspector}px` } as React.CSSProperties
   return (
     <div className={`frame${ui.focusMode ? ' focus' : ''}`} style={style}>
       <TopBar />
@@ -79,6 +84,7 @@ export function Frame() {
       {settingsOpen && <SettingsModal />}
       {projectDialog && <ProjectDialog mode={projectDialog} />}
       {helpOpen && <HelpOverlay />}
+      <ModelsSheet />
       <AskDialog />
     </div>
   )

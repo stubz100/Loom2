@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import type { ModelEntry } from '../../api/types'
 import type { SuiteDef } from '../../frame/suiteRegistry'
@@ -6,8 +6,9 @@ import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { revealPath } from '../../shell/tauri'
 import { useSession } from '../../store/session'
 
-interface ModelsUi { family: string; showRetired: boolean; search: string; set: (p: Partial<ModelsUi>) => void }
-const useModelsUi = create<ModelsUi>()((set) => ({ family: 'all', showRetired: false, search: '', set: (p) => set(p) }))
+interface ModelsUi { family: string; showRetired: boolean; search: string; missingOnly: boolean; set: (p: Partial<ModelsUi>) => void }
+const useModelsUi = create<ModelsUi>()((set) => ({ family: 'all', showRetired: false, search: '', missingOnly: false, set: (p) => set(p) }))
+const fetchable = (m: ModelEntry) => m.health !== 'present' && m.health !== 'verified' && !!m.repo && !m.retired
 
 const gb = (n: number | null | undefined) => (n == null ? '—' : `${(n / 2 ** 30).toFixed(2)} GB`)
 
@@ -46,6 +47,7 @@ function ModelsPanel({ tab }: { tab: string }) {
       <label>Family</label>
       <select value={ui.family} onChange={(e) => ui.set({ family: e.target.value })}>{families.map((f) => <option key={f}>{f}</option>)}</select>
       <label>Search</label><input type="text" value={ui.search} onChange={(e) => ui.set({ search: e.target.value })} placeholder="name, repo, role…" />
+      <label>Missing</label><label className="chk" style={{ justifySelf: 'start' }}><input type="checkbox" checked={ui.missingOnly} onChange={(e) => ui.set({ missingOnly: e.target.checked })} /> only the missing weights</label>
       <label>Retired</label><input type="checkbox" checked={ui.showRetired} onChange={(e) => ui.set({ showRetired: e.target.checked })} style={{ justifySelf: 'start' }} />
       <span className="hint">Retired entries were struck by a spike and deleted (D30); they can be re-fetched.</span>
       <label>Root</label><span className="mono" style={{ fontSize: 11 }}>{s.settings?.models_root}</span>
@@ -62,6 +64,8 @@ function ModelsStrip() {
     <>
       <span>Roster: {n.length} entries · <span className="badge verified">{counts.verified} verified</span> <span className="badge present">{counts.present} present</span> <span className="badge missing">{counts.missing} missing</span></span>
       <span className="spacer" />
+      {counts.missing > 0 && <button onClick={() => { for (const m of n.filter(fetchable)) if (!['queued', 'downloading', 'hashing'].includes(s.fetches[m.id]?.status ?? '')) void s.fetchModel(m.id) }}
+        title="fetch every missing roster entry (D90: one button instead of one per row)">Fetch all missing</button>}
       <button onClick={() => void s.scanModels()}>Rescan disk</button>
     </>
   )
@@ -70,7 +74,7 @@ function ModelsStrip() {
 function ModelsStage() {
   const s = useSession()
   const ui = useModelsUi()
-  const rows = s.models.filter((m) => (ui.showRetired || !m.retired) && (ui.family === 'all' || m.family === ui.family) &&
+  const rows = s.models.filter((m) => (ui.showRetired || !m.retired) && (!ui.missingOnly || m.health === 'missing') && (ui.family === 'all' || m.family === ui.family) &&
     (!ui.search || `${m.name} ${m.repo} ${m.role} ${m.id}`.toLowerCase().includes(ui.search.toLowerCase())))
   if (!s.models.length) return <div className="placeholder"><div><h2>No roster loaded</h2>waiting for the orchestrator…</div></div>
   return (
@@ -132,6 +136,20 @@ function ModelsInspector() {
         {m.path && <button onClick={() => void revealPath(m.path!)}>Reveal</button>}
       </div>
       {verify && <div className="mono" style={{ marginTop: 8 }}>{verify}</div>}
+    </div>
+  )
+}
+
+/** D90 (02 §7): Models & engine as a sheet over the frame — the roster (filters, table, the selected entry) or the engine. */
+export function ModelsSheetBody({ tab, missing }: { tab: 'roster' | 'engine'; missing: boolean }) {
+  const set = useModelsUi((u) => u.set)
+  useEffect(() => { set({ missingOnly: missing }) }, [missing, set])
+  if (tab === 'engine') return <div className="models-sheet-engine"><ModelsPanel tab="engine" /></div>
+  return (
+    <div className="models-sheet-grid">
+      <aside><ModelsPanel tab="roster" /></aside>
+      <section><div className="strip">{<ModelsStrip />}</div><div className="models-sheet-table"><ModelsStage /></div></section>
+      <aside><ModelsInspector /></aside>
     </div>
   )
 }

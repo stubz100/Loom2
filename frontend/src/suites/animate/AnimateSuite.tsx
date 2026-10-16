@@ -8,6 +8,7 @@ import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { type SuiteDef } from '../../frame/suiteRegistry'
@@ -258,7 +259,7 @@ export function useAnimateKeys() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'animate') return
-      if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable], .modal')) return
+      if (inField(e)) { if (primaryInField(e, ['anim.animate', 'anim.stage'])) e.stopImmediatePropagation(); return }   // D90 (B8): Ctrl+Enter from the prompt
       if (handleKeyFor('animate', e)) e.stopImmediatePropagation()
     }
     window.addEventListener('keydown', h, { capture: true })

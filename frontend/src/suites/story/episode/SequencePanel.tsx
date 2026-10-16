@@ -1,17 +1,18 @@
 // P17 (D83): the Sequence rail tab's panel — the project's sequences and the clip bin (every clip of the project, dragged or added
-// onto the lane) — and the Inspector when a sequence is open (sequence · clip · transition).
+// onto the lane) — and the Inspector when a sequence is open (sequence · clip · transition). D90 (B7): the bins are sources; the lane
+// (SequenceStage) is the drop target. Y57: the Shots bin offers a shot's final version (episode/bin.ts).
 import { Plus } from 'lucide-react'
 import { useEffect } from 'react'
 import { api } from '../../../api/client'
 import { CommandButton, CommandRow } from '../../../frame/CommandButton'
-import { beginDrag, onlyAssets, useDropTarget } from '../../../frame/drag'
-import { laneDrop } from '../../../frame/dropRules'
+import { beginDrag } from '../../../frame/drag'
 import { useSession } from '../../../store/session'
 import { useAnimate } from '../../animate/animateStore'
 import { duration, ticks } from './lane'
 import { useSequence } from './sequenceStore'
 import { useStory } from '../storyStore'
 import { laneChecklist } from './sequenceCommands'
+import { shotRows } from './bin'
 
 export function SequencePanel() {
   const project = useSession((s) => s.project)
@@ -22,7 +23,6 @@ export function SequencePanel() {
   const flowNodes = useStory((s) => s.flowNodes)
   const load = useSequence((s) => s.load)
   useEffect(() => { if (project?.open) { void load(); void useAnimate.getState().loadClips(); void useStory.getState().loadShots(); void useStory.getState().loadFlow() } }, [project?.path, load]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && laneDrop(d, clips).verdict.ok, (d) => laneDrop(d, clips).take.forEach((c) => useSequence.getState().addClip(c)), (d) => laneDrop(d, clips).verdict)
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   return (
     <div className="seq-panel">
@@ -36,11 +36,9 @@ export function SequencePanel() {
         ))}
       </div>
       <div className="seq-bin shots-bin">
-        <div className="seq-list-head"><b>Shots</b><span className="hint">{current ? 'a shot version\'s clip, stamped (final first)' : 'open a sequence first'}</span></div>
+        <div className="seq-list-head"><b>Shots</b><span className="hint">{current ? 'a shot\'s final version (else its current one), stamped — drag onto the lane, or +' : 'open a sequence first'}</span></div>
         {(() => {
-          const rows = shots.flatMap((sh) => { const v = sh.versions.find((x) => x.id === sh.current); const c = v?.clip_id ? clips.find((x) => x.id === v.clip_id) : undefined
-            return v && c ? [{ sh, v, c, node: sh.owner_node ? flowNodes[sh.owner_node] : undefined }] : [] })
-            .sort((a, b) => (a.v.state === b.v.state ? a.sh.name.localeCompare(b.sh.name) : a.v.state === 'final' ? -1 : 1))
+          const rows = shotRows(shots, clips).map((r) => ({ ...r, node: r.sh.owner_node ? flowNodes[r.sh.owner_node] : undefined }))
           if (!rows.length) return <span className="hint">No shot has a clip yet — Story · Shots.</span>
           return rows.map(({ sh, v, c, node }) => (
             <div key={sh.id} className={`seq-clip-card shot${v.state === 'final' ? ' final' : ''}`} data-shot={sh.id} title={`${sh.name} ${v.id} · ${v.state}${node ? ` · node ${node.title || node.type}` : ' · unbound'} · ${c.frames} f @ ${c.fps} · ${c.w}×${c.h}`}
@@ -52,7 +50,7 @@ export function SequencePanel() {
           ))
         })()}
       </div>
-      <div className="seq-bin" ref={dropRef} data-over={over || undefined}>
+      <div className="seq-bin">
         <div className="seq-list-head"><b>Clips</b><span className="hint">{current ? 'drag onto the lane, or +' : 'open a sequence first'}</span></div>
         {!clips.length && <span className="hint">No clips in this project yet — Animate makes them.</span>}
         {clips.map((c) => (

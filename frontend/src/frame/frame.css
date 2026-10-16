@@ -71,7 +71,7 @@ a { color: var(--accent); }
 .rail button.active { background: var(--bg3); color: var(--accent); border-color: var(--line2); }
 .rail .spacer { flex: 1; }
 
-.panel { grid-area: panel; display: flex; flex-direction: column; width: var(--panel-w, 320px); min-width: 0; background: var(--bg1); border-right: 1px solid var(--line); overflow: hidden; }
+.panel { grid-area: panel; position: relative; display: flex; flex-direction: column; width: var(--panel-w, 320px); min-width: 0; background: var(--bg1); border-right: 1px solid var(--line); overflow: hidden; }
 .panel.closed, .inspector.closed { width: 0; border: none; }
 .panel .head, .inspector .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--fg2); font-weight: 600; }
 .panel .body, .inspector .body { flex: 1; overflow: auto; padding: 12px; }
@@ -97,7 +97,7 @@ a { color: var(--accent); }
 .stage .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg3); text-align: center; }
 .stage .placeholder h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
 
-.inspector { grid-area: inspector; display: flex; flex-direction: column; width: var(--inspector-w, 340px); background: var(--bg1); border-left: 1px solid var(--line); overflow: hidden; }
+.inspector { grid-area: inspector; position: relative; display: flex; flex-direction: column; width: var(--inspector-w, 340px); background: var(--bg1); border-left: 1px solid var(--line); overflow: hidden; }
 
 .dock { grid-area: dock; display: flex; flex-direction: column; background: var(--bg1); border-top: 1px solid var(--line); height: var(--dock); overflow: hidden; }
 .dock.open { height: var(--dock-open); }
@@ -206,3 +206,21 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .render-error { margin: 16px; padding: 12px 14px; border: 1px solid var(--error); border-radius: var(--radius); background: var(--bg1); color: var(--fg); display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
 .render-error pre { margin: 0; font: var(--mono); font-size: 12px; color: var(--error); white-space: pre-wrap; max-height: 160px; overflow: auto; }
 .render-error-line { margin: 12px; color: var(--fg3); font-size: 12px; }
+
+/* D90 (02 §3.1): drag handles on the inner edges of the Panel and the Inspector */
+.resizer { position: absolute; top: 0; bottom: 0; width: 6px; z-index: 5; cursor: col-resize; touch-action: none; }
+.resizer.panel { right: -3px; } .resizer.inspector { left: -3px; }
+.resizer:hover, .resizer:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* D90 (02 §3): ☰ leads the top bar */
+.top .app-menu { padding: 4px 6px; }
+/* D90 (02 §7): Models & engine as a sheet */
+.modal.models-sheet { width: min(1400px, 96vw); height: min(900px, 90vh); max-width: none; max-height: none; display: flex; flex-direction: column; }
+.modal.models-sheet .head { display: flex; align-items: center; gap: 8px; }
+.modal.models-sheet .body { flex: 1; min-height: 0; padding: 0; overflow: hidden; }
+.models-sheet-grid { display: grid; grid-template-columns: 280px 1fr 320px; height: 100%; min-height: 0; }
+.models-sheet-grid > aside { overflow: auto; padding: 12px; border-right: 1px solid var(--line); }
+.models-sheet-grid > aside:last-child { border-right: none; border-left: 1px solid var(--line); }
+.models-sheet-grid > section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.models-sheet-grid .strip { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.models-sheet-table { flex: 1; overflow: auto; }
+.models-sheet-engine { padding: 16px; overflow: auto; height: 100%; }

@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, http, unwrap } from '../../api/client'
-import { isDocumentPreview, isT2IPreview, type Asset, type DocumentPreview, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
+import { isDocumentPreview, isT2IPreview, type Asset, type Capabilities, type DocumentPreview, type Job, type JobOrigin, type T2IPreview, type T2IRecipe } from '../../api/types'
 import type { components } from '../../api/schema'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
@@ -100,17 +100,40 @@ export function panelModel(p: Panel): string {
   return resolveModel(p.model_id, 't2i', (id) => !!useSession.getState().capabilities?.models[id])
 }
 
+export type ModelCap = Capabilities['models'][string]
+/** D90 (B12): the model honours a negative prompt — the server's `negative_used` rule (distilled variants run at CFG 1 and drop it). */
+export const honoursNegative = (cap: ModelCap | undefined): boolean => !cap?.distilled
+/** D90 (B12): the panel model's reference limit (`max_refs`; 0 = it takes none). */
+export const maxRefsOf = (p: Panel): number => useSession.getState().capabilities?.models[panelModel(p)]?.max_refs ?? 4
+
+/** D90 (B12): what picking a model changes besides the id — Turbo only where the model has it, the tier's size for the new model's family
+ *  (a custom size stays), and no base / max shift where the graph has no ModelSamplingFlux (the compiler refuses one). */
+export function modelPatch(p: Panel, id: string): Partial<Panel> {
+  const caps = useSession.getState().capabilities
+  const cap = caps?.models[id]
+  const wh = p.tier !== 'custom' && cap ? caps?.tiers?.[p.tier]?.[cap.family] : undefined
+  return { model_id: id, turbo: cap?.turbo ? p.turbo : false, ...(wh ? { width: wh[0], height: wh[1] } : {}), ...(cap?.flux_shift === false ? { base_shift: null, max_shift: null } : {}) }
+}
+
+/** D90 (B4): why the panel cannot be submitted now (the Foot's disabled reason, and the `when` of gen.generate / gen.stage), or null. */
+export function submitBlock(g: Pick<GenerateState, 'preview' | 'previewError'>, projectOpen: boolean): string | null {
+  const pv = g.preview, missing = pv?.missing ?? []
+  return !projectOpen ? 'no project' : g.previewError ? g.previewError : !pv ? 'preparing…' : !pv.serialized_prompt ? 'empty prompt'
+    : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
+}
+
 export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
   const model_id = panelModel(p)
   const cap = useSession.getState().capabilities?.models[model_id]
+  const shift = cap?.flux_shift !== false                                // D90 (B12): a persisted override never reaches a graph without the node
   let prompt_json: Record<string, unknown> | undefined
   if (p.prompt_mode === 'tree') prompt_json = cleanTree(p.tree)
   else if (p.prompt_mode === 'json') { try { prompt_json = JSON.parse(p.json_text || '{}') } catch { prompt_json = undefined } }
   const seedList = seeds ?? Array.from({ length: p.count }, (_, i) => (p.seed_mode === 'random' ? 0 : p.seed_mode === 'fixed' ? p.seed : p.seed + i))
   return {
-    kind: 't2i', model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: p.negative,
+    kind: 't2i', model_id, prompt_mode: p.prompt_mode, prompt_json, prompt_text: p.prompt_mode === 'text' ? p.text : (p.prompt_mode === 'tree' ? p.text : ''), negative: honoursNegative(cap) ? p.negative : '',
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
-    turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: p.base_shift, max_shift: p.max_shift, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
+    turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: shift ? p.base_shift : null, max_shift: shift ? p.max_shift : null, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
     mentions: mentionsInUse(p).map((m) => ({ group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}) })),   // D85: a profile mention names its profile
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
@@ -187,6 +210,10 @@ export interface GenerateState {
   rerun: (asset: Asset, origin?: JobOrigin) => Promise<void>
   loadFromAsset: (asset: Asset, keepSeeds?: boolean) => void
   addRef: (assetId: string) => void
+  /** D90 (B12): add references up to the model's `max_refs`; a toast says what did not fit. Returns how many were added. */
+  addRefs: (assetIds: string[]) => number
+  /** D90 (B12): pick the panel's model (see `modelPatch`). */
+  setModel: (id: string) => void
   removeRef: (assetId: string) => void
   setRefNote: (assetId: string, note: string) => void
   addMention: (m: MentionRef) => void
@@ -210,7 +237,7 @@ let anglePreviewSeq = 0
 /** D71 (P11): references from a drag (the slots, the Generate tab): images only, no duplicates, capped by the model's `max_refs`. */
 export function refDropFor(p: DragPayload) {
   const g = useGenerate.getState()
-  return refDrop(g.panel.refs.map((r) => r.asset_id), p, useSession.getState().capabilities?.models[g.panel.model_id]?.max_refs ?? 4)
+  return refDrop(g.panel.refs.map((r) => r.asset_id), p, maxRefsOf(g.panel))
 }
 /** Add a drag's references; a toast says what did not fit or was skipped. */
 export function dropRefs(p: DragPayload): void {
@@ -315,12 +342,19 @@ export const useGenerate = create<GenerateState>()(
         get().set(panelFromRecipe(r, keepSeeds))
         useSession.getState().toast('Panel loaded from asset', 'info')
       },
-      addRef: (assetId) => {
-        const refs = get().panel.refs
-        if (refs.some((r) => r.asset_id === assetId)) return
-        get().set({ refs: [...refs, { asset_id: assetId }] })
-        useSession.getState().setSuite('generate')
+      addRef: (assetId) => { get().addRefs([assetId]) },
+      addRefs: (assetIds) => {
+        const p = get().panel, s = useSession.getState()
+        const max = maxRefsOf(p), fresh = [...new Set(assetIds)].filter((id) => !p.refs.some((r) => r.asset_id === id))
+        const take = fresh.slice(0, Math.max(0, max - p.refs.length))
+        if (fresh.length > take.length) {                              // D90 (B12): the model's limit, said rather than sent and refused
+          const label = s.capabilities?.models[panelModel(p)]?.label ?? 'this model'
+          s.toast(!max ? `${label} takes no reference images` : take.length ? `Added ${take.length}; ${fresh.length - take.length} over the limit of ${max} references on ${label}` : `All ${max} reference slots are full on ${label}`, take.length ? 'info' : 'error')
+        }
+        if (take.length) { get().set({ refs: [...p.refs, ...take.map((asset_id) => ({ asset_id }))] }); s.setSuite('generate') }
+        return take.length
       },
+      setModel: (id) => get().set(modelPatch(get().panel, id)),
       removeRef: (assetId) => get().set({ refs: get().panel.refs.filter((r) => r.asset_id !== assetId) }),
       setRefNote: (assetId, note) => get().set({ refs: get().panel.refs.map((r) => (r.asset_id === assetId ? { ...r, note: note || undefined } : r)) }),
       addMention: (m) => { const ms = get().panel.mentions ?? []; if (!ms.some((x) => x.group_id === m.group_id)) get().set({ mentions: [...ms, m] }) },

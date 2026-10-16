@@ -13,7 +13,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { ensureAdjustment } from './adjustFilters'
 import { blendName, OPAQUE_BLEND } from './blendModes'
 import { canvasMenu } from './editCommands'
-import { findNode, transformPreview, useEditor, type MaskRef, type Node, setInteracting } from './editorStore'
+import { findNode, transformPreview, useEditor, viewDoc, type MaskRef, type Node, setInteracting } from './editorStore'
 import { derivedMask, maskParamsActive, outsideValue } from './maskDerived'
 import { useAiPanel } from './aiPanelStore'
 import { lumaOf, selectionAlphaCanvas, setPartialUpload, type LayerPixels } from './layerPixels'
@@ -136,12 +136,10 @@ export function EditorCanvas() {
   }, [stageActive]) // eslint-disable-line react-hooks/exhaustive-deps
   const docState = useEditor((s) => s.doc)
   const blendPreview = useEditor((s) => s.blendPreview)
-  // D55: the blend dropdown's hover preview — the scene renders the hovered mode; the document itself is untouched
-  const doc = useMemo(() => {
-    if (!docState || !blendPreview) return docState
-    const patch = (ns: Node[]): Node[] => ns.map((n) => (n.id === blendPreview.id ? { ...n, blend: blendPreview.mode } : n.children ? { ...n, children: patch(n.children) } : n))
-    return { ...docState, layers: patch(docState.layers) }
-  }, [docState, blendPreview])
+  const candPreview = useEditor((s) => s.candPreview)
+  const candidates = useEditor((s) => s.candidates)
+  // D55 / D90 (B18): hover previews — the blend dropdown's mode, the candidate strip's candidate; the document itself is untouched
+  const doc = useMemo(() => viewDoc(docState, blendPreview, candPreview, candidates), [docState, blendPreview, candPreview, candidates])
   const revision = useEditor((s) => s.revision)
   const fitRequested = useEditor((s) => s.fitRequested)
   const zoom = useEditor((s) => s.zoom)
@@ -646,7 +644,7 @@ export function EditorCanvas() {
       const st = useEditor.getState()
       return { x: (e.clientX - r.left - st.pan.x) / st.zoom, y: (e.clientY - r.top - st.pan.y) / st.zoom }
     }
-    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'lasso' | 'quick' | 'heal' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
+    type Drag = { kind: 'pan' | 'paint' | 'move' | 'marquee' | 'crop' | 'lasso' | 'quick' | 'heal' | 'xform' | 'aibox' | 'gradient'; start: Pt; last: Pt; startPan?: Pt; nodeStart?: Pt; pts?: Pt[]; target?: LayerPixels; hit?: Hit; quad0?: Quad; pivot0?: Pt; alt?: boolean
       // D50 / D51 painting: the stroke, its smoother and dab walker (layer coordinates), straight-line mode, the pointer's last move time
       stroke?: Stroke; smoother?: Smoother; walker?: PathWalker; brushAt?: Pt; offset?: Pt; line?: boolean; movedAt?: number; targetId?: string; targetKind?: 'image' | 'mask' }
     let drag: Drag | null = null
@@ -765,6 +763,7 @@ export function EditorCanvas() {
         return
       }
       if (tool === 'marquee') { drag = { kind: 'marquee', start: p, last: p }; return }
+      if (tool === 'crop') { drag = { kind: 'crop', start: p, last: p }; return }                     // D90 (B9): drag a crop rectangle
       if (tool === 'quick') { drag = { kind: 'quick', start: p, last: p, pts: [p], alt: m.altKey }; drawTrail([p]); return }   // D59
       if (tool === 'heal') { drag = { kind: 'heal', start: p, last: p, pts: [p] }; drawTrail([p], st.healSize); return }      // D62
       if (tool === 'lasso' && st.lassoKind === 'magnetic') {               // D59: PhotoCraft's Magnetic Lasso
@@ -836,6 +835,7 @@ export function EditorCanvas() {
         return
       }
       if (drag.kind === 'marquee') { drag.last = p; previewMarquee(drag.start, p); return }
+      if (drag.kind === 'crop') { drag.last = p; const r = cropRect(drag.start, p); drawPreview((g) => { g.rect(r.x, r.y, r.w, r.h) }); return }
       if (drag.kind === 'lasso') { drag.pts!.push(p); drag.last = p; previewLasso(drag.pts!); return }
       if (drag.kind === 'aibox') { drag.last = p; drawAiPrompt({ start: drag.start, last: p }); return }
       if (drag.kind === 'gradient') { drag.last = p; drawGuide(drag.start, p); return }
@@ -858,6 +858,7 @@ export function EditorCanvas() {
       }
       if (drag.kind === 'move') { const n = findNode(st.doc, st.activeId); if (n && (drag.last.x !== drag.nodeStart!.x || drag.last.y !== drag.nodeStart!.y)) st.updateNode(n.id, { x: drag.last.x, y: drag.last.y }, 'move layer') }
       if (drag.kind === 'marquee') commitMarquee(drag.start, drag.last, modeFor(mods(e), st.selectionMode))
+      if (drag.kind === 'crop') commitCrop(drag.start, drag.last)
       if (drag.kind === 'lasso') commitLasso(drag.pts!, modeFor(mods(e), st.selectionMode))
       if (drag.kind === 'aibox') {
         const moved = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) * st.zoom
@@ -879,6 +880,7 @@ export function EditorCanvas() {
       if (st.transform && insideQuad(st.transform.quad, toDoc(e))) st.applyTransform()
       else if (st.tool === 'lasso' && st.lassoKind === 'magnetic') void magnetic.close(mods(e).altKey)
       else if (st.tool === 'lasso' && st.lassoPoly) { clearPreview(); st.closeLassoPoly(modeFor(mods(e), st.selectionMode)) }
+      else if (st.tool === 'crop' && st.selection && insideSelection(toDoc(e))) st.cropToSelection()   // D90 (B9): double-click inside applies the crop
     }
     const zoomAt = (e: { clientX: number; clientY: number }, k: number) => {
       const st = useEditor.getState()
@@ -1080,6 +1082,29 @@ export function EditorCanvas() {
       if (st.marqueeStyle !== 'size' && (w < 1 || h < 1)) { if (mode === 'replace') st.deselect(); return }
       const shape = shapeFrom((ctx) => { if (st.marqueeShape === 'ellipse') { ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.fill() } else ctx.fillRect(x, y, w, h) })
       if (shape) st.applySelectionShape(shape, mode, st.marqueeShape === 'ellipse' ? 'elliptical marquee' : 'marquee', st.marqueeFeather)
+    }
+    /** D90 (B9): the Crop tool's rectangle — whole pixels inside the canvas; it is the selection (marching ants), so Enter / double-click
+     * crop to it (`edit.crop.apply`, `cropToSelection`) and Esc deselects. A click keeps it: the first click of a double-click lands inside. */
+    const cropRect = (a: Pt, b: Pt) => {
+      const doc = useEditor.getState().doc!
+      const x0 = Math.max(0, Math.round(Math.min(a.x, b.x))), y0 = Math.max(0, Math.round(Math.min(a.y, b.y)))
+      const x1 = Math.min(doc.w, Math.round(Math.max(a.x, b.x))), y1 = Math.min(doc.h, Math.round(Math.max(a.y, b.y)))
+      return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) }
+    }
+    const commitCrop = (a: Pt, b: Pt) => {
+      clearPreview()
+      const st = useEditor.getState()
+      const r = cropRect(a, b)
+      if (Math.hypot(b.x - a.x, b.y - a.y) * st.zoom < 3 || r.w < 1 || r.h < 1) return
+      const shape = shapeFrom((ctx) => ctx.fillRect(r.x, r.y, r.w, r.h))
+      if (shape) st.applySelectionShape(shape, 'replace', 'crop rectangle')
+    }
+    const insideSelection = (p: Pt) => {
+      const sel = useEditor.getState().selection
+      const x = Math.floor(p.x), y = Math.floor(p.y)
+      if (!sel || x < 0 || y < 0 || x >= sel.width || y >= sel.height) return false
+      const d = sel.ctx.getImageData(x, y, 1, 1).data
+      return (d[3] === 255 ? d[0] : (d[0] * d[3]) / 255) > 127                  // red × alpha, as selectionValues
     }
     const commitLasso = (pts: Pt[], mode: SelectionMode) => {
       clearPreview()

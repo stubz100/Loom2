@@ -63,6 +63,17 @@ export async function contextChoose(page: Page, target: Locator, label: string):
 
 /** Tiles of the Catalogue grid, and a wait until the first `n` visible thumbnails have decoded (naturalWidth > 0). */
 export const tiles = (page: Page) => page.locator('.cat-grid .tile')
+/** D90 (02 §3): the Catalogue is Story's third workspace — the Story tab, then the Catalogue on the rail (a click on the rail button of the
+ *  workspace already showing folds the panel, so it is clicked only while the Places panel is not up). */
+export async function openCatalogue(page: Page): Promise<void> {
+  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()
+  const rail = page.locator('nav.rail button[aria-label="Catalogue"]')
+  await expect(rail).toBeVisible()
+  const places = page.locator('.panel .place-row').first()
+  if (!(await places.isVisible().catch(() => false))) await rail.click()
+  await expect(places).toBeVisible()
+  await expect(page.locator('.cat-grid, .page-world').first()).toBeVisible()
+}
 export async function thumbsLoaded(page: Page, n: number): Promise<number> {
   const handle = await page.waitForFunction((want) => {
     const imgs = [...document.querySelectorAll<HTMLImageElement>('.cat-grid .tile img')].slice(0, want)

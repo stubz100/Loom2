@@ -98,7 +98,7 @@ def get(model_id: str | None) -> ModelSpec | None:
 
 RUNS = {"t2i": lambda s: s.recipes.t2i, "i2i": lambda s: s.recipes.i2i, "inpaint": lambda s: bool(s.recipes.inpaint),
         "upscale": lambda s: s.recipes.upscale_factor is not None, "segment": lambda s: bool(s.recipes.segment), "i2v": lambda s: s.recipes.i2v,
-        "mesh": lambda s: s.recipes.mesh}
+        "mesh": lambda s: s.recipes.mesh, "swatch": lambda s: s.recipes.t2i}   # D90 (02 §6.3): the preset swatch pack is a t2i job
 
 
 def offered(spec: ModelSpec, variant: str | None) -> bool:

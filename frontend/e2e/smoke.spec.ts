@@ -1,7 +1,7 @@
 // End-to-end smoke (D68, ArtCraft P6 §3): each scenario drives the real UI with the mouse in headless Edge against the e2e build, a real
 // orchestrator and the fake engine, and checks the outcome on the page and through the API. Scenarios are independent: each opens a
 // fresh page and picks its own assets; they share one project (global-setup.ts), so none relies on another's leftovers.
-import { api, centre, contextChoose, env, expect, openApp, test, thumbsLoaded, tiles } from './fixtures'
+import { api, centre, contextChoose, env, expect, openApp, openCatalogue, test, thumbsLoaded, tiles } from './fixtures'
 
 interface AssetLite { id: string; state: string; job_id: string | null }
 interface Group { id: string; name: string; items: { kind: string; id: string }[] }
@@ -22,6 +22,15 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await page.screenshot({ path: 'node_modules/.e2e/project-menu.png', clip: { x: 0, y: 0, width: 1100, height: 260 } })
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
+  // D90 (02 §3): Story leads the tabs and holds the Catalogue (active under it); Models & engine is a sheet in ☰
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Generate/, /^Edit/, /^Animate/, /^Stage/])
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('nav.rail button[aria-label="Catalogue"]')).toHaveClass(/active/)
+  await page.locator('button[aria-label="app menu"]').click()
+  await page.locator('.menu button', { hasText: 'Models & engine' }).click()
+  await expect(page.locator('.modal.models-sheet table.grid tbody tr').first()).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.modal.models-sheet')).toHaveCount(0)
 })
 
 test('Keep / Reject / Clear through the tile context menu change the tile and the asset', async ({ page }) => {
@@ -84,7 +93,7 @@ test('Generate with Klein 4B: the fake engine answers and the new asset lands in
   const jobOf = async () => (await api<{ items: { id: string; status: string; recipe: { model_id?: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === newest.job_id)
   await expect.poll(async () => (await jobOf())?.status, { timeout: 10_000 }).toBe('done')                // the asset lands a beat before the job's status flips (CI, full runner)
   expect((await jobOf())?.recipe.model_id).toBe(klein4b)
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await openCatalogue(page)
   await page.locator('.place-row', { hasText: 'Unprocessed' }).locator('button.place-open').click()
   await expect(page.locator('.place-row', { hasText: 'Unprocessed' }).locator('.n')).toHaveText(String(before + count))
   const tile = page.locator(`.cat-grid .tile[data-id="${newest.id}"]`)
@@ -121,7 +130,7 @@ test('Animate: the tile menu fills the start and the end slots', async ({ page }
   await contextChoose(page, a, 'Animate from this frame (start)')
   const slots = page.locator('.slots .slot')
   await expect(slots.nth(0).locator('img')).toBeVisible()
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await openCatalogue(page)
   await contextChoose(page, page.locator(`.cat-grid .tile[data-id="${idB}"]`), 'Use as the end frame in Animate')
   await expect(slots.nth(1).locator('img')).toBeVisible()
   for (const [k, id] of [[0, idA], [1, idB]] as const) {
@@ -153,7 +162,7 @@ test('send-to by drag (D71): a tile held on the Generate tab opens it, the ghost
   await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
   await expect(page.locator('.ref-slots .ref-slot img').first()).toHaveAttribute('src', new RegExp(id))
   // the same tile again, onto the tab: refused, and the ghost says why; nothing changes
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await openCatalogue(page)
   const again = await centre(page.locator(`.cat-grid .tile[data-id="${id}"]`))
   await page.mouse.move(again.x, again.y)
   await page.mouse.down()
@@ -192,7 +201,7 @@ test('spring-loaded tabs (D71) in Animate and Edit: hold, then drop on the end s
   await expect(end.locator('img')).toHaveAttribute('src', new RegExp(id))
   await expect(page.locator('.slots .slot').nth(0).locator('img')).toHaveCount(0)        // the end slot only
 
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await openCatalogue(page)
   await carryAndHold(page, await centre(tiles(page).nth(6)), 'Edit', '.edit-empty')
   const stage = await centre(page.locator('.edit-empty'))
   await page.mouse.move(stage.x, stage.y, { steps: 8 })
@@ -341,7 +350,7 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the panel says one line
   await expect(page.locator('.render-error-line')).toContainText('Edit is not available')
   await expect(page.locator('.frame')).toBeVisible()                                  // the rest of the app stays
-  await page.locator('nav.tabs button.tab', { hasText: 'Catalogue' }).click()
+  await openCatalogue(page)
   await expect(tiles(page).first()).toBeVisible()
   await page.unroute(/EditSuite-[\w-]+\.js$/)
   await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()

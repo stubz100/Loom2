@@ -140,6 +140,7 @@ class ImageModelCaps(Open):
     model_shift: float | None = None
     guidance_node: bool                            # D89: FluxGuidance in the graph — the Guidance field is shown only then
     tiled_refine: bool                             # D89: the model refines tiles after an upscale (the FLUX.2 family's i2i models)
+    flux_shift: bool                               # D90 (B12): ModelSamplingFlux in the graph — a recipe's base / max shift applies only then
 
 
 class I2vModelCaps(Open):
@@ -775,6 +776,20 @@ class JobsSubmitted(Out):
     jobs: list[JobRecord]
 
 
+class PresetIconPlanned(Out):
+    """D90 (02 §6.3): one swatch a make queued — the key its file will have and the job that makes it."""
+    key: str
+    field: str
+    value: str
+    job_id: str
+
+
+class PresetIconsMade(Out):
+    batch_id: str | None                           # one batch for a pack of two or more
+    items: list[PresetIconPlanned]
+    jobs: list[JobRecord]
+
+
 class Released(Out):
     released: list[str]
 
@@ -1181,6 +1196,16 @@ class LoraChangedEvent(_Frame):
     data: LoraChanged
 
 
+class PresetIconsChanged(Open):
+    keys: list[str]                                # D90 (02 §6.3): the swatches made again or deleted — refetch `/preset-icons`
+    deleted: bool = False
+
+
+class PresetIconsChangedEvent(_Frame):
+    type: Literal["preset_icons.changed"]
+    data: PresetIconsChanged
+
+
 class ClipReadyEvent(_Frame):
     type: Literal["clip.ready"]
     data: ClipReady
@@ -1213,5 +1238,5 @@ class HelloEvent(_Frame):
 
 EVENT_FRAMES = (JobEvent, JobProgressEvent, JobDeletedEvent, QueueStateEvent, EngineStateEvent, AssetEvent, AssetDeletedEvent,
                 CatalogueChangedEvent, GroupChangedEvent, DocumentChangedEvent, StoryChangedEvent, LoraChangedEvent, ClipReadyEvent, ClipUpdatedEvent, ModelFetchEvent,
-                ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent)
+                ProjectOpenedEvent, ProjectClosedEvent, HelloEvent, VramPressureEvent, PresetIconsChangedEvent)
 EVENT_TYPES = sorted({t for frame in EVENT_FRAMES for t in frame.model_fields["type"].annotation.__args__})

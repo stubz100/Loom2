@@ -151,3 +151,8 @@ def test_capabilities_list_them_by_licence(variant, tmp_path: Path):
         assert c["recipes"]["inpaint"] == [] and c["max_refs"] == 0
     flux_i2i = [m for m, c in models.items() if registry.get(m).graph in registry.FLUX_GRAPHS and c["recipes"]["i2i"]]
     assert flux_i2i and all(models[m]["tiled_refine"] and models[m]["guidance_node"] for m in flux_i2i)
+    # D90 (B12): Advanced's base / max shift (ModelSamplingFlux) is offered only where the graph has it — FLUX.2 / Klein yes, Z-Image / Chroma no
+    flux = [m for m in models if registry.get(m).graph in ("flux2", "klein")]
+    assert flux and all(models[m]["flux_shift"] is True for m in flux)
+    assert all(models[m]["flux_shift"] is False for m in models if registry.get(m).graph in ("zimage", "chroma"))
+    assert any(registry.get(m).graph in ("zimage", "chroma") for m in models)

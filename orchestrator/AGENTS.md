@@ -26,6 +26,8 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `maskops.py` / `matting.py` | bounded exact EDT, round expand / contract (D44); Refine Edge — guided filter, smart radius, post steps (D45) |
 | `clips.py` | clip masters (PNG sequence) + GOP-6 proxies |
 | `workspace.py` / `config.py` | project tree, `ProjectFormat`; app state `app.json`, `Settings`, the token |
+| `preset_icons.py` | D90 (02 §6.3): the preset swatch pack in app state (`<state>/preset_icons/`, index + `<key>.webp`, key = sha1(field + "
+" + value)[:16]); `routes/preset_icons.py` makes one staged t2i per item on the spec with `default_for = ["swatch"]`, `AssetFinisher` stores the result on `origin.surface == "swatch"` |
 | `events.py` | `EventHub`: WebSocket fan-out with seq numbers, 200-frame replay, binary previews |
 | `fsio.py` | `atomic_write_json/bytes/text`, `atomic_copy/move`, `read_json`, `new_id` |
 | `tools/` | `facesim.py` (advisory identity), `fetch.py` (weights), `pngmeta.py` (import metadata) |

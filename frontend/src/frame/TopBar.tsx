@@ -1,19 +1,15 @@
-import { ChevronDown, FolderOpen, Menu } from 'lucide-react'
+import { Boxes, ChevronDown, FolderOpen, Menu } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { Suite } from '../api/types'
 import { requestAppExit } from '../shell/tauri'
 import { selectRunningJob, useSession } from '../store/session'
 import { runCommand } from './commands'
 import { preloadSuite } from './lazySuite'
 import { THEMES } from './theme'
+import { TOP_TABS, topTabOf, type TopTab } from './railTabs'
+import { openTopTab } from './topTabs'
 import { onlyAssets, useDropTarget, type DragPayload, type DropVerdict } from './drag'
 import { editOpenDrop, startDrop } from './dropRules'
 import { dropRefs, refDropFor } from '../suites/generate/generateStore'
-
-export const SUITES: { id: Suite; label: string; key: string }[] = [
-  { id: 'catalogue', label: 'Catalogue', key: '1' }, { id: 'generate', label: 'Generate', key: '2' }, { id: 'edit', label: 'Edit', key: '3' },
-  { id: 'animate', label: 'Animate', key: '4' }, { id: 'stage', label: 'Stage', key: '6' }, { id: 'story', label: 'Story', key: '7' }, { id: 'models', label: 'Models', key: '5' },
-]
 
 function useOutside(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null)
@@ -37,7 +33,7 @@ const SPRING_MS = 600
 
 /** A suite tab; Edit, Generate and Animate take dropped tiles (frame/drag.ts). D71: a drag resting on one for 600 ms switches to that suite
  *  and carries on, so a tile reaches a particular slot there; a quick drop does the tab's own verb. */
-function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: boolean; onOpen: () => void }) {
+function SuiteTab({ t, active, onOpen }: { t: TopTab; active: boolean; onOpen: () => void }) {
   const { ref, over } = useDropTarget((p) => onlyAssets(p) && !!tabDrop(t.id, p)?.ok, (p) => {
     if (t.id === 'edit') { const id = editOpenDrop(p).open; if (id) void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }
     else if (t.id === 'generate') dropRefs(p)
@@ -70,6 +66,7 @@ function SuiteTab({ t, active, onOpen }: { t: (typeof SUITES)[number]; active: b
 export function TopBar() {
   const s = useSession()
   const [menu, setMenu] = useState<'project' | 'app' | null>(null)
+  const top = topTabOf(s.ui.suite)?.id
   const ref = useOutside(() => setMenu(null))
   const running = useSession(selectRunningJob)
   const engine = s.engine
@@ -81,17 +78,18 @@ export function TopBar() {
   const disk = s.project?.open ? `disk ${s.project.free_space_gb} GB free` : 'no project'
   return (
     <header className="top" ref={ref}>
+      <button className="quiet app-menu" onClick={() => setMenu(menu === 'app' ? null : 'app')} title="menu: Models & engine, settings, keys, theme…" aria-label="app menu"><Menu size={16} /></button>
       <nav className="tabs" aria-label="suites">
         <button className={`tab project-tab${menu === 'project' ? ' active' : ''}`} onClick={() => setMenu(menu === 'project' ? null : 'project')} aria-label="project menu"
           title={s.project?.open ? `Project: ${s.project.name} — new, open, close, recent` : 'Project: new, open, recent'}>
           <FolderOpen size={14} style={{ verticalAlign: '-2px' }} /> Project <span className="project-name">{s.project?.open ? s.project.name : 'none open'}</span> <ChevronDown size={14} style={{ verticalAlign: '-2px' }} />
         </button>
         <span className="tabs-sep" aria-hidden="true" />
-        {SUITES.map((t) => <SuiteTab key={t.id} t={t} active={s.ui.suite === t.id} onOpen={() => s.setSuite(t.id)} />)}
+        {TOP_TABS.map((t) => <SuiteTab key={t.id} t={t} active={top === t.id} onOpen={() => openTopTab(t)} />)}
       </nav>
       <div className="spacer" />
       {menu === 'project' && (
-        <div className="menu project-menu" style={{ left: 8 }}>
+        <div className="menu project-menu" style={{ left: 44 }}>
           <button onClick={() => { setMenu(null); s.setProjectDialog('new') }}>New project…</button>
           <button onClick={() => { setMenu(null); s.setProjectDialog('open') }}>Open project…</button>
           {s.project?.open && <button onClick={() => { setMenu(null); void s.closeProject() }}>Close {s.project.name}</button>}
@@ -100,15 +98,16 @@ export function TopBar() {
           {s.recents.map((r) => <button key={r} onClick={() => { setMenu(null); void s.openProject(r) }} title={r}>{r.split(/[\\/]/).pop()}</button>)}
         </div>
       )}
-      <span className="chip" onClick={() => s.setSuite('models')} title={engine?.version?.comfyui_version ? `ComfyUI ${engine.version.comfyui_version}` : 'engine'}>
+      <span className="chip" onClick={() => s.openModels({ tab: 'engine' })} title={`${engine?.version?.comfyui_version ? `ComfyUI ${engine.version.comfyui_version}` : 'engine'} — open Models & engine`}>
         <i className={`dot ${engineDot}`} /> engine {engineText}
       </span>
       <span className="chip" onClick={() => s.setUi({ dockOpen: !s.ui.dockOpen })}><i className={`dot ${running ? 'busy' : ''}`} /> {jobsText}</span>
       <span className="chip" title="project drive"><i className={`dot ${s.project?.open && (s.project.free_space_gb ?? 99) < 20 ? 'warn' : ''}`} /> {disk}</span>
-      <span className="chip" onClick={() => s.setSuite('models')}><i className={`dot ${missing ? 'warn' : 'ok'}`} /> {missing ? `${missing} weights missing` : 'weights ok'}</span>
-      <button className="quiet" onClick={() => setMenu(menu === 'app' ? null : 'app')} title="menu" aria-label="app menu"><Menu size={16} /></button>
+      <span className="chip" onClick={() => s.openModels({ missing: missing > 0 })} title="open Models & engine"><i className={`dot ${missing ? 'warn' : 'ok'}`} /> {missing ? `${missing} weights missing` : 'weights ok'}</span>
       {menu === 'app' && (
-        <div className="menu" style={{ right: 8 }}>
+        <div className="menu app-menu-list" style={{ left: 8 }}>
+          <button onClick={() => { setMenu(null); s.openModels() }}><Boxes size={14} style={{ verticalAlign: '-2px' }} /> Models & engine…</button>
+          <div className="sep" />
           <button onClick={() => { setMenu(null); s.openSettings(true) }}>Settings… <kbd>Ctrl+,</kbd></button>
           <button onClick={() => { setMenu(null); s.setHelp(true) }}>Commands and keys <kbd>?</kbd></button>
           <button onClick={() => { setMenu(null); runCommand('global.palette') }}>Command palette <kbd>Ctrl+K</kbd></button>
@@ -118,7 +117,7 @@ export function TopBar() {
           <button onClick={() => { setMenu(null); s.setUi({ density: s.ui.density === 'compact' ? 'comfortable' : 'compact' }) }}>Density: {s.ui.density}</button>
           <div className="sep" />
           <button onClick={() => { setMenu(null); void s.refreshAll() }}>Refresh state</button>
-          <button onClick={() => { setMenu(null); window.open('/spikes.html', '_blank') }}>M0 spike harness</button>
+          {import.meta.env.DEV && <button onClick={() => { setMenu(null); window.open('/spikes.html', '_blank') }}>M0 spike harness (dev)</button>}
           <div className="sep" />
           <button onClick={() => { setMenu(null); void requestAppExit() }}>Quit (graceful)</button>
           <div className="label">loom2 {s.health?.version ?? ''} · {s.health?.variant ?? ''} · ws {s.wsStatus}</div>

@@ -1,13 +1,20 @@
 // Global commands (07 §4): frame toggles, settings, help, the command palette. Suite switching stays on the
 // TopBar tabs (Ctrl+1…5) and is registered here so the help overlay lists it.
-import { Clapperboard, FilePlus, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, RefreshCw, Settings, Sparkles } from 'lucide-react'
+import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, RefreshCw, Settings, Sparkles } from 'lucide-react'
 const CircleHelp = Info
 import { useSession } from '../store/session'
+import { TOP_TABS } from './railTabs'
 import { registerCommands } from './commands'
 import { openWith } from './openWith'
 import { usePalette } from './CommandPalette'
 
 const s = () => useSession.getState()
+const openTop = (id: string) => import('./topTabs').then((m) => { const t = TOP_TABS.find((x) => x.id === id); if (t) m.openTopTab(t) })
+/** D90: one of Story's six workspaces (Alt+1–6), across the Story and Catalogue suites. */
+const openStory = (w: string) => void import('./suiteRegistry').then((m) => {
+  if (w === 'catalogue') { s().setSuite('catalogue'); return }
+  m.setRailTab('story', w); s().setSuite('story'); s().setUi({ panelOpen: true })
+})
 
 registerCommands([
   { id: 'global.palette', scope: 'global', label: 'Command palette', icon: Keyboard, keys: 'Ctrl+K', placement: ['topbar'], run: () => usePalette.getState().toggle() },
@@ -21,13 +28,19 @@ registerCommands([
   { id: 'global.focus', scope: 'global', label: 'Focus mode (hide panel + inspector)', icon: Maximize2, keys: 'Tab', placement: ['rail', 'topbar'], run: () => s().setUi({ focusMode: !s().ui.focusMode }) },
   { id: 'global.density', scope: 'global', label: 'Toggle density', icon: LayoutGrid, placement: ['topbar'], run: () => s().setUi({ density: s().ui.density === 'compact' ? 'comfortable' : 'compact' }) },
   { id: 'global.refresh', scope: 'global', label: 'Refresh state', icon: RefreshCw, placement: ['topbar'], run: () => void s().refreshAll() },
-  { id: 'global.suite.catalogue', scope: 'global', label: 'Catalogue', keys: 'Ctrl+1', placement: ['topbar'], run: () => s().setSuite('catalogue') },
+  // D90 (02 §3): the tabs are Story · Generate · Edit · Animate · Stage, keyed Ctrl+1–5 in their order; the Catalogue is Story's third
+  // workspace and Models & engine a sheet in ☰ — their commands stay (palette, remapped keys) without a top-bar key
+  { id: 'global.suite.story', scope: 'global', label: 'Story', keys: 'Ctrl+1', placement: ['topbar'], run: () => void openTop('story') },
   { id: 'global.suite.generate', scope: 'global', label: 'Generate', keys: 'Ctrl+2', placement: ['topbar'], run: () => s().setSuite('generate') },
   { id: 'global.suite.edit', scope: 'global', label: 'Edit', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('edit') },
   { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('animate') },
-  { id: 'global.suite.models', scope: 'global', label: 'Models', keys: 'Ctrl+5', placement: ['topbar'], run: () => s().setSuite('models') },
-  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+6', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
-  { id: 'global.suite.story', scope: 'global', label: 'Story', keys: 'Ctrl+7', placement: ['topbar'], run: () => s().setSuite('story') },   // 17 (D85)
+  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+5', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
+  { id: 'global.suite.catalogue', scope: 'global', label: 'Catalogue (Story)', icon: Images, placement: ['rail'], run: () => s().setSuite('catalogue') },
+  { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
+  ...(['world', 'cast', 'catalogue', 'shots', 'flow', 'episode'] as const).map((w, i) => ({
+    id: `global.story.${w}`, scope: 'global' as const, label: `Story · ${w[0].toUpperCase()}${w.slice(1)}`, keys: `Alt+${i + 1}`, placement: ['rail'] as ['rail'],
+    run: () => void openStory(w),
+  })),
   // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
   { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },
   { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },

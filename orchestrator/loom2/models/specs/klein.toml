@@ -11,7 +11,7 @@ graph = "klein"
 roles.te = { default = "qwen3-4b" }
 roles.vae = "flux2-vae"
 sampling = { steps = 4, guidance = 1.0, cfg = 1.0, weight_dtype = "fp8_e4m3fn", distilled = true, json_prompt = false, model_shift = 2.02 }
-recipes = { t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"], stage = "clay" }   # P14: the framing moves under `open` (9B is flux-nc); unmeasured on 4B. ST3: the clay method under `open`, unmeasured
+recipes = { default_for = ["swatch"], t2i = true, inpaint = ["fill", "fill_match", "remove", "outpaint"], icm_default = ["open"], reangle = "klein_prompt", reangle_moves = ["topdown", "closeup", "wide"], stage = "clay" }   # P14: the framing moves under `open` (9B is flux-nc); unmeasured on 4B. ST3: the clay method under `open`, unmeasured. D90 (02 §6.3): the preset swatch pack runs here (Apache 2.0: both variants, 4 steps)
 inputs = { refs_max = 4 }
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [1280, 720], full = [1920, 1088] } }
 estimates = { vram_gb = 8.5, base_seconds = 10.0, doc_seconds = 28.0 }

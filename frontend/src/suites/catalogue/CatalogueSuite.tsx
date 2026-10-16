@@ -17,6 +17,7 @@ import { useActiveCatalogue, useCat } from './catalogueContext'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
+import { isMenuFromKeys } from '../../frame/useKeyboardMap'                // D90 (B16): Shift+F10 with a selection opens the tile menu
 import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
 import { CatalogueStrip, EmptyTrashButton } from './CatalogueStrip'
 import { CLEAR_ALL } from './filters'
@@ -217,7 +218,7 @@ export function Stage() {
   }
   const empty = !c.loading && rows.length === 0
   return (
-    <div className="cat-grid" ref={scrollRef} tabIndex={0} onKeyDown={onKey} onContextMenu={(e) => { if ((e.target as HTMLElement).closest('.tile, .cat-header')) return; showMenu(e, gridMenu()) }}>
+    <div className="cat-grid" ref={scrollRef} tabIndex={0} onKeyDown={onKey} onContextMenu={(e) => { if ((e.target as HTMLElement).closest('.tile, .cat-header')) return; showMenu(e, isMenuFromKeys(e.nativeEvent) && selectedOrPrimary(c).length ? tileMenu() : gridMenu()) }}>
       {empty && <EmptyGrid />}
       {fileOver && <div className="file-over">Drop to import into Unprocessed</div>}
       <div className="cat-rows" style={{ height: virt.getTotalSize() }}>

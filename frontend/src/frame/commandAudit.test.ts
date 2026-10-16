@@ -16,9 +16,9 @@ vi.mock('./commands', async (importOriginal) => {
 // (import.meta.glob takes literals only, so the two pattern lists are spelled out twice)
 const SOURCES = import.meta.glob<string>(['../**/*.ts', '../**/*.tsx', '!../**/*.test.ts', '!../**/*.test.tsx', '!../**/*.d.ts', '!../spikes/**'], { query: '?raw', import: 'default', eager: true })
 const MODULES = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../**/*.test.ts', '!../**/*.test.tsx', '!../**/*.d.ts', '!../spikes/**'])
-const REGISTERING = Object.keys(SOURCES).filter((p) => p !== './commands.ts' && /\bregisterCommands\(\s*\[/.test(SOURCES[p]))
+const REGISTERING = Object.keys(SOURCES).filter((p) => p !== './commands.ts' && /\bregisterCommands\(\s*[[\w]/.test(SOURCES[p]))   // D90: also `registerCommands(cmds)` (storyCommands.ts was missed)
 
-const SCOPES: Scope[] = ['global', 'catalogue', 'generate', 'edit', 'animate', 'models']
+const SCOPES: Scope[] = ['global', 'catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models']   // D90 (01 §11.7): Stage and Story joined
 const PLACEMENTS: Placement[] = ['context', 'toolbar', 'strip', 'panel', 'inspector', 'topbar', 'rail', 'dock']
 
 type Chord = ReturnType<typeof import('./commands').parseChord>

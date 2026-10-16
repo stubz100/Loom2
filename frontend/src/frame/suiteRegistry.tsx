@@ -10,7 +10,7 @@ import '../suites/animate/animateCommands'
 import { CatalogueSuite } from '../suites/catalogue/CatalogueSuite'
 import { GenerateSuite } from '../suites/generate/GenerateSuite'
 import { lazySuite, preloadSuite } from './lazySuite'
-import { DEFAULT_RAIL, type RailTab } from './railTabs'
+import { DEFAULT_RAIL, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
 
 export interface SuiteDef {
   id: string
@@ -62,6 +62,20 @@ export function useSuiteRail() {
   const active = useRailState((r) => r.active[suite]) ?? tabs[0]?.id ?? ''
   const setActive = useRailState((r) => r.setActive)
   return { tabs, active, setActive: (tab: string) => setActive(suite, tab) }
+}
+
+/** D90: the rail the frame shows — the Story tab's six workspaces across the Story and Catalogue suites, else the suite's own tabs. */
+export function useRailEntries(): { entries: GroupRailTab[]; isActive: (e: GroupRailTab) => boolean; open: (e: GroupRailTab) => void } {
+  const suite = useSession((s) => s.ui.suite)
+  const active = useRailState((r) => r.active)
+  const own = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []
+  const entries = suite === 'story' || suite === 'catalogue' ? STORY_RAIL : own.map((t) => ({ ...t, suite }))
+  const activeOf = (s: string) => active[s] ?? (SUITE_DEFS[s]?.rail ?? DEFAULT_RAIL[s] ?? [])[0]?.id
+  return {
+    entries,
+    isActive: (e) => e.suite === suite && activeOf(e.suite) === e.id,
+    open: (e) => { useRailState.getState().setActive(e.suite, e.id); if (e.suite !== suite) useSession.getState().setSuite(e.suite as never) },
+  }
 }
 
 export function useSuite(): SuiteDef {

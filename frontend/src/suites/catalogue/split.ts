@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { activeCatalogue, type CatalogueHook } from './catalogueContext'
 import { useCatalogue, useCataloguePane2, type CatalogueState } from './catalogueStore'
+import { useSession } from '../../store/session'
 
 export type SplitMode = 'single' | 'stacked' | 'side'
 export type Place = 'unprocessed' | 'library' | 'trash' | { group: string }
@@ -37,6 +38,15 @@ export function openPlace(c: CatalogueState, place: Place): void {
   else if (place === 'library') void c.setQuery({ folder: 'all', group_id: undefined, collection_id: undefined })
   else if (place === 'trash') void c.setQuery({ folder: 'trash', group_id: undefined, collection_id: undefined })
   else void c.setQuery({ folder: 'all', group_id: place.group, collection_id: undefined })
+}
+
+/** D90 (B13): a view hosted outside the Catalogue (Generate's Inspector on its results) opens a place in the Catalogue — the suite switches
+ *  and the place opens in its active pane; the host's own grid stays what it was. A pane's own store opens it in place. */
+export function openPlaceFrom(host: CatalogueHook, place: Place): void {
+  if (host === useCatalogue || host === useCataloguePane2) { openPlace(host.getState(), place); return }
+  useSession.getState().setSuite('catalogue')
+  const sp = useSplit.getState()
+  openPlace(paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), place)
 }
 
 /** Open a place in the other pane, splitting the Stage first (stacked) when it is single. */

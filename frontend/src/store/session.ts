@@ -18,6 +18,8 @@ interface UiState {
   thumbFit: 'fit' | 'fill'; caption: 'off' | 'prompt' | 'model'                  // Settings · Catalogue (D34)
   editKeepAliveMin?: number                                                     // D69: a hidden Edit / Animate stage is released after this long
   panelWidth: number; inspectorWidth: number; dismissedBanners: string[]
+  panelWidths?: Record<string, number>; inspectorWidths?: Record<string, number>   // D90 (02 §3.1): dragged widths per suite; absent = the suite's default
+  storyLast?: 'story' | 'catalogue'                                            // D90: the Story tab returns to the workspace last open under it
 }
 
 export interface SessionState {
@@ -56,9 +58,15 @@ export interface SessionState {
   openSettings: (open: boolean) => void
   setProjectDialog: (d: 'new' | 'open' | null) => void
   setHelp: (open: boolean) => void
+  modelsSheet: ModelsSheetState | null                     // D90 (02 §7): Models & engine is a sheet in ☰, not a suite
+  openModels: (o?: ModelsSheetState) => void
+  closeModels: () => void
   selectModel: (id: string | null) => void
   banners: () => Banner[]
 }
+
+/** D90 (02 §7): which tab of Models & engine opens, and whether the roster shows only the missing weights (every Fetch link does). */
+export interface ModelsSheetState { tab?: 'roster' | 'engine'; missing?: boolean }
 
 export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean }
 export interface AskRequest extends AskOptions { kind: 'confirm' | 'prompt'; resolve: (v: string | boolean | null) => void }
@@ -70,7 +78,7 @@ export const useSession = create<SessionState>()(
   persist(
     (set, get) => ({
       backend: null, backendError: null, wsStatus: 'closed', health: null, project: null, recents: [], engine: null, queue: null, jobs: {}, previews: {},
-      models: [], unlisted: [], fetches: {}, settings: null, capabilities: null, events: [], toasts: [], settingsOpen: false, projectDialog: null, helpOpen: false, ask: null,
+      models: [], unlisted: [], fetches: {}, settings: null, capabilities: null, events: [], toasts: [], settingsOpen: false, projectDialog: null, helpOpen: false, ask: null, modelsSheet: null,
       ui: { suite: 'catalogue', panelOpen: true, inspectorOpen: true, dockOpen: false, focusMode: false, density: 'comfortable', theme: 'dark', thumbFit: 'fit', caption: 'off', panelWidth: 320, inspectorWidth: 340, dismissedBanners: [] },
       selectedModel: null,
 
@@ -86,7 +94,8 @@ export const useSession = create<SessionState>()(
         }
         const q0 = new URLSearchParams(location.search)
         const deep = q0.get('suite') === 'animate' && q0.get('tab') === 'sequence' ? 'story' : q0.get('suite')   // 17 SY4: the Sequence tab moved to Story · Episode
-        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(deep)) set({ ui: { ...get().ui, suite: deep as Suite } })
+        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(deep)) get().setSuite(deep as Suite)
+        else if (get().ui.suite === 'models') set({ ui: { ...get().ui, suite: 'catalogue' } })   // D90: a remembered Models suite lands in the Catalogue
         try {
           await get().refreshAll()
         } catch (e) {                                                   // B21: a failing first fetch shows the Retry banner, not the crash overlay
@@ -94,7 +103,7 @@ export const useSession = create<SessionState>()(
           return
         }
         const start = get().health?.start_suite
-        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(start)) set({ ui: { ...get().ui, suite: start as Suite } })
+        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(start)) get().setSuite(start as Suite)
         socket?.close()
         let everOpen = false
         socket = new EventsSocket(
@@ -133,7 +142,12 @@ export const useSession = create<SessionState>()(
         }
       },
 
-      setSuite: (suite) => set({ ui: { ...get().ui, suite } }),
+      setSuite: (suite) => {
+        if (suite === 'models') { get().openModels({ missing: true }); return }   // D90 (02 §7): the old routes (the Fetch buttons) open the sheet on the missing weights
+        set({ ui: { ...get().ui, suite, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}) } })
+      },
+      openModels: (o = {}) => set({ modelsSheet: { tab: o.tab ?? 'roster', missing: !!o.missing } }),
+      closeModels: () => set({ modelsSheet: null }),
       setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
 
       openProject: async (path) => {
@@ -215,7 +229,7 @@ export const useSession = create<SessionState>()(
         else if (s.queue?.paused) out.push({ id: 'paused', text: 'Queue paused.', action: { label: 'Resume', run: () => void s.pauseQueue(false) } })
         if (s.engine && !s.engine.running && s.engine.last_error) out.push({ id: 'engine', kind: 'error', text: `Engine down: ${s.engine.last_error}`, action: { label: 'Restart', run: () => void s.engineAction('restart') } })
         const missing = s.models.filter((m) => m.health === 'missing' && !m.retired)
-        if (missing.length && s.project?.open) out.push({ id: 'weights', kind: 'warn', text: `${missing.length} roster weight${missing.length > 1 ? 's' : ''} missing on disk.`, action: { label: 'Open Models', run: () => s.setSuite('models') } })
+        if (missing.length && s.project?.open) out.push({ id: 'weights', kind: 'warn', text: `${missing.length} roster weight${missing.length > 1 ? 's' : ''} missing on disk.`, action: { label: 'Show the missing weights', run: () => s.openModels({ missing: true }) } })
         const free = s.project?.open ? s.project.free_space_gb : null
         if (free != null && free < 20) out.push({ id: 'disk', kind: free < 8 ? 'error' : 'warn', text: `Disk: ${free} GB free on the project drive.` })
         return out.filter((b) => !s.ui.dismissedBanners.includes(b.id) || b.kind === 'error')

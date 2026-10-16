@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand, sep } from '../../frame/commands'
+import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
 import { useSuiteRail, type SuiteDef } from '../../frame/suiteRegistry'
 import { AnglePrimary, AngleTab } from './AngleTab'
@@ -15,7 +16,7 @@ import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { appendValue, FIELD_LABEL, presetMenu, type FieldKey } from './fieldPresets'
-import { batchOf, dropRefs, refDropFor, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { batchOf, dropRefs, honoursNegative, modelPatch, refDropFor, submitBlock, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
 import { RefExtras, TextPrompt } from './RefExtras'
 import { useMentions } from './useMentions'
 import { useStory } from '../story/storyStore'
@@ -129,6 +130,23 @@ function RefSlots() {
   )
 }
 
+/** D90 (B12): the reference block of every prompt mode — for a model that takes no references (`max_refs` 0) a note instead of "0 of 0". */
+const refsBlock = (p: PanelState, cap: ModelCap | undefined, hint?: string, top?: number) => {
+  const max = cap?.max_refs ?? 4
+  if (cap && !max) return <div className="refs-block disabled-why" style={{ marginTop: top }}>reference images · {cap.label} takes no references{p.refs.length ? ` — the ${p.refs.length} in the slots are not sent ` : ''}{p.refs.length > 0 && <CommandButton id="gen.clearRefs" text />}</div>
+  return <details open className="refs-block" style={{ marginTop: top }}><summary>reference images · {p.refs.length} of {max}{hint ? ` on ${cap?.label ?? p.model_id} — ${hint}` : ''}</summary><RefSlots /></details>
+}
+
+/** D90 (B12): the negative prompt, in every prompt mode — editable where the model honours one, else why not (the recipe then sends none).
+ *  `own`: its own form row (JSON and Text mode), and nothing at all where the model ignores negatives. */
+const negativeField = (g: ReturnType<typeof useGenerate.getState>, cap: ModelCap | undefined, own?: boolean): React.ReactNode => {
+  const on = !!cap && honoursNegative(cap)
+  if (own) return on ? <div className="gen-form" style={{ marginTop: 10 }}>{negativeField(g, cap)}</div> : null
+  return on
+    ? <Field field="negative" value={g.panel.negative} onChange={(v) => g.set({ negative: v })} placeholder="CFG-capable variant: negatives are honoured" />
+    : <><label>negative</label><span className="disabled-why">hidden: {cap?.distilled ? 'distilled variants ignore negatives (CFG 1)' : 'dev runs guidance-distilled without CFG'}</span></>
+}
+
 function PromptTab() {
   const g = useGenerate()
   const p = g.panel
@@ -148,10 +166,7 @@ function PromptTab() {
       {p.prompt_mode === 'tree' && (
         <div className="gen-form gen-tree">
           <Field field="scene" multiline rows={2} value={t.scene ?? ''} onChange={(v) => g.setTree({ scene: v })} placeholder="overall scene description" />
-          <details open className="refs-block">
-            <summary>reference images · {p.refs.length} of {cap?.max_refs ?? 4} on {cap?.label ?? p.model_id} — subjects can say "reference image 1"</summary>
-            <RefSlots />
-          </details>
+          {refsBlock(p, cap, 'subjects can say "reference image 1"')}
           <h5>subjects · optional</h5>
           {(t.subjects ?? []).map((s, i) => <SubjectCard key={i} i={i} s={s} />)}
           <div className="full"><button onClick={g.addSubject} title="Add a subject card"><Plus size={12} /> subject</button></div>
@@ -174,10 +189,10 @@ function PromptTab() {
           <Field label="f-number" field="camera.f-number" value={t.camera?.['f-number'] ?? ''} onChange={(v) => cam({ 'f-number': v })} />
           <Field label="distance" field="camera.distance" value={t.camera?.distance ?? ''} onChange={(v) => cam({ distance: v })} />
           <h5>extras</h5>
+          {/* D90 (B12): one text with the Text mode's prompt — said here, so switching modes surprises no one */}
           <Field label="lead text" field="text" value={p.text} onChange={(v) => g.set({ text: v })} placeholder="optional sentence prepended for Klein (prose mode)" />
-          {cap && !cap.distilled
-            ? <Field field="negative" value={p.negative} onChange={(v) => g.set({ negative: v })} placeholder="CFG-capable variant: negatives are honoured" />
-            : <><label>negative</label><span className="disabled-why">hidden: {cap?.distilled ? 'distilled variants ignore negatives (CFG 1)' : 'dev runs guidance-distilled without CFG'}</span></>}
+          <span className="hint">the same text as the Text mode's prompt — editing one edits the other</span>
+          {negativeField(g, cap)}
         </div>
       )}
       {p.prompt_mode === 'json' && (
@@ -190,19 +205,15 @@ function PromptTab() {
             <button onClick={() => void navigator.clipboard?.readText().then((x) => { try { JSON.parse(x); g.set({ json_text: x }) } catch { useSession.getState().toast('Clipboard is not JSON', 'error') } })}>import clipboard</button>
           </div>
           {g.previewError && <div style={{ color: 'var(--error)', fontSize: 12, marginTop: 6 }}>{g.previewError}</div>}
-          <details open className="refs-block" style={{ marginTop: 10 }}>
-            <summary>reference images · {p.refs.length} of {cap?.max_refs ?? 4}</summary>
-            <RefSlots />
-          </details>
+          {negativeField(g, cap, true)}
+          {refsBlock(p, cap, undefined, 10)}
         </div>
       )}
       {p.prompt_mode === 'text' && (
         <div>
           <TextPrompt />
-          <details open className="refs-block" style={{ marginTop: 10 }}>
-            <summary>reference images · {p.refs.length} of {cap?.max_refs ?? 4}</summary>
-            <RefSlots />
-          </details>
+          {negativeField(g, cap, true)}
+          {refsBlock(p, cap, undefined, 10)}
         </div>
       )}
       <details open style={{ marginTop: 10 }}>
@@ -241,7 +252,7 @@ function ModelTab() {
           const r = models.find((x) => x.id === m)
           const off = !c.wired
           return (
-            <button key={m} className={`model-card${p.model_id === m ? ' active' : ''}${off ? ' off' : ''}`} onClick={() => !off && g.set({ model_id: m, turbo: c.turbo ? p.turbo : false })} disabled={off} title={off ? 'coming in M5' : undefined}>
+            <button key={m} className={`model-card${p.model_id === m ? ' active' : ''}${off ? ' off' : ''}`} onClick={() => !off && g.setModel(m)} disabled={off} title={off ? 'coming in M5' : undefined}>
               <span>{c.label}{c.hint ? ` · ${c.hint}` : ''}</span>
               <small>{r?.license ?? ''} · {c.health}{c.distilled ? ' · distilled' : ''}{off ? ' · coming in M5' : ''}</small>
             </button>
@@ -277,11 +288,13 @@ function ModelTab() {
         <summary>Advanced · ComfyUI model and decode settings</summary>
         <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr' }}>
           <label>shift</label>
-          <div>
+          {cap && !cap.flux_shift   /* D90 (B12): no ModelSamplingFlux in this model's graph — its own shift node or built-in shift runs */
+            ? <span className="disabled-why">hidden: {cap.label} sets its own shift ({modelShift}); base / max shift is FLUX's ModelSamplingFlux</span>
+            : <div>
             <div className="segmented"><button className={!shiftCustom ? 'active' : ''} onClick={() => g.set({ base_shift: null, max_shift: null })}>model default ({modelShift})</button><button className={shiftCustom ? 'active' : ''} onClick={() => g.set({ base_shift: nodeDefaults.base, max_shift: nodeDefaults.max })}>custom</button></div>
             {shiftCustom && <span className="disabled-why"> base <input type="number" step={0.05} min={0} max={10} value={p.base_shift ?? nodeDefaults.base} onChange={(e) => g.set({ base_shift: Number(e.target.value) })} style={{ width: 64 }} /> max <input type="number" step={0.05} min={0} max={10} value={p.max_shift ?? nodeDefaults.max} onChange={(e) => g.set({ max_shift: Number(e.target.value) })} style={{ width: 64 }} /></span>}
             <span className="hint" style={{ gridColumn: 'auto' }}>ModelSamplingFlux: the shift grows with image size between base (256 tokens) and max (4 096); the model's own value is a constant</span>
-          </div>
+          </div>}
           <label>weight dtype</label>
           <div><select value={p.weight_dtype ?? ''} onChange={(e) => g.set({ weight_dtype: e.target.value || null })}><option value="">preset ({pv?.weight_dtype ?? 'default'})</option>{caps?.weight_dtypes.map((x) => <option key={x}>{x}</option>)}</select>
             <span className="disabled-why"> UNETLoader: fp8_e4m3fn_fast uses the fp8 matmul path — a speed candidate to measure on gfx1201</span></div>
@@ -366,7 +379,7 @@ function Panel({ tab }: { tab: string }) {
     const g = useGenerate.getState()
     if (!caps || caps.models[g.panel.model_id]?.recipes.t2i) return
     const next = (caps.models[caps.defaults.t2i] ? caps.defaults.t2i : '') || byOrder(caps.models).find(([, m]) => m.recipes.t2i)?.[0]
-    if (next) g.set({ model_id: next, turbo: caps.models[next].turbo ? g.panel.turbo : false })
+    if (next) g.set(modelPatch(g.panel, next))
   }, [caps])
   if (!project?.open) return <span style={{ color: 'var(--fg3)' }}>Open or create a project.</span>
   if (tab === 'model') return <ModelTab />
@@ -385,8 +398,7 @@ function PrimaryAction() {
   if (active === 'angle') return <AnglePrimary />
   const pv = g.preview
   const missing = pv?.missing ?? []
-  const reason = !s.project?.open ? 'no project' : g.previewError ? g.previewError : !pv ? 'preparing…' : !pv.serialized_prompt ? 'empty prompt'
-    : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
+  const reason = submitBlock(g, !!s.project?.open)                  // D90 (B4): the same reason gates Ctrl+Enter and the palette
   return (
     <div>
       <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (Ctrl+Enter)">Generate {g.panel.count} ▶</button>
@@ -458,9 +470,10 @@ function Stage() {
 
 const withResults = (C: React.ComponentType) => function Wrapped() { return <CatalogueStoreCtx.Provider value={useGenerateResults}><C /></CatalogueStoreCtx.Provider> }
 
+const canSubmit = () => !submitBlock(useGenerate.getState(), !!useSession.getState().project?.open)   // D90 (B4): what disables the Foot's buttons
 registerCommands([
-  { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(false) },
-  { id: 'gen.stage', scope: 'generate', label: 'Stage (add to the queue, run later)', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], run: () => void useGenerate.getState().generate(true) },
+  { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(false) },
+  { id: 'gen.stage', scope: 'generate', label: 'Stage (add to the queue, run later)', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(true) },
   // P14 (D82): the Angle tab — the five moves are buttons on the pad; the verb has no key (Ctrl+Enter stays Generate's)
   { id: 'gen.angle.generate', scope: 'generate', label: 'New angle', icon: Orbit, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id, run: () => void useGenerate.getState().generateAngle() },
   { id: 'gen.angle.left45', scope: 'generate', label: 'Rotate left 45°', icon: RotateCcw, placement: ['panel'], run: () => useGenerate.getState().setAngle({ move: 'left45' }) },

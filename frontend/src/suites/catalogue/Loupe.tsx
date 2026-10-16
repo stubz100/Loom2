@@ -2,7 +2,6 @@
 // wipe slider and difference toggle. One transform shared by every cell in Compare.
 import { Ellipsis, Film, FolderInput, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand } from '../../frame/commands'
@@ -11,6 +10,7 @@ import { showMenu } from '../../frame/ContextMenu'
 import { moveToMenu, rateMenu, tileMenu } from './catalogueCommands'
 import type { MenuItem } from '../../frame/commands'
 import { useCat } from './catalogueContext'
+import { loupeMedia, type LoupeMedia } from './media'
 
 interface Xf { s: number; x: number; y: number }
 
@@ -47,6 +47,13 @@ function useZoomPan(fitFor: { w: number; h: number } | null) {
 
 const style = (xf: Xf) => ({ transform: `translate(${xf.x}px, ${xf.y}px) scale(${xf.s})` })
 
+/** D90 (B10): a clip plays in a <video>, a spoken line in an <audio> under its thumbnail — never an <img> of a file it cannot show. */
+function Playable({ m }: { m: LoupeMedia }) {
+  if (m.kind === 'video') return <video key={m.src} className="loupe-media" src={m.src} poster={m.poster} controls preload="metadata" aria-label="the clip" />
+  if (m.kind === 'audio') return <div className="loupe-audio"><img src={m.poster} alt="" draggable={false} /><audio key={m.src} src={m.src} controls preload="metadata" aria-label="the spoken line" /></div>
+  return null
+}
+
 export function Loupe({ asset }: { asset: Asset }) {
   const c = useCat()
   const order = c.visibleOrder()
@@ -54,6 +61,7 @@ export function Loupe({ asset }: { asset: Asset }) {
   // memoised: a fresh object per render would recreate `fit`, whose mount effect sets state → an endless re-render loop
   const dims = useMemo(() => (asset.w && asset.h ? { w: asset.w, h: asset.h } : null), [asset.w, asset.h])
   const { xf, ref, fit, one, handlers } = useZoomPan(dims)
+  const m = loupeMedia(asset)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea')) return
@@ -71,20 +79,20 @@ export function Loupe({ asset }: { asset: Asset }) {
   const subItems = (m: MenuItem): MenuItem[] => ('items' in m ? m.items : [])
   return (
     <div className="loupe" tabIndex={0} onContextMenu={(e) => { if (!c.selected.includes(asset.id)) c.select(asset.id, 'single'); showMenu(e, tileMenu()) }}>
-      <div className="view" ref={ref} {...handlers}>
-        <img src={asset.kind === 'mesh' ? api.thumbUrl(asset.id, 1024) : api.assetUrl(asset.id)} alt="" style={style(xf)} draggable={false} />
+      <div className={`view${m.zoom ? '' : ' play'}`} ref={ref} {...(m.zoom ? handlers : {})}>
+        {m.zoom ? <img src={m.src} alt="" style={style(xf)} draggable={false} /> : <Playable m={m} />}
       </div>
       <div className="facts">
         <CommandButton id="cat.prev" /><span>{idx + 1} / {order.length}</span><CommandButton id="cat.next" />
         <span>{asset.model_id ?? asset.suite}</span>
-        <span>{asset.w}×{asset.h}</span>
+        {asset.kind !== 'audio' && <span>{asset.w}×{asset.h}</span>}
+        {asset.duration_s ? <span>{asset.duration_s} s</span> : null}
         <span>seed {asset.seed ?? '—'}</span>
         <span>{new Date(asset.created_at).toLocaleString()}</span>
         <span>{asset.state !== 'none' ? asset.state : ''} {asset.rating ? '★'.repeat(asset.rating) : ''}</span>
         <span className="spacer" />
-        <span>{Math.round(xf.s * 100)}%</span>
-        <CommandButton id="cat.loupe.fit" text label="Fit" />
-        <CommandButton id="cat.loupe.one" text label="1:1" />
+        {m.zoom ? <><span>{Math.round(xf.s * 100)}%</span><CommandButton id="cat.loupe.fit" text label="Fit" /><CommandButton id="cat.loupe.one" text label="1:1" /></>
+          : m.kind === 'video' && m.clipId ? <CommandButton id="cat.animate" text label="Play in Animate" /> : null}
         <button className="quiet" onClick={() => c.openLoupe(null)}>Close (Esc)</button>
       </div>
       {/* D71 (P11): the loupe is the send-to hub — every verb of the tile menu on one bar; the secondary ones fold into More when narrow.
@@ -134,14 +142,18 @@ export function Compare({ assets }: { assets: Asset[] }) {
   return (
     <div className="compare">
       <div className="cells" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-        {shown.map((a, i) => (
-          <div key={a.id} className={`cell${diff && i > 0 ? ' diff' : ''}`} ref={i === 0 ? ref : undefined} {...handlers}>
-            {diff && i > 0 && <img src={api.assetUrl(shown[0].id)} alt="" style={style(xf)} draggable={false} />}
-            <img className={diff && i > 0 ? 'over' : ''} src={a.kind === 'mesh' ? api.thumbUrl(a.id, 1024) : api.assetUrl(a.id)} alt="" style={{ ...style(xf), ...(two && i === 1 && !diff ? { clipPath: `inset(0 0 0 ${wipe * 100}%)` } : {}) }} draggable={false} />
-            {two && i === 1 && !diff && <div className="wipe" style={{ left: `${wipe * 100}%` }} />}
-            <span className="tag">{String.fromCharCode(65 + i)} · {a.model_id ?? a.suite} · seed {a.seed ?? '—'}</span>
-          </div>
-        ))}
+        {shown.map((a, i) => {
+          const m = loupeMedia(a), base = loupeMedia(shown[0])
+          const dif = diff && i > 0 && m.zoom && base.zoom, wiped = two && i === 1 && !diff && m.zoom && base.zoom   // D90 (B10): difference and wipe are for two images
+          return (
+            <div key={a.id} className={`cell${dif ? ' diff' : ''}`} ref={i === 0 ? ref : undefined} {...(m.zoom ? handlers : {})}>
+              {dif && <img src={base.src} alt="" style={style(xf)} draggable={false} />}
+              {m.zoom ? <img className={dif ? 'over' : ''} src={m.src} alt="" style={{ ...style(xf), ...(wiped ? { clipPath: `inset(0 0 0 ${wipe * 100}%)` } : {}) }} draggable={false} /> : <Playable m={m} />}
+              {wiped && <div className="wipe" style={{ left: `${wipe * 100}%` }} />}
+              <span className="tag">{String.fromCharCode(65 + i)} · {a.model_id ?? a.suite} · seed {a.seed ?? '—'}</span>
+            </div>
+          )
+        })}
       </div>
       <div className="bar">
         <span>Compare {shown.length}-up · zoom/pan locked</span>

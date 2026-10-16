@@ -1156,6 +1156,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/preset-icons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preset Icons List */
+        get: operations["preset_icons_list_preset_icons_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preset-icons/make": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preset Icons Make
+         * @description One t2i job per item on the variant's swatch model (`/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;
+         *     the finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there.
+         */
+        post: operations["preset_icons_make_preset_icons_make_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preset-icons/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Preset Icons Delete */
+        delete: operations["preset_icons_delete_preset_icons__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preset-icons/{key}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preset Icons File */
+        get: operations["preset_icons_file_preset_icons__key__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/project": {
         parameters: {
             query?: never;
@@ -3265,7 +3337,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** EventFrame */
-        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["LoraChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"];
+        EventFrame: components["schemas"]["JobEvent"] | components["schemas"]["JobProgressEvent"] | components["schemas"]["JobDeletedEvent"] | components["schemas"]["QueueStateEvent"] | components["schemas"]["EngineStateEvent"] | components["schemas"]["AssetEvent"] | components["schemas"]["AssetDeletedEvent"] | components["schemas"]["CatalogueChangedEvent"] | components["schemas"]["GroupChangedEvent"] | components["schemas"]["DocumentChangedEvent"] | components["schemas"]["StoryChangedEvent"] | components["schemas"]["LoraChangedEvent"] | components["schemas"]["ClipReadyEvent"] | components["schemas"]["ClipUpdatedEvent"] | components["schemas"]["ModelFetchEvent"] | components["schemas"]["ProjectOpenedEvent"] | components["schemas"]["ProjectClosedEvent"] | components["schemas"]["HelloEvent"] | components["schemas"]["VramPressureEvent"] | components["schemas"]["PresetIconsChangedEvent"];
         /** ExpandBody */
         ExpandBody: {
             /**
@@ -4430,6 +4502,8 @@ export interface components {
             distilled: boolean;
             /** Family */
             family: string;
+            /** Flux Shift */
+            flux_shift: boolean;
             geometry: components["schemas"]["Geometry"];
             /** Guidance */
             guidance: number;
@@ -5134,6 +5208,21 @@ export interface components {
              */
             strength?: number;
         };
+        /** MakeBody */
+        MakeBody: {
+            /** Items */
+            items: components["schemas"]["PresetItem"][];
+            /**
+             * Seed
+             * @default 90
+             */
+            seed?: number;
+            /**
+             * Stage
+             * @default true
+             */
+            stage?: boolean;
+        };
         /** Mask */
         Mask: {
             /**
@@ -5508,6 +5597,86 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        /** PresetIcon */
+        PresetIcon: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Field */
+            field: string;
+            /** Key */
+            key: string;
+            /** Model Id */
+            model_id: string | null;
+            /** Seed */
+            seed: number | null;
+            /** Updated At */
+            updated_at: string;
+            /** Value */
+            value: string;
+        };
+        /** PresetIconList */
+        PresetIconList: {
+            /** Items */
+            items: components["schemas"]["PresetIcon"][];
+        };
+        /**
+         * PresetIconPlanned
+         * @description D90 (02 §6.3): one swatch a make queued — the key its file will have and the job that makes it.
+         */
+        PresetIconPlanned: {
+            /** Field */
+            field: string;
+            /** Job Id */
+            job_id: string;
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+        };
+        /** PresetIconsChanged */
+        PresetIconsChanged: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted?: boolean;
+            /** Keys */
+            keys: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /** PresetIconsChangedEvent */
+        PresetIconsChangedEvent: {
+            data: components["schemas"]["PresetIconsChanged"];
+            /** Seq */
+            seq: number;
+            /**
+             * T
+             * @default 0
+             */
+            t: number;
+            /**
+             * Type
+             * @constant
+             */
+            type: "preset_icons.changed";
+        };
+        /** PresetIconsMade */
+        PresetIconsMade: {
+            /** Batch Id */
+            batch_id: string | null;
+            /** Items */
+            items: components["schemas"]["PresetIconPlanned"][];
+            /** Jobs */
+            jobs: components["schemas"]["JobRecord"][];
+        };
+        /** PresetItem */
+        PresetItem: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
         };
         /** Profile */
         Profile: {
@@ -10175,6 +10344,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelVerify"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preset_icons_list_preset_icons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetIconList"];
+                };
+            };
+        };
+    };
+    preset_icons_make_preset_icons_make_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MakeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetIconsMade"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preset_icons_delete_preset_icons__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preset_icons_file_preset_icons__key__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

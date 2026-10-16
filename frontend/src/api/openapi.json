@@ -2921,6 +2921,9 @@
           },
           {
             "$ref": "#/components/schemas/VramPressureEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PresetIconsChangedEvent"
           }
         ],
         "title": "EventFrame"
@@ -5603,6 +5606,10 @@
             "title": "Family",
             "type": "string"
           },
+          "flux_shift": {
+            "title": "Flux Shift",
+            "type": "boolean"
+          },
           "geometry": {
             "$ref": "#/components/schemas/Geometry"
           },
@@ -5760,7 +5767,8 @@
           "order",
           "cfg_fixed",
           "guidance_node",
-          "tiled_refine"
+          "tiled_refine",
+          "flux_shift"
         ],
         "title": "ImageModelCaps",
         "type": "object"
@@ -7302,6 +7310,35 @@
         "title": "LoraRef",
         "type": "object"
       },
+      "MakeBody": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PresetItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "seed": {
+            "default": 90,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "stage": {
+            "default": true,
+            "title": "Stage",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MakeBody",
+        "type": "object"
+      },
       "Mask": {
         "properties": {
           "default": {
@@ -8265,6 +8302,224 @@
           }
         },
         "title": "PoseLibrary",
+        "type": "object"
+      },
+      "PresetIcon": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "field",
+          "value",
+          "updated_at",
+          "model_id",
+          "seed",
+          "asset_id"
+        ],
+        "title": "PresetIcon",
+        "type": "object"
+      },
+      "PresetIconList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PresetIcon"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PresetIconList",
+        "type": "object"
+      },
+      "PresetIconPlanned": {
+        "description": "D90 (02 §6.3): one swatch a make queued — the key its file will have and the job that makes it.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "field",
+          "value",
+          "job_id"
+        ],
+        "title": "PresetIconPlanned",
+        "type": "object"
+      },
+      "PresetIconsChanged": {
+        "additionalProperties": true,
+        "properties": {
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "PresetIconsChanged",
+        "type": "object"
+      },
+      "PresetIconsChangedEvent": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PresetIconsChanged"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "t": {
+            "default": 0,
+            "title": "T",
+            "type": "number"
+          },
+          "type": {
+            "const": "preset_icons.changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "t",
+          "type",
+          "data"
+        ],
+        "title": "PresetIconsChangedEvent",
+        "type": "object"
+      },
+      "PresetIconsMade": {
+        "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PresetIconPlanned"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobRecord"
+            },
+            "title": "Jobs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "batch_id",
+          "items",
+          "jobs"
+        ],
+        "title": "PresetIconsMade",
+        "type": "object"
+      },
+      "PresetItem": {
+        "properties": {
+          "field": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value"
+        ],
+        "title": "PresetItem",
         "type": "object"
       },
       "Profile": {
@@ -17749,6 +18004,151 @@
         "summary": "Models Verify",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/preset-icons": {
+      "get": {
+        "operationId": "preset_icons_list_preset_icons_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetIconList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Preset Icons List",
+        "tags": [
+          "preset-icons"
+        ]
+      }
+    },
+    "/preset-icons/make": {
+      "post": {
+        "description": "One t2i job per item on the variant's swatch model (`/capabilities.defaults.swatch`), origin `{generate, swatch, {key, field, value}}`;\nthe finisher stores the result under the key. Needs an open project — the jobs and their Catalogue results live there.",
+        "operationId": "preset_icons_make_preset_icons_make_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetIconsMade"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preset Icons Make",
+        "tags": [
+          "preset-icons"
+        ]
+      }
+    },
+    "/preset-icons/{key}": {
+      "delete": {
+        "operationId": "preset_icons_delete_preset_icons__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preset Icons Delete",
+        "tags": [
+          "preset-icons"
+        ]
+      }
+    },
+    "/preset-icons/{key}/file": {
+      "get": {
+        "operationId": "preset_icons_file_preset_icons__key__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preset Icons File",
+        "tags": [
+          "preset-icons"
         ]
       }
     },

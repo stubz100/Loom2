@@ -8,7 +8,7 @@ import { commandsFor, defaultKeysOf, keyLabel, type Scope } from './commands'
 import { chordFromEvent, remap, resetAllKeys, resetKey, useKeymap } from './keymap'
 import { preloadSuite } from './lazySuite'
 
-const SCOPES: [Scope, string][] = [['global', 'Everywhere'], ['catalogue', 'Catalogue'], ['generate', 'Generate'], ['edit', 'Edit'], ['animate', 'Animate'], ['models', 'Models']]
+const SCOPES: [Scope, string][] = [['global', 'Everywhere'], ['story', 'Story'], ['catalogue', 'Catalogue'], ['generate', 'Generate'], ['edit', 'Edit'], ['animate', 'Animate'], ['stage', 'Stage'], ['models', 'Models']]   // D90 (01 §11.7): Stage and Story were missing
 
 export function KeyboardSettings() {
   const overrides = useKeymap((s) => s.overrides)
@@ -18,7 +18,7 @@ export function KeyboardSettings() {
   const [note, setNote] = useState<{ id: string; text: string; error?: boolean } | null>(null)
   const [loaded, setLoaded] = useState(0)
   useEffect(() => {                                                      // every suite's commands, so the conflict check sees them all (D69 lazy)
-    for (const id of ['edit', 'animate', 'models']) preloadSuite(id)
+    for (const id of ['edit', 'animate', 'models', 'stage', 'story']) preloadSuite(id)
     const t = window.setTimeout(() => setLoaded((n) => n + 1), 400)
     return () => window.clearTimeout(t)
   }, [])

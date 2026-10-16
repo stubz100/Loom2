@@ -109,6 +109,9 @@ export interface EditorState {
   // AI (10 §4, M5): jobs run on the saved server document; results arrive as layers via document.changed
   aiBatch: string | null                      // batch id of the last AI run (its candidates form the strip)
   candidates: { group: string; ids: string[] } | null
+  /** D90 (B18): the candidate the strip is hovering — the canvas shows it alone (`viewDoc`); never recorded, never dirties. */
+  candPreview: string | null
+  previewCandidate: (id: string | null) => void
   runAi: (recipe: DocumentRecipe, stage?: boolean) => Promise<void>
   onDocumentChanged: (d: DocumentChangedData) => void
   mergeServerLayers: (added: string[], group?: string, shift?: { left: number; top: number }) => Promise<void>
@@ -299,6 +302,19 @@ function findParent(doc: DocumentStack, id: string): { list: Node[]; index: numb
   return out
 }
 export function countRasters(doc: DocumentStack): number { let n = 0; walk(doc.layers, (x) => { if (x.kind === 'raster') n++ }); return n }
+/** The stack the canvas renders: the document with the view-only previews applied — the blend dropdown's hovered mode (D55) and the
+ * hovered AI candidate shown alone among its siblings (D90 B18). The document itself is never touched; the same object when no
+ * preview applies. */
+export function viewDoc(doc: DocumentStack | null, blendPreview: EditorState['blendPreview'], candPreview: string | null, candidates: EditorState['candidates']): DocumentStack | null {
+  const cand = candPreview && candidates?.ids.includes(candPreview) ? candidates.ids : null
+  if (!doc || (!blendPreview && !cand)) return doc
+  const patch = (ns: Node[]): Node[] => ns.map((n) => {
+    let m = n.id === blendPreview?.id ? { ...n, blend: blendPreview.mode } : n
+    if (cand?.includes(n.id) && m.visible !== (n.id === candPreview)) m = { ...m, visible: n.id === candPreview }
+    return m.children ? { ...m, children: patch(m.children) } : m
+  })
+  return { ...doc, layers: patch(doc.layers) }
+}
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
 const newId = (p: string) => `${p}_${Math.random().toString(16).slice(2, 10)}`
 // 10 §6: entering mask editing from a tool that cannot paint or select (Move, Crop, Zoom, Hand, Eyedropper) switches to the
@@ -562,7 +578,8 @@ export const useEditor = create<EditorState>()(
         zoom: 1, pan: { x: 0, y: 0 }, fitRequested: 0, overlay: true, before: false, pixelGrid: false, quickMask: false,
         history: [], future: [], renderer: '', rendererPref: 'auto', rendererEpoch: 0, cursor: null, pixels: new Map(), masks: new Map(), selection: null, revision: 0, extractor: null, lastCompare: null,
         transform: null,
-        aiBatch: null, candidates: null, aiPrompt: { points: [], box: null },
+        aiBatch: null, candidates: null, candPreview: null, aiPrompt: { points: [], box: null },
+        previewCandidate: (id) => { if (get().candPreview !== id) set({ candPreview: id && get().candidates?.ids.includes(id) ? id : null }) },
 
         runAi: async (recipe, stage = false) => {
           const { doc } = get()
@@ -575,7 +592,7 @@ export const useEditor = create<EditorState>()(
             // is in flight — a yield only waited behind a busy frame (≈ 50 ms on the headed aiclick run)
             const r = await unwrap(http.POST('/documents/{doc_id}/ai', { params: { path: { doc_id: doc.id } }, body: { recipe, stage } }))
             const jobs = r.jobs
-            set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null })
+            set({ aiBatch: jobs[0]?.batch_id ?? jobs[0]?.id ?? null, candidates: null, candPreview: null })
             s.toast(stage ? `Staged ${jobs.length} AI job${jobs.length > 1 ? 's' : ''}` : `Queued ${jobs.length} AI job${jobs.length > 1 ? 's' : ''} — results arrive as layers`, 'info')
             void s.refreshAll()
           } catch (e) { s.toast(`AI job failed to start: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
@@ -650,7 +667,7 @@ export const useEditor = create<EditorState>()(
             if (grown && old) { selection = new LayerPixels(server.w, server.h, true); selection.ctx.drawImage(old.canvas, dx, dy); selection.refresh(); selSwap = { lp: old } }
             if (grown && get().transform) { endTransformState(); set({ transform: null }); useSession.getState().toast('The canvas grew: the free transform was cancelled', 'info') }   // F10
             const ids = gnode?.children?.map((c) => c.id) ?? added
-            set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
+            set({ doc: next, selection, candidates: ids.length > 1 ? { group: group ?? '', ids } : null, candPreview: null, activeId: added[0], editingMask: false, revision: get().revision + 1 })
             get().pushHistory({ label: 'AI result', layerId: added[0], kind: 'image', tiles: [], stack: before, at: Date.now(), selSwap })
             if (grown) get().requestFit()
             useSession.getState().toast(ids.length > 1 ? `Candidate ${ids.indexOf(added[0]) + 1} of ${ids.length} arrived — pick with 1–4 or the strip` : 'AI layer added', 'success')
@@ -661,7 +678,7 @@ export const useEditor = create<EditorState>()(
           const doc = get().doc
           if (!c || !doc) return
           if (keepId === null) {                                            // keep all (hidden except the visible one)
-            set({ candidates: null })
+            set({ candidates: null, candPreview: null })
             return
           }
           const before = clone(doc)
@@ -672,7 +689,7 @@ export const useEditor = create<EditorState>()(
             g.children = g.children.filter((ch) => ch.id === keepId)
             // B18: the other candidates' canvases stay in the maps for undo; gc drops them when the history entry goes
           }
-          set({ doc: next, candidates: null, activeId: keepId, docDirty: true, revision: get().revision + 1 })
+          set({ doc: next, candidates: null, candPreview: null, activeId: keepId, docDirty: true, revision: get().revision + 1 })
           get().pushHistory({ label: 'pick candidate', layerId: keepId, kind: 'image', tiles: [], stack: before, at: Date.now() })
         },
 
@@ -778,7 +795,7 @@ export const useEditor = create<EditorState>()(
               ? { group: top.id, ids: top.children!.map((c) => c.id) } : null
             endTransformState()
             fileDirty = false; selectionUploaded = `${doc.id}:none`        // D70: a document opens in sync with its .ora (its selection loads after)
-            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, transform: null, revision: get().revision + 1,
+            set({ doc, pixels, masks, activeId: first, editingMask: false, docDirty: false, history: [], future: [], selection: null, quickMask: false, candidates, candPreview: null, transform: null, revision: get().revision + 1,
               lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: first ? [first] : [], anchorId: first, blendPreview: null })   // F17: nothing of the last document's gestures
             get().requestFit()
           } catch (e) { if (seq === openSeq) set({ error: (e as ApiError).detail ?? (e as Error).message }) }
@@ -825,7 +842,7 @@ export const useEditor = create<EditorState>()(
           endTransformState()                                              // F16
           // F17: an open polygon, the AI prompt and the layer selection belong to the closed document (the magnetic lasso resets
           // itself on a document change: smartselect/magnetic.ts subscribes)
-          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, quickMask: false, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, transform: null,
+          set({ doc: null, pixels: new Map(), masks: new Map(), selection: null, quickMask: false, activeId: null, history: [], future: [], docDirty: false, error: null, candidates: null, candPreview: null, transform: null,
             lassoPoly: null, aiPrompt: { points: [], box: null }, selectedIds: [], anchorId: null, blendPreview: null })
         },
         listDocuments: async () => (await unwrap(http.GET('/documents'))).items,

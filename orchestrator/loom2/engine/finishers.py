@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 from PIL import Image
 
-from .. import matting, native
+from .. import matting, native, preset_icons
 from ..clips import ClipStore, compute_identity
 from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
@@ -96,6 +96,8 @@ class AssetFinisher:
             await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id)
         if assets and job.origin and job.origin.surface == "lora_check":                        # 18 §3h (LT3): FaceSim against the hero, the record grows
             await asyncio.to_thread(_lora_check_result, q, job.origin.payload or {}, assets[0].id)
+        if assets and job.origin and job.origin.surface == preset_icons.SURFACE:              # D90 (02 §6.3): the swatch pack, in app state
+            await _swatch_result(job, assets[0], compiled.summary.get("model_id", getattr(recipe, "model_id", None)), q)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -270,6 +272,24 @@ class ClipFinisher:
             await asyncio.to_thread(_lipsync_take, q, job.origin.ref, str((job.origin.payload or {}).get("version") or ""), rec.id)
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
+
+
+async def _swatch_result(job: JobRecord, rec: Any, model_id: str | None, q: JobQueue) -> None:
+    """D90 (02 §6.3): the first result, downscaled, becomes the preset's swatch under its key (the asset stays in the Catalogue with its
+    lineage). Never the job's failure: a swatch that cannot be stored is logged, and the preset keeps its glyph or its text."""
+    payload = (job.origin.payload or {}) if job.origin else {}
+    field, value = payload.get("field"), payload.get("value")
+    if not (isinstance(field, str) and isinstance(value, str)):
+        job.log_tail.append("swatch: the origin names no field / value")
+        return
+    try:
+        icon = await asyncio.to_thread(preset_icons.PresetIconStore(q.app.state_dir).store_from, field, value, q.catalogue.abs_path(rec),
+                                       model_id=model_id, seed=job.seed, asset_id=rec.id)
+    except Exception as e:
+        job.log_tail.append(f"swatch not stored: {e}")
+        return
+    job.result["preset_icon"] = icon.key
+    q.hub.broadcast(preset_icons.EVENT, {"keys": [icon.key], "deleted": False})
 
 
 def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:

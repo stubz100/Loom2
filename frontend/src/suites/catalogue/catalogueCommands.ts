@@ -10,6 +10,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { flatGroups, useAlbum } from './albumStore'
 import { activeCatalogue } from './catalogueContext'
 import { catView } from './viewKeys'
+import { allPlaced } from './placement'
 import type { JobOrigin } from '../../api/types'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 
@@ -40,7 +41,7 @@ registerCommands([
   { id: 'cat.unstate', scope: 'catalogue', label: 'Clear keep / reject', icon: Circle, keys: 'U', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => void cat().setState(ids(), 'none') },
   ...[0, 1, 2, 3, 4, 5].map((n) => ({ id: `cat.rate.${n}`, scope: 'catalogue' as const, label: n ? `Rate ${'★'.repeat(n)}` : 'Remove rating', icon: Star, keys: String(n), placement: ['context', 'inspector'] as ['context', 'inspector'], when: hasSel, run: () => void cat().setRating(ids(), n) })),
   { id: 'cat.tag', scope: 'catalogue', label: 'Tag…', icon: Tag, keys: 'T', placement: ['context', 'strip', 'inspector'], when: hasSel, run: () => { if (!useSession.getState().ui.inspectorOpen) useSession.getState().setUi({ inspectorOpen: true }); focusField('insp-tag') } },
-  { id: 'cat.reference', scope: 'catalogue', label: 'Use as reference in Generate', icon: Images, keys: 'R', placement: ['context', 'inspector', 'strip'], when: hasSel, run: () => { const list = ids(); void gen().then((g) => list.forEach((id) => g.addRef(id))) } },
+  { id: 'cat.reference', scope: 'catalogue', label: 'Use as reference in Generate', icon: Images, keys: 'R', placement: ['context', 'inspector', 'strip'], when: hasSel, run: () => { const list = ids(); void gen().then((g) => g.addRefs(list)) } },   // D90 (B12): up to the model's max_refs, one toast for the rest
   { id: 'cat.rerun', scope: 'catalogue', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.rerun(a, o)) } },
   { id: 'cat.variations', scope: 'catalogue', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['context', 'inspector'], when: () => !!primary()?.params?.recipe, run: () => { const a = primary(); const o = originHere(); if (a) void gen().then((g) => g.variations(a, undefined, o)) } },
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
@@ -52,7 +53,7 @@ registerCommands([
   { id: 'cat.animateEnd', scope: 'catalogue', label: 'Use as the end frame in Animate', icon: Film, keys: 'Shift+Z', placement: ['context', 'inspector'], when: () => !!primary() && primary()!.kind === 'image', run: () => { const a = primary(); if (a) void import('../animate/animateStore').then((m) => m.useAnimate.getState().setEnd(a.id, true)) } },
   { id: 'cat.reveal', scope: 'catalogue', label: 'Reveal in folder', icon: ExternalLink, keys: 'Ctrl+Shift+R', placement: ['context', 'inspector'], when: () => !!primary(), run: () => { const a = primary(); if (a) void revealPath(a.path) } },
   { id: 'cat.trash', scope: 'catalogue', label: 'Move to trash', icon: Trash, keys: 'Delete', alt: ['Backspace'], danger: true, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && !inTrash(),
-    run: () => { const list = ids(); const c = cat(); void c.trash(list).then(() => useSession.getState().toast(`Moved ${list.length} to trash`, 'info', () => void c.restore(list))) } },
+    run: () => void cat().trash(ids()) },                         // D90 (B5): the store's trash toasts once, with Undo, for every caller
   { id: 'cat.restore', scope: 'catalogue', label: 'Restore from trash', icon: Undo, placement: ['context', 'strip', 'inspector'], when: () => hasSel() && inTrash(), run: () => void cat().restore(ids()) },
   { id: 'cat.purge', scope: 'catalogue', label: 'Delete permanently…', icon: Trash, danger: true, placement: ['context', 'strip'], when: () => hasSel() && inTrash(), run: () => { const list = ids(); void askConfirm({ title: `Delete ${list.length} permanently?`, text: 'The files are removed from the project. This cannot be undone.', okLabel: 'Delete permanently', danger: true }).then((ok) => { if (ok) void cat().purge(list) }) } },
   // Empty trash: the strip's button is a two-step confirm (07 §1.5); from a menu or the palette it asks once (§10 finding 2)
@@ -70,7 +71,7 @@ registerCommands([
     run: () => { const list = ids(); void useAlbum.getState().duplicateAssets(list).then((n) => useSession.getState().toast(`Duplicated ${n.length} item${n.length === 1 ? '' : 's'}`, 'success')) } },
   { id: 'cat.showBatch', scope: 'catalogue', label: 'Show this batch', icon: Layers, placement: ['context'], when: () => !!primary()?.batch_id,
     run: () => { const a = primary(); if (a?.batch_id) void cat().setQuery({ batch_id: a.batch_id, batch_label: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) } },
-  { id: 'cat.toUnprocessed', scope: 'catalogue', label: 'Back to Unprocessed', icon: Inbox, keys: 'Shift+Delete', placement: ['context', 'inspector'], when: () => hasSel() && !!cat().q.group_id,
+  { id: 'cat.toUnprocessed', scope: 'catalogue', label: 'Back to Unprocessed', icon: Inbox, keys: 'Shift+Delete', placement: ['context', 'inspector'], when: () => allPlaced(ids(), cat().q),   // D90 (B17): every selected asset is placed, not only on a group page
     run: () => void useAlbum.getState().move(ids().map((id) => ({ kind: 'asset' as const, id })), null) },
   { id: 'cat.import', scope: 'catalogue', label: 'Import…', icon: Upload, placement: ['strip', 'context'], run: () => void import('./CatalogueStrip').then((m) => m.importInteractive(cat(), 'files')) },
   { id: 'cat.prev', scope: 'catalogue', label: 'Previous image', icon: ChevronLeft, keys: 'ArrowLeft', placement: ['strip', 'context'], when: () => loupeIndex() > 0, run: () => { const c = cat(); c.openLoupe(c.visibleOrder()[loupeIndex() - 1]) } },

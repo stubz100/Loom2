@@ -2,20 +2,21 @@
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
 import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, Wand2, X } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api, http, unwrap } from '../../api/client'
 import type { Asset, LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
-import { runCommand, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, runCommand, type MenuItem } from '../../frame/commands'
 import { CommandCard } from '../../frame/CommandButton'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum, type PathStep } from './albumStore'
 import { moveToMenu } from './catalogueCommands'
-import { useCat } from './catalogueContext'
+import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { selectedOrPrimary } from './catalogueStore'
-import { openInOtherPane, openPlace } from './split'
+import { notePlacements } from './placement'
+import { openInOtherPane, openPlaceFrom, type Place } from './split'
 
 // ---------------------------------------------------------------- shared bits
 const usePrefs = create<{ closed: Record<string, boolean>; toggle: (k: string) => void }>()(persist((set, get) => ({
@@ -35,6 +36,17 @@ function Section({ id, title, right, children, fold = false }: { id: string; tit
       {(!fold || !closed) && children}
     </section>
   )
+}
+
+/** D90 (B13): the Inspector's place links — in the Catalogue, its own pane; hosted by Generate, the Catalogue's active pane (the suite switches). */
+function useOpenPlace(): (place: Place) => void {
+  const host = useContext(CatalogueStoreCtx)
+  return (place) => openPlaceFrom(host, place)
+}
+/** D90 (B17): "Back to Unprocessed" is the command, enabled by its one predicate (every selected asset placed). */
+function ToUnprocessed() {
+  const cmd = command('cat.toUnprocessed')
+  return <Btn icon={<Inbox size={14} />} label="Back to Unprocessed" run={() => runCommand('cat.toUnprocessed')} disabled={!cmd || !isEnabled(cmd)} title="Back to Unprocessed (Shift+Delete): off its group page" />
 }
 
 /** "today 14:02", "yesterday 09:10", "7 Oct 14:02", "7 Oct 2025". */
@@ -94,18 +106,18 @@ function useLocations(ids: string[]): Record<string, { group_id: string; path: P
     if (!ids.length) { setLoc(null); return }
     let live = true
     void unwrap(http.GET('/groups/where', { params: { query: { ids: ids.slice(0, 200) } } }))
-      .then((r) => { if (live) setLoc(r) }).catch(() => { if (live) setLoc(null) })
+      .then((r) => { if (live) { notePlacements(r); setLoc(r) } }).catch(() => { if (live) setLoc(null) })
     return () => { live = false }
   }, [key, tree]) // eslint-disable-line react-hooks/exhaustive-deps
   return loc
 }
 
 function Crumbs({ path }: { path: PathStep[] }) {
-  const c = useCat()
+  const open = useOpenPlace()
   return (
     <span className="crumbs-i">
       <BookOpen size={13} />
-      {path.map((p, i) => <span key={p.id}>{i > 0 && <span className="sep">›</span>}<button className="link" onClick={() => openPlace(c, { group: p.id })}>{p.name}</button></span>)}
+      {path.map((p, i) => <span key={p.id}>{i > 0 && <span className="sep">›</span>}<button className="link" onClick={() => open({ group: p.id })}>{p.name}</button></span>)}
     </span>
   )
 }
@@ -204,6 +216,7 @@ function One({ a }: { a: Asset }) {
   const ids = [a.id]
   const loc = useLocations(ids)
   const here = loc?.[a.id]
+  const open = useOpenPlace()
   const loadInGenerate = () => void import('../generate/generateStore').then((m) => { m.useGenerate.getState().loadFromAsset(a, false); useSession.getState().setSuite('generate') })
   return (
     <div className="insp">
@@ -213,10 +226,10 @@ function One({ a }: { a: Asset }) {
       <Judge ids={ids} a={a} />
       <Section id="tags" title="Tags"><Tags ids={ids} shared={a.tags} recs={[a]} /></Section>
       <Section id="location" title="Location">
-        <div className="loc">{a.trashed_at ? <span className="muted">In Trash{here ? ' (back on its page when restored)' : ''}</span> : here ? <Crumbs path={here.path} /> : <span className="crumbs-i"><Inbox size={13} /><button className="link" onClick={() => openPlace(c, 'unprocessed')}>Unprocessed</button></span>}</div>
+        <div className="loc">{a.trashed_at ? <span className="muted">In Trash{here ? ' (back on its page when restored)' : ''}</span> : here ? <Crumbs path={here.path} /> : <span className="crumbs-i"><Inbox size={13} /><button className="link" onClick={() => open('unprocessed')}>Unprocessed</button></span>}</div>
         {!a.trashed_at && <div className="row-btns">
           <Btn icon={<FolderInput size={14} />} label="Move to" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
-          {here && <Btn icon={<Inbox size={14} />} label="Back to Unprocessed" run={() => void useAlbum.getState().move([{ kind: 'asset', id: a.id }], null)} />}
+          {here && <ToUnprocessed />}
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => runCommand('cat.duplicate')} title="Duplicate (Ctrl+D): a second copy you can place elsewhere" />
         </div>}
       </Section>
@@ -274,6 +287,7 @@ function Many({ recs }: { recs: Asset[] }) {
         <div className="row-btns">
           {onePage && <button className="primary" onClick={groupThese}><Layers size={14} /> Group these</button>}
           <Btn icon={<FolderInput size={14} />} label="Move to" run={(e) => { const m = moveToMenu(); showMenu(e, 'items' in m ? m.items : []) }} />
+          {places && !places.has('') && <ToUnprocessed />}
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => runCommand('cat.duplicate')} />
         </div>
       </Section>
@@ -292,7 +306,7 @@ function Many({ recs }: { recs: Asset[] }) {
 }
 
 function Card({ gid }: { gid: string }) {
-  const c = useCat()
+  const open = useOpenPlace()
   const tree = useAlbum((s) => s.tree)
   const node = useMemo(() => useAlbum.getState().find(gid), [tree, gid]) // eslint-disable-line react-hooks/exhaustive-deps
   const path = useMemo(() => useAlbum.getState().pathOf(gid), [tree, gid]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -309,7 +323,7 @@ function Card({ gid }: { gid: string }) {
       <Section id="location" title="Location"><div className="loc"><Crumbs path={path.slice(0, -1)} /></div></Section>
       <Section id="group" title="Group">
         <div className="igrid">
-          <Btn icon={<BookOpen size={14} />} label="Open" run={() => openPlace(c, { group: gid })} />
+          <Btn icon={<BookOpen size={14} />} label="Open" run={() => open({ group: gid })} />
           <Btn icon={<Columns2 size={14} />} label="Open in other pane" run={() => openInOtherPane({ group: gid })} />
           <Btn icon={<Ungroup size={14} />} label="Ungroup" run={() => void al.ungroup(gid)} title="Dissolve the group: its items land where its card was (Ctrl+Shift+G)" />
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => void al.duplicate(gid)} title="A copy of the group, its photos duplicated" />

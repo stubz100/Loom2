@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { askConfirm, useSession } from '../../store/session'
 import { sy, useStory } from '../story/storyStore'
+import { setRailTab } from '../../frame/suiteRegistry'
 
 const gb = (n: number) => `${(n / 2 ** 30).toFixed(n < 2 ** 30 ? 2 : 1)} GB`
 
@@ -24,7 +25,7 @@ export function TrainedTable() {
                 <td><div>{l.name}</div><div className="mono" style={{ color: 'var(--fg3)', fontSize: 11 }}>{l.id}</div></td>
                 <td>{l.base}</td><td>{l.steps}</td><td>{gb(l.size)}</td><td className="mono">{l.trigger}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button onClick={() => { sy().selectProfile(l.profile_id, l.version); useSession.getState().setSuite('story') }} title="Open the version in Story · Cast">Show in Cast</button>{' '}
+                  <button onClick={() => { sy().selectProfile(l.profile_id, l.version); setRailTab('story', 'cast'); useSession.getState().setSuite('story') }} title="Open the version in Story · Cast">Show in Cast</button>{' '}
                   <button onClick={() => void (async () => { if (await askConfirm({ title: 'Delete the LoRA?', okLabel: 'Delete', text: `${l.name}: the file, its record and the engine's cached copy go; the version keeps its trigger.` })) await sy().deleteLora(l.id) })()} title="Delete the file, its record and the engine's copy">Delete</button>
                 </td>
               </tr>

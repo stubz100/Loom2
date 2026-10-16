@@ -59,7 +59,7 @@ def capabilities(svc: Services) -> dict:
     live = svc.queue.engine_enum if svc.queue else (lambda cls, key: None)      # the running engine's own enums when it has answered
     return {"recipes": RECIPES, "i2v": {"models": _i2v_models(svc, variant), **i2v_sizes()}, "models": _image_models(svc, variant),
             "tools": _tools(svc, variant),
-            "defaults": {kind: registry.default_model(kind, variant) for kind in RECIPES},
+            "defaults": {kind: registry.default_model(kind, variant) for kind in [*RECIPES, "swatch"]},   # D90 (02 §6.3): + the preset swatch pack's t2i model
             "facesim": {"available": facesim.available(svc.app.settings.models_root), "dir": str(facesim.weights_dir(svc.app.settings.models_root))},
             "variant": variant, "vram_budget_gb": svc.app.settings.vram_budget_gb,
             "samplers": live("KSampler", "sampler_name") or SAMPLERS, "schedulers": (live("KSampler", "scheduler") or SCHEDULERS) + [FLUX2_SCHEDULE],
@@ -252,6 +252,7 @@ def _image_models(svc: Services, variant: str) -> dict:
                            "cfg_fixed": sm.cfg_fixed, "cfg_note": sm.cfg_note, "model_shift": sm.model_shift,
                            # D89: guidance is a control only where the graph has FluxGuidance; tiled refine and the Edit graphs stay on the FLUX.2 family
                            "guidance_node": family(spec).flux_guidance, "tiled_refine": spec.recipes.i2i and spec.graph in registry.FLUX_GRAPHS,
+                           "flux_shift": family(spec).flux_shift,                    # D90 (B12): ModelSamplingFlux in the graph — Advanced shows base / max shift only then
                            # D31: the encoder that runs by default and the alternates a recipe may name in `te_id` (the panels' picker)
                            "te_id": te_default,
                            "te_options": [{"id": t, "label": te_label(t) or ROSTER_BY_ID[t].name, "name": ROSTER_BY_ID[t].name, "health": svc.roster.resolve(t).health,

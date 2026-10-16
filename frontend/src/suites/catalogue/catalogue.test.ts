@@ -100,3 +100,62 @@ describe('album tree', () => {
     expect(useAlbum.getState().pathOf('g1')).toEqual([])
   })
 })
+
+// D90 (B17): one predicate for "Back to Unprocessed" — every selected asset placed in a group
+describe('allPlaced', () => {
+  it('is true on a group page, false in Unprocessed and the Trash, elsewhere what /groups/where said', async () => {
+    const { allPlaced, clearPlacements, notePlacements } = await import('./placement')
+    clearPlacements()
+    expect(allPlaced([], { folder: 'all', group_id: 'g1' })).toBe(false)
+    expect(allPlaced(['a'], { folder: 'all', group_id: 'g1' })).toBe(true)
+    expect(allPlaced(['a'], { folder: 'unprocessed' })).toBe(false)
+    expect(allPlaced(['a'], { folder: 'trash' })).toBe(false)
+    expect(allPlaced(['a'], { folder: 'all' })).toBe(false)                         // unknown: not placed
+    notePlacements({ a: { group_id: 'g1' }, b: null, c: { group_id: 'album' } })
+    expect(allPlaced(['a', 'c'], { folder: 'all' })).toBe(true)                     // the Album page counts as placed
+    expect(allPlaced(['a', 'b'], { folder: 'all' })).toBe(false)
+  })
+  it('forgets every placement when the album tree changes (a move, a group made or removed)', async () => {
+    const { allPlaced, notePlacements } = await import('./placement')
+    notePlacements({ a: { group_id: 'g1' } })
+    expect(allPlaced(['a'], { folder: 'all' })).toBe(true)
+    useAlbum.setState({ tree: { id: 'album', name: 'Album', children: [] } as unknown as AlbumNode })
+    expect(allPlaced(['a'], { folder: 'all' })).toBe(false)
+    useAlbum.setState({ tree: null })
+  })
+})
+
+// D90 (B10): the loupe and compare show clips and spoken lines as media, not as a broken <img>
+describe('loupeMedia', () => {
+  it('plays a clip in a video (an Animate clip names its clip), a line in an audio, and zooms only images', async () => {
+    const { loupeMedia } = await import('./media')
+    const v = loupeMedia({ id: 'ast_v', kind: 'video', params: { clip_id: 'clip_1' } })
+    expect(v).toMatchObject({ kind: 'video', clipId: 'clip_1', zoom: false })
+    expect(v.src).toContain('/assets/ast_v/file')
+    expect(loupeMedia({ id: 'ast_w', kind: 'video', params: {} })).toMatchObject({ kind: 'video', clipId: null })
+    const a = loupeMedia({ id: 'ast_a', kind: 'audio', params: {} })
+    expect(a).toMatchObject({ kind: 'audio', zoom: false })
+    expect((a as { poster: string }).poster).toContain('/thumbs/ast_a/')
+    expect(loupeMedia({ id: 'ast_i', kind: 'image', params: {} })).toMatchObject({ kind: 'image', zoom: true })
+    expect(loupeMedia({ id: 'ast_m', kind: 'mesh', params: {} }).src).toContain('/thumbs/ast_m/1024')
+  })
+})
+
+// D90 (B13): the Inspector's place links from Generate switch to the Catalogue and open the place in its active pane
+describe('openPlaceFrom', () => {
+  it("opens in the Catalogue's active pane from Generate's results, and in place from a pane", async () => {
+    const [{ openPlaceFrom, useSplit }, st, { useSession }] = await Promise.all([import('./split'), import('./catalogueStore'), import('../../store/session')])
+    const spy = (h: typeof st.useCatalogue) => { const f = vi.fn(async () => undefined); h.setState({ setQuery: f }); return f }
+    const p0 = spy(st.useCatalogue), p1 = spy(st.useCataloguePane2), gen = spy(st.useGenerateResults)
+    useSession.setState({ ui: { ...useSession.getState().ui, suite: 'generate' } })
+    useSplit.setState({ mode: 'side', active: 1 })
+    openPlaceFrom(st.useGenerateResults, { group: 'g7' })
+    expect(useSession.getState().ui.suite).toBe('catalogue')
+    expect(p1).toHaveBeenCalledWith(expect.objectContaining({ group_id: 'g7' }))
+    expect(gen).not.toHaveBeenCalled()
+    expect(p0).not.toHaveBeenCalled()
+    openPlaceFrom(st.useCatalogue, 'unprocessed')
+    expect(p0).toHaveBeenCalledWith(expect.objectContaining({ folder: 'unprocessed' }))
+    useSplit.setState({ mode: 'single', active: 0 })
+  })
+})

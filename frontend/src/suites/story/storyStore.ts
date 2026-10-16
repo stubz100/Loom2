@@ -25,11 +25,17 @@ export type VoiceBody = { name: string; tier: 'draft' | 'cloning'; voice: string
 export function voiceLabel(v: { name: string; tier: string; language: string }): string {
   return `${v.name} · ${v.tier}${v.language !== 'English' ? ` · ${v.language}` : ''}`
 }
-/** D88 XL: the voiced Flow lines a lip-sync can follow — the owner node's first. */
-export function voicedLines(nodes: Record<string, FlowNode>, ownerNode: string | null): { node_id: string; index: number; label: string; too_long: boolean }[] {
-  const out: { node_id: string; index: number; label: string; too_long: boolean }[] = []
+/** D88 XL: the voiced Flow lines a lip-sync can follow — the owner node's first. D90 (B6): a line whose spoken audio (its asset's
+ *  `duration_s`, `secs` by asset id) runs past the lip-sync window (`/capabilities.experimental.lipsync.seconds_max`) is `too_long`;
+ *  a duration not known yet is offered (the server caps the frames). */
+export function voicedLines(nodes: Record<string, FlowNode>, ownerNode: string | null, secs: Record<string, number | null | undefined> = {}, max: number | null | undefined = null): { node_id: string; index: number; label: string; too_long: boolean; seconds: number | null }[] {
+  const out: { node_id: string; index: number; label: string; too_long: boolean; seconds: number | null }[] = []
   const order = Object.values(nodes).sort((a, b) => (a.id === ownerNode ? -1 : b.id === ownerNode ? 1 : 0))
-  for (const n of order) n.lines.forEach((l, i) => { if (l.audio_asset_id && l.text.trim()) out.push({ node_id: n.id, index: i, label: `${n.title || n.type} · ${l.text.slice(0, 40)}`, too_long: false }) })
+  for (const n of order) n.lines.forEach((l, i) => {
+    if (!l.audio_asset_id || !l.text.trim()) return
+    const d = secs[l.audio_asset_id] ?? null
+    out.push({ node_id: n.id, index: i, label: `${n.title || n.type} · ${l.text.slice(0, 40)}`, too_long: d !== null && max !== null && max !== undefined && d > max, seconds: d })
+  })
   return out
 }
 /** The newest `tts` job that speaks a Flow line (the line's state in the Inspector). */
@@ -77,6 +83,11 @@ export interface StoryState {
   playLine: (assetId: string) => void
   /** D88 XL (experimental): the shot version's lip-sync options and the verb. */
   lipsyncOpts: { node_id: string | null; index: number | null; preset: 'draft' | 'fast' }
+  /** D90 (B6): the spoken lines' durations by audio asset id (null: unknown), fetched once per asset for the lip-sync window check. */
+  audioSecs: Record<string, number | null>
+  loadAudioSecs: (assetIds: string[]) => Promise<void>
+  /** The selected shot's voiced lines with the window check applied (the Inspector's picker, the verb's `when`). */
+  lipsyncLines: () => ReturnType<typeof voicedLines>
   setLipsyncOpts: (patch: Partial<{ node_id: string | null; index: number | null; preset: 'draft' | 'fast' }>) => void
   lipsync: () => Promise<void>
   castFilter: ProfileClass | 'all'; castSearch: string
@@ -87,6 +98,8 @@ export interface StoryState {
   // SY3 · Flow
   flowNodes: Record<string, FlowNode>; flowGraph: FlowGraph | null; flowLoaded: boolean
   nodeId: string | null; problems: FlowProblem[] | null; play: PlayState | null; addAt: { x: number; y: number } | null
+  /** D90 (B3): the selected edge (an out-port has one edge), deleted by "Delete the connection". */
+  edge: { from: string; port: string } | null
   load: () => Promise<void>
   flush: () => Promise<void>
   setSection: (s: Section) => void
@@ -119,6 +132,8 @@ export interface StoryState {
   createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => Promise<Profile | null>
   patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string; voice_id?: string | null }) => Promise<void>
   setStub: (stub: string) => void
+  /** D90 (B14): the name as typed — shown at once, saved after a pause (as the stub). */
+  renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
   lockVersion: () => Promise<void>
@@ -137,6 +152,8 @@ export interface StoryState {
   shotVersion: () => ShotVersion | undefined
   createShot: (name: string, src?: { stage_id?: string; camera_id?: string; clip_id?: string; frame_asset_id?: string }) => Promise<Shot | null>
   patchShot: (patch: { name?: string; current?: string; owner_node?: string | null }) => Promise<void>
+  /** D90 (B14): the name as typed — shown at once, saved after a pause. */
+  renameShot: (name: string) => void
   newShotVersion: () => Promise<void>
   finalizeShot: () => Promise<boolean>
   useTake: (kind: 'image' | 'clip', id: string) => Promise<void>
@@ -148,6 +165,7 @@ export interface StoryState {
   // SY3 · Flow
   loadFlow: () => Promise<void>
   selectNode: (id: string | null) => void
+  selectEdge: (edge: { from: string; port: string } | null) => void
   setAddAt: (at: { x: number; y: number } | null) => void
   node: () => FlowNode | undefined
   addNode: (type: FlowNode['type'], title?: string, at?: { x: number; y: number } | null, extra?: { text?: string }) => Promise<FlowNode | null>
@@ -198,8 +216,25 @@ function schedule(get: () => StoryState, set: (p: Partial<StoryState>) => void):
   saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300)
 }
 
-// SY1: the stub saves after a pause, with the profile's revision
-let stubTimer: number | null = null
+// SY1: the stub saves after a pause, with the profile's revision. D90 (B14): the name too — one pending body per profile, the saves one
+// after another (each with the revision the last one returned), so a stub and a name typed together never send the same revision
+export type ProfileBody = { name?: string; versions?: { id: string; [k: string]: unknown }[]; [k: string]: unknown }
+let profTimer: number | null = null
+let profPending: { pid: string; body: ProfileBody } | null = null
+let profChain: Promise<unknown> = Promise.resolve()
+let shotTimer: number | null = null
+let shotPending: { sid: string; body: { name?: string } } | null = null
+let shotChain: Promise<unknown> = Promise.resolve()
+/** Two profile bodies as one: the later wins per field, the versions merged by id. */
+export function mergeProfileBody(a: ProfileBody, b: ProfileBody): ProfileBody {
+  const out: ProfileBody = { ...a, ...b }
+  if (a.versions || b.versions) {
+    const vs = new Map<string, { id: string; [k: string]: unknown }>()
+    for (const v of [...(a.versions ?? []), ...(b.versions ?? [])]) vs.set(v.id, { ...vs.get(v.id), ...v })
+    out.versions = [...vs.values()]
+  }
+  return out
+}
 // SY3: graph saves (positions, edges) go one after another, each with the index's revision; node saves likewise per node, coalesced
 let graphChain: Promise<void> = Promise.resolve()
 let graphPending = 0                                   // saves queued or running: no reload from the socket while one is pending
@@ -210,26 +245,66 @@ let nodeSaving = 0
 export const useStory = create<StoryState>()((set, get) => {
   const edit: StoryState['edit'] = (patch) => { const w = get().world ?? EMPTY; set({ world: { ...w, ...patch } }); schedule(get, set) }
   const replaceProfile = (p: Profile) => set({ profiles: [p, ...get().profiles.filter((x) => x.id !== p.id)] })
-  const patchWith = async (body: Record<string, unknown>): Promise<Profile | null> => {
-    const p = get().profile()
-    if (!p) return null
-    try {
-      const next = await unwrap(http.PATCH('/story/profiles/{pid}', { params: { path: { pid: p.id } }, body: { revision: p.revision, ...body } as never }))
-      replaceProfile(next)
-      return next
-    } catch (e) {
-      if ((e as ApiError).status === 409) { toast('The profile changed elsewhere — reloaded; your last change was not saved'); await get().loadProfiles() }
-      else toast(`Profile not saved: ${detail(e)}`)
-      return null
-    }
+  const updateProfile = (p: Profile) => set({ profiles: get().profiles.map((x) => (x.id === p.id ? p : x)) })           // a local edit: the list keeps its order
+  /** What the server returned, with the name / stubs typed since still showing (they save next). */
+  const overlayPending = (p: Profile): Profile => {
+    const b = profPending?.pid === p.id ? profPending.body : null
+    if (!b) return p
+    return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv && typeof pv.stub === 'string' ? { ...v, stub: pv.stub } : v }) }
+  }
+  const patchWith = (body: ProfileBody, pid: string | null = get().profileId): Promise<Profile | null> => {
+    const run = profChain.then(async (): Promise<Profile | null> => {
+      const p = get().profiles.find((x) => x.id === pid)
+      if (!p) return null
+      let b = body
+      if (profPending?.pid === p.id) { b = mergeProfileBody(profPending.body, body); profPending = null; if (profTimer) { window.clearTimeout(profTimer); profTimer = null } }   // a typed name / stub rides along
+      if (!Object.keys(b).length) return p
+      try {
+        const next = await unwrap(http.PATCH('/story/profiles/{pid}', { params: { path: { pid: p.id } }, body: { revision: p.revision, ...b } as never }))
+        replaceProfile(overlayPending(next))
+        return next
+      } catch (e) {
+        if ((e as ApiError).status === 409) { toast('The profile changed elsewhere — reloaded; your last change was not saved'); await get().loadProfiles() }
+        else toast(`Profile not saved: ${detail(e)}`)
+        return null
+      }
+    })
+    profChain = run.catch(() => null)
+    return run
+  }
+  /** D90 (B14): a shot PATCH with its revision, one at a time; a typed name waiting for its pause rides along. */
+  const patchShotWith = (patch: { name?: string; current?: string; owner_node?: string | null }, sid: string | null = get().shotId): Promise<void> => {
+    const run = shotChain.then(async () => {
+      const s = get().shots.find((x) => x.id === sid); if (!s) return
+      let body: typeof patch = patch
+      if (shotPending?.sid === s.id) { body = { ...shotPending.body, ...patch }; shotPending = null; if (shotTimer) { window.clearTimeout(shotTimer); shotTimer = null } }
+      if (!Object.keys(body).length) return
+      try {
+        const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, ...body } as never }))
+        const typed = shotPending?.sid === next.id ? shotPending.body.name : undefined                      // typed since: still shown, saved next
+        set({ shots: get().shots.map((x) => (x.id === next.id ? (typed !== undefined ? { ...next, name: typed } : next) : x)) })
+      } catch (e) {
+        if ((e as ApiError).status === 409) { toast('The shot changed elsewhere — reloaded; your last change was not saved'); await get().loadShots() }
+        else toast(`Shot not saved: ${detail(e)}`)
+      }
+    })
+    shotChain = run.catch(() => undefined)
+    return run
+  }
+  /** D90 (B14): a typed field joins the profile's pending body; the save follows a 400 ms pause (another profile's pending one goes first). */
+  const queueProfile = (pid: string, body: ProfileBody) => {
+    if (profPending && profPending.pid !== pid) { const prev = profPending; profPending = null; if (profTimer) { window.clearTimeout(profTimer); profTimer = null } void patchWith(prev.body, prev.pid) }
+    profPending = { pid, body: mergeProfileBody(profPending?.pid === pid ? profPending.body : {}, body) }
+    if (profTimer) window.clearTimeout(profTimer)
+    profTimer = window.setTimeout(() => { profTimer = null; if (profPending) void patchWith({}, profPending.pid) }, 400)
   }
   return {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
-    loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' },
+    loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
     castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
-    flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null,
+    flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
       set({ loading: true })
       try { set({ world: await unwrap(http.GET('/story/world')) }) }
@@ -299,11 +374,11 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     onChanged: (data) => {
       if (data?.kind === 'profile') {                                        // SY1: a profile moved on the server (an Expand's candidates page, a lock, a copy)
-        if (stubTimer !== null) return
+        if (profPending) return                                              // our typed name / stub is about to save (D90 B14)
         void get().loadProfiles()
         return
       }
-      if (data?.kind === 'shot') { void get().loadShots(); return }          // SY2: a take arrived, a finalize, a copy
+      if (data?.kind === 'shot') { if (!shotPending) void get().loadShots(); return }   // SY2: a take arrived, a finalize, a copy (not while a typed name waits)
       if (data?.kind === 'voice') { void get().loadVoices(); return }        // CN2: a voice made, changed, measured or deleted
       if (data?.kind === 'flow') { if (graphPending === 0 && nodeSaving === 0) void get().loadFlow(); return }   // SY3: a node or the index moved on the server (not while ours are pending)
       if (data?.kind && data.kind !== 'world') return
@@ -364,9 +439,13 @@ export const useStory = create<StoryState>()((set, get) => {
     setStub: (stub) => {
       const p = get().profile(); const v = get().version()
       if (!p || !v || v.state !== 'open') return
-      replaceProfile({ ...p, versions: p.versions.map((x) => (x.id === v.id ? { ...x, stub } : x)) })
-      if (stubTimer) window.clearTimeout(stubTimer)
-      stubTimer = window.setTimeout(() => { stubTimer = null; void patchWith({ versions: [{ id: v.id, stub: get().version()?.stub ?? stub }] }) }, 400)
+      updateProfile({ ...p, versions: p.versions.map((x) => (x.id === v.id ? { ...x, stub } : x)) })
+      queueProfile(p.id, { versions: [{ id: v.id, stub }] })
+    },
+    renameProfile: (name) => {
+      const p = get().profile(); if (!p) return
+      updateProfile({ ...p, name })
+      if (name.trim()) queueProfile(p.id, { name: name.trim() })                                     // a blank name is not sent (the server refuses it)
     },
     setHero: async (assetId) => { const v = get().version(); if (v) await patchWith({ versions: [{ id: v.id, hero_asset_id: assetId }] }) },
     newVersion: async () => {
@@ -487,11 +566,21 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Voice all lines: ${detail(e)}`) }
     },
     setLipsyncOpts: (patch) => set({ lipsyncOpts: { ...get().lipsyncOpts, ...patch } }),
+    loadAudioSecs: async (ids) => {
+      const want = [...new Set(ids)].filter((id) => !(id in get().audioSecs))
+      if (!want.length) return
+      set({ audioSecs: { ...get().audioSecs, ...Object.fromEntries(want.map((id) => [id, null])) } })                 // asked once
+      const got = await Promise.all(want.map((id) => unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: id } } })).then((a) => a.duration_s ?? null).catch(() => null)))
+      set({ audioSecs: { ...get().audioSecs, ...Object.fromEntries(want.map((id, i) => [id, got[i]])) } })
+    },
+    lipsyncLines: () => voicedLines(get().flowNodes, get().shot()?.owner_node ?? null, get().audioSecs, useSession.getState().capabilities?.experimental?.lipsync?.seconds_max),
     lipsync: async () => {
       const s = get().shot(); const v = get().shotVersion(); if (!s || !v) return
       const o = get().lipsyncOpts
-      const line = o.node_id !== null && o.index !== null ? { node_id: o.node_id, index: o.index } : voicedLines(get().flowNodes, s.owner_node ?? null)[0]
-      if (!line) { toast('No voiced line — voice one in the Flow (🎙) first'); return }
+      const lines = get().lipsyncLines()
+      const line = o.node_id !== null && o.index !== null ? lines.find((l) => l.node_id === o.node_id && l.index === o.index) ?? { node_id: o.node_id, index: o.index, too_long: false, seconds: null } : lines.find((l) => !l.too_long)
+      if (!line) { toast(lines.length ? 'Every voiced line runs past the lip-sync window — shorten one in the Flow' : 'No voiced line — voice one in the Flow (🎙) first'); return }
+      if (line.too_long) { toast(`That line runs ${line.seconds} s — past the lip-sync window; pick a shorter one`); return }
       try {
         const r = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/lipsync', { params: { path: { sid: s.id, vid: v.id } },
           body: { node_id: line.node_id, index: line.index, preset: o.preset, stage: true } as never }))
@@ -560,15 +649,15 @@ export const useStory = create<StoryState>()((set, get) => {
         return s
       } catch (e) { toast(`Shot: ${detail(e)}`); return null }
     },
-    patchShot: async (patch) => {
+    patchShot: async (patch) => { await patchShotWith(patch) },
+    renameShot: (name) => {
       const s = get().shot(); if (!s) return
-      try {
-        const next = await unwrap(http.PATCH('/story/shots/{sid}', { params: { path: { sid: s.id } }, body: { revision: s.revision, ...patch } as never }))
-        set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
-      } catch (e) {
-        if ((e as ApiError).status === 409) { toast('The shot changed elsewhere — reloaded; your last change was not saved'); await get().loadShots() }
-        else toast(`Shot not saved: ${detail(e)}`)
-      }
+      set({ shots: get().shots.map((x) => (x.id === s.id ? { ...x, name } : x)) })
+      if (!name.trim()) return                                                                        // a blank name is not sent
+      if (shotPending && shotPending.sid !== s.id) { const prev = shotPending; shotPending = null; if (shotTimer) { window.clearTimeout(shotTimer); shotTimer = null } void patchShotWith(prev.body, prev.sid) }
+      shotPending = { sid: s.id, body: { name: name.trim() } }
+      if (shotTimer) window.clearTimeout(shotTimer)
+      shotTimer = window.setTimeout(() => { shotTimer = null; if (shotPending) void patchShotWith({}, shotPending.sid) }, 400)
     },
     newShotVersion: async () => {
       const s = get().shot(); if (!s) return
@@ -620,15 +709,17 @@ export const useStory = create<StoryState>()((set, get) => {
         set({ flowNodes, flowGraph: r.graph, flowLoaded: true, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}) })
       } catch (e) { if ((e as ApiError).status !== 409) toast(`Flow: ${detail(e)}`) }
     },
-    selectNode: (nodeId) => set({ nodeId }),
+    selectNode: (nodeId) => set({ nodeId, ...(nodeId ? { edge: null } : {}) }),
+    selectEdge: (edge) => set({ edge, ...(edge ? { nodeId: null } : {}) }),
     setAddAt: (addAt) => set({ addAt }),
     node: () => { const id = get().nodeId; return id ? get().flowNodes[id] : undefined },
     addNode: async (type, title, at, extra) => {
+      const pin = at ?? get().addAt                                                                  // D90 (B11): read before the await — the pane menu's close clears it
+      set({ addAt: null })
       const g = get().flowGraph
       const n0 = g?.nodes.length ?? 0
-      const c = (await import('./storyCommands')).flowView.centre?.()
-      const pos = at ?? get().addAt ?? (c ? { x: c.x - 110 + (n0 % 4) * 40, y: c.y - 40 + (n0 % 4) * 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 })   // the view's centre, stepped so new nodes do not stack
-      set({ addAt: null })
+      const c = pin ? null : (await import('./storyCommands')).flowView.centre?.()
+      const pos = pin ?? (c ? { x: c.x - 110 + (n0 % 4) * 40, y: c.y - 40 + (n0 % 4) * 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 })   // the view's centre, stepped so new nodes do not stack
       try {
         const n = await unwrap(http.POST('/story/flow/nodes', { body: { type, title: title ?? '', x: pos.x, y: pos.y, text: extra?.text ?? '', target: null } }))
         await get().loadFlow()
@@ -666,7 +757,8 @@ export const useStory = create<StoryState>()((set, get) => {
     disconnect: async (from, port) => {
       const g = get().flowGraph; if (!g) return
       const edges = g.edges.filter((e) => !(e.from === from && e.port === port))
-      set({ flowGraph: { ...g, edges } })
+      const sel = get().edge
+      set({ flowGraph: { ...g, edges }, ...(sel?.from === from && sel.port === port ? { edge: null } : {}) })
       saveGraph(get, set, { edges })
     },
     bindShot: async (nodeId, shotId, version) => {

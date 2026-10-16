@@ -7,11 +7,19 @@ import { command, handleKeyFor, matchesCommand } from './commands'
 import { usePalette } from './CommandPalette'
 import './globalCommands'
 
+/** Marks a contextmenu event this module dispatched from the keyboard (Shift+F10 / the Menu key), so a host can tell it from a right-click. */
+export const FROM_KEYS = 'loom2FromKeys'
+export const isMenuFromKeys = (e: Event): boolean => !!(e as unknown as Record<string, unknown>)[FROM_KEYS]
+
 export function openContextMenuAtFocus(): void {
   const el = (document.activeElement as HTMLElement | null) ?? document.body
-  const target = el.closest('[data-id], .layer-row, .job, .loupe, .edit-canvas, .cat-grid') as HTMLElement | null ?? el
+  let target = el.closest('[data-id], .layer-row, .job, .loupe, .edit-canvas, .cat-grid') as HTMLElement | null ?? el
+  // D90 (B16): the Catalogue grid has the focus, its tiles never do — the menu is the primary selected tile's when it is rendered; when it
+  // is scrolled out of the virtual window the grid opens the tile menu itself (it sees FROM_KEYS and a selection)
+  if (target.matches('.cat-grid')) target = target.querySelector<HTMLElement>('.tile.primary') ?? target.querySelector<HTMLElement>('.tile.selected') ?? target
   const r = target.getBoundingClientRect()
-  target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(24, r.width / 2), clientY: r.top + Math.min(24, r.height / 2) }))
+  const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + Math.min(24, r.width / 2), clientY: r.top + Math.min(24, r.height / 2) })
+  target.dispatchEvent(Object.assign(ev, { [FROM_KEYS]: true }))
 }
 
 export function useKeyboardMap() {

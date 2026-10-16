@@ -14,13 +14,18 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
   { scope: 'edit', chord: 'delete', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'useEditKeys sends Delete to the magnetic lasso while it is active (D59) before handleKeyFor; otherwise only Clear is enabled' },
   { scope: 'edit', chord: 'backspace', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'as Delete: the magnetic lasso takes Backspace first while it is active (D59)' },
   // byDispatch: settled by which handler sees the key first, not by `when`
-  { scope: 'edit', chord: 'ctrl+1', ids: ['edit.view.100', 'global.suite.catalogue'], byDispatch: true, why: 'useEditKeys (capture phase) takes Ctrl+1 for 100 % while a document is open and stops it (10 §5); elsewhere it switches suite (07 §4)' },
+  { scope: 'edit', chord: 'ctrl+1', ids: ['edit.view.100', 'global.suite.story'], byDispatch: true, why: 'useEditKeys (capture phase) takes Ctrl+1 for 100 % while a document is open and stops it (10 §5); elsewhere it opens the Story tab (D90)' },
   { scope: 'edit', chord: 'ctrl+2', ids: ['edit.view.200', 'global.suite.generate'], byDispatch: true, why: 'as Ctrl+1: 200 % in Edit with a document open, the suite switch everywhere else' },
   // D72: keys that lived outside the registry until now
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.sel.polyClose'], why: 'with AI candidates showing, Enter keeps the visible one (it is registered first, as useEditKeys did before D72); else it closes an open polygon' },
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.transform.apply'], why: 'Keep the visible candidate is disabled while a transform is open, Apply only while one is' },
+  // D90 (B9): Apply crop needs the Crop tool and a selection, no open transform, polygon or magnetic border
+  { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.crop.apply'], why: 'with AI candidates showing, Enter keeps the visible one first (registered first); the next Enter applies the crop' },
+  { scope: 'edit', chord: 'enter', ids: ['edit.crop.apply', 'edit.sel.polyClose'], why: 'Apply crop is disabled while a polygon or magnetic border is open, and needs the Crop tool, which never has one' },
+  { scope: 'edit', chord: 'enter', ids: ['edit.crop.apply', 'edit.transform.apply'], why: 'Apply crop is disabled while a transform is open, Apply transform only while one is' },
   ...([1, 2, 3, 4] as const).map((n) => ({ scope: 'edit' as const, chord: String(n), ids: [`edit.brush.opacity.${n}`, `edit.cand.${n}`] as [string, string], why: `${n} keeps candidate ${n} while AI candidates show (10 §10), and sets the brush opacity otherwise — the two whens exclude each other` })),
-  { scope: 'catalogue', chord: 'ctrl+1', ids: ['cat.loupe.one', 'global.suite.catalogue'], byDispatch: true, why: 'in the loupe Ctrl+1 is 1:1; the suite switch the global map also runs is a no-op inside the Catalogue' },
+  { scope: 'story', chord: 'delete', ids: ['story.flow.deleteEdge', 'story.world.remove'], byDispatch: true, why: 'each Story tab dispatches only its own commands (storyKeys.ts, D90 B2): Delete removes a World row on World, a connection on Flow' },
+  { scope: 'catalogue', chord: 'ctrl+1', ids: ['cat.loupe.one', 'global.suite.story'], byDispatch: true, why: 'in the loupe Ctrl+1 is 1:1; the Story tab the global map also opens is a no-op inside the Catalogue, which sits under Story (D90)' },
   { scope: 'catalogue', chord: 'tab', ids: ['cat.compare.swap', 'global.focus'], byDispatch: true, why: 'Compare listens in the capture phase and stops Tab while it is open (swap); elsewhere Tab is focus mode' },
 ]
 

@@ -14,6 +14,7 @@ const active = (): Node | null => findNode(ed().doc, ed().activeId)
 const activeRaster = () => { const n = active(); return !!n && n.kind === 'raster' }
 const hasSel = () => !!ed().selection
 const setTool = (t: Tool) => () => ed().setTool(t)
+const cropOpen = () => ed().tool === 'crop' && hasSel() && !ed().transform && !ed().lassoPoly && !magnetic.active
 /** The tools: id, label, accelerator, icon — the toolbox (EditSuite) and the canvas menu's Tool submenu both read this. */
 export const TOOLS: [Tool, string, string, typeof Hand][] = [
   ['move', 'Move', 'V', MousePointer2], ['marquee', 'Marquee', 'M', Square], ['lasso', 'Lasso', 'L', Lasso], ['wand', 'Magic wand', 'W', Wand2], ['quick', 'Quick selection', '', WandSparkles], ['heal', 'Spot healing', 'J', Bandage], ['ai', 'AI select', 'A', Sparkles],
@@ -28,7 +29,8 @@ registerCommands([
   ...([1, 2, 3, 4] as const).map((n) => ({ id: `edit.cand.${n}`, scope: 'edit' as const, label: `Keep candidate ${n}`, keys: String(n), placement: ['strip'] as ['strip'],
     hint: 'or click it in the candidate strip', when: () => !!ed().candidates?.ids[n - 1], run: () => { const id = ed().candidates?.ids[n - 1]; if (id) ed().pickCandidate(id) } })),
   { id: 'edit.cand.keep', scope: 'edit', label: 'Keep the visible candidate', icon: Check, keys: 'Enter', placement: ['strip'], when: () => !!ed().candidates && !ed().transform,
-    run: () => { const st = ed(); if (!st.candidates) return; st.pickCandidate(st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]) } },
+    // D90 (B18): the one the canvas shows — the strip's hovered candidate first
+    run: () => { const st = ed(); if (!st.candidates) return; st.pickCandidate(st.candPreview ?? st.candidates.ids.find((id) => findNode(st.doc, id)?.visible) ?? st.candidates.ids[0]) } },
   ...OPACITY_DIGITS.map((n) => ({ id: `edit.brush.opacity.${n}`, scope: 'edit' as const, label: `Brush opacity ${n === 0 ? 100 : n * 10} %`, keys: String(n), placement: ['panel'] as ['panel'],
     hint: 'or the Opacity slider in Tool options', when: () => !(n >= 1 && n <= 4 && ed().candidates), run: () => ed().setBrush({ opacity: n === 0 ? 1 : n / 10 }) })),
   // history / files
@@ -107,6 +109,10 @@ registerCommands([
   { id: 'edit.sel.clear', scope: 'edit', label: 'Clear selected pixels', keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !ed().transform && (() => activeRaster() || (ed().editingMask && !!active()?.mask))(), hint: 'on a mask: fills with the background colour', run: () => ed().clearSelected() },
   { id: 'edit.sel.magBack', scope: 'edit', label: 'Remove the last point', icon: Undo2, keys: 'Backspace', alt: ['Delete'], placement: ['strip', 'context'], when: () => magnetic.active, hint: 'magnetic lasso', run: () => void magnetic.removeLast() },   // D59
   { id: 'edit.sel.crop', scope: 'edit', label: 'Crop to selection', icon: Crop, placement: ['panel', 'context'], when: () => !ed().transform && (hasSel)(), run: () => ed().cropToSelection() },
+  // D90 (B9): the Crop tool's rectangle is the selection; Enter applies it (after a candidate / polygon / transform, which exclude it), Esc
+  // deselects (useEditKeys)
+  { id: 'edit.crop.apply', scope: 'edit', label: 'Apply crop', icon: Check, keys: 'Enter', placement: ['panel', 'strip', 'context'], when: cropOpen, hint: 'or double-click inside the rectangle', run: () => ed().cropToSelection() },
+  { id: 'edit.crop.cancel', scope: 'edit', label: 'Cancel crop', icon: X, placement: ['panel', 'strip', 'context'], when: cropOpen, hint: 'or Esc', run: () => ed().deselect() },
   // free transform (10 §4)
   { id: 'edit.transform', scope: 'edit', label: 'Free transform', icon: Scan, keys: 'Ctrl+T', placement: ['panel', 'context', 'strip'], when: () => (activeRaster() || active()?.kind === 'group') && !ed().transform, hint: 'a pixel layer, the selected pixels of one, or all the layers of a group', run: () => ed().beginTransform() },
   // D58: Edit › Transform modes — start a box, or switch the open one (PhotoCraft TransformMode)
@@ -188,6 +194,7 @@ export function canvasMenu(): MenuItem[] {
   const tools: MenuItem[] = TOOLS.map(([tool, label]) => ({ cmd: `edit.tool.${tool}`, label, checked: st.tool === tool }))
   return [
     ...(st.transform ? [{ heading: 'transform' }, ...(['free', 'skew', 'distort', 'perspective'] as const).map((m) => ({ cmd: `edit.transform.mode.${m}`, label: m === 'free' ? 'Free transform' : m[0].toUpperCase() + m.slice(1), checked: st.transform!.mode === m })), sep, { cmd: 'edit.transform.apply' }, { cmd: 'edit.transform.cancel' }, sep] : []),
+    ...(cropOpen() ? [{ heading: 'crop' }, { cmd: 'edit.crop.apply' }, { cmd: 'edit.crop.cancel' }, sep] : []),
     ...(st.lassoPoly || magnetic.active ? [{ heading: magnetic.active ? 'magnetic lasso' : 'polygonal lasso' }, { cmd: 'edit.sel.polyClose', label: magnetic.active ? 'Close the border' : undefined }, ...(magnetic.active ? [{ cmd: 'edit.sel.magBack' }] : []), { cmd: 'edit.sel.polyCancel' }, sep] : []),
     { cmd: 'edit.undo' }, { cmd: 'edit.redo' }, sep,
     ...(st.quickMask || hasSel() ? [{ heading: 'selection' }, ...selection, sep] : [{ label: 'Selection', icon: SquareDashed, items: selection }]),

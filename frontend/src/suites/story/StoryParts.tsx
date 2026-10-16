@@ -7,7 +7,7 @@ import { Film, Lock, Star } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
-import { handleKeyFor, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
+import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
@@ -18,6 +18,7 @@ import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
 import { askExpand, rowMenu } from './storyCommands'
+import { storyKey } from './storyKeys'
 import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
 import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
@@ -430,7 +431,7 @@ function WorldEditor() {
   useEffect(() => { host.current?.querySelector<HTMLElement>(`#story-sec-${section}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }, [section])
   if (!world) return <div className="story-empty"><div>{loading ? 'Loading the world…' : 'The world could not be read.'}</div></div>
   return (
-    <div ref={host} className="world-editor" tabIndex={0} onKeyDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && handleKeyFor('story', e.nativeEvent)) e.preventDefault() }}>
+    <div ref={host} className="world-editor" tabIndex={0} onKeyDown={(e) => { storyKey('world', e.nativeEvent) }}>
       <section id="story-sec-logline">
         <h3>Logline<span className="hint">one sentence</span></h3>
         <textarea rows={2} value={world.logline} aria-label="logline" placeholder="Who wants what, and what stands in the way." onChange={(e) => sy().edit({ logline: e.target.value })} />
@@ -508,7 +509,7 @@ function CastPage() {
   const cands = Object.values(candPage?.assets ?? {}).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   const open = v.state === 'open'
   return (
-    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && handleKeyFor('story', e.nativeEvent)) e.preventDefault() }}>
+    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey('cast', e.nativeEvent) }}>
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
@@ -566,7 +567,7 @@ function ShotBoard() {
   const clip = v.clip_id ? clipsById[v.clip_id] : undefined
   const why = sy().finalizeWhy(v)
   return (
-    <div className="cast-page shot-board" tabIndex={0} onKeyDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && handleKeyFor('story', e.nativeEvent)) e.preventDefault() }}>
+    <div className="cast-page shot-board" tabIndex={0} onKeyDown={(e) => { storyKey('shots', e.nativeEvent) }}>
       <section>
         <h3>Versions <span className="hint">each owns one clip; the Flow pins one, the Episode takes the final one</span></h3>
         <div className="version-cards">
@@ -660,7 +661,7 @@ function CastInspector() {
     <div className="story-insp">
       <h4>{p.name}</h4>
       <div className="kv">
-        <span>name</span><input type="text" value={p.name} aria-label="profile name" onChange={(e) => void sy().patchProfile({ name: e.target.value })} />
+        <span>name</span><input type="text" value={p.name} aria-label="profile name" onChange={(e) => sy().renameProfile(e.target.value)} />
         <span>class</span>
         <select value={p.cls} aria-label="profile class" onChange={(e) => void sy().patchProfile({ cls: e.target.value as ProfileClass })}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
         <span>current</span>
@@ -703,7 +704,7 @@ function ShotInspector() {
     <div className="story-insp">
       <h4>{s.name}</h4>
       <div className="kv">
-        <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => void sy().patchShot({ name: e.target.value })} />
+        <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => sy().renameShot(e.target.value)} />
         <span>owner</span><span>{s.owner_node ? `node ${s.owner_node}` : 'unbound (the Flow binds, SY3)'}</span>
         <span>current</span>
         <select value={s.current} aria-label="current shot version" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
@@ -850,6 +851,7 @@ function NodeInspector() {
         <select value={n.type} aria-label="node type" onChange={(e) => void sy().patchNode(n.id, { type: e.target.value as FlowNode['type'] })}>{(Object.keys(NODE_LABEL) as FlowNode['type'][]).map((t) => <option key={t} value={t}>{NODE_LABEL[t]}</option>)}</select>
         <span>title</span><input type="text" value={n.title} aria-label="node title" onChange={(e) => void sy().patchNode(n.id, { title: e.target.value })} />
         {n.type === 'comment' && <><span>text</span><textarea rows={3} value={n.text} aria-label="note text" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
+        {n.type === 'shot' && <><span>line</span><textarea rows={2} value={n.text} aria-label="shot line" placeholder="what happens (a beat's line lands here)" onChange={(e) => void sy().patchNode(n.id, { text: e.target.value })} /></>}
         {n.type === 'jump' && <><span>target</span><select value={n.target ?? ''} aria-label="jump target" onChange={(e) => void sy().patchNode(n.id, { target: e.target.value || null })}><option value="">(none)</option>{Object.values(flowNodes).filter((x) => x.id !== n.id && x.type !== 'comment').map((x) => <option key={x.id} value={x.id}>{x.title || NODE_LABEL[x.type]}</option>)}</select></>}
         {n.type === 'condition' && <><span>condition</span><div className="cond-row">
           <select value={n.cond?.var ?? ''} aria-label="condition variable" onChange={(e) => void sy().patchNode(n.id, { cond: { var: e.target.value, op: n.cond?.op ?? 'eq', value: n.cond?.value ?? true } })}><option value="">variable</option>{vars.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}</select>

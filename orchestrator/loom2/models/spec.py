@@ -63,7 +63,7 @@ class Train(Strict):
 
 
 class Recipes(Strict):
-    default_for: list[str] = []                    # recipe kinds whose default model this is (t2i, i2i, inpaint, upscale, segment, i2v)
+    default_for: list[str] = []                    # recipe kinds whose default model this is (t2i, i2i, inpaint, upscale, segment, i2v; swatch: D90's preset icon pack)
     t2i: bool = False
     i2i: bool = False                              # partial denoise (refine, tiled refine): base and dev models
     inpaint: list[str] = []                        # modes this model runs (fill, fill_match, remove, outpaint)

@@ -1,14 +1,15 @@
 // The lineage view (D34, proto01_design/01 §6c): one derivation tree on the Stage — the root on the left, derivations to the
 // right, one row per branch, the edge kind on each connector, and under every card where that asset lives (the branches of
 // one lineage are usually spread over several groups). Cards select, open the loupe, drag onto groups and take the tile menu.
-import { GitBranch } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, GitBranch } from 'lucide-react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import type { LineageTree } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
+import { runCommand } from '../../frame/commands'
 import { beginDrag, mediaOf } from '../../frame/drag'
 import { tileMenu } from './catalogueCommands'
-import { useCat } from './catalogueContext'
+import { InPaneCtx, useCat } from './catalogueContext'
 
 type Tree = LineageTree
 const CARD_W = 240, CARD_H = 76, COL = 360, ROW = 112, PAD = 40, BEND = 24
@@ -41,6 +42,7 @@ export function LineageView({ id }: { id: string }) {
   const [tree, setTree] = useState<Tree | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rootId, setRootId] = useState<string | null>(null)
+  const inPane = useContext(InPaneCtx)                             // the Catalogue's strip has Back; a host without it (Generate) gets one here
   useEffect(() => {
     let live = true
     void unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: id } } })).then((a) => { if (live) setRootId(a.root_id ?? a.id) }).catch((e) => { if (live) setError((e as Error).message) })
@@ -67,6 +69,8 @@ export function LineageView({ id }: { id: string }) {
   return (
     <div className="lineage-view">
       <div className="lin-bar">
+        {/* D90 (B13): Back, as the Catalogue strip's (cat.closeLoupe) */}
+        {!inPane && <button className="quiet" title="Back (Esc)" onClick={() => runCommand('cat.closeLoupe')}><ArrowLeft size={14} /> Back</button>}
         <GitBranch size={14} /><b>Lineage</b>
         <span className="muted">{tree.items.length} asset{tree.items.length === 1 ? '' : 's'} · {lay.rows} branch{lay.rows === 1 ? '' : 'es'} · in {new Set(tree.items.map((a) => tree.locations[a.id]?.group_id ?? 'unprocessed')).size} place{new Set(tree.items.map((a) => tree.locations[a.id]?.group_id ?? 'u')).size === 1 ? '' : 's'}</span>
       </div>

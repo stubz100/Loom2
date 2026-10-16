@@ -150,3 +150,62 @@ describe('reangleRecipe', () => {
     expect(() => reangleRecipe(DEFAULT_ANGLE)).toThrow()
   })
 })
+
+// D90 (B12 / B4): what the panel sends follows the model — the negative where it is honoured, the shift where the graph has
+// ModelSamplingFlux, references up to max_refs, the tier's size on a model change — and Ctrl+Enter is gated by the Foot's reason
+describe('the model decides (D90)', () => {
+  const MODELS = {
+    defaults: { t2i: 'fx-flux' },
+    tiers: { draft: { flux2: [960, 544], zimage: [1024, 576] }, full: { flux2: [1920, 1088], zimage: [1920, 1088] } },
+    models: {
+      'fx-flux': { order: 1, family: 'flux2', label: 'Fx Flux', turbo: true, distilled: false, flux_shift: true, max_refs: 2, recipes: {} },
+      'fx-zimage': { order: 2, family: 'zimage', label: 'Fx Z', turbo: false, distilled: false, flux_shift: false, max_refs: 0, recipes: {} },
+      'fx-distilled': { order: 3, family: 'flux2', label: 'Fx Distilled', turbo: false, distilled: true, flux_shift: true, max_refs: 4, recipes: {} },
+    },
+  } as unknown as Capabilities
+  beforeEach(() => useSession.setState({ capabilities: MODELS }))
+
+  it('sends the negative only where the model honours one, the shift only where the graph has ModelSamplingFlux', async () => {
+    const { honoursNegative } = await import('./generateStore')
+    const p: Panel = { ...DEFAULT_PANEL, prompt_mode: 'text', text: 'x', negative: 'blur', base_shift: 0.7, max_shift: 1.3 }
+    expect(recipeFromPanel({ ...p, model_id: 'fx-flux' })).toMatchObject({ negative: 'blur', base_shift: 0.7, max_shift: 1.3 })
+    expect(recipeFromPanel({ ...p, model_id: 'fx-distilled' }).negative).toBe('')
+    expect(recipeFromPanel({ ...p, model_id: 'fx-zimage' })).toMatchObject({ negative: 'blur', base_shift: null, max_shift: null })
+    expect(honoursNegative(MODELS.models['fx-distilled'])).toBe(false)
+  })
+  it('a model change re-applies the tier size for its family, keeps a custom size, clears a shift it cannot take and Turbo it lacks', async () => {
+    const { modelPatch } = await import('./generateStore')
+    const p: Panel = { ...DEFAULT_PANEL, model_id: 'fx-flux', tier: 'full', width: 1920, height: 1088, base_shift: 0.6, max_shift: 1.2, turbo: true }
+    expect(modelPatch({ ...p, tier: 'draft' }, 'fx-zimage')).toEqual({ model_id: 'fx-zimage', turbo: false, width: 1024, height: 576, base_shift: null, max_shift: null })
+    expect(modelPatch({ ...p, tier: 'custom', width: 800, height: 600 }, 'fx-distilled')).toEqual({ model_id: 'fx-distilled', turbo: false })
+    expect(modelPatch(p, 'fx-flux')).toEqual({ model_id: 'fx-flux', turbo: true, width: 1920, height: 1088 })
+  })
+  it('addRefs takes references up to max_refs and says what did not fit; none on a model that takes none', async () => {
+    const { useGenerate } = await import('./generateStore')
+    const toasts: string[] = [], toast = useSession.getState().toast
+    useSession.setState({ toast: (t: string) => { toasts.push(t) } })
+    useGenerate.setState({ panel: { ...DEFAULT_PANEL, model_id: 'fx-flux', refs: [] } })
+    expect(useGenerate.getState().addRefs(['a', 'b', 'c'])).toBe(2)
+    expect(useGenerate.getState().panel.refs.map((r) => r.asset_id)).toEqual(['a', 'b'])
+    expect(toasts.pop()).toMatch(/1 over the limit of 2/)
+    expect(useGenerate.getState().addRefs(['a'])).toBe(0)                            // already there: no toast
+    expect(toasts).toEqual([])
+    useGenerate.getState().addRef('d')
+    expect(toasts.pop()).toMatch(/All 2 reference slots are full/)
+    useGenerate.setState({ panel: { ...DEFAULT_PANEL, model_id: 'fx-zimage', refs: [] } })
+    expect(useGenerate.getState().addRefs(['a'])).toBe(0)
+    expect(toasts.pop()).toMatch(/takes no reference images/)
+    useSession.setState({ toast })
+  })
+  it("submitBlock gives the Foot's reason, which also gates Ctrl+Enter and Stage (B4)", async () => {
+    const { submitBlock } = await import('./generateStore')
+    const pv = { serialized_prompt: 'a harbour', missing: [], estimate: { vram_fit: 'ok' } } as never
+    expect(submitBlock({ preview: pv, previewError: null }, false)).toBe('no project')
+    expect(submitBlock({ preview: null, previewError: 'bad size' }, true)).toBe('bad size')
+    expect(submitBlock({ preview: null, previewError: null }, true)).toBe('preparing…')
+    expect(submitBlock({ preview: { ...(pv as object), serialized_prompt: '' } as never, previewError: null }, true)).toBe('empty prompt')
+    expect(submitBlock({ preview: { ...(pv as object), missing: [{ model_id: 'w1' }] } as never, previewError: null }, true)).toBe('weights missing: w1')
+    expect(submitBlock({ preview: { ...(pv as object), estimate: { vram_fit: 'over' } } as never, previewError: null }, true)).toMatch(/VRAM/)
+    expect(submitBlock({ preview: pv, previewError: null }, true)).toBeNull()
+  })
+})

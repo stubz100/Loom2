@@ -4087,3 +4087,51 @@ split by file so that no two hands touched the same module.
   and the Turbo probe built its Roster without `scan()`. Nothing deleted (D30): every model passed.
 - Measured `estimates` and hints into the specs (Krea 2 Raw's hint names the new-prompt cost and the CPU encoder). Owed: the author's look
   at `engine/spikes/out/cr/` (t2i, variety, i2i, krea-size, zimage-dtype).
+
+## 2026-10-16 19:28 — D90 · the UI reorganisation accepted; wave UI0 (bugs) started
+
+- The author asked for an inventory of every function and its place (`.docs/proto01_UI/01-function-inventory.md`: the frame and seven
+  suites, ≈ 330 functions with ids F/C/G/E/A/S/Y/M, 302 registered commands, 18 cross-suite concepts X1–X18, 19 bugs B1–B19), then gave
+  the direction (Story first and highest, the Catalogue under Story after Cast, Models in ☰, Generate as one resizable scrolling panel,
+  presets as icons, styles shown as images) and asked whether loom2 had become several applications. The plan
+  (`.docs/proto01_UI/02-ui-plan.md`) answers it — one backend, nine applications on screen — and the author accepted it ("can you make
+  this?") → **D90**, the open points of 02 §12 on the plan's defaults.
+- The original loom read for the plan (`stubz-002-tripo-sf/loom`): one sample image per style in `bible/styles/`, picked from an image
+  popover with the fragment only as a tooltip (the author's request of 2026-08-08); World the first top tab in v2 (Assets in v1); pose
+  cells as generated mannequin icons; v2's single composer column with the action pinned and a drag-resizable 260–420 px width.
+- Order: UI0 bugs (B1 Stage keys while typing and B2 Story keys across tabs can lose work) → UI1 frame → UI2 Generate column → UI3 icons
+  and visual styles → UI4 context → UI5 vocabulary and shared components → UI6 makers.
+
+## 2026-10-16 20:01 — D90 · waves UI0 (bugs) and UI1 (frame) built; the swatch backend and the preset-icon component for UI3
+
+- **UI0 — the 19 bugs of `proto01_UI/01` §11.1 fixed.** B1 Stage keys in fields (and B8 Animate's Ctrl+Enter from the prompt) through
+  `frame/fieldKeys.ts` — a field keeps its keys, the primary action still answers; B2 Story keys per tab (`story/storyKeys.ts`,
+  `handleKeyFor(scope, e, only?)`), the Flow canvas and the Episode stage forward keys; B3 `story.flow.deleteEdge` (edge menu, Delete /
+  Backspace, Undo toast); B4 `submitBlock` gates Ctrl+Enter / the palette; B5 one trash toast; B6 lip-sync lines over
+  `experimental.lipsync.seconds_max` disabled (the voiced line's `duration_s`); B7 the Episode lane is the drop target, a Shots-bin card
+  arrives stamped, the bin offers the final version (Y57, `episode/bin.ts`); B9 Edit's Crop tool draws a rectangle, Enter / a double-click
+  inside crops (`edit.crop.apply` / `.cancel`); B10 clips and audio play in the loupe and compare (`catalogue/media.ts`); B11 "Add a node
+  here" through `screenToFlowPosition`; B12 Generate follows the model (negative only where honoured, in every mode; the tier size
+  re-applied; `/capabilities.models[id].flux_shift` hides base / max shift on Z-Image and Chroma; no reference block at `max_refs` 0;
+  `addRefs` caps at the model's limit); B13 Generate's Inspector links open the Catalogue (`split.openPlaceFrom`), lineage gets a Back; B14
+  profile and shot names saved after a 400 ms pause, one save at a time; B15 Show in Cast opens Cast; B16 Shift+F10 on the grid opens the
+  selected tile's menu; B17 one predicate for Back to Unprocessed (`catalogue/placement.ts`); B18 a hovered AI candidate is a view
+  override (`candPreview`, `viewDoc`), never a document edit; B19 a beat's line shows on Shot nodes.
+- **UI1 — the frame (02 §3, §3.1, §7).** Top bar: ☰ first (Models & engine…, settings, keys, palette, focus, dock, theme, density,
+  refresh, quit; the spike harness in dev builds only), Project ▾ kept on the project's name, then **Story · Generate · Edit · Animate ·
+  Stage** on Ctrl+1–5. Story's rail is World · Cast · **Catalogue** · Shots · Flow · Episode (`railTabs.STORY_RAIL`, `TOP_TABS`,
+  `useRailEntries`): the Catalogue stays its own suite underneath (scope, keys, deep links, wide strip unchanged) and shows under the
+  Story tab; the Story tab returns to the workspace last open under it (`ui.storyLast`); Alt+1–6 open Story's workspaces. **Models &
+  engine** is a sheet (`frame/ModelsSheet.tsx` over the old suite's parts: Roster / Engine, *only the missing weights*, *Fetch all
+  missing*); every old route to the Models suite opens it on the missing weights, the engine chip on the Engine tab. The Panel and the
+  Inspector are drag-resizable per suite (`frame/Resizer.tsx`, `panelWidth.ts`; Generate 30 % of the window by default, double-click
+  resets). Settings › Keyboard and the D32 audit now include Stage and Story; the audit also reads `registerCommands(cmds)` (Story's main
+  command file was never audited) — one declared pair, Delete for a World row / a Flow connection.
+- **UI3 groundwork.** `frame/PresetIcons.tsx` (one tile row for every preset; words in the tooltip and `aria-label`, an optional caption)
+  and `frame/presetGlyphs.tsx` (drawn glyphs for shot size, camera angle, lens, depth of field, aperture, composition, subject position,
+  the angle moves, aspect and tier — every built-in of those fields has one, tested). The swatch pack backend: `preset_icons.py` +
+  `routes/preset_icons.py` (`GET /preset-icons`, `GET …/{key}/file`, `POST /preset-icons/make` — one staged 512² t2i per preset on the
+  `swatch` default, `default_for = ["swatch"]` on Klein 4B in `klein.toml`, origin surface `swatch` — and `DELETE`), the finisher writes
+  `<state>/preset_icons/<key>.webp` and broadcasts `preset_icons.changed`. The pack's one-time cost is owed to the rig.
+- Tests: Vitest 230 (+23), offline 340 under full and open (+6), audits clean, lint 96 warnings (100 at HEAD), build clean, smoke 29 / 29
+  under full and open (`openCatalogue` in the fixtures: the Story tab, then the Catalogue workspace).

@@ -270,6 +270,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     }
     case 'job.deleted': { const jobs = { ...s.jobs }; delete jobs[f.data.id]; set({ jobs }); break }
     case 'queue.state': set({ queue: f.data }); break
+    case 'preset_icons.changed': void import('../suites/generate/swatches').then((m) => m.useSwatches.getState().load()); break   // D90 (02 §6.3): a swatch was made or removed
     case 'engine.state': set({ engine: { ...(s.engine ?? {}), ...f.data } }); break
     case 'engine.vram_pressure': {                                     // D69: a GPU job needs the memory a hidden stage holds
       void import('../frame/stageKeep').then((m) => {

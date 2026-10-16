@@ -1,14 +1,19 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowUp, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, Maximize, MessageSquare, Mic, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, type Command } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
+import { defaultModel } from '../../store/modelCaps'
+import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestTrainJob, sy, useStory, type ProfileClass } from './storyStore'
+import { findNode, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
 const selStyle = () => selected()?.kind === 'style'
 const selBeat = () => selected()?.kind === 'beat'
+const style = () => { const s = selected(); return s?.kind === 'style' ? sy().world?.styles.find((x) => x.id === s.id) : undefined }
+const sampleModel = () => { const c = useSession.getState().capabilities; return defaultModel('swatch', c) || defaultModel('t2i', c) }
 const profile = () => sy().profile()
 const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
@@ -49,6 +54,52 @@ export async function askTrain(): Promise<void> {
   if (ok) await sy().train()
 }
 
+/** D90 (02 §4.1): the style's group (its samples), made as "Style · <name>" in the album when it has none (or it was deleted). */
+async function ensureStyleGroup(id: string): Promise<string | null> {
+  if (!useAlbum.getState().tree) await useAlbum.getState().load()
+  const tree = useAlbum.getState().tree
+  const s = sy().world?.styles.find((x) => x.id === id)
+  if (!s || !tree) return null
+  if (s.group_id && findNode(tree, s.group_id)) return s.group_id
+  const gid = await useAlbum.getState().create(styleGroupName(s.name))
+  sy().setStyle(id, { group_id: gid }); await sy().flush()
+  return gid
+}
+
+/** D90 (02 §4.1): one Draft image of the style on the preview scene, queued now; the finisher puts it on the style's group (the cover
+ *  follows: a group without a chosen cover shows its top asset). The world is saved first so the server appends the fragment as typed. */
+export async function makeStyleSample(id: string): Promise<void> {
+  const model = sampleModel(); const ss = useSession.getState()
+  if (!model) { ss.toast('No sample model in this build'); return }
+  try {
+    const gid = await ensureStyleGroup(id); if (!gid) return
+    await sy().flush()
+    const s = sy().world?.styles.find((x) => x.id === id)
+    const first = !(findNode(useAlbum.getState().tree, gid)?.total)
+    await ss.submitJob(sampleRecipe(id, model, first), { suite: 'story', surface: 'style', ref: id, payload: { group_id: gid } })
+    ss.toast(`Sample queued for ${s?.name ?? 'the style'} — it lands in "${findNode(useAlbum.getState().tree, gid)?.name ?? styleGroupName(s?.name ?? '')}"`, 'info')
+  } catch (e) { ss.toast(`Sample not queued: ${(e as { detail?: string }).detail ?? String(e)}`) }
+}
+
+/** D90 (02 §4.1): images dropped on a style become its samples — copies (the originals stay put) on the style's group, the first the cover. */
+export async function addStyleSamples(id: string, assetIds: string[]): Promise<void> {
+  if (!assetIds.length) return
+  try {
+    const gid = await ensureStyleGroup(id); if (!gid) return
+    const al = useAlbum.getState()
+    const dup = await al.duplicateAssets(assetIds)
+    if (!dup.length) return
+    await al.move(dup.map((a) => ({ kind: 'asset' as const, id: a })), gid)
+    await al.setCover(gid, dup[0])
+  } catch { /* the album verbs toast their own failures */ }
+}
+
+/** A group page in the active Catalogue pane (Story's Catalogue workspace). */
+function openGroupPage(gid: string): void {
+  useSession.getState().setSuite('catalogue')
+  void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: gid }) })
+}
+
 export async function newProfile(cls: ProfileClass = 'character', hero: string | null = null): Promise<void> {
   const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Catalogue ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
   if (name?.trim()) await sy().createProfile(name.trim(), cls, hero)
@@ -58,6 +109,15 @@ const cmds: Command[] = [
   { id: 'story.world.addStyle', scope: 'story', label: 'Add style', icon: Palette, placement: ['panel', 'context'], when: hasWorld, run: () => { sy().addStyle() } },
   { id: 'story.world.addBeat', scope: 'story', label: 'Add beat', icon: ListPlus, placement: ['panel', 'context'], when: hasWorld, run: () => { sy().addBeat() } },
   { id: 'story.world.addVariable', scope: 'story', label: 'Add variable', icon: ToggleLeft, placement: ['panel', 'context'], when: hasWorld, run: () => { sy().addVariable() } },
+  // D90 (02 §4.1): a style is shown by its sample; the sample is made here or dropped on the tile, its group opened in the Catalogue
+  { id: 'story.world.styleSample', scope: 'story', label: 'Make a sample image', icon: ImagePlus, placement: ['inspector', 'context'],
+    when: () => !!style() && !!useSession.getState().project?.open && !!sampleModel() && !sampleJob(useSession.getState().jobs, style()!.id),
+    run: () => { const s = style(); if (s) void makeStyleSample(s.id) } },
+  { id: 'story.world.openStyleGroup', scope: 'story', label: 'Open the samples in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'],
+    when: () => !!style()?.group_id && !!findNode(useAlbum.getState().tree, style()?.group_id),
+    run: () => { const g = style()?.group_id; if (g) openGroupPage(g) } },
+  { id: 'story.world.open', scope: 'story', label: 'Open Story · World', icon: BookOpen, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
+    run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); sy().setSection('styles'); useSession.getState().setSuite('story') }) } },
   { id: 'story.world.defaultStyle', scope: 'story', label: 'Make it the default style', icon: Star, placement: ['inspector', 'context'], when: () => selStyle() && sy().world?.default_style !== selected()?.id,
     run: () => { const s = selected(); if (s?.kind === 'style') sy().setDefaultStyle(s.id) } },
   { id: 'story.world.beatUp', scope: 'story', label: 'Move the beat earlier', icon: ArrowUp, keys: 'Ctrl+ArrowUp', placement: ['inspector', 'context'], when: selBeat, run: () => { const s = selected(); if (s) sy().moveBeat(s.id, -1) } },
@@ -99,9 +159,9 @@ const cmds: Command[] = [
   { id: 'story.cast.cancelTrain', scope: 'story', label: 'Cancel the training job', icon: X, placement: ['inspector'], when: () => ['staged', 'queued', 'running'].includes(trainJob()?.status ?? ''),
     run: () => { const j = trainJob(); if (j) void useSession.getState().cancelJob(j.id) } },
   { id: 'story.cast.openGroup', scope: 'story', label: 'Open the reference set in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version(),
-    run: () => { const v = version(); if (!v) return; useSession.getState().setSuite('catalogue'); void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: v.group_id }) }) } },
+    run: () => { const v = version(); if (v) openGroupPage(v.group_id) } },
   { id: 'story.cast.openCandidates', scope: 'story', label: 'Open the candidates in the Catalogue', icon: FolderOpen, placement: ['inspector', 'context'], when: () => !!version()?.candidates_group_id,
-    run: () => { const g = version()?.candidates_group_id; if (!g) return; useSession.getState().setSuite('catalogue'); void import('../catalogue/split').then((m) => { const sp = m.useSplit.getState(); m.openPlace(m.paneStore(sp.mode === 'single' ? 0 : sp.active).getState(), { group: g }) }) } },
+    run: () => { const g = version()?.candidates_group_id; if (g) openGroupPage(g) } },
   // SY2 · Shots
   { id: 'story.shot.new', scope: 'story', label: 'New shot…', icon: Clapperboard, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
     run: () => void askText({ title: 'New shot', text: 'An empty shot: its frame and clip come from a Stage camera ("New shot from this camera") or from Animate ("Make a shot from this clip"), or pick takes here.', placeholder: 'shot name' })
@@ -176,7 +236,7 @@ registerCommands(cmds)
 export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], id: string) {
   useStory.getState().select({ kind, id })
   const items: ({ cmd: string } | 'sep')[] = []
-  if (kind === 'style') items.push({ cmd: 'story.world.defaultStyle' })
+  if (kind === 'style') items.push({ cmd: 'story.world.styleSample' }, { cmd: 'story.world.openStyleGroup' }, 'sep', { cmd: 'story.world.defaultStyle' })
   if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' })
   items.push({ cmd: 'story.world.remove' })
   return items

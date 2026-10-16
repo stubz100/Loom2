@@ -228,7 +228,7 @@ def world(cdp, hero, caps, check, rows, failures) -> None:
                                      "variables": [{"name": "met_mara", "type": "bool", "values": [], "default": False}]})
     check(w2["revision"] == w["revision"] + 1 and w2["default_style"] == "sty_ink", "the world holds two styles, the first the default")
     cdp.eval("window.__loom2Story.openTab('world')")
-    check(cdp.wait_for("document.querySelectorAll('.world-editor .style-row').length === 2", timeout=30, settle=0.5), "the World tab shows both styles")
+    check(cdp.wait_for("document.querySelectorAll('.world-editor .style-tile').length === 2", timeout=30, settle=0.5), "the World tab shows both styles")
     pv = api("POST", "/recipes/preview", {"recipe": {"kind": "t2i", "model_id": caps["model_id"], "prompt_mode": "text", "prompt_text": "a courier on a rooftop at dawn", "width": 960, "height": 544, "style_id": "sty_film"}})
     check(pv["style_text"] == styles[1]["fragment"] and pv["serialized_prompt"].endswith(styles[1]["fragment"]), "the preview appends style B's fragment")
     t0 = time.time()

@@ -1,9 +1,9 @@
 // 17 (D85): the Story suite's parts (StorySuite.ts registers them) — SY0: the World tab. Panel: the sections with their counts and the
 // adders; Stage: the editor over story/world.json (logline, synopsis, styles, the spine, variables); Inspector: the project format (the
-// finalize gate), counts, the default style, the selected item's fields. SY1: the Cast tab — Panel: the profiles by class; Strip: the
+// finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90). SY1: the Cast tab — Panel: the profiles by class; Strip: the
 // version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
-import { Film, Lock, Star } from 'lucide-react'
+import { Film, Lock } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
@@ -17,6 +17,7 @@ import { coverageGrid, readiness, rowsCovered } from './coverage'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
+import { StyleEditor, StyleGrid } from './StyleWorld'
 import { askExpand, rowMenu } from './storyCommands'
 import { storyKey } from './storyKeys'
 import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
@@ -59,7 +60,7 @@ function devHook(): Record<string, unknown> {
 }
 if (DEV_HOOKS) devHook()
 
-const menu = (kind: 'style' | 'beat' | 'variable', id: string): MenuItem[] => rowMenu(kind, id).map((m) => (m === 'sep' ? sep : m))
+const menu = (kind: 'beat' | 'variable', id: string): MenuItem[] => rowMenu(kind, id).map((m) => (m === 'sep' ? sep : m))
 
 // ------------------------------------------------------------------ Panel · World
 function WorldTab() {
@@ -379,18 +380,6 @@ export function Strip() {
 }
 
 // ------------------------------------------------------------------ Stage: the World editor
-function StyleRow({ s, active, isDefault }: { s: WorldStyle; active: boolean; isDefault: boolean }) {
-  return (
-    <div className={`row-item style-row${active ? ' active' : ''}`} data-id={s.id} onClick={() => sy().select({ kind: 'style', id: s.id })} onContextMenu={(e) => showMenu(e, menu('style', s.id))}>
-      <button className="quiet" title={isDefault ? 'The default style (Generate preselects it)' : 'Make it the default style'} aria-label={isDefault ? `${s.name} is the default style` : `make ${s.name} the default style`}
-        onClick={(e) => { e.stopPropagation(); sy().setDefaultStyle(isDefault ? null : s.id) }}><Star size={12} fill={isDefault ? 'currentColor' : 'none'} /></button>
-      <input type="text" value={s.name} aria-label="style name" placeholder="name" onChange={(e) => sy().setStyle(s.id, { name: e.target.value })} />
-      <input type="text" value={s.fragment} aria-label="style fragment" placeholder="the fragment appended after the prompt — e.g. painterly storyboard, ink and wash" onChange={(e) => sy().setStyle(s.id, { fragment: e.target.value })} />
-      <span className="tools"><button className="quiet" title="Remove this style" aria-label={`remove style ${s.name}`} onClick={(e) => { e.stopPropagation(); sy().removeStyle(s.id) }}>✕</button></span>
-    </div>
-  )
-}
-
 function BeatRow({ b, i, active }: { b: StoryBeat; i: number; active: boolean }) {
   return (
     <div className={`row-item beat-row${active ? ' active' : ''}`} data-id={b.id} onClick={() => sy().select({ kind: 'beat', id: b.id })} onContextMenu={(e) => showMenu(e, menu('beat', b.id))}>
@@ -441,11 +430,8 @@ function WorldEditor() {
         <textarea rows={8} value={world.synopsis} aria-label="synopsis" placeholder="The story in a page." onChange={(e) => sy().edit({ synopsis: e.target.value })} />
       </section>
       <section id="story-sec-styles">
-        <h3>Styles<span className="hint">one per generation, appended after the prompt; ★ marks the default Generate preselects</span></h3>
-        <div className="rows">
-          {world.styles.map((s) => <StyleRow key={s.id} s={s} active={selected?.kind === 'style' && selected.id === s.id} isDefault={world.default_style === s.id} />)}
-          {!world.styles.length && <div className="empty">No styles yet.</div>}
-        </div>
+        <h3>Styles<span className="hint">one per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects</span></h3>
+        <StyleGrid />
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
       </section>
       <section id="story-sec-spine">
@@ -899,21 +885,9 @@ export function Inspector() {
         <span>styles</span><span>{world.styles.length}</span>
         <span>beats</span><span>{world.spine.length}</span>
         <span>variables</span><span>{world.variables.length}</span>
-        <span>default style</span>
-        <select value={world.default_style ?? ''} aria-label="default style" onChange={(e) => sy().setDefaultStyle(e.target.value || null)}>
-          <option value="">none</option>{world.styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
         <span>revision</span><span>{world.revision}</span>
       </div>
-      {style && <>
-        <h4>Style · {style.name}</h4>
-        <div className="kv">
-          <span>name</span><input type="text" value={style.name} aria-label="selected style name" onChange={(e) => sy().setStyle(style.id, { name: e.target.value })} />
-          <span>fragment</span><textarea rows={3} value={style.fragment} aria-label="selected style fragment" onChange={(e) => sy().setStyle(style.id, { fragment: e.target.value })} />
-          <span>default</span><span>{world.default_style === style.id ? 'yes' : 'no'}</span>
-        </div>
-        <div className="verbs"><CommandButton id="story.world.defaultStyle" text /><CommandButton id="story.world.remove" text /></div>
-      </>}
+      {style && <StyleEditor key={style.id} s={style} isDefault={world.default_style === style.id} />}
       {beat && <>
         <h4>Beat {world.spine.indexOf(beat) + 1}</h4>
         <div className="kv">

@@ -2,8 +2,12 @@
 // Qwen-Image-Edit 2509, the framing moves run Klein with a strict-reference prompt; `auto` picks per move and the preview says which
 // method runs and how long it took on the rig. Mouse-first (D32): every move is a button on the pad; the source arrives by drop, by the
 // Catalogue's "New angle…" or by the loupe's hub.
+import { X } from 'lucide-react'
+import { useEffect } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
+import { PresetIcons } from '../../frame/PresetIcons'
+import { glyphFor } from '../../frame/presetGlyphs'
 import { markUsed, runCommand } from '../../frame/commands'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { angleDrop } from '../../frame/dropRules'
@@ -14,7 +18,7 @@ import { MOVES, useGenerate, type AngleMethod } from './generateStore'
 export function AnglePrimary() {
   const g = useGenerate()
   const s = useSession()
-  markUsed('gen.angle.generate')
+  markUsed('gen.angle.generate'); for (const m of MOVES) markUsed(`gen.angle.${m.id}`)   // D90: the moves are icon tiles, not CommandButtons
   const pv = g.anglePreview
   const missing = pv?.missing ?? []
   const reason = !s.project?.open ? 'no project' : !g.angle.asset_id ? 'pick a source image' : g.anglePreviewError ? g.anglePreviewError : !pv ? 'preparing…'
@@ -22,7 +26,7 @@ export function AnglePrimary() {
   return (
     <div>
       <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.angle.generate')} title="Queue the new angle">New angle{g.angle.count > 1 ? ` ×${g.angle.count}` : ''} ▶</button>
-      {missing.length > 0 && <div style={{ marginTop: 6 }}><button onClick={() => s.setSuite('models')}>Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></div>}
+      {missing.length > 0 && <div style={{ marginTop: 6 }}><button onClick={() => s.openModels({ missing: true })}>Fetch {missing.reduce((a, m) => a + (m.approx_gb ?? 0), 0).toFixed(0)} GB</button></div>}
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * g.angle.count)} s · {String(pv?.params?.label ?? '')}</>}</div>
     </div>
   )
@@ -46,11 +50,8 @@ export function AngleTab() {
           <CommandButton id="gen.angle.clear" className="quiet x" size={12} />
         </> : <span className="empty">source</span>}
       </div>
-      <div className="angle-pad" role="group" aria-label="Camera move">
-        <div className="row"><CommandButton id="gen.angle.topdown" text active={a.move === 'topdown'} /></div>
-        <div className="row"><CommandButton id="gen.angle.left45" text active={a.move === 'left45'} /><CommandButton id="gen.angle.right45" text active={a.move === 'right45'} /></div>
-        <div className="row"><CommandButton id="gen.angle.closeup" text active={a.move === 'closeup'} /><CommandButton id="gen.angle.wide" text active={a.move === 'wide'} /></div>
-      </div>
+      {/* D90 (02 §6.3): the five moves as drawn icons; the words are the tooltip */}
+      <div className="angle-pad"><PresetIcons label="Camera move" size={48} items={MOVES.map((m) => ({ id: m.id, label: m.label, icon: glyphFor('move', m.id), hint: m.hint }))} selected={a.move} onPick={(id) => runCommand(`gen.angle.${id}`)} /></div>
       <p className="disabled-why">{MOVES.find((m) => m.id === a.move)?.hint}</p>
       <div className="gen-form" style={{ gridTemplateColumns: '84px 1fr' }}>
         <label>method</label>
@@ -70,6 +71,29 @@ export function AngleTab() {
       {g.anglePreviewError && <p className="disabled-why">{g.anglePreviewError}</p>}
       {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
       {pv && seconds != null && <p className="disabled-why">{pv.params?.label as string} · ≈ {Math.round(seconds)} s each (measured 2026-10-12)</p>}
+    </div>
+  )
+}
+
+/** D90 (02 §6.1): New angle as a sheet over whatever is open — opened by "New angle…" on an image (the Catalogue's tile menu, Inspector
+ *  card and loupe hub); queueing closes it, the candidates land in Generate's "this batch". */
+export function AngleSheet() {
+  const open = useGenerate((g) => g.angleOpen)
+  const close = () => useGenerate.setState({ angleOpen: false })
+  useEffect(() => {
+    if (!open) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !useSession.getState().ask) { e.preventDefault(); e.stopImmediatePropagation(); useGenerate.setState({ angleOpen: false }) } }
+    window.addEventListener('keydown', h, { capture: true })
+    return () => window.removeEventListener('keydown', h, { capture: true })
+  }, [open])
+  if (!open) return null
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal angle-sheet" role="dialog" aria-label="New angle" onClick={(e) => e.stopPropagation()}>
+        <div className="head">New angle<span className="spacer" /><button className="quiet" onClick={close} title="Close (Esc)" aria-label="Close"><X size={16} /></button></div>
+        <div className="body"><AngleTab /></div>
+        <div className="foot"><AnglePrimary /></div>
+      </div>
     </div>
   )
 }

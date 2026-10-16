@@ -30,7 +30,7 @@ export function ModelsSheet() {
           <span className="spacer" />
           <button className="quiet" onClick={close} title="Close (Esc)" aria-label="Close"><X size={16} /></button>
         </div>
-        <div className="body"><Suspense fallback={<p className="muted">Loading…</p>}><Body tab={tab} missing={!!sheet.missing} /></Suspense></div>
+        <div className="body"><Suspense fallback={<p className="muted" style={{ padding: 16 }}>Loading…</p>}><Body tab={tab} missing={!!sheet.missing} /></Suspense></div>
       </div>
     </div>
   )

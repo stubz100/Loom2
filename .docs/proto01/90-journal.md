@@ -4135,3 +4135,29 @@ split by file so that no two hands touched the same module.
   `<state>/preset_icons/<key>.webp` and broadcasts `preset_icons.changed`. The pack's one-time cost is owed to the rig.
 - Tests: Vitest 230 (+23), offline 340 under full and open (+6), audits clean, lint 96 warnings (100 at HEAD), build clean, smoke 29 / 29
   under full and open (`openCatalogue` in the fixtures: the Story tab, then the Catalogue workspace).
+
+## 2026-10-16 20:16 — D90 · waves UI2 (Generate as one column) and UI3 (presets as icons, styles as images) built
+
+- **UI2 (02 §6.1).** Generate's Panel is one scrolling column (`generate/GenerateColumn.tsx`): Saved panels · Prompt (Tree / Text / JSON,
+  scene, subjects, lead text, negative where the model honours one) · References · Look (the Story style by its sample, lighting, mood,
+  art style, background, composition, palette) · Camera (shot size, angle, lens, depth of field, aperture) · Model (compact cards with a
+  health dot; Sampling, LoRAs and Advanced folded unless set) · Size (aspect and tier as drawn shapes, a count stepper, exact pixels only
+  for a custom size) · Preview (the prompt as sent, opened from the Foot's **Preview**). The rail's seven buttons jump to the sections and
+  follow the scroll; the Panel head says "Generate" (`SuiteDef.panelTitle`); the Panel opens at 30 % of the window (UI1). Look and Camera
+  say so when the prompt is not a Tree. The dead "Upsample (later)" and the stale "coming in M5" are gone; guidance and CFG gained a reset;
+  the FLUX-only `flux2` schedule is listed only where the graph has its shift. **New angle** left Generate's rail: a sheet over whatever
+  suite is open (`AngleSheet`, opened by "New angle…" on an image), its five moves as drawn icons; queueing closes it.
+- **UI3 (02 §4.1, §6.3).** Every prompt-field preset is an icon tile (`PresetRow` on `frame/PresetIcons`): drawn glyphs for geometry,
+  generated swatches for looks (`generate/swatches.ts` over `/preset-icons`; the Look section's ▣ N makes the missing ones after a
+  confirm, a tile's right-click remakes one, `preset_icons.changed` reloads), monograms until a swatch exists; words in the tooltip, a
+  section's **Aa** shows them under the tiles (remembered). A field's **+** saves its text as a preset, which joins the row (right-click
+  removes it). **Styles as images:** World › Styles is a tile grid of samples (`story/StyleWorld.tsx`; a style's face is the cover of its
+  group, `StoryStyle.group_id`, made on first use as `Style · <name>`); **Make a sample image** queues one 768² text-mode t2i on
+  `defaults.swatch` with the style applied and the result placed in the style's group (`origin.payload.group_id`); a dropped Catalogue
+  image is copied in as a sample; the fragment is written only in the World Inspector. Generate (and anything else) picks a style from
+  `story/StyleTiles.tsx` — default, none, then the samples with ★ on the default, the fragment in the tooltip. Commands
+  `story.world.styleSample`, `story.world.openStyleGroup`, `story.world.open`.
+- Tests: Vitest 235 (+5: style samples), smoke 29 / 29 under full and open (the angle scenario drives the sheet, the
+  world scenario makes a sample and picks the style by its tile, the LoRA scenario opens the LoRAs fold), lint 88 warnings (100 at
+  D90's start), build clean; `scripts/sy_acceptance.py` reads `.style-tile`. **Rig owed:** the swatch pack (64 look presets at 512² on
+  Klein 4B) and a style sample, measured and looked at.

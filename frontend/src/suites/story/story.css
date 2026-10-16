@@ -21,7 +21,31 @@
 .world-editor .row-item:hover { background: var(--bg2); }
 .world-editor .row-item.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .world-editor .row-item input[type=text], .world-editor .row-item select { width: 100%; min-width: 0; box-sizing: border-box; }
-.world-editor .style-row { grid-template-columns: 22px 180px 1fr auto; }
+/* D90 (02 §4.1): styles as images — the World grid (sample, name, ★) and the Inspector's editor (the sample large, the fragment folded) */
+.style-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.style-tile { width: 108px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; border-radius: var(--radius); padding: 3px; border: 1px solid transparent; }
+.style-tile .face { position: relative; width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: 6px; background: var(--media-bg); overflow: hidden; }
+.style-tile .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.style-tile .mono { font-size: 30px; font-weight: 600; color: var(--fg3); letter-spacing: .02em; }
+.style-tile .name { font-size: 12px; color: var(--fg2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.style-tile:hover .face { border-color: var(--fg3); }
+.style-tile.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.style-tile.active .name { color: var(--fg); }
+.style-tile.over .face, .style-sample.over { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.style-tile .star { position: absolute; top: 2px; right: 2px; padding: 0 3px; min-height: 18px; color: var(--fg3); background: color-mix(in srgb, var(--bg0) 60%, transparent); border-radius: 4px; opacity: 0; }
+.style-tile:hover .star, .style-tile .star.on { opacity: 1; }
+.style-tile .star.on { color: var(--warn); }
+.style-tile .busy { position: absolute; left: 4px; bottom: 2px; font-size: 14px; color: var(--accent); }
+.style-sample { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--media-bg); overflow: hidden; margin: 2px 0 6px; text-align: center; }
+.style-sample img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.style-sample .hint { padding: 0 16px; }
+.style-sample .busy { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 11px; color: var(--fg); background: color-mix(in srgb, var(--bg0) 70%, transparent); }
+.story-insp .check { display: flex; align-items: center; gap: 4px; }
+.style-fragment { margin: 6px 0; font-size: 12px; color: var(--fg2); }
+.style-fragment summary { cursor: pointer; margin-bottom: 4px; }
+.style-fragment textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+/* D90 (02 §4.1): the picker other suites use (StyleTiles) */
+.style-tiles-empty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--fg3); }
 .world-editor .beat-row { grid-template-columns: 28px 200px 1fr auto; }
 .world-editor .var-row { grid-template-columns: 180px 90px 1fr 110px auto; }
 .world-editor .row-item .k { color: var(--fg3); font-size: 11px; text-align: right; }

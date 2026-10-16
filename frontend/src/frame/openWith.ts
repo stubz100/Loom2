@@ -27,11 +27,10 @@ export async function openWith(assetId: string | null, o: OpenWith): Promise<voi
     else if (assetId) a.setStart(assetId, true)
     else s.setSuite('animate')
   } else {
-    const [{ useGenerate }, { setRailTab }] = await Promise.all([import('../suites/generate/generateStore'), import('./suiteRegistry')])
-    if (o.slot === 'angle') {                                          // P14: the Angle tab with this image as the source
+    const { useGenerate } = await import('../suites/generate/generateStore')
+    if (o.slot === 'angle') {                                          // P14 / D90: the New angle sheet with this image as the source, over the suite you are in
       useGenerate.getState().setAngle({ asset_id: assetId })
-      setRailTab('generate', 'angle')
-      s.setSuite('generate')
+      useGenerate.setState({ angleOpen: true })
     } else if (assetId) useGenerate.getState().addRef(assetId)
     else s.setSuite('generate')
   }

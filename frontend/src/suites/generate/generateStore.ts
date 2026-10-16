@@ -188,6 +188,9 @@ export interface GenerateState {
   presets: Preset[]; lastPreset: string | null; snippets: Snippet[]
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
   angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
+  angleOpen: boolean                                       // D90 (02 §6.1): New angle is a sheet on an image, not a Generate tab
+  presetText: Record<string, boolean>                      // D90 (02 §6.3): the sections that show the words under their preset icons
+  setPresetText: (section: string, on: boolean) => void
   /** LT1: what the slots may hold for the panel's model (GET /loras); loadLoras prunes slots that do not fit after a model change. */
   lorasAvailable: LoraOption[]
   loadLoras: (modelId: string) => Promise<void>
@@ -250,7 +253,8 @@ export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
       panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, snippets: [], show: 'batch', lastBatch: null, pinned: [],
-      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [],
+      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, presetText: {},
+      setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
       loadLoras: async (modelId) => {
         try {
@@ -384,7 +388,7 @@ export const useGenerate = create<GenerateState>()(
       saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => !(x.name === sn.name && x.field === sn.field)), sn]; await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
       deleteSnippet: async (name) => { const snippets = get().snippets.filter((x) => x.name !== name); await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
     }),
-    { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show }) as never,
+    { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show, presetText: s.presetText }) as never,
       // a panel persisted before a field existed gets that field's default (new engine options, 2026-10-06)
       merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<GenerateState>; return { ...current, ...p, panel: { ...DEFAULT_PANEL, ...(p.panel ?? {}) } } } },
   ),

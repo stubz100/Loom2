@@ -8,6 +8,7 @@ import { ContextMenuHost } from './ContextMenu'
 import { Dock } from './Dock'
 import { HelpOverlay } from './HelpOverlay'
 import { ModelsSheet } from './ModelsSheet'
+import { AngleSheet } from '../suites/generate/AngleTab'
 import { frameWidths } from './panelWidth'
 import { Inspector } from './Inspector'
 import { Panel } from './Panel'
@@ -85,6 +86,7 @@ export function Frame() {
       {projectDialog && <ProjectDialog mode={projectDialog} />}
       {helpOpen && <HelpOverlay />}
       <ModelsSheet />
+      <AngleSheet />
       <AskDialog />
     </div>
   )

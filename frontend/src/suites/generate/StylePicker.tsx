@@ -1,27 +1,17 @@
-// D85 (17 §3a): the Style picker on Generate's Prompt tab — one Story style per generation, its fragment appended after the prompt by
-// the server (story.resolve_style); "default" follows the world's ★ style, "none" overrides it. Its own file so Fast Refresh keeps working.
-import { styleFor, useStory } from '../story/storyStore'
+// D85 (17 §3a) / D90 (02 §4.1): the Story style of a generation, picked by its sample image — the world's styles are written only in
+// Story · World; here they are tiles (StyleTiles), the fragment in the tooltip. "default" follows the world's ★ style, "none" overrides it;
+// the server appends the fragment after the prompt (story.resolve_style). Its own file so Fast Refresh keeps working.
+import { StyleTiles } from '../story/StyleTiles'
 import { useGenerate } from './generateStore'
 
 export function StylePicker() {
   const choice = useGenerate((g) => g.panel.style_id)
   const set = useGenerate((g) => g.set)
-  const world = useStory((s) => s.world)
-  const styles = world?.styles ?? []
-  const def = styles.find((s) => s.id === world?.default_style)
-  const cur = styles.find((s) => s.id === styleFor(choice))
+  const showText = useGenerate((g) => !!g.presetText.look)
   return (
     <div className="gen-form style-pick" style={{ marginBottom: 8 }}>
       <label>style</label>
-      <div>
-        <select aria-label="style" title="A Story style: its fragment is appended after the prompt (Story · World)" value={choice === undefined ? '' : choice === null ? 'none' : choice}
-          onChange={(e) => set({ style_id: e.target.value === '' ? undefined : e.target.value === 'none' ? null : e.target.value })}>
-          <option value="">default{def ? ` · ${def.name}` : ' · none'}</option>
-          <option value="none">none</option>
-          {styles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <span className="hint"> {cur ? (cur.fragment ? `appended: ${cur.fragment}` : 'its fragment is empty') : styles.length ? 'no style appended' : 'styles are made in Story · World'}</span>
-      </div>
+      <StyleTiles value={choice} onChange={(v) => set({ style_id: v })} size={48} showText={showText} />
     </div>
   )
 }

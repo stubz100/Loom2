@@ -88,3 +88,30 @@
 .angle-pad button { min-width: 120px; }
 .angle-count { display: inline-flex; align-items: center; gap: 8px; }
 .angle-count span { min-width: 1.5em; text-align: center; font-weight: 600; }
+
+/* D90 (02 §6.1): the single column — sections with a sticky head, compact model cards, a count stepper */
+.gen-column { display: flex; flex-direction: column; gap: 4px; }
+.gen-sec { padding: 6px 0 12px; border-bottom: 1px solid var(--line); scroll-margin-top: 4px; }
+.gen-sec:last-child { border-bottom: none; }
+.gen-sec-head { position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 0 4px; background: var(--bg1);
+  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg2); }
+.gen-sec-head .spacer { flex: 1; }
+.gen-sec-head .counter { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.gen-sec-head button.icon { padding: 2px 4px; min-height: 0; }
+.gen-sec-head button.icon.active { color: var(--accent); }
+.gen-sec-head .cmd-btn, .gen-sec-head > button { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.gen-sec .field .preset-icons { margin-top: 2px; }
+.model-grid.compact { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+.model-grid.compact .model-card { grid-template-columns: 1fr auto; align-items: center; padding: 6px 8px; }
+.model-grid.compact .model-card .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg3); }
+.model-grid.compact .model-card .dot.ok { background: var(--keep); } .model-grid.compact .model-card .dot.warn { background: var(--warn); }
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper button { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; }
+.stepper b { min-width: 14px; text-align: center; }
+.swatch .x { position: absolute; right: -7px; top: -7px; width: 16px; height: 16px; min-height: 0; padding: 0; border-radius: 50%; background: var(--bg4); color: var(--fg2); font-size: 11px; line-height: 1; }
+.preview-sec summary { cursor: pointer; color: var(--fg2); font-size: 12px; padding: 6px 0; }
+label.chk { display: inline-flex; gap: 6px; align-items: center; }
+/* D90: New angle as a sheet */
+.modal.angle-sheet { width: min(560px, 94vw); }
+.modal.angle-sheet .foot { display: block; }
+.modal.angle-sheet .foot button.primary { width: 100%; }

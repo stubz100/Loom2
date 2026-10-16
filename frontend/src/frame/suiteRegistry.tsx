@@ -23,6 +23,7 @@ export interface SuiteDef {
   wideStrip?: boolean                     // the strip spans panel, stage and inspector (Catalogue, D34)
   keepAlive?: boolean                     // D69: the Stage stays mounted (hidden) after the first visit — see frame/stageKeep.ts
   PrimaryAction?: ComponentType
+  panelTitle?: string                     // D90: a one-column Panel (Generate) names the suite, not the rail button it scrolled to
 }
 
 export const SUITE_DEFS: Record<string, SuiteDef> = {

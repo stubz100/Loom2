@@ -360,20 +360,22 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 90_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot; 45 s failed once on the open runner, 2026-10-13)
 })
 
-test('a new angle (P14, D82): "New angle" on a tile opens the Angle tab with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
+test('a new angle (P14, D82; a sheet since D90): "New angle" on a tile opens the sheet with the source, the pad picks the move, the job lands with reangle lineage', async ({ page }) => {
   const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
   await openApp(page, { suite: 'catalogue' })
   const srcId = await tiles(page).nth(8).getAttribute('data-id')                                     // pinned by id: a late asset can reorder the grid between two reads
   await page.locator(`.tile[data-id="${srcId}"]`).click()
   await page.locator('.insp .quick-card', { hasText: 'New angle' }).click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
-  await expect(page.locator('nav.rail button.active[title^="New angle"]')).toBeVisible()
-  await expect(page.locator('.angle-tab .ref-slot.source img')).toBeVisible()
-  await page.locator('.angle-pad button', { hasText: /^Wide$/ }).click()
-  const go = page.locator('.panel .foot button.primary', { hasText: /^New angle/ })
+  const sheet = page.locator('.modal.angle-sheet')                                                    // D90: a sheet over the Catalogue, no suite switch
+  await expect(sheet).toBeVisible()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(sheet.locator('.angle-tab .ref-slot.source img')).toBeVisible()
+  await sheet.locator('.angle-pad button[aria-label="Wide"]').click()                             // D90: the moves are icons
+  const go = sheet.locator('.foot button.primary', { hasText: /^New angle/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
-  await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/)                 // auto: a framing move runs Klein (D77)
+  await expect(sheet.locator('.foot .estimate')).toContainText(/Klein/)                        // auto: a framing move runs Klein (D77)
   await go.click()
+  await expect(sheet).toHaveCount(0)                                                                  // queueing closes the sheet
   // the result is found through its job, not as "the newest asset": on a slow runner an earlier scenario's job (the @mentions one, four
   // parents) can land in Unprocessed between the click and the poll (CI on bb1f90a, open variant)
   type JobLite = { id: string; status: string; recipe: { kind: string; move?: string }; result: { asset_ids?: string[] } | null }
@@ -707,16 +709,23 @@ test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a l
   await expect(page.locator('.world-editor')).toBeVisible()
   await page.locator('.world-editor textarea[aria-label="logline"]').fill('A courier must cross the city before dawn.')
   await page.locator('.story-panel button', { hasText: 'Add style' }).click()                                 // the panel's verb (D32)
-  const row = page.locator('.world-editor .style-row').last()
-  await row.locator('input[aria-label="style name"]').fill('Ink wash')
-  await row.locator('input[aria-label="style fragment"]').fill('ink and wash storyboard, loose brush')
-  await expect(page.locator('.inspector .story-insp h4', { hasText: 'Style' })).toContainText('Ink wash')     // the new row is selected
-  type WorldLite = { revision: number; logline: string; default_style: string | null; styles: { id: string; name: string; fragment: string }[] }
+  await expect(page.locator('.world-editor .style-tile.active')).toBeVisible()                               // D90 (02 §4.1): a tile, selected; written in the Inspector only
+  await page.locator('.inspector input[aria-label="selected style name"]').fill('Ink wash')
+  await page.locator('.inspector textarea[aria-label="selected style fragment"]').fill('ink and wash storyboard, loose brush')   // folded open while empty
+  await expect(page.locator('.inspector .story-insp h4', { hasText: 'Style' })).toContainText('Ink wash')     // the new style is selected
+  await expect(page.locator('.world-editor .style-tile.active .name')).toHaveText('Ink wash')
+  type WorldLite = { revision: number; logline: string; default_style: string | null; styles: { id: string; name: string; fragment: string; group_id: string | null }[] }
   await expect.poll(async () => (await api<WorldLite>('GET', '/story/world')).styles.find((s) => s.name === 'Ink wash')?.fragment, { timeout: 10_000 }).toBe('ink and wash storyboard, loose brush')
+  // D90 (02 §4.1): Make a sample image — one job on the swatch model into the style's own group, whose cover becomes the style's face
+  await page.locator('.inspector button', { hasText: 'Make a sample image' }).click()
+  await expect(page.locator('.world-editor .style-tile.active .face img')).toBeVisible({ timeout: 45_000 })
+  await expect(page.locator('.inspector .style-sample img')).toBeVisible()
   const w = await api<WorldLite>('GET', '/story/world')
   expect(w.logline).toBe('A courier must cross the city before dawn.')
   expect(w.revision).toBeGreaterThanOrEqual(1)
   const style = w.styles.find((s) => s.name === 'Ink wash')!
+  const sample = Object.values((await api<{ assets: Record<string, { params: { style_id?: string | null } }> }>('GET', `/groups/${style.group_id}`)).assets)
+  expect(sample.length === 1 && sample[0].params.style_id === style.id).toBe(true)                             // the sample ran under the style, on its group
   expect(w.default_style).toBe(w.styles[0].id)                                                               // the first style made is the default
   // Generate: the picker lists it and says what it appends; the job records the style and the text that ran
   await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
@@ -724,8 +733,9 @@ test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a l
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await page.locator('nav.rail button[title^="Prompt"]').click()                                              // switches the tab (a click on the active tab would fold the panel)
   await page.locator('.segmented button', { hasText: /^Text$/ }).click()
-  await page.locator('.panel select[aria-label="style"]').selectOption(style.id)
-  await expect(page.locator('.panel .style-pick .hint')).toContainText('appended: ink and wash storyboard, loose brush')
+  await page.locator('.panel .style-pick button[aria-label="Ink wash"]').click()                   // D90: styles are picked by their sample tile
+  await expect(page.locator('.panel .style-pick button[aria-label="Ink wash"]')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.panel .style-pick button[aria-label="Ink wash"]')).toHaveAttribute('title', /ink and wash storyboard, loose brush/)
   await page.locator('.panel textarea').fill('a courier on a rooftop at dawn')
   const before = (await api<Record<string, number>>('GET', '/assets/counts')).unprocessed ?? 0
   const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
@@ -1220,6 +1230,7 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   await openApp(page, { suite: 'generate' })
   await page.locator('nav.rail button[title^="Model"]').click()
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await page.locator('.panel summary', { hasText: /^LoRAs/ }).click()                                         // D90: the slots fold away until one is used
   const slot = page.locator('.panel select[aria-label="LoRA slot 1"]')
   await expect(slot.locator('option', { hasText: 'smoke/mara_smoke' })).toHaveCount(1)                   // the e2e tree's file LoRA (e2e_setup.py)
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: a file declares no licence — listed, disabled, with the sentence

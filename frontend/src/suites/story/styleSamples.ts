@@ -5,7 +5,7 @@ import type { AlbumNode, Job, WorldStyle } from '../../api/types'
 import type { DragItem, DragPayload, DropVerdict } from '../../frame/drag'
 import type { PresetIcon } from '../../frame/PresetIcons'
 
-/** The preview scene every style is shown on, so samples compare across styles. */
+/** The preview scene every style is shown on, so samples compare across styles — the default; Settings › Samples may change it (D90). */
 export const SAMPLE_PROMPT = 'a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her'
 export const SAMPLE_SEED = 90                                 // the first sample of every style shares a seed (a set, as the swatch pack); later ones 0 = random
 export const SAMPLE_PX = 768                                  // square, a multiple of 16: big enough to read a look at 108 px and in the Inspector
@@ -34,8 +34,8 @@ export function sampleJob(jobs: Record<string, Job>, styleId: string): Job | und
 }
 
 /** The one-image t2i a sample runs: text mode, the swatch model, square Draft size, the style id (its fragment appended at submit). */
-export function sampleRecipe(styleId: string, modelId: string, first: boolean): Record<string, unknown> {
-  return { kind: 't2i', model_id: modelId, prompt_mode: 'text', prompt_text: SAMPLE_PROMPT, width: SAMPLE_PX, height: SAMPLE_PX, seeds: [first ? SAMPLE_SEED : 0], style_id: styleId }
+export function sampleRecipe(styleId: string, modelId: string, first: boolean, prompt?: string | null): Record<string, unknown> {
+  return { kind: 't2i', model_id: modelId, prompt_mode: 'text', prompt_text: prompt?.trim() || SAMPLE_PROMPT, width: SAMPLE_PX, height: SAMPLE_PX, seeds: [first ? SAMPLE_SEED : 0], style_id: styleId }
 }
 
 /** A drop on a style tile: images become samples (copies — the originals stay where they are), the first the cover; clips are refused. */

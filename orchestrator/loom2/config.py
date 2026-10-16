@@ -11,7 +11,7 @@ import secrets
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .fsio import atomic_write_json, new_id, read_json_or, utc_now
 
@@ -62,6 +62,41 @@ class VoicesSettings(BaseModel):
     cloning_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"     # Apache-2.0; the GPU with the engine stopped (E20: 3–5 s a line at a 2.6 GB peak)
 
 
+# D90 (02 §4.1, §6.3): the scenes the sample images are rendered on — the defaults of Settings › Samples
+STYLE_SAMPLE_PROMPT = "a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her"
+SWATCH_PROMPTS: dict[str, str] = {   # `{value}` is the preset; a neutral subject so the swatch shows the value, not the subject
+    "lighting": "a simple still life of a white sphere on a table, {value}",
+    "mood": "an empty street corner, {value} mood",
+    "style": "a lighthouse on a cliff, {value}",
+    "background": "{value}, empty, no people",
+    "scene": "{value}",
+}
+
+
+class SampleSettings(BaseModel):
+    """D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look
+    preset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it
+    appended. Changing them does not remake existing samples."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
+    style_prompt: str = STYLE_SAMPLE_PROMPT
+    swatch_prompts: dict[str, str] = Field(default_factory=lambda: dict(SWATCH_PROMPTS))
+
+    @field_validator("style_prompt")
+    @classmethod
+    def _style(cls, v: str) -> str:
+        return v.strip() or STYLE_SAMPLE_PROMPT
+
+    @field_validator("swatch_prompts")
+    @classmethod
+    def _swatches(cls, v: dict[str, str]) -> dict[str, str]:
+        out = dict(SWATCH_PROMPTS)
+        for field, t in v.items():
+            t = t.strip()
+            if t:
+                out[field] = t if "{value}" in t else f"{t}, {{value}}"
+        return out
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)   # D38: present in every reply → required in the schema
     schema_version: int = APP_SCHEMA_VERSION
@@ -79,6 +114,7 @@ class Settings(BaseModel):
     log_level: str = "INFO"
     reopen_last_project: bool = True
     h3_licence_confirmed: bool = False      # D17: the author confirms the MiniMax H3 community-licence application is filed
+    samples: SampleSettings = Field(default_factory=SampleSettings)     # D90: the scenes of the style samples and the preset swatches
 
 
 class AppRecord(BaseModel):

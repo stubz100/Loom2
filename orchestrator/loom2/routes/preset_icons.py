@@ -53,7 +53,7 @@ async def preset_icons_make(svc: Svc, body: MakeBody):
         for it in body.items:
             key = icon_key(it.field, it.value)
             origin = JobOrigin(suite="generate", surface=SURFACE, ref=key, payload={"key": key, "field": it.field, "value": it.value})
-            made = q.submit(swatch_recipe(it.field, it.value, variant, body.seed), stage=body.stage, origin=origin, batch_id=batch)
+            made = q.submit(swatch_recipe(it.field, it.value, variant, body.seed, svc.app.settings.samples.swatch_prompts), stage=body.stage, origin=origin, batch_id=batch)   # D90: the scenes of Settings › Samples
             jobs += made
             items.append({"key": key, "field": it.field, "value": it.value, "job_id": made[0].id})
     except FieldError as e:

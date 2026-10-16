@@ -1,5 +1,5 @@
 import { KeyboardSettings } from './KeyboardSettings'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import type { Settings } from '../api/types'
 import { useSession } from '../store/session'
 import { About } from './About'
@@ -23,7 +23,7 @@ export function SettingsModal() {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
           stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
@@ -72,6 +72,18 @@ export function SettingsModal() {
           <label>Log level</label>
           <select value={draft.log_level} onChange={(e) => set({ log_level: e.target.value })}>{['DEBUG', 'INFO', 'WARNING', 'ERROR'].map((l) => <option key={l}>{l}</option>)}</select>
           <span className="hint">Pen pressure curve appears when a pen is detected (D19). Project format defaults arrive with their suites.</span>
+          <h4 id="settings-samples">Samples</h4>
+          {/* D90 (02 §4.1, §6.3): the scenes the style samples and the look-preset icons are rendered on; blank = the default again */}
+          <label>Style sample</label>
+          <textarea rows={2} aria-label="style sample prompt" value={draft.samples.style_prompt} onChange={(e) => set({ samples: { ...draft.samples, style_prompt: e.target.value } })} />
+          <span className="hint">the scene every style is rendered on by "Make a sample image" — its fragment is appended; the same scene for every style keeps the samples comparable</span>
+          {Object.entries(draft.samples.swatch_prompts).map(([field, t]) => (
+            <Fragment key={field}>
+              <label>Icon · {field}</label>
+              <input type="text" aria-label={`${field} icon scene`} value={t} onChange={(e) => set({ samples: { ...draft.samples, swatch_prompts: { ...draft.samples.swatch_prompts, [field]: e.target.value } } })} />
+            </Fragment>
+          ))}
+          <span className="hint">the scenes of Generate's look-preset icons; {'{value}'} is the preset (added at the end when left out). Clear a field and Save to get its default back. Existing samples and icons stay — remake one from its right-click menu.</span>
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

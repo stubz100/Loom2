@@ -10023,6 +10023,29 @@
         "title": "Restored",
         "type": "object"
       },
+      "SampleSettings": {
+        "description": "D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look\npreset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it\nappended. Changing them does not remake existing samples.",
+        "properties": {
+          "style_prompt": {
+            "default": "a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her",
+            "title": "Style Prompt",
+            "type": "string"
+          },
+          "swatch_prompts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Swatch Prompts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "style_prompt",
+          "swatch_prompts"
+        ],
+        "title": "SampleSettings",
+        "type": "object"
+      },
       "Segment": {
         "description": "AI Select (10 §4, D7 masks): a mask from the visible composite becomes (part of) the document's selection.\n`subject` = BiRefNet matte through the core background-removal nodes; `text` / `points` / `box` = SAM 3\n(core `SAM3_Detect` on the sam3.pt checkpoint). Coordinates are document pixels; the queue scales them.",
         "properties": {
@@ -10247,6 +10270,9 @@
             "title": "Reopen Last Project",
             "type": "boolean"
           },
+          "samples": {
+            "$ref": "#/components/schemas/SampleSettings"
+          },
           "schema_version": {
             "default": 1,
             "title": "Schema Version",
@@ -10295,7 +10321,8 @@
           "thumbnail_sizes",
           "log_level",
           "reopen_last_project",
-          "h3_licence_confirmed"
+          "h3_licence_confirmed",
+          "samples"
         ],
         "title": "Settings",
         "type": "object"

@@ -101,7 +101,8 @@ export async function makeStyleSample(id: string): Promise<void> {
     await sy().flush()
     const s = sy().world?.styles.find((x) => x.id === id)
     const first = !(findNode(useAlbum.getState().tree, gid)?.total)
-    await ss.submitJob(sampleRecipe(id, model, first), { suite: 'story', surface: 'style', ref: id, payload: { group_id: gid } })
+    await ss.submitJob(sampleRecipe(id, model, first, ss.settings?.samples?.style_prompt), {   // D90: the scene of Settings › Samples
+      suite: 'story', surface: 'style', ref: id, payload: { group_id: gid } })
     ss.toast(`Sample queued for ${s?.name ?? 'the style'} — it lands in "${findNode(useAlbum.getState().tree, gid)?.name ?? styleGroupName(s?.name ?? '')}"`, 'info')
   } catch (e) { ss.toast(`Sample not queued: ${(e as { detail?: string }).detail ?? String(e)}`) }
 }

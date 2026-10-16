@@ -6306,6 +6306,23 @@ export interface components {
             restored: string[];
         };
         /**
+         * SampleSettings
+         * @description D90: the prompt a style's sample is rendered with (the style's fragment is appended by the server), and the scene each look
+         *     preset's swatch is rendered on. Editable in Settings › Samples; a blank entry is its default again, a scene without `{value}` gets it
+         *     appended. Changing them does not remake existing samples.
+         */
+        SampleSettings: {
+            /**
+             * Style Prompt
+             * @default a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her
+             */
+            style_prompt: string;
+            /** Swatch Prompts */
+            swatch_prompts: {
+                [key: string]: string;
+            };
+        };
+        /**
          * Segment
          * @description AI Select (10 §4, D7 masks): a mask from the visible composite becomes (part of) the document's selection.
          *     `subject` = BiRefNet matte through the core background-removal nodes; `text` / `points` / `box` = SAM 3
@@ -6441,6 +6458,7 @@ export interface components {
              * @default true
              */
             reopen_last_project: boolean;
+            samples: components["schemas"]["SampleSettings"];
             /**
              * Schema Version
              * @default 1

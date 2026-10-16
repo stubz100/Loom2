@@ -4214,3 +4214,13 @@ split by file so that no two hands touched the same module.
 - Tests: Vitest 263 (+4), smoke 30 / 30 under full and open, lint 88, build clean, settings and agents audits clean; offline suite
   unchanged (343, no Python touched but `edit_headed_check.py`'s strings). **D90 is complete** except what 02's status line lists; owed:
   the rig run of the swatch pack and a style sample, and the author's click-through of the new layout.
+
+## 2026-10-16 21:42 — D90 follow-up · the sample scenes are settings (Settings › Samples)
+
+- The author asked whether the style sample's prompt was baked into the code: it was (`styleSamples.ts` `SAMPLE_PROMPT`), as were the
+  look-preset icons' scenes (`preset_icons.py` `PROMPTS`). Both now live in `Settings.samples` (`config.SampleSettings`:
+  `style_prompt`, `swatch_prompts` per field, the old texts as the defaults in `config.py`), edited in **Settings › Samples**: a blank
+  entry is its default again, a scene without `{value}` gets it appended; `POST /preset-icons/make` renders with the saved scenes and
+  "Make a sample image" with the saved style scene. Existing samples and icons are not remade (a tile's right-click remakes one).
+- Tests: offline 343 (the swatch test checks a changed scene reaches the job, the `{value}` append and the blank reset), Vitest 263
+  (the recipe takes the setting, blank = default), settings audit 228 fields clean, contract regenerated, smoke 30 / 30, lint 88.

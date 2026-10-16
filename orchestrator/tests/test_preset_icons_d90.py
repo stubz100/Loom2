@@ -88,6 +88,14 @@ def test_make_plans_one_staged_job_per_item(tmp_path: Path, variant: str):
         assert queued["batch_id"] is None and queued["jobs"][0]["status"] == "queued" and queued["jobs"][0]["seed"] > 0   # 0 = a random seed
         assert c.post("/preset-icons/make", json={"items": []}).status_code == 422
         assert c.post("/preset-icons/make", json={"items": [{"field": "mood", "value": ""}]}).status_code == 422
+        # D90: Settings › Samples — a changed scene reaches the next swatch job; a scene without {value} gets it; blank is the default again
+        s = c.put("/settings", json={"samples": {"swatch_prompts": {"mood": "a quiet harbour at {value}", "lighting": "a chair"}}}).json()["samples"]
+        assert s["swatch_prompts"]["mood"] == "a quiet harbour at {value}" and s["swatch_prompts"]["lighting"] == "a chair, {value}"
+        assert s["swatch_prompts"]["style"] == "a lighthouse on a cliff, {value}" and s["style_prompt"].startswith("a woman in a long coat")
+        made = c.post("/preset-icons/make", json={"items": [{"field": "mood", "value": "dusk"}, {"field": "lighting", "value": "moonlight"}]}).json()
+        assert [j["recipe"]["prompt_text"] for j in made["jobs"]] == ["a quiet harbour at dusk", "a chair, moonlight"]
+        s = c.put("/settings", json={"samples": {"style_prompt": "  ", "swatch_prompts": {"mood": ""}}}).json()["samples"]
+        assert s["swatch_prompts"]["mood"] == "an empty street corner, {value} mood" and s["style_prompt"].startswith("a woman in a long coat")
 
 
 def test_file_and_delete_routes(tmp_path: Path):

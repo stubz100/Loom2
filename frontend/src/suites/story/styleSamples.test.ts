@@ -22,6 +22,8 @@ describe('D90 styles as images', () => {
     expect(r).toMatchObject({ kind: 't2i', model_id: 'm', prompt_mode: 'text', style_id: 'sty_1', seeds: [SAMPLE_SEED] })
     expect(r.width).toBe(r.height); expect((r.width as number) % 16).toBe(0)
     expect(sampleRecipe('sty_1', 'm', false).seeds).toEqual([0])
+    expect(sampleRecipe('sty_1', 'm', true, 'a lighthouse at dawn').prompt_text).toBe('a lighthouse at dawn')    // D90: Settings › Samples
+    expect(sampleRecipe('sty_1', 'm', true, '  ').prompt_text).toBe(sampleRecipe('sty_1', 'm', true).prompt_text)  // blank = the default scene
     expect(styleGroupName('Ink wash')).toBe('Style · Ink wash')
   })
 

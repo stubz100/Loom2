@@ -22,6 +22,7 @@ from pathlib import Path
 from PIL import Image
 from pydantic import BaseModel, ConfigDict
 
+from .config import SWATCH_PROMPTS
 from .fsio import StateError, atomic_write_bytes, atomic_write_json, read_json_or, utc_now
 from .models import registry
 
@@ -33,14 +34,8 @@ KEY_RE = re.compile(r"^[0-9a-f]{16}$")
 SURFACE = "swatch"                              # JobOrigin.surface of a swatch job (the finisher's hook)
 EVENT = "preset_icons.changed"
 
-# The scene each field's value is shown on — a neutral subject so the swatch shows the value, not the subject. `{value}` is the preset.
-PROMPTS = {
-    "lighting": "a simple still life of a white sphere on a table, {value}",
-    "mood": "an empty street corner, {value} mood",
-    "style": "a lighthouse on a cliff, {value}",
-    "background": "{value}, empty, no people",
-    "scene": "{value}",
-}
+# The scene each field's value is shown on — the defaults live in config (Settings › Samples, D90); `{value}` is the preset.
+PROMPTS = SWATCH_PROMPTS
 _lock = threading.Lock()                        # the finisher (a worker thread) and the routes both write the index
 
 
@@ -64,13 +59,13 @@ def icon_key(field: str, value: str) -> str:
     return hashlib.sha1(f"{field}\n{value}".encode("utf-8")).hexdigest()[:16]
 
 
-def swatch_prompt(field: str, value: str) -> str:
-    return PROMPTS.get(field, "{value}").replace("{value}", value)
+def swatch_prompt(field: str, value: str, prompts: dict[str, str] | None = None) -> str:
+    return (prompts or PROMPTS).get(field, "{value}").replace("{value}", value)
 
 
-def swatch_recipe(field: str, value: str, variant: str | None, seed: int = SWATCH_SEED) -> dict:
+def swatch_recipe(field: str, value: str, variant: str | None, seed: int = SWATCH_SEED, prompts: dict[str, str] | None = None) -> dict:
     """One square Draft t2i on the variant's swatch model (D65: the spec says which), its own sampling preset otherwise."""
-    return {"kind": "t2i", "model_id": registry.default_model("swatch", variant), "prompt_mode": "text", "prompt_text": swatch_prompt(field, value),
+    return {"kind": "t2i", "model_id": registry.default_model("swatch", variant), "prompt_mode": "text", "prompt_text": swatch_prompt(field, value, prompts),
             "width": SWATCH_PX, "height": SWATCH_PX, "seeds": [seed]}
 
 

@@ -4281,3 +4281,14 @@ split by file so that no two hands touched the same module.
   All within the 14.5 GB bar; an earlier run at 22:21 (Klein 4B + Lumina) agreed within a second. The images are under
   `engine/spikes/out/sm/` (style samples, swatches, drafts, the Refine): the three style samples are the same scene in recognisably
   different hands, the swatches read their value at 512² on all three. Measured estimates into the specs. Owed: the author's look.
+
+## 2026-10-16 23:31 — D90 / D91 pushed
+
+- The day's work goes to origin/main at the author's request: 6f5e5f9 (D90 · UI0 + UI1), 5d7065d (UI2 + UI3), 3eeed73 (UI4 + UI6),
+  3c21765 (UI5, D90 complete), d8555b1 (the sample scenes as settings), fb94623 (D91 · the sample-model choice, Lumina Image 2.0 and
+  SD 3.5 Medium), and this entry. A contact sheet of `engine/spikes/out/sm/` (each model's style sample and three swatches) was looked at
+  before the push: all three models render the scene and the presets sensibly.
+- Still owed: the author's click-through of the new layout; the full swatch pack (64 look presets, now on the chosen sample model);
+  a stall timeout in `fetch_weights.py` (the SD 3.5 Medium transfer hung ≈ 4 min at 8.25 GB and recovered by itself); Klein 4B's ledger
+  sha256 (it shows `present`); not built in D90 — takes as a Catalogue group, the groups' "used by", Edit's Flatten, For contexts for
+  profiles and styles.

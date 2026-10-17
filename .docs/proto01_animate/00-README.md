@@ -10,8 +10,8 @@ character image as an input of wan-animate and create very precise movement and 
 
 | # | Document | What it holds |
 | --- | --- | --- |
-| [01](01-clay-animation.md) | **The pipeline** | the author's eight-step workflow, reviewed step by step; the refined pipeline; what exists in loom2 today and what is new; the measurements this rests on; risks; open questions |
-| [02](02-implementation-plan.md) | **The implementation plan** | a licence check for the motion, three spikes first (E23a frame rate and weld, E23b Move vs Replace, E24 the post-processing in three stages), the decision gate, nine build waves (CA0–CA8) with acceptance bars, estimates, the rig runs |
+| [01](01-clay-animation.md) | **The pipeline** | the author's eight-step workflow, reviewed step by step; the motion library; the refined pipeline; what exists in loom2 today and what is new; the measurements this rests on; risks; open questions, incl. §9 detailed and non-human dummies |
+| [02](02-implementation-plan.md) | **The implementation plan** | a licence check for the motion (the CC0 starter set fetched), spikes first (E23a frame rate and weld, E23b Move vs Replace, E24 the post-processing in three stages; E25 hands in the guide, E26 a non-human performance), the decision gate, nine build waves (CA0–CA8) with acceptance bars, estimates, the rig runs |
 
 Background reading, in this order:
 

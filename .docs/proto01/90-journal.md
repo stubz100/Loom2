@@ -4916,3 +4916,26 @@ The author reviewed `.docs/proto01_animate` and sent six notes. Both documents a
 Plan now: §2 licence check → E23a → E23b → E24 → a D-number → CA0–CA8 (≈ 26–30 days; CA0 and CA1 may start beside the spikes). Still open
 for the author (01 §7): the starter library and the Mixamo downloads, camera moves, joins, the delivery rate (24 or 25 fps), the time
 budget per shot, props, lip-sync. Nothing decided or run.
+
+## 2026-10-17 23:14 — proto01_animate, second round · the CC0 starter motion fetched; detailed and non-human dummies an open question
+
+The author's second notes:
+
+- **Hands, feet and creatures.** A new open question, 01 §9, with proposals.
+  - Hands and feet: H3, a Simple / Detailed level per figure, where Detailed is the starter set's skinned mannequin; spike E25 asks
+    whether Wan Animate follows drawn hands (21 points) and feet.
+  - Non-human: N1, humanoid creatures by proportion controls and attachments (Wan Animate as today), first. N3, not humanoid (a
+    quadruped), needs a depth-guided performance instead of a pose skeleton (LTX IC-LoRA depth or VACE): spike E26, only if wanted.
+- **The starter library, fetched with the author's yes.** Quaternius' *Universal Animation Library* 1 and 2 [Standard], CC0 1.0 (read
+  in each archive's `License.txt`), from OpenGameArt to `F:/loom2-models/motion/`. `SOURCES.md` there holds the URLs and the sha256
+  (UAL1 `18ff1a72…3ac2`, UAL2 `ec0e40d6…9217`).
+  - 87 clips plus a rest pose in each: talking, folded arms, phone, yes / no, walk, formal walk, carry, jog, sprint, crouch, sit down /
+    sitting / sitting talking / stand up, lie to idle, pick up, interact, open a chest, push, climb, falls, combat.
+  - Missing for our shots: point, wave, turn on the spot, step back.
+  - Each library has **skinned mannequins with fingers and feet**: UAL1 53 joints (Rigify `DEF-` names), UAL2 65 joints (Unreal names),
+    plus a female mannequin on the same rig. E23a uses `Walk_Loop` for Mara.
+- **Mixamo.** The download steps are in 01 step 5 (mixamo.com, an Adobe account, FBX Binary, Without Skin, 30 fps, untick In Place for
+  walks, a local folder outside the repo). Re-reading Adobe's live terms is still owed (02 §2).
+- **24 fps** stays the delivery rate; 25 matters only for a European TV master, so B4 is later.
+- **Times are judged after the spikes.** The estimates are removed. A6 is new: a FLUX.2 dev *healing patch* on a region over a frame
+  range. Klein 9B is named first for per-frame work.

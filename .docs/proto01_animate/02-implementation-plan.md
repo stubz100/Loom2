@@ -1,11 +1,11 @@
 # 02 · Animation from clay — implementation plan
 
-Status: **proposal, 2026-10-17; revised the same evening after the author's six notes** (01 §8). It follows the reviewed pipeline in
+Status: **proposal, 2026-10-17; revised twice the same evening after the author's notes** (01 §8, §9). It follows the reviewed pipeline in
 [01](01-clay-animation.md). The order:
 
 1. The author refines 01.
 2. A licence check for the motion sources (§2).
-3. Three spikes (§3).
+3. Three spikes, and two more for the dummies (§3).
 4. A decision: a D-number (§4).
 5. The build waves (§5).
 
@@ -23,13 +23,13 @@ Each wave ends measured on the rig, as every wave has ("no milestone closes with
 - **Licences (D17 / D26):** motion clips the author downloads stay in the author's local folder. Only clips with a verified open licence
   ship.
 
-## 2. Licence check for the motion (≈ 1 h, no download)
+## 2. Licence check for the motion
 
-- Re-read Adobe's live terms and Mixamo FAQ for: use in films, local storage, a local library, and pose sequences from the clips fed to a
-  generative model. Record the reading in the licence ledger (D17).
-- Verify the licence of a starter library to ship (Quaternius' *Universal Animation Library*, reported as CC0; others if it is not), and
-  what it holds (acting moves: sit, point, talk, wave, pick up).
-- Nothing is fetched without the author's yes.
+- **Done (2026-10-17):** the starter set. Quaternius' *Universal Animation Library* 1 and 2 [Standard] are CC0 1.0 (each archive's
+  `License.txt`); fetched with the author's yes to `F:/loom2-models/motion/` (`SOURCES.md` holds the URLs and sha256). 87 clips and
+  skinned mannequins with fingers and feet (01 step 5, §9).
+- **Owed:** re-read Adobe's live terms and Mixamo FAQ for use in films, a local library, and pose sequences from the clips fed to a
+  generative model; record the reading with D17's licence notes. Mixamo clips stay in the author's local folder either way.
 
 ## 3. Spikes first
 
@@ -40,8 +40,7 @@ joins with the identity held?
 
 **The shot.** About 10 s, Mara alone in E22's set:
 
-- she walks along a path (the walk from the old loom's local `mixamo_animations/Walking.fbx`, retargeted by spike code; or keys written
-  programmatically), then turns and points;
+- she walks along a path (the starter set's `Walk_Loop`, retargeted onto the dummy by spike code), then turns and points (keys);
 - a locked-off camera, so the plate is not a variable;
 - Move mode (CN4's), with the animation reference made by hand to 01 step 2's rules (16:9, full body, A-pose, colours bound).
 
@@ -105,14 +104,15 @@ The question: which post-processing, at which stage, makes the performance the f
 the shadows and light? Every idea of 01 step 8 is an arm. The three stages are tested **separately** (note 4), and then the best of each
 together.
 
-**Before it:** the FLUX.2 dev RAM-pressure slowness (owed, journal 2026-10-17 18:03) is investigated. Otherwise A4 / C5 on dev are only
-measured on keyframes.
+Times are measured here, not estimated before (the author). FLUX.2 dev is tried where it matters (A6, the healing patch) and Klein 9B
+for per-frame work; the dev RAM-pressure slowness (owed, journal 2026-10-17 18:03) is worth fixing first, because it inflates every dev
+number.
 
 | Stage | Arms (01 step 8) | Run on |
 | --- | --- | --- |
-| **A · layer pass** | A0 none · A1 the amount per layer (plate none, characters low, hero more) · A2 low-σ v2v per layer (Wan low expert σ 0.1 / 0.2; LTX-2.3), a model per layer · A3 face-crop refine (Klein 9B + references) · A4 per-frame i2i with neighbours as references (FLUX.2 dev: the frame ± 2 + the animation reference, up to 10; Klein 9B KV: up to 4) · A5 keyframe refine every 8th frame + optical-flow propagation | each character layer of the E23b shot |
-| **B · image stream** | B1 RIFE 16 → 24 · B2 native 24 (from E23a) · B3 refined keyframes + in-betweens from them · B4 another rate (25 fps, by interpolation) | the best A |
-| **C · final polish** | C0 none · C1 Wan low-expert v2v σ 0.1 / 0.2 · C2 LTX-2.3 v2v, low strength · C3 structure-locked v2v (LTX-2.3 + IC-LoRA depth from the shot's Stage depth sequence, from the flattened clip at a low strength) · C5 FLUX.2 dev with neighbours over the flattened frames (keyframes only unless dev is fixed). C4 (Wan VACE) only if the author approves the download | the flattened shot, after A0 and after the best A |
+| **A · layer pass** | A0 none · A1 the amount per layer (plate none, characters low, hero more) · A2 low-σ v2v per layer (Wan low expert σ 0.1 / 0.2; LTX-2.3), a model per layer · A3 face-crop refine (Klein 9B + references) · A4 per-frame i2i with neighbours as references (Klein 9B KV: up to 4; FLUX.2 dev: the frame ± 2 + the animation reference, up to 10) · A5 keyframe refine every 8th frame + optical-flow propagation · A6 a healing patch: a region over a frame range (a hand, a face at a join) with FLUX.2 dev | each character layer of the E23b shot |
+| **B · image stream** | B1 RIFE 16 → 24 · B2 native 24 (from E23a) · B3 refined keyframes + in-betweens from them (B4, other rates, later: delivery is 24 fps) | the best A |
+| **C · final polish** | C0 none · C1 Wan low-expert v2v σ 0.1 / 0.2 · C2 LTX-2.3 v2v, low strength · C3 structure-locked v2v (LTX-2.3 + IC-LoRA depth from the shot's Stage depth sequence, from the flattened clip at a low strength) · C5 Klein 9B or FLUX.2 dev with neighbours over the flattened frames, or A6 patches on them. C4 (Wan VACE) only if the author approves the download | the flattened shot, after A0 and after the best A |
 
 **Measures:**
 
@@ -126,6 +126,17 @@ measured on keyframes.
 **Bar:** an arm goes in only if it improves detail, identity or light, *and* its warping error and flicker are no worse than the
 baseline's, *and* its faithfulness outside the faces stays high (SSIM ≥ 0.9 to the input; to confirm on the baseline).
 
+### E25 · Hands and feet in the guide (≈ ½ day) — before CA1 builds the Detailed dummy (01 §9a)
+
+One character, the starter set's skinned mannequin playing a clip with clear hand action (`PickUp_Table`, `Idle_Talking`), Wan Animate
+driven by COCO-18 alone vs COCO-18 + hands (21 points each) + feet (6). Measured: hand PCK against Stage's hand points, fingers by eye,
+foot sliding. It decides whether the pose pass draws hands; the Detailed dummy is useful for posing and clay stills either way.
+
+### E26 · A non-human performance (≈ 1 day) — only if the author wants creatures soon (01 §9b, N3)
+
+One quadruped clip from a CC0 rigged animal, its depth (+ mask) sequence from Stage driving LTX-2.3 + IC-LoRA depth (exists) vs Wan VACE
+with depth (a download, a decision), with the creature's reference image. Bars as E23: identity, the shape kept, the background stable.
+
 ## 4. Decision gate
 
 After E23a, E23b and E24, a D-number records, with the numbers:
@@ -134,7 +145,8 @@ After E23a, E23b and E24, a D-number records, with the numbers:
 - the weld (W1 / W2 / W3);
 - the mode (Move / Replace);
 - the plate method(s);
-- the post-processing per stage (A / B / C), or none.
+- the post-processing per stage (A / B / C), or none;
+- the dummy: hands in the pose pass or not (E25); Simple / Detailed per figure (01 §9a).
 
 Only then the waves below, trimmed to what the decision keeps.
 
@@ -146,7 +158,7 @@ parallel with the spikes.
 | Wave | Content | Effort | Acceptance (rig) |
 | --- | --- | --- | --- |
 | **CA0 · The animation reference in Cast** (note 6) | per Cast version: *Make an animation reference* (16:9, full body, A-pose, plain background, colours bound, Klein 9B with the sheet's references), shown beside the coverage grid; an optional back view; an optional test animation (a turn on the spot); lineage; commands and menus (D32) | 1.5–2 | three characters × two versions: the reference animates in the test with PCK ≥ 0.8 and no ghost or crop |
-| **CA1 · The motion library** (note 5) | an FBX / glTF importer (three.js loaders): bone mapping (Mixamo names and the starter set's), rest-pose correction, scale, retargeting onto the mannequin's 12 joints, the hips' translation as root motion, baked to keys at 24 fps; a **local motion folder** in Settings (outside the repo, never bundled) and a **starter set** that ships (per §2); a library browser with previews on the mannequin; **root motion along a path** drawn on the floor; **foot lock**; trim, speed, **blend** from one clip into the next; presets and keys by hand stay | 5–6 | a walk along a curved path into a turn and a point, from the library, in < 2 min of clicks; feet do not slide (≤ 2 cm); a Mixamo FBX from the local folder imports and plays |
+| **CA1 · The motion library** (note 5) | the **Detailed dummy** (the starter set's skinned mannequin, male / female, as a per-figure detail level beside today's Simple one, 01 §9a H3; proportion controls for humanoid creatures, §9b N1) with hand presets; an FBX / glTF importer (three.js loaders): bone mapping (Mixamo names and the starter set's), rest-pose correction, scale, retargeting onto the mannequin's 12 joints, the hips' translation as root motion, baked to keys at 24 fps; a **local motion folder** in Settings (outside the repo, never bundled) and a **starter set** that ships (per §2); a library browser with previews on the mannequin; **root motion along a path** drawn on the floor; **foot lock**; trim, speed, **blend** from one clip into the next; presets and keys by hand stay | 7–9 | a walk along a curved path into a turn and a point, from the library, in < 2 min of clicks; feet do not slide (≤ 2 cm); a Mixamo FBX from the local folder imports and plays |
 | **CA2 · Layers and light** | a Layers panel in Stage (figures and props → layers, the plate = the set; a held prop joins its holder); a **key light** with its direction matched to the plate; a **shadow pass** per figure (Move) | 2 | the shadow pass lines up with the plate's light by eye on 3 plates |
 | **CA3 · The plate** | the plate still from the empty set and the shot camera (Clay reference, the World style) as an app action; the **2.5D projection** along the camera path (three.js); per the decision, the **depth-guided plate video** | 3 | a dolly-in and a pan without visible stretching at Draft; the projected plate's frames match the still plate at frame 1 |
 | **CA4 · The batch planner** | shot range → batches at the decided rate (F16: resampled; F24: as keyed), 77 frames, 5 carried / 72 new; per figure: pose and mask sequences; per batch: the plate frames and (W2) a **keyframe still** per figure (Exact pose with the binding, the reference and the previous still as references); the plan with its cost; staged by default | 2–3 | a 10 s shot plans 3 (F16) or 4 (F24) batches per layer; the frames per batch the UI shows are what the jobs get (T8) |
@@ -155,11 +167,12 @@ parallel with the spikes.
 | **CA7 · The final** | what E24 keeps, per stage: the **layer pass** (amount and model per layer), the **image stream** (rate, in-betweens), the **final polish**; each a step with its cost, re-runnable alone; the result as a **take on the Story shot** (D93) with lineage | 3–4 | the take plays in Story › Shots and exports through the Episode; its metrics within E24's bars |
 | **CA8 · UI** | Stage › an **Animate shot** panel: the batches on the timeline, the layers list with per-layer status and preview, Run all / Re-take layer / Re-take batch, the post stages with their amounts per layer, the cost; Story shot **Make clip ▸ in Stage (animated)** | 3 | the author's click-through of one shot from Cast to Episode |
 
-**Total:** about 26–30 working days after the spikes, plus the spikes' ≈ 3 days.
+**Total:** about 28–33 working days after the spikes, plus the spikes' ≈ 3.5 days (E26 another day if creatures are wanted). A
+non-human route (N3, depth-guided) is not in these waves; it follows E26 if the author wants it.
 
 **Later, not in this plan:**
 
-- a finer mannequin rig (chest, wrists, ankles, hands) and hands in the pose pass;
+- non-human creatures that are not humanoid (01 §9b N3, after E26);
 - pose from a reference video;
 - HD (1280×720) Wan Animate runs;
 - a face video for expressions, and lip-sync (D88's S2V), in this route.

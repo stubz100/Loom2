@@ -1,7 +1,7 @@
 # 01 · Animation from clay — the pipeline, reviewed
 
-Status: **proposal, 2026-10-17; revised the same evening after the author's six notes** (§8 lists them and where each one went). For
-the author to refine; no decision yet (00).
+Status: **proposal, 2026-10-17; revised twice the same evening after the author's notes** (§8 lists them and where each one went; §9
+is the open question of the dummies). For the author to refine; no decision yet (00).
 
 ## 1. The idea
 
@@ -125,8 +125,30 @@ without committing it.
 | Source | What it holds | Terms | Use in loom2 |
 | --- | --- | --- | --- |
 | **Mixamo** (Adobe, a free account) | thousands of clips, acting included (sitting, talking, pointing, waving, walk variants), as FBX | free in your own films and games, no credit needed; you may **not redistribute the raw files** or build a library or dataset of them for others (Adobe's Mixamo FAQ; to be re-read against the live terms before we rely on it, D17) | the author downloads clips with their own account into a **local motion folder** outside the repo and the installers, and loom2 imports from it. Never bundled, never in CI, never a default of the `open` variant |
-| a CC0 / CC-BY library shipped as the starter set: e.g. Quaternius' *Universal Animation Library* (reported as CC0) | locomotion and basic gestures, glTF | **to verify** (D17 / D26) | the clips that ship with loom2, in both variants |
+| **the starter set: Quaternius' *Universal Animation Library* 1 and 2 [Standard]** (fetched 2026-10-17 to `F:/loom2-models/motion/`, provenance and sha256 in its `SOURCES.md`) | 87 clips (below; plus a rest pose in each) and **skinned mannequins with fingers and feet**: a male (UAL1: 53 joints, Rigify `DEF-` names; UAL2: 65 joints, Unreal names) and a female on the same rig; glb and fbx | **CC0 1.0**, verified in each archive's `License.txt` | the clips that ship with loom2, in both variants; the mannequins are a candidate for a detailed dummy (§9) |
 | the old Godot libraries above | game moves | none declared | not used |
+
+**What the starter set holds** (clip names as in the files):
+
+| For storyboards | Clips |
+| --- | --- |
+| standing, talking, reacting | Idle, Idle_Talking, Idle_FoldArms, Idle_TalkingPhone, Idle_No, Yes, Hit_Chest, Hit_Head, Hit_Knockback |
+| moving | Walk, Walk_Formal, Walk_Carry, Jog, Sprint, Crouch_Fwd, Crouch_Idle, Push, Roll, Slide, Jump (start / loop / land), ClimbUp_1m, Swim |
+| sitting, lying | Sitting_Enter, Sitting_Idle, Sitting_Talking, Sitting_Exit, LayToIdle, Death01, Driving |
+| hands at work | PickUp_Table, Interact, Chest_Open, Consume, OverhandThrow, Fixing_Kneeling, Farm (harvest, plant, water), TreeChopping |
+| action | punches, sword, shield, pistol, spell, melee hooks |
+| other | Dance, Zombie (idle, walk, scratch), A_TPose (the rest pose) |
+
+**Missing** for our shots: pointing, waving, turning on the spot, a step back. These stay pose presets and keys by hand until another
+CC0 source or the author's Mixamo folder covers them.
+
+**Getting Mixamo clips** (the author's own downloads):
+
+1. Sign in at **https://www.mixamo.com** with a free Adobe account.
+2. Pick a character (*X Bot* or *Y Bot* is fine; only the motion is kept) and search the *Animations* tab.
+3. Download with these settings: *Format* FBX Binary, *Skin* **Without Skin**, *Frames per second* 30, *Keyframe reduction* none.
+   Untick *In Place* for walks, so the clip keeps its root motion.
+4. Save the files into a local motion folder outside the repo, e.g. `F:/loom2-motion-mixamo/`, like the old loom's `mixamo_animations/`.
 
 **The importer** (Stage is three.js, which has FBX and glTF loaders):
 
@@ -146,8 +168,7 @@ On top of the clips:
 - On import, a spine chain collapses into one joint, and wrists, ankles, toes and fingers are dropped.
 - The COCO-18 pose pass that guides Wan Animate needs none of them: its wrist and ankle points are the ends of the limbs. So the guide
   is unaffected, but foot roll and hand gestures are lost.
-- A finer rig (chest, wrists, ankles, maybe hands) is a possible follow-up. With hands in the pose pass (DWPose draws them), Wan Animate
-  could follow gestures too; untested.
+- A detailed dummy with hands and feet, and dummies for non-human characters, are an open question with proposed solutions in §9.
 
 ### 6) Keyframes and batches — ✎ revised (note 1)
 
@@ -254,17 +275,11 @@ untested.
 | A1 | **a different amount per layer**: the plate none (a still or a projection is stable by construction), the characters low, the hero more than the extras | the author's idea; the layer stack makes it free |
 | A2 | a low-σ v2v per layer: the Wan 2.2 low-noise expert or LTX-2.3, **a different model per layer** if one suits faces and another cloth | on a Move layer, the layer's own background is re-rendered too; only the matte is kept |
 | A3 | a **face-crop refine** per character per frame (the crop at ×2, Klein 9B with the character's references, pasted back feathered) | small faces are the weakest part at Draft size |
-| A4 | per-frame image-to-image with the **neighbouring frames as references**. FLUX.2 dev takes up to 10 images: the frame, its neighbours (e.g. ±2), the animation reference, and near a join the keyframe still (W3). Klein 9B (KV) takes up to 4 | the author's idea. The neighbours pull each frame towards the detail of the frames around it, against flicker |
+| A4 | per-frame image-to-image with the **neighbouring frames as references**: **Klein 9B (KV)** with up to 4 images (the frame, its neighbours, the animation reference), the faster model; **FLUX.2 dev** with up to 10 (the frame, its neighbours ± 2, the animation reference, and near a join the keyframe still, W3) | the author's idea. The neighbours pull each frame towards the detail of the frames around it, against flicker |
 | A5 | **keyframe refine + propagation**: refine every 8th–12th frame (A3 or A4), and carry the change to the frames between along the optical flow (OpenCV, "EbSynth-style", no new engine node) | the flicker-safe variant of A4 |
+| A6 | **a healing patch**: A4 on **a region over a frame range only**, e.g. a hand in frames 40–60, a face around a join, a sleeve that changed colour. The region is masked, refined with neighbours as references (FLUX.2 dev where it matters most, Klein 9B otherwise), and pasted back feathered | the author's idea. The whole shot does not have to pass through FLUX.2 dev: it repairs what the other stages leave |
 
-**Cost of A4 per 10 s of one layer** (240 frames at Draft size). These are estimates from the specs, to be measured:
-
-- **Klein 9B KV:** ≈ 10–18 s a frame → 40–70 min.
-- **FLUX.2 dev:** ≈ 40–65 s a frame in the specs, more with references → 2.7–4.3 h at best. Today it runs at 290–560 s a frame under
-  RAM-pressure reloads (owed, journal 2026-10-17 18:03), which makes 20 h or more.
-- **A5** refines every 8th frame only (30 frames), which divides these by about 8.
-
-FLUX.2 dev on every frame is an overnight job. The RAM-pressure fix comes before it is measured.
+Times are measured in the spikes, not estimated here (the author, 2026-10-17): first see what each spike gives.
 
 **B · The image stream** (frames as files)
 
@@ -273,7 +288,7 @@ FLUX.2 dev on every frame is an overnight job. The RAM-pressure fix comes before
 | B1 | 16 → 24 fps with RIFE | exists (D27), with F16 |
 | B2 | native 24 fps | F24; no interpolation (E23a) |
 | B3 | refine the keyframes, then make the in-betweens from the refined frames (RIFE or flow) | combines with A5 |
-| B4 | other delivery rates: up by interpolation (e.g. 25 or 30 fps), down by dropping frames | the Episode's export rate decides |
+| B4 | other delivery rates: up by interpolation (25, 30 fps), down by dropping frames | **later**: the delivery rate is 24 fps (the author, 2026-10-17), the project default |
 | B5 | the master as PNG sequences with alpha, per layer | the layer pass and re-takes work on files; the h264 proxy stays for playback |
 
 **C · The final polish** (one pass over the flattened shot, kept separate from A)
@@ -287,7 +302,7 @@ The requirement (note 4): the **most accurate and faithful** polish, one that **
 | C2 | LTX-2.3 v2v at a low strength | LTX broke the blocking as I2V (E22); as a low-strength v2v it starts from the shot |
 | C3 | **structure-locked v2v**: LTX-2.3 with its IC-LoRA depth guide (Stage's *Render clip* guide, D76), fed the shot's own Stage depth sequence, starting from the flattened clip at a low strength (if the pinned engine's core nodes allow it) | holds the geometry and where the shadows fall while it unifies the light. The candidate I expect most from |
 | C4 | Wan VACE v2v with a depth or pose control | Apache-2.0, but not installed: a download, so a decision |
-| C5 | A4 over the flattened frames (FLUX.2 dev with neighbours) | the slowest |
+| C5 | A4 over the flattened frames (Klein 9B or FLUX.2 dev with neighbours), or A6 on the flattened frames (a healing patch where the polish left a fault) | |
 
 **Measures for C:**
 
@@ -361,7 +376,8 @@ a take on the Story shot ─► Episode
 
 - **Authoring the motion.** The library (step 5) is the mitigation. Its licence decides what ships: Mixamo stays in the author's local
   folder.
-- **The coarse rig.** No wrists, ankles or fingers: hand gestures and foot roll are lost on import.
+- **The coarse rig.** No wrists, ankles or fingers: hand gestures and foot roll are lost on import (§9).
+- **Non-human characters.** Wan Animate's guide is a human skeleton; creatures need another dummy and possibly another guide (§9).
 - **Liveliness.** Pose-driven motion is exact but can look stiff, with smaller gestures than free I2V (E21 banim). Faces and expressions
   come only from the model, because the mannequin has none.
 - **Joins.** Appearance drift at a join (W1) or a keyframe still that does not match (W2). Unmeasured on our engine.
@@ -369,8 +385,8 @@ a take on the Story shot ─► Episode
 - **Light integration.** Move keeps the reference's light; Replace's relighting is unmeasured.
 - **Hands and held props.** The mannequin has no fingers. A prop held across a join may change.
 - **Camera moves.** The projected plate stretches where the camera sees behind objects; a depth-guided plate video may breathe.
-- **Post-processing.** Flicker (A4 / C5 without temporal care). Time: FLUX.2 dev on every frame is hours per shot, and today more,
-  because of RAM pressure.
+- **Post-processing.** Flicker (A4 / C5 without temporal care). Time is measured per stage in E24; FLUX.2 dev is the slow model, which
+  is why it is used as a healing patch (A6) where it matters, and Klein 9B where speed does.
 
 ## 7. Questions for the author
 
@@ -381,18 +397,23 @@ Answered by the notes of 2026-10-17 (§8):
   are tested as W2;
 - ~~post-processing priority~~ → test everything, in three separate stages (note 4).
 
+Answered in the second round (2026-10-17):
+
+- ~~a CC0 starter library~~ → fetched: Quaternius' UAL 1 + 2 (step 5). Mixamo: the author downloads clips as in step 5.
+- ~~the delivery rate~~ → 24 fps, the project default. 25 fps would only matter for a European TV broadcast master (PAL); for
+  pre-production, festivals and streaming 24 is the norm. B4 is later.
+- ~~the time budget~~ → judged after the spikes, not before. FLUX.2 dev is a healing patch where it matters (A6), Klein 9B the faster
+  per-frame option.
+
 Still open:
 
-1. **Motion library.** Shall I verify a CC0 starter library and fetch it? And will you download Mixamo clips with your own Adobe account
-   into a local folder (never into the repo)?
-2. **Camera moves.** Are small moves (pan, tilt, a short dolly) enough at first? They allow the cheap projected plate.
-3. **Joins.** Is a short crossfade (about 5 frames) at each join acceptable, or should a join be invisible frame by frame?
-4. **Delivery rate.** Is it 24 fps, or 25 (EU broadcast)? It decides B1 / B2 / B4.
-5. **Final size and time budget.** Draft (832×480) first and HD later? And how long may one 10 s shot take, overnight included? This
-   decides whether FLUX.2 dev per frame is an option.
-6. **Props.** A held prop goes in its character's layer. Should free props (a door, a car) be their own layers?
-7. **Faces and lip-sync.** Do talking shots need lip-sync in this route soon? Wan Animate can take a *face video* to drive expressions,
+1. **Camera moves.** Are small moves (pan, tilt, a short dolly) enough at first? They allow the cheap projected plate.
+2. **Joins.** Is a short crossfade (about 5 frames) at each join acceptable, or should a join be invisible frame by frame?
+3. **Final size.** Draft (832×480) first and HD later?
+4. **Props.** A held prop goes in its character's layer. Should free props (a door, a car) be their own layers?
+5. **Faces and lip-sync.** Do talking shots need lip-sync in this route soon? Wan Animate can take a *face video* to drive expressions,
    and S2V is the experimental lip-sync (D88).
+6. **Detailed and non-human dummies** — §9.
 
 ## 8. The author's notes of 2026-10-17 and where they went
 
@@ -401,6 +422,64 @@ Still open:
 | 1 · Wan Animate's output is a model of the final, like the clay; 72 frames = 3 s of Stage at 24 fps?; Stage keyframes for the welding | Agreed. The performance is the second proxy, and post-processing becomes the render. 72 new frames per batch cover exactly 3 s if the poses are fed at 24 fps (F24); the node has no frame rate of its own. The welding: the geometry welds by construction and the identity is re-anchored in every batch, so the risk left is appearance drift. Keyframe stills can start every batch through `continue_motion` (W2), which also makes each batch re-takeable alone | §1, step 6; E23a |
 | 2 · Swap steps 3 and 4 | Done: the Stage with its set comes first, the background is generated from it. The *moving* plate still comes after the camera keys (step 5) | steps 3, 4 |
 | 3 · Compare the two modes of step 7 | E23b compares Move and Replace on the same shot, layers and batches, with one scoring | step 7; 02 §2 |
-| 4 · Test every post-processing idea; a different amount and v2v model per layer; FLUX.2 dev with neighbouring frames as references; the image stream for frame rates and in-betweens; the layer pass separate from a final faithful polish that keeps shadows and light | All listed, in three stages: A layer pass (A1 the amount per layer, A2 models per layer, A4 neighbours as references), B image stream (B1–B5), C final polish (C1–C5, with C3 the structure-locked candidate). The cost of FLUX.2 dev per frame is the catch | step 8; E24 |
-| 5 · The Mixamo library in the old loom repo | The checkout is catprisbrey's Godot libraries (game moves, no licence; the Mixamo files were removed for Adobe's terms), so not usable. Mixamo itself is free to use in your own films but not to redistribute, so: an importer in loom2, Mixamo clips in your local folder (the old loom's `mixamo_animations/` already holds a walk), a CC0 starter set shipped (to verify) | step 5; CA1 |
+| 4 · Test every post-processing idea; a different amount and v2v model per layer; FLUX.2 dev with neighbouring frames as references; the image stream for frame rates and in-betweens; the layer pass separate from a final faithful polish that keeps shadows and light | All listed, in three stages: A layer pass (A1 the amount per layer, A2 models per layer, A4 neighbours as references), B image stream (B1–B5), C final polish (C1–C5, with C3 the structure-locked candidate). Times are measured in the spikes (note 10) | step 8; E24 |
+| 5 · The Mixamo library in the old loom repo | The checkout is catprisbrey's Godot libraries (game moves, no licence; the Mixamo files were removed for Adobe's terms), so not usable. Mixamo itself is free to use in your own films but not to redistribute, so: an importer in loom2, Mixamo clips in your local folder (the old loom's `mixamo_animations/` already holds a walk), a CC0 starter set shipped (fetched in the second round, note 8) | step 5; CA1 |
 | 6 · Animation references at casting | Agreed: one per Cast version, made at casting, at 16:9, with an optional back view and test animation | step 2; CA0 |
+| 7 · *(second round)* A detailed dummy with hands and feet, optional; dummies for non-human characters | An open question with proposed solutions | §9 |
+| 8 · *(second round)* Get the open starter library; where to get Mixamo | Fetched (CC0, UAL 1 + 2, with skinned mannequins); the Mixamo steps written down | step 5 |
+| 9 · *(second round)* 24 fps is the default; why 25? | 24 stays; 25 matters only for a European TV master | §7, B4 |
+| 10 · *(second round)* Times after the spikes; FLUX.2 dev as a healing patch on some areas; Klein 9B the faster option | Agreed: time estimates removed, A6 added, Klein 9B named first for per-frame work | step 8 |
+
+## 9. Open question: a detailed dummy, and dummies for non-human characters
+
+The author (2026-10-17): *"Is it possible to upgrade the clay dummy to have proper hands and feet? Perhaps optional, if we want to focus
+on detailed hand / feet animation. We might also need to think about customising dummies for non-human animation (monsters, aliens …)."*
+
+Yes to both, with limits that come from the guide, not from Stage.
+
+**What decides it: the guide Wan Animate reads.**
+
+- Wan Animate is driven by a **human pose skeleton**. Ours is COCO-18: body only, no hands, no feet. Wan's own preprocessing draws a
+  DWPose-style skeleton, which adds **21 points per hand** (and the face); COCO-WholeBody adds **6 foot points**.
+- A detailed dummy therefore helps twice: in Stage (the poses look right, hands can hold things), and possibly in the guide, *if* Wan
+  Animate follows drawn fingers. **That is untested**; a short spike settles it (below).
+- A **non-human** character works through Wan Animate only if its body can be read as a human skeleton. Otherwise it needs a different
+  guide (depth, silhouette) and a different video model.
+
+### 9a · Hands and feet — three ways
+
+| | **H1 · Detailed dummy from the starter set** | **H2 · Extend today's dummy** | **H3 · Both, a detail level per figure** |
+| --- | --- | --- | --- |
+| What | Quaternius' CC0 skinned mannequins (fetched; male and female, the same rig): 65 joints with spine ×3, clavicles, **fingers (4 bones each), foot + ball** | add wrists, ankles and toes, and "mitten" hands (a thumb + the four fingers as one) to the procedural 12-joint dummy | *Simple* (today's, fast to pose by hand) or *Detailed* (H1) per figure, switchable; the keys map between them |
+| Library clips | play **natively**, no retargeting loss (they were made on this rig) | retargeted; fingers collapse into the mitten | natively on Detailed; retargeted on Simple |
+| Hand poses | hand presets (open, relaxed, fist, point, grip, pinch) as finger keys; the clips' own finger motion | open / closed / point only | as H1 |
+| The pose pass | COCO-18 + hands (21 points each, OpenPose hand order) + feet (6) | COCO-18 + a wrist direction + feet | per figure |
+| Proportions | male and female builds; bone scaling for height and build (from the Cast sheet) | the procedural sizes, already parametric | both |
+| Cost | medium: a skinned glb in Stage, a joint-picking and posing UI for 65 joints (IK helps: the hands and feet are chain ends) | small | H1 + a mapping |
+
+**Proposal: H3**, with H1 as the Detailed level. The starter set's clips then play without loss on Detailed figures, and Simple stays for
+blocking. The Simple dummy keeps E10's clay-reference results (PCK 0.86), so it should not be replaced blindly. Clay, depth and mask
+passes of the skinned mannequin are re-checked with the Klein clay reference before it becomes a default.
+
+**Spike E25 (½ day; before CA1 builds the Detailed level):** one character, one clip with clear hand action (PickUp_Table, Idle_Talking),
+Wan Animate driven by COCO-18 alone vs COCO-18 + hands + feet. Measured: hand PCK against Stage's hand points, finger counts by eye,
+foot sliding. If the hands do not help the guide, Detailed is still worth having for posing and the clay stills, but the pose pass stays
+body-only.
+
+### 9b · Non-human characters — by body plan
+
+| Body plan | Examples | Dummy | Guide and model |
+| --- | --- | --- | --- |
+| **N1 · Humanoid, other proportions** | an orc, a grey alien, a robot, a child, a giant | the human dummy with **proportion controls**: limb lengths, head size, torso, hands; extra parts as rigid attachments that follow a bone (tail, horns, wings folded, antennae) | **Wan Animate as today.** The skeleton stays human, and the reference image gives the look. Attachments are not in the pose pass, so their motion is the model's guess (a tail sways or not) |
+| **N2 · Humanoid + moving extras** | wings that flap, a tail that whips, tentacle arms | N1 + extra bone chains on the attachments (keyed or procedural) | Wan Animate for the body; the extras need the **depth / mask guide** of the dummy as a second signal: either a depth-guided pass over the layer (LTX IC-LoRA depth, as Stage's *Render clip* does), or the extras as their own layer |
+| **N3 · Not humanoid** | a dog, a horse, a dragon, a spider, a snake, a blob | an imported **rigged model** (glb) posed by its own bones; CC0 animated animals and monsters exist (Quaternius has several packs; to verify); or image → mesh (Pixal3D, full variant only) and an auto-rig (Puppeteer, Apache-2.0 code, in the old loom repo; its weights' licence and UniRig's to check) | **not Wan Animate**: a human pose skeleton cannot describe a quadruped. The guide is the dummy's **depth (+ mask) sequence**, driving a depth-guided video model with the creature's reference: LTX-2.3 + IC-LoRA depth (exists, D76), or Wan VACE with depth control (a download, a decision). Then layered like any other figure |
+
+**Proposal:** N1 first. It is small (bone scaling + attachments) and covers most monsters and aliens in a storyboard. N3 is a separate
+route, the depth-guided performance, which needs its own spike (E26) before any build: one quadruped clip from a CC0 rigged animal,
+LTX IC-LoRA depth vs Wan VACE depth, against the bars of E23 (identity, the shape kept, background stable).
+
+**Questions for the author:**
+
+1. Hands and feet: **H3** (Simple and Detailed per figure), or replace the dummy with the Detailed one everywhere?
+2. Non-human: is **N1** (humanoid monsters and aliens) enough for now, or are quadrupeds and creatures (N3) needed soon?
+3. Should the Cast sheet carry a body (height, build, proportions, attachments), so the dummy is shaped from the character?

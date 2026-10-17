@@ -1,7 +1,9 @@
 // D90 (02 §6, R3, R4): Generate's Panel as one continuous column — saved panels, prompt, references, look, camera, model, size, preview —
 // instead of five rail tabs. The rail's buttons jump to a section and follow the scroll. Every preset is an icon tile (frame/PresetIcons):
-// drawn glyphs for geometry, generated swatches for looks (swatches.ts), monograms until a swatch exists; the words live in the tooltip,
-// and a section's "Aa" shows them under the tiles. Fields a model cannot use are hidden, not disabled (B12).
+// drawn glyphs for geometry, generated swatches for looks (swatches.ts); the words live in the tooltip, and a section's "Aa" shows them
+// under the tiles. Fields a model cannot use are hidden, not disabled (B12). D92: the tiles are the project's Story · World library (a
+// field's + adds an entry there; a tile's right-click edits it in World), a look without its picture yet shows its field's glyph — never
+// letters — and a subject card picks a Cast character or prop by its hero image.
 import { CaseSensitive, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
@@ -10,17 +12,19 @@ import { sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
-import { aspectGlyph, glyphFor, tierGlyph } from '../../frame/presetGlyphs'
+import { aspectGlyph, fieldGlyph, tierGlyph } from '../../frame/presetGlyphs'
 import { setRailTab } from '../../frame/suiteRegistry'
 import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
-import { appendValue, BUILTIN, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
+import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
 import { dropRefs, honoursNegative, refDropFor, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
+import { entriesOf, entryTile, useLibrary } from '../story/libraryStore'
+import { profilesForMentions, sy, useStory } from '../story/storyStore'
 import { LoraSlots } from './LoraSlots'
 import { RefExtras, TextPrompt } from './RefExtras'
 import { StylePicker } from './StylePicker'
 import { ForChip } from '../story/ForChip'
-import { SWATCH_FIELDS, useSwatches } from './swatches'
+import { needsPicture, swatchJob, useSwatches } from './swatches'
 import { useMentions } from './useMentions'
 
 const ASPECTS: [string, number, number][] = [['16:9', 16, 9], ['1:1', 1, 1], ['3:2', 3, 2], ['2:3', 2, 3], ['9:16', 9, 16], ['21:9', 21, 9]]
@@ -33,25 +37,19 @@ const SECTION_IDS = ['presets', 'prompt', 'refs', 'look', 'camera', 'model', 'si
 const partsOf = (field: FieldKey, text: string) => (REPLACE.has(field) ? [text.trim()] : text.split(',').map((x) => x.trim())).filter(Boolean).map((x) => x.toLowerCase())
 
 function PresetRow({ field, value, onChange, section }: { field: FieldKey; value: string; onChange: (v: string) => void; section: string }) {
-  const snippets = useGenerate((g) => g.snippets)
-  const del = useGenerate((g) => g.deleteSnippet)
+  const lib = useLibrary((l) => l.library)
   const showText = useGenerate((g) => !!g.presetText[section])
   const swatchUrl = useSwatches((s) => s.url)
   useSwatches((s) => s.items)                                             // re-render when a swatch lands
+  const jobs = useSession((s) => s.jobs)                                  // … and when its job starts or ends (the busy mark)
   const has = new Set(partsOf(field, value))
-  const pic = SWATCH_FIELDS.has(field)
-  const tile = (id: string, label: string, text: string, extra?: Partial<PresetIcon>): PresetIcon & { text: string } => {
-    const icon = glyphFor(field, text)
-    return { id, label, text, icon: icon ?? undefined, img: icon || !pic ? null : swatchUrl(field, text), ...extra }
-  }
-  const items = [
-    ...(BUILTIN[field] ?? []).map((v) => tile(`b:${v}`, v, v)),
-    ...snippets.filter((s) => s.field === field).map((s) => tile(`u:${s.name}`, s.name, s.text, { hint: `yours · ${s.text}`, badge: '•' })),
-  ]
+  const items = entriesOf(lib, field).map((e) => entryTile(e, swatchUrl, (f, v) => !!swatchJob(jobs, f, v)))   // D92: the World library's entries for this field
+  const pic = items.some((i) => i.img || i.busy) || entriesOf(lib, field).some((e) => needsPicture(e.field, e.text))
   const toggle = (text: string) => {
     if (!has.has(text.toLowerCase())) { onChange(appendValue(value, text, field)); return }
     onChange(REPLACE.has(field) ? '' : value.split(',').map((x) => x.trim()).filter((x) => x && x.toLowerCase() !== text.toLowerCase()).join(', '))
   }
+  if (!items.length) return null
   return (
     <PresetIcons label={`${FIELD_LABEL[field]} presets`} size={pic ? 44 : 38} showText={showText} items={items}
       selected={items.filter((i) => has.has(i.text.toLowerCase())).map((i) => i.id)}
@@ -59,21 +57,20 @@ function PresetRow({ field, value, onChange, section }: { field: FieldKey; value
       onContext={(id, e) => {
         const it = items.find((i) => i.id === id)
         if (!it) return
+        sy().select({ kind: 'entry', id })                               // D92: the entry is the item the World verbs act on
         showMenu(e, [
           { label: has.has(it.text.toLowerCase()) ? 'Remove from the field' : 'Add to the field', run: () => toggle(it.text) },
-          ...(pic ? [{ label: it.img ? 'Make a new sample icon' : 'Make a sample icon', icon: ImagePlus, run: () => void useSwatches.getState().make([{ field, value: it.text }]).then((n) => { if (n) useSession.getState().toast('Sample icon queued', 'info') }) }] : []),
-          ...(id.startsWith('u:') ? [sep, { label: 'Remove this preset', icon: X, danger: true, run: () => void del(it.label) }] : []),
+          { cmd: 'story.world.entryPicture' }, { cmd: 'story.world.editEntry' }, sep, { cmd: 'story.world.remove', label: 'Remove from the library' },
         ])
       }} />
   )
 }
 
-/** One prompt field: its input (with @ for the multiline ones), its preset icons and the "save as preset" tile. */
+/** One prompt field: its input (with @ for the multiline ones), its preset icons and the + that adds the words to the World library. */
 function Field({ label, field, value, onChange, multiline, placeholder, rows, section }: { label?: string; field: FieldKey; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; rows?: number; section: string }) {
   const [naming, setNaming] = useState<string | null>(null)
   const mention = useMentions(value, onChange)
-  const save = useGenerate((g) => g.saveSnippet)
-  const commit = () => { if (naming?.trim()) void save({ name: naming.trim(), field, text: value }); setNaming(null) }
+  const commit = () => { if (naming !== null) void useLibrary.getState().add(field, value, naming.trim()).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (Story · World)`, 'info') }); setNaming(null) }
   return (
     <>
       <label>{label ?? FIELD_LABEL[field]}</label>
@@ -83,13 +80,13 @@ function Field({ label, field, value, onChange, multiline, placeholder, rows, se
             ? <textarea value={value} rows={rows} onChange={(e) => onChange(e.target.value)} onKeyUp={mention.onKeyUp} placeholder={placeholder} />
             : <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />}
           {multiline && mention.button}
-          <button type="button" className="preset-btn" disabled={!value.trim()} title={`Save the current ${FIELD_LABEL[field]} as a preset`} aria-label={`save ${FIELD_LABEL[field]} as a preset`} onClick={() => setNaming('')}><Plus size={13} /></button>
+          <button type="button" className="preset-btn" disabled={!value.trim()} title={`Add the current ${FIELD_LABEL[field]} to the library (Story · World)`} aria-label={`add ${FIELD_LABEL[field]} to the library`} onClick={() => setNaming('')}><Plus size={13} /></button>
         </div>
         {naming !== null && (
           <div className="saver">
-            <input type="text" autoFocus value={naming} placeholder={`name this ${FIELD_LABEL[field]} preset`} onChange={(e) => setNaming(e.target.value)}
+            <input type="text" autoFocus value={naming} aria-label={`name of the new ${FIELD_LABEL[field]} entry`} placeholder={`a name for it (blank: the words)`} onChange={(e) => setNaming(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setNaming(null) }} />
-            <button className="primary" disabled={!naming.trim()} onClick={commit}>Save</button>
+            <button className="primary" onClick={commit}>Add</button>
             <button className="quiet" onClick={() => setNaming(null)}>Cancel</button>
           </div>
         )}
@@ -114,13 +111,41 @@ function Section({ id, title, words, tools, children }: { id: string; title: str
 }
 
 // ------------------------------------------------------------------ prompt
+const FREE = '__free'
+/** D92: the Cast as picture tiles — characters first, then props (places could map to the scene or background later), each by its current
+ *  version's hero; "free subject" unlinks. */
+function CastPicker({ s, i }: { s: Subject; i: number }) {
+  const profiles = useStory((x) => x.profiles)
+  const loaded = useStory((x) => x.profilesLoaded)
+  useEffect(() => { if (!loaded) profilesForMentions() }, [loaded])
+  const g = useGenerate.getState()
+  const cast = [...profiles.filter((p) => p.cls === 'character'), ...profiles.filter((p) => p.cls === 'prop')]
+  const hero = (pid: string) => { const p = profiles.find((x) => x.id === pid); return p?.versions.find((v) => v.id === p.current)?.hero_asset_id ?? null }
+  const items: PresetIcon[] = [
+    ...cast.map((p): PresetIcon => { const h = hero(p.id); return { id: p.id, label: p.name, hint: `${p.cls} · ${p.current} — its reference set${p.versions.find((v) => v.id === p.current)?.lora ? ' and LoRA' : ''} follow`, icon: fieldGlyph(p.cls), img: h ? api.thumbUrl(h, 256) : null } }),
+    { id: FREE, label: 'free subject', hint: 'described in words only, no Cast profile', icon: fieldGlyph('free') },
+  ]
+  return (
+    <PresetIcons label={`subject ${i + 1} from the Cast`} size={44} items={items} selected={s.profile_id ?? FREE}
+      onPick={(id) => { if (id === FREE) g.unlinkSubject(i); else { const p = profiles.find((x) => x.id === id); if (p) g.linkSubject(i, p) } }}
+      onContext={(id, e) => { if (id === FREE) return; sy().selectProfile(id); showMenu(e, [{ cmd: 'story.cast.openInStory' }]) }} />
+  )
+}
+
 function SubjectCard({ i, s }: { i: number; s: Subject }) {
   const g = useGenerate()
   const set = (patch: Partial<Subject>) => g.setSubject(i, patch)
+  const linked = useStory((x) => (s.profile_id ? x.profiles.find((p) => p.id === s.profile_id) : undefined))
+  const hero = linked?.versions.find((v) => v.id === linked.current)?.hero_asset_id
   return (
-    <div className="subject">
-      <div className="head"><b>subject {i + 1}</b><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
-      <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(v) => set({ description: v })} placeholder='who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")' />
+    <div className={`subject${s.profile_id ? ' linked' : ''}`}>
+      <div className="head"><b>subject {i + 1}</b>
+        {s.profile_id && <span className="linked-to" title="its reference set and LoRA follow through the profile mention">
+          {hero ? <img src={api.thumbUrl(hero, 256)} alt="" /> : <span className="glyph">{fieldGlyph(linked?.cls ?? 'character')}</span>}{linked?.name ?? 'a Cast profile'}
+          <button className="quiet" aria-label={`unlink subject ${i + 1}`} title="Unlink: a free subject again (the words stay)" onClick={() => g.unlinkSubject(i)}><X size={11} /> unlink</button></span>}
+        <span className="spacer" /><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
+      <CastPicker s={s} i={i} />
+      <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(v) => set({ description: v })} placeholder={s.profile_id ? "the version's stub — edit for this picture" : 'who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")'} />
       <Field section="prompt" label="position" field="subject.position" value={s.position ?? ''} onChange={(v) => set({ position: v })} placeholder="where in frame" />
       <Field section="prompt" label="action" field="subject.action" value={s.action ?? ''} onChange={(v) => set({ action: v })} />
       <Field section="prompt" label="pose" field="subject.pose" value={s.pose ?? ''} onChange={(v) => set({ pose: v })} />
@@ -152,7 +177,7 @@ function PromptSection() {
         <div className="gen-form gen-tree">
           <Field section="prompt" field="scene" multiline rows={2} value={t.scene ?? ''} onChange={(v) => g.setTree({ scene: v })} placeholder="the scene in a sentence" />
           {(t.subjects ?? []).map((s, i) => <SubjectCard key={i} i={i} s={s} />)}
-          <div className="full"><button onClick={g.addSubject} title="Add a subject card: who or what, where, doing what"><Plus size={12} /> subject</button></div>
+          <div className="full"><button onClick={g.addSubject} title="Add a subject card: a Cast character or prop, or free words — where, doing what"><Plus size={12} /> subject</button></div>
           <Field section="prompt" label="lead text" field="text" value={p.text} onChange={(v) => g.set({ text: v })} placeholder="optional sentence before the tree — the same text as Text mode" />
         </div>
       )}
@@ -236,12 +261,13 @@ function LookSection() {
   const t = g.panel.tree
   const tree = g.panel.prompt_mode === 'tree'
   const swatches = useSwatches()
-  const snippets = g.snippets
+  const lib = useLibrary((l) => l.library)
+  const jobs = useSession((s) => s.jobs)
   useEffect(() => { if (!swatches.loaded) void swatches.load() }, [swatches.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
-  const missing = [...SWATCH_FIELDS].flatMap((f) => [...(BUILTIN[f as FieldKey] ?? []), ...snippets.filter((s) => s.field === f).map((s) => s.text)].map((value) => ({ field: f, value })))
-    .filter((x) => !swatches.url(x.field, x.value))
+  const missing = (lib?.entries ?? []).filter((e) => needsPicture(e.field, e.text) && !swatches.url(e.field, e.text) && !swatchJob(jobs, e.field, e.text))   // D92: the library's looks without a picture
+    .map((e) => ({ field: e.field, value: e.text }))
   const makeAll = async () => {
-    if (!(await askConfirm({ title: 'Make sample icons', okLabel: `Make ${missing.length}`, text: `${missing.length} small sample images (one per look preset that has none yet), queued now on the open-licence sample model. They are kept with the app, not the project, and each can be remade from its right-click menu.` }))) return
+    if (!(await askConfirm({ title: 'Make sample icons', okLabel: `Make ${missing.length}`, text: `${missing.length} small sample images (one per look in the library that has none yet), queued now on the sample model (Settings › Samples). They are kept with the app, not the project, and each can be remade from its right-click menu.` }))) return
     const n = await swatches.make(missing)
     if (n) useSession.getState().toast(`${n} sample icon${n === 1 ? '' : 's'} queued`, 'info')
   }
@@ -404,12 +430,13 @@ function SizeSection() {
 // ------------------------------------------------------------------ saved panels and the preview
 function SavedSection() {
   const g = useGenerate()
+  const caps = useSession((s) => s.capabilities)
   useEffect(() => { void g.loadPresets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Section id="presets" title="Saved panels" tools={<CommandButton id="gen.savePreset" className="quiet" size={14} />}>
       {g.presets.length
-        ? <PresetIcons label="saved panels" size={36} showText items={g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: pr.panel.model_id }))} selected={g.lastPreset}
-            onPick={(id) => g.applyPreset(id)} onContext={(id, e) => showMenu(e, [{ label: 'Apply', run: () => g.applyPreset(id) }, sep, { label: `Delete "${id}"`, icon: X, danger: true, run: () => void askConfirm({ title: 'Delete the saved panel?', text: id, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void g.deletePreset(id) }) }])} />
+        ? <PresetIcons label="saved panels" size={44} showText items={g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: caps?.models[pr.panel.model_id]?.label ?? pr.panel.model_id, icon: fieldGlyph('panel'), img: pr.thumb_asset_id ? api.thumbUrl(pr.thumb_asset_id, 256) : null }))} selected={g.lastPreset}
+            onPick={(id) => g.applyPreset(id)} onContext={(id, e) => { sy().select({ kind: 'panel', id }); showMenu(e, [{ cmd: 'story.world.applyPanel', label: 'Apply' }, { cmd: 'story.world.renamePanel' }, { cmd: 'story.world.editEntry', label: 'Show in Story · World' }, sep, { cmd: 'story.world.remove', label: `Delete "${id}"…` }]) }} />
         : <p className="disabled-why">None yet — the bookmark above saves every field of the panel under a name.</p>}
     </Section>
   )

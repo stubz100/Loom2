@@ -111,8 +111,8 @@ def test_mentions_take_turns_within_the_room_left_and_are_stamped(tmp_path: Path
     # one explicit reference, then three turns: hero's cover, tavern's first, hero's next — capped at the model's 4
     assert [(x.asset_id, x.note, x.mention) for x in out.refs] == [(ids[6], "the lamp", None), (ids[3], "hero", hero.id),
                                                                    (ids[4], "tavern", tavern.id), (ids[1], "hero", hero.id)]
-    assert [m.model_dump(exclude={"profile_id", "version", "lora", "lora_available"}) for m in out.mentions] == [{"group_id": hero.id, "name": "hero", "revision": hero.revision, "asset_ids": [ids[3], ids[1]]},
-                                                      {"group_id": tavern.id, "name": "tavern", "revision": tavern.revision, "asset_ids": [ids[4]]}]   # D85: profile fields stay None for a group
+    assert [m.model_dump(exclude={"profile_id", "version", "lora", "lora_available", "subject"}) for m in out.mentions] == [{"group_id": hero.id, "name": "hero", "revision": hero.revision, "asset_ids": [ids[3], ids[1]]},
+                                                      {"group_id": tavern.id, "name": "tavern", "revision": tavern.revision, "asset_ids": [ids[4]]}]   # D85: profile fields (D92: and the subject link) stay None for a group
     assert resolve_mentions(out, st, cat, 4) is out                                    # stamped: not resolved again (a re-run uses the same images)
     assert resolve_mentions(r, st, cat, 1).refs == r.refs                              # no room left: a mention never pushes a reference out
     dup = T2I(model_id=KLEIN, refs=[RefImage(asset_id=ids[3])], mentions=[Mention(group_id=hero.id)])

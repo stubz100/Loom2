@@ -10,9 +10,12 @@ import type { DragPayload } from '../../frame/drag'
 import { refDrop } from '../../frame/dropRules'
 import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
-import { styleFor } from '../story/storyStore'
+import { profilesForMentions as profilesNow, styleFor } from '../story/storyStore'
+import type { Profile } from '../../api/types'
 
-export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string }
+/** A subject card of the Tree prompt. D92: `profile_id` links it to a Cast character or prop — its version's reference set and LoRA ride on
+ *  the profile mention the link records (never sent in the prompt itself). */
+export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string; profile_id?: string }
 export interface Camera { angle?: string; lens?: string; depth_of_field?: string; 'f-number'?: string; distance?: string }
 export interface Tree { scene?: string; subjects?: Subject[]; style?: string; color_palette?: string[]; lighting?: string; mood?: string; background?: string; composition?: string; camera?: Camera }
 export type PromptMode = 'tree' | 'json' | 'text'
@@ -46,16 +49,19 @@ function promptStrings(p: Panel): string[] {
   if (p.prompt_mode === 'json') out.push(p.json_text)
   return out
 }
-/** D73: the mentions still written somewhere in the prompt as `@name` (deleting the text drops the mention). */
+/** D92: the Tree subject card linked to a profile (its index), or -1. */
+export const linkedSubject = (p: Panel, profileId: string | undefined): number => (profileId && p.prompt_mode === 'tree' ? (p.tree.subjects ?? []).findIndex((s) => s.profile_id === profileId) : -1)
+/** D73: the mentions still written somewhere in the prompt as `@name` (deleting the text drops the mention); D92: and the profile mentions a
+ *  Tree subject card is linked to. */
 export function mentionsInUse(p: Panel): MentionRef[] {
   const text = promptStrings(p).join('\n')
-  return (p.mentions ?? []).filter((m) => text.includes('@' + m.name))
+  return (p.mentions ?? []).filter((m) => text.includes('@' + m.name) || linkedSubject(p, m.profile_id) >= 0)
 }
 const unmention = (s: string, name: string) => s.split('@' + name).join(name)
 
 export type Preview = T2IPreview                          // D38: the server's t2i preview reply
-export interface Preset { name: string; panel: Panel; saved_at: string }
-export interface Snippet { name: string; field: string; text: string }
+/** A saved panel (09 §3e). D92: its picture is its most recent result (`thumb_asset_id`, kept by the server). */
+export interface Preset { name: string; panel: Panel; saved_at: string; thumb_asset_id?: string | null }
 
 /** A fresh subject card; subjects are optional — none by default (2026-10-06). */
 export const NEW_SUBJECT: Subject = { description: '', position: '', action: '', pose: '', color_match: 'exact' }
@@ -74,7 +80,7 @@ export function cleanTree(t: Tree): Record<string, unknown> {
     if (v === undefined || v === null || v === '') continue
     if (Array.isArray(v)) {
       if (k === 'subjects') {
-        const subs = (v as Subject[]).filter((s) => (s.description || s.action || s.pose || s.position || '').trim()).map((s) => Object.fromEntries(Object.entries(s).filter(([, x]) => x !== '' && x != null)))
+        const subs = (v as Subject[]).filter((s) => (s.description || s.action || s.pose || s.position || '').trim()).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'profile_id' && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's
         if (subs.length) out[k] = subs
       } else if (v.length) out[k] = v
     } else if (typeof v === 'object') {
@@ -136,7 +142,8 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: shift ? p.base_shift : null, max_shift: shift ? p.max_shift : null, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
-    mentions: mentionsInUse(p).map((m) => ({ group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}) })),   // D85: a profile mention names its profile
+    mentions: mentionsInUse(p).map((m) => { const si = linkedSubject(p, m.profile_id)                 // D85: a profile mention names its profile; D92: and the card it links
+      return { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}), ...(si >= 0 ? { subject: si } : {}) } }),
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
 }
@@ -158,6 +165,10 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     style_id: (r.style_id as string | null | undefined) ?? null,                                     // D85: a stored recipe's style (null = it ran without one)
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }
+  for (const m of (Array.isArray(r.mentions) ? r.mentions : []) as { profile_id?: string | null; subject?: number | null }[]) {   // D92: a subject's profile link comes back
+    const s = m.profile_id && typeof m.subject === 'number' ? out.tree?.subjects?.[m.subject] : undefined
+    if (s) s.profile_id = m.profile_id!
+  }
   if (keepSeeds && Array.isArray(r.seeds) && r.seeds.length) { out.seed_mode = 'fixed'; out.seed = Number(r.seeds[0]); out.count = 1 }
   return out
 }
@@ -186,7 +197,9 @@ export const batchOf = (j: Pick<Job, 'id' | 'batch_id'>): string => j.batch_id ?
 
 export interface GenerateState {
   panel: Panel; preview: Preview | null; previewError: string | null; previewing: boolean
-  presets: Preset[]; lastPreset: string | null; snippets: Snippet[]
+  presets: Preset[]; lastPreset: string | null
+  /** D92: the saved panel applied (or saved) in this session — a job made from it becomes its picture (origin `saved_panel`). */
+  appliedPreset: string | null
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
   angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
   angleOpen: boolean                                       // D90 (02 §6.1): New angle is a sheet on an image, not a Generate tab
@@ -204,6 +217,12 @@ export interface GenerateState {
   setSubject: (i: number, patch: Partial<Subject>) => void
   addSubject: () => void
   removeSubject: (i: number) => void
+  /** D92: link a subject card to a Cast profile (its current version): the description defaults to the version's stub, the profile mention
+   *  is recorded so its reference set and LoRA follow (mentions.py); `unlinkSubject` ends it (the words stay). */
+  linkSubject: (i: number, profile: Profile) => void
+  unlinkSubject: (i: number) => void
+  /** D92 (Cast's "Use as a subject in Generate"): the Tree prompt with a subject card linked to the profile. */
+  useAsSubject: (profile: Profile) => void
   setCamera: (patch: Partial<Camera>) => void
   treeToJson: () => void
   jsonToTree: () => boolean
@@ -230,9 +249,21 @@ export interface GenerateState {
   savePreset: (name: string) => Promise<void>
   applyPreset: (name: string) => void
   deletePreset: (name: string) => Promise<void>
-  loadSnippets: () => Promise<void>
-  saveSnippet: (s: Snippet) => Promise<void>
-  deleteSnippet: (name: string) => Promise<void>
+  /** D92: World's Rename… of a saved panel (its picture goes with it). */
+  renamePreset: (from: string, to: string) => Promise<boolean>
+}
+
+/** D92: the newest result of a Generate job (a saved panel's picture when it is saved). */
+export function latestResult(jobs: Record<string, Job>): string | null {
+  const ids = (x: Job) => (x.result as { asset_ids?: string[] } | null)?.asset_ids ?? []
+  const j = Object.values(jobs).filter((x) => x.origin?.suite === 'generate' && x.kind === 't2i' && x.status === 'done' && ids(x).length)
+    .sort((a, b) => ((a.finished_at ?? a.created_at) < (b.finished_at ?? b.created_at) ? 1 : -1))[0]
+  return j ? ids(j)[0] : null
+}
+/** The stub of a profile's current version as the Story store holds it (a subject card's default words). */
+function stubOf(profileId: string): string | null {
+  const p = profilesNow().find((x) => x.id === profileId)
+  return p?.versions.find((v) => v.id === p.current)?.stub ?? null
 }
 
 let previewTimer: number | null = null
@@ -254,7 +285,7 @@ export function dropRefs(p: DragPayload): void {
 export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
-      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, snippets: [], show: 'batch', lastBatch: null, pinned: [],
+      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [],
       angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, presetText: {},
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
@@ -298,6 +329,37 @@ export const useGenerate = create<GenerateState>()(
       setSubject: (i, patch) => { const subs = [...(get().panel.tree.subjects ?? [])]; subs[i] = { ...subs[i], ...patch }; get().setTree({ subjects: subs }) },
       addSubject: () => get().setTree({ subjects: [...(get().panel.tree.subjects ?? []), { ...NEW_SUBJECT }] }),
       removeSubject: (i) => get().setTree({ subjects: (get().panel.tree.subjects ?? []).filter((_, j) => j !== i) }),
+      linkSubject: (i, profile) => {
+        const p = get().panel, subs = [...(p.tree.subjects ?? [])], cur = subs[i]
+        const v = profile.versions.find((x) => x.id === profile.current)
+        if (!cur || !v) return
+        const was = cur.profile_id ?? null
+        const wasStub = was ? stubOf(was) : null
+        const keep = !!cur.description.trim() && cur.description.trim() !== (wasStub ?? '').trim()     // typed words stay; the last link's stub is replaced
+        subs[i] = { ...cur, profile_id: profile.id, description: keep ? cur.description : v.stub.trim() || profile.name }
+        const text = promptStrings(p).join('\n')
+        const others = (p.mentions ?? []).filter((m) => m.group_id !== v.group_id && m.profile_id !== profile.id
+          && !(was && m.profile_id === was && !subs.some((s) => s.profile_id === was) && !text.includes('@' + m.name)))
+        get().set({ tree: { ...p.tree, subjects: subs }, mentions: [...others, { group_id: v.group_id, name: profile.name, profile_id: profile.id }] })
+      },
+      unlinkSubject: (i) => {
+        const p = get().panel, subs = [...(p.tree.subjects ?? [])], cur = subs[i]
+        if (!cur?.profile_id) return
+        const pid = cur.profile_id
+        subs[i] = { ...cur, profile_id: undefined }
+        const text = promptStrings(p).join('\n')
+        get().set({ tree: { ...p.tree, subjects: subs }, mentions: (p.mentions ?? []).filter((m) => m.profile_id !== pid || subs.some((s) => s.profile_id === pid) || text.includes('@' + m.name)) })
+      },
+      useAsSubject: (profile) => {
+        if (get().panel.prompt_mode === 'json' && !get().jsonToTree()) return
+        if (get().panel.prompt_mode !== 'tree') get().set({ prompt_mode: 'tree' })
+        if (linkedSubject(get().panel, profile.id) >= 0) return                 // already a subject
+        const subs = get().panel.tree.subjects ?? []
+        const free = subs.findIndex((s) => !s.profile_id && !(s.description || s.action || s.pose || s.position || '').trim())
+        const at = free >= 0 ? free : subs.length
+        if (at === subs.length) get().addSubject()
+        get().linkSubject(at, profile)
+      },
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
       treeToJson: () => get().set({ json_text: JSON.stringify(cleanTree(get().panel.tree), null, 2), prompt_mode: 'json' }),
       jsonToTree: () => {
@@ -318,7 +380,9 @@ export const useGenerate = create<GenerateState>()(
 
       generate: async (stage = false, asked) => {
         const s = useSession.getState()
-        const origin = asked ?? originFor('generate', GENERATE_ORIGIN)            // D90 (02 §5): the For chip's shot gets the results as takes
+        const base = asked ?? originFor('generate', GENERATE_ORIGIN)              // D90 (02 §5): the For chip's shot gets the results as takes
+        const lp = asked ? null : get().appliedPreset                             // D92: made from an applied saved panel — its picture follows the result
+        const origin = lp ? { ...base, payload: { ...(base.payload ?? {}), saved_panel: lp } } : base
         const f = origin.surface === FOR_SHOT ? useMakeFor.getState().generate : null
         try {
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
@@ -371,26 +435,41 @@ export const useGenerate = create<GenerateState>()(
         const m = (p.mentions ?? []).find((x) => x.group_id === groupId)
         if (!m) return
         const fix = (v: unknown): unknown => (typeof v === 'string' ? unmention(v, m.name) : Array.isArray(v) ? v.map(fix) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fix(x)])) : v)
-        get().set({ mentions: (p.mentions ?? []).filter((x) => x.group_id !== groupId), text: unmention(p.text, m.name), tree: fix(p.tree) as Tree, json_text: unmention(p.json_text, m.name) })
+        const tree = fix(p.tree) as Tree
+        if (m.profile_id) tree.subjects = (tree.subjects ?? []).map((s) => (s.profile_id === m.profile_id ? { ...s, profile_id: undefined } : s))   // D92: the card's link goes with it
+        get().set({ mentions: (p.mentions ?? []).filter((x) => x.group_id !== groupId), text: unmention(p.text, m.name), tree, json_text: unmention(p.json_text, m.name) })
       },
       moveRef: (from, to) => { const refs = [...get().panel.refs]; const [x] = refs.splice(from, 1); refs.splice(to, 0, x); get().set({ refs }) },
       setShow: (show) => set({ show }),
       togglePinned: (id) => set({ pinned: get().pinned.includes(id) ? get().pinned.filter((x) => x !== id) : [...get().pinned, id].slice(-6) }),
 
       loadPresets: async () => {
-        try { const r = await unwrap(http.GET('/project/presets')) as { presets?: Preset[]; last?: string | null }; set({ presets: r.presets ?? [], lastPreset: r.last ?? null }) } catch { set({ presets: [], lastPreset: null }) }
+        try { const r = await unwrap(http.GET('/project/presets')); set({ presets: r.presets as unknown as Preset[], lastPreset: r.last ?? null }) } catch { set({ presets: [], lastPreset: null }) }
       },
       savePreset: async (name) => {
-        const presets = [...get().presets.filter((p) => p.name !== name), { name, panel: get().panel, saved_at: new Date().toISOString() }]
-        await unwrap(http.PUT('/project/presets', { body: { presets, last: name } }))
-        set({ presets, lastPreset: name })
+        const thumb = latestResult(useSession.getState().jobs) ?? get().presets.find((p) => p.name === name)?.thumb_asset_id ?? null   // D92: the panel's most recent result is its picture
+        const presets = [...get().presets.filter((p) => p.name !== name), { name, panel: get().panel, saved_at: new Date().toISOString(), thumb_asset_id: thumb }]
+        const r = await unwrap(http.PUT('/project/presets', { body: { presets, last: name } as never }))
+        set({ presets: r.presets as unknown as Preset[], lastPreset: name, appliedPreset: name })
         useSession.getState().toast(`Preset "${name}" saved`, 'success')
       },
-      applyPreset: (name) => { const p = get().presets.find((x) => x.name === name); if (p) { get().set({ ...p.panel }); set({ lastPreset: name }) } },
-      deletePreset: async (name) => { const presets = get().presets.filter((p) => p.name !== name); await unwrap(http.PUT('/project/presets', { body: { presets, last: get().lastPreset === name ? null : get().lastPreset } })); set({ presets }) },
-      loadSnippets: async () => { try { set({ snippets: ((await unwrap(http.GET('/snippets'))) as { snippets?: Snippet[] }).snippets ?? [] }) } catch { set({ snippets: [] }) } },
-      saveSnippet: async (sn) => { const snippets = [...get().snippets.filter((x) => !(x.name === sn.name && x.field === sn.field)), sn]; await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
-      deleteSnippet: async (name) => { const snippets = get().snippets.filter((x) => x.name !== name); await unwrap(http.PUT('/snippets', { body: { snippets } })); set({ snippets }) },
+      applyPreset: (name) => { const p = get().presets.find((x) => x.name === name); if (p) { get().set({ ...p.panel }); set({ lastPreset: name, appliedPreset: name }) } },
+      deletePreset: async (name) => {
+        const presets = get().presets.filter((p) => p.name !== name)
+        const r = await unwrap(http.PUT('/project/presets', { body: { presets, last: get().lastPreset === name ? null : get().lastPreset } as never }))
+        set({ presets: r.presets as unknown as Preset[], lastPreset: r.last ?? null, ...(get().appliedPreset === name ? { appliedPreset: null } : {}) })
+      },
+      renamePreset: async (from, to) => {
+        const name = to.trim()
+        if (!name || name === from) return false
+        if (get().presets.some((p) => p.name === name)) { useSession.getState().toast(`A saved panel is already called "${name}"`); return false }
+        const presets = get().presets.map((p) => (p.name === from ? { ...p, name } : p))
+        try {
+          const r = await unwrap(http.PUT('/project/presets', { body: { presets, last: get().lastPreset === from ? name : get().lastPreset } as never }))
+          set({ presets: r.presets as unknown as Preset[], lastPreset: r.last ?? null, ...(get().appliedPreset === from ? { appliedPreset: name } : {}) })
+          return true
+        } catch (e) { useSession.getState().toast(`Not renamed: ${(e as ApiError).detail ?? e}`); return false }
+      },
     }),
     { name: 'loom2.generate', partialize: (s) => ({ panel: s.panel, show: s.show, presetText: s.presetText }) as never,
       // a panel persisted before a field existed gets that field's default (new engine options, 2026-10-06)

@@ -115,3 +115,9 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; }
 .modal.angle-sheet { width: min(560px, 94vw); }
 .modal.angle-sheet .foot { display: block; }
 .modal.angle-sheet .foot button.primary { width: 100%; }
+/* D92: a subject card linked to a Cast profile — its hero, its name and unlink in the head; the Cast row of picture tiles under it */
+.subject.linked { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.subject .head .linked-to { display: inline-flex; align-items: center; gap: 5px; padding: 1px 4px 1px 1px; border: 1px solid var(--line2); border-radius: 12px; background: var(--bg1); color: var(--fg); }
+.subject .head .linked-to img, .subject .head .linked-to .glyph { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
+.subject .head .linked-to button { margin-left: 2px; min-height: 0; padding: 0 4px; font-size: 11px; }
+.subject > .preset-icons { grid-column: 1 / -1; }

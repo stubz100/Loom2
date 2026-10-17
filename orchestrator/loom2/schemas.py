@@ -17,6 +17,7 @@ from .documents import Document
 from .timelines import Timeline
 from .stages import Stage
 from .story import FlowGraph, FlowNode, Profile, Shot
+from .library import Library, LibraryEntry
 from .groups import GroupRecord
 from .queue import JobRecord
 from .recipes import RefineEdge
@@ -701,6 +702,19 @@ class NodeShot(Out):
     """A bind / unbind / spawn: the node and the shot it now owns (or released)."""
     node: FlowNode
     shot: Shot | None = None
+
+
+class LibraryChange(Out):
+    """D92: an entry added or edited — the library at its new revision and the entry."""
+    library: Library
+    entry: LibraryEntry
+
+
+class LibraryRemoved(Out):
+    """D92: an entry removed — the library at its new revision, the entry and where it stood (the Undo puts it back there)."""
+    library: Library
+    entry: LibraryEntry
+    index: int
 
 
 class Expanded(Out):

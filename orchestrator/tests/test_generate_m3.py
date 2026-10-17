@@ -107,11 +107,12 @@ def test_preview_stage_release_presets(tmp_path: Path):
         assert client.post(f"/jobs/{jobs[0]['id']}/release", headers=H).status_code == 409
         assert client.post("/queue/release", headers=H).json()["released"] == [jobs[1]["id"]]
         assert client.get("/queue").json()["counts"] == {"queued": 2}
-        # presets per project, snippets per app
+        # saved panels per project (D92: a record with a picture each; the app-wide snippets became the World library)
         body = {"presets": [{"name": "alley", "panel": {"model_id": "flux2-dev-fp8mixed"}}], "last": "alley"}
-        assert client.put("/project/presets", json=body, headers=H).json() == body and client.get("/project/presets").json()["last"] == "alley"
+        got = client.put("/project/presets", json=body, headers=H).json()
+        assert got["presets"][0]["name"] == "alley" and got["presets"][0]["thumb_asset_id"] is None and client.get("/project/presets").json()["last"] == "alley"
         assert (tmp_path / "proj" / "generate" / "presets.json").is_file()
-        assert client.put("/snippets", json={"snippets": [{"name": "rim", "field": "lighting", "text": "golden hour rim light"}]}, headers=H).json()["snippets"][0]["name"] == "rim"
+        assert client.get("/snippets").status_code == 404
         client.post("/project/close", headers=H)
 
 

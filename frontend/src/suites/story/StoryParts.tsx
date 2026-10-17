@@ -1,6 +1,7 @@
 // 17 (D85): the Story suite's parts (StorySuite.ts registers them) — SY0: the World tab. Panel: the sections with their counts and the
 // adders; Stage: the editor over story/world.json (logline, synopsis, styles, the spine, variables); Inspector: the project format (the
-// finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90). SY1: the Cast tab — Panel: the profiles by class; Strip: the
+// finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90; a library entry's and a saved panel's:
+// LibraryWorld.tsx, D92). SY1: the Cast tab — Panel: the profiles by class; Strip: the
 // version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
@@ -18,6 +19,9 @@ import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
 import { StyleEditor, StyleGrid } from './StyleWorld'
+import { EntryEditor, LibraryGrid, PanelEditor, PanelGrid } from './LibraryWorld'
+import { useLibrary } from './libraryStore'
+import { useGenerate } from '../generate/generateStore'
 import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnItem, shotMenu, storyItem } from './storyCommands'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
@@ -68,8 +72,10 @@ const menu = (kind: 'beat' | 'variable', id: string): MenuItem[] => rowMenu(kind
 function WorldTab() {
   const world = useStory((s) => s.world)
   const section = useStory((s) => s.section)
+  const entries = useLibrary((l) => l.library?.entries.length ?? 0)
+  const panels = useGenerate((g) => g.presets.length)
   const counts: Record<Section, number | null> = {
-    logline: null, synopsis: null, styles: world?.styles.length ?? 0, spine: world?.spine.length ?? 0, variables: world?.variables.length ?? 0,
+    logline: null, synopsis: null, styles: world?.styles.length ?? 0, library: entries, panels, spine: world?.spine.length ?? 0, variables: world?.variables.length ?? 0,
   }
   return (
     <div className="story-panel">
@@ -81,8 +87,8 @@ function WorldTab() {
         ))}
       </div>
       <h4>Add</h4>
-      <div className="verbs"><CommandButton id="story.world.addStyle" text /><CommandButton id="story.world.addBeat" text /><CommandButton id="story.world.addVariable" text /></div>
-      <span className="hint">The styles reach Generate's Style picker; a beat becomes a Flow node by hand; the variables drive the Flow's conditions.</span>
+      <div className="verbs"><CommandButton id="story.world.addStyle" text /><CommandButton id="story.world.addEntry" text /><CommandButton id="story.world.addBeat" text /><CommandButton id="story.world.addVariable" text /></div>
+      <span className="hint">The styles reach Generate's Style picker and the library its preset tiles; a beat becomes a Flow node by hand; the variables drive the Flow's conditions.</span>
     </div>
   )
 }
@@ -203,7 +209,7 @@ function FlowTab() {
 
 export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   if (tab === 'cast') return <CastTab />
   if (tab === 'shots') return <ShotsTab />
@@ -446,6 +452,14 @@ function WorldEditor() {
         <StyleGrid />
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
       </section>
+      <section id="story-sec-library">
+        <h3>Library<span className="hint">every preset of Generate's prompt fields — words and a picture; click one to edit it in the Inspector, + Add puts new words in a field</span></h3>
+        <LibraryGrid />
+      </section>
+      <section id="story-sec-panels">
+        <h3>Saved panels<span className="hint">Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete</span></h3>
+        <PanelGrid />
+      </section>
       <section id="story-sec-spine">
         <h3>Spine<span className="hint">the beats in order; a Flow node is made from a beat by hand</span></h3>
         <div className="rows">
@@ -680,6 +694,7 @@ function CastInspector() {
           <span>from</span><span>{v.derived_from ?? '—'}</span>
           <span>created</span><span>{v.created_at.slice(0, 16).replace('T', ' ')}</span>
         </div>
+        <div className="verbs"><CommandButton id="story.cast.useAsSubject" text /></div>
         <div className="verbs"><CommandButton id="story.cast.expand" text /><CommandButton id="story.cast.lock" text /><CommandButton id="story.cast.newVersion" text /></div>
         <div className="verbs"><CommandButton id="story.cast.openGroup" text /><CommandButton id="story.cast.openCandidates" text /></div>
         <TrainingBlock p={p} v={v} />
@@ -909,6 +924,8 @@ function NodeInspector() {
 
 export function Inspector() {
   const world = useStory((s) => s.world)
+  const lib = useLibrary((l) => l.library)                                // D92 (a stable selection: the record, not a fresh list)
+  const libEntries = lib?.entries ?? []
   const selected = useStory((s) => s.selected)
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
@@ -922,17 +939,21 @@ export function Inspector() {
   const style = selected?.kind === 'style' ? world.styles.find((s) => s.id === selected.id) : undefined
   const beat = selected?.kind === 'beat' ? world.spine.find((b) => b.id === selected.id) : undefined
   const variable = selected?.kind === 'variable' ? world.variables.find((v) => v.name === selected.id) : undefined
+  const entry = selected?.kind === 'entry' ? libEntries.find((e) => e.id === selected.id) : undefined
   return (
     <div className="story-insp">
       <h4>World</h4>
       <div className="kv">
         <span>format</span><span title="Fixed at the project's creation; a shot's clip must be at this size to be marked final">{fmt ? `${fmt.aspect[0]}:${fmt.aspect[1]} · ${fmt.width}×${fmt.height} · ${fmt.fps} fps` : '—'}</span>
         <span>styles</span><span>{world.styles.length}</span>
+        <span>library</span><span>{libEntries.length}</span>
         <span>beats</span><span>{world.spine.length}</span>
         <span>variables</span><span>{world.variables.length}</span>
         <span>revision</span><span>{world.revision}</span>
       </div>
       {style && <StyleEditor key={style.id} s={style} isDefault={world.default_style === style.id} />}
+      {entry && <EntryEditor key={entry.id} e={entry} />}
+      {selected?.kind === 'panel' && <PanelEditor name={selected.id} />}
       {beat && <>
         <h4>Beat {world.spine.indexOf(beat) + 1}</h4>
         <div className="kv">

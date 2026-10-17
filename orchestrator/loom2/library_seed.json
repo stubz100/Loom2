@@ -1,0 +1,25 @@
+{
+  "_comment": "D92: the built-in vocabulary of Generate's prompt fields (loom's directive vocabulary, 04 §3c, plus BFL's prompting-guide examples) — the seed of every project's Story · World library (library.py). An entry is \"words\" (the name is the words) or [\"name\", \"words\"]. The one source: the frontend's glyph test reads this file too (frame/presetGlyphs.test.ts).",
+  "fields": {
+    "scene": [["rainy alley", "a narrow rain-soaked alley at night in a weathered harbour town"], ["captain's cabin", "a captain's cabin lit by a single oil lamp"],
+      ["clifftop at dawn", "a windswept clifftop at dawn"], ["fish market", "a crowded fish market under canvas awnings"], ["lighthouse room", "a lighthouse room with a map table"],
+      ["empty rooftop", "an empty rooftop above a sleeping city"], ["storm deck", "a storm-lashed ship deck"], ["library at closing", "a quiet library at closing time"]],
+    "subject.position": ["left third", "centre", "right third", "foreground", "midground", "background", "waist-up", "full figure", "lower left", "upper right"],
+    "subject.action": ["looking back over the shoulder", "reading a map", "running towards the camera", "holding up a lantern", "pointing into the distance",
+      "leaning on a railing", "kneeling to pick something up", "shielding eyes from the light"],
+    "subject.pose": ["standing", "sitting", "crouching", "walking", "running", "leaning", "turning back over the shoulder", "arms crossed", "reaching out", "kneeling"],
+    "style": ["painterly storyboard", "cinematic film still", "graphic-novel ink and wash", "oil painting", "watercolour sketch", "photoreal", "charcoal concept sketch", "anime key visual"],
+    "lighting": ["golden hour rim light", "soft overcast", "hard noon sun", "neon rim light", "single candle", "moonlight", "window light", "firelight", "studio key + fill", "backlit silhouette"],
+    "mood": ["tense", "melancholic", "hopeful", "eerie", "serene", "triumphant", "lonely", "playful"],
+    "background": [["harbour cranes", "harbour cranes in fog"], ["neon brick wall", "rain-streaked brick wall with a neon sign"], ["bruised sky over the sea", "open sea under a bruised sky"],
+      ["bookshelves", "bookshelves and a ticking clock"], "a blurred crowd", "distant mountains"],
+    "composition": ["rule of thirds, subject left", "centred and symmetrical", "leading lines towards the subject", "framed by a doorway", "low horizon, big sky", "tight over-the-shoulder", "dynamic diagonal"],
+    "camera.angle": ["eye level", "low angle", "high angle", "bird's eye", "worm's eye", "dutch tilt", "over the shoulder", "three-quarter left", "three-quarter right", "profile", "from behind"],
+    "camera.lens": ["24mm", "35mm", "50mm", "85mm", "135mm", "anamorphic"],
+    "camera.depth_of_field": ["shallow", "medium", "deep", "rack focus on the subject", "soft bokeh background"],
+    "camera.f-number": ["f/1.4", "f/2", "f/2.8", "f/4", "f/5.6", "f/8", "f/11"],
+    "camera.distance": ["extreme close-up", "close-up", "medium close-up", "medium shot", "medium long shot", "full shot", "wide shot", "establishing shot"],
+    "text": [["storyboard frame", "Storyboard frame."], ["concept art", "Concept art, production painting."], ["pitch key visual", "Key visual for a film pitch."]],
+    "negative": [["blur", "blurry, low detail"], ["text and watermarks", "text, watermark, logo"], ["bad hands", "deformed hands, extra fingers"], ["oversaturated", "oversaturated"]]
+  }
+}

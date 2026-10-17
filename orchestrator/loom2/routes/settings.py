@@ -1,15 +1,14 @@
-"""App settings and the prompt snippet library (07 §6, 09 §3e) — app state, not project data."""
+"""App settings (07 §6) — app state, not project data. D92: the app-wide prompt snippets (`/snippets`) are gone — every project's Story ·
+World library holds its presets, seeded once from `<state>/snippets.json` (library.py)."""
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from ..config import Settings
-from ..fsio import atomic_write_json, read_json_or
 from ..roster import Roster
 from .deps import Svc
 
@@ -33,13 +32,3 @@ async def put_settings(svc: Svc, patch: dict):
     svc.engine.reconfigure()
     return s.model_dump()
 
-
-@router.get("/snippets", response_model=dict[str, Any])
-async def snippets_get(svc: Svc):
-    return await asyncio.to_thread(read_json_or, svc.app.state_dir / "snippets.json", {"snippets": []})
-
-
-@router.put("/snippets", response_model=dict[str, Any])
-async def snippets_put(svc: Svc, body: dict):
-    await asyncio.to_thread(atomic_write_json, svc.app.state_dir / "snippets.json", body)
-    return body

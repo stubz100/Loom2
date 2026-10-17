@@ -14,13 +14,14 @@ import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { batchOf, modelPatch, submitBlock, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import { useStory } from '../story/storyStore'
+import { useLibrary } from '../story/libraryStore'
 import './generate.css'
 
 function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities)
   const refresh = useGenerate((g) => g.refreshPreview)
-  useEffect(() => { if (project?.open) { void refresh(); void useGenerate.getState().loadSnippets(); void useStory.getState().load() } }, [project?.path, refresh])   // C23: the ✦ menus need the field presets; D85: the Style picker needs the world
+  useEffect(() => { if (project?.open) { void refresh(); void useLibrary.getState().load(); void useStory.getState().load() } }, [project?.path, refresh])   // D92: the tiles are the World library's; D85: the Style picker needs the world
   // C3 (D26) / D65: no model yet, or a persisted one this build does not offer (dev under `open`) → the variant's t2i default, else the first listed
   useEffect(() => {
     const g = useGenerate.getState()

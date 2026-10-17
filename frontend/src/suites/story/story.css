@@ -26,7 +26,8 @@
 .style-tile { width: 108px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; border-radius: var(--radius); padding: 3px; border: 1px solid transparent; }
 .style-tile .face { position: relative; width: 100px; height: 100px; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: 6px; background: var(--media-bg); overflow: hidden; }
 .style-tile .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.style-tile .mono { font-size: 30px; font-weight: 600; color: var(--fg3); letter-spacing: .02em; }
+.style-tile .glyph, .style-sample .glyph.big, .lib-picture .glyph { display: block; width: 44px; height: 44px; color: var(--fg3); }   /* D92: a glyph, never letters */
+.style-sample .glyph.big { width: 64px; height: 64px; margin: 0 auto 8px; }
 .style-tile .name { font-size: 12px; color: var(--fg2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .style-tile:hover .face { border-color: var(--fg3); }
 .style-tile.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -35,7 +36,7 @@
 .style-tile .star { position: absolute; top: 2px; right: 2px; padding: 0 3px; min-height: 18px; color: var(--fg3); background: color-mix(in srgb, var(--bg0) 60%, transparent); border-radius: 4px; opacity: 0; }
 .style-tile:hover .star, .style-tile .star.on { opacity: 1; }
 .style-tile .star.on { color: var(--warn); }
-.style-tile .busy { position: absolute; left: 4px; bottom: 2px; font-size: 14px; color: var(--accent); }
+.style-tile .busy-mark, .lib-picture .busy-mark { position: absolute; left: 5px; bottom: 5px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: preset-busy 0.9s linear infinite; }
 .style-sample { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--media-bg); overflow: hidden; margin: 2px 0 6px; text-align: center; }
 .style-sample img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .style-sample .hint { padding: 0 16px; }
@@ -198,3 +199,14 @@
 .flow-node .board img, .flow-node .board .empty { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; background: var(--bg3); flex: none; }
 .flow-node .board span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-node.drop-over { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* D92: World's Library (grouped by field, picture tiles with names) and Saved panels; the Inspector's picture */
+.lib-groups { display: grid; gap: 12px; }
+.lib-group h4 { margin: 0 0 4px; font-size: 12px; color: var(--fg2); }
+.lib-field { display: grid; grid-template-columns: 110px 1fr; align-items: start; gap: 4px 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.lib-field .lib-label { font-size: 12px; color: var(--fg2); padding-top: 6px; }
+.lib-field .lib-label .n { color: var(--fg3); }
+.lib-field .lib-add { grid-column: 2; justify-self: start; font-size: 11px; min-height: 0; padding: 1px 6px; }
+.lib-picture { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--media-bg); overflow: hidden; margin: 2px 0 6px; }
+.lib-picture.wide { aspect-ratio: 16 / 9; }
+.lib-picture img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-picture .glyph { width: 72px; height: 72px; }

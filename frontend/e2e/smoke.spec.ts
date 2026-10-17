@@ -1318,3 +1318,77 @@ test('makers in context (D90 · UI4): "Make frame ▸ in Generate" on a Story sh
   await chip.locator('button[aria-label^="Stop making for the shot"]').click()
   await expect(chip).toHaveCount(0)
 })
+
+test('the World library (D92 · UI7): an entry added in Story · World gets its picture by itself and is a tile in Generate; its right-click edits it in World; no tile shows letters', async ({ page }) => {
+  test.setTimeout(90_000)
+  const tag = Date.now().toString(36)
+  const words = `teal shop-sign glow ${tag}`, name = `teal ${tag}`                      // unique: the project is reused between runs
+  await openApp(page, { suite: 'story', tab: 'world' })
+  await page.locator('.story-panel .story-row', { hasText: 'Library' }).click()
+  const field = page.locator('.lib-field[data-field="lighting"]')
+  await expect(field.locator('.preset-icon').first()).toBeVisible()                      // the project's library is seeded with the built-ins
+  await field.locator('button.lib-add').click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill(words)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.inspector textarea[aria-label="selected entry words"]')).toHaveValue(words)   // added and selected: the Inspector writes it
+  await page.locator('.inspector input[aria-label="selected entry name"]').fill(name)
+  type Entry = { id: string; field: string; name: string; text: string }
+  await expect.poll(async () => (await api<{ entries: Entry[] }>('GET', '/story/library')).entries.find((e) => e.text === words)?.name, { timeout: 10_000 }).toBe(name)
+  // its picture is made by itself (one small job on the sample model, run now) and lands on the tile
+  type SwatchJob = { status: string; origin: { surface: string; payload: { field?: string; value?: string } | null } | null }
+  await expect.poll(async () => (await api<{ items: SwatchJob[] }>('GET', '/jobs')).items.some((j) => j.origin?.surface === 'swatch' && j.origin.payload?.value === words), { timeout: 10_000 }).toBe(true)
+  await expect(field.locator(`button[aria-label="${name}"] img`)).toBeVisible({ timeout: 45_000 })
+  expect(await page.locator('.preset-icon .tile').evaluateAll((ts) => ts.filter((t) => !t.querySelector('svg, img')).length)).toBe(0)   // D92: a glyph or a picture, never letters
+  // Generate: the tile in the Look section's lighting row; a click puts the words in the field
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await page.locator('nav.rail button[title^="Look"]').click()
+  const row = page.locator('#gen-sec-look .field', { has: page.locator('[aria-label="lighting presets"]') })
+  const tile = row.locator(`[aria-label="lighting presets"] button[aria-label="${name}"]`)
+  await expect(tile.locator('img')).toBeVisible()
+  await tile.click()
+  await expect(row.locator('input[type=text]').first()).toHaveValue(new RegExp(words.replace(/[.*+?^${}()|[\]-]/g, '\\$&')))
+  await expect(tile).toHaveAttribute('aria-pressed', 'true')
+  // the field's + adds the field's words as a new entry; the tile's right-click opens it in Story · World
+  await contextChoose(page, tile, 'Edit in Story · World')
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
+  await expect(page.locator('.inspector input[aria-label="selected entry name"]')).toHaveValue(name)
+})
+
+test('a subject is a Cast character (D92 · UI7): the subject card picks a profile by its hero, the description is its stub, and the job carries its references through the profile mention', async ({ page }) => {
+  test.setTimeout(90_000)
+  const name = `Ines ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]            // a copy: no other scenario's image moves
+  type ProfileLite = { id: string; name: string; current: string; versions: { id: string; group_id: string }[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, stub: `${name}, a lighthouse keeper in a yellow oilskin` })
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
+  const card = page.locator('.gen-tree .subject').last()
+  const pick = card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`)
+  await expect(pick.locator('img')).toBeVisible()                                         // the profile by its hero image
+  await pick.click()
+  await expect(card.locator('textarea').first()).toHaveValue(`${name}, a lighthouse keeper in a yellow oilskin`)
+  await expect(card.locator('.linked-to')).toContainText(name)
+  await expect(page.locator('.mention-chips .mchip', { hasText: name })).toBeVisible()  // the profile mention, recorded by the link
+  await expect(page.locator('.ref-from-mentions .ref-slot').first()).toBeVisible({ timeout: 20_000 })
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  type JobLite = { status: string; recipe: { refs?: { asset_id: string; mention?: string | null }[]; mentions?: { profile_id?: string | null; subject?: number | null; group_id: string; asset_ids: string[] }[] } }
+  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.recipe.mentions?.some((m) => m.profile_id === prof.id))
+  await expect.poll(async () => (await mine())?.status, { timeout: 45_000 }).toBe('done')
+  const job = (await mine())!
+  const m = job.recipe.mentions!.find((x) => x.profile_id === prof.id)!
+  expect(m.subject).toBe(0)
+  expect(m.group_id).toBe(prof.versions[0].group_id)
+  expect(m.asset_ids).toContain(hero)
+  expect(job.recipe.refs?.some((r) => r.asset_id === hero && r.mention === m.group_id)).toBe(true)   // the hero rides as a reference
+  await card.locator('button[aria-label="unlink subject 1"]').click()
+  await expect(page.locator('.mention-chips .mchip', { hasText: name })).toHaveCount(0)
+})

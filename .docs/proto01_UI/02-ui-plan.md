@@ -148,6 +148,20 @@ not deletion:
 | **Flow** | graph, play, validate, shot binding | Nodes can carry a **group** (§4.2). Edges can be deleted (B3). Keys work on the canvas (B2). Variables live here. |
 | **Episode** | lane, preview, exports | Drop on the lane (B7). Episode / sequence named once (§8). The bins read from Shots and the Catalogue, not from Animate's store. |
 
+**D92 (2026-10-17, wave UI7) — World holds every Generate template; subjects are Cast characters.** World gains two sections:
+the **Library** — every preset of Generate's prompt fields (lighting, mood, art-style words, background, composition; the camera
+fields; scene, lead text, negative; subject position, action, pose) is an entry `{id, field, name, text}` in `story/library.json`
+(revision-guarded like the world), seeded per project from the built-in vocabulary (`orchestrator/loom2/library_seed.json`) and the
+author's former app-wide presets (`snippets.json`, merged once; `/snippets` is gone), grouped Look · Camera · Prompt · Subject as picture
+tiles and written only in World's Inspector (name, words, picture, Make a new picture, Move, Remove with Undo); and **Saved panels** —
+Generate's whole-panel templates, each shown by its latest result (`thumb_asset_id`, set when saved and when a job made from the applied
+panel lands), with Apply in Generate, Rename…, Delete. Generate's preset tiles read the library; a field's **+** adds an entry; a tile's
+right-click offers Make a new picture, **Edit in Story · World** and Remove from the library. A Generate **subject card picks a Cast
+character or prop by its hero image** (or stays a free subject): the description defaults to the version's stub, and the version's
+reference set and LoRA follow through the existing profile mention (the link is recorded on the mention as `subject`, so a stored recipe
+brings it back); Cast offers **Use as a subject in Generate**. Places are not offered as subjects; they could map to the scene or the
+background later.
+
 ### 4.1 Styles as images (R2)
 
 - **Each style has a sample image.** It uses the existing `StoryStyle.group_id` (in the schema today, "a reference album, a later
@@ -236,7 +250,8 @@ origins (D66), shot versions with frames and takes, profile versions with candid
   it (§10).
 - **New angle leaves Generate** (01 G33–G35). It is an operation *on an image*, so it joins the image's actions (§9) with its own small
   sheet: source, move icons, count, ▶. The single panel then has one Generate button and no second Foot.
-- **Saved panels** (today's Presets tab) become a row of tiles at the top of the column, each showing the thumbnail of its last output.
+- **Saved panels** (today's Presets tab) become a row of tiles at the top of the column, each showing the thumbnail of its last output
+  (D92: built — the picture is the panel's `thumb_asset_id`; the panels are listed and managed in Story · World too, §4).
   ⊕ saves the current panel, and a tile's ⋯ menu renames or deletes it.
 
 ### 6.2 Fixes carried with it
@@ -255,6 +270,15 @@ There are three sources, all local, all re-makeable:
 | **Schematic glyphs** (SVG, shipped) | aspect, tier, camera distance / shot size, lens, depth of field, composition, subject position, angle moves | drawn once: a frame with a figure at the shot size, a lens's field of view as a wedge, thirds lines, … |
 | **Mannequin renders** (made locally) | pose, camera angle, shot size in Cast's Expand cells | rendered by the **Stage suite's own three.js mannequin** with clay shading, as loom made its pose cells but with no GPU job: Stage already has the figures, poses and cameras (S5, S19) |
 | **Sample swatches** (generated locally, once) | lighting, mood, background, style, the user's own presets | a **preset icon pack**: one staged Draft job per preset on an open-licence model, stored in app state (not the project), re-made per item from its ⋯ menu. A user preset gets its swatch when it is saved. |
+
+**D92 (2026-10-17): no lettered tiles.** The monogram fallback is gone: every tile carries a drawn glyph (`PresetIcons` requires one) and
+a picture covers it when there is one. A look entry without its picture shows its **field's glyph** (a sun for lighting, a mask for mood,
+a horizon for background, a framed horizon for a scene, a brush for art style, text lines for the lead text, a running and a standing
+figure for action and pose; sliders for a saved panel, a palette for a style, a bust or a box for a Cast profile) with a busy mark while
+it is made. **Pictures are made by themselves:** a look entry that is added or re-worded and has no swatch queues one small job (run now,
+not staged) on the D91 sample model; the subject's action and pose and the lead text are looks too. Negatives never get a picture: the
+four built-ins have drawn glyphs (blur, a watermark, a six-fingered hand, oversaturation), a new one the generic negative mark. A style
+without a sample shows the palette glyph; its sample stays a hand-made "Make a sample image".
 
 **The rules for every icon:**
 

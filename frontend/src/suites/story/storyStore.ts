@@ -6,14 +6,17 @@
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
 import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
-import { useSession } from '../../store/session'
+import { askConfirm, useSession } from '../../store/session'
+import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
 
-export type Section = 'logline' | 'synopsis' | 'styles' | 'spine' | 'variables'
-export type Selection = { kind: 'style' | 'beat' | 'variable'; id: string } | null   // a variable's id is its name
+export type Section = 'logline' | 'synopsis' | 'styles' | 'library' | 'panels' | 'spine' | 'variables'
+/** A variable's id is its name; D92: a library entry's id is its `lib_` id, a saved panel's its name. */
+export type Selection = { kind: 'style' | 'beat' | 'variable' | 'entry' | 'panel'; id: string } | null
 export type ProfileClass = Profile['cls']
 export const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'logline', label: 'Logline' }, { id: 'synopsis', label: 'Synopsis' }, { id: 'styles', label: 'Styles' }, { id: 'spine', label: 'Spine' }, { id: 'variables', label: 'Variables' },
+  { id: 'logline', label: 'Logline' }, { id: 'synopsis', label: 'Synopsis' }, { id: 'styles', label: 'Styles' }, { id: 'library', label: 'Library' }, { id: 'panels', label: 'Saved panels' },   // D92
+  { id: 'spine', label: 'Spine' }, { id: 'variables', label: 'Variables' },
 ]
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
 
@@ -117,7 +120,7 @@ export interface StoryState {
   addVariable: (name?: string) => string
   setVariable: (name: string, patch: Partial<StoryVariable>) => void
   removeVariable: (name: string) => void
-  /** The selected item goes (a style, a beat or a variable). */
+  /** The selected item goes (a style, a beat or a variable; D92: a library entry — Undo in the toast — or a saved panel, confirmed). */
   removeSelected: () => void
   /** `story.changed` on the socket: another writer moved a record — reload when nothing of ours is pending. */
   onChanged: (data: { kind?: string; id?: string; revision?: number; deleted?: boolean } | null) => void
@@ -370,6 +373,12 @@ export const useStory = create<StoryState>()((set, get) => {
     removeVariable: (name) => { const w = get().world; if (!w) return; edit({ variables: w.variables.filter((v) => v.name !== name) }); if (get().selected?.id === name) set({ selected: null }) },
     removeSelected: () => {
       const s = get().selected; if (!s) return
+      if (s.kind === 'entry') { set({ selected: null }); void useLibrary.getState().remove(s.id); return }
+      if (s.kind === 'panel') {
+        void askConfirm({ title: `Delete the saved panel "${s.id}"?`, text: 'Its fields and picture go; what it made stays in the Catalogue.', okLabel: 'Delete', danger: true })
+          .then(async (ok) => { if (!ok) return; const { useGenerate } = await import('../generate/generateStore'); await useGenerate.getState().deletePreset(s.id); if (get().selected?.id === s.id) set({ selected: null }) })
+        return
+      }
       if (s.kind === 'style') get().removeStyle(s.id); else if (s.kind === 'beat') get().removeBeat(s.id); else get().removeVariable(s.id)
     },
     onChanged: (data) => {
@@ -380,6 +389,8 @@ export const useStory = create<StoryState>()((set, get) => {
       }
       if (data?.kind === 'shot') { if (!shotPending) void get().loadShots(); return }   // SY2: a take arrived, a finalize, a copy (not while a typed name waits)
       if (data?.kind === 'voice') { void get().loadVoices(); return }        // CN2: a voice made, changed, measured or deleted
+      if (data?.kind === 'library') { useLibrary.getState().onChanged(data.revision); return }   // D92: the World library moved
+      if (data?.kind === 'panels') { void import('../generate/generateStore').then((m) => void m.useGenerate.getState().loadPresets()); return }   // D92: a saved panel (its picture)
       if (data?.kind === 'flow') { if (graphPending === 0 && nodeSaving === 0) void get().loadFlow(); return }   // SY3: a node or the index moved on the server (not while ours are pending)
       if (data?.kind && data.kind !== 'world') return
       const w = get().world

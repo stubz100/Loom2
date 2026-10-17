@@ -70,6 +70,10 @@ SWATCH_PROMPTS: dict[str, str] = {   # `{value}` is the preset; a neutral subjec
     "style": "a lighthouse on a cliff, {value}",
     "background": "{value}, empty, no people",
     "scene": "{value}",
+    "subject.action": "a plain grey mannequin figure {value}, simple studio backdrop",   # D92: a subject's action and pose are pictured on a neutral figure
+    "subject.pose": "a plain grey mannequin figure, {value}, full body, simple studio backdrop",
+    "subject.description": "{value}, simple studio backdrop",
+    "text": "a lighthouse on a cliff. {value}",                                             # the lead text says what kind of picture: shown on the style scene
 }
 
 

@@ -62,6 +62,7 @@ class Mention(BaseModel):
     version: str | None = None
     lora: str | None = None                       # LT3 (18 §3f): the version's LoRA the mention added to the slots (stamped)
     lora_available: str | None = None             # LT3: the version's LoRA whether or not it was added (the chip's on / off)
+    subject: int | None = Field(None, ge=0)       # D92: the Tree prompt's subject card linked to this profile (its index) — the link comes back with the recipe
 
 
 class T2I(BaseModel):

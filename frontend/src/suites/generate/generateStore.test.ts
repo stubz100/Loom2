@@ -3,7 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Capabilities } from '../../api/types'
 import { useSession } from '../../store/session'
-import { cleanTree, DEFAULT_PANEL, panelFromRecipe, recipeFromPanel, treeFromJson, type Panel, type Tree } from './generateStore'
+import type { Job } from '../../api/types'
+import { cleanTree, DEFAULT_PANEL, latestResult, panelFromRecipe, recipeFromPanel, treeFromJson, type Panel, type Tree } from './generateStore'
 
 const CAPS = {
   defaults: { t2i: 'fixture-turbo' },
@@ -207,5 +208,18 @@ describe('the model decides (D90)', () => {
     expect(submitBlock({ preview: { ...(pv as object), missing: [{ model_id: 'w1' }] } as never, previewError: null }, true)).toBe('weights missing: w1')
     expect(submitBlock({ preview: { ...(pv as object), estimate: { vram_fit: 'over' } } as never, previewError: null }, true)).toMatch(/VRAM/)
     expect(submitBlock({ preview: pv, previewError: null }, true)).toBeNull()
+  })
+})
+
+describe("D92 a saved panel's picture", () => {
+  const job = (id: string, finished: string, extra: Partial<Job> = {}): Job => ({ id, kind: 't2i', status: 'done', created_at: '2026-10-17T08:00:00Z', finished_at: finished,
+    origin: { suite: 'generate', surface: 'results', ref: null, payload: null }, result: { asset_ids: [`ast_${id}`] }, ...extra }) as unknown as Job
+  it("is the newest done Generate image — not a failed job, another suite's or a clip", () => {
+    const jobs = Object.fromEntries([
+      job('a', '2026-10-17T08:01:00Z'), job('b', '2026-10-17T08:03:00Z'), job('c', '2026-10-17T08:05:00Z', { status: 'failed' } as Partial<Job>),
+      job('d', '2026-10-17T08:06:00Z', { origin: { suite: 'story', surface: 'expand', ref: null, payload: null } } as Partial<Job>), job('e', '2026-10-17T08:07:00Z', { kind: 'i2v' } as Partial<Job>),
+    ].map((j) => [j.id, j]))
+    expect(latestResult(jobs)).toBe('ast_b')
+    expect(latestResult({})).toBeNull()
   })
 })

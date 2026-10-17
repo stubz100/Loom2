@@ -16,7 +16,8 @@ from ..fsio import new_id, utc_now
 from ..origin import JobOrigin
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
-from ..schemas import Curated, Deleted, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..library import Library, LibraryStore, StaleLibrary
+from ..schemas import Curated, Deleted, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
 from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
@@ -42,6 +43,75 @@ async def world_put(svc: Svc, body: dict):
         raise HTTPException(422, str(e))
     svc.hub.broadcast("story.changed", {"kind": "world", "revision": w.revision})
     return w.model_dump()
+
+
+# ---- the World library (D92) -------------------------------------------------------------------------------------------------------
+class LibraryAdd(BaseModel):
+    field: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=400)               # the words the field takes
+    name: str = Field("", max_length=80)                          # the words when empty
+    revision: int | None = None                                   # the library the client holds (409 when stale)
+    id: str | None = Field(None, pattern=r"^lib_[0-9a-z]+$")    # the Undo of a removal: the entry's id …
+    at: int | None = Field(None, ge=0)                            # … and its place
+
+
+class LibraryOrder(BaseModel):
+    ids: list[str]
+    revision: int | None = None
+
+
+def _library(svc) -> LibraryStore:
+    ws, _, _ = svc.require_project()
+    return LibraryStore(ws.story_dir, svc.app.state_dir)
+
+
+def _lib_changed(svc, lib: Library) -> None:
+    svc.hub.broadcast("story.changed", {"kind": "library", "revision": lib.revision})
+
+
+async def _lib_call(svc, fn, *args, **kw):
+    try:
+        return await asyncio.to_thread(fn, *args, **kw)
+    except KeyError:
+        raise HTTPException(404, "no such library entry")
+    except StaleLibrary as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.get("/story/library", response_model=Library)
+async def library_get(svc: Svc):
+    """The project's library of prompt-field presets — seeded with the built-in vocabulary and the app-wide presets on the first read."""
+    return (await asyncio.to_thread(_library(svc).get)).model_dump()
+
+
+@router.post("/story/library/entries", response_model=LibraryChange)
+async def library_add(svc: Svc, body: LibraryAdd):
+    lib, e = await _lib_call(svc, _library(svc).add, body.field, body.name, body.text, base=body.revision, entry_id=body.id, at=body.at)
+    _lib_changed(svc, lib)
+    return {"library": lib.model_dump(), "entry": e.model_dump()}
+
+
+@router.put("/story/library/order", response_model=Library)
+async def library_order(svc: Svc, body: LibraryOrder):
+    lib = await _lib_call(svc, _library(svc).reorder, body.ids, body.revision)
+    _lib_changed(svc, lib)
+    return lib.model_dump()
+
+
+@router.patch("/story/library/entries/{eid}", response_model=LibraryChange)
+async def library_patch(svc: Svc, eid: str, body: dict):
+    lib, e = await _lib_call(svc, _library(svc).patch, eid, body)
+    _lib_changed(svc, lib)
+    return {"library": lib.model_dump(), "entry": e.model_dump()}
+
+
+@router.delete("/story/library/entries/{eid}", response_model=LibraryRemoved)
+async def library_remove(svc: Svc, eid: str, revision: int | None = None):
+    lib, e, i = await _lib_call(svc, _library(svc).remove, eid, revision)
+    _lib_changed(svc, lib)
+    return {"library": lib.model_dump(), "entry": e.model_dump(), "index": i}
 
 
 # ---- profiles (SY1, 17 §3b) --------------------------------------------------------------------------------------------------------

@@ -1,14 +1,12 @@
-"""Projects: create, open, close, info, recents, Generate presets (06 §4)."""
+"""Projects: create, open, close, info, recents, Generate's saved panels (06 §4; D92: a record with a picture each)."""
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
-
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..fsio import atomic_write_json, read_json_or
+from ..library import SavedPanels, put_panels, read_panels
 from ..schemas import ProjectInfo, Recents
 from ..workspace import Workspace
 from .deps import Svc
@@ -57,17 +55,22 @@ async def project_get(svc: Svc):
     return info | {"assets": count, "usage_gb": round(usage / 2**30, 2), "jobs_indexed": jobs}
 
 
-@router.get("/project/presets", response_model=dict[str, Any])
+@router.get("/project/presets", response_model=SavedPanels)
 async def presets_get(svc: Svc):
     ws, _, _ = svc.require_project()
-    return await asyncio.to_thread(read_json_or, ws.path / "generate" / "presets.json", {"presets": [], "last": None})
+    return (await asyncio.to_thread(read_panels, ws.path)).model_dump()
 
 
-@router.put("/project/presets", response_model=dict[str, Any])
+@router.put("/project/presets", response_model=SavedPanels)
 async def presets_put(svc: Svc, body: dict):
+    """D92: the saved panels as a record — a panel sent without its picture keeps the one the server holds (the finisher sets it)."""
     ws, _, _ = svc.require_project()
-    await asyncio.to_thread(atomic_write_json, ws.path / "generate" / "presets.json", body)
-    return body
+    try:
+        out = await asyncio.to_thread(put_panels, ws.path, body)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("story.changed", {"kind": "panels", "revision": 0})
+    return out.model_dump()
 
 
 @router.get("/projects", response_model=Recents)

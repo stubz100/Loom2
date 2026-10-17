@@ -1,7 +1,8 @@
 // D90 (02 §6.3, R3): presets are icons, not words. These are the schematic glyphs — the presets whose meaning is geometry (aspect, size,
 // shot size, camera angle, lens, depth of field, aperture, composition, subject position, the angle moves). Looks (lighting, mood, style,
-// background) get generated sample swatches instead (02 §6.3); anything without a glyph or a swatch falls back to a monogram tile.
-// Every glyph is a 32×32 line drawing in currentColor, so it follows the theme and the selected state.
+// background) get generated sample swatches instead (02 §6.3). D92: no lettered tiles anywhere — a preset without a glyph or a picture
+// shows its *field's* glyph (`fieldGlyph`: a sun for lighting, a mask for mood, a palette for a style …); the built-in negatives have
+// drawn glyphs of their own. Every glyph is a 32×32 line drawing in currentColor, so it follows the theme and the selected state.
 import type { ReactNode } from 'react'
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -56,7 +57,7 @@ const ANGLE: Record<string, ReactNode> = {
 /** Lens: the field of view as a wedge from the camera at the bottom. */
 const LENS: Record<string, number> = { '24mm': 84, '35mm': 63, '50mm': 47, '85mm': 28, '135mm': 18 }
 function lensGlyph(v: string): ReactNode | null {
-  if (v === 'anamorphic') return svg(<><ellipse cx="16" cy="16" rx="13" ry="6" {...S} /><path d="M9 16 L23 16" {...S} strokeWidth={1} /><text x="16" y="27.5" fontSize="6.5" textAnchor="middle" fill="currentColor">ana</text></>)
+  if (v === 'anamorphic') return svg(<><ellipse cx="16" cy="15" rx="13" ry="6" {...S} /><path d="M9 15 L23 15" {...S} strokeWidth={1} /><path d="M2 26 L30 26" {...S} strokeWidth={1} /><path d="M8 26 L24 26" {...S} strokeWidth={2.4} opacity={0.5} /></>)   // D92: the oval and a lens flare, no letters
   const a = LENS[v]
   if (!a) return null
   const r = 22, t = (a / 2) * (Math.PI / 180), x = Math.sin(t) * r, y = 28 - Math.cos(t) * r
@@ -121,7 +122,7 @@ export function tierGlyph(tier: 'thumb' | 'draft' | 'full' | 'custom'): ReactNod
   return svg(<>{[9, 17, 26].map((v) => <rect key={v} x={16 - v / 2} y={16 - (v * 9) / 32} width={v} height={(v * 9) / 16} rx="1" {...S} strokeWidth={v === s ? 1.8 : 0.7} opacity={v === s ? 1 : 0.45} />)}</>)
 }
 
-/** The glyph for a preset value of a prompt field, or null when that preset has no geometry to draw (it shows a swatch or a monogram). */
+/** The glyph for a preset value of a prompt field, or null when that preset has no drawing of its own (it shows a swatch or its field's glyph, D92). */
 export function glyphFor(field: string, value: string): ReactNode | null {
   const v = value.trim().toLowerCase()
   switch (field) {
@@ -133,9 +134,52 @@ export function glyphFor(field: string, value: string): ReactNode | null {
     case 'composition': return COMPOSITION[v] ? svg(COMPOSITION[v]) : null
     case 'subject.position': return POSITION[v] ? svg(POSITION[v]) : null
     case 'move': return MOVES[v] ? svg(MOVES[v]) : null
+    case 'negative': return NEGATIVE[v] ? svg(<>{NEGATIVE[v]}{noMark}</>) : null
     default: return null
   }
 }
 
-/** Two letters for a preset that has neither a glyph nor a swatch yet. */
-export const monogram = (label: string): string => label.split(/[\s-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')
+/** D92: the built-in negatives as drawn glyphs (a picture of a negative is meaningless) — the defect, with a small "not" mark. */
+const noMark = <g {...S} strokeWidth={1.3}><circle cx="25" cy="7" r="4.5" /><path d="M21.8 10.2 L28.2 3.8" /></g>
+const NEGATIVE: Record<string, ReactNode> = {
+  'blurry, low detail': <><circle cx="13" cy="18" r="8" {...S} strokeDasharray="2 2" /><circle cx="15" cy="17" r="8" {...S} opacity={0.45} /></>,
+  'text, watermark, logo': <><rect x="3" y="10" width="20" height="16" rx="1.5" {...S} /><circle cx="13" cy="18" r="4.5" {...S} /><path d="M15 16.4 A2.4 2.4 0 1 0 15 19.6" {...S} strokeWidth={1.2} /></>,
+  'deformed hands, extra fingers': <g {...S}><path d="M8 28 L8 18 M8 18 L6 12 M10.5 17 L10 8 M13 17 L13.5 7.5 M15.5 17.5 L17 9 M17.5 19 L20 12 M19 21 L23 16" /><path d="M8 28 Q14 30 18 24 L19 21" /></g>,
+  oversaturated: <>{[[11, 13], [19, 13], [15, 20]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="6.5" fill="currentColor" opacity={0.55} stroke="none" />)}</>,
+}
+
+const ray = (i: number) => { const t = (Math.PI / 4) * i, c = Math.cos(t), n = Math.sin(t); return <path key={i} d={`M${16 + c * 8.5} ${16 + n * 8.5} L${16 + c * 12} ${16 + n * 12}`} /> }
+const hexAt = (r: number) => Array.from({ length: 6 }, (_, i) => { const t = (Math.PI / 3) * i + Math.PI / 6; return `${16 + Math.cos(t) * r},${16 + Math.sin(t) * r}` }).join(' ')
+const bust = (dash?: string) => <g {...S} strokeDasharray={dash}><circle cx="16" cy="11" r="5" /><path d="M6 28 Q6 19 16 18 Q26 19 26 28" /></g>
+/** D92: the glyph of a prompt field (and of the other library kinds) — what a tile shows while it has no glyph of its own and no picture. */
+const FIELD: Record<string, () => ReactNode> = {
+  lighting: () => <g {...S}><circle cx="16" cy="16" r="5.5" />{Array.from({ length: 8 }, (_, i) => ray(i))}</g>,
+  mood: () => <g {...S}><path d="M6 8 Q16 4 26 8 Q27 20 16 28 Q5 20 6 8 Z" /><path d="M10 14 Q12 12.5 14 14 M18 14 Q20 12.5 22 14" /><path d="M11.5 20 Q16 23.5 20.5 20" /></g>,
+  background: () => <>{frame}<path d="M3 21 L10 14 L15 18 L21 11 L29 19" {...S} /></>,
+  scene: () => <>{frame}<path d="M3 20 L29 20" {...S} /><circle cx="22" cy="13" r="2.4" {...S} /><path d="M7 20 L7 15 L10 15 L10 20" {...S} strokeWidth={1.1} /></>,
+  style: () => <g {...S}><path d="M26 4 L14.5 15.5" strokeWidth={2.4} /><path d="M14.5 15.5 Q10 16 9 20 Q8 24 4.5 27 Q11 28 14 24.5 Q17 21 16.5 17.5 Z" /></g>,
+  text: () => <path d="M5 8 L27 8 M5 13 L27 13 M5 18 L27 18 M5 23 L18 23" {...S} />,
+  negative: () => <g {...S}><circle cx="16" cy="16" r="11" /><path d="M8.2 23.8 L23.8 8.2" /></g>,
+  'subject.action': () => <g {...S}><circle cx="19.5" cy="6" r="2.6" /><path d="M18.5 9.5 L15 18 M17.5 11.5 L23 14.5 M17.5 11.5 L11.5 12.5 M15 18 L20.5 22 L19 28 M15 18 L11 22.5 L5.5 22" /></g>,
+  'subject.pose': () => <g {...S}><circle cx="16" cy="6.5" r="2.8" /><path d="M16 9.5 L16 19 M10 15.5 L16 11.5 L22 15.5 M16 19 L12 28 M16 19 L20 28" /></g>,
+  'subject.description': () => bust(),
+  'subject.position': () => <>{frame}{thirds}<circle cx="11.7" cy="13" r="2.2" {...S} /></>,
+  composition: () => <>{frame}{thirds}</>,
+  'camera.angle': () => <g {...S}><rect x="4" y="13" width="15" height="11" rx="1.5" /><path d="M19 16 L27 12 L27 25 L19 21" /><path d="M6 9 A12 12 0 0 1 22 6.5 M22 6.5 L19.5 5 M22 6.5 L20.5 9" strokeWidth={1.2} /></g>,
+  'camera.lens': () => <g {...S}><path d="M16 28 L5 9 A20 20 0 0 1 27 9 Z" /><circle cx="16" cy="24" r="1.4" fill="currentColor" /></g>,
+  'camera.depth_of_field': () => <>{[[9, 22, 5], [17, 15, 3.6], [24, 10, 2.6]].map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} {...S} strokeDasharray={i ? '1.6 1.6' : undefined} />)}</>,
+  'camera.f-number': () => <g {...S}><circle cx="16" cy="16" r="12" strokeWidth={1.1} /><polygon points={hexAt(6)} /></g>,
+  'camera.distance': () => <>{frame}{figure(16, 12, 2.6, 'fld-dist')}</>,
+  panel: () => <g {...S}><path d="M8 5 L8 27 M16 5 L16 27 M24 5 L24 27" strokeWidth={1.1} /><rect x="5.5" y="9" width="5" height="4" rx="1" fill="currentColor" /><rect x="13.5" y="18" width="5" height="4" rx="1" fill="currentColor" /><rect x="21.5" y="12" width="5" height="4" rx="1" fill="currentColor" /></g>,
+  palette: () => <g {...S}><path d="M16 4 C8 4 3 10 3 16 C3 22 8 27 14 27 C16.5 27 17 25 16 23.5 C15 22 16 20.5 18 20.5 L22 20.5 C26 20.5 29 18 29 14 C29 8 23 4 16 4 Z" />{[[10, 15], [13, 9.5], [19.5, 9], [24, 13.5]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.8" fill="currentColor" />)}</g>,
+  character: () => bust(),
+  prop: () => <path d="M16 4 L27 10 L27 22 L16 28 L5 22 L5 10 Z M5 10 L16 16 L27 10 M16 16 L16 28" {...S} />,
+  place: () => <g {...S}><path d="M16 28 C16 28 7 19 7 12.5 A9 9 0 0 1 25 12.5 C25 19 16 28 16 28 Z" /><circle cx="16" cy="12.5" r="3" /></g>,
+  free: () => bust('2 1.8'),
+}
+/** The fields and kinds `fieldGlyph` draws (a test keeps every library field among them). */
+export const FIELD_GLYPHS: readonly string[] = Object.keys(FIELD)
+/** D92: a field's (or a kind's — panel, palette, character, prop, place, free) glyph; the generic negative mark for anything unknown. */
+export function fieldGlyph(field: string): ReactNode { return svg((FIELD[field] ?? FIELD.negative)()) }
+/** D92: a tile's glyph — its own drawing when it has one (geometry, a built-in negative), else its field's. */
+export const tileGlyph = (field: string, value: string): ReactNode => glyphFor(field, value) ?? fieldGlyph(field)

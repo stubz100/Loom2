@@ -4,6 +4,7 @@
 import type { AlbumNode, Capabilities, Job, SampleModelCaps, WorldStyle } from '../../api/types'
 import type { DragItem, DragPayload, DropVerdict } from '../../frame/drag'
 import type { PresetIcon } from '../../frame/PresetIcons'
+import { fieldGlyph } from '../../frame/presetGlyphs'
 
 /** The preview scene every style is shown on, so samples compare across styles — the default; Settings › Samples may change it (D90). */
 export const SAMPLE_PROMPT = 'a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her'
@@ -80,13 +81,14 @@ export const pickerValue = (id: string): string | null | undefined => (id === DE
 
 const tip = (s: WorldStyle) => s.fragment.trim() || 'no prompt fragment yet'
 
-/** The picker's tiles: default (the default style's face), none, then every style with ★ on the default; the fragment is the tooltip. */
-export function pickerItems(styles: WorldStyle[], defaultId: string | null | undefined, face: (s: WorldStyle) => string | null, thumb: (assetId: string) => string, none?: PresetIcon['icon']): PresetIcon[] {
+/** The picker's tiles: default (the default style's face), none, then every style with ★ on the default; the fragment is the tooltip. D92: a
+ *  style without a sample shows the palette glyph (its sample is made by hand — "Make a sample image" — never queued by itself). */
+export function pickerItems(styles: WorldStyle[], defaultId: string | null | undefined, face: (s: WorldStyle) => string | null, thumb: (assetId: string) => string, none: PresetIcon['icon'] = fieldGlyph('negative')): PresetIcon[] {
   const def = styles.find((s) => s.id === defaultId)
   const img = (s: WorldStyle | undefined) => { const f = s ? face(s) : null; return f ? thumb(f) : null }
   return [
-    { id: DEFAULT_ID, label: def ? `Default · ${def.name}` : 'Default · none', hint: def ? `the world's ★ style — ${tip(def)}` : 'the world has no default style', img: img(def), badge: 'default' },
+    { id: DEFAULT_ID, label: def ? `Default · ${def.name}` : 'Default · none', hint: def ? `the world's ★ style — ${tip(def)}` : 'the world has no default style', img: img(def), icon: fieldGlyph('palette'), badge: 'default' },
     { id: NONE_ID, label: 'No style', hint: 'nothing appended to the prompt', icon: none },
-    ...styles.map((s): PresetIcon => ({ id: s.id, label: s.name || 'untitled', hint: tip(s), img: img(s), badge: s.id === defaultId ? '★' : undefined })),
+    ...styles.map((s): PresetIcon => ({ id: s.id, label: s.name || 'untitled', hint: tip(s), img: img(s), icon: fieldGlyph('palette'), badge: s.id === defaultId ? '★' : undefined })),
   ]
 }

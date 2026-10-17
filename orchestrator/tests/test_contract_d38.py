@@ -54,7 +54,7 @@ def test_every_json_get_answers_on_a_populated_project(tmp_path: Path):
         g = client.post("/groups", json={"name": "Shots"}, headers=H).json()
         assert client.post("/groups/move", json={"items": [{"kind": "asset", "id": b}], "to": g["id"]}, headers=H).status_code == 200
         doc = client.post("/documents", json={"from_asset": a}, headers=H).json()
-        gets = ["/health", "/version", "/capabilities", "/settings", "/snippets", "/project", "/project/presets", "/projects",
+        gets = ["/health", "/version", "/capabilities", "/settings", "/project", "/project/presets", "/story/library", "/projects",
                 "/assets", "/assets/groups?group=batch", "/assets/counts", "/assets/tags", f"/assets/{a}", f"/lineage/{a}", f"/lineage/tree/{a}",
                 "/groups/tree", f"/groups/where?ids={a}&ids={b}", f"/groups/{g['id']}", "/documents", f"/documents/{doc['id']}",
                 "/clips", "/jobs", "/queue", "/models", "/models/unlisted", "/engine"]

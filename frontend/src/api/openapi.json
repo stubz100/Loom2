@@ -6603,6 +6603,224 @@
         "title": "LayoutReply",
         "type": "object"
       },
+      "Library": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "entries",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Library",
+        "type": "object"
+      },
+      "LibraryAdd": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "field": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "pattern": "^lib_[0-9a-z]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "text": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "text"
+        ],
+        "title": "LibraryAdd",
+        "type": "object"
+      },
+      "LibraryChange": {
+        "description": "D92: an entry added or edited — the library at its new revision and the entry.",
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/LibraryEntry"
+          },
+          "library": {
+            "$ref": "#/components/schemas/Library"
+          }
+        },
+        "required": [
+          "library",
+          "entry"
+        ],
+        "title": "LibraryChange",
+        "type": "object"
+      },
+      "LibraryEntry": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "default": "user",
+            "enum": [
+              "builtin",
+              "snippet",
+              "user"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "field",
+          "name",
+          "text",
+          "source",
+          "group_id"
+        ],
+        "title": "LibraryEntry",
+        "type": "object"
+      },
+      "LibraryOrder": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "LibraryOrder",
+        "type": "object"
+      },
+      "LibraryRemoved": {
+        "description": "D92: an entry removed — the library at its new revision, the entry and where it stood (the Undo puts it back there).",
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/LibraryEntry"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "library": {
+            "$ref": "#/components/schemas/Library"
+          }
+        },
+        "required": [
+          "library",
+          "entry",
+          "index"
+        ],
+        "title": "LibraryRemoved",
+        "type": "object"
+      },
       "LineVoiceBody": {
         "properties": {
           "speed": {
@@ -7492,6 +7710,19 @@
             ],
             "default": null,
             "title": "Revision"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subject"
           },
           "version": {
             "anyOf": [
@@ -10159,6 +10390,76 @@
           "model_id"
         ],
         "title": "SampleSettings",
+        "type": "object"
+      },
+      "SavedPanel": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "additionalProperties": true,
+            "title": "Panel",
+            "type": "object"
+          },
+          "saved_at": {
+            "title": "Saved At",
+            "type": "string"
+          },
+          "thumb_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Asset Id"
+          }
+        },
+        "required": [
+          "name",
+          "panel",
+          "saved_at",
+          "thumb_asset_id"
+        ],
+        "title": "SavedPanel",
+        "type": "object"
+      },
+      "SavedPanels": {
+        "properties": {
+          "last": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPanel"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "presets",
+          "last"
+        ],
+        "title": "SavedPanels",
         "type": "object"
       },
       "Segment": {
@@ -18436,9 +18737,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Presets Get Project Presets Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SavedPanels"
                 }
               }
             },
@@ -18451,6 +18750,7 @@
         ]
       },
       "put": {
+        "description": "D92: the saved panels as a record — a panel sent without its picture keeps the one the server holds (the finisher sets it).",
         "operationId": "presets_put_project_presets_put",
         "requestBody": {
           "content": {
@@ -18469,9 +18769,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Presets Put Project Presets Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SavedPanels"
                 }
               }
             },
@@ -18755,72 +19053,6 @@
         "summary": "Shutdown",
         "tags": [
           "meta"
-        ]
-      }
-    },
-    "/snippets": {
-      "get": {
-        "operationId": "snippets_get_snippets_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Snippets Get Snippets Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Snippets Get",
-        "tags": [
-          "settings"
-        ]
-      },
-      "put": {
-        "operationId": "snippets_put_snippets_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Snippets Put Snippets Put",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Snippets Put",
-        "tags": [
-          "settings"
         ]
       }
     },
@@ -19662,6 +19894,220 @@
           }
         },
         "summary": "Flow Validate",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/library": {
+      "get": {
+        "description": "The project's library of prompt-field presets — seeded with the built-in vocabulary and the app-wide presets on the first read.",
+        "operationId": "library_get_story_library_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Library Get",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/library/entries": {
+      "post": {
+        "operationId": "library_add_story_library_entries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryChange"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Add",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/library/entries/{eid}": {
+      "delete": {
+        "operationId": "library_remove_story_library_entries__eid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eid",
+            "required": true,
+            "schema": {
+              "title": "Eid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Revision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryRemoved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Remove",
+        "tags": [
+          "story"
+        ]
+      },
+      "patch": {
+        "operationId": "library_patch_story_library_entries__eid__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eid",
+            "required": true,
+            "schema": {
+              "title": "Eid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryChange"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Patch",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/library/order": {
+      "put": {
+        "operationId": "library_order_story_library_order_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library Order",
         "tags": [
           "story"
         ]

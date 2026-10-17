@@ -28,6 +28,7 @@ line that the Tauri shell (`frontend/src-tauri/src/lib.rs`) parses for the port 
 | `workspace.py` / `config.py` | project tree, `ProjectFormat`; app state `app.json`, `Settings`, the token |
 | `preset_icons.py` | D90 (02 §6.3): the preset swatch pack in app state (`<state>/preset_icons/`, index + `<key>.webp`, key = sha1(field + "
 " + value)[:16]); `routes/preset_icons.py` makes one staged t2i per item on the sample model — D91: `Settings.samples.model_id` when it names a spec with `recipes.sample` this variant offers (`registry.sample_model`), else the spec with `default_for = ["swatch"]` — at its `geometry.sample_px.swatch`; `/capabilities.sample_models` lists the choices (the default first); `AssetFinisher` stores the result on `origin.surface == "swatch"` |
+| `library.py` | D92: the project's World library (`story/library.json`: entries `{id, field, name, text}`, revision → 409; seeded on the first read from `library_seed.json` — the one built-in vocabulary, the frontend's glyph test reads it — and the app-wide `snippets.json`, once) and Generate's saved panels (`generate/presets.json` as a record with `thumb_asset_id`, set by the finisher for a job whose origin payload names `saved_panel`) |
 | `events.py` | `EventHub`: WebSocket fan-out with seq numbers, 200-frame replay, binary previews |
 | `fsio.py` | `atomic_write_json/bytes/text`, `atomic_copy/move`, `read_json`, `new_id` |
 | `tools/` | `facesim.py` (advisory identity), `fetch.py` (weights), `pngmeta.py` (import metadata) |

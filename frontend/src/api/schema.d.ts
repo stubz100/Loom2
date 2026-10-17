@@ -1289,7 +1289,10 @@ export interface paths {
         };
         /** Presets Get */
         get: operations["presets_get_project_presets_get"];
-        /** Presets Put */
+        /**
+         * Presets Put
+         * @description D92: the saved panels as a record — a panel sent without its picture keeps the one the server holds (the finisher sets it).
+         */
         put: operations["presets_put_project_presets_put"];
         post?: never;
         delete?: never;
@@ -1456,24 +1459,6 @@ export interface paths {
          * @description Graceful exit for the shell (06 §1): the lifespan teardown stops the queue (clean mark) and the engine.
          */
         post: operations["shutdown_shutdown_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/snippets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Snippets Get */
-        get: operations["snippets_get_snippets_get"];
-        /** Snippets Put */
-        put: operations["snippets_put_snippets_put"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1757,6 +1742,78 @@ export interface paths {
         put?: never;
         /** Flow Validate */
         post: operations["flow_validate_story_flow_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Library Get
+         * @description The project's library of prompt-field presets — seeded with the built-in vocabulary and the app-wide presets on the first read.
+         */
+        get: operations["library_get_story_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/library/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Library Add */
+        post: operations["library_add_story_library_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/library/entries/{eid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Library Remove */
+        delete: operations["library_remove_story_library_entries__eid__delete"];
+        options?: never;
+        head?: never;
+        /** Library Patch */
+        patch: operations["library_patch_story_library_entries__eid__patch"];
+        trace?: never;
+    };
+    "/story/library/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Library Order */
+        put: operations["library_order_story_library_order_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4938,6 +4995,87 @@ export interface components {
             /** Revision */
             revision: number;
         };
+        /** Library */
+        Library: {
+            /** Created At */
+            created_at: string;
+            /** Entries */
+            entries: components["schemas"]["LibraryEntry"][];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** LibraryAdd */
+        LibraryAdd: {
+            /** At */
+            at?: number | null;
+            /** Field */
+            field: string;
+            /** Id */
+            id?: string | null;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Revision */
+            revision?: number | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * LibraryChange
+         * @description D92: an entry added or edited — the library at its new revision and the entry.
+         */
+        LibraryChange: {
+            entry: components["schemas"]["LibraryEntry"];
+            library: components["schemas"]["Library"];
+        };
+        /** LibraryEntry */
+        LibraryEntry: {
+            /** Field */
+            field: string;
+            /** Group Id */
+            group_id: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @default user
+             * @enum {string}
+             */
+            source: "builtin" | "snippet" | "user";
+            /** Text */
+            text: string;
+        };
+        /** LibraryOrder */
+        LibraryOrder: {
+            /** Ids */
+            ids: string[];
+            /** Revision */
+            revision?: number | null;
+        };
+        /**
+         * LibraryRemoved
+         * @description D92: an entry removed — the library at its new revision, the entry and where it stood (the Undo puts it back there).
+         */
+        LibraryRemoved: {
+            entry: components["schemas"]["LibraryEntry"];
+            /** Index */
+            index: number;
+            library: components["schemas"]["Library"];
+        };
         /** LineVoiceBody */
         LineVoiceBody: {
             /**
@@ -5309,6 +5447,11 @@ export interface components {
              * @default null
              */
             revision?: number | null;
+            /**
+             * Subject
+             * @default null
+             */
+            subject?: number | null;
             /**
              * Version
              * @default null
@@ -6378,6 +6521,31 @@ export interface components {
             swatch_prompts: {
                 [key: string]: string;
             };
+        };
+        /** SavedPanel */
+        SavedPanel: {
+            /** Name */
+            name: string;
+            /** Panel */
+            panel: {
+                [key: string]: unknown;
+            };
+            /** Saved At */
+            saved_at: string;
+            /** Thumb Asset Id */
+            thumb_asset_id: string | null;
+        };
+        /** SavedPanels */
+        SavedPanels: {
+            /** Last */
+            last: string | null;
+            /** Presets */
+            presets: components["schemas"]["SavedPanel"][];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
         };
         /**
          * Segment
@@ -10670,9 +10838,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SavedPanels"];
                 };
             };
         };
@@ -10698,9 +10864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SavedPanels"];
                 };
             };
             /** @description Validation Error */
@@ -10938,65 +11102,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShuttingDown"];
-                };
-            };
-        };
-    };
-    snippets_get_snippets_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    snippets_put_snippets_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -11620,6 +11725,162 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FlowProblems"];
+                };
+            };
+        };
+    };
+    library_get_story_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+        };
+    };
+    library_add_story_library_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    library_remove_story_library_entries__eid__delete: {
+        parameters: {
+            query?: {
+                revision?: number | null;
+            };
+            header?: never;
+            path: {
+                eid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryRemoved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    library_patch_story_library_entries__eid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryChange"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    library_order_story_library_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

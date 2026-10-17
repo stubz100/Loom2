@@ -4292,3 +4292,55 @@ split by file so that no two hands touched the same module.
   a stall timeout in `fetch_weights.py` (the SD 3.5 Medium transfer hung ≈ 4 min at 8.25 GB and recovered by itself); Klein 4B's ledger
   sha256 (it shows `present`); not built in D90 — takes as a Catalogue group, the groups' "used by", Edit's Flatten, For contexts for
   profiles and styles.
+
+## 2026-10-17 08:08 — D92 accepted · World holds every Generate template; subjects are Cast characters; no lettered tiles
+
+- The author: "In Generate - all templates should have an entry in Story/World and World/Character should be connected to
+  Generate/Subject (they are essentially the same thing). There should be no boxes with 2 letter abbreviations." Asked and answered:
+  field presets and saved panels; Cast stays the characters' home and Generate's subject cards pick from it; the library is per project,
+  seeded. → D92 (wave UI7): a World library of field presets (words + picture), saved panels in World, subject ↔ Cast character, no
+  monogram tiles (glyphs, sample pictures made automatically, a busy glyph meanwhile).
+
+## 2026-10-17 08:52 — D92 built (wave UI7) · the World library, saved panels in World, subjects are Cast characters, no lettered tiles
+
+- **The World library** (`orchestrator/loom2/library.py`, `story/library.json`): entries `{id, field, name, text, source, group_id}` with
+  `schema_version` and `revision` (409 when stale), seeded on the project's first read from `library_seed.json` (the built-in vocabulary,
+  moved out of `fieldPresets.ts` — the one source; the frontend's glyph test imports the same file) plus the author's app-wide presets
+  (`<state>/snippets.json`, merged once; descriptions kept, not seeded). Routes `GET /story/library`, `POST /story/library/entries` (an
+  Undo re-adds with its id and place), `PATCH|DELETE /story/library/entries/{eid}`, `PUT /story/library/order`; `story.changed {kind:
+  library}`. `/snippets` (GET / PUT) is gone — nothing else used it. Story · World: **Library** and **Saved panels** sections (panel rows
+  with counts), the library grouped Look · Camera · Prompt · Subject as `PresetIcons` tiles with names and a ＋ Add per field; the World
+  Inspector edits name and words (debounced, one PATCH at a time), shows the picture large, Make a new picture, Move earlier / later,
+  Remove (Undo in the toast). Generate's tiles read the library; a field's + adds an entry (name asked inline, blank = the words); a tile's
+  right-click: Add to / Remove from the field, Make a new picture, Edit in Story · World, Remove from the library.
+- **Saved panels** are a record now (`SavedPanels` / `SavedPanel` with `thumb_asset_id`): the picture is sent when a panel is saved (the
+  newest Generate result) and set by the finisher when a job made from the panel applied in this session lands (`origin.payload.
+  saved_panel`); a client PUT without a picture keeps the server's. World lists them (Apply in Generate, Rename…, Delete with a confirm);
+  Generate's tiles show the picture, else the sliders glyph.
+- **Subjects are Cast characters:** a subject card has a row of Cast profiles as hero tiles (characters, then props; places later, as
+  the scene or background) and "free subject"; a pick fills the description with the current version's stub (typed words stay) and
+  records the profile mention, which carries the reference set and the LoRA as before (`mentions.py` unchanged but for a new
+  `Mention.subject` — the card's index — so a stored recipe brings the link back). The card shows the hero, the name and ✕ unlink; the
+  mention chip's × unlinks too. Cast: **Use as a subject in Generate** (Inspector, row menu).
+- **No monograms:** `monogram` is gone; `PresetIcon.icon` is required; `fieldGlyph` draws every field and kind (sun, mask, horizon,
+  framed horizon, brush, text lines, circle-slash, running / standing figure, bust, box, pin, sliders, palette …), the four built-in
+  negatives are drawn, the anamorphic lens lost its "ana". A look entry added or re-worded without a swatch queues one (run now) on the
+  sample model; its tile shows the field's glyph with a busy ring meanwhile. Styles without a sample show the palette glyph (not queued).
+  New swatch scenes for subject action / pose (a grey mannequin), description and the lead text (on the lighthouse scene).
+- Commands: `story.world.addEntry` (panel, context), `.entryPicture`, `.entryEarlier`, `.entryLater`, `.applyPanel`, `.renamePanel`
+  (inspector, context), `.editEntry` (context: Generate's tile and saved-panel menus), `story.cast.useAsSubject` (inspector, context),
+  `story.cast.openInStory` (context: a subject card's Cast tile); `story.world.remove` also removes an entry (Undo) or a saved panel.
+- **Rig — the pack** (`scripts/swatch_pack.py`, the real route, Klein 4B, the pack's seed): 61 look entries of the seeded library,
+  61 / 61 done in 205 s (first 30.3 s cold, ≈ 3.3 s a swatch warm), peak 12.01 GB, 0 failures; contact sheet
+  `engine/spikes/out/sm/pack_sheet.png` looked at: the three lead-text swatches were literal (a blank panel, a poster of gibberish) — the
+  `text` scene became "a lighthouse on a cliff. {value}" and they were remade (`--only`, 39.7 s, 11.98 GB, `pack_sheet_redo.png`), now
+  fine. Installed into `.loom2_state/preset_icons`; the Lumina pack there before (64, 2026-10-16) is kept in
+  `.loom2_state/preset_icons.before-20261017-085007/`. The dark moods (tense, melancholic, eerie, lonely) read alike — the mood scene is
+  Settings › Samples' to change.
+- Tests: offline 362 under full and open (`test_library_d92.py`: seed, snippets once, revision / 409, add / edit / remove / undo / order,
+  routes, saved-panel pictures incl. the finisher, the subject link on the mention), Vitest 278 (`PresetIcons.test.tsx` no-text tiles,
+  glyphs against the seed, `libraryStore.test.ts` tiles and the subject ↔ profile link, `latestResult`), lint 88, build clean, settings
+  audit 230 clean, model literals and agents clean, contract regenerated; smoke 32 / 32 under full and open (new: the library entry →
+  its picture → a Generate tile → Edit in Story · World; a subject linked to a character → the job's mention and references).
+- Owed: the author's click-through and a look at the pack; Places as scene / background subjects; a picture album per entry
+  (`group_id` is there); reorder by drag (the Move commands do it).

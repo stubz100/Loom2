@@ -9,7 +9,7 @@ import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { useDropTarget } from '../../frame/drag'
-import { monogram } from '../../frame/presetGlyphs'
+import { fieldGlyph } from '../../frame/presetGlyphs'
 import { useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
 import { addStyleSamples, rowMenu } from './storyCommands'
@@ -37,8 +37,8 @@ function StyleTile({ s, active, isDefault }: { s: WorldStyle; active: boolean; i
     <div ref={ref} className={`style-tile${active ? ' active' : ''}${over ? ' over' : ''}`} data-id={s.id} role="button" tabIndex={-1} aria-pressed={active} aria-label={`style ${s.name}`}
       title={`${s.name}\n${s.fragment.trim() || 'no prompt fragment yet'}`} onClick={() => sy().select({ kind: 'style', id: s.id })} onContextMenu={(e) => showMenu(e, menu(s.id))}>
       <span className="face">
-        {face ? <img src={api.thumbUrl(face, 256)} alt="" draggable={false} /> : <span className="mono">{monogram(s.name || '?')}</span>}
-        {busy && <span className="busy" title="a sample is being made">…</span>}
+        {face ? <img src={api.thumbUrl(face, 256)} alt="" draggable={false} /> : <span className="glyph">{fieldGlyph('palette')}</span>/* D92: never letters */}
+        {busy && <i className="busy-mark" title="a sample is being made" />}
         <button className={`quiet star${isDefault ? ' on' : ''}`} title={isDefault ? 'The default style (Generate preselects it) — click to clear' : 'Make it the default style'}
           aria-label={isDefault ? `${s.name} is the default style` : `make ${s.name} the default style`} onClick={(e) => { e.stopPropagation(); sy().setDefaultStyle(isDefault ? null : s.id) }}>
           <Star size={12} fill={isDefault ? 'currentColor' : 'none'} />
@@ -73,7 +73,7 @@ export function StyleEditor({ s, isDefault }: { s: WorldStyle; isDefault: boolea
     <>
       <h4>Style · {s.name}</h4>
       <div ref={ref} className={`style-sample${over ? ' over' : ''}`} title="The style's sample (its group's cover) — drop a Catalogue image here to make it the sample">
-        {face ? <img src={api.thumbUrl(face, 512)} alt={`the sample of ${s.name}`} draggable={false} /> : <span className="hint">No sample yet — make one, or drop an image here.</span>}
+        {face ? <img src={api.thumbUrl(face, 512)} alt={`the sample of ${s.name}`} draggable={false} /> : <span className="hint"><span className="glyph big">{fieldGlyph('palette')}</span>No sample yet — make one, or drop an image here.</span>}
         {busy && <span className="busy">rendering a sample…</span>}
       </div>
       <div className="kv">

@@ -101,6 +101,9 @@ class AssetFinisher:
             await _swatch_result(job, assets[0], compiled.summary.get("model_id", getattr(recipe, "model_id", None)), q)
         if assets and job.origin and job.origin.surface == FOR_SHOT:                         # D90 (02 §5): made for a shot version → its takes
             await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "image", [a.id for a in assets], None)
+        panel = (job.origin.payload or {}).get("saved_panel") if job.origin else None       # D92: made from an applied saved panel → its picture
+        if assets and isinstance(panel, str) and panel:
+            await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -352,6 +355,16 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
+
+
+def _panel_thumb(q: JobQueue, name: str, asset_id: str) -> None:
+    """D92: the saved panel's picture is its most recent result. Never the job's failure (a panel renamed or deleted meanwhile)."""
+    from ..library import set_panel_thumb
+    try:
+        if set_panel_thumb(q.ws.path, name, asset_id):
+            q.hub.broadcast("story.changed", {"kind": "panels", "revision": 0})
+    except Exception as e:  # noqa: BLE001
+        q.hub.broadcast("story.changed", {"kind": "panels", "revision": 0, "error": str(e)})
 
 
 def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:

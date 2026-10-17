@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -8,11 +8,23 @@ import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestTrainJob, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget } from './makeFor'
 import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
+import { useLibrary } from './libraryStore'
+import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
+import { needsPicture, swatchJob, useSwatches } from '../generate/swatches'
 
 const hasWorld = () => !!sy().world
 const selected = () => sy().selected
 const selStyle = () => selected()?.kind === 'style'
 const selBeat = () => selected()?.kind === 'beat'
+/** D92: the selected library entry (World's tiles; Generate's tile right-click selects it first) and the selected saved panel. */
+const entry = () => { const s = selected(); return s?.kind === 'entry' ? useLibrary.getState().library?.entries.find((e) => e.id === s.id) : undefined }
+const panelName = () => { const s = selected(); return s?.kind === 'panel' ? s.id : null }
+const panelPreset = async () => { const n = panelName(); if (!n) return null; const { useGenerate } = await import('../generate/generateStore'); return { g: useGenerate.getState(), p: useGenerate.getState().presets.find((x) => x.name === n) } }
+const entryAt = (delta: -1 | 1) => { const e = entry(); if (!e) return false; const same = (useLibrary.getState().library?.entries ?? []).filter((x) => x.field === e.field); const i = same.findIndex((x) => x.id === e.id) + delta; return i >= 0 && i < same.length }
+/** Story · World on a section (the library, the saved panels …). */
+function openWorld(section: 'library' | 'panels' | 'styles'): void {
+  void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); sy().setSection(section); useSession.getState().setSuite('story') })
+}
 const style = () => { const s = selected(); return s?.kind === 'style' ? sy().world?.styles.find((x) => x.id === s.id) : undefined }
 const sampleModel = () => { const ss = useSession.getState(); return pickSampleModel(ss.capabilities, ss.settings?.samples?.model_id) }   // D91: Settings › Samples' model, else the default
 const profile = () => sy().profile()
@@ -42,7 +54,7 @@ const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: '
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
 /** D90 (01 §11.2): the item a per-item command acts on — the take or the line whose button or menu ran it (commands take no
  *  arguments; the button sets this first). A run clears it, so the palette never acts on a stale one. */
-export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number } } = {}
+export const storyItem: { take?: { kind: 'image' | 'clip'; id: string }; line?: { node: string; index: number }; field?: string } = {}   // D92: a library field's Add
 /** Run `id` on an item (a take card's ✓ use, a line's 🎙). */
 export function runOnItem(item: Partial<typeof storyItem>, id: string): boolean {
   Object.assign(storyItem, item)
@@ -145,6 +157,24 @@ const cmds: Command[] = [
     run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'world'); sy().setSection('styles'); useSession.getState().setSuite('story') }) } },
   { id: 'story.world.defaultStyle', scope: 'story', label: 'Make it the default style', icon: Star, placement: ['inspector', 'context'], when: () => selStyle() && sy().world?.default_style !== selected()?.id,
     run: () => { const s = selected(); if (s?.kind === 'style') sy().setDefaultStyle(s.id) } },
+  // D92: the World library — an entry is written here only (the Inspector); Generate's tiles and its field's + read and add to it
+  { id: 'story.world.addEntry', scope: 'story', label: 'Add to the library…', icon: BookPlus, placement: ['panel', 'context'], when: () => hasWorld() && projectOpen(),
+    run: () => { const field = (storyItem.field ?? entry()?.field ?? 'lighting') as FieldKey; storyItem.field = undefined
+      void askText({ title: `Add to the library · ${FIELD_LABEL[field] ?? field}`, text: 'The words the field takes. The name is the words until you give it one in the Inspector; a look gets its picture by itself.', placeholder: 'the words' })
+        .then(async (t) => { if (!t?.trim()) return; const e = await useLibrary.getState().add(field, t); if (e) { sy().select({ kind: 'entry', id: e.id }); sy().setSection('library') } }) } },
+  { id: 'story.world.entryPicture', scope: 'story', label: 'Make a new picture', icon: ImagePlus, placement: ['inspector', 'context'], hint: 'one small image on the sample model (Settings › Samples), run now',
+    when: () => { const e = entry(); return !!e && needsPicture(e.field, e.text) && projectOpen() && !!sampleModel() && !swatchJob(useSession.getState().jobs, e.field, e.text) },
+    run: () => { const e = entry(); if (e) void useSwatches.getState().make([{ field: e.field, value: e.text }]).then((n) => { if (n) useSession.getState().toast(`A new picture for “${e.name}” is queued`, 'info') }) } },
+  { id: 'story.world.editEntry', scope: 'story', label: 'Edit in Story · World', icon: Pencil, placement: ['context'], when: () => !!entry() || !!panelName(),
+    run: () => openWorld(entry() ? 'library' : 'panels') },
+  { id: 'story.world.entryEarlier', scope: 'story', label: 'Move earlier', icon: ChevronLeft, placement: ['inspector', 'context'], when: () => entryAt(-1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, -1) } },
+  { id: 'story.world.entryLater', scope: 'story', label: 'Move later', icon: ChevronRight, placement: ['inspector', 'context'], when: () => entryAt(1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, 1) } },
+  { id: 'story.world.applyPanel', scope: 'story', label: 'Apply in Generate', icon: Wand2, placement: ['inspector', 'context'], when: () => !!panelName(),
+    run: () => void panelPreset().then((x) => { if (!x?.p) return; x.g.applyPreset(x.p.name); useSession.getState().setSuite('generate') }) },
+  { id: 'story.world.renamePanel', scope: 'story', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!panelName(),
+    run: () => void panelPreset().then(async (x) => { if (!x?.p) return; const from = x.p.name
+      const to = await askText({ title: 'Rename the saved panel', initial: from, placeholder: 'name' })
+      if (to && (await x.g.renamePreset(from, to))) sy().select({ kind: 'panel', id: to.trim() }) }) },
   { id: 'story.world.beatUp', scope: 'story', label: 'Move the beat earlier', icon: ArrowUp, keys: 'Ctrl+ArrowUp', placement: ['inspector', 'context'], when: selBeat, run: () => { const s = selected(); if (s) sy().moveBeat(s.id, -1) } },
   { id: 'story.world.beatDown', scope: 'story', label: 'Move the beat later', icon: ArrowDown, keys: 'Ctrl+ArrowDown', placement: ['inspector', 'context'], when: selBeat, run: () => { const s = selected(); if (s) sy().moveBeat(s.id, 1) } },
   { id: 'story.world.remove', scope: 'story', label: 'Remove', icon: Trash2, keys: 'Delete', placement: ['inspector', 'context'], when: () => !!selected(), danger: true, run: () => sy().removeSelected() },
@@ -286,6 +316,14 @@ const cmds: Command[] = [
   { id: 'story.flow.fit', scope: 'story', label: 'Fit the graph', icon: Maximize, keys: 'F', placement: ['strip', 'context'], when: () => !!sy().flowGraph && !sy().play, run: () => flowView.fit?.() },
   { id: 'story.world.beatToNode', scope: 'story', label: 'Make a Flow node from this beat', icon: GitBranch, placement: ['inspector', 'context'], when: selBeat,
     run: () => { const s = selected(); if (s?.kind === 'beat') void sy().nodeFromBeat(s.id) } },
+  // D92: subjects are Cast characters — Generate's Tree prompt with a subject card linked to the profile (its reference set and LoRA follow)
+  { id: 'story.cast.useAsSubject', scope: 'story', label: 'Use as a subject in Generate', icon: UserRoundPlus, placement: ['inspector', 'context'], when: () => !!profile() && profile()!.cls !== 'place',
+    run: () => { const p = profile(); if (!p) return
+      void Promise.all([import('../generate/generateStore'), import('../../frame/suiteRegistry')]).then(([g, r]) => {
+        g.useGenerate.getState().useAsSubject(p); r.setRailTab('generate', 'prompt'); useSession.getState().setSuite('generate')
+        useSession.getState().toast(`${p.name} is a subject in Generate's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
+  { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
+    run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },
@@ -294,14 +332,17 @@ registerCommands(cmds)
 
 /** The right-click menu of a row in the World editor: the row is selected first, so the Inspector shows it too. */
 /** The right-click menu of a Cast profile row (the profile is selected first). D90 (01 §11.3): the training and new-profile verbs too. */
-export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
+export const profileMenu = (): MenuItem[] => [{ cmd: 'story.cast.useAsSubject' }, sep, { cmd: 'story.cast.expand' }, { cmd: 'story.cast.newVersion' }, { cmd: 'story.cast.lock' }, sep, { cmd: 'story.cast.openGroup' }, { cmd: 'story.cast.openCandidates' }, sep,
   { cmd: 'story.cast.train' }, { cmd: 'story.cast.useLora' }, { cmd: 'story.cast.checkLora' }, { cmd: 'story.cast.deleteLora' }, sep, { cmd: 'story.cast.new' }, { cmd: 'story.cast.newPlace' }, { cmd: 'story.cast.newProp' }, sep, { cmd: 'story.cast.delete' }]
 export function rowMenu(kind: NonNullable<ReturnType<typeof selected>>['kind'], id: string) {
   useStory.getState().select({ kind, id })
-  const items: ({ cmd: string } | 'sep')[] = []
+  const items: ({ cmd: string; label?: string } | 'sep')[] = []
   if (kind === 'style') items.push({ cmd: 'story.world.styleSample' }, { cmd: 'story.world.openStyleGroup' }, 'sep', { cmd: 'story.world.defaultStyle' })
   if (kind === 'beat') items.push({ cmd: 'story.world.beatUp' }, { cmd: 'story.world.beatDown' }, { cmd: 'story.world.beatToNode' })
-  items.push({ cmd: 'story.world.remove' }, 'sep', kind === 'style' ? { cmd: 'story.world.addStyle' } : kind === 'beat' ? { cmd: 'story.world.addBeat' } : { cmd: 'story.world.addVariable' })   // D90 (01 §11.3): Add … where its row is
+  if (kind === 'entry') items.push({ cmd: 'story.world.entryPicture' }, { cmd: 'story.world.entryEarlier' }, { cmd: 'story.world.entryLater' }, 'sep')   // D92
+  if (kind === 'panel') { items.push({ cmd: 'story.world.applyPanel' }, { cmd: 'story.world.renamePanel' }, 'sep', { cmd: 'story.world.remove', label: 'Delete…' }); return items }
+  items.push(kind === 'entry' ? { cmd: 'story.world.remove', label: 'Remove from the library' } : { cmd: 'story.world.remove' }, 'sep',
+    kind === 'style' ? { cmd: 'story.world.addStyle' } : kind === 'beat' ? { cmd: 'story.world.addBeat' } : kind === 'entry' ? { cmd: 'story.world.addEntry' } : { cmd: 'story.world.addVariable' })   // D90 (01 §11.3): Add … where its row is
   return items
 }
 

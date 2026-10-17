@@ -83,6 +83,13 @@ Every colour in the app's CSS is a custom property defined in `frame.css` for `:
 (`THEMES`, `applyTheme`, `CANVAS_COLOURS`) switches them; `ui.theme` persists in `loom2.ui`; `?theme=light|dark` deep-links. Don't add colour
 literals; image content (brush colours, overlays on images) is the exception.
 
+## Rule 5 — preset tiles never show letters (D92)
+
+`PresetIcons.tsx` is the one tile row (prompt-field presets, aspect and size, styles, saved panels, Cast profiles, angle moves). Every item
+carries a drawn glyph (`icon` is required; `presetGlyphs.tsx`: `glyphFor` for geometry and the built-in negatives, `fieldGlyph` for a
+field or a kind, `tileGlyph` for both); a picture (`img`) covers it, `busy` marks a picture being made. The words are the tooltip and the
+`aria-label` only; `PresetIcons.test.tsx` fails a tile without an svg or an img, or with text of its own.
+
 ## State
 
 `frontend/src/store/session.ts` holds the app-wide store (backend, health, project, engine, queue, jobs, previews, capabilities, toasts,

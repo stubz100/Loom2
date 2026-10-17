@@ -20,7 +20,7 @@ REVALIDATE = {"Cache-Control": "private, no-cache"}       # re-made in place und
 
 
 class PresetItem(BaseModel):
-    field: str = Field(min_length=1, max_length=64)            # the prompt field (lighting · mood · style · background · scene …) or a snippet's
+    field: str = Field(min_length=1, max_length=64)            # the prompt field (lighting · mood · style · background · scene …) of a library entry (D92)
     value: str = Field(min_length=1, max_length=400)           # the preset's text, exactly as the field inserts it
 
 

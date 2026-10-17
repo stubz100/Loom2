@@ -1,5 +1,5 @@
-"""D90 (02 §6.3): the preset swatch pack — one small generated image per *look* preset (Generate's prompt-field presets and the user's
-snippets), made locally once as a staged t2i job on the sample model (D91: Settings › Samples › Sample model, else the spec named
+"""D90 (02 §6.3): the preset swatch pack — one small generated image per *look* preset (Generate's prompt-field presets — the project's World
+library entries, D92), made locally once as a staged t2i job on the sample model (D91: Settings › Samples › Sample model, else the spec named
 `default_for = ["swatch"]` — an open-licence model, so both variants make it) at its `geometry.sample_px.swatch`, kept in **app
 state**, not in the project, and re-made per item.
 

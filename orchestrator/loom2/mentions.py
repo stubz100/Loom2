@@ -71,7 +71,8 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
                 added = v.lora
                 if v.trigger:
                     triggers[v.group_id] = v.trigger.strip()
-        pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id, lora=added, lora_available=v.lora if v.lora in trained else None)
+        pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id, lora=added, lora_available=v.lora if v.lora in trained else None,
+                            subject=m.subject)
         if v.stub.strip() and v.stub.strip().lower() != (m.name or p.name).strip().lower():
             stubs[v.group_id] = v.stub.strip().rstrip(".")
     if pinned:
@@ -102,6 +103,7 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
             refs.append(RefImage(asset_id=aid, note=note, mention=m.group_id))
             room -= 1
     stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
-                                                        asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version, lora=m.lora, lora_available=m.lora_available)
+                                                        asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version, lora=m.lora, lora_available=m.lora_available,
+                                                        subject=m.subject)
                for m in recipe.mentions]
     return recipe.model_copy(update={"refs": refs, "mentions": stamped, "loras": loras})

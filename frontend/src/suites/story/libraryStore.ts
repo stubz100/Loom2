@@ -37,6 +37,19 @@ export function moveWithinField(entries: Entry[], id: string, delta: -1 | 1): st
   return ids
 }
 
+/** D92 (owed): the whole list's ids after dragging one entry before / after another of its field (World › Library's drag); null when the
+ *  target is in another field, is the entry itself, or the order would not change. The other fields' entries keep their places. */
+export function moveToInField(entries: Entry[], id: string, targetId: string, where: 'before' | 'after'): string[] | null {
+  const e = entries.find((x) => x.id === id), t = entries.find((x) => x.id === targetId)
+  if (!e || !t || e.field !== t.field || id === targetId) return null
+  const slots = entries.flatMap((x, i) => (x.field === e.field ? [i] : []))       // the field's places in the whole list, kept
+  const order = slots.map((i) => entries[i].id).filter((x) => x !== id)
+  order.splice(order.indexOf(targetId) + (where === 'after' ? 1 : 0), 0, id)
+  const ids = entries.map((x) => x.id)
+  slots.forEach((i, k) => { ids[i] = order[k] })
+  return ids.every((x, i) => x === entries[i].id) ? null : ids
+}
+
 interface LibraryState {
   library: Library | null
   loading: boolean
@@ -49,6 +62,8 @@ interface LibraryState {
   /** Out of the library; the toast's Undo puts it back with its id and place. */
   remove: (id: string) => Promise<void>
   move: (id: string, delta: -1 | 1) => Promise<void>
+  /** D92 (owed): a drag within the field's row — before / after another entry (`PUT /story/library/order`, the same as Move earlier / later). */
+  moveTo: (id: string, targetId: string, where: 'before' | 'after') => Promise<void>
   /** `story.changed` {kind: library}: another writer moved it — reload when nothing of ours is pending. */
   onChanged: (revision?: number) => void
 }
@@ -131,6 +146,16 @@ export const useLibrary = create<LibraryState>()((set, get) => {
       if (!ids) return
       const r = await run('Not moved', (revision) => unwrap(http.PUT('/story/library/order', { body: { ids, revision } })))
       if (r) set({ library: overlay(r) })
+    },
+    moveTo: async (id, targetId, where) => {
+      await get().flush()
+      const ids = moveToInField(get().library?.entries ?? [], id, targetId, where)
+      if (!ids) return
+      const lib = get().library!
+      const byId = new Map(lib.entries.map((e) => [e.id, e]))
+      set({ library: { ...lib, entries: ids.map((x) => byId.get(x)!) } })            // the row shows the new order at once
+      const r = await run('Not moved', (revision) => unwrap(http.PUT('/story/library/order', { body: { ids, revision } })))
+      if (r) set({ library: overlay(r) }); else void get().load()
     },
     onChanged: (revision) => {
       const lib = get().library

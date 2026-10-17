@@ -1637,3 +1637,101 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   expect(job.recipe.refs?.map((r) => r.asset_id)).toEqual([copies[0], copies[1]])
   expect(job.result?.serialized_prompt).toContain(`From left to right in image 1: figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3), a lanky boy with a green cap.`)
 })
+
+test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a blend mode and an adjustment into one layer, exactly as the server flattens; Undo brings the layers back; Save to Catalogue still matches', async ({ page }) => {
+  type Ed = { getState: () => { doc: { id: string; layers: { id: string; name: string; kind: string }[] } | null; addLayer: (k: string, extra?: Record<string, unknown>) => unknown; updateNode: (id: string, p: Record<string, unknown>) => void; groupNodes: (ids: string[]) => void; duplicateNodes: (ids: string[]) => void; undo: () => void; save: () => Promise<boolean>; docDirty: boolean } }
+  const ed = () => page.evaluate(() => { const s = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState(); return { layers: s.doc!.layers.map((n) => ({ id: n.id, name: n.name, kind: n.kind })), dirty: s.docDirty } })
+  const raw = async (docId: string): Promise<Buffer> => {
+    const e = env()
+    const r = await fetch(`http://127.0.0.1:${e.port}/documents/${docId}/export`, { method: 'POST', headers: { 'X-Loom-Token': e.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ format: 'raw' }) })
+    expect(r.status).toBe(200)
+    return Buffer.from(await r.arrayBuffer())
+  }
+  await openApp(page, { suite: 'catalogue', renderer: 'webgl' })
+  await contextChoose(page, tiles(page).nth(7), 'Open in Edit')
+  const docId = await page.waitForFunction(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().doc?.id ?? null).then((h) => h.jsonValue() as Promise<string>)
+  // arrange (dev hook): a copy of the photo in a group at screen, an invert adjustment on top at 40 %
+  await page.evaluate(() => {
+    const s = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState()
+    s.duplicateNodes([s.doc!.layers[0].id])
+    const wash = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().doc!.layers[0]
+    s.updateNode(wash.id, { blend: 'screen', opacity: 0.6 })
+    s.groupNodes([wash.id])
+    s.addLayer('adjustment', { type: 'invert', params: {}, opacity: 0.4 })
+  })
+  expect((await ed()).layers.map((n) => n.kind)).toEqual(['adjustment', 'group', 'raster'])
+  const bottom = (await ed()).layers[2].name
+  await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().save())
+  const before = await raw(docId)
+  // the action: right-click the canvas → Layer ▸ → Flatten image
+  const canvas = page.locator('.edit-canvas canvas')
+  await canvas.click({ button: 'right', position: { x: 40, y: 40 } })
+  await page.locator('.ctx-menu .item.sub', { hasText: /^Layer/ }).hover()
+  const flat = page.locator('.ctx-menu .ctx-menu button.item', { hasText: 'Flatten image' })
+  await expect(flat).toBeEnabled()
+  await flat.click()
+  await expect(page.locator('.toast', { hasText: /^Flattened 4 layers into/ })).toBeVisible()
+  await expect.poll(async () => (await ed()).layers.length).toBe(1)
+  const after = await ed()
+  expect(after.layers[0]).toMatchObject({ kind: 'raster', name: bottom })
+  expect(after.dirty).toBe(true)
+  await expect(page.locator('.layer-row')).toHaveCount(1)
+  await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().save())
+  expect((await api<{ layers: unknown[] }>('GET', `/documents/${docId}`)).layers).toHaveLength(1)
+  expect((await raw(docId)).equals(before)).toBe(true)                                                 // the one layer renders what the stack rendered
+  // Save to Catalogue after the flatten: a new asset from the same pixels
+  const last = async () => (await api<{ meta: { last_flatten_asset?: string } }>('GET', `/documents/${docId}`)).meta.last_flatten_asset ?? null
+  const a0 = await last()
+  await page.locator('.edit-canvas canvas').click({ button: 'right', position: { x: 40, y: 40 } })
+  await page.locator('.ctx-menu .item.sub', { hasText: /^Document/ }).hover()
+  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: 'Save to Catalogue' }).click()
+  await expect(page.locator('.toast', { hasText: /^Saved to Catalogue as / })).toBeVisible()
+  await expect.poll(last).not.toBe(a0)
+  expect((await api<{ params: { layers: number } }>('GET', `/assets/${await last()}`)).params.layers).toBe(1)                // flattened from the one-layer document
+  // Undo (the layers footer's More ▾ has it too): the three layers again
+  await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().undo())
+  expect((await ed()).layers.map((n) => n.kind)).toEqual(['adjustment', 'group', 'raster'])
+  await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().save())
+  expect((await raw(docId)).equals(before)).toBe(true)
+  // the layers footer's More ▾ lists it as well
+  // a click (press + release in place) opens it and chooses nothing, although this tall menu is placed over its button (the fix in
+  // ContextMenu.tsx: before, the release chose the entry under the pointer — Solo)
+  await page.getByRole('button', { name: 'More', exact: true }).click()
+  await expect(page.locator('.ctx-menu button.item', { hasText: 'Flatten image' })).toBeEnabled()
+  expect((await ed()).layers.map((n) => n.kind)).toEqual(['adjustment', 'group', 'raster'])
+  expect(await page.evaluate(() => (window as unknown as { __loom2Editor: { getState: () => { history: { label: string }[] } } }).__loom2Editor.getState().history.at(-1)?.label)).not.toMatch(/solo|visib/i)
+  await page.keyboard.press('Escape')
+})
+
+test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so on its page and in the card\'s Inspector, the link opens Cast, and Delete group… warns', async ({ page }) => {
+  const name = `Ines ${Date.now().toString(36)}`
+  type ProfileLite = { id: string; versions: { id: string; group_id: string }[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character' })
+  const gid = prof.versions[0].group_id
+  const users = await api<Record<string, { kind: string; name: string; extra: string }[]>>('GET', `/groups/used-by?ids=${gid}`)
+  expect(users[gid]).toEqual([expect.objectContaining({ kind: 'profile_ref', name, extra: 'v1' })])
+  await openApp(page, { suite: 'catalogue' })
+  const row = page.locator('.place-row', { hasText: name })
+  await expect(row).toBeVisible()
+  await row.locator('button.place-open').click()
+  const line = page.locator('.page-head .used-by')                                                     // the page's header
+  await expect(line).toContainText(`used by:${name} v1 · references`)
+  // the card on the Album page: its Inspector says so too
+  await page.locator('.place-open.album').click()
+  const card = page.locator('.pcard', { hasText: name })
+  await expect(card).toBeVisible()
+  await card.click()
+  const used = page.locator('.insp .used-by')
+  await expect(used).toContainText(`${name} v1 · references`)
+  // Delete group… warns (and Cancel keeps it)
+  await card.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Delete group…' }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(`It is used by ${name} v1 · references`)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  expect((await api<{ group: { id: string } }>('GET', `/groups/${gid}`)).group.id).toBe(gid)
+  // the link opens the user: Story · Cast at that version
+  await used.locator('button.link', { hasText: `${name} v1 · references` }).click()
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+})

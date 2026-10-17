@@ -229,3 +229,19 @@
 .flow-node .place { margin: 0 8px 4px; color: var(--fg2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-insp .place-field .place-hero { display: inline-flex; align-items: center; gap: 6px; }
 .node-insp .place-field .place-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+
+/* D92 (owed): World › Library — drag a tile within its field's row; the insertion line before / after the tile under the pointer */
+.lib-field .preset-icon.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.lib-field .preset-icon.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.lib-field .preset-icon.dragging { opacity: 0.45; }
+.lib-ghost { position: fixed; z-index: 1000; pointer-events: none; padding: 2px 8px; border-radius: 4px; background: var(--bg3); color: var(--fg); border: 1px solid var(--accent); font-size: 12px; white-space: nowrap; }
+
+/* D93 follow-up: a Flow node's speakers and the version each one wears (a chip per speaker) */
+.speaker-versions { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.speaker-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.speaker-row .speaker-thumb { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; background: var(--bg3); flex: none; }
+.speaker-row .who { min-width: 60px; color: var(--fg); }
+.speaker-row .version-chip { min-height: 0; padding: 0 6px; font-size: 11px; border: 1px solid var(--line2); border-radius: 9px; background: var(--bg2); color: var(--fg2); }
+.speaker-row .version-chip.pinned { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 55%, var(--line2)); }
+.speaker-row .version-chip .caret { font-size: 9px; color: var(--fg3); }
+.speaker-row .hint.stage-wins { color: var(--warn); }

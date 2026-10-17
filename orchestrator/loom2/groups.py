@@ -204,6 +204,11 @@ class GroupStore:
                     stack.append(it.id)
         return out
 
+    def descendants(self, gid: str) -> set[str]:
+        """The groups inside a group, at any depth (empty for an unknown id) — D92 §4.2: what a delete would take with it."""
+        with self._lock:
+            return self._descendants(gid) if gid in self.groups else set()
+
     def _height(self, it: GroupItem) -> float:
         if it.kind == "group":
             return it.w * CARD_RATIO

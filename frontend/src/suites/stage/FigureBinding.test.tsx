@@ -80,4 +80,10 @@ describe('D93 (C8) a figure bound to a character', () => {
     expect([obj('fig_l').profile_id, obj('fig_r').profile_id]).toEqual(['prf_m', 'prf_i'])
     expect(st().prebindSpeakers([MARA])).toBeNull()
   })
+  it('D93 follow-up: a newly bound figure wears the pin of the node; a figure already bound to that character keeps its own version', () => {
+    expect(st().prebindSpeakers([{ ...MARA, version: 'v2' }, INES])).toBe(2)
+    expect([obj('fig_l').version, obj('fig_r').version]).toEqual(['v2', null])
+    expect(st().prebindSpeakers([{ ...MARA, version: 'v3' }, { ...INES, version: 'v4' }])).toBe(2)
+    expect([obj('fig_l').version, obj('fig_r').version]).toEqual(['v2', null])          // already bound: kept (the Stage binding is the author's)
+  })
 })

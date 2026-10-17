@@ -153,7 +153,8 @@ interface StageState {
   figureMentions: () => { profile_id: string; figure: string; version?: string }[]
   /** D93 (C8, UI4's Make frame ▸ in Stage): bind the speakers to the figures in screen order when the counts match — the number bound, or
    *  null when the counts differ (the author binds them). */
-  prebindSpeakers: (speakers: { id: string }[]) => number | null
+  /** D93 (C8): bind the speakers to the figures left to right; D93 follow-up: a newly bound figure wears the node's pin (`version`). */
+  prebindSpeakers: (speakers: { id: string; version?: string | null }[]) => number | null
 }
 
 let saveTimer: number | null = null
@@ -540,7 +541,8 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!d) return null
     const map = prebindOf(d.objects, get().activeCamera(), speakers)
     if (!map) return null
-    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => (x.id in map ? { ...x, profile_id: map[x.id], version: x.profile_id === map[x.id] ? x.version : null } : x)) }), 'bind the speakers')
+    const pinOf = (pid: string) => speakers.find((s) => s.id === pid)?.version ?? null
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => (x.id in map ? { ...x, profile_id: map[x.id], version: x.profile_id === map[x.id] ? x.version : pinOf(map[x.id]) } : x)) }), 'bind the speakers')
     void get().refreshShotPreview()
     return Object.keys(map).length
   },

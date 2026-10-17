@@ -376,6 +376,7 @@ class FlowNode(BaseModel):
     shot_version: str | None = None
     board_group_id: str | None = None             # D90 (02 §4.2): the node's board — an album group (references, mood, places); its cover on the card
     place_id: str | None = None                   # D93 (C7): where — a Cast place (Dialogue / Shot nodes); Make frame links Generate's scene to it
+    speaker_versions: dict[str, str] = Field(default_factory=dict)   # D93 follow-up: a speaker's pinned version (profile id → version id); absent = current — Make frame uses it unless the shot's stage binds another
     colour: str | None = None
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
@@ -806,7 +807,7 @@ class _FlowMixin:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id")
+        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id", "speaker_versions")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         n = FlowNode.model_validate(merged)

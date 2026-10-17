@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { http, unwrap } from '../../api/client'
-import type { AlbumNode as ApiAlbumNode, PathStep as ApiPathStep } from '../../api/types'
+import type { AlbumNode as ApiAlbumNode, GroupUser, PathStep as ApiPathStep } from '../../api/types'
 import { useSession } from '../../store/session'
 
 export const ALBUM_ID = 'album'
@@ -15,7 +15,10 @@ export type PathStep = ApiPathStep
 interface AlbumState {
   tree: AlbumNode | null
   expanded: Record<string, boolean>
+  /** D92 §4.2: every used group → what uses it (Cast versions, styles, Flow boards, stages, library entries), from GET /groups/used-by. */
+  usedBy: Record<string, GroupUser[]>
   load: () => Promise<void>
+  loadUsedBy: () => Promise<void>
   toggle: (id: string, open?: boolean) => void
   find: (id: string) => AlbumNode | null
   pathOf: (id: string) => PathStep[]
@@ -32,8 +35,9 @@ interface AlbumState {
 const err = (what: string) => (e: unknown) => { useSession.getState().toast(`${what} failed: ${(e as Error).message}`, 'error'); throw e }
 
 export const useAlbum = create<AlbumState>()(persist((set, get) => ({
-  tree: null, expanded: {},
-  load: async () => { try { set({ tree: await unwrap(http.GET('/groups/tree')) }) } catch { /* no project yet */ } },
+  tree: null, expanded: {}, usedBy: {},
+  load: async () => { try { set({ tree: await unwrap(http.GET('/groups/tree')) }) } catch { /* no project yet */ } void get().loadUsedBy() },
+  loadUsedBy: async () => { try { set({ usedBy: await unwrap(http.GET('/groups/used-by', { params: { query: {} } })) }) } catch { /* no project yet */ } },
   toggle: (id, open) => set({ expanded: { ...get().expanded, [id]: open ?? !get().expanded[id] } }),
   find: (id) => {
     const walk = (n: AlbumNode | null): AlbumNode | null => { if (!n) return null; if (n.id === id) return n; for (const c of n.children) { const f = walk(c); if (f) return f } return null }

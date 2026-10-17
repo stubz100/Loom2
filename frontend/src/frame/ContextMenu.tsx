@@ -11,9 +11,12 @@ interface MenuState { open: { x: number; y: number; items: MenuItem[]; opener?: 
 export const useMenu = create<MenuState>()((set) => ({ open: null, show: (x, y, items, opener) => set({ open: { x, y, items, opener } }), hide: () => set({ open: null }) }))
 
 /** D55 press menus (PhotoCraft press_menu.rs): the press on a menu button opens the menu; releasing that same press over an item
- * chooses it; releasing anywhere else leaves the menu open (so a plain click opens it and a second click chooses). */
+ * chooses it; releasing anywhere else leaves the menu open (so a plain click opens it and a second click chooses). 2026-10-17: a release
+ * where the press was (under 4 px) is a click, never a choice — a menu too tall for either side of its button is placed over it, and a
+ * click on "More ▾" chose whatever entry lay under the pointer (the layers footer's menu: Solo). */
 let pressGesture = false
-export function openPressMenu(e: { button: number; currentTarget: Element; preventDefault: () => void }, items: () => MenuItem[], fromKeyboard = false): void {
+let pressAt: { x: number; y: number } | null = null
+export function openPressMenu(e: { button: number; currentTarget: Element; preventDefault: () => void; clientX?: number; clientY?: number }, items: () => MenuItem[], fromKeyboard = false): void {
   if (e.button !== 0 && e.button !== 2) return
   e.preventDefault()
   const st = useMenu.getState()
@@ -21,7 +24,10 @@ export function openPressMenu(e: { button: number; currentTarget: Element; preve
   const r = e.currentTarget.getBoundingClientRect()
   st.show(r.left, r.bottom + 2, items(), e.currentTarget)
   pressGesture = e.button === 0 && !fromKeyboard
+  pressAt = e.clientX !== undefined && e.clientY !== undefined ? { x: e.clientX, y: e.clientY } : null
 }
+/** The release of a press-menu gesture chooses only after the pointer has moved (the e2e smoke clicks "More ▾" over a tall menu). */
+const releaseChooses = (at: { x: number; y: number } | null, x: number, y: number): boolean => !at || Math.hypot(x - at.x, y - at.y) >= 4
 
 /** Open a context menu at the pointer (or at an element for keyboard-triggered menus). */
 export function showMenu(e: ReactMouseEvent | MouseEvent | { clientX: number; clientY: number }, items: MenuItem[]): void {
@@ -124,6 +130,7 @@ export function ContextMenuHost() {
     const onUp = (e: PointerEvent) => {
       if (!pressGesture) return
       pressGesture = false
+      if (!releaseChooses(pressAt, e.clientX, e.clientY)) return          // a click: the menu stays open for the next click
       const item = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.ctx-menu button.item:not(.disabled)') as HTMLButtonElement | null
       item?.click()                                                       // press–drag–release chooses; elsewhere the menu stays open
     }

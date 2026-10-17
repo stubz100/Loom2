@@ -7,6 +7,10 @@ Each entry: repo, file in repo, destination folder (ComfyUI key), optional renam
 downloaded with hf_hub_download(local_dir=<tmp>) (resumable), hashed, moved into place, and appended to
 <root>/roster.index.json. Existing destinations with the right size are skipped. Gated repos use the
 HF token already stored in HF_HOME (F:/HF_HOME/token).
+
+Stall watchdog (D91 follow-up: the SD 3.5 Medium transfer sat at 8.25 GB for ~4 min with the connection open): each download runs in
+a child process; when nothing in the run's staging folder has grown for --stall-s seconds (default 120) the child is stopped and the
+download started again — hf_hub_download resumes from its `.incomplete` file — up to --stall-retries times, each one logged.
 """
 from __future__ import annotations
 
@@ -15,10 +19,11 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
-
-from huggingface_hub import hf_hub_download
+from typing import Callable
 
 MANIFEST = [
     # ---- M5 Edit AI tools ----
@@ -140,12 +145,79 @@ def sha256_of(p: Path) -> str:
     return h.hexdigest()
 
 
+class Stalled(RuntimeError):
+    """A download made no progress for the stall window more often than the retries allow."""
+
+
+def watch(start: Callable[[], "object"], probe: Callable[[], int], *, stall_s: float = 120.0, retries: int = 3, poll_s: float = 5.0,
+          log: Callable[[str], None] = print, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep):
+    """Run a download under a stall watchdog. `start()` returns a worker with `alive()`, `stop()` and `result()` (raises if it failed);
+    `probe()` is the bytes on disk so far. No growth for `stall_s` → stop the worker and start a new one (the download resumes from its
+    partial file), at most `retries` times; then `Stalled`. Pure on its arguments so the offline test drives it with a fake clock."""
+    restarts = 0
+    while True:
+        w = start()
+        last, since = probe(), clock()
+        while w.alive():
+            sleep(poll_s)
+            n = probe()
+            if n != last:
+                last, since = n, clock()
+            elif clock() - since >= stall_s:
+                w.stop()
+                if restarts >= retries:
+                    log(f"[stall] no growth for {stall_s:.0f} s at {last / 2**30:.2f} GiB; {retries} restart(s) used, giving up")
+                    raise Stalled(f"no progress for {stall_s:.0f} s after {retries} restart(s)")
+                restarts += 1
+                log(f"[stall] no growth for {stall_s:.0f} s at {last / 2**30:.2f} GiB; restart {restarts}/{retries} (resumes from the partial file)")
+                break
+        else:
+            return w.result()
+
+
+_CHILD = "import sys; from huggingface_hub import hf_hub_download; hf_hub_download(sys.argv[1], sys.argv[2], local_dir=sys.argv[3], token=True)"
+
+
+class _Proc:
+    """One hf_hub_download in a child process (the same interpreter) — a thread blocked on a dead socket cannot be stopped, a process can."""
+
+    def __init__(self, repo: str, file: str, local_dir: Path) -> None:
+        self.target = local_dir / file
+        self.p = subprocess.Popen([sys.executable, "-c", _CHILD, repo, file, str(local_dir)])
+
+    def alive(self) -> bool:
+        return self.p.poll() is None
+
+    def stop(self) -> None:
+        self.p.kill()
+        self.p.wait(30)
+
+    def result(self) -> Path:
+        if self.p.wait() != 0 or not self.target.is_file():
+            raise RuntimeError(f"download failed (exit {self.p.returncode})")
+        return self.target
+
+
+def staged_bytes(tmp: Path) -> int:
+    """Everything in this run's staging folder (the `.incomplete` under .cache/huggingface/download and the finished file)."""
+    n = 0
+    for f in tmp.rglob("*"):
+        try:
+            if f.is_file():
+                n += f.stat().st_size
+        except OSError:
+            pass
+    return n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.environ.get("LOOM2_MODELS", "F:/loom2-models"))
     ap.add_argument("--only", action="append", help="spike tag(s) to fetch; default all")
     ap.add_argument("--no-hash", action="store_true")
     ap.add_argument("--include-retired", action="store_true", help="also fetch entries marked retired=... (deleted by policy D30)")
+    ap.add_argument("--stall-s", type=float, default=120.0, help="restart a transfer whose partial file has not grown for this long (s)")
+    ap.add_argument("--stall-retries", type=int, default=3, help="restarts per file before giving up")
     a = ap.parse_args()
     root = Path(a.root)
     # one staging folder per run: two fetches at once (2026-10-11) shared `_incoming`, and one's clean-up removed the folder the other's
@@ -164,7 +236,7 @@ def main() -> int:
             continue
         t0 = time.time()
         print(f"[get]   {m['repo']} :: {m['file']}")
-        local = Path(hf_hub_download(m["repo"], m["file"], local_dir=str(tmp), token=True))
+        local = watch(lambda m=m: _Proc(m["repo"], m["file"], tmp), lambda: staged_bytes(tmp), stall_s=a.stall_s, retries=a.stall_retries)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if dest.exists():
             dest.unlink()

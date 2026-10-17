@@ -4,6 +4,7 @@
 // place they are written), shows the picture large, makes a new one, moves or removes it (Undo). The saved panels show their latest
 // result (else the panel glyph): Apply opens Generate with them, Rename…, Delete (confirmed).
 import { useEffect } from 'react'
+import { libraryDrag } from './libraryDrag'
 import { api } from '../../api/client'
 import type { LibraryEntry } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
@@ -32,6 +33,9 @@ function usePictures() {
   return { url, jobs }
 }
 
+/** The click that ends a drag must not select the tile it was released on. */
+const swallowAfterDrag = (e: React.MouseEvent) => { if (libraryDrag.justDropped) { e.stopPropagation(); e.preventDefault() } }
+
 export function LibraryGrid() {
   const lib = useLibrary((l) => l.library)
   const selected = useStory((s) => s.selected)
@@ -47,7 +51,7 @@ export function LibraryGrid() {
           {g.fields.filter((f) => f !== 'subject.description' || entriesOf(lib, f).length).map((f: FieldKey) => {
             const items = entriesOf(lib, f).map((e) => tileOf(e, url, jobs))
             return (
-              <div key={f} className="lib-field" data-field={f}>
+              <div key={f} className="lib-field" data-field={f} onPointerDown={libraryDrag} onClickCapture={swallowAfterDrag}>
                 <span className="lib-label">{FIELD_LABEL[f]}<span className="n"> · {items.length}</span></span>
                 <PresetIcons label={`${FIELD_LABEL[f]} entries`} size={56} showText items={items} selected={sel}
                   onPick={(id) => sy().select({ kind: 'entry', id })} onContext={(id, e) => showMenu(e, menu('entry', id))} />

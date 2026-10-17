@@ -82,6 +82,7 @@ export type GroupSummary = S['GroupSummary']
 export type GroupItem = S['GroupItem']
 export type PathStep = S['PathStep']
 export type GroupLocation = S['Location']
+export type GroupUser = S['GroupUser']                    // D92 §4.2: what uses a group (GET /groups/used-by)
 export type LineageTree = S['LineageTree']
 export type Document = S['Document']
 export type DocumentPutReply = S['DocumentPutReply']

@@ -716,6 +716,18 @@ async def flow_node_patch(svc: Svc, nid: str, body: dict):
             cur = await asyncio.to_thread(StoryStore(ws).flow_node, nid)
             if cur is None or place != cur.place_id:                       # a place deleted since stays until it is changed
                 raise HTTPException(422, f"{place!r} is not a place of the Cast")
+    pins = body.get("speaker_versions")
+    if pins is not None:                                                   # D93 follow-up: a pin names a character and one of its versions
+        if not isinstance(pins, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in pins.items()):
+            raise HTTPException(422, "speaker_versions maps a character's profile id to one of its version ids")
+        store = StoryStore(ws)
+        cur = await asyncio.to_thread(store.flow_node, nid)
+        for pid, vid in pins.items():
+            if cur is not None and cur.speaker_versions.get(pid) == vid:
+                continue                                                   # a pin whose character or version was deleted since stays until changed
+            p = await asyncio.to_thread(store.profile, pid)
+            if p is None or p.cls != "character" or not any(v.id == vid for v in p.versions):
+                raise HTTPException(422, f"{vid!r} is not a version of the character {pid!r}")
     try:
         n = await asyncio.to_thread(StoryStore(ws).patch_node, nid, body)
     except KeyError:

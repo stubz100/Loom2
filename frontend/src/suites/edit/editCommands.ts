@@ -1,11 +1,12 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, ClipboardCopy, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, ClipboardCopy, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
 import { typeLabel } from './labels'
+import { flattenBlocker } from './flatten'
 import { DEV_HOOKS } from '../../devHooks'
 import { useAiPanel, type AiOp } from './aiPanelStore'
 import { aiReason, aiRecipe, opCandidates, rerunRecipe, subjectPlan, type AiCtx } from './aiRecipes'
@@ -77,10 +78,12 @@ registerCommands([
   { id: 'edit.layer.ungroup', scope: 'edit', label: 'Ungroup', icon: Group, placement: ['context', 'inspector'], when: () => active()?.kind === 'group', hint: 'the group\'s layers take its place', run: () => ed().ungroupNode(ed().activeId!) },
   { id: 'edit.layer.duplicate', scope: 'edit', label: 'Duplicate layer', icon: Copy, keys: 'Ctrl+J', placement: ['toolbar', 'context'], when: () => !!active(), hint: 'or drop rows on this button', run: () => ed().duplicateNodes(ed().targetIds()) },
   // D90 (01 §5 E46): Merge visible — the visible top-level pixel layers into the bottom one (merge down's canvas blends; hidden ones stay)
-  { id: 'edit.layer.mergeVisible', scope: 'edit', label: 'Merge visible', icon: Layers2, placement: ['context'], when: () => !ed().transform && (ed().doc?.layers.filter((n) => n.visible).length ?? 0) > 1, hint: 'pixel layers only — Save to Catalogue flattens everything exactly', run: () => {
+  { id: 'edit.layer.mergeVisible', scope: 'edit', label: 'Merge visible', icon: Layers2, placement: ['context'], when: () => !ed().transform && (ed().doc?.layers.filter((n) => n.visible).length ?? 0) > 1, hint: 'pixel layers only — Flatten image folds in everything exactly', run: () => {
       const shown = ed().doc!.layers.filter((n) => n.visible)
-      if (shown.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge visible merges pixel layers only: hide the groups, adjustment and filter layers first (Save to Catalogue flattens everything exactly)', 'info'); return }
+      if (shown.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge visible merges pixel layers only: hide the groups, adjustment and filter layers first, or use Flatten image (it folds in everything exactly)', 'info'); return }
       ed().mergeNodes(shown.map((n) => n.id)) } },
+  // D90 (UI6, owed): Flatten image — everything (groups, masks, modes, adjustment and filter layers) into one layer, exactly as Save to Catalogue renders it
+  { id: 'edit.layer.flatten', scope: 'edit', label: 'Flatten image', icon: Layers, placement: ['context'], when: () => !ed().transform && !flattenBlocker(ed().doc), hint: 'every layer into one, exactly as Save to Catalogue renders it; hidden layers are discarded', run: () => { void ed().flattenImage() } },
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },
@@ -217,7 +220,7 @@ export function layerMenu(): MenuItem[] {
   return [
     { cmd: 'edit.layer.rename' }, sep,
     { cmd: 'edit.layer.visibility', label: many ? (n.visible ? 'Hide layers' : 'Show layers') : visLabel() }, { cmd: 'edit.layer.solo' }, { cmd: 'edit.layer.lock', label: many ? (n.locked ? 'Unlock layers' : 'Lock layers') : lockLabel() }, sep,
-    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
+    { cmd: 'edit.layer.duplicate', label: many ? 'Duplicate layers' : undefined }, { cmd: 'edit.layer.mergeDown', label: many ? 'Merge layers' : undefined }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.flatten' }, { cmd: 'edit.layer.group', label: many ? 'Group layers' : 'Group the layer' }, ...(n.kind === 'group' && !many ? [{ cmd: 'edit.layer.ungroup' }] : []), { cmd: 'edit.layer.up' }, { cmd: 'edit.layer.down' }, sep,
     { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.layer.inkFromWhite' }, { cmd: 'edit.layer.lockAlpha', label: active()?.lock_alpha ? 'Unlock transparency' : 'Lock transparency' },
     { label: 'Transform', icon: Scan, items: transformItems() },
     { label: 'Mask', icon: SquareDashed, items: maskItems() }, sep,
@@ -235,7 +238,7 @@ export function canvasMenu(): MenuItem[] {
   const px = st.selModifyPx
   const modify: MenuItem[] = (['expand', 'contract', 'border', 'smooth', 'feather'] as const).map((op) => ({ cmd: `edit.sel.${op}`, label: `${op[0].toUpperCase()}${op.slice(1)} by ${px} px` }))
   const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.refine' }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
-  const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.newGroup' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
+  const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.newGroup' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.flatten' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
   const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { cmd: 'edit.view.grid', checked: st.pixelGrid }, { cmd: 'edit.view.overlay', checked: st.overlay }, { cmd: 'edit.view.before', checked: st.before }]
   const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.close' }]   // D90 (01 §11.6): Compare moved to Info › Diagnostics
   const tools: MenuItem[] = TOOLS.map(([tool, label]) => ({ cmd: `edit.tool.${tool}`, label, checked: st.tool === tool }))

@@ -3900,6 +3900,13 @@
             ],
             "title": "Shot Version"
           },
+          "speaker_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Speaker Versions",
+            "type": "object"
+          },
           "target": {
             "anyOf": [
               {
@@ -3957,6 +3964,7 @@
           "shot_version",
           "board_group_id",
           "place_id",
+          "speaker_versions",
           "colour",
           "revision",
           "created_at",
@@ -4788,6 +4796,73 @@
           "revision"
         ],
         "title": "GroupSummary",
+        "type": "object"
+      },
+      "GroupUser": {
+        "description": "One record that names a group. `id` opens the user (a profile, style, node, stage or library entry); `name` is its name; `extra` the\ndetail the line shows (a version's label, a node's type, an entry's field); `version` the profile version; `group_id` the group it names\n(the asked group, or one inside it when `deep`).",
+        "properties": {
+          "cls": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cls"
+          },
+          "extra": {
+            "default": "",
+            "title": "Extra",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "profile_ref",
+              "profile_candidates",
+              "style",
+              "flow_board",
+              "stage",
+              "library"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "extra",
+          "version",
+          "cls",
+          "group_id"
+        ],
+        "title": "GroupUser",
         "type": "object"
       },
       "Guide": {
@@ -17975,6 +18050,76 @@
           }
         },
         "summary": "Groups Tree",
+        "tags": [
+          "groups"
+        ]
+      }
+    },
+    "/groups/used-by": {
+      "get": {
+        "description": "D92 §4.2: what uses each group (a Cast version's references or candidates, a style, a Flow board, a Stage page, a library entry) —\ncomputed from the records, nothing stored; no `ids` = every used group; `deep` adds the groups inside (a delete's confirm).",
+        "operationId": "groups_used_by_groups_used_by_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "deep",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Deep",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "$ref": "#/components/schemas/GroupUser"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Groups Used By Groups Used By Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Groups Used By",
         "tags": [
           "groups"
         ]

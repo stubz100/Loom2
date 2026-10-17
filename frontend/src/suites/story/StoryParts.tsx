@@ -6,10 +6,10 @@
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { api } from '../../api/client'
+import { api, http, unwrap } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
-import { showMenu } from '../../frame/ContextMenu'
+import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
@@ -36,7 +36,8 @@ import { laneChecklist } from './episode/sequenceCommands'
 import { useSequence } from './episode/sequenceStore'
 import { NODE_LABEL } from './flow/types'
 import { optionsAvailable } from './flow/play'
-import type { FlowNode, FlowOption } from '../../api/types'
+import type { FlowNode, FlowOption, StageObject } from '../../api/types'
+import { speakersOf, speakerVersion } from './makeFor'
 import { CommandRow } from '../../frame/CommandButton'
 import './story.css'
 
@@ -886,6 +887,62 @@ function PlaceField({ n }: { n: FlowNode }) {
   )
 }
 
+/** D93 follow-up: which version of each speaking character the node uses — a chip per speaker ("current ▾", or "v2 · rain gear ▾" when
+ *  pinned); Make frame ▸ uses it, unless the bound shot's stage binds the character to another version (the Stage binding wins — said here). */
+function SpeakerVersions({ n }: { n: FlowNode }) {
+  const profiles = useStory((s) => s.profiles)
+  const shots = useStory((s) => s.shots)
+  const sh = n.shot_id ? shots.find((s) => s.id === n.shot_id) : undefined
+  const stageId = sh?.versions.find((v) => v.id === (n.shot_version ?? sh.current))?.stage_id ?? null
+  const [loaded, setLoaded] = useState<{ stage: string; figs: StageObject[] } | null>(null)        // the bound shot's stage figures (Stage wins)
+  const figs = loaded && loaded.stage === stageId ? loaded.figs : []
+  useEffect(() => {
+    let off = false
+    if (stageId) void unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: stageId } } }))
+      .then((s) => { if (!off) setLoaded({ stage: stageId, figs: s.objects.filter((o) => o.kind === 'mannequin') }) }).catch(() => { if (!off) setLoaded({ stage: stageId, figs: [] }) })
+    return () => { off = true }
+  }, [stageId])
+  const speakers = speakersOf(n, profiles)
+  if (!speakers.length) return null
+  const pin = (pid: string, vid: string | null) => {
+    const next = { ...(n.speaker_versions ?? {}) }
+    if (vid) next[pid] = vid; else delete next[pid]
+    void sy().patchNode(n.id, { speaker_versions: next })
+  }
+  return (
+    <>
+      <h4>Speakers <span className="hint">the version each one wears here</span></h4>
+      <div className="speaker-versions" data-testid="speaker-versions">
+        {speakers.map((p) => {
+          const pinned = n.speaker_versions?.[p.id] ?? null
+          const pv = pinned ? p.versions.find((v) => v.id === pinned) : undefined
+          const cur = p.versions.find((v) => v.id === p.current)
+          const sv = speakerVersion(p, n, figs)
+          const hero = (pv ?? cur)?.hero_asset_id
+          const items = (): MenuItem[] => [
+            { label: `current (${cur ? versionName(cur) : p.current})`, checked: !pinned, run: () => pin(p.id, null) }, sep,
+            ...p.versions.map((v) => ({ label: `${versionName(v)}${v.state === 'final' ? ' · final' : ''}`, checked: pinned === v.id, run: () => pin(p.id, v.id) })),
+          ]
+          const stageWins = sv.from === 'stage' && sv.version !== (pv ? pv.id : p.current)
+          return (
+            <div key={p.id} className="speaker-row" data-profile={p.id}>
+              {hero ? <img className="speaker-thumb" src={api.thumbUrl(hero, 256)} alt="" /> : <span className="speaker-thumb" />}
+              <span className="who">{p.name}</span>
+              <button type="button" className={`version-chip${pv ? ' pinned' : ''}`} aria-haspopup="menu" aria-label={`${p.name}'s version`}
+                title={`The version of ${p.name} this node uses — Make frame ▸ links the subject at it (press and drag to one, or click)`}
+                onPointerDown={(e) => openPressMenu(e, items)} onContextMenu={(e) => e.preventDefault()}>
+                {pv ? versionName(pv) : 'current'} <span className="caret">▾</span>
+              </button>
+              {pinned && !pv && <span className="hint">{pinned} was deleted — the current one is used</span>}
+              {stageWins && <span className="hint stage-wins">the shot's stage binds {sv.version} — the Stage binding wins</span>}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
 function NodeInspector() {
   const nodeId = useStory((s) => s.nodeId)
   const flowNodes = useStory((s) => s.flowNodes)
@@ -928,6 +985,7 @@ function NodeInspector() {
       {n.type === 'choice' && <><h4>Options <span className="hint">each is an out-port</span></h4><OptionsEditor n={n} /></>}
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
       {visual && <PlaceField n={n} />}
+      {visual && <SpeakerVersions n={n} />}
       {visual && <>
         <h4>Shot</h4>
         {sh ? <div className="kv"><span>bound</span><span>{sh.name} · {n.shot_version ?? sh.current} · {sh.versions.find((v) => v.id === (n.shot_version ?? sh.current))?.state ?? '?'}</span>

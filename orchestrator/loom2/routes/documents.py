@@ -46,7 +46,7 @@ class FlattenRequest(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    format: str = "png"
+    format: str = "png"          # "png" (a download) or "raw" (straight RGBA with X-Loom-Width/Height/Channels — Edit › Flatten image, D90)
 
 
 @router.get("/documents", response_model=DocList)
@@ -152,10 +152,13 @@ async def documents_flatten(svc: Svc, doc_id: str, body: FlattenRequest):
 
 @router.post("/documents/{doc_id}/export")
 async def documents_export(svc: Svc, doc_id: str, body: ExportRequest):
-    if body.format != "png":
-        raise HTTPException(422, "the orchestrator exports PNG; PSD is written by the editor (ag-psd)")
+    if body.format not in ("png", "raw"):
+        raise HTTPException(422, "the orchestrator exports PNG (or raw RGBA); PSD is written by the editor (ag-psd)")
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
     merged = await asyncio.to_thread(od.flatten)
+    if body.format == "raw":      # D90 (UI6, owed): Flatten image takes the exact flatten Save to Catalogue writes as its one layer
+        return Response(content=merged.tobytes(), media_type="application/octet-stream",
+                        headers={"X-Loom-Width": str(merged.shape[1]), "X-Loom-Height": str(merged.shape[0]), "X-Loom-Channels": "4", **NO_STORE})
     png = await asyncio.to_thread(_png_bytes, merged, 6)
     return Response(content=png, media_type="image/png", headers={"Content-Disposition": f'attachment; filename="{od.doc.name}.png"'})
 

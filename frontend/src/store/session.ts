@@ -313,6 +313,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'story.changed':                                         // 17 (D85): the world (later profiles, shots, the flow) moved on the server
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
+      void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().loadUsedBy())      // D92 §4.2: a version, style, board or entry may name another group
       void import('../suites/generate/generateStore').then((m) => { const d = f.data as { kind?: string; id?: string } | null; if (d?.kind === 'profile' && d.id) m.mentionsMoved({ profile: d.id }) })   // D93: a linked character got a hero
       break
     case 'lora.changed':                                          // 18 (D86) LT2: a LoRA trained or deleted — the registry and the versions' slots moved

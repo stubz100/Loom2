@@ -11,7 +11,9 @@ import { showMenu } from '../../frame/ContextMenu'
 import { command, isEnabled, markUsed, runCommand, titleFor, type MenuItem } from '../../frame/commands'
 import { useKeymap } from '../../frame/keymap'
 import { CommandCard } from '../../frame/CommandButton'
-import { askConfirm, askText, useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
+import { UsedBy } from './UsedBy'
+import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
 import { useAlbum, type PathStep } from './albumStore'
 import { addToCharacterMenu, moveToMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
@@ -330,13 +332,14 @@ function Card({ gid }: { gid: string }) {
       <label className="gname">Group name<input type="text" value={name} onChange={(e) => setName(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /></label>
       <div className="meta-line">{node.total} photo{node.total === 1 ? '' : 's'}{node.groups ? ` · ${node.groups} group${node.groups === 1 ? '' : 's'} inside` : ''} · cover: {node.cover_ids.length ? 'first on the page' : 'none yet'}</div>
       <Section id="location" title="Location"><div className="loc"><Crumbs path={path.slice(0, -1)} /></div></Section>
+      <Section id="usedby" title="Used by"><div className="loc"><UsedBy gid={gid} /></div></Section>
       <Section id="group" title="Group">
         <div className="igrid">
           <Btn icon={<BookOpen size={14} />} label="Open" run={() => open({ group: gid })} />
           <Btn icon={<Columns2 size={14} />} label="Open in other pane" run={() => openInOtherPane({ group: gid })} />
-          <Btn icon={<Ungroup size={14} />} label="Ungroup" run={() => void al.ungroup(gid)} title="Dissolve the group: its items land where its card was (Ctrl+Shift+G)" />
+          <Btn icon={<Ungroup size={14} />} label="Ungroup" run={() => void confirmUngroup(node).then((ok) => { if (ok) void al.ungroup(gid) })} title="Dissolve the group: its items land where its card was (Ctrl+Shift+G)" />
           <Btn icon={<Copy size={14} />} label="Duplicate" run={() => void al.duplicate(gid)} title="A copy of the group, its photos duplicated" />
-          <Btn icon={<X size={14} />} label="Delete group…" danger run={() => void askConfirm({ title: `Delete "${node.name}"?`, text: `Its ${node.total} photo${node.total === 1 ? '' : 's'} go back to Unprocessed; nothing is trashed.`, okLabel: 'Delete group', danger: true }).then((ok) => { if (ok) void al.remove(gid) })} />
+          <Btn icon={<X size={14} />} label="Delete group…" danger run={() => void confirmDeleteGroup(node).then((ok) => { if (ok) void al.remove(gid) })} />
         </div>
         <div className="muted">To set the cover, right-click a photo on the group's page: "Use as cover of this group".</div>
       </Section>

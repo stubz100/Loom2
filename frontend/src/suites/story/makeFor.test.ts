@@ -2,10 +2,10 @@
 // order, and the board drop rule on a Flow node.
 import { describe, expect, it } from 'vitest'
 import type { Asset, FlowNode, GroupPage, Profile, Shot } from '../../api/types'
-import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeTarget } from './makeFor'
+import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeTarget, speakerVersion } from './makeFor'
 
 const node = (type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode => ({
-  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, colour: null,
+  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, speaker_versions: {}, colour: null,
   revision: 0, created_at: '', updated_at: '', ...extra,
 })
 const version = (id: string, state: 'open' | 'final' = 'open') => ({ id, state, stage_id: null, camera_id: null, stage_revision: null, frame_asset_id: null, clip_id: null, takes: [], derived_from: null, created_at: '', finalized_at: null })
@@ -44,6 +44,19 @@ describe('framePrefill / clipPrefill', () => {
     const figs = [{ profile_id: 'prf_m', version: 'v2', pose: { preset: 'point', joints: {} } }, { profile_id: 'prf_j', version: null, pose: { preset: 'arms_crossed', joints: {} } }, { profile_id: null, version: null, pose: null }]
     expect(framePrefill(d, two, figs).subjects).toEqual([{ profile_id: 'prf_j', action: 'saying Hey', pose: 'standing with arms crossed' }, { profile_id: 'prf_m', version: 'v2', pose: 'pointing' }])
     expect(framePrefill(d, two, [{ profile_id: 'prf_m', version: 'v9', pose: null }]).subjects[1]).toEqual({ profile_id: 'prf_m' })   // a version it no longer has: the current one
+  })
+  it('D93 follow-up: a node pins a version per speaker — used unless the stage binds the character to another (the Stage wins, said)', () => {
+    const three = { ...profile('prf_m', 'Mara'), versions: [{ id: 'v1', group_id: 'g1' }, { id: 'v2', group_id: 'g2' }, { id: 'v3', group_id: 'g3' }] } as unknown as Profile
+    const cast = [three, profile('prf_j', 'Joe')]
+    const d = node('dialogue', { lines: [line('prf_m', 'Hi.'), line('prf_j', 'Hey.')], speaker_versions: { prf_m: 'v3', prf_j: 'v7' } })
+    expect(speakerVersion(three, d)).toEqual({ version: 'v3', from: 'node', overrides: null })
+    expect(framePrefill(d, cast).subjects).toEqual([{ profile_id: 'prf_m', version: 'v3', action: 'saying Hi' }, { profile_id: 'prf_j' }])   // Joe's pin names a version he lacks: current
+    const figs = [{ profile_id: 'prf_m', version: 'v2', pose: null }]
+    expect(speakerVersion(three, d, figs)).toEqual({ version: 'v2', from: 'stage', overrides: 'v3' })
+    expect(framePrefill(d, cast, figs).subjects[0]).toEqual({ profile_id: 'prf_m', version: 'v2', action: 'saying Hi' })
+    expect(speakerVersion(three, d, [{ profile_id: 'prf_m', version: null, pose: null }]).from).toBe('node')   // a figure bound without a version pins none
+    expect(speakerVersion(three, node('dialogue'), [])).toEqual({ version: 'v1', from: 'current', overrides: null })
+    expect(speakerVersion(three, { speaker_versions: { prf_m: 'v2' } }, figs).overrides).toBeNull()             // the same version: nothing to say
   })
   it('nothing to say leaves the prompt alone', () => {
     expect(framePrefill(undefined, cast)).toEqual({ text: null, subjects: [], place: null })

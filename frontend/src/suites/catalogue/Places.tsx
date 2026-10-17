@@ -2,7 +2,8 @@
 // conditions live in the strip's filter chips. Every row takes dropped tiles; group rows take cards too.
 import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, FolderPlus, Inbox, Library, Pencil, Trash2, Ungroup, X } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
-import { askConfirm, askText, useSession } from '../../store/session'
+import { askText, useSession } from '../../store/session'
+import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
 import { assetIds, onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { showMenu } from '../../frame/ContextMenu'
 import { sep, type MenuItem } from '../../frame/commands'
@@ -36,9 +37,9 @@ export function groupMenu(node: AlbumNode, c: CatalogueState): MenuItem[] {
     sep,
     { label: 'Rename…', icon: Pencil, run: () => void askText({ title: 'Rename group', initial: node.name }).then((n) => { if (n?.trim() && n !== node.name) void al.rename(node.id, n.trim()) }) },
     { label: 'Duplicate', icon: Copy, run: () => void al.duplicate(node.id) },
-    { label: 'Ungroup', icon: Ungroup, run: () => void al.ungroup(node.id).then(() => { if (c.q.group_id === node.id) openPlace(c, 'unprocessed') }) },
+    { label: 'Ungroup', icon: Ungroup, run: () => void confirmUngroup(node).then((ok) => { if (ok) void al.ungroup(node.id).then(() => { if (c.q.group_id === node.id) openPlace(c, 'unprocessed') }) }) },
     sep,
-    { label: 'Delete group…', icon: X, danger: true, run: () => void askConfirm({ title: `Delete "${node.name}"?`, text: `Its ${node.total} photo${node.total === 1 ? '' : 's'} go back to Unprocessed; nothing is trashed. The arrangement of the page is lost.`, okLabel: 'Delete group', danger: true })
+    { label: 'Delete group…', icon: X, danger: true, run: () => void confirmDeleteGroup(node, 'The arrangement of the page is lost.')
       .then((ok) => { if (ok) void al.remove(node.id).then(() => { if (c.q.group_id === node.id) openPlace(c, 'unprocessed') }) }) },
   ]
 }

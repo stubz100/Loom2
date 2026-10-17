@@ -11,6 +11,7 @@ import { border, changedTiles, combine, contract, expand, feather, selectionValu
 import { maskAlphaCanvas } from './maskDerived'
 import { compositeOver, Homography, homographyOf, isIdentity, premultiply, rectCorners, splitSelected, toStraight8, warpGray, warpRaster, type Raster, type Xform } from './transform'
 import { typeLabel } from './labels'
+import { flattenBlocker, flattenCounts, flattenedStack } from './flatten'
 
 export type NodeKind = 'raster' | 'group' | 'adjustment' | 'filter'
 export interface MaskRef { enabled: boolean; linked: boolean; x: number; y: number; density?: number; feather?: number; default?: number }   // D52: density 0–1, feather σ px; D54: the value outside the extent
@@ -183,6 +184,8 @@ export interface EditorState {
   /** D57 quick action: the group's children take its place (its opacity, blend and mask go, as in Photoshop). */
   ungroupNode: (id: string) => void
   mergeNodes: (ids: string[]) => void
+  /** D90 (UI6): Flatten image — every layer into one raster layer holding the server's exact flatten (flatten.ts); one undo step. */
+  flattenImage: () => Promise<void>
   setPropsFor: (ids: string[], patch: Partial<Node>, label: string) => void
   /** Reorder: the layers go above / below the target row, or into a group (at its top); `copy` drops duplicates. One history step. */
   moveNodesTo: (ids: string[], targetId: string, where: 'above' | 'below' | 'into', copy?: boolean) => void
@@ -1135,6 +1138,32 @@ export const useEditor = create<EditorState>()(
           get().pixels.set(base.id, out)
           set({ doc: next, activeId: base.id, selectedIds: [base.id], anchorId: base.id, editingMask: false, docDirty: true, revision: get().revision + 1 })
           get().pushHistory({ label: `merge ${nodes.length} layers`, layerId: base.id, kind: 'image', tiles: [], stack: before, at: Date.now(), swap: { layerId: base.id, lp: old, mask: oldMask } })
+        },
+        flattenImage: async () => {
+          const doc0 = get().doc
+          const why = flattenBlocker(doc0)
+          if (!doc0 || why) { if (doc0) useSession.getState().toast(`Nothing to flatten: ${why}`, 'info'); return }
+          if (transformOpen()) return
+          const head = () => get().history[get().history.length - 1]
+          try {
+            if (!(await get().sync())) return                          // D70: the server's open document = what is on screen
+            const mark = head()
+            const b = useSession.getState().backend!
+            const res = await fetch(`http://${b.host}:${b.port}/documents/${doc0.id}/export`, { method: 'POST', headers: { 'X-Loom-Token': b.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ format: 'raw' }) })
+            if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+            const w = Number(res.headers.get('x-loom-width')), h = Number(res.headers.get('x-loom-height'))
+            const bytes = new Uint8Array(await res.arrayBuffer())
+            const doc = get().doc
+            // an edit (or another document) while the flatten was fetched: what came back is not what is on screen now
+            if (!doc || doc.id !== doc0.id || head() !== mark || get().docDirty || w !== doc.w || h !== doc.h) { useSession.getState().toast('The document changed while flattening — try again', 'info'); return }
+            const next = flattenedStack(doc, newId('lyr'))
+            const lp = LayerPixels.fromRaw(w, h, bytes, 4); lp.dirty = true
+            const id = next.layers[0].id
+            get().pixels.set(id, lp)                                   // the old layers' canvases stay in the maps for undo (gcPixels keeps what a stack names)
+            const { layers, hidden } = flattenCounts(doc)
+            commit(next, clone(doc), 'flatten image', id, { activeId: id, selectedIds: [id], anchorId: id, editingMask: false, candidates: null, candPreview: null, blendPreview: null })
+            useSession.getState().toast(`Flattened ${layers} layer${layers === 1 ? '' : 's'} into "${next.layers[0].name}"${hidden ? ` (${hidden} hidden discarded)` : ''}`, 'success', () => get().undo())
+          } catch (e) { useSession.getState().toast(`Flatten failed: ${(e as ApiError).detail ?? (e as Error).message}`, 'error') }
         },
         setPropsFor: (ids, patch, label) => {
           const doc = get().doc

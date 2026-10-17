@@ -10,7 +10,9 @@ import type { GroupItem, GroupPage, GroupSummary } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { handleKeyFor, sep, type MenuItem } from '../../frame/commands'
 import { carry, registerDropTarget, type DragItem, type DragPayload, mediaOf } from '../../frame/drag'
-import { askConfirm, askText, onEvents, useSession } from '../../store/session'
+import { askText, onEvents, useSession } from '../../store/session'
+import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
+import { UsedBy } from './UsedBy'
 import { useAlbum } from './albumStore'
 import { tileMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
@@ -135,9 +137,8 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
         .then((g) => { setSel([], [g.id]); void useAlbum.getState().load() }).catch((e) => toast(`Group failed: ${(e as Error).message}`, 'error'))
     })
   }
-  const ungroup = (id: string) => void useAlbum.getState().ungroup(id)
-  const deleteGroup = (s: Summary) => void askConfirm({ title: `Delete "${s.name}"?`, text: `Its ${s.total} photo${s.total === 1 ? '' : 's'} go back to Unprocessed; nothing is trashed.`, okLabel: 'Delete group', danger: true })
-    .then((ok) => { if (ok) void useAlbum.getState().remove(s.id) })
+  const ungroup = (id: string) => { const s = page?.groups[id]; void confirmUngroup({ id, name: s?.name ?? 'the group' }).then((ok) => { if (ok) void useAlbum.getState().ungroup(id) }) }   // D92 §4.2: a used group asks first
+  const deleteGroup = (s: Summary) => void confirmDeleteGroup(s).then((ok) => { if (ok) void useAlbum.getState().remove(s.id) })
 
   // ---- pointer: items ------------------------------------------------------------------------------------
   const onItemDown = (e: React.PointerEvent, it: Item) => {
@@ -352,6 +353,7 @@ export function PageView({ gid, onOpenGroup }: { gid: string; onOpenGroup?: (id:
       {marquee && <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
       {page && !items.length && <div className="page-empty"><div><h2>{page.group.name} is empty</h2><p>Drag photos here from Unprocessed: split the view (<Columns2 size={12} style={{ verticalAlign: '-2px' }} /> in the strip) to see both, or drop tiles on this group in the Places panel.</p></div></div>}
       {!page && <div className="page-empty"><div>loading…</div></div>}
+      {page && <div className="page-head" onPointerDown={(e) => e.stopPropagation()}><UsedBy gid={gid} compact /></div>}   {/* D92 §4.2: what uses this page */}
     </div>
   )
 }

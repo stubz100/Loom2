@@ -1,6 +1,6 @@
 """Album pages (D34, proto01_design/01 §6c, §8): the group tree, pages with free item layout, move / group / ungroup / duplicate.
 
-Order matters: `/groups/tree`, `/groups/where` and `/groups/move` are registered before `/groups/{gid}`.
+Order matters: `/groups/tree`, `/groups/where`, `/groups/used-by` and `/groups/move` are registered before `/groups/{gid}`.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..groups import ROOT_ID, GroupRecord
 from ..schemas import AlbumNode, ChangedGroups, GroupDeleted, GroupPage, LayoutReply, Location, Ungrouped
+from ..usedby import GroupUser, users_of
 from .deps import Svc
 
 router = APIRouter(tags=["groups"])
@@ -58,6 +59,14 @@ async def groups_tree(svc: Svc):
 @router.get("/groups/where", response_model=dict[str, Location | None])
 async def groups_where(svc: Svc, ids: Annotated[list[str], Query()]):
     return await asyncio.to_thread(svc.require_groups().where, ids)
+
+
+@router.get("/groups/used-by", response_model=dict[str, list[GroupUser]])
+async def groups_used_by(svc: Svc, ids: Annotated[list[str] | None, Query()] = None, deep: bool = False):
+    """D92 §4.2: what uses each group (a Cast version's references or candidates, a style, a Flow board, a Stage page, a library entry) —
+    computed from the records, nothing stored; no `ids` = every used group; `deep` adds the groups inside (a delete's confirm)."""
+    ws, _, _ = svc.require_project()
+    return await asyncio.to_thread(users_of, ws, svc.require_groups(), ids, deep)
 
 
 @router.post("/groups", response_model=GroupRecord)

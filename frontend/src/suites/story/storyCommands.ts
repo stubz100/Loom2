@@ -47,7 +47,7 @@ const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
 const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
 /** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
  *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
-function openStageAt(stageId: string, cam: string | null, speakers?: Profile[]): void {
+function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[]): void {
   useSession.getState().setSuite('stage')
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
     if (cam) m.useStage.getState().setActiveCamera(cam)
@@ -58,7 +58,10 @@ function openStageAt(stageId: string, cam: string | null, speakers?: Profile[]):
       : `The stage has ${figs} figure${figs === 1 ? '' : 's'} and the scene ${speakers.length} speaker${speakers.length === 1 ? '' : 's'} — bind them yourself: a figure's Inspector › character, or right-click ▸ Bind to a character`, n ? 'success' : 'info') }) })
 }
 /** D93 (C7): the speakers of the node that owns a shot (or the node Make came from). */
-const shotSpeakers = (s: Shot | undefined): Profile[] => { const n = s?.owner_node ? sy().flowNodes[s.owner_node] : undefined; return speakersOf(n, sy().profiles) }
+const shotSpeakers = (s: Shot | undefined): (Profile & { version?: string | null })[] => {   // D93 follow-up: with the node's pin per speaker
+  const n = s?.owner_node ? sy().flowNodes[s.owner_node] : undefined
+  return speakersOf(n, sy().profiles).map((p) => { const pin = n?.speaker_versions?.[p.id]; return pin && p.versions.some((v) => v.id === pin) ? { ...p, version: pin } : p })
+}
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */

@@ -785,6 +785,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/groups/used-by": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Groups Used By
+         * @description D92 §4.2: what uses each group (a Cast version's references or candidates, a style, a Flow board, a Stage page, a library entry) —
+         *     computed from the records, nothing stored; no `ids` = every used group; `deep` adds the groups inside (a delete's confirm).
+         */
+        get: operations["groups_used_by_groups_used_by_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups/where": {
         parameters: {
             query?: never;
@@ -3853,6 +3874,10 @@ export interface components {
             shot_id: string | null;
             /** Shot Version */
             shot_version: string | null;
+            /** Speaker Versions */
+            speaker_versions: {
+                [key: string]: string;
+            };
             /** Target */
             target: string | null;
             /**
@@ -4210,6 +4235,34 @@ export interface components {
             revision: number;
             /** Total */
             total: number;
+        };
+        /**
+         * GroupUser
+         * @description One record that names a group. `id` opens the user (a profile, style, node, stage or library entry); `name` is its name; `extra` the
+         *     detail the line shows (a version's label, a node's type, an entry's field); `version` the profile version; `group_id` the group it names
+         *     (the asked group, or one inside it when `deep`).
+         */
+        GroupUser: {
+            /** Cls */
+            cls: string | null;
+            /**
+             * Extra
+             * @default
+             */
+            extra: string;
+            /** Group Id */
+            group_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "profile_ref" | "profile_candidates" | "style" | "flow_board" | "stage" | "library";
+            /** Name */
+            name: string;
+            /** Version */
+            version: string | null;
         };
         /**
          * Guide
@@ -10112,6 +10165,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlbumNode"];
+                };
+            };
+        };
+    };
+    groups_used_by_groups_used_by_get: {
+        parameters: {
+            query?: {
+                ids?: string[] | null;
+                deep?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["GroupUser"][];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

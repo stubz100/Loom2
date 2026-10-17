@@ -4521,3 +4521,66 @@ split by file so that no two hands touched the same module.
   drops every link the project lacks (a card keeps its words: its "this shot" line joins the description; the scene keeps its line) and a
   toast says how many. Vitest 324 (+1), smoke 36 / 36 under full and open (the @mentions scenario failed once under `open` in a full run
   and passed alone 4 / 4 and in the next full run — its known flakiness, D89; the cleanup writes nothing when nothing is foreign).
+
+## 2026-10-17 16:18 — The owed items · fetch stall watchdog, verified ledger, Edit's Flatten, groups' "used by", the library drag, speaker version pins
+
+- **Fetch stall timeout** (D91's SD 3.5 Medium transfer sat at 8.25 GB for ≈ 4 min with the connection open): `scripts/fetch_weights.py` runs
+  each `hf_hub_download` in a child process (a thread on a dead socket cannot be stopped) under `watch()`: no growth of the run's staging
+  folder (the `.incomplete` + the file) for `--stall-s` (default 120) → the child is killed and started again, resuming from the partial
+  file, at most `--stall-retries` (3) times, each restart logged; then it gives up (`Stalled`). sha256 and the ledger unchanged. Offline
+  `test_fetch_stall.py` (6: fake clock — a stall restarts and resumes, gives up after the retries, slow growth is not a stall; a real thread
+  writing a partial file that hangs, resumed to the exact size); a live child fetched a small Hub file once.
+- **The ledger: no `present` left.** Nothing put on disk before the ledger existed was in `roster.index.json` — 19 entries, not only Klein 4B.
+  New `scripts/ledger_verify.py` (orchestrator venv; background I/O priority, read-only) hashes every `present` roster file, compares it
+  with the Hub's LFS oid (`get_paths_info`) and appends the entry the fetch tools write (+ `hf_sha256`, `hf_match`; a mismatch would be
+  recorded unverified). **Klein 4B matches the Hub** (`ec3d4e73…a343`). 15 others match too: FLUX.2 dev fp8mixed, Mistral 3 small, the
+  FLUX.2 VAE, Klein base 4B, Klein 9B / base 9B / 9B KV, Wan 2.2 Animate, clip_vision_h, lightx2v I2V, Qwen-Image-Edit 2509, Qwen 2.5 VL
+  7B, the Qwen VAE, the 2509 Lightning and angles LoRAs. Five roster sources were stale and are fixed in `roster.py` (the files on disk
+  are those files, by sha256): Klein 9B / base 9B / 9B KV live in BFL's gated repos (`black-forest-labs/FLUX.2-klein-9B`, `…-base-9B`,
+  `…-9b-kv`; Comfy-Org's 9B repo holds only the encoder and the VAE), the Lightning LoRA in its repo's `Qwen-Image-Edit-2509/` folder,
+  the angles LoRA is the repo's Chinese-named file (renamed on disk). Recorded without a Hub comparison: SAM 3 (gated, this token has no
+  access), the FLUX.2 small decoder and Flux2TurboComfyv2 (no repo in the roster). 0 mismatches; the roster reports `verified` after a
+  rescan. A copy of the ledger from before: the session scratchpad.
+- **Edit › Flatten image** (owed since UI6): `edit.layer.flatten` in the canvas menu's Layer ▸ and the layers footer's More ▾ (the layer
+  menu). The store syncs (D70), asks the server for its exact flatten as raw RGBA (`POST /documents/{id}/export` gains `format: "raw"` —
+  the same `OpenDocument.flatten` Save to Catalogue and the PNG export run) and makes it the one full-canvas raster layer, named after the
+  bottom pixel layer (else "Background"), lineage kept; hidden layers are discarded (the toast says how many, with Undo); one history step
+  storing the stack only — the old layers' canvases stay in the maps (`gcPixels` keeps what a stack names), so Undo is cheap at any size;
+  an edit during the fetch aborts it. Disabled on one plain full-canvas layer. `test_flatten_d90.py`: a stack of every kind (isolated masked
+  group in screen, a clipped multiply, overlay, an adjustment, a filter, a masked soft-light layer at an offset, a hidden one) on a colour
+  and a transparent background — raw == `od.flatten()` == the PNG, and the one-layer document flattens **bit-identically**, Save to
+  Catalogue's file too. Headed check (`edit_headed_check.py`) not run: 1420 was free, but the other worker was measuring on the GPU and the
+  check drives WebGPU in a visible Edge; the change adds no rendering path (the layer is server pixels), and the smoke runs it on WebGL2.
+- **A press-menu bug found on the way** (D55, `frame/ContextMenu.tsx`): a menu too tall for either side of its button is placed over it,
+  and the release of a plain click chose the entry under the pointer — a click on the layers footer's More ▾ ran *Solo*. A release under
+  4 px from the press is now a click (the menu stays open); press–drag–release still chooses.
+- **"Used by" on Catalogue groups** (D92 §4.2): `usedby.py` computes, per request, what names a group — a Cast version's reference set /
+  candidates, a style's samples, a Flow node's board, a Stage's album page, a library entry (read without seeding) — as `GET /groups/used-by`
+  (`?ids=…`, none = every used group; `deep` adds the groups inside, what a delete takes). The album store keeps the map (reloaded with the
+  tree and on `story.changed`); the card Inspector has a Used by section ("Mara v1 · references; Style · Ink wash", each a link that opens
+  Cast at the version, World at the style or the library, Flow at the node, the Stage), the page shows "used by: Mara v1 · references +1"
+  top left (the first user, all in the tooltip); Delete group… (Inspector, card menu, Places) says who loses its images (deep) and Ungroup
+  asks only when the group is used.
+- **World › Library drag reorder**: a tile dragged within its field's row (pointer events, 5 px threshold, a ghost, Esc cancels) shows an
+  insertion line before / after the tile under the pointer and drops through `PUT /story/library/order` (`moveToInField`; other fields
+  keep their places; the row reorders at once). Move earlier / later stay; Help lists the gesture.
+- **Flow nodes pin a version per speaker** (D93 C left it): `FlowNode.speaker_versions` (profile id → version id, absent = current; old node
+  files read; PATCH 422 for a non-character or a version it lacks, a pin deleted since stays until changed). The node Inspector's
+  **Speakers**: a chip per speaker ("current ▾" / "v2 · rain gear ▾", a press menu of the versions), with "the shot's stage binds v1 — the
+  Stage binding wins" when the bound shot's stage binds that character to another version. Make frame ▸ in Generate uses
+  `speakerVersion` (a figure bound with a version > the node's pin > current; the toast names an overridden pin); Make frame ▸ in Stage
+  gives a newly bound figure the node's pin (an already bound figure keeps its own).
+- **D90 §5 "For" contexts for profiles and styles — evaluated, not built:** covered without a chip — a profile's more candidates are Cast's
+  Expand and, from Generate, D93 A1's casting run on a linked card (origin `cast`, results into the version's candidates, Go to origin →
+  Cast; Cast's "Use as a subject in Generate" opens it), a style's sample is World's "Make a sample image" (origin `style`, into its
+  samples). Takes stay a list (an asset lives on one page, D34). Both noted in `proto01_UI/02`'s status line.
+- **Tests:** offline **411** under full and open (+13: `test_fetch_stall` 6, `test_flatten_d90` 1, `test_used_by_d92` 4,
+  `test_speaker_versions_d93` 2; route snapshot + `GET /groups/used-by`); Vitest **341** (+17: `flatten.test.ts` 5, `groupUsers.test.tsx` 5,
+  `libraryDrag.test.ts` 5, `makeFor` +1, `FigureBinding` +1); lint 88; build clean; settings audit 239 / 0, model literals, agents check,
+  OpenAPI current (regenerated, `schema.d.ts`); smoke **38 / 38** under full and open (new: Flatten image from the canvas menu — one layer,
+  the raw flatten byte-equal before / after, Save to Catalogue from it, Undo back to three, More ▾ by a click lists it and chooses nothing;
+  a Cast version's group says "used by" on its page and in the card's Inspector, Delete group… warns, the link opens Cast). Screenshots
+  (a temporary spec, deleted): `frontend/node_modules/.e2e/owed/` (local) — flatten-menu / -after, usedby-page / -inspector /
+  -delete-confirm, library-drag / -after-drop, speaker-chip-menu / speaker-chips.
+- **Owed:** the author's click-through; the headed Edit check of Flatten on WebGPU when the GPU is free; SAM 3's Hub hash (needs access to
+  the gated repo); a stage-wins hint on the Flow node card itself (the Inspector says it).

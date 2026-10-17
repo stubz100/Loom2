@@ -179,7 +179,7 @@ export interface StoryState {
   setAddAt: (at: { x: number; y: number } | null) => void
   node: () => FlowNode | undefined
   addNode: (type: FlowNode['type'], title?: string, at?: { x: number; y: number } | null, extra?: { text?: string }) => Promise<FlowNode | null>
-  patchNode: (id: string, patch: Partial<Pick<FlowNode, 'type' | 'title' | 'lines' | 'options' | 'cond' | 'set' | 'target' | 'text' | 'colour' | 'board_group_id' | 'place_id'>>) => Promise<void>
+  patchNode: (id: string, patch: Partial<Pick<FlowNode, 'type' | 'title' | 'lines' | 'options' | 'cond' | 'set' | 'target' | 'text' | 'colour' | 'board_group_id' | 'place_id' | 'speaker_versions'>>) => Promise<void>
   deleteNode: (id: string) => Promise<void>
   duplicateNode: (id: string) => Promise<void>
   moveNodes: (positions: { id: string; x: number; y: number }[]) => void
@@ -788,7 +788,7 @@ export const useStory = create<StoryState>()((set, get) => {
     duplicateNode: async (id) => {
       const n = get().flowNodes[id]; const p = get().flowGraph?.nodes.find((x) => x.id === id); if (!n) return
       const made = await get().addNode(n.type, n.title ? `${n.title} copy` : '', { x: (p?.x ?? 0) + 40, y: (p?.y ?? 0) + 40 }, { text: n.text })
-      if (made) await get().patchNode(made.id, { lines: n.lines, options: n.options.map((o) => ({ ...o, id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}` })), cond: n.cond, set: n.set, target: n.target, colour: n.colour, board_group_id: n.board_group_id, place_id: n.place_id })
+      if (made) await get().patchNode(made.id, { lines: n.lines, options: n.options.map((o) => ({ ...o, id: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}` })), cond: n.cond, set: n.set, target: n.target, colour: n.colour, board_group_id: n.board_group_id, place_id: n.place_id, speaker_versions: n.speaker_versions })
     },
     moveNodes: (positions) => {
       const g = get().flowGraph; if (!g) return
@@ -850,8 +850,8 @@ function saveNode(get: () => StoryState, set: (p: Partial<StoryState>) => void, 
     const n = get().flowNodes[id]; if (!n) return
     nodeSaving += 1
     try {
-      const { type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id } = n     // D90 (02 §4.2): the board rides along; D93 (C7): where
-      const next = await unwrap(http.PATCH('/story/flow/nodes/{nid}', { params: { path: { nid: id } }, body: { revision: n.revision, type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id } as never }))
+      const { type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, speaker_versions } = n     // D90 (02 §4.2): the board rides along; D93 (C7): where; D93 follow-up: the speakers' versions
+      const next = await unwrap(http.PATCH('/story/flow/nodes/{nid}', { params: { path: { nid: id } }, body: { revision: n.revision, type, title, lines, options, cond, set: sets, target, text, colour, board_group_id, place_id, speaker_versions } as never }))
       const cur = get().flowNodes[id]
       if (cur) set({ flowNodes: { ...get().flowNodes, [id]: { ...cur, revision: next.revision, updated_at: next.updated_at } } })
       if (ports) { const r = await unwrap(http.GET('/story/flow')); set({ flowGraph: r.graph }) }

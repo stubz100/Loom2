@@ -31,20 +31,34 @@ export function speakersOf(node: FlowNode | undefined, profiles: Profile[]): Pro
   return ids.map((id) => profiles.find((p) => p.id === id && p.cls === 'character')).filter((p): p is Profile => !!p)
 }
 
+type Figure = Pick<StageObject, 'profile_id' | 'version' | 'pose'>
+/** D93 follow-up: the version a speaker is made at — the shot's stage binding wins (a figure bound to the character with a version of its
+ *  own: what the Stage render sends), else the node's pin (`FlowNode.speaker_versions`), else the current one. `overrides`: the node's pin the
+ *  stage overrode (the Inspector's hint and Make frame's toast say so). A pin or binding to a version deleted since counts as none. */
+export function speakerVersion(p: Profile, node: Pick<FlowNode, 'speaker_versions'> | undefined, figures: Figure[] = []): { version: string; from: 'stage' | 'node' | 'current'; overrides: string | null } {
+  const has = (v: string | null | undefined): v is string => !!v && p.versions.some((x) => x.id === v)
+  const fig = figures.find((f) => f.profile_id === p.id)?.version
+  const pin = node?.speaker_versions?.[p.id]
+  if (has(fig)) return { version: fig, from: 'stage', overrides: has(pin) && pin !== fig ? pin : null }
+  if (has(pin)) return { version: pin, from: 'node', overrides: null }
+  return { version: p.current, from: 'current', overrides: null }
+}
+
 /** A line as a subject's action: "saying <the line>" — no quote marks (a quoted phrase is lettered into the image as text). */
 export const lineAction = (text: string): string => { const t = text.trim().replace(/^["“'‘]+|["”'’]+$/g, '').replace(/[\s.]+$/, '').trim(); return t ? `saying ${t}` : '' }
 
 /** What Generate starts from (where sensible): a Shot node's line (else its title) as the lead text; a Dialogue node's title as the lead text
  *  and D93 (C7) one linked subject card per speaker — the version the shot's stage binds to that character (a figure's `profile_id` /
- *  `version`), else the current one, the figure's pose in words — the first line as its speaker's action ("saying …": a line is something the
+ *  `version`), else the node's pin for that speaker (D93 follow-up), else the current one (`speakerVersion`), the figure's pose in words — the first line as its speaker's action ("saying …": a line is something the
  *  character does in this shot; "this shot" is composed into the look, after the sheet, so it would read as appearance); the node's place
  *  links the scene. `text` null: the lead text is left as it is. */
-export function framePrefill(node: FlowNode | undefined, profiles: Profile[], figures: Pick<StageObject, 'profile_id' | 'version' | 'pose'>[] = []): FramePrefill {
+export function framePrefill(node: FlowNode | undefined, profiles: Profile[], figures: Figure[] = []): FramePrefill {
   if (!node) return { text: null, subjects: [], place: null }
   const first = node.type === 'dialogue' ? node.lines.find((l) => l.speaker && l.text.trim()) : undefined
   const subjects = speakersOf(node, profiles).map((p) => {
     const fig = figures.find((f) => f.profile_id === p.id)
-    const version = fig?.version && p.versions.some((v) => v.id === fig.version) && fig.version !== p.current ? fig.version : undefined
+    const sv = speakerVersion(p, node, figures).version
+    const version = sv !== p.current ? sv : undefined
     const action = first?.speaker === p.id ? lineAction(first.text) : ''
     return { profile_id: p.id, ...(version ? { version } : {}), ...(action ? { action } : {}), ...(fig?.pose ? { pose: poseWords(fig.pose) } : {}) }
   })
@@ -90,7 +104,9 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
   useMakeFor.getState().set('generate', f)
   const { useGenerate } = await import('../generate/generateStore')
   const g = useGenerate.getState()
-  const pre = framePrefill(node, st.profiles, await stageFigures(v))
+  const figs = await stageFigures(v)
+  const pre = framePrefill(node, st.profiles, figs)
+  const over = speakersOf(node, st.profiles).flatMap((p) => { const sv = speakerVersion(p, node, figs); return sv.overrides ? [`${p.name} at ${sv.version} (the stage's binding, not the node's ${sv.overrides})`] : [] })
   if (pre.subjects.length || pre.place) g.applyFrame(pre)
   else if (pre.text) g.set({ text: pre.text, ...(g.panel.prompt_mode === 'json' ? { prompt_mode: 'text' as const } : {}) })
   let refs = 0
@@ -102,7 +118,7 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
   }
   useSession.getState().setSuite('generate')
   const who = pre.subjects.length ? `; ${pre.subjects.length} subject${pre.subjects.length === 1 ? '' : 's'} from the speakers` : ''
-  toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
+  toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${over.length ? ` (${over.join('; ')})` : ''}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
 }
 
 /** Make clip ▸ Animate: the For chip set, the version's frame as the start, a Shot node's line as the motion. */

@@ -254,3 +254,15 @@ button.link:hover { text-decoration: underline; background: transparent; }
 .page-empty p { max-width: 440px; line-height: 1.5; }
 .insp .gname { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg3); }
 .insp .gname input { font-size: 14px; font-weight: 600; color: var(--fg); }
+
+/* D92 §4.2: what uses a group — the card Inspector's Used by section and the page's header (top left of the page) */
+.used-by { display: inline; color: var(--fg3); font-size: 12px; line-height: 1.6; }
+.used-by .lead { margin-right: 4px; }
+.used-by button.link { font-size: 12px; }
+.used-by.compact { display: inline-flex; align-items: center; gap: 0 3px; margin-left: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.used-by.compact .ic { flex: none; }
+.page-head { position: absolute; top: 8px; left: 10px; max-width: calc(100% - 20px); z-index: 2; }
+.page-head:empty { display: none; }
+.page-head .used-by.compact { margin: 0; padding: 3px 8px; border-radius: 4px; background: color-mix(in srgb, var(--bg1) 88%, transparent); border: 1px solid var(--line); }
+.used-by.compact > span:not(.lead):not(.more) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.used-by.compact .more { color: var(--fg3); flex: none; }

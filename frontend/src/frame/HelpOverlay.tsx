@@ -16,7 +16,7 @@ const GESTURES: Record<string, [string, string][]> = {
   stage: [['Left-drag · right-drag · wheel in the free view', 'orbit · pan · zoom'], ['Drag the gizmo', 'move / rotate / scale (also: the numbers in the Inspector)'], ['Drop an image tile on the viewport', 'add an image plane'],
     ['Drop a mesh tile on the viewport', 'add a mesh prop (also: Library › Meshes)'], ['Poses tab: click a joint, drag a hand or foot', 'rotate the joint (FK) · reach (IK)'], ['Double-click an Outliner row', 'frame it; double-click its name to rename']],
   story: [['Drag between node handles (Flow)', 'connect two nodes; right-click a connection to delete it'], ['Drag a node (Flow)', 'move it; right-click the canvas → Add a node here'], ['Drag a clip block (Episode)', 'reorder (also: Earlier / Later)'],
-    ['Drag the edge of a block (Episode)', 'trim in / out'], ['Drag the shaded overlap (Episode)', 'set the dissolve length (also: Dissolve toggles 12 frames)'], ['Drop a Catalogue image on a style (World)', 'make it a sample of the style']],
+    ['Drag the edge of a block (Episode)', 'trim in / out'], ['Drag the shaded overlap (Episode)', 'set the dissolve length (also: Dissolve toggles 12 frames)'], ['Drop a Catalogue image on a style (World)', 'make it a sample of the style'], ['Drag a library tile (World › Library)', 'reorder it within its field (also: Move earlier / later)']],
 }
 
 /** D72: the gesture keys every suite shares — not remappable, listed so they are discoverable (07 §4). */

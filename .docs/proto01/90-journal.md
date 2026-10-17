@@ -4787,3 +4787,87 @@ split by file so that no two hands touched the same module.
   72 with a 5-frame overlap; Move vs Replace mode; the post-processing options against E21's v2v result and the per-frame-i2i flicker
   risk) and `02-implementation-plan.md` (spikes E23 core pipeline and E24 post-processing with bars, a decision gate, waves CA1–CA8 ≈
   22–25 days). Open questions for the author in 01 §7. Nothing decided; E22 still running.
+
+## 2026-10-17 22:17 — Spike E22 result · complex action for both: one clip keeps each action but takes turns; layers act at once; D94 stands
+
+- **Setup** (`engine/spikes/e22_layers.py run|score`, `e22_score.py`, reusing E21's passes, plate, heroes, references and helpers;
+  outputs `engine/spikes/out/e22/`, local, ≈ 0.85 GB). E21's blocking unchanged (room, static camera, Mara x −1 turned +35° `stand`,
+  Ines x +1 turned −35° `arms_crossed`); scratch copy of E21's project → `F:\loom2-projects\e22-action-20261017-210015` (+ `_state-…`),
+  a private orchestrator, seeds 20261017–19. **The actions**, written into every prompt: Mara — *M1* walks two steps forward towards
+  the middle of the room, *M2* stops and raises both arms high above her head, *M3* lowers them and puts her hands on her hips; Ines —
+  *I1* uncrosses her arms, *I2* takes one step back, *I3* points with her outstretched arm at the window on the far left, *I4* turns
+  her head to look at it. (a) prompt: "Static camera, a wide two-shot in a quiet room; two women face each other a few metres apart.
+  The woman on the left, ⟨Mara⟩, ⟨M1–M3⟩. At the same time the woman on the right, ⟨Ines⟩, ⟨I1–I4⟩. They do not touch; the camera does
+  not move." Layer prompts: "Static camera, a quiet room. ⟨Mara⟩, turned towards someone off-screen to the right, ⟨M1–M3⟩. The camera
+  does not move." (Ines mirrored, only her own action.) Still text: "Mara stands with her arms relaxed at her sides, turned towards Ines;
+  Ines stands with her arms crossed, turned towards Mara." + E21's scene. Exact strings in `state.json` → `prompts`.
+  **(a)** Stage clay still (Klein 9B, both bound, D93 C) → Wan 2.2 I2V Draft (832×480, 81 f @ 16 fps, Lightning 2 + 2).
+  **(a_ltx)** the same stills → LTX-2.3 distilled Draft (1024×576, 121 f @ 24 fps, 8 steps), the same prompt, 3 seeds. **Beats
+  skipped:** a keyframe needs an end-of-action still of the *same* room (a Stage render of the end blocking draws a new room), and
+  plain LTX already broke the blocking (below).
+  **(b)** E21's plate → each character into its own copy (E21's Fill-Match + references graph; the facing in the prompt: "her body
+  turned three-quarters to the right towards someone off-screen on the right, her face in three-quarter view looking to the right, not
+  at the camera", the mannequin's yaw as image 1) → gate on FaceSim's 5 keypoints, yaw = (nose x − eye midpoint x) ÷ eye distance,
+  calibrated on E21 (its (a) stills ±1.0, its copies 0.01–0.08): |yaw| ≥ 0.4 with the right sign, else another seed → each copy
+  animated alone → per-frame `SAM3_Detect` by text ("woman", one detection — the character walks, a fixed box would not follow; core
+  node, the SAM 3 checkpoint's own text encoder) → stacked over the plate, Ines then Mara, alpha = the mask feathered ≈ 2 px. No colour
+  lock, no shadow zone, no video pass. Measurement for every two-character clip: `SAM3_Detect` "woman:2" per frame, split left/right at
+  the empty columns between them.
+- **Copies:** Mara passed 3 of 5 tries (yaw +0.43, +0.44, +0.43; rejected +0.31, +0.39), Ines 3 of 3 (−0.49, −0.44, −0.45). The heads
+  now turn towards each other; the bodies only about a quarter turn (the (a) stills read ±1.0) — no longer a line-up, still less
+  turned than (a). Mara's third copy changed her trousers for a dress.
+- **Beats, by eye on per-character strips** (`strips_a.jpg`, `strips_b.jpg`, `strips_a_ltx.jpg`; ✓ done, ~ partly, ✗ not):
+
+  | arm · seed | M1 walk | M2 arms up | M3 hips | I1 uncross | I2 step back | I3 point | I4 head | Ines starts | notes |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | a · 17 | ✗ | ✓ | ✓ | ✓ | ✗ side step | ✓ | ~ | ≈ 2.5 s | Mara adds hands-on-head |
+  | a · 18 | ✗ | ✓ | ✓ | ✓ | ✗ | ✓ | ~ | ≈ 2 s | |
+  | a · 19 | ✗ | ✓ | ✓ | ✓ | ✗ steps forward | ✓ | ~ | ≈ 2 s | |
+  | b · 17 | ✗ | ~ hands by the head | ✓ | ✓ | ✗ | ✓ held 3 s | ~ | ≈ 1 s | |
+  | b · 18 | ~ two short steps | ✓ | ~ one hand | ✓ | ✗ | ✓ held 3 s | ~ | ≈ 1 s | |
+  | b · 19 | ~ one step | ✓ | ✓ | ✓ | ✗ | ✓ held 3 s | ~ | ≈ 1 s | |
+  | a_ltx · 17 | ✓ overshoots | ✓ | ✓ | ~ | ✗ | ✓ | ~ | ≈ 1.5 s | **paths cross, they swap places** |
+  | a_ltx · 18 | ✓ walks out of frame | ✓ | ✗ | ✓ | ✗ | ✓ | ~ | ≈ 1.5 s | **Mara walks past Ines and leaves** |
+  | a_ltx · 19 | ✓ up to Ines | ✓ | ✓ | ~ | ✗ | ✗ | ✗ | — | **they touch** |
+
+  Counting ✓ 1, ~ ½: Wan (a) Mara 6/9, Ines 7.5/12; (b) Mara 6/9, Ines 7.5/12 — **the same beats**. The difference is *when*: in (a)
+  Ines holds still until Mara has finished (her motion over the first 2 s 2.2 / 4.5 / 3.8 levels vs Mara's 18–19; in (b) 9.2 / 8.3 /
+  8.0) — the shared clip takes turns. Numeric proxies (`results.jsonl`, in body heights; mask-split per frame): Mara's walk (feet x, end
+  − start) (a) +0.03 / +0.01 / +0.03, (b) +0.04 / +0.20 / +0.24, a_ltx +0.15 / +0.19 / +0.94 (the a_ltx splits fall back on 35–61 frames
+  because the two overlap — those numbers are not per character); arms above the start top (a) 0.11–0.12, (b) 0.12–0.20; Ines's leftward
+  reach (pointing) (a) 0.34–0.41, (b) 0.28–0.38; Ines's feet (a) −0.04 / −0.04 / +0.01, (b) −0.09 / −0.03 / −0.04 — I2 (step back = +)
+  failed in every clip of every arm. The walk is Wan I2V's weak point either way (a: no steps at all; b: one or two short steps).
+- **Identity** (FaceSim on every 8th frame, faces ≈ 40 px, advisory; LTX every 12th):
+
+  | arm | Mara own mean (min) | Ines own mean (min) | wrong / swapped frames |
+  | --- | --- | --- | --- |
+  | (a) Wan | 0.199 (0.068) | 0.257 (0.098) | 0 / 0 |
+  | (a_ltx) | 0.096 (−0.118) | 0.163 (−0.084) | 15 / 5 — the place swap and the crossings |
+  | (b) layers | 0.158 (−0.041) | 0.252 (0.146) | 0 / 0 |
+  | each layer alone (ceiling) | 0.145 (−0.032) | 0.232 (0.141) | — |
+
+  Costumes: (a)'s Ines is olive in 2/3 again (seed 19 right), and Mara's shoes stand on the mannequin's grey foot plates in 2/3 stills.
+- **What broke.** (a): turn-taking (above); the background shifts 2.0–4.5 levels from frame 0 (b: 0.0, the plate); Ines points "at
+  the window" through Mara in every clip of both Wan arms. (b): Ines's point passes straight through Mara's head (her layer does not
+  know Mara is there — it reads as pointing at Mara); **"turned towards someone off-screen to the right" made Wan walk a stranger in
+  from the right in 2/3 of Mara's layer clips** (a woman, a man; a hand in the third) — the one-detection text mask kept them out of
+  the stack (0 frames of Mara's mask right of x = 480), but the wording must go; no duplicates, no limbs in the wrong layer, no visible
+  edge at Draft (seed 18 frame 75: one stray fleck); the feet carry only the shadow inside the mask, so they sit a little pasted.
+  (a_ltx): more motion and real walking, but the blocking breaks in 3/3 (crossing, a swap, an exit, touching) and the room changes (a
+  lamp appears) — unusable for two characters without guides.
+- **Time per shot and peak VRAM:** (a) 299–321 s (still 48–77 s at 10.4–10.9 GB + clip 243–251 s at 12.5 GB); (a_ltx) 322–324 s
+  (clip 247–274 s, 13.35–13.46 GB); (b) 713–726 s (E21's plate 11 s; copies 8 tries, 474 s in all, 2 rejected, 9.7–12.2 GB; two clips
+  240–245 s each, 12.5 GB; SAM 3 text masks 28–33 s per layer, 3.0 GB; stack 7.7 s CPU). No OOM. Rig 21:00–22:12.
+- **Recommendation.** D94 stands as the default: with complex, different actions the shared Wan clip still gives each character *its
+  own* action (no mixing, no swaps, the same beat count as layers, bigger gestures, the eye lines and shadows of one image, half the
+  time). What it does not do is act at the same time — it plays the two actions one after the other. When the beats must overlap (or
+  one character must be re-taken), the layers route does it, at 2.3× the time and with no contact between the layers (a point or a
+  look goes through the other person). Untested next steps, cheapest first: time words in (a)'s prompt ("from the first second, while
+  …"), or Ines's action first; for (b), drop "someone off-screen" from the layer prompt and give the copy the other character as a grey
+  placeholder so gestures respect it. LTX-2.3 is not a two-character route without a guide (beats or the IC-LoRA pose pass). The walk
+  and the step back are the actions Wan Draft does not deliver in either arm.
+- **Outputs** (`engine/spikes/out/e22/`, not committed): `sheet_a.jpg`, `sheet_a_ltx.jpg`, `sheet_b.jpg` (plate, the six copies, the
+  stacks, every layer clip), `sheet_copies.jpg` (all tries with yaw), `strips_a|b|a_ltx.jpg`, `a_|a_ltx_|b_|layerMara_|layerInes_seedN.mp4`,
+  `compare.mp4` ((a) seed 20261019 | (b) seed 20261018), `results.jsonl`, `score_summary.json`, `state.json`, `run.log`. Code:
+  `engine/spikes/e22_layers.py`, `e22_score.py` (new, not committed). Not done: I1 / I4 by eye only (no pose metric); 3 seeds per arm;
+  no report.md (the tables are here).

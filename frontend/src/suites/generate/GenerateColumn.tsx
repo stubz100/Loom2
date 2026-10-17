@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, sep } from '../../frame/commands'
-import { showMenu } from '../../frame/ContextMenu'
+import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
 import { aspectGlyph, fieldGlyph, tierGlyph } from '../../frame/presetGlyphs'
@@ -17,9 +17,10 @@ import { setRailTab } from '../../frame/suiteRegistry'
 import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
 import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
-import { dropRefs, honoursNegative, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
-import { bindingLines, castOffer, nameOnly, needsLook, sentIndex, slotsOf } from './subjectCast'
-import { CastButton, SubjectSlots, SubjectWarn } from './SubjectLink'
+import { dropRefs, honoursNegative, onSubject, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
+import { bindingLines, castOffer, composedLines, nameOnly, needsLook, sentIndex, slotsOf } from './subjectCast'
+import { CastButton, SheetView, SubjectSlots, SubjectWarn, VersionChip } from './SubjectLink'
+import { adoptDescription, composeSheet, versionItems, versionOf } from './sheet'
 import { entriesOf, entryTile, useLibrary } from '../story/libraryStore'
 import { profilesForMentions, sy, useStory } from '../story/storyStore'
 import { LoraSlots } from './LoraSlots'
@@ -135,30 +136,48 @@ function CastPicker({ s, i }: { s: Subject; i: number }) {
   )
 }
 
-function SubjectCard({ i, s }: { i: number; s: Subject }) {
+export function SubjectCard({ i, s }: { i: number; s: Subject }) {
   const g = useGenerate()
   const set = (patch: Partial<Subject>) => g.setSubject(i, patch)
   const linked = useStory((x) => (s.profile_id ? x.profiles.find((p) => p.id === s.profile_id) : undefined))
-  const hero = linked?.versions.find((v) => v.id === linked.current)?.hero_asset_id
-  // D93 (A1, A3, A9): the link's slots in the prompt, the casting run, and what the description still lacks
+  const v = versionOf(linked, s.version)                                  // D93 (B5): the version the chip picked, else the current one
+  const hero = v?.hero_asset_id
+  // D93 (A1, A3, A9): the link's slots in the prompt, the casting run, and what the sheet still lacks
   const pm = s.profile_id ? g.preview?.mentions?.find((m) => m.profile_id === s.profile_id) : undefined
-  const offer = s.profile_id ? castOffer(linked, pm?.asset_ids?.length ?? 0) : null
+  const offer = s.profile_id ? castOffer(linked, pm?.asset_ids?.length ?? 0, s.version) : null
   const slots = s.profile_id && g.panel.prompt_mode === 'tree' ? slotsOf(g.preview?.bindings, sentIndex(g.panel.tree.subjects ?? [], i)) : null
   const name = linked?.name ?? ''
+  const sheet = v ? composeSheet(v) : ''
+  useEffect(() => {                                                       // D93 (B4): a panel from before B4 copied the stub into the card — its own words go to "this shot"
+    if (!s.profile_id || !s.description?.trim() || !linked) return
+    const a = adoptDescription(s.description, v, linked.name, s.shot_note ?? '')
+    if (a) set({ description: '', shot_note: a.note })
+  }, [s.profile_id, s.description, linked?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   markUsed('gen.subject.cast')
   return (
     <div className={`subject${s.profile_id ? ' linked' : ''}`}>
       <div className="head"><b>subject {i + 1}</b>
-        {s.profile_id && <span className="linked-to" title="its reference set and LoRA follow through the profile mention">
+        {s.profile_id && <span className="linked-to" title="its sheet, reference set and LoRA follow through the profile mention">
           {hero ? <img src={api.thumbUrl(hero, 256)} alt="" /> : <span className="glyph">{fieldGlyph(linked?.cls ?? 'character')}</span>}{linked?.name ?? 'a Cast profile'}
-          <button className="quiet" aria-label={`unlink subject ${i + 1}`} title="Unlink: a free subject again (the words stay)" onClick={() => g.unlinkSubject(i)}><X size={11} /> unlink</button></span>}
+          {linked && v && <VersionChip v={v} pinned={!!s.version} onOpen={(e) => openPressMenu(e, () => versionItems(linked, s.version, (vid) => g.setSubjectVersion(i, vid), [{ cmd: 'gen.subject.editSheet', on: onSubject(i) }]))} />}
+          <button className="quiet" aria-label={`unlink subject ${i + 1}`} title="Unlink: a free subject again (the sheet's words stay as its description)" onClick={() => g.unlinkSubject(i)}><X size={11} /> unlink</button></span>}
         <SubjectSlots slots={slots} />
         <span className="spacer" /><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
       <CastPicker s={s} i={i} />
       {offer && <div className="subject-cast-row"><CastButton offer={offer} onCast={() => runOnSubject(i, 'gen.subject.cast')} /></div>}
-      <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(v) => set({ description: v })} id={`gen-subject-desc-${i}`}
-        placeholder={s.profile_id ? `describe ${name || 'the character'}'s look — e.g. a wiry courier in a long grey coat, red scarf` : 'who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")'}
-        after={s.profile_id ? <SubjectWarn name={name} nameOnly={nameOnly(s.description, name)} ask={g.castAsk === i && needsLook(s.description, name)} refs={pm?.asset_ids?.length ?? 0} /> : null} />
+      {s.profile_id ? <>
+        <div className="subject-sheet-row">{/* D93 (B4): the sheet from Cast, read-only, then this shot's words */}
+          <SheetView i={i} v={v} name={name || 'the character'} outfitOverridden={!!s.shot_outfit?.trim()} onEdit={() => runOnSubject(i, 'gen.subject.editSheet')} />
+          <SubjectWarn name={name} nameOnly={nameOnly(composeSheet(v, null, name), name)} ask={g.castAsk === i && needsLook(sheet, name)} refs={pm?.asset_ids?.length ?? 0} />
+        </div>
+        <label>outfit</label>
+        <div className="field"><div className="row"><input type="text" value={s.shot_outfit ?? ''} aria-label={`subject ${i + 1}: the outfit in this shot`} onChange={(e) => set({ shot_outfit: e.target.value })}
+          placeholder={v?.outfit.trim() ? `the sheet's: ${v.outfit.trim()} — or another, this shot only` : 'the sheet has none — an outfit for this shot only'} /></div></div>
+        <label>this shot</label>
+        <div className="field"><div className="row"><input type="text" value={s.shot_note ?? ''} aria-label={`subject ${i + 1}: this shot only`} onChange={(e) => set({ shot_note: e.target.value })}
+          placeholder="this shot only, after the sheet — e.g. soaked, hood up" /></div></div>
+      </> : <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(x) => set({ description: x })} id={`gen-subject-desc-${i}`}
+        placeholder={'who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")'} />}
       <Field section="prompt" label="position" field="subject.position" value={s.position ?? ''} onChange={(v) => set({ position: v })} placeholder="where in frame" />
       <Field section="prompt" label="action" field="subject.action" value={s.action ?? ''} onChange={(v) => set({ action: v })} />
       <Field section="prompt" label="pose" field="subject.pose" value={s.pose ?? ''} onChange={(v) => set({ pose: v })} />
@@ -458,12 +477,16 @@ function SavedSection() {
 function PreviewSection() {
   const pv = useGenerate((g) => g.preview)
   const previewing = useGenerate((g) => g.previewing)
+  const profiles = useStory((x) => x.profiles)
+  const composed = composedLines(pv?.mentions)
   return (
     <details id="gen-sec-preview" className="gen-sec preview-sec">
       <summary>Preview · the prompt as sent{pv ? ` (${pv.prompt_mode === 'json' ? 'JSON in the Mistral template' : pv.prompt_mode === 'prose' ? 'prose for Klein' : 'plain text'})` : ''}</summary>
       <div className="preview-box">{pv?.serialized_prompt || (previewing ? '…' : '(empty prompt)')}</div>
+      {composed.length > 0 && <ul className="preview-bindings preview-composed" aria-label="the linked subjects as composed">{/* D93 (B4): each linked subject's sheet + this shot, as sent */}
+        {composed.map((t) => <li key={t}>{t}</li>)}</ul>}
       {!!pv?.bindings?.length && <ul className="preview-bindings" aria-label="subjects and their reference images">{/* D93 (A3): what each linked subject got, what was left out */}
-        {bindingLines(pv.bindings, pv.max_refs).map((t) => <li key={t}>{t}</li>)}
+        {bindingLines(pv.bindings, pv.max_refs, profiles).map((t) => <li key={t}>{t}</li>)}
         {!pv.bind_refs && <li className="muted">this model reads the references by their notes — the subjects are not bound in its prompt</li>}</ul>}
     </details>
   )

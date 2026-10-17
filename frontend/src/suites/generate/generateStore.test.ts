@@ -229,7 +229,7 @@ describe('D93 (A3) the linked subject the server reads', () => {
     const panel: Panel = { ...DEFAULT_PANEL, model_id: 'fixture-turbo', prompt_mode: 'tree', tree: { subjects: [{ description: '' }, { description: 'Mara, a courier', profile_id: 'prf_m' }] },
       mentions: [{ group_id: 'grp_m', name: 'Mara', profile_id: 'prf_m' }] }
     const r = recipeFromPanel(panel)
-    expect((r.prompt_json as { subjects: unknown[] }).subjects).toEqual([{ description: 'Mara, a courier' }])
+    expect((r.prompt_json as { subjects: unknown[] }).subjects).toEqual([{}])                    // D93 (B4): a linked card sends no words — the server composes its sheet
     expect(r.mentions).toEqual([{ group_id: 'grp_m', name: 'Mara', profile_id: 'prf_m', subject: 0 }])
     expect(panelFromRecipe(r as unknown as Record<string, unknown>).tree?.subjects?.[0].profile_id).toBe('prf_m')
   })

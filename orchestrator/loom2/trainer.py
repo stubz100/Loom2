@@ -24,7 +24,7 @@ from .fsio import new_id, utc_now
 from .loras import LoraRecord, LoraRegistry, model_base, publish
 from .models import registry
 from .recipes import TrainLora
-from .story import StoryStore, cell_sentence
+from .story import StoryStore, cell_sentence, compose_sheet
 
 if TYPE_CHECKING:
     from .config import Settings
@@ -116,7 +116,7 @@ def materialise(ws: Any, catalogue: Any, groups: Any, store: StoryStore, recipe:
     if p is None:
         raise ValueError(f"profile {recipe.profile_id!r} not found")
     v = p.version(recipe.version)
-    stub = (v.stub or p.name).strip()
+    stub = compose_sheet(v, name=p.name)                                # D93 (B4): the version's sheet, composed (the hero's caption)
     refs = reference_assets(groups, v.group_id)
     if len(refs) < MIN_REFS:
         raise ValueError(f"version {v.id} has {len(refs)} reference images; training needs at least {MIN_REFS}")

@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
 from .models import registry
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from .workspace import Workspace
 
 WORLD_SCHEMA_VERSION = 1
-PROFILE_SCHEMA_VERSION = 1
+PROFILE_SCHEMA_VERSION = 2                         # D93 (B4): 2 — a version holds a sheet (appearance, outfit, colours, marks) and a label, not one stub
 SHOT_SCHEMA_VERSION = 1
 FLOW_SCHEMA_VERSION = 1
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -134,22 +134,76 @@ def check_world(w: World) -> None:
 
 
 # ---- profiles (SY1, 17 §3b) ----------------------------------------------------------------------------------------------------
+class SheetColour(BaseModel):
+    """D93 (B4): a colour bound to what it colours ("#C0392B" + "rain jacket") — the way Generate's Tree prompt binds colours (a hex code
+    in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    object: str = Field("", max_length=80)
+
+
+SHEET_FIELDS = ("appearance", "outfit", "colours", "marks")
+
+
 class ProfileVersion(BaseModel):
     """One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`
     is editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the
-    LoRA wave (D25)."""
+    LoRA wave (D25). D93 (B4): the version holds a character sheet — appearance (the look), outfit, bound colours and marks — composed into
+    the clause a mention and a linked subject carry (`compose_sheet`); a version is a costume, an age or a look, named by its `label`.
+    Schema 1 had one free-text `stub`: it is read as the appearance (the file is rewritten at the next save)."""
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
+    label: str = Field("", max_length=40)             # D93 (B5): "rain gear", "winter" — the version chip's words; its id when blank
     state: VersionState = "open"
     group_id: str
     candidates_group_id: str | None = None
     hero_asset_id: str | None = None
-    stub: str = ""                                   # the clause a mention carries into a prompt (loom R112)
+    appearance: str = Field("", max_length=1000)      # the look: face, hair, build (schema 1's stub)
+    outfit: str = Field("", max_length=400)           # the default clothes; a shot may wear another (SubjectShot.outfit)
+    colours: list[SheetColour] = Field(default_factory=list, max_length=12)
+    marks: str = Field("", max_length=400)            # distinguishing features: a scar, a tattoo, glasses
     trigger: str | None = None
     lora: str | None = None
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_stub(cls, data: Any) -> Any:
+        """Schema 1 (and a client still sending `stub`): the stub is the appearance; the label defaults to the id."""
+        if isinstance(data, dict):
+            data = dict(data)
+            stub = data.pop("stub", None)
+            if isinstance(stub, str) and "appearance" not in data:
+                data["appearance"] = stub
+            if not str(data.get("label") or "").strip():
+                data["label"] = data.get("id") or ""
+        return data
+
+    @property
+    def stub(self) -> str:
+        """The clause a mention of this version carries (loom R112) — since D93 (B4) the composed sheet."""
+        return compose_sheet(self)
+
+
+def _clause(s: str | None) -> str:
+    return (s or "").strip().strip(",;").rstrip(".").strip()
+
+
+_WORN = re.compile(r"(?i)^(wearing|in|dressed|clad)\b")
+
+
+def compose_sheet(v: ProfileVersion, shot: Any = None, name: str = "") -> str:
+    """D93 (B4) the composition rule — one clause, its parts joined by ", ": the appearance; the outfit (this shot's when it has one, else
+    the sheet's; "wearing …" unless it says so itself); the bound colours as "<HEX> <object>" (those without an object are not sent); the
+    marks; this shot's line. Empty → the name (the model then sees only the name, and the card says so). The shared cases in
+    tests/fixtures/sheet_compose.json hold the client's copy (frontend generate/sheet.ts) to the same rule."""
+    outfit = _clause(getattr(shot, "outfit", "") if shot is not None else "") or _clause(v.outfit)
+    colours = ", ".join(f"{c.hex.upper()} {_clause(c.object)}" for c in v.colours if _clause(c.object))
+    parts = [_clause(v.appearance), outfit if not outfit or _WORN.match(outfit) else f"wearing {outfit}", colours, _clause(v.marks),
+             _clause(getattr(shot, "note", "") if shot is not None else "")]
+    return ", ".join(p for p in parts if p) or name.strip()
 
 
 class Profile(BaseModel):
@@ -164,6 +218,15 @@ class Profile(BaseModel):
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data: Any) -> Any:
+        """D93 (B4): a schema-1 record reads as schema 2 (each version's stub → its appearance, ProfileVersion._from_stub); nothing is written
+        by a read — the next save writes the new shape."""
+        if isinstance(data, dict) and int(data.get("schema_version") or 1) < PROFILE_SCHEMA_VERSION:
+            data = {**data, "schema_version": PROFILE_SCHEMA_VERSION}
+        return data
 
     def version(self, vid: str | None = None) -> ProfileVersion:
         want = vid or self.current
@@ -491,7 +554,7 @@ def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant:
     if spec is None:
         raise ValueError("no model to expand with in this build")
     out = []
-    stub = (version.stub or profile.name).strip().rstrip(".")
+    stub = compose_sheet(version, name=profile.name)                    # D93 (B4): the version's sheet, composed
     for cell in preset_cells(preset):
         for s in range(max(1, int(seeds_per_cell))):
             c = {**cell, "take": (cell["take"] - 1) * max(1, int(seeds_per_cell)) + s + 1}
@@ -914,24 +977,30 @@ class StoryStore(_ShotMixin, _FlowMixin):
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_json(self.profile_path(p.id), p.model_dump())
 
-    def create_profile(self, name: str, cls: ProfileClass, groups: GroupStore, hero_asset_id: str | None = None, stub: str = "") -> Profile:
+    def create_profile(self, name: str, cls: ProfileClass, groups: GroupStore, hero_asset_id: str | None = None, stub: str = "", **sheet: Any) -> Profile:
         """A profile with version 1: its reference set is a new album group named after it; the hero (when given) moves onto that page
-        as its cover and first reference."""
+        as its cover and first reference. D93 (B4): `sheet` holds the version's appearance / outfit / colours / marks / label; `stub` is
+        the appearance (the schema-1 word, still taken)."""
         name = name.strip()
         if not name:
             raise ValueError("a profile needs a name")
+        fields = {k: x for k, x in sheet.items() if k in (*SHEET_FIELDS, "label") and x is not None}
+        fields.setdefault("appearance", stub.strip())                    # D93 (A9): empty by default — the name alone describes nothing
+        ProfileVersion.model_validate({"id": "v1", "group_id": "-", **fields})   # a bad colour is refused before the group is made
         g = groups.create(f"{name} · v1")
         if hero_asset_id:
             groups.move([("asset", hero_asset_id)], g.id)
             groups.update(g.id, cover_id=hero_asset_id)
-        v = ProfileVersion(id="v1", group_id=g.id, hero_asset_id=hero_asset_id, stub=stub.strip())   # D93 (A9): empty by default — the name alone describes nothing
+        v = ProfileVersion.model_validate({"id": "v1", "group_id": g.id, "hero_asset_id": hero_asset_id, **fields})
         p = Profile(name=name, cls=cls, current="v1", versions=[v])
         check_profile(p)
         self.save_profile(p)
         return p
 
     def patch_profile(self, pid: str, data: dict[str, Any]) -> Profile:
-        """Name, class, the current version, and an open version's stub / hero from a client body based on `revision` (409 when stale)."""
+        """Name, class, the current version, and an open version's sheet / hero from a client body based on `revision` (409 when stale).
+        D93 (B4): a version's sheet fields (`stub` is taken as the appearance) are read-only once it is final; its label is not (a name, not
+        the look)."""
         cur = self.profile(pid)
         if cur is None:
             raise KeyError(pid)
@@ -943,11 +1012,11 @@ class StoryStore(_ShotMixin, _FlowMixin):
             v = next((x for x in versions if x.id == patch.get("id")), None)
             if v is None:
                 raise ValueError(f"no version {patch.get('id')!r}")
-            if v.state != "open" and any(k in patch for k in ("stub", "hero_asset_id")):
+            patch = {("appearance" if k == "stub" else k): x for k, x in patch.items()}
+            if v.state != "open" and any(k in patch for k in (*SHEET_FIELDS, "hero_asset_id")):
                 raise ValueError(f"version {v.id} is locked — its fields are read-only; make a new version")
-            for k in ("stub", "hero_asset_id"):
-                if k in patch:
-                    setattr(v, k, patch[k])
+            i = versions.index(v)
+            versions[i] = ProfileVersion.model_validate({**v.model_dump(), **{k: patch[k] for k in (*SHEET_FIELDS, "hero_asset_id", "label") if k in patch}})
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in ("name", "cls", "current", "voice_id")}, "versions": [v.model_dump() for v in versions],
                   "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         p = Profile.model_validate(merged)
@@ -991,8 +1060,8 @@ class StoryStore(_ShotMixin, _FlowMixin):
         g = groups.duplicate_group(src.group_id)
         groups.update(g.id, name=f"{cur.name} · v{n}")
         g = groups.groups[g.id]
-        v = ProfileVersion(id=f"v{n}", group_id=g.id, hero_asset_id=g.cover_id if src.hero_asset_id else None, stub=src.stub, trigger=None, lora=None,
-                           derived_from=src.id)
+        v = ProfileVersion.model_validate({**src.model_dump(include=set(SHEET_FIELDS)), "id": f"v{n}", "group_id": g.id,   # D93 (B4): the sheet copied, a label of its own
+                                           "hero_asset_id": g.cover_id if src.hero_asset_id else None, "derived_from": src.id})
         p = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
         check_profile(p)
         self.save_profile(p)

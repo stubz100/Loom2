@@ -132,9 +132,11 @@ export interface StoryState {
   loadPages: () => Promise<void>
   profile: () => Profile | undefined
   version: () => ProfileVersion | undefined
-  createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => Promise<Profile | null>
+  createProfile: (name: string, cls: ProfileClass, hero?: string | null, appearance?: string) => Promise<Profile | null>
   patchProfile: (patch: { name?: string; cls?: ProfileClass; current?: string; voice_id?: string | null }) => Promise<void>
-  setStub: (stub: string) => void
+  /** D93 (B4): the shown version's sheet (appearance, outfit, colours, marks) and (B5) its label — shown at once, saved after a pause with
+   *  the name in one body, one save at a time (B14); a final version takes only its label. */
+  setSheet: (patch: Partial<Pick<ProfileVersion, 'appearance' | 'outfit' | 'colours' | 'marks' | 'label'>>) => void
   /** D90 (B14): the name as typed — shown at once, saved after a pause (as the stub). */
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
@@ -225,7 +227,9 @@ function schedule(get: () => StoryState, set: (p: Partial<StoryState>) => void):
 }
 
 // SY1: the stub saves after a pause, with the profile's revision. D90 (B14): the name too — one pending body per profile, the saves one
-// after another (each with the revision the last one returned), so a stub and a name typed together never send the same revision
+// after another (each with the revision the last one returned), so a stub and a name typed together never send the same revision.
+// D93 (B4): the stub is a sheet now — every field of it rides the same pending body
+const TYPED = new Set(['appearance', 'outfit', 'colours', 'marks', 'label'])
 export type ProfileBody = { name?: string; versions?: { id: string; [k: string]: unknown }[]; [k: string]: unknown }
 let profTimer: number | null = null
 let profPending: { pid: string; body: ProfileBody } | null = null
@@ -254,11 +258,11 @@ export const useStory = create<StoryState>()((set, get) => {
   const edit: StoryState['edit'] = (patch) => { const w = get().world ?? EMPTY; set({ world: { ...w, ...patch } }); schedule(get, set) }
   const replaceProfile = (p: Profile) => set({ profiles: [p, ...get().profiles.filter((x) => x.id !== p.id)] })
   const updateProfile = (p: Profile) => set({ profiles: get().profiles.map((x) => (x.id === p.id ? p : x)) })           // a local edit: the list keeps its order
-  /** What the server returned, with the name / stubs typed since still showing (they save next). */
+  /** What the server returned, with the name / sheet fields typed since still showing (they save next). */
   const overlayPending = (p: Profile): Profile => {
     const b = profPending?.pid === p.id ? profPending.body : null
     if (!b) return p
-    return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv && typeof pv.stub === 'string' ? { ...v, stub: pv.stub } : v }) }
+    return { ...p, ...(b.name !== undefined ? { name: b.name } : {}), versions: p.versions.map((v) => { const pv = b.versions?.find((x) => x.id === v.id); return pv ? { ...v, ...Object.fromEntries(Object.entries(pv).filter(([k]) => TYPED.has(k))) } : v }) }
   }
   const patchWith = (body: ProfileBody, pid: string | null = get().profileId): Promise<Profile | null> => {
     const run = profChain.then(async (): Promise<Profile | null> => {
@@ -443,20 +447,20 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     profile: () => get().profiles.find((p) => p.id === get().profileId),
     version: () => { const p = get().profile(); return p?.versions.find((v) => v.id === (get().versionId ?? p.current)) },
-    createProfile: async (name, cls, hero, stub) => {
+    createProfile: async (name, cls, hero, appearance) => {
       try {
-        const p = await unwrap(http.POST('/story/profiles', { body: { name, cls, hero_asset_id: hero ?? null, stub: stub ?? '' } }))
+        const p = await unwrap(http.POST('/story/profiles', { body: { name, cls, hero_asset_id: hero ?? null, appearance: appearance ?? '' } }))
         replaceProfile(p)
         get().selectProfile(p.id)
         return p
       } catch (e) { toast(`Profile: ${detail(e)}`); return null }
     },
     patchProfile: async (patch) => { await patchWith(patch) },
-    setStub: (stub) => {
+    setSheet: (patch) => {
       const p = get().profile(); const v = get().version()
-      if (!p || !v || v.state !== 'open') return
-      updateProfile({ ...p, versions: p.versions.map((x) => (x.id === v.id ? { ...x, stub } : x)) })
-      queueProfile(p.id, { versions: [{ id: v.id, stub }] })
+      if (!p || !v || (v.state !== 'open' && Object.keys(patch).some((k) => k !== 'label'))) return
+      updateProfile({ ...p, versions: p.versions.map((x) => (x.id === v.id ? { ...x, ...patch } : x)) })
+      queueProfile(p.id, { versions: [{ id: v.id, ...patch }] })
     },
     renameProfile: (name) => {
       const p = get().profile(); if (!p) return

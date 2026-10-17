@@ -2667,6 +2667,8 @@ export interface components {
             span: string | null;
             /** Subject */
             subject: number;
+            /** Version */
+            version: string | null;
         };
         /** BlobPut */
         BlobPut: {
@@ -5505,6 +5507,11 @@ export interface components {
             /** Asset Ids */
             asset_ids?: string[];
             /**
+             * Composed
+             * @default null
+             */
+            composed?: string | null;
+            /**
              * Group Id
              * @default
              */
@@ -5534,6 +5541,8 @@ export interface components {
              * @default null
              */
             revision?: number | null;
+            /** @default null */
+            shot?: components["schemas"]["SubjectShot"] | null;
             /**
              * Skipped
              * @default null
@@ -5557,6 +5566,8 @@ export interface components {
              * @default []
              */
             asset_ids: string[];
+            /** Composed */
+            composed: string | null;
             /** Group Id */
             group_id: string;
             /** Lora */
@@ -5569,6 +5580,7 @@ export interface components {
             profile_id: string | null;
             /** Revision */
             revision: number | null;
+            shot: components["schemas"]["SubjectShotOut"] | null;
             /** Skipped */
             skipped: number | null;
             /** Subject */
@@ -5948,7 +5960,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Updated At */
@@ -5994,16 +6006,26 @@ export interface components {
         };
         /** ProfileCreate */
         ProfileCreate: {
+            /** Appearance */
+            appearance?: string | null;
             /**
              * Cls
              * @default character
              * @enum {string}
              */
             cls?: "character" | "place" | "prop";
+            /** Colours */
+            colours?: components["schemas"]["SheetColour-Input"][] | null;
             /** Hero Asset Id */
             hero_asset_id?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Marks */
+            marks?: string | null;
             /** Name */
             name: string;
+            /** Outfit */
+            outfit?: string | null;
             /**
              * Stub
              * @default
@@ -6019,11 +6041,20 @@ export interface components {
          * ProfileVersion
          * @description One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`
          *     is editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the
-         *     LoRA wave (D25).
+         *     LoRA wave (D25). D93 (B4): the version holds a character sheet — appearance (the look), outfit, bound colours and marks — composed into
+         *     the clause a mention and a linked subject carry (`compose_sheet`); a version is a costume, an age or a look, named by its `label`.
+         *     Schema 1 had one free-text `stub`: it is read as the appearance (the file is rewritten at the next save).
          */
         ProfileVersion: {
+            /**
+             * Appearance
+             * @default
+             */
+            appearance: string;
             /** Candidates Group Id */
             candidates_group_id: string | null;
+            /** Colours */
+            colours: components["schemas"]["SheetColour-Output"][];
             /** Created At */
             created_at: string;
             /** Derived From */
@@ -6034,21 +6065,31 @@ export interface components {
             hero_asset_id: string | null;
             /** Id */
             id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
             /** Locked At */
             locked_at: string | null;
             /** Lora */
             lora: string | null;
+            /**
+             * Marks
+             * @default
+             */
+            marks: string;
+            /**
+             * Outfit
+             * @default
+             */
+            outfit: string;
             /**
              * State
              * @default open
              * @enum {string}
              */
             state: "open" | "final";
-            /**
-             * Stub
-             * @default
-             */
-            stub: string;
             /** Trigger */
             trigger: string | null;
         };
@@ -6835,6 +6876,34 @@ export interface components {
              */
             vram_budget_gb: number;
         };
+        /**
+         * SheetColour
+         * @description D93 (B4): a colour bound to what it colours ("#C0392B" + "rain jacket") — the way Generate's Tree prompt binds colours (a hex code
+         *     in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).
+         */
+        "SheetColour-Input": {
+            /** Hex */
+            hex: string;
+            /**
+             * Object
+             * @default
+             */
+            object?: string;
+        };
+        /**
+         * SheetColour
+         * @description D93 (B4): a colour bound to what it colours ("#C0392B" + "rain jacket") — the way Generate's Tree prompt binds colours (a hex code
+         *     in front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).
+         */
+        "SheetColour-Output": {
+            /** Hex */
+            hex: string;
+            /**
+             * Object
+             * @default
+             */
+            object: string;
+        };
         /** ShellBuild */
         ShellBuild: {
             /** Build Time */
@@ -7332,6 +7401,36 @@ export interface components {
             type: "bool" | "enum";
             /** Values */
             values: string[];
+        };
+        /**
+         * SubjectShot
+         * @description D93 (B4): a linked subject's words for this shot only — an outfit in place of the sheet's, and a line after the sheet ("soaked, hood
+         *     up"). The character's sheet itself is read from Cast at submit (story.compose_subject), never copied into the panel.
+         */
+        SubjectShot: {
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /**
+             * Outfit
+             * @default
+             */
+            outfit?: string;
+        };
+        /** SubjectShotOut */
+        SubjectShotOut: {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Outfit
+             * @default
+             */
+            outfit: string;
         };
         /** T2I */
         T2I: {

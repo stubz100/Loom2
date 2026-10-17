@@ -8,8 +8,8 @@ import { bindingLines, castOffer, castOrigin, nameOnly, needsLook, sentIndex, sl
 import { CastButton, SubjectSlots, SubjectWarn } from './SubjectLink'
 
 const prof = (v: Partial<Profile['versions'][number]> = {}, name = 'char01'): Profile => ({
-  id: 'prf_1', name, cls: 'character', current: 'v1', schema_version: 1, revision: 3, voice_id: null, created_at: '', updated_at: '',
-  versions: [{ id: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, stub: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v }],
+  id: 'prf_1', name, cls: 'character', current: 'v1', schema_version: 2, revision: 3, voice_id: null, created_at: '', updated_at: '',
+  versions: [{ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v }],
 })
 const html = (el: React.ReactElement) => { const host = document.createElement('div'); host.innerHTML = renderToStaticMarkup(el); return host }
 
@@ -50,16 +50,16 @@ describe('D93 (A9) the description', () => {
     expect(needsLook('a red-haired diver', 'char01')).toBe(false)
   })
   it('the warning line: the ask first, then the name-only warning, else nothing', () => {
-    expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={0} />).textContent).toBe('the model only sees the name — describe the look')
+    expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={0} />).textContent).toBe('the model only sees the name — describe the look in Cast')   // D93 (B4): the sheet is Cast's
     expect(html(<SubjectWarn name="char01" nameOnly ask={false} refs={3} />).textContent).toContain('(and its reference images)')
-    expect(html(<SubjectWarn name="char01" nameOnly ask refs={0} />).textContent).toContain("describe char01's look first")
+    expect(html(<SubjectWarn name="char01" nameOnly ask refs={0} />).textContent).toContain("describe char01's look in Story · Cast first")
     expect(html(<SubjectWarn name="char01" nameOnly={false} ask={false} refs={0} />).textContent).toBe('')
   })
 })
 
 describe('D93 (A3) the slots', () => {
-  const bs: Binding[] = [{ subject: 0, name: 'Mara', profile_id: 'prf_m', refs: [1, 2, 3], span: 'reference images 1–3', skipped: 0 },
-    { subject: 1, name: 'Ines', profile_id: 'prf_i', refs: [4], span: 'reference image 4', skipped: 2 }]
+  const bs: Binding[] = [{ subject: 0, name: 'Mara', profile_id: 'prf_m', version: 'v1', refs: [1, 2, 3], span: 'reference images 1–3', skipped: 0 },
+    { subject: 1, name: 'Ines', profile_id: 'prf_i', version: 'v1', refs: [4], span: 'reference image 4', skipped: 2 }]
   it('the card shows its range, and what did not fit', () => {
     expect(slotsOf(bs, 0)).toEqual({ label: 'refs 1–3', left: 0, refs: [1, 2, 3] })
     expect(slotsOf(bs, 1)!.label).toBe('ref 4')
@@ -75,5 +75,6 @@ describe('D93 (A3) the slots', () => {
     expect(sentIndex(subs, 1)).toBe(0)
     expect(sentIndex(subs, 3)).toBe(1)
     expect(sentIndex(subs, 0)).toBe(-1)
+    expect(sentIndex([{ description: '' }, { description: '', profile_id: 'prf_m' }], 1)).toBe(0)   // D93 (B4): a linked card without words is sent (its sheet is the server's)
   })
 })

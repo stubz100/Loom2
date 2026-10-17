@@ -144,7 +144,7 @@ def test_routes_candidates_and_add(tmp_path: Path):
         svc = app.state.services
         ids = [svc.catalogue.ingest_file(_png(tmp_path / f"r{i}.png")).id for i in range(4)]
         p = cl.post("/story/profiles", json={"name": "char01", "cls": "character"}).json()
-        assert p["versions"][0]["stub"] == "" and p["versions"][0]["candidates_group_id"] is None      # A9: empty; no candidates page yet
+        assert p["versions"][0]["appearance"] == "" and p["versions"][0]["candidates_group_id"] is None      # A9: empty; no candidates page yet
         # A1: the casting run's page, made once
         r = cl.post(f"/story/profiles/{p['id']}/candidates", json={})
         cand = r.json()["versions"][0]["candidates_group_id"]

@@ -382,6 +382,11 @@ class RefOut(Out):
     mention: str | None = None
 
 
+class SubjectShotOut(Out):
+    outfit: str = ""
+    note: str = ""
+
+
 class MentionOut(Out):
     group_id: str
     name: str | None = None
@@ -393,6 +398,8 @@ class MentionOut(Out):
     lora_available: str | None = None             # LT3: the version's LoRA, added or not (the chip's on / off)
     subject: int | None = None                    # D92: the subject card (its index in prompt_json.subjects) linked to this profile
     skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room
+    shot: SubjectShotOut | None = None            # D93 (B4): the linked card's per-shot override
+    composed: str | None = None                   # D93 (B4): the description the linked subject carried (the version's sheet + the shot)
 
 
 class BindingOut(Out):
@@ -400,6 +407,7 @@ class BindingOut(Out):
     subject: int
     name: str | None = None
     profile_id: str | None = None
+    version: str | None = None                    # D93 (B5): the version (costume) the subject uses
     refs: list[int] = []
     span: str | None = None                       # 'reference images 1–3' — the words the prompt carries when the model binds
     skipped: int = 0                              # the set's images that did not fit

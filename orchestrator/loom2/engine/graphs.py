@@ -476,7 +476,7 @@ def subject_bindings(recipe: T2I, spec: ModelSpec) -> list[dict[str, Any]]:
             continue
         idx = [i + 1 for i, r in enumerate(kept) if r.mention == m.group_id]
         cut = len([r for r in recipe.refs[len(kept):] if r.mention == m.group_id])
-        out.append({"subject": m.subject, "name": m.name, "profile_id": m.profile_id, "refs": idx, "span": ref_span(idx) if idx else None, "skipped": (m.skipped or 0) + cut})
+        out.append({"subject": m.subject, "name": m.name, "profile_id": m.profile_id, "version": m.version, "refs": idx, "span": ref_span(idx) if idx else None, "skipped": (m.skipped or 0) + cut})
     return out
 
 

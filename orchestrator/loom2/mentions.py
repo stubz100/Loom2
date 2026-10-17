@@ -7,7 +7,10 @@ never pushes a reference out. Each reference it adds carries the group's name as
 in `mention`; the mention is stamped with the group's revision and the asset ids it gave (lineage at write time, loom lesson 7). A
 stamped mention is not resolved again, so re-running a stored recipe uses the same images. The Story workspace (14) will resolve
 AssetProfiles behind the same function. D93 (A3): after the turns, each mention's images are put together (a linked subject's first, in
-subject order) so the prompt can bind a subject to its range; the images left out for room are stamped as `skipped`.
+subject order) so the prompt can bind a subject to its range; the images left out for room are stamped as `skipped`. D93 (B4): a subject
+card linked to a profile carries no words of its own — its description is composed here from the chosen version's sheet and the card's
+per-shot override (`Mention.shot`), written into the subject and stamped on the mention (`composed`), so Cast's edits follow and the
+recipe keeps what ran.
 """
 from __future__ import annotations
 
@@ -43,8 +46,11 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
         return recipe
     if groups is None or catalogue is None:
         raise ValueError("mentions need an open project")
+    from .story import compose_sheet
     stubs: dict[str, str] = {}
     pinned: dict[int, Mention] = {}
+    subs = recipe.prompt_json.get("subjects") if recipe.prompt_mode in ("tree", "json") and isinstance(recipe.prompt_json, dict) else None
+    composed: dict[int, str] = {}                                               # D93 (B4): subject index → the description it carries
     triggers: dict[str, str] = {}                                               # LT3 (18 §3f): group id → the trigger of the LoRA the mention added
     loras = list(recipe.loras)
     trained = getattr(roster, "trained", {}) or {}
@@ -72,10 +78,18 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
                 added = v.lora
                 if v.trigger:
                     triggers[v.group_id] = v.trigger.strip()
+        text = None
+        if m.subject is not None and isinstance(subs, list) and m.subject < len(subs) and isinstance(subs[m.subject], dict):
+            text = composed[m.subject] = compose_sheet(v, m.shot, p.name)      # D93 (B4): the sheet of the version chosen + this shot
         pinned[i] = Mention(group_id=v.group_id, name=m.name or p.name, profile_id=p.id, version=v.id, lora=added, lora_available=v.lora if v.lora in trained else None,
-                            subject=m.subject)
-        if v.stub.strip() and v.stub.strip().lower() != (m.name or p.name).strip().lower():
-            stubs[v.group_id] = v.stub.strip().rstrip(".")
+                            subject=m.subject, shot=m.shot, composed=text)
+        sheet = compose_sheet(v)                                                # D85: the clause the references' note carries (the sheet, no shot)
+        if sheet and sheet.lower() != (m.name or p.name).strip().lower():
+            stubs[v.group_id] = sheet
+    if composed:                                                                # a linked card's own words (an old panel's copy) give way to the sheet
+        tree = {**recipe.prompt_json, "subjects": [{"description": composed[k], **{x: y for x, y in sub.items() if x != "description"}} if k in composed else sub
+                                                   for k, sub in enumerate(subs)]}
+        recipe = recipe.model_copy(update={"prompt_json": tree})
     if pinned:
         recipe = recipe.model_copy(update={"mentions": [pinned.get(i, m) for i, m in enumerate(recipe.mentions)]})
         todo = [m for m in recipe.mentions if m.revision is None]
@@ -111,6 +125,6 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
     skipped = {m.group_id: len([a for a in queues[m.group_id] if a not in taken]) for m in todo}
     stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
                                                         asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version, lora=m.lora, lora_available=m.lora_available,
-                                                        subject=m.subject, skipped=skipped[m.group_id])
+                                                        subject=m.subject, skipped=skipped[m.group_id], shot=m.shot, composed=m.composed)
                for m in recipe.mentions]
     return recipe.model_copy(update={"refs": refs, "mentions": stamped, "loras": loras})

@@ -2,7 +2,7 @@
 // adders; Stage: the editor over story/world.json (logline, synopsis, styles, the spine, variables); Inspector: the project format (the
 // finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90; a library entry's and a saved panel's:
 // LibraryWorld.tsx, D92). SY1: the Cast tab — Panel: the profiles by class; Strip: the
-// version selector and the bootstrap strip; Stage: the version page (hero, stub, the coverage grid, the candidates with keep / reject);
+// version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
@@ -22,6 +22,8 @@ import { StyleEditor, StyleGrid } from './StyleWorld'
 import { EntryEditor, LibraryGrid, PanelEditor, PanelGrid } from './LibraryWorld'
 import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
+import { versionName } from '../generate/sheet'
+import { CastSheet } from './CastSheet'
 import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnItem, shotMenu, storyItem } from './storyCommands'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
@@ -46,9 +48,9 @@ function devHook(): Record<string, unknown> {
     addStyle: (name?: string) => sy().addStyle(name), setStyle: (id: string, patch: Partial<WorldStyle>) => sy().setStyle(id, patch), edit: (patch: Record<string, unknown>) => sy().edit(patch as never),
     // SY1
     loadProfiles: () => sy().loadProfiles(), selectProfile: (id: string | null, v?: string | null) => sy().selectProfile(id, v), loadPages: () => sy().loadPages(),
-    createProfile: (name: string, cls: ProfileClass, hero?: string | null, stub?: string) => sy().createProfile(name, cls, hero, stub),
+    createProfile: (name: string, cls: ProfileClass, hero?: string | null, appearance?: string) => sy().createProfile(name, cls, hero, appearance),
     expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), curate: (ids: string[], verdict: 'keep' | 'reject') => sy().curate(ids, verdict),
-    lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setStub(s),
+    lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setSheet({ appearance: s }), setSheet: (patch: Record<string, unknown>) => sy().setSheet(patch as never),
     train: (opts: Record<string, unknown> = {}) => { sy().setTrainOpts(opts as never); return sy().train() }, loras: () => sy().loras, loadLoras: () => sy().loadLoras(),
     useLora: (id: string) => sy().useLora(id), deleteLora: (id: string) => sy().deleteLora(id), checkLora: (id: string) => sy().checkLora(id),
     // SY2
@@ -379,7 +381,7 @@ export function Strip() {
       <div className="story-strip">
         <b>{p.name}</b>
         <select aria-label="version" value={v?.id ?? p.current} onChange={(e) => sy().selectProfile(p.id, e.target.value)} title="The version shown (mentions use the current one unless pinned)">
-          {p.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.id === p.current ? ' · current' : ''}{x.state === 'final' ? ' · final' : ''}</option>)}
+          {p.versions.map((x) => <option key={x.id} value={x.id}>{versionName(x)}{x.id === p.current ? ' · current' : ''}{x.state === 'final' ? ' · final' : ''}</option>)}
         </select>
         <CommandButton id="story.cast.newVersion" />
         {v?.state === 'final' ? <span className="lock-badge" title={`marked final ${v.locked_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.cast.lock" />}
@@ -525,10 +527,8 @@ function CastPage() {
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
-          <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {v.id} ({open ? 'open' : 'final'})</span></h2>
-          <label className="stub"><span>prompt stub</span>
-            <textarea rows={2} value={v.stub} aria-label="prompt stub" readOnly={!open} placeholder={`describe ${p.name}'s look — e.g. ${p.name}, a wiry courier in a long grey coat, red scarf (the clause a @mention and a linked subject carry)`} onChange={(e) => sy().setStub(e.target.value)} />
-          </label>
+          <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {versionName(v)} ({open ? 'open' : 'final'})</span></h2>
+          <CastSheet p={p} v={v} />{/* D93 (B4): the character sheet (was the one prompt stub) */}
           <div className="counts"><span>reference set · <b>{refs.length}</b></span><span>candidates · <b>{cands.length}</b></span>{v.candidates_group_id === null && <span className="hint">(none expanded yet)</span>}</div>
         </div>
       </div>
@@ -681,12 +681,12 @@ function CastInspector() {
         <span>class</span>
         <select value={p.cls} aria-label="profile class" onChange={(e) => void sy().patchProfile({ cls: e.target.value as ProfileClass })}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
         <span>current</span>
-        <select value={p.current} aria-label="current version" onChange={(e) => void sy().patchProfile({ current: e.target.value })}>{p.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
+        <select value={p.current} aria-label="current version" onChange={(e) => void sy().patchProfile({ current: e.target.value })}>{p.versions.map((x) => <option key={x.id} value={x.id}>{versionName(x)}</option>)}</select>
         <span>versions</span><span>{p.versions.length}</span>
         <span>mention</span><span className="mono">@{p.name}</span>
       </div>
       {v && <>
-        <h4>Version {v.id} · {v.state}</h4>
+        <h4>Version {versionName(v)} · {v.state}</h4>
         <div className="kv">
           <span>hero</span><span>{v.hero_asset_id ? <img className="insp-thumb small" src={api.thumbUrl(v.hero_asset_id, 256)} alt="" /> : '—'}</span>
           <span>reference set</span><span className="mono">{v.group_id}</span>

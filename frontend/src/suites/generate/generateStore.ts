@@ -7,17 +7,22 @@ import { isDocumentPreview, isT2IPreview, type Asset, type Capabilities, type Do
 import type { components } from '../../api/schema'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
-import { runCommand } from '../../frame/commands'
+import { runCommand, type OnItem } from '../../frame/commands'
 import { refDrop } from '../../frame/dropRules'
 import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { profilesForMentions as profilesNow, styleFor } from '../story/storyStore'
 import type { Profile } from '../../api/types'
 import { castOrigin, keptSubject, needsLook, sentIndex } from './subjectCast'
+import { adoptDescription, composeSheet, versionOf } from './sheet'
 
 /** A subject card of the Tree prompt. D92: `profile_id` links it to a Cast character or prop — its version's reference set and LoRA ride on
- *  the profile mention the link records (never sent in the prompt itself). */
-export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string; profile_id?: string }
+ *  the profile mention the link records (never sent in the prompt itself). D93 (B4): a linked card has no words of its own — the server
+ *  composes its description from the version's sheet (`version`: the chip's pick, else the current one, B5) and this shot's override
+ *  (`shot_outfit`, `shot_note`); `description` is a free card's. */
+export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string; profile_id?: string; version?: string; shot_outfit?: string; shot_note?: string }
+/** D93 (B4): the card fields that ride on the mention, never in the prompt's subject object. */
+const LINK_KEYS = new Set(['profile_id', 'version', 'shot_outfit', 'shot_note'])
 export interface Camera { angle?: string; lens?: string; depth_of_field?: string; 'f-number'?: string; distance?: string }
 export interface Tree { scene?: string; subjects?: Subject[]; style?: string; color_palette?: string[]; lighting?: string; mood?: string; background?: string; composition?: string; camera?: Camera }
 export type PromptMode = 'tree' | 'json' | 'text'
@@ -82,7 +87,7 @@ export function cleanTree(t: Tree): Record<string, unknown> {
     if (v === undefined || v === null || v === '') continue
     if (Array.isArray(v)) {
       if (k === 'subjects') {
-        const subs = (v as Subject[]).filter(keptSubject).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'profile_id' && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's
+        const subs = (v as Subject[]).filter(keptSubject).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => !LINK_KEYS.has(k) && !(k === 'description' && s.profile_id) && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's; D93 (B4): a linked card's words are the server's to compose
         if (subs.length) out[k] = subs
       } else if (v.length) out[k] = v
     } else if (typeof v === 'object') {
@@ -144,8 +149,9 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: shift ? p.base_shift : null, max_shift: shift ? p.max_shift : null, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
-    mentions: mentionsInUse(p).map((m) => { const si = sentIndex(p.tree.subjects ?? [], linkedSubject(p, m.profile_id))   // D85: a profile mention names its profile; D92: and the card it links (D93: its index among the subjects sent)
-      return { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}), ...(si >= 0 ? { subject: si } : {}) } }),
+    mentions: mentionsInUse(p).map((m) => { const li = linkedSubject(p, m.profile_id), si = sentIndex(p.tree.subjects ?? [], li), s = p.tree.subjects?.[li]   // D85: a profile mention names its profile; D92: and the card it links (D93: its index among the subjects sent)
+      const shot = s && (s.shot_outfit?.trim() || s.shot_note?.trim()) ? { outfit: s.shot_outfit?.trim() ?? '', note: s.shot_note?.trim() ?? '' } : null   // D93 (B4): this shot's words; (B5) the chip's version
+      return { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}), ...(si >= 0 ? { subject: si, ...(s?.version ? { version: s.version } : {}), ...(shot ? { shot } : {}) } : {}) } }),
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
 }
@@ -167,9 +173,9 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     style_id: (r.style_id as string | null | undefined) ?? null,                                     // D85: a stored recipe's style (null = it ran without one)
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }
-  for (const m of (Array.isArray(r.mentions) ? r.mentions : []) as { profile_id?: string | null; subject?: number | null }[]) {   // D92: a subject's profile link comes back
+  for (const m of (Array.isArray(r.mentions) ? r.mentions : []) as { profile_id?: string | null; subject?: number | null; version?: string | null; shot?: { outfit?: string; note?: string } | null }[]) {   // D92: a subject's profile link comes back
     const s = m.profile_id && typeof m.subject === 'number' ? out.tree?.subjects?.[m.subject] : undefined
-    if (s) s.profile_id = m.profile_id!
+    if (s) Object.assign(s, { profile_id: m.profile_id!, description: '', ...(m.version ? { version: m.version } : {}), shot_outfit: m.shot?.outfit ?? '', shot_note: m.shot?.note ?? '' })   // D93 (B4, B5): the version it ran with and its shot words; the composed text was the sheet's
   }
   if (keepSeeds && Array.isArray(r.seeds) && r.seeds.length) { out.seed_mode = 'fixed'; out.seed = Number(r.seeds[0]); out.count = 1 }
   return out
@@ -219,10 +225,13 @@ export interface GenerateState {
   setSubject: (i: number, patch: Partial<Subject>) => void
   addSubject: () => void
   removeSubject: (i: number) => void
-  /** D92: link a subject card to a Cast profile (its current version): the description defaults to the version's stub, the profile mention
-   *  is recorded so its reference set and LoRA follow (mentions.py); `unlinkSubject` ends it (the words stay). */
+  /** D92: link a subject card to a Cast profile (its current version): the profile mention is recorded so its reference set and LoRA follow
+   *  (mentions.py). D93 (B4): the card copies nothing — the sheet is read from Cast at every preview and submit; words typed in the card
+   *  before go to "this shot". `unlinkSubject` ends it: the composed words stay as a free card's description. */
   linkSubject: (i: number, profile: Profile) => void
   unlinkSubject: (i: number) => void
+  /** D93 (B5): the version (costume) a linked card uses — undefined follows the profile's current one; the mention moves to its set. */
+  setSubjectVersion: (i: number, version: string | undefined) => void
   /** D92 (Cast's "Use as a subject in Generate"): the Tree prompt with a subject card linked to the profile. */
   useAsSubject: (profile: Profile) => void
   /** D93 (A1): "Give <name> a look" / "More looks for <name>" on a linked card — the panel's images as the version's candidates (the page
@@ -266,6 +275,8 @@ export function runOnSubject(i: number, id: string): boolean {
   subjectItem.i = i
   try { return runCommand(id) } finally { subjectItem.i = undefined }
 }
+/** D93 (B5): a menu entry on one card (the version chip's "Edit the sheet in Cast") — the card set around the command's `when` and `run`. */
+export const onSubject = (i: number): OnItem => (f) => { subjectItem.i = i; try { return f() } finally { subjectItem.i = undefined } }
 
 /** D92: the newest result of a Generate job (a saved panel's picture when it is saved). */
 export function latestResult(jobs: Record<string, Job>): string | null {
@@ -274,10 +285,10 @@ export function latestResult(jobs: Record<string, Job>): string | null {
     .sort((a, b) => ((a.finished_at ?? a.created_at) < (b.finished_at ?? b.created_at) ? 1 : -1))[0]
   return j ? ids(j)[0] : null
 }
-/** The stub of a profile's current version as the Story store holds it (a subject card's default words). */
-function stubOf(profileId: string): string | null {
-  const p = profilesNow().find((x) => x.id === profileId)
-  return p?.versions.find((v) => v.id === p.current)?.stub ?? null
+/** D93 (B4): a linked card's description as the server will compose it (from the Story store's copy of the profile) — JSON mode bakes it in. */
+export function linkedWords(s: Subject, profiles: Profile[] = profilesNow()): string | null {
+  const p = s.profile_id ? profiles.find((x) => x.id === s.profile_id) : undefined
+  return p ? composeSheet(versionOf(p, s.version), { outfit: s.shot_outfit, note: s.shot_note }, p.name) : null
 }
 
 let previewTimer: number | null = null
@@ -348,9 +359,8 @@ export const useGenerate = create<GenerateState>()(
         const v = profile.versions.find((x) => x.id === profile.current)
         if (!cur || !v) return
         const was = cur.profile_id ?? null
-        const wasStub = was ? stubOf(was) : null
-        const keep = !!cur.description.trim() && cur.description.trim() !== (wasStub ?? '').trim()     // typed words stay; the last link's stub is replaced
-        subs[i] = { ...cur, profile_id: profile.id, description: keep ? cur.description : v.stub.trim() || profile.name }
+        const typed = was ? '' : cur.description.trim()                                     // D93 (B4): a free card's words go to "this shot"; nothing is copied
+        subs[i] = { ...cur, profile_id: profile.id, description: '', version: undefined, shot_outfit: was ? cur.shot_outfit : '', shot_note: was ? cur.shot_note : (adoptDescription(typed, v, profile.name)?.note ?? '') }
         const text = promptStrings(p).join('\n')
         const others = (p.mentions ?? []).filter((m) => m.group_id !== v.group_id && m.profile_id !== profile.id
           && !(was && m.profile_id === was && !subs.some((s) => s.profile_id === was) && !text.includes('@' + m.name)))
@@ -360,9 +370,17 @@ export const useGenerate = create<GenerateState>()(
         const p = get().panel, subs = [...(p.tree.subjects ?? [])], cur = subs[i]
         if (!cur?.profile_id) return
         const pid = cur.profile_id
-        subs[i] = { ...cur, profile_id: undefined }
+        subs[i] = { ...cur, profile_id: undefined, version: undefined, shot_outfit: undefined, shot_note: undefined, description: linkedWords(cur) ?? cur.description }   // D93 (B4): the composed words stay
         const text = promptStrings(p).join('\n')
         get().set({ tree: { ...p.tree, subjects: subs }, mentions: (p.mentions ?? []).filter((m) => m.profile_id !== pid || subs.some((s) => s.profile_id === pid) || text.includes('@' + m.name)) })
+      },
+      setSubjectVersion: (i, version) => {
+        const p = get().panel, subs = [...(p.tree.subjects ?? [])], cur = subs[i]
+        const prof = cur?.profile_id ? profilesNow().find((x) => x.id === cur.profile_id) : undefined
+        const v = versionOf(prof, version)
+        if (!cur || !prof || !v) return
+        subs[i] = { ...cur, version: version && version !== prof.current ? version : undefined }   // the current one: follow the current one
+        get().set({ tree: { ...p.tree, subjects: subs }, mentions: (p.mentions ?? []).map((m) => (m.profile_id === prof.id ? { ...m, group_id: v.group_id } : m)) })
       },
       useAsSubject: (profile) => {
         if (get().panel.prompt_mode === 'json' && !get().jsonToTree()) return
@@ -377,12 +395,12 @@ export const useGenerate = create<GenerateState>()(
       castLook: async (i) => {
         const p = get().panel, sub = p.tree.subjects?.[i], ss = useSession.getState()
         const prof = sub?.profile_id ? profilesNow().find((x) => x.id === sub.profile_id) : undefined
-        const v = prof?.versions.find((x) => x.id === prof.current)
+        const v = versionOf(prof, sub?.version)                                 // D93 (B5): the version the card uses
         if (!sub || !prof || !v || p.prompt_mode !== 'tree') return null
         if (v.state !== 'open') { ss.toast(`${prof.name} ${v.id} is final — make a new version to cast it again`, 'error'); return null }
-        if (needsLook(sub.description, prof.name)) {                          // the casting run renders the words: ask for them first
+        if (needsLook(composeSheet(v), prof.name)) {                           // the casting run renders the sheet: ask for it first (B4: it is written in Cast)
           set({ castAsk: i })
-          window.setTimeout(() => (document.getElementById(`gen-subject-desc-${i}`) as HTMLTextAreaElement | null)?.focus(), 30)
+          window.setTimeout(() => (document.getElementById(`gen-subject-sheet-${i}`) as HTMLElement | null)?.focus(), 30)
           return null
         }
         set({ castAsk: null })
@@ -394,7 +412,10 @@ export const useGenerate = create<GenerateState>()(
           action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
       },
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
-      treeToJson: () => get().set({ json_text: JSON.stringify(cleanTree(get().panel.tree), null, 2), prompt_mode: 'json' }),
+      treeToJson: () => {                                                      // D93 (B4): JSON has no links — a linked card's composed words are written in
+        const t = get().panel.tree
+        get().set({ json_text: JSON.stringify(cleanTree({ ...t, subjects: (t.subjects ?? []).map((s) => (s.profile_id ? { ...s, profile_id: undefined, description: linkedWords(s) ?? '' } : s)) }), null, 2), prompt_mode: 'json' })
+      },
       jsonToTree: () => {
         try { const j = JSON.parse(get().panel.json_text || '{}'); get().set({ tree: treeFromJson(j), prompt_mode: 'tree' }); return true }
         catch { useSession.getState().toast('JSON is not valid', 'error'); return false }

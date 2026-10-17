@@ -49,6 +49,13 @@ class RefImage(BaseModel):
     mention: str | None = None                    # D73: the group id of the @mention that added it (mentions.py)
 
 
+class SubjectShot(BaseModel):
+    """D93 (B4): a linked subject's words for this shot only — an outfit in place of the sheet's, and a line after the sheet ("soaked, hood
+    up"). The character's sheet itself is read from Cast at submit (story.compose_subject), never copied into the panel."""
+    outfit: str = Field("", max_length=400)
+    note: str = Field("", max_length=400)
+
+
 class Mention(BaseModel):
     """D73: an @mention of an album group. The client sends the id (and the name it shows); the server resolves it into references and
     stamps the group's revision and the asset ids it gave — a stamped mention is not resolved again. D85: a Story profile mention names
@@ -64,6 +71,8 @@ class Mention(BaseModel):
     lora_available: str | None = None             # LT3: the version's LoRA whether or not it was added (the chip's on / off)
     subject: int | None = Field(None, ge=0)       # D92: the Tree prompt's subject card linked to this profile (its index in prompt_json.subjects) — the link comes back with the recipe
     skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room (stamped; the preview says so)
+    shot: SubjectShot | None = None               # D93 (B4): the linked subject's per-shot override (sent by the card, kept with the recipe)
+    composed: str | None = None                   # D93 (B4): the description the linked subject carried — the version's sheet + the shot (stamped)
 
 
 class T2I(BaseModel):

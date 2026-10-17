@@ -1,7 +1,7 @@
 // Generate suite (09; D90 02 §6): one scrolling Panel column (GenerateColumn.tsx — saved panels, prompt, references, look, camera, model,
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
-import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
@@ -14,6 +14,7 @@ import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
 import { batchOf, modelPatch, subjectItem, submitBlock, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
 import { castOffer } from './subjectCast'
+import { versionOf } from './sheet'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useLibrary } from '../story/libraryStore'
 import './generate.css'
@@ -133,8 +134,21 @@ registerCommands([
   // D93 (A1): a linked subject card's casting run — "Give <name> a look" / "More looks for <name>" (the card's button sets the card first)
   { id: 'gen.subject.cast', scope: 'generate', label: 'Give the character a look', icon: Sparkles, placement: ['panel'], hint: "the panel's images land as the linked character's candidates in Story · Cast",
     when: () => { const i = subjectItem.i, g = useGenerate.getState(); const pid = i !== undefined ? g.panel.tree.subjects?.[i]?.profile_id : undefined
-      const o = pid ? castOffer(profilesForMentions().find((p) => p.id === pid)) : null; return !!o && !o.disabled && g.panel.prompt_mode === 'tree' && !!useSession.getState().project?.open },
+      const o = pid ? castOffer(profilesForMentions().find((p) => p.id === pid), 0, g.panel.tree.subjects?.[i ?? -1]?.version) : null; return !!o && !o.disabled && g.panel.prompt_mode === 'tree' && !!useSession.getState().project?.open },
     run: () => { const i = subjectItem.i; if (i !== undefined) void useGenerate.getState().castLook(i) } },
+  // D93 (B4): the sheet a linked card shows is Cast's — edited there (the card's "edit in Cast", the version chip's menu); every linked subject follows
+  { id: 'gen.subject.editSheet', scope: 'generate', label: 'Edit the character sheet in Story · Cast', icon: PenLine, placement: ['panel', 'context'],
+    hint: 'the appearance, outfit, bound colours and marks of the version this subject uses — every linked subject follows',
+    when: () => { const i = subjectItem.i; return i !== undefined && !!useGenerate.getState().panel.tree.subjects?.[i]?.profile_id },
+    run: () => { const i = subjectItem.i, s = i !== undefined ? useGenerate.getState().panel.tree.subjects?.[i] : undefined
+      const p = s?.profile_id ? profilesForMentions().find((x) => x.id === s.profile_id) : undefined, v = versionOf(p, s?.version)
+      if (!p || !v) return
+      const focus = (n: number) => {                                         // the version page renders after Story loads: focus its appearance once it is there
+        const el = document.getElementById('cast-appearance') as HTMLTextAreaElement | null
+        if (el && document.querySelector('.cast-page h2')?.textContent?.includes(p.name)) el.focus()
+        else if (n < 60) window.setTimeout(() => focus(n + 1), 50)
+      }
+      void import('../../store/origin').then((m) => { m.goToStory({ tab: 'cast', id: p.id, version: v.id }); focus(0) }) } },
   { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
 ])
 

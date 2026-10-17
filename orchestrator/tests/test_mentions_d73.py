@@ -113,7 +113,7 @@ def test_mentions_take_turns_within_the_room_left_and_are_stamped(tmp_path: Path
     assert [(x.asset_id, x.note, x.mention) for x in out.refs] == [(ids[6], "the lamp", None), (ids[3], "hero", hero.id),
                                                                    (ids[1], "hero", hero.id), (ids[4], "tavern", tavern.id)]
     assert out.mentions[0].skipped == 2                                                  # D93: hero's other two did not fit
-    assert [m.model_dump(exclude={"profile_id", "version", "lora", "lora_available", "subject", "skipped"}) for m in out.mentions] == [{"group_id": hero.id, "name": "hero", "revision": hero.revision, "asset_ids": [ids[3], ids[1]]},
+    assert [m.model_dump(exclude={"profile_id", "version", "lora", "lora_available", "subject", "skipped", "shot", "composed"}) for m in out.mentions] == [{"group_id": hero.id, "name": "hero", "revision": hero.revision, "asset_ids": [ids[3], ids[1]]},
                                                       {"group_id": tavern.id, "name": "tavern", "revision": tavern.revision, "asset_ids": [ids[4]]}]   # D85: profile fields (D92: and the subject link) stay None for a group
     assert resolve_mentions(out, st, cat, 4) is out                                    # stamped: not resolved again (a re-run uses the same images)
     assert resolve_mentions(r, st, cat, 1).refs == r.refs                              # no room left: a mention never pushes a reference out

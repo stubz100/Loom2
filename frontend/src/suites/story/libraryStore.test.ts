@@ -1,6 +1,6 @@
 // D92: the World library → Generate's tiles (an entry's own drawing, its picture or its field's glyph — busy while being made, never
-// letters), a field's entries in order, a move within a field; and a subject card ↔ a Cast profile (the description defaults to the
-// version's stub, the profile mention is recorded with the card's index, unlinking drops it, the link survives a stored recipe).
+// letters), a field's entries in order, a move within a field; and a subject card ↔ a Cast profile (D93 B4: the card copies nothing —
+// the server composes the sheet; the profile mention is recorded with the card's index, unlinking drops it, the link survives a stored recipe).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement, type ReactNode } from 'react'
@@ -47,8 +47,9 @@ describe('D92 the library as tiles', () => {
 })
 
 const CAPS = { defaults: { t2i: 'fixture-model' }, models: { 'fixture-model': { order: 1, short: 'M', turbo: false, recipes: {} } } } as unknown as Capabilities
-const prof = (id: string, name: string, stub: string, cls = 'character'): Profile =>
-  ({ id, name, cls, current: 'v2', versions: [{ id: 'v1', group_id: `${id}_g1`, stub: 'old', hero_asset_id: null }, { id: 'v2', group_id: `${id}_g2`, stub, hero_asset_id: 'ast_h' }] }) as unknown as Profile
+const prof = (id: string, name: string, appearance: string, cls = 'character'): Profile =>
+  ({ id, name, cls, current: 'v2', versions: [{ id: 'v1', label: 'v1', group_id: `${id}_g1`, appearance: 'old', outfit: '', colours: [], marks: '', hero_asset_id: null },
+    { id: 'v2', label: 'v2', group_id: `${id}_g2`, appearance, outfit: '', colours: [], marks: '', hero_asset_id: 'ast_h' }] }) as unknown as Profile
 const MARA = prof('prf_m', 'Mara', 'Mara, a wiry courier in a grey coat')
 const BOX = prof('prf_b', 'Compass', 'a brass compass with a cracked glass', 'prop')
 
@@ -62,29 +63,29 @@ describe('D92 a subject card is a Cast profile', () => {
   afterEach(() => { vi.useRealTimers(); useSession.setState({ capabilities: null }); useStory.setState({ profiles: [], profilesLoaded: false }) })
   const g = () => useGenerate.getState()
 
-  it('linking fills the description with the current version\'s stub and records the profile mention with the card', () => {
+  it('linking records the profile mention with the card and copies nothing (D93 B4: the server composes the sheet)', () => {
     g().addSubject()
     g().linkSubject(0, MARA)
     const p = g().panel
-    expect(p.tree.subjects![0]).toMatchObject({ profile_id: 'prf_m', description: 'Mara, a wiry courier in a grey coat' })
+    expect(p.tree.subjects![0]).toMatchObject({ profile_id: 'prf_m', description: '' })
     expect(p.mentions).toEqual([{ group_id: 'prf_m_g2', name: 'Mara', profile_id: 'prf_m' }])
     expect(mentionsInUse(p)).toHaveLength(1)                                           // in use without an @name in the text
     const r = recipeFromPanel(p)
     expect(r.mentions).toEqual([{ group_id: 'prf_m_g2', name: 'Mara', profile_id: 'prf_m', subject: 0 }])
-    expect(r.prompt_json).toEqual({ subjects: [{ description: 'Mara, a wiry courier in a grey coat', color_match: 'exact' }] })   // the link is not prompt text
+    expect(r.prompt_json).toEqual({ subjects: [{ color_match: 'exact' }] })            // the link and the sheet are not prompt text: the card is still sent
     expect(cleanTree(p.tree)).toEqual(r.prompt_json)
   })
-  it('a typed description stays; re-linking replaces the last stub and the last mention', () => {
+  it('a free card\'s typed words go to "this shot" on linking; re-linking keeps the shot words and moves the mention', () => {
     g().addSubject()
     g().setSubject(0, { description: 'a tired traveller' })
     g().linkSubject(0, MARA)
-    expect(g().panel.tree.subjects![0].description).toBe('a tired traveller')
-    g().setSubject(0, { description: 'Mara, a wiry courier in a grey coat' })
+    expect(g().panel.tree.subjects![0]).toMatchObject({ description: '', shot_note: 'a tired traveller' })
     g().linkSubject(0, BOX)
-    expect(g().panel.tree.subjects![0]).toMatchObject({ profile_id: 'prf_b', description: 'a brass compass with a cracked glass' })
+    expect(g().panel.tree.subjects![0]).toMatchObject({ profile_id: 'prf_b', description: '', shot_note: 'a tired traveller' })
     expect(g().panel.mentions).toEqual([{ group_id: 'prf_b_g2', name: 'Compass', profile_id: 'prf_b' }])
+    expect(recipeFromPanel(g().panel).mentions![0]).toMatchObject({ subject: 0, shot: { outfit: '', note: 'a tired traveller' } })
   })
-  it('unlinking (or the mention chip\'s ×) ends the link and the mention; the words stay', () => {
+  it('unlinking (or the mention chip\'s ×) ends the link and the mention; the composed words stay', () => {
     g().useAsSubject(MARA)
     expect(g().panel.tree.subjects).toHaveLength(1)
     g().useAsSubject(MARA)

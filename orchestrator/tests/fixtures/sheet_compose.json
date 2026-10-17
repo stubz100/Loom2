@@ -1,0 +1,18 @@
+{
+  "about": "D93 (B4): the composition rule of a character sheet — story.compose_sheet (server) and frontend/src/suites/generate/sheet.ts composeSheet (the card, JSON mode) both read these cases",
+  "cases": [
+    {"case": "a schema-1 stub as the appearance", "sheet": {"appearance": "Mara, a wiry courier in her thirties."}, "shot": null, "name": "Mara",
+     "out": "Mara, a wiry courier in her thirties"},
+    {"case": "every part, in order", "sheet": {"appearance": "a wiry woman, cropped black hair", "outfit": "a long grey coat over a hoodie", "colours": [{"hex": "#c0392b", "object": "rain jacket"}, {"hex": "#2C3E50", "object": "boots"}], "marks": "a scar over the left eyebrow"}, "shot": null, "name": "Mara",
+     "out": "a wiry woman, cropped black hair, wearing a long grey coat over a hoodie, #C0392B rain jacket, #2C3E50 boots, a scar over the left eyebrow"},
+    {"case": "this shot's outfit replaces the sheet's; its line comes last", "sheet": {"appearance": "a wiry woman", "outfit": "a long grey coat", "marks": "glasses"}, "shot": {"outfit": "a yellow oilskin", "note": "soaked, hood up."}, "name": "Mara",
+     "out": "a wiry woman, wearing a yellow oilskin, glasses, soaked, hood up"},
+    {"case": "an outfit that says how it is worn keeps its words", "sheet": {"appearance": "a tall man", "outfit": "in a red tracksuit"}, "shot": {"outfit": "", "note": ""}, "name": "Ivo",
+     "out": "a tall man, in a red tracksuit"},
+    {"case": "a colour without an object is not sent", "sheet": {"appearance": "a girl", "colours": [{"hex": "#F2A93B", "object": ""}, {"hex": "#1E8449", "object": " scarf. "}]}, "shot": null, "name": "Lea",
+     "out": "a girl, #1E8449 scarf"},
+    {"case": "an empty sheet is the name", "sheet": {}, "shot": null, "name": "Noor", "out": "Noor"},
+    {"case": "an empty sheet without a name is empty", "sheet": {"appearance": "  ", "colours": [{"hex": "#000000", "object": ""}]}, "shot": null, "name": "", "out": ""},
+    {"case": "only this shot's words", "sheet": {}, "shot": {"outfit": "", "note": "laughing"}, "name": "Noor", "out": "laughing"}
+  ]
+}

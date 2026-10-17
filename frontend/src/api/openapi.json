@@ -850,12 +850,24 @@
           "subject": {
             "title": "Subject",
             "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
           "subject",
           "name",
           "profile_id",
+          "version",
           "refs",
           "span",
           "skipped"
@@ -7760,6 +7772,18 @@
             "title": "Asset Ids",
             "type": "array"
           },
+          "composed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Composed"
+          },
           "group_id": {
             "default": "",
             "title": "Group Id",
@@ -7825,6 +7849,17 @@
             "default": null,
             "title": "Revision"
           },
+          "shot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectShot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "skipped": {
             "anyOf": [
               {
@@ -7875,6 +7910,17 @@
             },
             "title": "Asset Ids",
             "type": "array"
+          },
+          "composed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composed"
           },
           "group_id": {
             "title": "Group Id",
@@ -7935,6 +7981,16 @@
             ],
             "title": "Revision"
           },
+          "shot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectShotOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "skipped": {
             "anyOf": [
               {
@@ -7979,7 +8035,9 @@
           "lora",
           "lora_available",
           "subject",
-          "skipped"
+          "skipped",
+          "shot",
+          "composed"
         ],
         "title": "MentionOut",
         "type": "object"
@@ -8960,7 +9018,7 @@
             "type": "integer"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -9067,6 +9125,17 @@
       },
       "ProfileCreate": {
         "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appearance"
+          },
           "cls": {
             "default": "character",
             "enum": [
@@ -9076,6 +9145,20 @@
             ],
             "title": "Cls",
             "type": "string"
+          },
+          "colours": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SheetColour-Input"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colours"
           },
           "hero_asset_id": {
             "anyOf": [
@@ -9088,9 +9171,42 @@
             ],
             "title": "Hero Asset Id"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "marks": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marks"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "outfit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outfit"
           },
           "stub": {
             "default": "",
@@ -9121,8 +9237,14 @@
         "type": "object"
       },
       "ProfileVersion": {
-        "description": "One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`\nis editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the\nLoRA wave (D25).",
+        "description": "One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`\nis editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the\nLoRA wave (D25). D93 (B4): the version holds a character sheet — appearance (the look), outfit, bound colours and marks — composed into\nthe clause a mention and a linked subject carry (`compose_sheet`); a version is a costume, an age or a look, named by its `label`.\nSchema 1 had one free-text `stub`: it is read as the appearance (the file is rewritten at the next save).",
         "properties": {
+          "appearance": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Appearance",
+            "type": "string"
+          },
           "candidates_group_id": {
             "anyOf": [
               {
@@ -9133,6 +9255,14 @@
               }
             ],
             "title": "Candidates Group Id"
+          },
+          "colours": {
+            "items": {
+              "$ref": "#/components/schemas/SheetColour-Output"
+            },
+            "maxItems": 12,
+            "title": "Colours",
+            "type": "array"
           },
           "created_at": {
             "title": "Created At",
@@ -9168,6 +9298,12 @@
             "title": "Id",
             "type": "string"
           },
+          "label": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Label",
+            "type": "string"
+          },
           "locked_at": {
             "anyOf": [
               {
@@ -9190,6 +9326,18 @@
             ],
             "title": "Lora"
           },
+          "marks": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Marks",
+            "type": "string"
+          },
+          "outfit": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Outfit",
+            "type": "string"
+          },
           "state": {
             "default": "open",
             "enum": [
@@ -9197,11 +9345,6 @@
               "final"
             ],
             "title": "State",
-            "type": "string"
-          },
-          "stub": {
-            "default": "",
-            "title": "Stub",
             "type": "string"
           },
           "trigger": {
@@ -9218,11 +9361,15 @@
         },
         "required": [
           "id",
+          "label",
           "state",
           "group_id",
           "candidates_group_id",
           "hero_asset_id",
-          "stub",
+          "appearance",
+          "outfit",
+          "colours",
+          "marks",
           "trigger",
           "lora",
           "derived_from",
@@ -10956,6 +11103,49 @@
         "title": "Settings",
         "type": "object"
       },
+      "SheetColour-Input": {
+        "description": "D93 (B4): a colour bound to what it colours (\"#C0392B\" + \"rain jacket\") — the way Generate's Tree prompt binds colours (a hex code\nin front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).",
+        "properties": {
+          "hex": {
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "title": "Hex",
+            "type": "string"
+          },
+          "object": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hex"
+        ],
+        "title": "SheetColour",
+        "type": "object"
+      },
+      "SheetColour-Output": {
+        "description": "D93 (B4): a colour bound to what it colours (\"#C0392B\" + \"rain jacket\") — the way Generate's Tree prompt binds colours (a hex code\nin front of its object); one without an object is kept on the sheet but not sent (a palette alone is weak).",
+        "properties": {
+          "hex": {
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "title": "Hex",
+            "type": "string"
+          },
+          "object": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hex",
+          "object"
+        ],
+        "title": "SheetColour",
+        "type": "object"
+      },
       "ShellBuild": {
         "additionalProperties": true,
         "properties": {
@@ -12249,6 +12439,45 @@
           "default"
         ],
         "title": "StoryVariable",
+        "type": "object"
+      },
+      "SubjectShot": {
+        "description": "D93 (B4): a linked subject's words for this shot only — an outfit in place of the sheet's, and a line after the sheet (\"soaked, hood\nup\"). The character's sheet itself is read from Cast at submit (story.compose_subject), never copied into the panel.",
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          },
+          "outfit": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Outfit",
+            "type": "string"
+          }
+        },
+        "title": "SubjectShot",
+        "type": "object"
+      },
+      "SubjectShotOut": {
+        "properties": {
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "outfit": {
+            "default": "",
+            "title": "Outfit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outfit",
+          "note"
+        ],
+        "title": "SubjectShotOut",
         "type": "object"
       },
       "T2I": {

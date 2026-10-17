@@ -130,3 +130,21 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; }
 .subject-warn.ask { color: var(--error); }
 .preview-bindings { margin: 6px 0 0; padding-left: 16px; font-size: 11px; color: var(--fg2); }
 .preview-bindings .muted { color: var(--fg3); }
+
+/* D93 (B4, B5): a linked subject card — the character's sheet from Cast (read-only), this shot's words, the version chip */
+.subject .head .version-chip { min-height: 0; padding: 0 6px; font-size: 11px; border: 1px solid var(--line2); border-radius: 9px; background: var(--bg2); color: var(--fg2); }
+.subject .head .version-chip.pinned { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 55%, var(--line2)); }
+.subject .head .version-chip .caret { font-size: 9px; color: var(--fg3); }
+.subject .subject-sheet-row { grid-column: 1 / -1; }
+.subject-sheet { border: 1px dashed var(--line2); border-radius: var(--radius); padding: 6px 8px; background: var(--bg1); font-size: 12px; outline: none; }
+.subject-sheet:focus-visible { border-color: var(--accent); }
+.subject-sheet .sheet-head { display: flex; align-items: center; gap: 6px; color: var(--fg3); font-size: 11px; margin-bottom: 3px; }
+.subject-sheet .sheet-head span { flex: 1; }
+.subject-sheet .sheet-head button { display: inline-flex; align-items: center; gap: 3px; min-height: 0; padding: 0 4px; font-size: 11px; }
+.subject-sheet p { margin: 2px 0; color: var(--fg); }
+.subject-sheet .sheet-empty { color: var(--fg3); }
+.subject-sheet .sheet-row .k { display: inline-block; min-width: 52px; color: var(--fg3); font-size: 11px; }
+.subject-sheet .sheet-row.over .v { text-decoration: line-through; color: var(--fg3); }
+.subject-sheet .colour-chip { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
+.subject-sheet .colour-chip i { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--line2); display: inline-block; }
+.preview-composed { color: var(--fg); }

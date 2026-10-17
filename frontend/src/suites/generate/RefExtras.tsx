@@ -39,7 +39,7 @@ export function RefExtras() {
             const loraOn = !!pm?.lora
             const loraKnown = !!pm?.lora_available
             return (
-              <span key={m.group_id} className={`mchip${m.profile_id ? ' profile' : ''}${loraOn ? ' lora' : ''}`} title={m.profile_id ? "the profile's current version: its hero, then its reference set in order — as many as the model has room for; its stub rides on the note" : "the group's cover, then its page in order — as many as the model has room for"}>
+              <span key={m.group_id} className={`mchip${m.profile_id ? ' profile' : ''}${loraOn ? ' lora' : ''}`} title={m.profile_id ? "the profile's version (a linked subject's chip picks it, else the current one): its hero, then its reference set in order — as many as the model has room for; its sheet rides on the note" : "the group's cover, then its page in order — as many as the model has room for"}>
                 @{m.name}<span className="muted"> · {got === undefined ? '…' : `${got} image${got === 1 ? '' : 's'}`}</span>
                 {loraKnown && (loraOn
                   ? <button className="quiet lora-toggle on" aria-label={`LoRA of ${m.name} on`} title="The version's LoRA rides in a slot with its trigger — click to leave it out of this prompt (18 §3f)" onClick={() => g.set({ auto_lora: false })}>+ LoRA</button>

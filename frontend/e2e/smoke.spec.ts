@@ -1131,7 +1131,7 @@ test('a voice (19 / CN2, D87): a draft voice from the Cast Inspector\'s form spe
   // a character with a hero and a Dialogue node with two lines (through the API; the Cast and Flow scenarios cover those mouse paths)
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const name = `Vo ${Date.now().toString(36)}`
-  const prof = await api<{ id: string; revision: number }>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: img, stub: 'a courier' })
+  const prof = await api<{ id: string; revision: number }>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
   const node = await api<{ id: string; revision: number }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `${name} says`, x: 1200, y: 900 })
   await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: node.revision, lines: [{ speaker: prof.id, text: 'Hi there, come in.' }, { speaker: null, text: 'Thank you.' }] })
   await openApp(page, { suite: 'story', tab: 'cast' })
@@ -1358,13 +1358,13 @@ test('the World library (D92 · UI7): an entry added in Story · World gets its 
   await expect(page.locator('.inspector input[aria-label="selected entry name"]')).toHaveValue(name)
 })
 
-test('a subject is a Cast character (D92 · UI7): the subject card picks a profile by its hero, the description is its stub, and the job carries its references through the profile mention', async ({ page }) => {
+test('a subject is a Cast character (D92 · UI7): the subject card picks a profile by its hero, shows its sheet (D93 B4: no copy), and the job carries its references through the profile mention', async ({ page }) => {
   test.setTimeout(90_000)
   const name = `Ines ${Date.now().toString(36)}`
   const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
   const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]            // a copy: no other scenario's image moves
   type ProfileLite = { id: string; name: string; current: string; versions: { id: string; group_id: string }[] }
-  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, stub: `${name}, a lighthouse keeper in a yellow oilskin` })
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a lighthouse keeper in a yellow oilskin` })
   await openApp(page, { suite: 'generate', tab: 'model' })
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
   await page.locator('nav.rail button[title^="Prompt"]').click()
@@ -1374,7 +1374,8 @@ test('a subject is a Cast character (D92 · UI7): the subject card picks a profi
   const pick = card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`)
   await expect(pick.locator('img')).toBeVisible()                                         // the profile by its hero image
   await pick.click()
-  await expect(card.locator('textarea').first()).toHaveValue(`${name}, a lighthouse keeper in a yellow oilskin`)
+  await expect(card.locator('.subject-sheet')).toContainText(`${name}, a lighthouse keeper in a yellow oilskin`)   // D93 (B4): the sheet, read from Cast
+  await expect(card.locator('textarea')).toHaveCount(0)                                   // … not copied into a description to edit
   await expect(card.locator('.linked-to')).toContainText(name)
   await expect(page.locator('.mention-chips .mchip', { hasText: name })).toBeVisible()  // the profile mention, recorded by the link
   await expect(page.locator('.ref-from-mentions .ref-slot').first()).toBeVisible({ timeout: 20_000 })
@@ -1397,10 +1398,10 @@ test('a subject is a Cast character (D92 · UI7): the subject card picks a profi
 test('Cast from Generate (D93 · A1, A2): a character without a look gets candidates from Generate, and one becomes its hero via Add to character ▸', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Noor ${Date.now().toString(36)}`
-  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null; stub: string }
+  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null; appearance: string }
   type ProfileLite = { id: string; name: string; current: string; versions: Version[] }
   const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character' })              // no hero, no references
-  expect(prof.versions[0].stub).toBe('')                                                                  // A9: the stub starts empty
+  expect(prof.versions[0].appearance).toBe('')                                                            // A9: the sheet starts empty
   await openApp(page, { suite: 'generate', tab: 'model' })
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await page.locator('nav.rail button[title^="Prompt"]').click()
@@ -1408,15 +1409,21 @@ test('Cast from Generate (D93 · A1, A2): a character without a look gets candid
   await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
   const card = page.locator('.gen-tree .subject').last()
   await card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`).click()
-  const desc = card.locator('textarea').first()
-  await expect(desc).toHaveValue(name)                                                                     // no stub: the name alone …
-  await expect(card.locator('.subject-warn')).toHaveText('the model only sees the name — describe the look')   // … and the card says so
+  await expect(card.locator('.subject-sheet .sheet-empty')).toBeVisible()                                 // an empty sheet: the name alone …
+  await expect(card.locator('.subject-warn')).toHaveText('the model only sees the name — describe the look in Cast')   // … and the card says so
   const cast = card.locator('button.subject-cast')
   await expect(cast).toHaveText(new RegExp(`Give ${name} a look`))
-  await cast.click()                                                                                       // the run asks for words first
-  await expect(card.locator('.subject-warn.ask')).toContainText(`describe ${name}'s look first`)
-  await expect(desc).toBeFocused()
-  await desc.fill(`${name}, a red-haired diver in a yellow wetsuit`)
+  await cast.click()                                                                                       // the run asks for the look first
+  await expect(card.locator('.subject-warn.ask')).toContainText(`describe ${name}'s look in Story · Cast first`)
+  await expect(card.locator('.subject-sheet')).toBeFocused()
+  // D93 (B4): the look is written in Cast — the sheet's "edit in Cast" opens the version with the appearance focused
+  await card.locator('.subject-sheet button', { hasText: 'edit in Cast' }).click()
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+  await expect(page.locator('#cast-appearance')).toBeFocused()
+  await page.locator('#cast-appearance').fill(`${name}, a red-haired diver in a yellow wetsuit`)
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].appearance).toBe(`${name}, a red-haired diver in a yellow wetsuit`)
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await expect(card.locator('.subject-sheet')).toContainText('a red-haired diver in a yellow wetsuit')   // the card follows Cast
   await expect(card.locator('.subject-warn')).toHaveCount(0)
   await expect(page.locator('.panel .foot button.primary', { hasText: /^Generate/ })).toBeEnabled({ timeout: 30_000 })
   await cast.click()
@@ -1449,4 +1456,73 @@ test('Cast from Generate (D93 · A1, A2): a character without a look gets candid
   await page.locator('.toast button', { hasText: `Open ${name} in Cast` }).first().click()
   await expect(page.locator('.cast-page h2')).toContainText(name)
   await expect(page.locator('.cand-card')).toHaveCount(made.length - 1)
+})
+
+test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on the linked subject and rides the job; the version chip switches the job to that version\'s references', async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `Ida ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]            // a copy: no other scenario's image moves
+  type Version = { id: string; label: string; group_id: string; hero_asset_id: string | null; outfit: string; colours: { hex: string; object: string }[] }
+  type ProfileLite = { id: string; name: string; current: string; revision: number; versions: Version[] }
+  const p1 = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a tall woman with silver hair`, outfit: 'a grey wool coat', label: 'rain gear' })
+  const p2 = await api<ProfileLite>('POST', `/story/profiles/${p1.id}/versions`)                              // v2: a copy (its references duplicated), current
+  await api('PATCH', `/story/profiles/${p1.id}`, { revision: p2.revision, versions: [{ id: 'v2', label: 'winter' }] })
+  const [v1, v2] = p2.versions
+  // Cast: v2's outfit and a bound colour, typed on the version page (saved after a pause)
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p1.id}"]`).click()
+  await expect(page.locator('.cast-page h2')).toContainText('v2 · winter')
+  await page.locator('#cast-outfit').fill('a yellow oilskin')
+  await page.locator('.cast-sheet button', { hasText: 'colour' }).click()
+  await page.locator('.cast-sheet input[aria-label="colour 1: what it colours"]').fill('oilskin')
+  await expect(page.locator('.cast-sheet .sheet-sent')).toContainText('wearing a yellow oilskin, #C0392B oilskin')
+  await expect.poll(async () => { const v = (await api<ProfileLite>('GET', `/story/profiles/${p1.id}`)).versions[1]; return `${v.outfit}|${v.colours.map((c) => `${c.hex} ${c.object}`).join()}` }).toBe('a yellow oilskin|#C0392B oilskin')
+  await page.screenshot({ path: 'node_modules/.e2e/d93b-smoke-cast.png' })
+  // Generate: the subject linked to the character shows the edited sheet, the chip says the version
+  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
+  const card = page.locator('.gen-tree .subject').last()
+  await card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`).click()
+  await expect(card.locator('.subject-sheet')).toContainText('a yellow oilskin')
+  await expect(card.locator('.version-chip')).toHaveText(/v2 · winter/)
+  await card.locator('input[aria-label$="this shot only"]').fill('soaked, hood up')
+  await page.locator('#gen-sec-preview summary').click()
+  await expect(page.locator('.preview-composed')).toContainText(`${name}, a tall woman with silver hair, wearing a yellow oilskin, #C0392B oilskin, soaked, hood up`)   // T8: as sent
+  await expect(page.locator('.preview-box')).toContainText('wearing a yellow oilskin, #C0392B oilskin, soaked, hood up')
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  type JobLite = { id: string; status: string; recipe: { prompt_json?: { subjects?: { description?: string }[] }; refs?: { asset_id: string; mention?: string | null }[]; mentions?: { profile_id?: string | null; version?: string | null; group_id: string; asset_ids: string[]; composed?: string | null }[] } }
+  const jobsFor = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.recipe.mentions?.some((m) => m.profile_id === p1.id))
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  await expect.poll(async () => { const js = await jobsFor(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
+  const first = (await jobsFor())[0]
+  const m1 = first.recipe.mentions!.find((m) => m.profile_id === p1.id)!
+  expect(first.recipe.prompt_json?.subjects?.[0].description).toContain('wearing a yellow oilskin, #C0392B oilskin, soaked, hood up')   // the job's prompt carries the Cast edit
+  expect(m1.version).toBe('v2')
+  expect(m1.group_id).toBe(v2.group_id)
+  expect(m1.composed).toBe(first.recipe.prompt_json?.subjects?.[0].description)
+  // the version chip: v1 (rain gear) — its sheet on the card, and the next job takes v1's references
+  await card.locator('.version-chip').click()
+  await page.locator('.ctx-menu button.item', { hasText: 'v1 · rain gear' }).click()
+  await expect(card.locator('.version-chip')).toHaveText(/v1 · rain gear/)
+  await expect(card.locator('.subject-sheet')).toContainText('a grey wool coat')
+  await expect(page.locator('.preview-composed')).toContainText('wearing a grey wool coat, soaked, hood up')
+  await page.screenshot({ path: 'node_modules/.e2e/d93b-smoke-generate.png' })
+  const before = new Set((await jobsFor()).map((j) => j.id))
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  await expect.poll(async () => { const js = (await jobsFor()).filter((j) => !before.has(j.id)); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
+  const second = (await jobsFor()).find((j) => !before.has(j.id))!
+  const m2 = second.recipe.mentions!.find((m) => m.profile_id === p1.id)!
+  expect(m2.version).toBe('v1')
+  expect(m2.group_id).toBe(v1.group_id)
+  expect(m2.asset_ids).toContain(hero)                                                                      // v1's own hero, not v2's copy
+  expect(second.recipe.refs?.filter((r) => r.mention === v1.group_id).map((r) => r.asset_id)).toContain(hero)
+  expect(second.recipe.refs?.some((r) => r.mention === v2.group_id)).toBe(false)
+  expect(second.recipe.prompt_json?.subjects?.[0].description).toContain('wearing a grey wool coat')
 })

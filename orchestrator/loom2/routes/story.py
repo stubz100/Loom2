@@ -19,7 +19,7 @@ from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
-from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -119,7 +119,12 @@ class ProfileCreate(BaseModel):
     name: str
     cls: ProfileClass = "character"
     hero_asset_id: str | None = None              # moves onto the version's reference page as its cover
-    stub: str = ""                                # the clause a mention carries; D93 (A9): empty stays empty (the Cast field says to describe the look)
+    stub: str = ""                                # schema 1's clause — taken as the appearance; D93 (A9): empty stays empty (Cast says to describe the look)
+    appearance: str | None = None                 # D93 (B4): version 1's sheet (the look, the outfit, bound colours, marks) and its label
+    outfit: str | None = None
+    colours: list[SheetColour] | None = None
+    marks: str | None = None
+    label: str | None = None
 
 
 class CurateBody(BaseModel):
@@ -163,7 +168,8 @@ async def profile_create(svc: Svc, body: ProfileCreate):
         if rec is None or rec.trashed_at is not None or rec.kind != "image":
             raise HTTPException(422, "the hero must be an image in the Catalogue")
     try:
-        p = await asyncio.to_thread(StoryStore(ws).create_profile, body.name, body.cls, groups, body.hero_asset_id, body.stub)
+        sheet = body.model_dump(include={"appearance", "outfit", "colours", "marks", "label"}, exclude_none=True)
+        p = await asyncio.to_thread(lambda: StoryStore(ws).create_profile(body.name, body.cls, groups, body.hero_asset_id, body.stub, **sheet))
     except ValueError as e:
         raise HTTPException(422, str(e))
     svc.group_changed([v.group_id for v in p.versions])

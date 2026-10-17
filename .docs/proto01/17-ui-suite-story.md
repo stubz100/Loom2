@@ -112,6 +112,11 @@ candidates, `derived_from`), *Open in Catalogue*, *Expand…*, *Lock*, *New vers
 groups; a profile mention resolves to its **current version's group** (or a pinned `@mara@v1`), the stamp gains `profile_id` and
 `version` beside `{group_id, revision, asset_ids}` — the `asset@version` pin loom wanted (R98) is this stamp, and provenance stays
 as it is. The prompt stub is appended once per mention as its note's lead sentence per model family (D73's serialisation).
+**D93 phase B (2026-10-17):** the stub became a **character sheet** — appearance (the old stub, read so from schema-1 records), outfit,
+bound colours (`#C0392B` + "rain jacket") and marks, edited only on the version page and composed into one clause (appearance, "wearing"
+the outfit, the colours, the marks); a version has a **label** ("rain gear", "winter"). A Generate subject card linked to a profile copies
+nothing: it shows the sheet read-only, adds this shot's outfit and line ("soaked, hood up"), and picks the version with its chip; the
+server composes the subject's description at preview and submit (`mentions.py`) and stamps it (`Mention.composed`, `shot`, `version`).
 
 ### 3c. Shots (loom L3 · Shots & Takes)
 **Panel:** the shots grouped by their owner node (*Unbound* first), each row with its current version's thumbnail, name and state;
@@ -200,7 +205,7 @@ the Sequence stage, undo stack, Mediabunny scrubbing, trims, dissolves, draft re
 ```
 story/
 ├── world.json                # L1: logline, synopsis, styles[{id, name, fragment, group_id?}], default_style, spine[{id, title, line}], variables[{name, type, values?, default}]; revision
-├── profiles/<id>.json        # L2: name, cls (character | place | prop), current, versions[{id, state, group_id, hero_asset_id?, candidates_group_id, stub, trigger?, lora?, derived_from?, created_at}]; revision
+├── profiles/<id>.json        # L2: name, cls (character | place | prop), current, versions[{id, label, state, group_id, hero_asset_id?, candidates_group_id, appearance, outfit, colours[{hex, object}], marks, trigger?, lora?, derived_from?, created_at}]; revision (schema 2, D93 B4 — schema 1's `stub` reads as the appearance)
 ├── shots/<id>.json           # L3: name, owner_node?, current, versions[{id, state, source?: {stage_id, camera_id, stage_revision} | {clip_id}, frame_asset_id?, clip_id?, takes[{kind, id, at}], derived_from?, created_at}]; revision
 └── flow/
     ├── graph.json            # L4 index (rebuildable): nodes[{id, x, y}], edges[{from, port, to}], start

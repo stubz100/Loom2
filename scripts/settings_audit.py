@@ -96,6 +96,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "RefImage": (("ref", "r"), None),                               # queue: `for ref in recipe.refs`, the parents list `r.asset_id`
     "Beat": (("b",), None),                                         # `for b in recipe.beats`
     "Mention": (("m",), None),                                      # D73: mentions.py `for m in todo`
+    "SubjectShot": (("shot",), ["story.py"]),                       # D93 (B4): story.compose_sheet reads the linked card's per-shot words
     # D45: matting.params_from copies the fields by name (getattr) into matting.RefineParams; the kernels read them there
     "RefineEdge": (("params", "self"), ["matting.py"]),
     "TtsItem": (("it",), ["voices.py", "engine/pipeline.py"]),      # CN2: `for it in recipe.items`

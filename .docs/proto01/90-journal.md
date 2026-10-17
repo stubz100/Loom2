@@ -4399,3 +4399,45 @@ split by file so that no two hands touched the same module.
   scenario now expects the grouped order). Screenshots: frontend/node_modules/.e2e/d93a/ (local).
 - **Owed:** the binding measured on dev (JSON) — on by spec, not yet rigged; the author's click-through; phases B (the live character
   sheet, the version chip) and C (places and props, a subject per speaker, Stage figures bound).
+
+## 2026-10-17 14:24 — D93 phase B built · a live character sheet, the version chip (costumes)
+
+- **B4 · the sheet.** A profile version (schema **2**) holds `appearance` (the look), `outfit`, `colours` [{`hex`, `object`}] and `marks`
+  instead of the one `stub`, plus a `label` (B5). A schema-1 record reads as schema 2 — `stub` → `appearance`, the label = the id
+  (`ProfileVersion._from_stub`, `Profile._migrate`); nothing is written by a read, the next save writes the new shape. `POST
+  /story/profiles` and the PATCH take the fields (`stub` still taken as the appearance); a final version refuses its sheet (422) but its
+  label can change; a new version copies the sheet with a label of its own. **The rule** (`story.compose_sheet`, the client's copy
+  `generate/sheet.ts`, both held to `tests/fixtures/sheet_compose.json`): appearance, the outfit (this shot's, else the sheet's — "wearing
+  …" unless it says how it is worn), the bound colours as "`#C0392B` rain jacket" (a colour without an object is kept but not sent), the
+  marks, this shot's line — joined by ", "; empty → the name. Expand's prompts, the LoRA captions and a mention's reference note read
+  the composed sheet (`ProfileVersion.stub` is now that clause).
+- **Cast** (`CastSheet.tsx` on the version page): version label, appearance, outfit, colour chips (a colour picker + what it colours,
+  ＋ colour, ×), marks, and the clause as sent under it; every field shows at once and saves after a pause in one PATCH with the revision,
+  one save at a time (`storyStore.setSheet`, B14's chain); the version selectors show "v1 · rain gear".
+- **Generate: a linked subject copies nothing.** The card shows the sheet read-only (appearance · outfit · colours · marks, "edit in Cast"),
+  then **outfit** (this shot only; the sheet's struck through when set) and **this shot** ("soaked, hood up"), position, action, pose. The
+  card sends no words: `Mention.shot` {outfit, note} and the chip's `version` ride the profile mention; `mentions.py` composes the
+  subject's description at preview and submit from that version's sheet, writes it into the subject and stamps it (`Mention.composed`;
+  a stamped recipe is never composed again, so a re-run keeps its words while a new submit follows Cast). Saved and persisted panels
+  keep the link; an old panel's copied stub in a linked card is adopted (the copy dropped, extra words → "this shot"). Unlink leaves the
+  composed words as a free card's description; JSON mode writes them in. The casting run (A1) asks for the look in Cast. The Preview lists
+  each linked subject as composed (`preview-composed`) and the version in its binding line.
+- **B5 · the version chip** "v2 · winter ▾" on the linked card (a press menu: the versions with their labels, the one in use checked;
+  picking the current one follows it again) — the mention moves to that version's set, so the references, the LoRA and the sheet follow;
+  the hero shown is that version's. `BindingOut.version` added.
+- Command: `gen.subject.editSheet` "Edit the character sheet in Story · Cast" (panel: the sheet's "edit in Cast"; context: the version
+  chip's menu) — opens Cast on the profile at the version the card uses, the appearance focused.
+- **No rig run:** the binding wording is unchanged and a linked subject's text is the sheet, which for phase A's measured profiles
+  (appearance = their stub) is the words the rig sent.
+- **The author's project:** a copy of `F:\loom2-projects\stubz001` opened in the e2e orchestrator (`POST /project/open`): char01 reads as
+  schema 2 (appearance "char01", label v1), the copy's record unchanged by the reads, the original's sha256 unchanged; Cast and the linked
+  card show it (the name-only warning). Screenshots: `frontend/node_modules/.e2e/d93b/` (local).
+- **Tests:** offline **385** under full and open (`test_character_sheet_d93b.py` +14: the 8 shared cases, the migration without a write,
+  the routes' round trip with revisions / 409 / 422 / labels on a final version, Expand and the LoRA caption, the composed subject stamped
+  and not recomposed, the version picking sheet / references / LoRA, the preview route); Vitest **308** (+16, `sheet.test.tsx`: the shared
+  cases, adoption, the chip's menu, the debounced one-at-a-time sheet save, a linked card that shows the sheet, sends no words and follows a
+  Cast edit, the chip switching set / sheet / version); lint 88; build, settings audit (236 / 0), model literals, agents check, OpenAPI
+  current; smoke **34 / 34** under full and open (new: an outfit edited in Cast shows on the linked card and rides the job's prompt; the
+  chip's v1 takes v1's references; D92 / A1 scenarios updated — the look is written in Cast).
+- **Owed:** the author's click-through; phase C (places and props, a subject per speaker, Stage figures bound); FLUX.2 dev's JSON binding
+  on the rig (from phase A).

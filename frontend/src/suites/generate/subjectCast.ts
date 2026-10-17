@@ -2,13 +2,15 @@
 // look" or "More looks for <name>" (A1), the casting run's origin (results into the version's candidates), the slots the preview gave it
 // (A3, "refs 1–3"), and the name-only warning (A9). Kept out of the component so the tests read them without a store.
 import type { Binding, JobOrigin, Profile } from '../../api/types'
+import { versionName, versionOf } from './sheet'
 
-/** The subject cards the prompt keeps (cleanTree's rule): one with a description, an action, a pose or a position. */
-export const keptSubject = (s: { description?: string; action?: string; pose?: string; position?: string }): boolean =>
-  !!(s.description || s.action || s.pose || s.position || '').trim()
+type CardWords = { description?: string; action?: string; pose?: string; position?: string; profile_id?: string }
+/** The subject cards the prompt keeps (cleanTree's rule): one with a description, an action, a pose or a position — D93 (B4): or a link
+ *  (its words are the character's sheet, composed by the server). */
+export const keptSubject = (s: CardWords): boolean => !!s.profile_id || !!(s.description || s.action || s.pose || s.position || '').trim()
 
 /** D93 (A3): a card's index among the subjects the prompt sends (the server's `Mention.subject`), or -1 when the card is dropped. */
-export function sentIndex(subjects: { description?: string; action?: string; pose?: string; position?: string }[], i: number): number {
+export function sentIndex(subjects: CardWords[], i: number): number {
   if (!subjects[i] || !keptSubject(subjects[i])) return -1
   return subjects.slice(0, i).filter(keptSubject).length
 }
@@ -21,10 +23,11 @@ export const nameOnly = (description: string, name: string | undefined): boolean
 export const needsLook = (description: string, name: string | undefined): boolean => !description.trim() || nameOnly(description, name)
 
 export interface CastOffer { kind: 'give' | 'more'; label: string; hint: string; disabled: string | null }
-/** D93 (A1): what the linked card offers — "Give <name> a look" while the current version has no hero and no references, "More looks for
- *  <name>" after; a final version cannot take candidates (a new version first). `refs`: the images its mention gives (the preview's). */
-export function castOffer(p: Profile | undefined, refs = 0): CastOffer | null {
-  const v = p?.versions.find((x) => x.id === p.current)
+/** D93 (A1): what the linked card offers — "Give <name> a look" while the version has no hero and no references, "More looks for <name>"
+ *  after; a final version cannot take candidates (a new version first). `refs`: the images its mention gives (the preview's). D93 (B5):
+ *  the version the card uses (its chip), else the current one. */
+export function castOffer(p: Profile | undefined, refs = 0, vid?: string | null): CastOffer | null {
+  const v = versionOf(p, vid)
   if (!p || !v) return null
   const give = !v.hero_asset_id && refs === 0
   return {
@@ -50,7 +53,14 @@ export function slotsOf(bindings: Binding[] | undefined, sent: number): { label:
   return { label, left: b.skipped ?? 0, refs: r }
 }
 
-/** D93 (A3): the Preview's line per bound subject — what it got and what was left out (T8: said, never silent). */
-export function bindingLines(bindings: Binding[] | undefined, maxRefs: number | undefined): string[] {
-  return (bindings ?? []).map((b) => `subject ${b.subject + 1} · ${b.name ?? 'a profile'} → ${b.span ?? 'no reference images'}${b.skipped ? ` · ${b.skipped} of its set left out (the model takes ${maxRefs ?? '?'})` : ''}`)
+/** D93 (A3): the Preview's line per bound subject — what it got and what was left out (T8: said, never silent); D93 (B5): the version it
+ *  uses when the profile has more than one ("Mara v2 · winter"). */
+export function bindingLines(bindings: Binding[] | undefined, maxRefs: number | undefined, profiles: Profile[] = []): string[] {
+  const ver = (b: Binding) => { const p = profiles.find((x) => x.id === b.profile_id); const v = p && p.versions.length > 1 ? versionOf(p, b.version) : undefined; return v ? ` ${versionName(v)}` : '' }
+  return (bindings ?? []).map((b) => `subject ${b.subject + 1} · ${b.name ?? 'a profile'}${ver(b)} → ${b.span ?? 'no reference images'}${b.skipped ? ` · ${b.skipped} of its set left out (the model takes ${maxRefs ?? '?'})` : ''}`)
+}
+
+/** D93 (B4): the Preview's line per linked subject — the description the server composed for it, exactly as sent in its subject. */
+export function composedLines(mentions: { subject?: number | null; name?: string | null; composed?: string | null }[] | undefined): string[] {
+  return (mentions ?? []).filter((m) => typeof m.subject === 'number' && m.composed).map((m) => `subject ${m.subject! + 1} · ${m.name ?? 'a profile'}: ${m.composed}`)
 }

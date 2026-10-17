@@ -169,7 +169,7 @@ def test_routes_profiles_and_curate(tmp_path: Path):
         # patch with the revision; stale → 409; a bad current → 422
         p = cl.get(f"/story/profiles/{p['id']}").json()
         r = cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"], "versions": [{"id": "v1", "stub": "Mara Vey, a courier"}]})
-        assert r.status_code == 200 and r.json()["versions"][0]["stub"] == "Mara Vey, a courier"
+        assert r.status_code == 200 and r.json()["versions"][0]["appearance"] == "Mara Vey, a courier"
         assert cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"], "name": "x"}).status_code == 409
         assert cl.patch(f"/story/profiles/{p['id']}", json={"revision": p["revision"] + 1, "current": "v7"}).status_code == 422
         # lock: the album's routes answer 423 on the reference page; curate is refused; the preview still resolves @Mara

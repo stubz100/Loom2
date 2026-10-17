@@ -26,11 +26,11 @@ from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, Inpaint, Render, TTS, TrainLora, parse_recipe, warm_group
+from .recipes import T2I, I2V, Inpaint, Render, StageShot, TTS, TrainLora, parse_recipe, stage_spec, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .loras import LoraRegistry, check_recipe_loras, publish
-from .mentions import resolve_mentions
+from .mentions import resolve_figures, resolve_mentions
 from .story import StoryStore, resolve_style
 from . import native
 from .origin import JobOrigin
@@ -245,7 +245,12 @@ class JobQueue:
 
     def resolve_mentions(self, recipe: Any) -> Any:
         """D73: a T2I recipe's unresolved @mentions turned into references (mentions.py) and, D85, its Story style stamped (story.py);
-        other recipes unchanged. The same resolution runs for a preview and a submit (T8: display == reality)."""
+        other recipes unchanged. The same resolution runs for a preview and a submit (T8: display == reality). D93 (C8): a StageShot's figures
+        bound to characters bring their references within the method's room (resolve_figures)."""
+        if isinstance(recipe, StageShot) and recipe.mentions:
+            spec = stage_spec(recipe.method, self.app.settings.variant)
+            room = 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1)
+            return resolve_figures(recipe, self.groups, self.catalogue, room, StoryStore(self.ws) if self.ws else None)
         if not isinstance(recipe, T2I):
             return recipe
         if recipe.mentions:

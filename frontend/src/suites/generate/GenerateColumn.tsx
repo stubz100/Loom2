@@ -3,12 +3,13 @@
 // drawn glyphs for geometry, generated swatches for looks (swatches.ts); the words live in the tooltip, and a section's "Aa" shows them
 // under the tiles. Fields a model cannot use are hidden, not disabled (B12). D92: the tiles are the project's Story · World library (a
 // field's + adds an entry there; a tile's right-click edits it in World), a look without its picture yet shows its field's glyph — never
-// letters — and a subject card picks a Cast character or prop by its hero image.
-import { CaseSensitive, ImagePlus, Minus, Plus, X } from 'lucide-react'
+// letters — and a subject card picks a Cast character or prop by its hero image. D93 (C6): the scene picks a Cast place the same way (its
+// sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
+import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
-import { markUsed, sep } from '../../frame/commands'
+import { markUsed, runCommand as runCommandId, sep } from '../../frame/commands'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
@@ -20,6 +21,7 @@ import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets
 import { dropRefs, honoursNegative, onSubject, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
 import { bindingLines, castOffer, composedLines, nameOnly, needsLook, sentIndex, slotsOf } from './subjectCast'
 import { CastButton, SheetView, SubjectSlots, SubjectWarn, VersionChip } from './SubjectLink'
+import type { Profile } from '../../api/types'
 import { adoptDescription, composeSheet, versionItems, versionOf } from './sheet'
 import { entriesOf, entryTile, useLibrary } from '../story/libraryStore'
 import { profilesForMentions, sy, useStory } from '../story/storyStore'
@@ -136,6 +138,75 @@ function CastPicker({ s, i }: { s: Subject; i: number }) {
   )
 }
 
+/** The hero of a profile's version (the chip's, else the current one), as a thumbnail URL. */
+const heroUrl = (p: Profile | undefined, vid?: string | null): string | null => { const h = versionOf(p, vid)?.hero_asset_id; return h ? api.thumbUrl(h, 256) : null }
+
+/** D93 (C6): "holds ▸" — the Cast prop a subject card holds: said "holding <its clause>" after the card, its images bound to the card (the
+ *  server composes both); a press opens the Cast's props, the chip's ✕ puts it down. */
+export function HoldsChip({ i, s }: { i: number; s: Subject }) {
+  const profiles = useStory((x) => x.profiles)
+  const preview = useGenerate((g) => g.preview)
+  const subs = useGenerate((g) => g.panel.tree.subjects)
+  const held = s.holds ? profiles.find((p) => p.id === s.holds!.profile_id) : undefined
+  const props = profiles.filter((p) => p.cls === 'prop')
+  const slots = held ? slotsOf(preview?.bindings, sentIndex(subs ?? [], i), 'held') : null
+  const menu = () => [{ heading: `subject ${i + 1} holds — a prop of the Cast` },
+    ...(props.length ? props.map((p) => ({ label: p.name, checked: p.id === s.holds?.profile_id, run: () => useGenerate.getState().holdProp(i, p) })) : [{ label: 'no props in the Cast yet — Story · Cast › New profile… (prop)', disabled: true, run: () => {} }]),
+    sep, { cmd: 'gen.subject.unhold', on: onSubject(i) }]
+  markUsed('gen.subject.unhold')
+  if (!held) return <button type="button" className="quiet holds-btn" aria-haspopup="menu" title="This subject holds a Cast prop — its sheet and its images go with the subject" onPointerDown={(e) => openPressMenu(e, menu)}><Hand size={12} /> holds ▸</button>
+  const img = heroUrl(held)
+  return (
+    <span className="holds-chip" title={`holding ${held.name} — its sheet and reference images follow from Story · Cast`}>
+      <button type="button" className="quiet" aria-haspopup="menu" aria-label={`subject ${i + 1} holds ${held.name}`} onPointerDown={(e) => openPressMenu(e, menu)}>
+        {img ? <img src={img} alt="" /> : <span className="glyph">{fieldGlyph('prop')}</span>}holds {held.name} ▾</button>
+      <SubjectSlots slots={slots} />
+      <button type="button" className="quiet" aria-label={`subject ${i + 1}: put ${held.name} down`} title="Put the prop down" onClick={() => runOnSubject(i, 'gen.subject.unhold')}><X size={11} /></button>
+    </span>
+  )
+}
+
+/** D93 (C6): the scene as a Cast place — its places as hero tiles and "free scene"; a linked scene shows the place's sheet read-only (Cast's,
+ *  followed live), its version chip, its slots and this shot's line; the server composes the scene from them at preview and submit. */
+export function SceneField() {
+  const g = useGenerate()
+  const t = g.panel.tree
+  const link = t.scene_link
+  const profiles = useStory((x) => x.profiles)
+  const loaded = useStory((x) => x.profilesLoaded)
+  useEffect(() => { if (!loaded) profilesForMentions() }, [loaded])
+  const places = profiles.filter((p) => p.cls === 'place')
+  const place = link ? profiles.find((p) => p.id === link.profile_id) : undefined
+  const v = versionOf(place, link?.version)
+  const slots = link ? slotsOf(g.preview?.bindings, -1, 'scene') : null
+  const items: PresetIcon[] = [
+    ...places.map((p): PresetIcon => ({ id: p.id, label: p.name, hint: `place · ${p.current} — its sheet is the scene, its reference set follows`, icon: fieldGlyph('place'), img: heroUrl(p) })),
+    { id: FREE, label: 'free scene', hint: 'the scene in words only, no Cast place', icon: fieldGlyph('scene') },
+  ]
+  markUsed('gen.scene.editSheet')
+  return (
+    <>
+      {places.length > 0 && <><label>place</label>
+        <PresetIcons label="the scene from the Cast's places" size={40} items={items} selected={link?.profile_id ?? FREE}
+          onPick={(id) => { if (id === FREE) g.unlinkScene(); else { const p = places.find((x) => x.id === id); if (p) g.linkScene(p) } }}
+          onContext={(id, e) => { if (id === FREE) return; sy().selectProfile(id); showMenu(e, [{ cmd: 'story.cast.openInStory' }]) }} /></>}
+      {link ? <>
+        <label>scene</label>
+        <div className="field scene-linked">
+          <div className="head"><span className="linked-to" title="its sheet and reference set follow through the profile mention">
+            {heroUrl(place, link.version) ? <img src={heroUrl(place, link.version)!} alt="" /> : <span className="glyph">{fieldGlyph('place')}</span>}{place?.name ?? 'a Cast place'}
+            {place && v && <VersionChip v={v} pinned={!!link.version} onOpen={(e) => openPressMenu(e, () => versionItems(place, link.version, (vid) => g.setSceneLink({ version: vid }), [{ cmd: 'gen.scene.editSheet' }]))} />}
+            <button className="quiet" aria-label="unlink the scene" title="Unlink: a free scene again (the place's words stay)" onClick={() => g.unlinkScene()}><X size={11} /> unlink</button></span>
+            <SubjectSlots slots={slots} /></div>
+          <SheetView i={-1} domId="gen-scene-sheet" v={v} name={place?.name || 'the place'} cls="place" outfitOverridden={false} onEdit={() => runCommandId('gen.scene.editSheet')} />
+          <div className="row"><input type="text" value={link.note ?? ''} aria-label="the scene: this shot only" onChange={(e) => g.setSceneLink({ note: e.target.value })}
+            placeholder="this shot only, after the place — e.g. rain on the stones, night" /></div>
+        </div>
+      </> : <Field section="prompt" field="scene" multiline rows={2} value={t.scene ?? ''} onChange={(x) => g.setTree({ scene: x })} placeholder="the scene in a sentence — or pick a Cast place above" />}
+    </>
+  )
+}
+
 export function SubjectCard({ i, s }: { i: number; s: Subject }) {
   const g = useGenerate()
   const set = (patch: Partial<Subject>) => g.setSubject(i, patch)
@@ -162,7 +233,7 @@ export function SubjectCard({ i, s }: { i: number; s: Subject }) {
           {linked && v && <VersionChip v={v} pinned={!!s.version} onOpen={(e) => openPressMenu(e, () => versionItems(linked, s.version, (vid) => g.setSubjectVersion(i, vid), [{ cmd: 'gen.subject.editSheet', on: onSubject(i) }]))} />}
           <button className="quiet" aria-label={`unlink subject ${i + 1}`} title="Unlink: a free subject again (the sheet's words stay as its description)" onClick={() => g.unlinkSubject(i)}><X size={11} /> unlink</button></span>}
         <SubjectSlots slots={slots} />
-        <span className="spacer" /><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
+        <span className="spacer" /><HoldsChip i={i} s={s} /><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
       <CastPicker s={s} i={i} />
       {offer && <div className="subject-cast-row"><CastButton offer={offer} onCast={() => runOnSubject(i, 'gen.subject.cast')} /></div>}
       {s.profile_id ? <>
@@ -207,7 +278,7 @@ function PromptSection() {
       </div>
       {p.prompt_mode === 'tree' && (
         <div className="gen-form gen-tree">
-          <Field section="prompt" field="scene" multiline rows={2} value={t.scene ?? ''} onChange={(v) => g.setTree({ scene: v })} placeholder="the scene in a sentence" />
+          <SceneField />
           {(t.subjects ?? []).map((s, i) => <SubjectCard key={i} i={i} s={s} />)}
           <div className="full"><button onClick={g.addSubject} title="Add a subject card: a Cast character or prop, or free words — where, doing what"><Plus size={12} /> subject</button></div>
           <Field section="prompt" label="lead text" field="text" value={p.text} onChange={(v) => g.set({ text: v })} placeholder="optional sentence before the tree — the same text as Text mode" />

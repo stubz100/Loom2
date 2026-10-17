@@ -462,22 +462,50 @@ def ref_span(idx: list[int]) -> str:
     return f"reference images {idx[0]}–{idx[-1]}" if run else "reference images " + ", ".join(map(str, idx))
 
 
+def _binding(m: Any, role: str, at: int | None, refs: list, kept: list, offset: int = 0) -> dict[str, Any]:
+    """One linked mention's binding: the kept references it gave (numbered as the prompt numbers them, from `offset` + 1) and how many of its
+    set did not fit (left out by the resolver, or cut at the model's limit)."""
+    idx = [offset + i + 1 for i, r in enumerate(kept) if r.mention == m.group_id]
+    cut = len([r for r in refs[len(kept):] if r.mention == m.group_id])
+    return {"subject": at, "role": role, "name": m.name, "profile_id": m.profile_id, "version": m.version, "refs": idx, "span": ref_span(idx) if idx else None,
+            "skipped": (m.skipped or 0) + cut}
+
+
 def subject_bindings(recipe: T2I, spec: ModelSpec) -> list[dict[str, Any]]:
     """D93 (A3): each subject card linked to a profile (a resolved mention with `subject`) and the kept references its mention gave, 1-based;
     `skipped` counts the set's images that did not fit (left out by the resolver, or cut at the model's limit). Only subjects the prompt
-    has (tree / JSON modes)."""
-    subs = (recipe.prompt_json or {}).get("subjects") if recipe.prompt_mode in ("tree", "json") else None
-    if not isinstance(subs, list):
-        return []
+    has (tree / JSON modes). D93 (C6): also each prop a subject holds (`role` held, `subject` = its holder) and the place of the scene
+    (`role` scene, `subject` None)."""
+    tree = (recipe.prompt_json or {}) if recipe.prompt_mode in ("tree", "json") else {}
+    subs = tree.get("subjects")
+    subs = subs if isinstance(subs, list) else []
     kept = kept_refs(recipe, spec)
-    out = []
+    ok = lambda k: k is not None and k < len(subs) and isinstance(subs[k], dict)  # noqa: E731
+    out: list[dict[str, Any]] = []
     for m in recipe.mentions:
-        if m.subject is None or not m.profile_id or m.subject >= len(subs) or not isinstance(subs[m.subject], dict) or any(b["subject"] == m.subject for b in out):
+        if not m.profile_id:
             continue
-        idx = [i + 1 for i, r in enumerate(kept) if r.mention == m.group_id]
-        cut = len([r for r in recipe.refs[len(kept):] if r.mention == m.group_id])
-        out.append({"subject": m.subject, "name": m.name, "profile_id": m.profile_id, "version": m.version, "refs": idx, "span": ref_span(idx) if idx else None, "skipped": (m.skipped or 0) + cut})
+        if m.subject is not None:
+            if ok(m.subject) and not any(b["role"] == "subject" and b["subject"] == m.subject for b in out):
+                out.append(_binding(m, "subject", m.subject, recipe.refs, kept))
+        elif m.held_by is not None:
+            if ok(m.held_by) and subs[m.held_by].get("holding") and not any(b["role"] == "held" and b["subject"] == m.held_by for b in out):
+                out.append(_binding(m, "held", m.held_by, recipe.refs, kept))
+        elif m.scene and isinstance(tree.get("scene"), str) and tree.get("scene") and not any(b["role"] == "scene" for b in out):
+            out.append(_binding(m, "scene", None, recipe.refs, kept))
     return out
+
+
+def _lead(text: str, name: str, span: str | None) -> str:
+    """D93 (A3): the name with the range in brackets leading a clause ("Mara (reference images 1–3), a wiry courier …"); a clause that does
+    not start with the name gets it. Without a range the clause is returned as it is."""
+    d = (text or "").strip()
+    if not span:
+        return d
+    lead = f"{name} ({span})"
+    if name and d.lower().startswith(name.lower()):
+        return lead + d[len(name):]
+    return f"{lead}, {d}" if d else lead
 
 
 def _bind_subject(sub: dict, name: str, span: str, prose: bool) -> dict:
@@ -486,13 +514,21 @@ def _bind_subject(sub: dict, name: str, span: str, prose: bool) -> dict:
     images 1–3), a wiry courier …")."""
     if not prose:
         return {**sub, "reference": span}
-    d = str(sub.get("description") or "").strip()
-    lead = f"{name} ({span})"
-    if d.lower().startswith(name.lower()):
-        d = lead + d[len(name):]
-    else:
-        d = f"{lead}, {d}" if d else lead
-    return {**sub, "description": d}
+    return {**sub, "description": _lead(str(sub.get("description") or ""), name, span)}
+
+
+def _hold(sub: dict, prose: bool, name: str = "", span: str | None = None) -> dict:
+    """D93 (C6): the prop a subject holds, said as its family reads it — prose: ", holding <the prop's clause>" after the description (its name
+    and range leading it when bound: "holding the compass (reference image 3), a brass compass …"); JSON: `"holding": "<clause>"`, or
+    `{"description", "reference"}` when bound."""
+    clause = str(sub.get("holding") or "").strip()
+    if not clause:
+        return {k: v for k, v in sub.items() if k != "holding"}
+    if not prose:
+        return {**sub, "holding": {"description": clause, "reference": span} if span else clause}
+    d = str(sub.get("description") or "").strip().rstrip(",")
+    held = "holding " + _lead(clause, name, span)
+    return {**{k: v for k, v in sub.items() if k != "holding"}, "description": f"{d}, {held}" if d else held}
 
 
 def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, str]:
@@ -501,18 +537,25 @@ def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, s
     image ("Image 2 shows the hero."); @mentions read as the plain name."""
     spec = spec or registry.get(recipe.model_id) or registry.SPECS[registry.default_model("t2i")]
     names = sorted((m.name for m in recipe.mentions if m.name), key=len, reverse=True)
-    binds = [b for b in subject_bindings(recipe, spec) if b["refs"]] if binds_refs(recipe, spec) else []   # D93 (A3)
+    binds = [b for b in subject_bindings(recipe, spec) if b["refs"]] if binds_refs(recipe, spec) else []   # D93 (A3, C6)
     notes = ref_notes(recipe, spec, {i for b in binds for i in b["refs"]})
     sentences = " ".join(f"Image {i} shows {n.rstrip('.')}." for i, n in notes)
     style = (recipe.style_text or "").strip()                                   # D85: the Story style's fragment, appended after the prompt (loom R104)
     prompt_text = _unmention(recipe.prompt_text.strip(), names)
     if recipe.prompt_mode in ("tree", "json") and recipe.prompt_json:
         tree = {k: v for k, v in _unmention(recipe.prompt_json, names).items() if v not in (None, "", [], {})}
-        if binds and isinstance(tree.get("subjects"), list):                   # D93 (A3): each linked subject names its own references
+        prose = not spec.sampling.json_prompt
+        if isinstance(tree.get("subjects"), list):                             # D93 (A3): each linked subject names its own references
             subs = list(tree["subjects"])
             for b in binds:
-                subs[b["subject"]] = _bind_subject(subs[b["subject"]], b["name"] or "", b["span"], not spec.sampling.json_prompt)
+                if b["role"] == "subject":
+                    subs[b["subject"]] = _bind_subject(subs[b["subject"]], b["name"] or "", b["span"], prose)
+            held = {b["subject"]: b for b in binds if b["role"] == "held"}       # D93 (C6): the prop a subject holds — "holding …", bound when it has images
+            subs = [_hold(x, prose, (held[k]["name"] or "") if k in held else "", held[k]["span"] if k in held else None) if isinstance(x, dict) else x for k, x in enumerate(subs)]
             tree["subjects"] = subs
+        place = next((b for b in binds if b["role"] == "scene"), None)
+        if place and isinstance(tree.get("scene"), str):                       # D93 (C6): the place's range leads the scene it composed
+            tree["scene"] = _lead(tree["scene"], place["name"] or "", place["span"])
         if style:                                                               # the tree's own style slot (04 §3c) takes the fragment, after what is there
             cur = tree.get("style")
             tree["style"] = f"{cur}, {style}" if isinstance(cur, str) and cur.strip() else style
@@ -952,17 +995,44 @@ def stage_refs(recipe: StageShot, spec: ModelSpec) -> list[RefImage]:
     return recipe.refs[:room]
 
 
+def stage_binds(recipe: StageShot, spec: ModelSpec | None) -> bool:
+    """D93 (C8): whether the prompt binds each figure to its references — the recipe's choice, else the method's spec (`inputs.bind_refs`)."""
+    return bool(spec) and (recipe.bind_refs if recipe.bind_refs is not None else bool(spec.inputs.bind_refs))
+
+
+def stage_bindings(recipe: StageShot, spec: ModelSpec | None) -> list[dict[str, Any]]:
+    """D93 (C8): each figure bound to a character (resolved mentions with `figure`, in screen order left to right — `figure` N is its place,
+    1-based) and the images it was given, numbered as the prompt numbers them (image 1 is the pass, the references follow from 2)."""
+    kept = stage_refs(recipe, spec) if spec else []
+    out = []
+    for k, m in enumerate(m for m in recipe.mentions if m.figure and m.profile_id):
+        b = _binding(m, "figure", k, recipe.refs, kept, offset=1)
+        out.append({**b, "figure": k + 1, "object_id": m.figure, "composed": m.composed})
+    return out
+
+
 def stage_prompt(recipe: StageShot, variant: str = "full") -> str:
     """The exact text the engine gets: the method's lead sentence about image 1, then a sentence per noted reference ("Image 2 shows …",
-    D73), then the recipe's own sentence."""
+    D73), then the recipe's own sentence. D93 (C8): the figures bound to characters, left to right, each with its sheet — and, when the
+    method binds, its own range ("figure 1 is Mara (reference images 2–3), …"; those images' sentences are then said by the figure)."""
     spec = registry.get(stage_model_id(recipe, variant))
     extra = recipe.prompt_text.strip()
+    figs = stage_bindings(recipe, spec)
+    bind = stage_binds(recipe, spec)
+    bound = {i for b in figs for i in b["refs"]} if bind else set()
+    named = lambda b: _lead(b["composed"] or "", b["name"] or "", "") if (b["composed"] or "").lower().startswith((b["name"] or "").lower()) else ", ".join(x for x in (b["name"], b["composed"]) if x)  # noqa: E731
+    who = "; ".join(f"figure {b['figure']} is " + (_lead(named(b), b["name"] or "", b["span"]) if bind else named(b)) for b in figs)
+    figures = f"From left to right in image 1: {who}." if figs else ""
     if recipe.method == "refcontrol":
-        return _then(STAGE_POSE_LEAD, extra)
-    text = STAGE_CLAY_LEAD
-    for i, r in enumerate(stage_refs(recipe, spec) if spec else []):
-        if r.note and r.note.strip():
-            text = _then(text, f"Image {i + 2} shows {r.note.strip().rstrip('.')}.")
+        text = STAGE_POSE_LEAD
+    else:
+        text = STAGE_CLAY_LEAD
+    notes = [(i + 2, r.note.strip().rstrip(".")) for i, r in enumerate(stage_refs(recipe, spec) if spec else []) if r.note and r.note.strip() and (i + 2) not in bound]
+    if recipe.method == "refcontrol":
+        notes = []                                                              # E10's exact-pose sentence names image 2 itself
+    text = _then(text, figures)
+    for i, n in notes:
+        text = _then(text, f"Image {i} shows {n}.")
     return _then(text, extra)
 
 

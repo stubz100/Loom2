@@ -6,7 +6,8 @@ import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
 import { CLASS_LABEL, latestTrainJob, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
-import { makeClipFor, makeFrameFor, makeTarget } from './makeFor'
+import { makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
+import type { Profile, Shot } from '../../api/types'
 import { findNode, pickSampleModel, sampleJob, sampleRecipe, styleGroupName } from './styleSamples'
 import { useLibrary } from './libraryStore'
 import { FIELD_LABEL, type FieldKey } from '../generate/fieldPresets'
@@ -44,11 +45,20 @@ const shotTarget = () => makeTarget(shot(), shotVersion()?.id)
 const nodeShot = () => { const n = node(); return n?.shot_id ? sy().shots.find((x) => x.id === n.shot_id) : undefined }
 const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
 const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
-/** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). */
-function openStageAt(stageId: string, cam: string | null): void {
+/** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
+ *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
+function openStageAt(stageId: string, cam: string | null, speakers?: Profile[]): void {
   useSession.getState().setSuite('stage')
-  void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => { if (cam) m.useStage.getState().setActiveCamera(cam) }) })
+  void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
+    if (cam) m.useStage.getState().setActiveCamera(cam)
+    if (!speakers?.length) return
+    const n = m.useStage.getState().prebindSpeakers(speakers)
+    const figs = (m.useStage.getState().current?.objects ?? []).filter((o) => o.kind === 'mannequin' && o.visible).length
+    useSession.getState().toast(n ? `${speakers.map((p) => p.name).join(', ')} bound to the figures, left to right — their references and sheets go into the frame`
+      : `The stage has ${figs} figure${figs === 1 ? '' : 's'} and the scene ${speakers.length} speaker${speakers.length === 1 ? '' : 's'} — bind them yourself: a figure's Inspector › character, or right-click ▸ Bind to a character`, n ? 'success' : 'info') }) })
 }
+/** D93 (C7): the speakers of the node that owns a shot (or the node Make came from). */
+const shotSpeakers = (s: Shot | undefined): Profile[] => { const n = s?.owner_node ? sy().flowNodes[s.owner_node] : undefined; return speakersOf(n, sy().profiles) }
 const NODE_ICON = { start: Play, hub: GitFork, dialogue: MessageSquare, choice: ListChecks, condition: CircleHelp, action: Zap, shot: Clapperboard, jump: CornerDownRight, comment: StickyNote } as const
 const NODE_LABEL = { start: 'Start', hub: 'Hub', dialogue: 'Dialogue', choice: 'Choice', condition: 'Condition', action: 'Action', shot: 'Shot', jump: 'Jump', comment: 'Note' } as const
 /** The viewport registers its fit, its centre and the screen → flow mapping (D90 B11) in flow coordinates (the canvas is not a store). */
@@ -244,7 +254,7 @@ const cmds: Command[] = [
   { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Generate', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeFrameFor(s, v) } },
   { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make frame in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
-    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
+    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id, shotSpeakers(shot())) } },
   { id: 'story.shot.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeClipFor(s, v) } },
   { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,

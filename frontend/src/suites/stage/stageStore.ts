@@ -9,6 +9,7 @@ import { useSession } from '../../store/session'
 import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
+import { figureMentions, prebind as prebindOf } from './figures'
 import type { Keypoint } from './passes'
 
 export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
@@ -146,6 +147,13 @@ interface StageState {
   frameView: (ids: string[] | null) => void                // frame the selection (or everything) in the viewport
   object: (id: string | null) => StageObject | undefined
   activeCamera: () => StageCamera | undefined
+  /** D93 (C8): bind a figure to a Cast character (at a version — a costume; null = the current one), or unbind it (`null`). */
+  bindFigure: (id: string, profileId: string | null, version?: string | null) => void
+  /** D93 (C8): the figure mentions the Render tab sends — the visible bound figures at the active camera, left to right. */
+  figureMentions: () => { profile_id: string; figure: string; version?: string }[]
+  /** D93 (C8, UI4's Make frame ▸ in Stage): bind the speakers to the figures in screen order when the counts match — the number bound, or
+   *  null when the counts differ (the author binds them). */
+  prebindSpeakers: (speakers: { id: string }[]) => number | null
 }
 
 let saveTimer: number | null = null
@@ -313,7 +321,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const entry = get().passesEntry()
     const [width, height] = get().shotSize()
     const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry?.assets ?? { clay: 'pending', pose: 'pending' }, method: sh.method,
-      prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), seeds: [0], width, height }
+      prompt_text: sh.prompt_text.trim(), refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: [0], width, height }   // D93 (C8): the bound figures
     try {
       const pv = await unwrap(http.POST('/recipes/preview', { body: { recipe: recipe as never } }))
       if (seq === shotPreviewSeq) set({ shotPreview: isDocumentPreview(pv) ? pv : null, shotPreviewError: null })
@@ -360,7 +368,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const sh = get().shot
     const [width, height] = get().shotSize()
     const recipe = { kind: 'stage_shot', stage_id: cur.id, camera_id: cam.id, passes: entry.assets, method: sh.method, prompt_text: sh.prompt_text.trim(),
-      refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }
+      refs: sh.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })), mentions: get().figureMentions(), seeds: Array.from({ length: Math.max(1, Math.min(4, sh.count)) }, () => 0), width, height }   // D93 (C8)
     try {
       const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipe as never, stage: false, origin: { suite: 'stage', surface: 'shot', ref: cur.id, payload: { camera_id: cam.id } } } }))
       s.toast(`Queued ${jobs.jobs.length} frame${jobs.jobs.length > 1 ? 's' : ''} of ${cam.name}`, 'success')
@@ -460,7 +468,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {} } : null, billboard: kind === 'plane' }
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {} } : null, billboard: kind === 'plane', profile_id: null, version: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
@@ -488,7 +496,8 @@ export const useStage = create<StageState>()((set, get) => ({
     const src = get().object(id)
     if (!src) return
     const nid = newId(src.kind === 'mannequin' ? 'fig' : src.kind)
-    const copy: StageObject = { ...src, id: nid, name: `${src.name} copy`, transform: { ...src.transform, pos: [src.transform.pos[0] + 0.6, src.transform.pos[1], src.transform.pos[2]] }, locked: false }
+    const copy: StageObject = { ...src, id: nid, name: `${src.name} copy`, transform: { ...src.transform, pos: [src.transform.pos[0] + 0.6, src.transform.pos[1], src.transform.pos[2]] }, locked: false,
+      profile_id: null, version: null }                                                   // D93 (C8): one figure per character — the copy is unbound
     get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'duplicate')
     set({ selected: nid })
   },
@@ -518,6 +527,23 @@ export const useStage = create<StageState>()((set, get) => ({
   frameView: (ids) => set({ frameRequest: { ids, n: get().frameRequest.n + 1 } }),
   object: (id) => (id ? get().current?.objects.find((o) => o.id === id) : undefined),
   activeCamera: () => { const c = get().current; return c?.cameras.find((x) => x.id === c.active_camera) ?? c?.cameras[0] },
+  bindFigure: (id, profileId, version = null) => {
+    const o = get().object(id)
+    if (!o || o.kind !== 'mannequin') return
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, profile_id: profileId, version: profileId ? version : null }
+      : profileId && x.profile_id === profileId ? { ...x, profile_id: null, version: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
+    void get().refreshShotPreview()
+  },
+  figureMentions: () => { const d = get().sampledDoc(); return d ? figureMentions(d.objects, d.cameras.find((c) => c.id === d.active_camera) ?? d.cameras[0]) : [] },
+  prebindSpeakers: (speakers) => {
+    const d = get().current
+    if (!d) return null
+    const map = prebindOf(d.objects, get().activeCamera(), speakers)
+    if (!map) return null
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => (x.id in map ? { ...x, profile_id: map[x.id], version: x.profile_id === map[x.id] ? x.version : null } : x)) }), 'bind the speakers')
+    void get().refreshShotPreview()
+    return Object.keys(map).length
+  },
 }))
 
 export const st = () => useStage.getState()

@@ -23,7 +23,7 @@ import { NODE_LABEL } from './types'
 const NODE_W = 220
 
 interface StoryData extends Record<string, unknown> { node: FlowNode; thumb: string | null; speaker: string | null; problem: string | null; shotState: string | null
-  board: { name: string; cover: string | null; total: number } | null }
+  board: { name: string; cover: string | null; total: number } | null; place: string | null }
 type StoryNodeT = Node<StoryData, 'story'>
 
 function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
@@ -43,6 +43,7 @@ function StoryNode({ id, data, selected }: NodeProps<StoryNodeT>) {
       {(n.type === 'dialogue' || n.type === 'shot') && (
         <div className={`shot${n.shot_id ? '' : ' none'}`}>{data.thumb ? <img src={api.thumbUrl(data.thumb, 256)} alt="" /> : <span>{n.shot_id ? 'shot' : 'no shot'}</span>}{data.shotState && <i className={`dot ${data.shotState === 'final' ? 'ok' : 'tight'}`} title={data.shotState} />}</div>
       )}
+      {data.place && <div className="place" title="where — a Cast place; Make frame links Generate's scene to it">@ {data.place}</div>}{/* D93 (C7) */}
       {n.board_group_id && <div className="board" title={data.board ? `board: ${data.board.name} — its images seed Make frame's references` : 'its board group was deleted'}>
         {data.board?.cover ? <img src={api.thumbUrl(data.board.cover, 256)} alt="" /> : <span className="empty" />}<span>{data.board ? `${data.board.name} · ${data.board.total}` : 'board gone'}</span></div>}
       {ports.map((p, i) => (
@@ -96,7 +97,7 @@ export function FlowCanvas() {
       const sp = n.lines[0]?.speaker ? profiles.find((x) => x.id === n.lines[0].speaker) : undefined
       const g = findNode(tree, n.board_group_id)
       return { id: p.id, type: 'story' as const, position: { x: p.x, y: p.y }, selected: p.id === nodeId, data: { node: n, thumb, speaker: sp ? `${sp.name} (${CLASS_LABEL[sp.cls]})` : null, problem: byProblem.get(p.id) ?? null, shotState: v?.state ?? null,
-        board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null } }
+        board: g ? { name: g.name, cover: g.cover_ids[0] ?? null, total: g.total } : null, place: n.place_id ? profiles.find((x) => x.id === n.place_id)?.name ?? 'a deleted place' : null } }
     })
   }, [graph, flowNodes, nodeId, shots, clipsById, profiles, problems, tree])
   if (from !== built) { setFrom(built); setNodes(built) }                                      // derived state, synced in render (not an effect)

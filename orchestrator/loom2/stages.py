@@ -48,6 +48,8 @@ class StageObject(BaseModel):
     colour_id: int = 0                             # the object-ID mask colour (ST3)
     pose: Pose | None = None                       # figures
     billboard: bool = True                         # planes face the camera
+    profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame
+    version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one
 
 
 class StageCamera(BaseModel):
@@ -104,6 +106,8 @@ def check(st: Stage) -> None:
             p = by[p].parent
         if len(o.transform.pos) != 3 or len(o.transform.rot) != 3 or len(o.transform.scale) != 3:
             raise ValueError(f"object {o.id}: a transform has three components each")
+        if o.profile_id is not None and o.kind != "mannequin":
+            raise ValueError(f"object {o.id}: only a figure is bound to a character")   # D93 (C8)
     cids = [c.id for c in st.cameras]
     if len(set(cids)) != len(cids):
         raise ValueError("camera ids must be unique")

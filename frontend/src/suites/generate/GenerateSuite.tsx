@@ -1,7 +1,7 @@
 // Generate suite (09; D90 02 §6): one scrolling Panel column (GenerateColumn.tsx — saved panels, prompt, references, look, camera, model,
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
-import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownFromLine, Boxes, Bookmark, Camera, Hand, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
@@ -149,6 +149,14 @@ registerCommands([
         else if (n < 60) window.setTimeout(() => focus(n + 1), 50)
       }
       void import('../../store/origin').then((m) => { m.goToStory({ tab: 'cast', id: p.id, version: v.id }); focus(0) }) } },
+  // D93 (C6): a held prop is put down (the holds ▸ menu, the chip's ✕); a linked place's sheet is Cast's (the scene's "edit in Cast", its chip's menu)
+  { id: 'gen.subject.unhold', scope: 'generate', label: 'Put the prop down', icon: Hand, placement: ['panel', 'context'], hint: 'the subject holds nothing — its words and images leave the prompt',
+    when: () => { const i = subjectItem.i; return i !== undefined && !!useGenerate.getState().panel.tree.subjects?.[i]?.holds },
+    run: () => { const i = subjectItem.i; if (i !== undefined) useGenerate.getState().holdProp(i, null) } },
+  { id: 'gen.scene.editSheet', scope: 'generate', label: 'Edit the place in Story · Cast', icon: PenLine, placement: ['panel', 'context'],
+    hint: 'the look, colours and marks of the place the scene uses — the scene follows', when: () => !!useGenerate.getState().panel.tree.scene_link,
+    run: () => { const l = useGenerate.getState().panel.tree.scene_link, p = l ? profilesForMentions().find((x) => x.id === l.profile_id) : undefined, v = versionOf(p, l?.version)
+      if (p && v) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: p.id, version: v.id })) } },
   { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
 ])
 

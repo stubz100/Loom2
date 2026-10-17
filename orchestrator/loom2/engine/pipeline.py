@@ -26,7 +26,7 @@ from ..recipes import I2I, I2V, T2I, TTS, ImageToMesh, Inpaint, Reangle, Render,
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
-                     estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights, stage_pass_for, stage_prompt, stage_refs)
+                     estimate_vram_gb, i2v_params, reangle_prompt, recipe_weights, stage_binds, stage_bindings, stage_pass_for, stage_prompt, stage_refs)
 
 if TYPE_CHECKING:
     from ..queue import JobQueue, JobRecord
@@ -127,10 +127,12 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         kept = stage_refs(recipe, spec) if spec else recipe.refs
         if recipe.method == "refcontrol" and not kept:
             raise CompileError("the exact-pose method needs one reference image (image 2)")
+        figs = stage_bindings(recipe, spec)                            # D93 (C8): the figures bound to characters and the images each was given
         params = {"method": recipe.method, "model_id": mid, "label": spec.label if spec else mid, "prompt": stage_prompt(recipe, variant),
                   "image1": stage_pass_for(recipe.method), "width": recipe.width, "height": recipe.height, "refs": len(kept),
-                  "max_refs": len(kept) if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1),
-                  "refs_dropped": max(0, len(recipe.refs) - len(kept))}
+                  "max_refs": 1 if recipe.method == "refcontrol" else max(0, (spec.inputs.refs_max if spec else 1) - 1),
+                  "refs_dropped": max(0, len(recipe.refs) - len(kept)), "bind_refs": stage_binds(recipe, spec), "figures": figs,
+                  "ref_list": [{"image": i + 2, "asset_id": r.asset_id, "figure": next((b["figure"] for b in figs if (i + 2) in b["refs"]), None)} for i, r in enumerate(kept)]}
         measured = spec.recipes.stage_seconds if spec else None
         est = {"seconds": measured if measured is not None else (spec.estimates.base_seconds if spec else None),
                "source": "baseline (E10 2026-10-12, warm)" if measured is not None else "the model's base estimate (this method is unmeasured on it)"}

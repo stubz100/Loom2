@@ -194,12 +194,14 @@ def _clause(s: str | None) -> str:
 _WORN = re.compile(r"(?i)^(wearing|in|dressed|clad)\b")
 
 
-def compose_sheet(v: ProfileVersion, shot: Any = None, name: str = "") -> str:
+def compose_sheet(v: ProfileVersion, shot: Any = None, name: str = "", cls: str = "character") -> str:
     """D93 (B4) the composition rule — one clause, its parts joined by ", ": the appearance; the outfit (this shot's when it has one, else
     the sheet's; "wearing …" unless it says so itself); the bound colours as "<HEX> <object>" (those without an object are not sent); the
     marks; this shot's line. Empty → the name (the model then sees only the name, and the card says so). The shared cases in
-    tests/fixtures/sheet_compose.json hold the client's copy (frontend generate/sheet.ts) to the same rule."""
-    outfit = _clause(getattr(shot, "outfit", "") if shot is not None else "") or _clause(v.outfit)
+    tests/fixtures/sheet_compose.json hold the client's copy (frontend generate/sheet.ts) to the same rule. D93 (C6): a place or a prop
+    wears nothing — its outfit (the sheet's or a shot's) is not sent; the appearance is its look, the colours and marks apply."""
+    worn = cls == "character"
+    outfit = (_clause(getattr(shot, "outfit", "") if shot is not None else "") or _clause(v.outfit)) if worn else ""
     colours = ", ".join(f"{c.hex.upper()} {_clause(c.object)}" for c in v.colours if _clause(c.object))
     parts = [_clause(v.appearance), outfit if not outfit or _WORN.match(outfit) else f"wearing {outfit}", colours, _clause(v.marks),
              _clause(getattr(shot, "note", "") if shot is not None else "")]
@@ -373,6 +375,7 @@ class FlowNode(BaseModel):
     shot_id: str | None = None
     shot_version: str | None = None
     board_group_id: str | None = None             # D90 (02 §4.2): the node's board — an album group (references, mood, places); its cover on the card
+    place_id: str | None = None                   # D93 (C7): where — a Cast place (Dialogue / Shot nodes); Make frame links Generate's scene to it
     colour: str | None = None
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
@@ -803,7 +806,7 @@ class _FlowMixin:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleFlow(f"the node is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id")
+        keep = ("type", "title", "lines", "options", "cond", "set", "target", "text", "colour", "board_group_id", "place_id")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": nid, "schema_version": FLOW_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         n = FlowNode.model_validate(merged)

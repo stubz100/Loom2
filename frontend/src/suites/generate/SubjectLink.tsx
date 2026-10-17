@@ -35,15 +35,15 @@ export function VersionChip({ v, pinned, onOpen }: { v: Pick<ProfileVersion, 'id
 
 /** D93 (B4): the character's sheet as Cast holds it, read-only — the appearance, the outfit (struck through when this shot wears another),
  *  the bound colours (a colour without an object is not sent, so not shown), the marks; Edit opens it in Story · Cast. */
-export function SheetView({ i, v, name, outfitOverridden, onEdit }: { i: number; v: ProfileVersion | undefined; name: string; outfitOverridden: boolean; onEdit: () => void }) {
+export function SheetView({ i, v, name, outfitOverridden, onEdit, cls = 'character', domId }: { i: number; v: ProfileVersion | undefined; name: string; outfitOverridden: boolean; onEdit: () => void; cls?: string; domId?: string }) {
   const colours = (v?.colours ?? []).filter((c) => c.object.trim())
   return (
-    <div className="subject-sheet" id={`gen-subject-sheet-${i}`} tabIndex={-1} aria-label={`${name}'s sheet`}>
+    <div className="subject-sheet" id={domId ?? `gen-subject-sheet-${i}`} tabIndex={-1} aria-label={`${name}'s sheet`}>
       <div className="sheet-head"><span>{name}'s sheet{v ? ` · ${versionName(v)}` : ''} — from Story · Cast</span>
         <button type="button" className="quiet" title={`Edit ${name}'s sheet in Story · Cast — every linked subject follows`} onClick={onEdit}><PenLine size={12} /> edit in Cast</button></div>
-      {!v || sheetEmpty(v) ? <p className="sheet-empty">no look yet — the sheet in Cast is empty</p> : <>
+      {!v || sheetEmpty(v, cls) ? <p className="sheet-empty">no look yet — the sheet in Cast is empty</p> : <>
         {v.appearance.trim() && <p className="sheet-look">{v.appearance}</p>}
-        {v.outfit.trim() && <p className={`sheet-row${outfitOverridden ? ' over' : ''}`}><span className="k">outfit</span> <span className="v">{v.outfit}</span></p>}
+        {cls === 'character' && v.outfit.trim() && <p className={`sheet-row${outfitOverridden ? ' over' : ''}`}><span className="k">outfit</span> <span className="v">{v.outfit}</span></p>}
         {colours.length > 0 && <p className="sheet-row"><span className="k">colours</span> {colours.map((c, k) => <span key={k} className="colour-chip" title={sentColours({ colours: [c] })[0]}><i style={{ background: c.hex }} />{c.object}</span>)}</p>}
         {v.marks.trim() && <p className="sheet-row"><span className="k">marks</span> <span className="v">{v.marks}</span></p>}
       </>}

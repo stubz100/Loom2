@@ -1526,3 +1526,114 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   expect(second.recipe.refs?.some((r) => r.mention === v2.group_id)).toBe(false)
   expect(second.recipe.prompt_json?.subjects?.[0].description).toContain('wearing a grey wool coat')
 })
+
+test('a subject per speaker, a place, a prop (D93 · C6, C7): the Flow Inspector sets where a Dialogue node happens; Make frame ▸ gives Generate one linked card per speaker and the place as the scene; holds ▸ gives a card a prop; the job\'s prompt carries all three', async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const copies = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id, src.id, src.id, src.id] })).ids   // copies: no other scenario's image moves
+  type ProfileLite = { id: string; name: string; versions: { id: string; group_id: string }[] }
+  const mk = (name: string, cls: string, hero: string, appearance: string) => api<ProfileLite>('POST', '/story/profiles', { name, cls, hero_asset_id: hero, appearance })
+  const mara = await mk(`Mara ${tag}`, 'character', copies[0], `Mara ${tag}, a wiry courier`)
+  const joe = await mk(`Joe ${tag}`, 'character', copies[1], 'a tall fisherman with a grey beard')
+  const quay = await mk(`Quay ${tag}`, 'place', copies[2], 'a stone quay at dusk, fishing boats')
+  const key = await mk(`Key ${tag}`, 'prop', copies[3], 'a brass key on a red ribbon')
+  const node = await api<{ id: string }>('POST', '/story/flow/nodes', { type: 'dialogue', title: `At the gate ${tag}`, x: 2400, y: 1600 })
+  await api('POST', `/story/flow/nodes/${node.id}/shot`, { name: `Gate ${tag}` })
+  type NodeLite = { id: string; revision: number; place_id: string | null }
+  const nodeOf = async () => (await api<{ nodes: NodeLite[] }>('GET', '/story/flow')).nodes.find((n) => n.id === node.id)!
+  await api('PATCH', `/story/flow/nodes/${node.id}`, { revision: (await nodeOf()).revision, lines: [{ speaker: mara.id, text: '"We go at dawn."' }, { speaker: joe.id, text: 'Not without the key.' }, { speaker: mara.id, text: 'Then find it.' }] })
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
+  // Story · Flow: the node's Inspector — where (a Cast place), then Make frame in Generate
+  await openApp(page, { suite: 'story', tab: 'flow' })
+  type Hook = { loadFlow: () => Promise<void>; selectNode: (id: string | null) => void }
+  await page.evaluate(async (id) => { const h = (window as unknown as { __loom2Story: Hook }).__loom2Story; await h.loadFlow(); h.selectNode(id) }, node.id)
+  await page.locator('.inspector select[aria-label="where (a Cast place)"]').selectOption(quay.id)
+  await expect.poll(async () => (await nodeOf()).place_id).toBe(quay.id)
+  await expect(page.locator(`.flow-node[data-id="${node.id}"] .place`)).toHaveText(`@ ${quay.name}`)
+  await page.locator('.inspector button', { hasText: 'Make frame in Generate' }).click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
+  await expect(page.locator('#gen-sec-prompt .segmented button.active')).toHaveText('Tree')
+  const cards = page.locator('.gen-tree .subject.linked')
+  await expect(cards).toHaveCount(2)
+  await expect(cards.nth(0).locator('.linked-to')).toContainText(mara.name)
+  await expect(cards.nth(1).locator('.linked-to')).toContainText(joe.name)
+  await expect(cards.nth(0).locator('input[type=text]').nth(3)).toHaveValue('saying We go at dawn')           // the first line: its speaker's action (no quote marks)
+  await expect(page.locator('.scene-linked .linked-to')).toContainText(quay.name)
+  await expect(page.locator('.scene-linked .subject-sheet')).toContainText('a stone quay at dusk')
+  // holds ▸ on Joe's card: the Cast's props
+  await cards.nth(1).locator('.holds-btn').click()
+  await page.locator('.ctx-menu button.item', { hasText: key.name }).click()
+  await expect(cards.nth(1).locator('.holds-chip')).toContainText(`holds ${key.name}`)
+  await page.locator('#gen-sec-preview summary').click()
+  await expect(page.locator('.preview-composed')).toContainText(`the scene · ${quay.name}: a stone quay at dusk, fishing boats`)
+  await expect(page.locator('.preview-composed')).toContainText(`subject 2 holds · ${key.name}: holding a brass key on a red ribbon`)
+  await expect(page.locator('.preview-box')).toContainText(`${quay.name} (reference image 4), a stone quay at dusk`)   // T8: the place's range leads the scene
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  type JobLite = { status: string; result: { serialized_prompt?: string } | null; recipe: { prompt_json?: { scene?: string; subjects?: { description?: string; action?: string; holding?: string }[] }; mentions?: { profile_id?: string | null; subject?: number | null; held_by?: number | null; scene?: boolean; composed?: string | null }[] } }
+  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.recipe.mentions?.some((m) => m.profile_id === quay.id))
+  await expect.poll(async () => { const js = await mine(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
+  const job = (await mine())[0]
+  const ms = job.recipe.mentions!
+  expect(ms.find((m) => m.profile_id === mara.id)?.subject).toBe(0)
+  expect(ms.find((m) => m.profile_id === joe.id)?.subject).toBe(1)
+  expect(ms.find((m) => m.profile_id === key.id)?.held_by).toBe(1)
+  expect(ms.find((m) => m.profile_id === quay.id)).toMatchObject({ scene: true, composed: 'a stone quay at dusk, fishing boats' })
+  expect(job.recipe.prompt_json?.scene).toBe('a stone quay at dusk, fishing boats')
+  expect(job.recipe.prompt_json?.subjects?.[1]).toMatchObject({ description: 'a tall fisherman with a grey beard', holding: 'a brass key on a red ribbon' })
+  expect(job.result?.serialized_prompt).toContain(`Joe ${tag} (reference image 2), a tall fisherman with a grey beard, holding Key ${tag} (reference image 3), a brass key on a red ribbon`)
+  expect(job.result?.serialized_prompt).toContain(`scene: Quay ${tag} (reference image 4), a stone quay at dusk, fishing boats`)
+})
+
+test('figures bound to characters (D93 · C8): a figure picks a character in the Inspector or by right-click, the Outliner says who, the Render tab\'s deck shows each figure\'s slot, and the frame\'s job carries their references and sheets left to right', async ({ page }) => {
+  test.setTimeout(150_000)
+  const tag = Date.now().toString(36)
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const copies = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id, src.id] })).ids
+  type ProfileLite = { id: string; name: string; versions: { id: string; group_id: string }[] }
+  const ana = await api<ProfileLite>('POST', '/story/profiles', { name: `Ana ${tag}`, cls: 'character', hero_asset_id: copies[0], appearance: 'a short woman in a red raincoat' })
+  const bo = await api<ProfileLite>('POST', '/story/profiles', { name: `Bo ${tag}`, cls: 'character', hero_asset_id: copies[1], appearance: 'a lanky boy with a green cap' })
+  type StageLite = { id: string; revision: number; objects: { id: string; name: string; profile_id: string | null }[] }
+  const st0 = await api<StageLite>('POST', '/stages', { name: `Figures ${tag}` })
+  const figure = (id: string, name: string, x: number) => ({ id, kind: 'mannequin', name, preset: 'adult', transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, pose: { preset: 'stand', joints: {} }, colour_id: 1 })
+  await api('PUT', `/stages/${st0.id}`, { ...st0, objects: [figure('fig_r', 'Right one', 1.2), figure('fig_l', 'Left one', -1.2)],
+    cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1' })
+  await openApp(page, { suite: 'stage' })
+  type StageHook = { open: (id: string) => Promise<void> }
+  await expect.poll(async () => page.evaluate(() => !!(window as unknown as { __loom2Stage?: StageHook }).__loom2Stage), { timeout: 30_000 }).toBe(true)
+  await page.evaluate(async (id) => { await (window as unknown as { __loom2Stage: StageHook }).__loom2Stage.open(id) }, st0.id)
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('nav.rail button[title^="Outliner"]').click()
+  // the left figure: the Inspector's tiles (the Cast's characters by their heroes)
+  await page.locator('.outl-row', { hasText: 'Left one' }).click()
+  const tile = page.locator(`.inspector [aria-label="the figure's character"] button[aria-label="${ana.name}"]`)
+  await expect(tile.locator('img')).toBeVisible()
+  await tile.click()
+  await expect(page.locator('.outl-row', { hasText: 'Left one' }).locator('.bound-tag')).toContainText(ana.name)
+  // the right figure: right-click ▸ Bind to a character ▸ Bo
+  await page.locator('.outl-row', { hasText: 'Right one' }).click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Bind to a character' }).hover()
+  await page.locator('.ctx-menu button.item', { hasText: bo.name }).click()
+  await expect(page.locator('.outl-row', { hasText: 'Right one' }).locator('.bound-tag')).toContainText(bo.name)
+  await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.map((o) => [o.id, o.profile_id]), { timeout: 10_000 }).toEqual([['fig_r', bo.id], ['fig_l', ana.id]])
+  // the Render tab: the deck's figure slots (image 2 the left figure's, image 3 the right's) and the lines
+  await page.locator('nav.rail button[title^="Render"]').click()
+  await expect(page.locator('.shot-tab .figure-slot')).toHaveCount(2, { timeout: 20_000 })
+  await expect(page.locator('.shot-tab .figure-slot').nth(0).locator('.fig-badge')).toHaveText(`fig 1 · ${ana.name}`)
+  await expect(page.locator('.shot-tab .figure-lines')).toContainText(`figure 1 · ${ana.name} → image 2`)
+  await expect(page.locator('.shot-tab .prompt-preview')).toContainText(`figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3)`)
+  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  await go.click()
+  type JobLite = { status: string; result: { serialized_prompt?: string } | null; recipe: { kind: string; stage_id?: string; refs?: { asset_id: string; mention?: string | null }[]; mentions?: { figure?: string | null; profile_id?: string | null; asset_ids: string[] }[] } }
+  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.recipe.kind === 'stage_shot' && j.recipe.stage_id === st0.id)
+  await expect.poll(async () => { const js = await mine(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
+  const job = (await mine())[0]
+  expect(job.recipe.mentions?.map((m) => [m.figure, m.profile_id])).toEqual([['fig_l', ana.id], ['fig_r', bo.id]])   // left to right, not the document's order
+  expect(job.recipe.refs?.map((r) => r.asset_id)).toEqual([copies[0], copies[1]])
+  expect(job.result?.serialized_prompt).toContain(`From left to right in image 1: figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3), a lanky boy with a green cap.`)
+})

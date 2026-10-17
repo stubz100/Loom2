@@ -4441,3 +4441,74 @@ split by file so that no two hands touched the same module.
   chip's v1 takes v1's references; D92 / A1 scenarios updated — the look is written in Cast).
 - **Owed:** the author's click-through; phase C (places and props, a subject per speaker, Stage figures bound); FLUX.2 dev's JSON binding
   on the rig (from phase A).
+
+## 2026-10-17 15:14 — D93 phase C built · places and props, a subject per speaker, Stage figures bound to characters — D93 complete
+
+- **C6 · a Cast place is the scene.** The Tree's scene has a row of Cast places as hero tiles (and "free scene"); a pick links the scene
+  (`Tree.scene_link {profile_id, version?, note}`) — the words typed in the scene become this shot's line, the place's sheet shows read-only
+  with its version chip, its slots ("ref 3") and "this shot" ("rain on the stones"); unlink leaves the composed words. The link rides on the
+  profile mention (`Mention.scene`, `shot.note`, `version`): `mentions.py` composes the scene from the version's sheet + the line and writes it
+  into `prompt_json.scene`, stamped `composed` like a linked subject. A place or a prop **wears nothing**: `compose_sheet(…, cls)` (and the
+  client's `composeSheet`) send no outfit for them — two shared cases added to `sheet_compose.json`; Cast hides their outfit field.
+- **C6 · a prop held by a subject.** A subject card's **holds ▸** (a press menu of the Cast's props; the chip "holds Compass ▾ · ref 3 ✕")
+  links the prop to the card (`Subject.holds`, `Mention.held_by` = the card's index among the subjects sent); a card with only a prop is still
+  sent. `mentions.py` puts the prop's clause under the subject's `holding` (one prop per subject); the serialiser says it per family. A prop
+  can still be a subject of its own (D92).
+- **The binding formats (extending A3; `BindingOut.role` subject · held · scene, `subject` None for the scene).** The images sit subject by
+  subject, each holder's prop right after it, the place after the subjects (`_bind_order`). Klein prose: `subjects: Mara (reference image 1),
+  …, Ines (reference image 2), a woman …, holding Compass (reference image 3), a brass compass …` and `scene: Warehouse (reference image 4),
+  a dim harbour warehouse …`; unbound (bind off or no images): `…, holding a brass compass …` with D73's "Image 3 shows Compass, …". dev JSON:
+  `"holding": {"description": "<clause>", "reference": "reference images 7–8"}` (a plain string unbound) and the scene string led by
+  `Harbour (reference images 4–5), …`. The Preview lists the composed scene / "subject 2 holds · Compass: holding …" and each binding (T8).
+- **C7 · a subject per speaker.** Flow's Dialogue and Shot nodes have **where** (`FlowNode.place_id`, a Cast place — the Inspector's select
+  with the place's hero; the node card says "@ Warehouse"; `PATCH` answers 422 for anything but a place, a place deleted since stays until
+  changed). **Make frame ▸** from a node (`makeFor.framePrefill`) now switches Generate to Tree mode and makes **one linked subject card per
+  speaker** (Cast characters, in the order they first speak), the scene linked to the node's place, the node's title as the lead text. The
+  version: the one the shot's stage binds to that character (C8's figure `version`), else the current one; the figure's pose goes into the
+  card's pose (`stage/poseWords.ts`: "pointing", "walking" …). **The first line goes into its speaker's action as "saying <the line>"**
+  (quote marks dropped) rather than "this shot": a line is something the character does in this shot, while "this shot" is composed into the
+  description right after the sheet (outfit, marks — the look), where speech would read as appearance; the action is its own field in both
+  families, and unquoted it is not lettered into the image. A Shot node without speakers keeps the cards and only links the place.
+- **C8 · Stage figures bound to characters.** A figure (`StageObject.profile_id`, `version` — a pinned costume; old stages read, only a
+  mannequin binds, `check` refuses others) picks a character in the **Inspector** (the Cast's characters as hero tiles, "no character", the
+  version select when it has several, Unbind / Open in Cast) or by **right-click ▸ Bind to a character ▸** (Outliner and viewport); one
+  figure per character (a second binding moves it); a duplicate is unbound; the **Outliner** shows the hero and the name on the figure's row.
+  The Render tab sends the visible bound figures **left to right on screen** (`stage/figures.ts`: the camera's own projection, roll included)
+  as `StageShot.mentions` (`figure` = the object id); `mentions.resolve_figures` gives each its version's reference images after the deck's
+  own, within the method's room (clay: the model's references less the pass; refcontrol: one), in turns then figure by figure, stamps them
+  and composes each sheet. The prompt: `From left to right in image 1: figure 1 is Mara (reference images 2–3), a courier; figure 2 is Ines
+  (reference image 4), a lighthouse keeper.` (unbound: the same without the ranges, D73's sentence per image). `/recipes/preview` returns
+  `params.figures` and `params.ref_list` — the deck shows the figures' slots ("fig 1 · Mara" on images 2–3) and a line per figure. **Make
+  frame ▸ in Stage** from a shot binds the owner node's speakers to the stage's figures in screen order when the counts match, else a toast
+  says how to bind them. `StageShot.bind_refs` overrides the spec (`inputs.bind_refs`, on).
+- **Commands:** `gen.subject.unhold` "Put the prop down" (panel: the chip's ✕; context: the holds ▸ menu), `gen.scene.editSheet` "Edit the
+  place in Story · Cast" (panel: the scene sheet's "edit in Cast"; context: its version chip's menu), `stage.figure.unbind` "Unbind the
+  character" and `stage.figure.openInCast` "Open the character in Story · Cast" (inspector: the figure's row; context: Bind to a character ▸).
+  The picks themselves (place tiles, holds ▸ entries, the figure's tiles and submenu) are item entries, as the version chip's are.
+- **Rig** (`scripts/d93c_stage_rig.py`; a copy of phase A's scratch project → `F:\loom2-projects\d93c-stage-20261017-144418`, the original
+  untouched; ST3's acceptance passes — a walking figure left, a pointing one right — uploaded to a new stage; the figures bound to Mara and
+  Ines (sheets that say a role, not a look); clay on Klein 9B at Draft 1280 × 720, three references after the pass; seeds 20261017–22):
+  **none** (no binding, the figures by their words) own 0.041 / cross 0.044, right 0 / 6, ≈ 11 s warm; **off** (bound, D73's sentences, no
+  ranges) own 0.115 / cross 0.054 (margin 0.061), right 2 / 6, 3 swapped, and in 5 of 6 a grey mannequin stayed grey or extra people
+  appeared (4 in one frame), 26–130 s; **on** (ranges) own **0.251** / cross 0.044 (margin **0.207**), right **5 / 6**, 1 swapped, always
+  exactly two real people, 65–79 s. Peak 12.6 GB. The binding stays on by default (no flag needed). Sheet: engine/spikes/out/d93c/sheet.jpg
+  (local).
+- **The author's project:** a copy of `F:\loom2-projects\stubz001` opened in the e2e orchestrator (`POST /project/open`): char01 reads
+  (schema 2, v1), no nodes or stages; its profile and world unchanged by the reads (the copy gained D92's seeded `library.json`, as before),
+  the original's story records' sha256 unchanged; Cast and a linked card show char01 as in phase B.
+- **Tests:** offline **398** under full and open (`test_places_props_figures_d93c.py` +11: no outfit on a place, the scene composed and
+  bound in Klein prose and dev JSON, a held prop in both families and unbound, a free holder and no recomposition, `place_id` and its 422s
+  with an old node file, a figure binding and an old stage, figures within clay's room left to right / off / the deck first / refcontrol one /
+  refusals, the plan's `figures` / `ref_list` and the compiled graph, the preview route; +2 shared composition cases; `test_mentions_d73`
+  excludes the new fields); Vitest **323** (+15: `placesProps.test.tsx` the scene tiles, link / chip / slots / unlink / round trip, holds ▸
+  and its recipe, JSON's "holding", Make frame's cards, the Preview lines; `figures.test.ts` the screen order, the mentions, the pre-binding;
+  `FigureBinding.test.tsx` the Inspector tiles, one figure per character, the tag, the menu, Make frame ▸ in Stage; `makeFor.test.ts` the
+  speakers' cards, versions and poses); lint 88; build, settings audit (239 / 0; `Mention.lora` / `lora_available` allow-listed as the stamps
+  they are — the resolver now carries them by copy), model literals, agents check, OpenAPI regenerated; smoke **36 / 36** under full and
+  open (new: a Dialogue node's where → Make frame → two linked cards and the place → holds ▸ → the job's prompt carries the scene, the cards
+  and "holding" with their ranges; a figure bound in the Inspector and by right-click → the Outliner, the deck's figure slots → the frame's
+  job carries the figures left to right). Screenshots: `frontend/node_modules/.e2e/d93c/` (local).
+- **Owed:** the author's click-through; FLUX.2 dev's JSON binding on the rig (from phase A, now with "holding" and the scene); refcontrol
+  with a bound figure on the rig (one image, unmeasured); a version pin for a speaker on the Flow node itself (only the stage's figure pins
+  one today); links to profiles of another project stay in a persisted panel after a project switch (pre-existing since D92: the preview
+  says "mentioned profile … does not exist" until the card is unlinked).

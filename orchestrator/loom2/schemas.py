@@ -400,11 +400,16 @@ class MentionOut(Out):
     skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room
     shot: SubjectShotOut | None = None            # D93 (B4): the linked card's per-shot override
     composed: str | None = None                   # D93 (B4): the description the linked subject carried (the version's sheet + the shot)
+    scene: bool = False                           # D93 (C6): a Cast place linked to the Tree's scene
+    held_by: int | None = None                    # D93 (C6): a Cast prop held by that subject card
+    figure: str | None = None                     # D93 (C8): the Stage figure bound to this character (a StageShot)
 
 
 class BindingOut(Out):
-    """D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them)."""
-    subject: int
+    """D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them). D93 (C6):
+    `role` subject, held (a prop the subject card `subject` holds) or scene (the place of the scene; `subject` None)."""
+    subject: int | None
+    role: str = "subject"
     name: str | None = None
     profile_id: str | None = None
     version: str | None = None                    # D93 (B5): the version (costume) the subject uses

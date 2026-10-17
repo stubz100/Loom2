@@ -20,11 +20,15 @@ import { adoptDescription, composeSheet, versionOf } from './sheet'
  *  the profile mention the link records (never sent in the prompt itself). D93 (B4): a linked card has no words of its own — the server
  *  composes its description from the version's sheet (`version`: the chip's pick, else the current one, B5) and this shot's override
  *  (`shot_outfit`, `shot_note`); `description` is a free card's. */
-export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string; profile_id?: string; version?: string; shot_outfit?: string; shot_note?: string }
+export interface Subject { description: string; position?: string; action?: string; pose?: string; color_match?: string; profile_id?: string; version?: string; shot_outfit?: string; shot_note?: string; holds?: HeldProp }
+/** D93 (C6): a Cast prop a subject card holds — "holding <its clause>", its references bound to the subject (the server composes both). */
+export interface HeldProp { profile_id: string }
+/** D93 (C6): the Tree's scene linked to a Cast place — its sheet (at the chip's version) + this shot's line is the scene, composed by the server. */
+export interface SceneLink { profile_id: string; version?: string; note?: string }
 /** D93 (B4): the card fields that ride on the mention, never in the prompt's subject object. */
-const LINK_KEYS = new Set(['profile_id', 'version', 'shot_outfit', 'shot_note'])
+const LINK_KEYS = new Set(['profile_id', 'version', 'shot_outfit', 'shot_note', 'holds'])
 export interface Camera { angle?: string; lens?: string; depth_of_field?: string; 'f-number'?: string; distance?: string }
-export interface Tree { scene?: string; subjects?: Subject[]; style?: string; color_palette?: string[]; lighting?: string; mood?: string; background?: string; composition?: string; camera?: Camera }
+export interface Tree { scene?: string; scene_link?: SceneLink; subjects?: Subject[]; style?: string; color_palette?: string[]; lighting?: string; mood?: string; background?: string; composition?: string; camera?: Camera }
 export type PromptMode = 'tree' | 'json' | 'text'
 export type SeedMode = 'random' | 'fixed' | 'increment'
 export interface RefSlot { asset_id: string; note?: string }
@@ -58,11 +62,22 @@ function promptStrings(p: Panel): string[] {
 }
 /** D92: the Tree subject card linked to a profile (its index), or -1. */
 export const linkedSubject = (p: Panel, profileId: string | undefined): number => (profileId && p.prompt_mode === 'tree' ? (p.tree.subjects ?? []).findIndex((s) => s.profile_id === profileId) : -1)
+/** D93 (C6): the subject card holding a prop (its index), or -1. */
+export const holderOf = (p: Panel, profileId: string | undefined): number => (profileId && p.prompt_mode === 'tree' ? (p.tree.subjects ?? []).findIndex((s) => s.holds?.profile_id === profileId) : -1)
+/** D93 (C6): the place linked to the Tree's scene is this profile. */
+export const sceneOf = (p: Panel, profileId: string | undefined): boolean => !!profileId && p.prompt_mode === 'tree' && p.tree.scene_link?.profile_id === profileId
+/** A profile the Tree links somewhere (a subject card, a held prop, the scene). */
+const linkedAnywhere = (p: Panel, profileId: string | undefined): boolean => linkedSubject(p, profileId) >= 0 || holderOf(p, profileId) >= 0 || sceneOf(p, profileId)
 /** D73: the mentions still written somewhere in the prompt as `@name` (deleting the text drops the mention); D92: and the profile mentions a
- *  Tree subject card is linked to. */
+ *  Tree subject card is linked to; D93 (C6): a held prop's and the scene's place. */
 export function mentionsInUse(p: Panel): MentionRef[] {
   const text = promptStrings(p).join('\n')
-  return (p.mentions ?? []).filter((m) => text.includes('@' + m.name) || linkedSubject(p, m.profile_id) >= 0)
+  return (p.mentions ?? []).filter((m) => text.includes('@' + m.name) || linkedAnywhere(p, m.profile_id))
+}
+/** The panel's mentions without the profile mentions nothing links or writes any more (after a link changed). */
+function pruned(p: Panel): MentionRef[] {
+  const text = promptStrings(p).join('\n')
+  return (p.mentions ?? []).filter((m) => !m.profile_id || linkedAnywhere(p, m.profile_id) || text.includes('@' + m.name))
 }
 const unmention = (s: string, name: string) => s.split('@' + name).join(name)
 
@@ -90,6 +105,8 @@ export function cleanTree(t: Tree): Record<string, unknown> {
         const subs = (v as Subject[]).filter(keptSubject).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => !LINK_KEYS.has(k) && !(k === 'description' && s.profile_id) && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's; D93 (B4): a linked card's words are the server's to compose
         if (subs.length) out[k] = subs
       } else if (v.length) out[k] = v
+    } else if (k === 'scene_link' || (k === 'scene' && t.scene_link?.profile_id)) {
+      continue                                                                           // D93 (C6): the place's link rides on its mention; its scene is the server's
     } else if (typeof v === 'object') {
       const o = Object.fromEntries(Object.entries(v as Record<string, string>).filter(([, x]) => x !== '' && x != null))
       if (Object.keys(o).length) out[k] = o
@@ -151,7 +168,13 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
     mentions: mentionsInUse(p).map((m) => { const li = linkedSubject(p, m.profile_id), si = sentIndex(p.tree.subjects ?? [], li), s = p.tree.subjects?.[li]   // D85: a profile mention names its profile; D92: and the card it links (D93: its index among the subjects sent)
       const shot = s && (s.shot_outfit?.trim() || s.shot_note?.trim()) ? { outfit: s.shot_outfit?.trim() ?? '', note: s.shot_note?.trim() ?? '' } : null   // D93 (B4): this shot's words; (B5) the chip's version
-      return { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}), ...(si >= 0 ? { subject: si, ...(s?.version ? { version: s.version } : {}), ...(shot ? { shot } : {}) } : {}) } }),
+      const base = { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}) }
+      if (si >= 0) return { ...base, subject: si, ...(s?.version ? { version: s.version } : {}), ...(shot ? { shot } : {}) }
+      const hi = sentIndex(p.tree.subjects ?? [], holderOf(p, m.profile_id))                 // D93 (C6): a prop held by that card (its index among the subjects sent)
+      if (hi >= 0) return { ...base, held_by: hi }
+      const sc = sceneOf(p, m.profile_id) ? p.tree.scene_link : undefined                    // D93 (C6): the place of the scene, its version and this shot's line
+      if (sc) return { ...base, scene: true, ...(sc.version ? { version: sc.version } : {}), ...(sc.note?.trim() ? { shot: { outfit: '', note: sc.note.trim() } } : {}) }
+      return base }),
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
 }
@@ -173,9 +196,12 @@ export function panelFromRecipe(r: Record<string, unknown>, keepSeeds = false): 
     style_id: (r.style_id as string | null | undefined) ?? null,                                     // D85: a stored recipe's style (null = it ran without one)
   }
   if (r.prompt_json && typeof r.prompt_json === 'object') { out.tree = treeFromJson(r.prompt_json as Record<string, unknown>); out.json_text = JSON.stringify(r.prompt_json, null, 2) }
-  for (const m of (Array.isArray(r.mentions) ? r.mentions : []) as { profile_id?: string | null; subject?: number | null; version?: string | null; shot?: { outfit?: string; note?: string } | null }[]) {   // D92: a subject's profile link comes back
+  for (const m of (Array.isArray(r.mentions) ? r.mentions : []) as { profile_id?: string | null; subject?: number | null; version?: string | null; shot?: { outfit?: string; note?: string } | null; held_by?: number | null; scene?: boolean | null }[]) {   // D92: a subject's profile link comes back
     const s = m.profile_id && typeof m.subject === 'number' ? out.tree?.subjects?.[m.subject] : undefined
     if (s) Object.assign(s, { profile_id: m.profile_id!, description: '', ...(m.version ? { version: m.version } : {}), shot_outfit: m.shot?.outfit ?? '', shot_note: m.shot?.note ?? '' })   // D93 (B4, B5): the version it ran with and its shot words; the composed text was the sheet's
+    const h = m.profile_id && typeof m.held_by === 'number' ? out.tree?.subjects?.[m.held_by] : undefined
+    if (h) h.holds = { profile_id: m.profile_id! }                                         // D93 (C6): the prop it held (its "holding" words were the server's)
+    if (m.profile_id && m.scene && out.tree) out.tree = { ...out.tree, scene: '', scene_link: { profile_id: m.profile_id, ...(m.version ? { version: m.version } : {}), note: m.shot?.note ?? '' } }   // D93 (C6): the scene's place
   }
   if (keepSeeds && Array.isArray(r.seeds) && r.seeds.length) { out.seed_mode = 'fixed'; out.seed = Number(r.seeds[0]); out.count = 1 }
   return out
@@ -234,6 +260,16 @@ export interface GenerateState {
   setSubjectVersion: (i: number, version: string | undefined) => void
   /** D92 (Cast's "Use as a subject in Generate"): the Tree prompt with a subject card linked to the profile. */
   useAsSubject: (profile: Profile) => void
+  /** D93 (C6): a subject card holds a Cast prop ("holding …", its references bound to the card) — or puts it down (`null`). */
+  holdProp: (i: number, profile: Profile | null) => void
+  /** D93 (C6): the Tree's scene linked to a Cast place (its sheet + this shot's line, composed by the server; the words typed in the scene go to
+   *  the line); `unlinkScene` leaves the composed words as the scene. */
+  linkScene: (profile: Profile) => void
+  unlinkScene: () => void
+  setSceneLink: (patch: Partial<Omit<SceneLink, 'profile_id'>>) => void
+  /** D93 (C7): Make frame ▸ from a Dialogue / Shot node — the Tree with one linked card per speaker (their versions; the first line as the
+   *  first speaker's action), the scene linked to the node's place. */
+  applyFrame: (pre: FramePrefill) => void
   /** D93 (A1): "Give <name> a look" / "More looks for <name>" on a linked card — the panel's images as the version's candidates (the page
    *  made when it has none); the description must say the look first (`castAsk` marks the card and its field takes the focus). */
   castLook: (i: number) => Promise<Job[] | null>
@@ -288,8 +324,20 @@ export function latestResult(jobs: Record<string, Job>): string | null {
 /** D93 (B4): a linked card's description as the server will compose it (from the Story store's copy of the profile) — JSON mode bakes it in. */
 export function linkedWords(s: Subject, profiles: Profile[] = profilesNow()): string | null {
   const p = s.profile_id ? profiles.find((x) => x.id === s.profile_id) : undefined
-  return p ? composeSheet(versionOf(p, s.version), { outfit: s.shot_outfit, note: s.shot_note }, p.name) : null
+  return p ? composeSheet(versionOf(p, s.version), { outfit: s.shot_outfit, note: s.shot_note }, p.name, p.cls) : null
 }
+/** D93 (C6): the scene a linked place composes (its sheet + this shot's line), as the server will. */
+export function linkedSceneWords(link: SceneLink, profiles: Profile[] = profilesNow()): string | null {
+  const p = profiles.find((x) => x.id === link.profile_id)
+  return p ? composeSheet(versionOf(p, link.version), { note: link.note }, p.name, p.cls) : null
+}
+/** D93 (C6): a held prop's clause (its current version's sheet), as the server says it after "holding". */
+export function heldWords(h: HeldProp, profiles: Profile[] = profilesNow()): string | null {
+  const p = profiles.find((x) => x.id === h.profile_id)
+  return p ? composeSheet(versionOf(p), null, p.name, p.cls) : null
+}
+/** D93 (C7): what Make frame ▸ puts into the Tree (makeFor.ts framePrefill): one linked card per speaker, the node's place, the lead text. */
+export interface FramePrefill { text: string | null; subjects: { profile_id: string; version?: string; action?: string; pose?: string }[]; place: string | null }
 
 let previewTimer: number | null = null
 let previewSeq = 0
@@ -392,6 +440,54 @@ export const useGenerate = create<GenerateState>()(
         if (at === subs.length) get().addSubject()
         get().linkSubject(at, profile)
       },
+      holdProp: (i, profile) => {
+        const p = get().panel, subs = [...(p.tree.subjects ?? [])], cur = subs[i]
+        if (!cur || p.prompt_mode !== 'tree') return
+        subs[i] = { ...cur, holds: profile ? { profile_id: profile.id } : undefined }
+        const v = profile ? versionOf(profile) : undefined
+        const next = { ...p, tree: { ...p.tree, subjects: subs } }
+        const ms = pruned(next).filter((m) => !(profile && m.profile_id === profile.id))
+        get().set({ tree: next.tree, mentions: profile && v ? [...ms, { group_id: v.group_id, name: profile.name, profile_id: profile.id }] : ms })
+      },
+      linkScene: (profile) => {
+        const p = get().panel
+        const v = versionOf(profile)
+        if (!v) return
+        if (p.prompt_mode === 'json' && !get().jsonToTree()) return
+        const t = get().panel.tree, was = t.scene_link
+        const note = was ? was.note ?? '' : (t.scene ?? '').trim()               // the scene typed before becomes this shot's line (another place keeps the line)
+        const tree: Tree = { ...t, scene: '', scene_link: { profile_id: profile.id, note } }
+        const next = { ...get().panel, prompt_mode: 'tree' as const, tree }
+        get().set({ prompt_mode: 'tree', tree, mentions: [...pruned(next).filter((m) => m.profile_id !== profile.id), { group_id: v.group_id, name: profile.name, profile_id: profile.id }] })
+      },
+      unlinkScene: () => {
+        const p = get().panel, link = p.tree.scene_link
+        if (!link) return
+        const tree: Tree = { ...p.tree, scene: linkedSceneWords(link) ?? '', scene_link: undefined }
+        get().set({ tree, mentions: pruned({ ...p, tree }) })
+      },
+      setSceneLink: (patch) => {
+        const p = get().panel, link = p.tree.scene_link
+        if (!link) return
+        const next: SceneLink = { ...link, ...patch }
+        const prof = profilesNow().find((x) => x.id === link.profile_id)
+        if ('version' in patch && prof && (!patch.version || patch.version === prof.current)) delete next.version   // the current one: follow it
+        const v = versionOf(prof, next.version)
+        get().set({ tree: { ...p.tree, scene_link: next }, ...('version' in patch && v ? { mentions: (p.mentions ?? []).map((m) => (m.profile_id === link.profile_id ? { ...m, group_id: v.group_id } : m)) } : {}) })
+      },
+      applyFrame: (pre) => {
+        if (get().panel.prompt_mode === 'json' && !get().jsonToTree()) return
+        const p = get().panel
+        const profiles = profilesNow()
+        const cards: Subject[] = pre.subjects.map((x) => ({ ...NEW_SUBJECT, description: '', profile_id: x.profile_id, ...(x.version ? { version: x.version } : {}), action: x.action ?? '', pose: x.pose ?? '', shot_outfit: '', shot_note: '' }))
+        const place = pre.place ? profiles.find((x) => x.id === pre.place) : undefined
+        const tree: Tree = { ...p.tree, ...(cards.length ? { subjects: cards } : {}), ...(place ? { scene: '', scene_link: { profile_id: place.id, note: '' } } : {}) }   // a Shot node without speakers keeps the cards
+        const linked = [...pre.subjects.map((x) => x.profile_id), ...(place ? [place.id] : [])]
+        const mentions = linked.flatMap((id) => { const pr = profiles.find((x) => x.id === id); const sub = pre.subjects.find((x) => x.profile_id === id); const v = versionOf(pr, sub?.version)
+          return pr && v ? [{ group_id: v.group_id, name: pr.name, profile_id: pr.id }] : [] })
+        const next = { ...p, prompt_mode: 'tree' as const, tree, ...(pre.text !== null ? { text: pre.text } : {}) }
+        get().set({ prompt_mode: 'tree', tree, ...(pre.text !== null ? { text: pre.text } : {}), mentions: [...pruned(next).filter((m) => !linked.includes(m.profile_id ?? '')), ...mentions] })
+      },
       castLook: async (i) => {
         const p = get().panel, sub = p.tree.subjects?.[i], ss = useSession.getState()
         const prof = sub?.profile_id ? profilesNow().find((x) => x.id === sub.profile_id) : undefined
@@ -414,7 +510,9 @@ export const useGenerate = create<GenerateState>()(
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
       treeToJson: () => {                                                      // D93 (B4): JSON has no links — a linked card's composed words are written in
         const t = get().panel.tree
-        get().set({ json_text: JSON.stringify(cleanTree({ ...t, subjects: (t.subjects ?? []).map((s) => (s.profile_id ? { ...s, profile_id: undefined, description: linkedWords(s) ?? '' } : s)) }), null, 2), prompt_mode: 'json' })
+        const held = (s: Subject) => { const w = s.holds ? heldWords(s.holds) : null; return w ? { description: [s.description.trim(), `holding ${w}`].filter(Boolean).join(', ') } : {} }   // D93 (C6)
+        get().set({ json_text: JSON.stringify(cleanTree({ ...t, ...(t.scene_link ? { scene: linkedSceneWords(t.scene_link) ?? '', scene_link: undefined } : {}),
+          subjects: (t.subjects ?? []).map((s) => { const own = s.profile_id ? { ...s, profile_id: undefined, description: linkedWords(s) ?? '' } : s; return { ...own, ...held(own), holds: undefined } }) }), null, 2), prompt_mode: 'json' })
       },
       jsonToTree: () => {
         try { const j = JSON.parse(get().panel.json_text || '{}'); get().set({ tree: treeFromJson(j), prompt_mode: 'tree' }); return true }
@@ -490,7 +588,8 @@ export const useGenerate = create<GenerateState>()(
         if (!m) return
         const fix = (v: unknown): unknown => (typeof v === 'string' ? unmention(v, m.name) : Array.isArray(v) ? v.map(fix) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fix(x)])) : v)
         const tree = fix(p.tree) as Tree
-        if (m.profile_id) tree.subjects = (tree.subjects ?? []).map((s) => (s.profile_id === m.profile_id ? { ...s, profile_id: undefined } : s))   // D92: the card's link goes with it
+        if (m.profile_id) tree.subjects = (tree.subjects ?? []).map((s) => (s.profile_id === m.profile_id ? { ...s, profile_id: undefined } : s.holds?.profile_id === m.profile_id ? { ...s, holds: undefined } : s))   // D92: the card's link goes with it; D93 (C6): a held prop too
+        if (m.profile_id && tree.scene_link?.profile_id === m.profile_id) { tree.scene = linkedSceneWords(tree.scene_link) ?? ''; tree.scene_link = undefined }   // D93 (C6): the scene keeps its words
         get().set({ mentions: (p.mentions ?? []).filter((x) => x.group_id !== groupId), text: unmention(p.text, m.name), tree, json_text: unmention(p.json_text, m.name) })
       },
       moveRef: (from, to) => { const refs = [...get().panel.refs]; const [x] = refs.splice(from, 1); refs.splice(to, 0, x); get().set({ refs }) },

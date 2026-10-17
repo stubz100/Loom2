@@ -86,3 +86,11 @@
 .lib-grid .mesh-card { display: grid; grid-template-rows: auto auto; justify-items: center; gap: 2px; padding: 4px; }
 .lib-grid .mesh-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: var(--bg2); }
 .lib-grid .mesh-card span { font-size: 10px; color: var(--fg3); }
+/* D93 (C8): figures bound to Cast characters — the Outliner's tag, the deck's figure slots and lines */
+.outl-row .bound-tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 5px 0 1px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg1); color: var(--fg); font-size: 11px; white-space: nowrap; max-width: 46%; overflow: hidden; }
+.outl-row .bound-tag img, .outl-row .bound-tag .glyph { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
+.shot-tab .ref-slot.figure-slot { border-style: solid; border-color: color-mix(in srgb, var(--accent) 55%, var(--line2)); }
+.shot-tab .ref-slot.figure-slot img { width: 100%; height: 100%; object-fit: cover; }
+.shot-tab .ref-slot .fig-badge { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--bg0) 75%, transparent); color: var(--fg); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shot-tab .figure-lines { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--fg2); }
+.shot-tab .figure-lines .muted { color: var(--fg3); }

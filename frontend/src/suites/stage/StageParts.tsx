@@ -1,6 +1,8 @@
 // P13 / ST1 (D81): the Stage suite's parts (16; StageSuite.ts registers them) — Panel (Library · Outliner · Cameras), Strip (view, guides, frame), the viewport Stage with
 // its floating gizmo bar and the framing rectangle, the Inspector (object · camera · stage). Mouse-first (D32): every verb is a
-// button or a menu entry; keys are accelerators. Keep-alive (D69): the engine pauses while the suite is hidden and keeps its view.
+// button or a menu entry; keys are accelerators. Keep-alive (D69): the engine pauses while the suite is hidden and keeps its view. D93 (C8):
+// a figure is bound to a Cast character (the Inspector's tiles, "Bind to a character ▸"); the Outliner shows who; the Render tab's deck shows
+// which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 import { Camera, Eye, EyeOff, Lock, LockOpen } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
@@ -11,6 +13,7 @@ import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
+import { BoundTag, FigureCharacter } from './FigureBinding'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -35,7 +38,8 @@ function devHook(): Record<string, unknown> {
     setFrame: (f: number) => st().setFrame(f), keyCamera: () => st().keyCamera(), setRange: (a: number, b: number) => st().setRange(a, b), setGuideKind: (k: 'depth' | 'pose') => st().setGuideKind(k),
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
     updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch), setTransform: (id: string, t: { pos: number[]; rot: number[]; scale: number[] }) => st().setTransform(id, t),
-    frameAll: () => st().frameView(null) }
+    frameAll: () => st().frameView(null),
+    bindFigure: (id: string, pid: string | null, v?: string | null) => st().bindFigure(id, pid, v ?? null), select: (id: string | null) => st().select(id) }   // D93 (C8)
   return w.__loom2Stage
 }
 if (DEV_HOOKS) devHook()
@@ -90,6 +94,7 @@ function OutlinerTab() {
           <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
           <span className="kind">{o.kind}</span>
           <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename(o.id, o.name) }}>{o.name}</span>
+          {o.kind === 'mannequin' && o.profile_id && <BoundTag o={o} />}
           <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
           <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
         </div>
@@ -191,6 +196,10 @@ function ShotTab() {
   const [w, h] = st().shotSize()                                   // derived from `shot.tier` and `current`, both subscribed above (a selector must not return a fresh tuple)
   const method = caps?.methods[sh.method]
   const room = Math.max(0, (method?.max_refs ?? 3) - sh.refs.length)
+  const figs = (pv?.params?.figures ?? []) as { figure: number; name?: string | null; refs: number[]; span?: string | null; skipped: number }[]   // D93 (C8): the server's resolution
+  const figSlots = ((pv?.params?.ref_list ?? []) as { image: number; asset_id?: string | null; figure?: number | null }[]).filter((x) => x.figure)
+    .map((x) => ({ ...x, figure: x.figure!, name: figs.find((f) => f.figure === x.figure)?.name ?? 'a character' }))
+  const figLines = figs.map((f) => `figure ${f.figure} · ${f.name ?? 'a character'} → ${f.span ? f.span.replace('reference ', '') : 'no images (the sheet only)'}${f.skipped ? ` · ${f.skipped} of its set left out` : ''}`)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && shotRefDrop(d, room).ok,
     (d) => { d.items.filter((i) => i.kind === 'asset' && i.media !== 'video').slice(0, room).forEach((i) => st().addShotRef(i.id)) }, (d) => shotRefDrop(d, room))
   markUsed('stage.shot.generate'); markUsed('stage.shot.passes')
@@ -232,8 +241,16 @@ function ShotTab() {
             <button className="quiet x" title="Remove" onClick={() => st().removeShotRef(r.asset_id)}>✕</button>
           </div>
         ))}
-        {room > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + 2}</span></div>}
+        {figSlots.map((x) => (
+          <div key={x.image} className="ref-slot figure-slot" title={`image ${x.image}: ${x.name}'s reference — bound to figure ${x.figure} (the Cast's set, not the deck's)`}>
+            {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">fig {x.figure} · {x.name}</span>
+          </div>
+        ))}
+        {room - figSlots.length > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
       </div>
+      {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
+        {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}</ul>}
+      {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right.</p>}
       {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
       {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
       <h4>Prompt</h4>
@@ -502,6 +519,7 @@ export function Inspector() {
         <Vec label="position" v={t.pos} onChange={(pos) => st().setTransform(o.id, { ...t, pos })} />
         <Vec label="rotation" v={t.rot} onChange={(rot) => st().setTransform(o.id, { ...t, rot })} step={1} />
         <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
+        {o.kind === 'mannequin' && <FigureCharacter o={o} />}
         {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select>{Object.keys(o.pose?.joints ?? {}).length ? <span className="hint"> edited</span> : null}</span></div>}
         {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
         <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>

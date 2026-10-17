@@ -2,10 +2,10 @@
 // order, and the board drop rule on a Flow node.
 import { describe, expect, it } from 'vitest'
 import type { Asset, FlowNode, GroupPage, Profile, Shot } from '../../api/types'
-import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, makeTarget } from './makeFor'
+import { boardDrop, boardRefs, clipPrefill, forShot, framePrefill, lineAction, makeTarget } from './makeFor'
 
 const node = (type: FlowNode['type'], extra: Partial<FlowNode> = {}): FlowNode => ({
-  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, colour: null,
+  schema_version: 1, id: 'node_1', type, title: '', lines: [], options: [], cond: null, set: [], target: null, text: '', shot_id: null, shot_version: null, board_group_id: null, place_id: null, colour: null,
   revision: 0, created_at: '', updated_at: '', ...extra,
 })
 const version = (id: string, state: 'open' | 'final' = 'open') => ({ id, state, stage_id: null, camera_id: null, stage_revision: null, frame_asset_id: null, clip_id: null, takes: [], derived_from: null, created_at: '', finalized_at: null })
@@ -27,17 +27,26 @@ describe('makeTarget / forShot', () => {
 })
 
 describe('framePrefill / clipPrefill', () => {
-  const cast = [profile('prf_m', 'Mara'), profile('prf_j', 'Joe')]
-  it('a Shot node gives its line (else its title); a Dialogue node its title and its speakers as @mentions', () => {
-    expect(framePrefill(node('shot', { text: 'Mara opens the gate.', title: 'Gate' }), cast)).toEqual({ text: 'Mara opens the gate', mentions: [] })
+  const cast = [profile('prf_m', 'Mara'), profile('prf_j', 'Joe'), { ...profile('prf_h', 'Harbour'), cls: 'place' } as Profile, { ...profile('prf_k', 'Key'), cls: 'prop' } as Profile]
+  const line = (speaker: string | null, text: string) => ({ speaker, text, audio_asset_id: null, audio_text: null })
+  it('a Shot node gives its line (else its title); D93 (C7) a Dialogue node one linked subject per speaker, the first line as its action, its place', () => {
+    expect(framePrefill(node('shot', { text: 'Mara opens the gate.', title: 'Gate' }), cast)).toEqual({ text: 'Mara opens the gate', subjects: [], place: null })
     expect(framePrefill(node('shot', { title: 'Gate' }), cast).text).toBe('Gate')
-    const d = node('dialogue', { title: 'At the gate', lines: [{ speaker: 'prf_m', text: 'Hi.', audio_asset_id: null, audio_text: null }, { speaker: 'prf_j', text: 'Hey.', audio_asset_id: null, audio_text: null }, { speaker: 'prf_m', text: 'Bye.', audio_asset_id: null, audio_text: null }] })
-    const p = framePrefill(d, cast)
-    expect(p.text).toBe('@Mara and @Joe, At the gate')
-    expect(p.mentions).toEqual([{ group_id: 'grp_prf_m', name: 'Mara', profile_id: 'prf_m' }, { group_id: 'grp_prf_j', name: 'Joe', profile_id: 'prf_j' }])
+    expect(framePrefill(node('shot', { title: 'Gate', place_id: 'prf_h' }), cast).place).toBe('prf_h')                       // a Shot node's place too
+    const d = node('dialogue', { title: 'At the gate', place_id: 'prf_h', lines: [line(null, 'Wind.'), line('prf_m', '"Hi there."'), line('prf_j', 'Hey.'), line('prf_m', 'Bye.'), line('prf_k', 'clink')] })
+    expect(framePrefill(d, cast)).toEqual({ text: 'At the gate', place: 'prf_h', subjects: [{ profile_id: 'prf_m', action: 'saying Hi there' }, { profile_id: 'prf_j' }] })   // a prop never speaks as a subject
+    expect(framePrefill(node('dialogue', { lines: [line('prf_m', 'x')], place_id: 'prf_m' }), cast).place).toBeNull()       // a character is not a place
+    expect(lineAction('  “Run!”  ')).toBe('saying Run!'); expect(lineAction(' ')).toBe('')
+  })
+  it('D93 (C7, C8): the stage of the shot gives each speaker the version and the pose its figure has', () => {
+    const two = [{ ...profile('prf_m', 'Mara'), versions: [{ id: 'v1', group_id: 'g1' }, { id: 'v2', group_id: 'g2' }] } as unknown as Profile, profile('prf_j', 'Joe')]
+    const d = node('dialogue', { lines: [line('prf_j', 'Hey.'), line('prf_m', 'Hi.')] })
+    const figs = [{ profile_id: 'prf_m', version: 'v2', pose: { preset: 'point', joints: {} } }, { profile_id: 'prf_j', version: null, pose: { preset: 'arms_crossed', joints: {} } }, { profile_id: null, version: null, pose: null }]
+    expect(framePrefill(d, two, figs).subjects).toEqual([{ profile_id: 'prf_j', action: 'saying Hey', pose: 'standing with arms crossed' }, { profile_id: 'prf_m', version: 'v2', pose: 'pointing' }])
+    expect(framePrefill(d, two, [{ profile_id: 'prf_m', version: 'v9', pose: null }]).subjects[1]).toEqual({ profile_id: 'prf_m' })   // a version it no longer has: the current one
   })
   it('nothing to say leaves the prompt alone', () => {
-    expect(framePrefill(undefined, cast)).toEqual({ text: null, mentions: [] })
+    expect(framePrefill(undefined, cast)).toEqual({ text: null, subjects: [], place: null })
     expect(framePrefill(node('shot'), cast).text).toBeNull()
     expect(framePrefill(node('hub', { title: 'Crossroads' }), cast).text).toBeNull()
     expect(clipPrefill(node('shot', { text: ' the gate swings open ' }))).toBe('the gate swings open')

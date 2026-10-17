@@ -709,6 +709,13 @@ async def flow_node_patch(svc: Svc, nid: str, body: dict):
         cur = await asyncio.to_thread(StoryStore(ws).flow_node, nid)
         if cur is None or board != cur.board_group_id:                    # a board deleted since stays until it is changed (other saves pass)
             raise HTTPException(422, f"the board {board!r} is not a group of the album")
+    place = body.get("place_id")
+    if place is not None:                                                  # D93 (C7): where is a Cast place
+        p = await asyncio.to_thread(StoryStore(ws).profile, place) if isinstance(place, str) else None
+        if p is None or p.cls != "place":
+            cur = await asyncio.to_thread(StoryStore(ws).flow_node, nid)
+            if cur is None or place != cur.place_id:                       # a place deleted since stays until it is changed
+                raise HTTPException(422, f"{place!r} is not a place of the Cast")
     try:
         n = await asyncio.to_thread(StoryStore(ws).patch_node, nid, body)
     except KeyError:

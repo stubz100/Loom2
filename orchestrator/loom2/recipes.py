@@ -73,6 +73,9 @@ class Mention(BaseModel):
     skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room (stamped; the preview says so)
     shot: SubjectShot | None = None               # D93 (B4): the linked subject's per-shot override (sent by the card, kept with the recipe)
     composed: str | None = None                   # D93 (B4): the description the linked subject carried — the version's sheet + the shot (stamped)
+    scene: bool = False                           # D93 (C6): a Cast place linked to the Tree's scene — its sheet (+ `shot.note`) is the scene's text
+    held_by: int | None = Field(None, ge=0)       # D93 (C6): a Cast prop held by that subject card ("holding <the prop's clause>"), bound to it
+    figure: str | None = None                     # D93 (C8): a Stage figure (its object id) bound to this character — StageShot's figures, left to right
 
 
 class T2I(BaseModel):
@@ -326,6 +329,8 @@ class StageShot(BaseModel):
     method: Literal["clay", "refcontrol"] = "clay"
     prompt_text: str = ""                         # what the scene is — after the method's own lead sentence
     refs: list[RefImage] = Field(default_factory=list)   # the reference deck (D73); refcontrol takes the first as image 2
+    mentions: list[Mention] = Field(default_factory=list)   # D93 (C8): the figures bound to Cast characters, in screen order left to right (`figure`)
+    bind_refs: bool | None = None                 # D93 (C8): each bound figure names its references in the prompt; None = the method's spec
     seeds: list[int] = Field(default_factory=lambda: [0])
     width: int = 1280                             # the project tier (D18: Draft by default)
     height: int = 720

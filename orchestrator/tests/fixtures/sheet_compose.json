@@ -13,6 +13,9 @@
      "out": "a girl, #1E8449 scarf"},
     {"case": "an empty sheet is the name", "sheet": {}, "shot": null, "name": "Noor", "out": "Noor"},
     {"case": "an empty sheet without a name is empty", "sheet": {"appearance": "  ", "colours": [{"hex": "#000000", "object": ""}]}, "shot": null, "name": "", "out": ""},
-    {"case": "only this shot's words", "sheet": {}, "shot": {"outfit": "", "note": "laughing"}, "name": "Noor", "out": "laughing"}
+    {"case": "only this shot's words", "sheet": {}, "shot": {"outfit": "", "note": "laughing"}, "name": "Noor", "out": "laughing"},
+    {"case": "D93 (C6): a place wears no outfit; its colours and marks apply", "cls": "place", "sheet": {"appearance": "a stone quay at dusk", "outfit": "a coat", "colours": [{"hex": "#1f3a5f", "object": "harbour water"}], "marks": "a broken lamp post"}, "shot": {"outfit": "rain gear", "note": "in the rain"}, "name": "Harbour",
+     "out": "a stone quay at dusk, #1F3A5F harbour water, a broken lamp post, in the rain"},
+    {"case": "D93 (C6): an empty prop is its name", "cls": "prop", "sheet": {"outfit": "a sleeve"}, "shot": null, "name": "Compass", "out": "Compass"}
   ]
 }

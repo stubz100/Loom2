@@ -1,11 +1,12 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, Layers, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, Layers, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
+import { profilesForMentions } from '../story/storyStore'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -58,6 +59,10 @@ registerCommands([
   { id: 'stage.pose.reset', scope: 'stage', label: 'Reset the pose (stand)', icon: LockOpen, placement: ['panel', 'inspector', 'context'], when: () => sel()?.kind === 'mannequin', run: () => st().resetPose(st().selected!) },
   { id: 'stage.pose.save', scope: 'stage', label: 'Save pose…', icon: Plus, placement: ['panel', 'context'], when: () => sel()?.kind === 'mannequin',
     run: () => void askText({ title: 'Save pose', text: "The figure's joints, as a preset of this project.", placeholder: 'pose name' }).then((n) => { if (n?.trim()) void st().savePose(n.trim(), st().selected!) }) },
+  // D93 (C8): a figure bound to a Cast character (the Inspector's tiles, "Bind to a character ▸" pick it; these end it or open the character)
+  { id: 'stage.figure.unbind', scope: 'stage', label: 'Unbind the character', icon: UserX, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id, run: () => st().bindFigure(st().selected!, null) },
+  { id: 'stage.figure.openInCast', scope: 'stage', label: 'Open the character in Story · Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
+    run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
   { id: 'stage.shot.generate', scope: 'stage', label: 'Render frame', icon: Aperture, keys: 'Ctrl+Enter', placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,
     run: () => void st().generateShot() },
@@ -90,11 +95,22 @@ export const addMenu = (): MenuItem => ({ label: 'Add', icon: Plus, items: [
   ...PROP_PRESETS.map((p) => ({ cmd: `stage.add.prop.${p}` })),
 ] })
 
+/** D93 (C8): "Bind to a character ▸" — the right-click submenu of a figure (the viewport, the Outliner row): the Cast's characters (the one
+ *  bound checked), then unbind and open it in Cast. */
+export function bindItems(): MenuItem[] {
+  const o = sel()
+  if (!o || o.kind !== 'mannequin') return []
+  const chars = profilesForMentions().filter((p) => p.cls === 'character')
+  return [{ label: 'Bind to a character', icon: UserRound, items: [
+    ...(chars.length ? chars.map((p): MenuItem => ({ label: p.name, checked: o.profile_id === p.id, run: () => st().bindFigure(o.id, p.id) })) : [{ label: 'no characters in the Cast yet', disabled: true, run: () => {} }]),
+    sep, { cmd: 'stage.figure.unbind' }, { cmd: 'stage.figure.openInCast' }] }]
+}
+
 /** Right-click on an object (selected by the caller) or on empty space. */
 export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
-      ...(sel()?.kind === 'mannequin' ? [{ cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, sep] : []),
+      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.toShot' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

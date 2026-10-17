@@ -3,12 +3,15 @@
 // from what the shot has: Generate from the owner node's words (a Shot node's line, a Dialogue node's speakers as @mentions) and the
 // node's board (an album group) as references; Animate from the version's frame as the start and the Shot node's line as the motion.
 // The pure parts (the target version, the pre-fill, the board's order, the board drop) are tested; the two actions below them are not.
+// D93 (C7): a Dialogue node's speakers become one linked subject card each (their Cast character — at the version the shot's stage binds to
+// it, else the current one — with the figure's pose when one is bound), the node's place links the scene, Generate switches to Tree mode.
 import { http, unwrap, type ApiError } from '../../api/client'
-import type { FlowNode, GroupPage, Profile, Shot, ShotVersion } from '../../api/types'
+import type { FlowNode, GroupPage, Profile, Shot, ShotVersion, StageObject } from '../../api/types'
 import type { DragPayload, DropVerdict } from '../../frame/drag'
 import { forLabel, useMakeFor, type MakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
-import type { MentionRef } from '../generate/generateStore'
+import type { FramePrefill } from '../generate/generateStore'
+import { poseWords } from '../stage/poseWords'
 import { useStory } from './storyStore'
 
 /** The version to make for: the one asked for (a node pins one) when it is open, else the shot's current one when that is open; null when
@@ -22,17 +25,32 @@ export function makeTarget(s: Shot | undefined, want?: string | null): ShotVersi
 /** The For context of a shot version (the node: the one Make came from, else the shot's owner). */
 export const forShot = (s: Shot, v: ShotVersion, nodeId?: string | null): MakeFor => ({ kind: 'shot', shot_id: s.id, version: v.id, name: s.name, node_id: nodeId ?? s.owner_node ?? null })
 
-/** What Generate starts from (where sensible): a Shot node's line (else its title); a Dialogue node's title, its speakers as @mentions of
- *  their profiles (D73 / D85: each one's current reference set rides along as references). `text` null: the prompt is left as it is. */
-export function framePrefill(node: FlowNode | undefined, profiles: Profile[]): { text: string | null; mentions: MentionRef[] } {
-  if (!node) return { text: null, mentions: [] }
-  const speakers = node.type === 'dialogue' ? [...new Set(node.lines.map((l) => l.speaker).filter((x): x is string => !!x))] : []
-  const mentions = speakers.map((id) => profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p)
-    .map((p) => ({ group_id: p.versions.find((v) => v.id === p.current)?.group_id ?? '', name: p.name, profile_id: p.id }))
+/** A Dialogue node's speakers in the order they first speak (Cast characters only; a speaker deleted from the Cast is skipped). */
+export function speakersOf(node: FlowNode | undefined, profiles: Profile[]): Profile[] {
+  const ids = node?.type === 'dialogue' ? [...new Set(node.lines.map((l) => l.speaker).filter((x): x is string => !!x))] : []
+  return ids.map((id) => profiles.find((p) => p.id === id && p.cls === 'character')).filter((p): p is Profile => !!p)
+}
+
+/** A line as a subject's action: "saying <the line>" — no quote marks (a quoted phrase is lettered into the image as text). */
+export const lineAction = (text: string): string => { const t = text.trim().replace(/^["“'‘]+|["”'’]+$/g, '').replace(/[\s.]+$/, '').trim(); return t ? `saying ${t}` : '' }
+
+/** What Generate starts from (where sensible): a Shot node's line (else its title) as the lead text; a Dialogue node's title as the lead text
+ *  and D93 (C7) one linked subject card per speaker — the version the shot's stage binds to that character (a figure's `profile_id` /
+ *  `version`), else the current one, the figure's pose in words — the first line as its speaker's action ("saying …": a line is something the
+ *  character does in this shot; "this shot" is composed into the look, after the sheet, so it would read as appearance); the node's place
+ *  links the scene. `text` null: the lead text is left as it is. */
+export function framePrefill(node: FlowNode | undefined, profiles: Profile[], figures: Pick<StageObject, 'profile_id' | 'version' | 'pose'>[] = []): FramePrefill {
+  if (!node) return { text: null, subjects: [], place: null }
+  const first = node.type === 'dialogue' ? node.lines.find((l) => l.speaker && l.text.trim()) : undefined
+  const subjects = speakersOf(node, profiles).map((p) => {
+    const fig = figures.find((f) => f.profile_id === p.id)
+    const version = fig?.version && p.versions.some((v) => v.id === fig.version) && fig.version !== p.current ? fig.version : undefined
+    const action = first?.speaker === p.id ? lineAction(first.text) : ''
+    return { profile_id: p.id, ...(version ? { version } : {}), ...(action ? { action } : {}), ...(fig?.pose ? { pose: poseWords(fig.pose) } : {}) }
+  })
+  const place = node.place_id && profiles.some((p) => p.id === node.place_id && p.cls === 'place') ? node.place_id : null
   const words = (node.type === 'shot' ? node.text.trim() || node.title.trim() : node.type === 'dialogue' ? node.title.trim() : '').replace(/[\s.]+$/, '')
-  const who = mentions.map((m) => `@${m.name}`).join(' and ')
-  const text = [who, words].filter(Boolean).join(', ')
-  return { text: text || null, mentions }
+  return { text: words || null, subjects, place }
 }
 
 /** The Shot node's line as Animate's motion prompt (a Dialogue node's words are speech, not motion), or null. */
@@ -57,7 +75,14 @@ export function boardDrop(p: DragPayload, node: string): { group: string | null;
 
 const toast = (text: string, kind: 'info' | 'error' = 'info') => useSession.getState().toast(text, kind)
 
-/** Make frame ▸ Generate: the For chip set, the panel pre-filled (the node's words, the board's references within the model's limit). */
+/** The figures of the stage a shot version is made on (its `stage_id`) — Make frame ▸ reads their bound characters' versions and poses. */
+async function stageFigures(v: ShotVersion): Promise<StageObject[]> {
+  if (!v.stage_id) return []
+  try { return (await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: v.stage_id } } }))).objects.filter((o) => o.kind === 'mannequin') } catch { return [] }
+}
+
+/** Make frame ▸ Generate: the For chip set, the panel pre-filled (the node's words, D93 (C7) a linked card per speaker and the place as the
+ *  scene — Tree mode, the board's references within the model's limit). */
 export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | null): Promise<void> {
   const st = useStory.getState()
   const f = forShot(s, v, nodeId)
@@ -65,8 +90,9 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
   useMakeFor.getState().set('generate', f)
   const { useGenerate } = await import('../generate/generateStore')
   const g = useGenerate.getState()
-  const pre = framePrefill(node, st.profiles)
-  if (pre.text) { g.set({ text: pre.text, ...(g.panel.prompt_mode === 'json' ? { prompt_mode: 'text' as const } : {}) }); pre.mentions.forEach((m) => g.addMention(m)) }
+  const pre = framePrefill(node, st.profiles, await stageFigures(v))
+  if (pre.subjects.length || pre.place) g.applyFrame(pre)
+  else if (pre.text) g.set({ text: pre.text, ...(g.panel.prompt_mode === 'json' ? { prompt_mode: 'text' as const } : {}) })
   let refs = 0
   if (node?.board_group_id) {
     try {
@@ -75,7 +101,8 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
     } catch (e) { toast(`The board could not be read: ${(e as ApiError).detail ?? e}`, 'error') }
   }
   useSession.getState().setSuite('generate')
-  toast(`Generate for ${forLabel(f)} — the results come back as its takes${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
+  const who = pre.subjects.length ? `; ${pre.subjects.length} subject${pre.subjects.length === 1 ? '' : 's'} from the speakers` : ''
+  toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
 }
 
 /** Make clip ▸ Animate: the For chip set, the version's frame as the start, a Shot node's line as the motion. */

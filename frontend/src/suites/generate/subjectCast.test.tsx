@@ -58,8 +58,8 @@ describe('D93 (A9) the description', () => {
 })
 
 describe('D93 (A3) the slots', () => {
-  const bs: Binding[] = [{ subject: 0, name: 'Mara', profile_id: 'prf_m', version: 'v1', refs: [1, 2, 3], span: 'reference images 1–3', skipped: 0 },
-    { subject: 1, name: 'Ines', profile_id: 'prf_i', version: 'v1', refs: [4], span: 'reference image 4', skipped: 2 }]
+  const bs: Binding[] = [{ subject: 0, role: 'subject', name: 'Mara', profile_id: 'prf_m', version: 'v1', refs: [1, 2, 3], span: 'reference images 1–3', skipped: 0 },
+    { subject: 1, role: 'subject', name: 'Ines', profile_id: 'prf_i', version: 'v1', refs: [4], span: 'reference image 4', skipped: 2 }]
   it('the card shows its range, and what did not fit', () => {
     expect(slotsOf(bs, 0)).toEqual({ label: 'refs 1–3', left: 0, refs: [1, 2, 3] })
     expect(slotsOf(bs, 1)!.label).toBe('ref 4')

@@ -99,6 +99,14 @@ The generation form for the blocking, generated from `/capabilities` (07 §3d):
 - Foot: **[Generate ▶]** (`Ctrl+Enter`) — renders the passes for the active camera if they are stale, uploads them, queues
   `StageShot`; the estimate line names the method's measured time. **Stage** queues without starting (09's staging).
 
+*D93 (C8, 2026-10-17): a figure can be **bound to a Cast character** (`profile_id`, and a `version` for a costume) — the Inspector's
+*character* tiles (the Cast's characters by their heroes), or right-click ▸ *Bind to a character ▸* on the figure (viewport, Outliner); one
+figure per character, the Outliner shows who. Render frame sends the visible bound figures left to right on screen; each brings its
+version's reference images after the deck's own, within the method's room (clay: the model's references less the pass; exact pose: one),
+and its sheet into the prompt ("From left to right in image 1: figure 1 is Mara (reference images 2–3), …"). The deck shows which images
+are a figure's ("fig 1 · Mara") and a line per figure. *Make frame ▸ in Stage* from a Story shot binds its speakers to the figures in screen
+order when the counts match. Rig (clay, Klein 9B): right person 5 / 6 bound vs 2 / 6 without the ranges and 0 / 6 without references.*
+
 ## 4. Stage · Viewport
 - One `three` scene on its **own canvas and WebGL2 renderer** (separate from Pixi; Edit may be on WebGPU). The suite is
   `keepAlive` under D69's policy: the Stage stays mounted and hidden after the first visit, pauses its render loop while hidden,

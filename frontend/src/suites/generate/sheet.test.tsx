@@ -22,7 +22,7 @@ const MARA: Profile = { id: 'prf_m', name: 'Mara', cls: 'character', current: 'v
 
 describe('D93 (B4) the composition rule', () => {
   it.each(cases.cases.map((c) => [c.case, c] as const))('%s — as the server composes it', (_, c) => {
-    expect(composeSheet(c.sheet as Partial<ProfileVersion>, c.shot, c.name)).toBe(c.out)
+    expect(composeSheet(c.sheet as Partial<ProfileVersion>, c.shot, c.name, (c as { cls?: string }).cls)).toBe(c.out)
   })
   it('an old panel\'s copied description: a plain copy goes, words beyond the appearance go to "this shot"', () => {
     const v = MARA.versions[1]

@@ -15,15 +15,15 @@ const WORN = /^(wearing|in|dressed|clad)\b/i
 export const sentColours = (v: Partial<Sheet>): string[] => (v.colours ?? []).filter((c) => clause(c.object)).map((c) => `${c.hex.toUpperCase()} ${clause(c.object)}`)
 
 /** D93 (B4) the composition rule: appearance, the outfit (this shot's, else the sheet's — "wearing …" unless it says how), the bound
- *  colours, the marks, this shot's line — joined by ", "; empty → the name. */
-export function composeSheet(v: Partial<Sheet> | undefined, shot?: ShotWords | null, name = ''): string {
-  const outfit = clause(shot?.outfit) || clause(v?.outfit)
+ *  colours, the marks, this shot's line — joined by ", "; empty → the name. D93 (C6): a place or a prop wears nothing (no outfit sent). */
+export function composeSheet(v: Partial<Sheet> | undefined, shot?: ShotWords | null, name = '', cls: string = 'character'): string {
+  const outfit = cls === 'character' ? clause(shot?.outfit) || clause(v?.outfit) : ''
   const parts = [clause(v?.appearance), outfit && !WORN.test(outfit) ? `wearing ${outfit}` : outfit, sentColours(v ?? {}).join(', '), clause(v?.marks), clause(shot?.note)]
   return parts.filter(Boolean).join(', ') || name.trim()
 }
 
 /** The sheet says nothing of the look (the casting run needs words, A1). */
-export const sheetEmpty = (v: Partial<Sheet> | undefined): boolean => !composeSheet(v)
+export const sheetEmpty = (v: Partial<Sheet> | undefined, cls = 'character'): boolean => !composeSheet(v, null, '', cls)
 
 /** D93 (B5): the version a linked subject uses — the one its chip picked, else the profile's current one. */
 export const versionOf = (p: Profile | undefined, vid?: string | null): ProfileVersion | undefined =>

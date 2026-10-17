@@ -799,7 +799,7 @@
         "type": "object"
       },
       "BindingOut": {
-        "description": "D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them).",
+        "description": "D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them). D93 (C6):\n`role` subject, held (a prop the subject card `subject` holds) or scene (the place of the scene; `subject` None).",
         "properties": {
           "name": {
             "anyOf": [
@@ -831,6 +831,11 @@
             "title": "Refs",
             "type": "array"
           },
+          "role": {
+            "default": "subject",
+            "title": "Role",
+            "type": "string"
+          },
           "skipped": {
             "default": 0,
             "title": "Skipped",
@@ -848,8 +853,15 @@
             "title": "Span"
           },
           "subject": {
-            "title": "Subject",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           },
           "version": {
             "anyOf": [
@@ -865,6 +877,7 @@
         },
         "required": [
           "subject",
+          "role",
           "name",
           "profile_id",
           "version",
@@ -3836,6 +3849,17 @@
             "title": "Options",
             "type": "array"
           },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
           "revision": {
             "default": 0,
             "title": "Revision",
@@ -3932,6 +3956,7 @@
           "shot_id",
           "shot_version",
           "board_group_id",
+          "place_id",
           "colour",
           "revision",
           "created_at",
@@ -7784,10 +7809,35 @@
             "default": null,
             "title": "Composed"
           },
+          "figure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Figure"
+          },
           "group_id": {
             "default": "",
             "title": "Group Id",
             "type": "string"
+          },
+          "held_by": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Held By"
           },
           "lora": {
             "anyOf": [
@@ -7848,6 +7898,11 @@
             ],
             "default": null,
             "title": "Revision"
+          },
+          "scene": {
+            "default": false,
+            "title": "Scene",
+            "type": "boolean"
           },
           "shot": {
             "anyOf": [
@@ -7922,9 +7977,31 @@
             ],
             "title": "Composed"
           },
+          "figure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Figure"
+          },
           "group_id": {
             "title": "Group Id",
             "type": "string"
+          },
+          "held_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held By"
           },
           "lora": {
             "anyOf": [
@@ -7980,6 +8057,11 @@
               }
             ],
             "title": "Revision"
+          },
+          "scene": {
+            "default": false,
+            "title": "Scene",
+            "type": "boolean"
           },
           "shot": {
             "anyOf": [
@@ -8037,7 +8119,10 @@
           "subject",
           "skipped",
           "shot",
-          "composed"
+          "composed",
+          "scene",
+          "held_by",
+          "figure"
         ],
         "title": "MentionOut",
         "type": "object"
@@ -12094,8 +12179,30 @@
             ],
             "title": "Preset"
           },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           },
           "visible": {
             "default": true,
@@ -12115,7 +12222,9 @@
           "visible",
           "colour_id",
           "pose",
-          "billboard"
+          "billboard",
+          "profile_id",
+          "version"
         ],
         "title": "StageObject",
         "type": "object"

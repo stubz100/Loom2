@@ -866,6 +866,26 @@ function BoardField({ n }: { n: FlowNode }) {
   )
 }
 
+/** D93 (C7): where a Dialogue or Shot node happens — a Cast place (its hero beside the select); Make frame ▸ links Generate's scene to it. */
+function PlaceField({ n }: { n: FlowNode }) {
+  const profiles = useStory((s) => s.profiles)
+  const places = profiles.filter((p) => p.cls === 'place')
+  const cur = n.place_id ? profiles.find((p) => p.id === n.place_id) : undefined
+  const hero = cur?.versions.find((v) => v.id === cur.current)?.hero_asset_id
+  return (
+    <div className="kv place-field">
+      <span>where</span>
+      <select value={n.place_id ?? ''} aria-label="where (a Cast place)" title="A Cast place: Make frame ▸ links Generate's scene to it (its sheet and references)" onChange={(e) => void sy().patchNode(n.id, { place_id: e.target.value || null })}>
+        <option value="">(no place)</option>
+        {n.place_id && !cur && <option value={n.place_id}>(a deleted place)</option>}
+        {places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      {cur && <><span /><span className="place-hero">{hero ? <img className="place-thumb" src={api.thumbUrl(hero, 256)} alt="" /> : null}<span className="hint">{cur.name} · {cur.current}</span></span></>}
+      {!places.length && <><span /><span className="hint">no places in the Cast yet — New profile… (place)</span></>}
+    </div>
+  )
+}
+
 function NodeInspector() {
   const nodeId = useStory((s) => s.nodeId)
   const flowNodes = useStory((s) => s.flowNodes)
@@ -907,6 +927,7 @@ function NodeInspector() {
       {n.type === 'dialogue' && <><h4>Lines</h4><LinesEditor n={n} /></>}
       {n.type === 'choice' && <><h4>Options <span className="hint">each is an out-port</span></h4><OptionsEditor n={n} /></>}
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
+      {visual && <PlaceField n={n} />}
       {visual && <>
         <h4>Shot</h4>
         {sh ? <div className="kv"><span>bound</span><span>{sh.name} · {n.shot_version ?? sh.current} · {sh.versions.find((v) => v.id === (n.shot_version ?? sh.current))?.state ?? '?'}</span>

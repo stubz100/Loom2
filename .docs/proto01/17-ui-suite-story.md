@@ -117,6 +117,10 @@ bound colours (`#C0392B` + "rain jacket") and marks, edited only on the version 
 the outfit, the colours, the marks); a version has a **label** ("rain gear", "winter"). A Generate subject card linked to a profile copies
 nothing: it shows the sheet read-only, adds this shot's outfit and line ("soaked, hood up"), and picks the version with its chip; the
 server composes the subject's description at preview and submit (`mentions.py`) and stamps it (`Mention.composed`, `shot`, `version`).
+**D93 phase C (2026-10-17):** a **place** is Generate's scene — the Tree's scene row shows the Cast's places by their heroes; a linked scene
+shows the place's sheet read-only (its chip picks the version) and a "this shot" line, and the server composes the scene from them with the
+place's images bound to it; a **prop** is a subject of its own or **held** by a subject card ("holds ▸": "holding <its clause>", its images
+bound to that card). A place or a prop has no outfit (Cast hides it, the rule does not send one).
 
 ### 3c. Shots (loom L3 · Shots & Takes)
 **Panel:** the shots grouped by their owner node (*Unbound* first), each row with its current version's thumbnail, name and state;
@@ -150,9 +154,11 @@ node in `story/flow/nodes/<id>.json` (loom R139); the index is rebuilt from the 
 new one owned by it; binding transfers **sole ownership** (`owner_node` on the shot) — a look reused elsewhere is a duplicated shot;
 deleting a node releases its shot (the shot stays, unbound). The node pins the shot version it shows (`shot_version`, default the
 current one). **Inspector:** the node's fields by type — title; Dialogue: lines `[{speaker: profile_id, text}]` with an ✚ row and
-a speaker picker; Choice: options `[{label, to, require?: {var, value}, set?: [{var, value}]}]`; Condition: `{var, op, value}` with
+a speaker picker, and **where** (D93 C7: a Cast place, on Dialogue and Shot nodes — the card says "@ <place>"); Choice: options `[{label, to, require?: {var, value}, set?: [{var, value}]}]`; Condition: `{var, op, value}` with
 *then* / *else*; Action: `set[]`; Jump: the target node; Comment: text; colour; the bound shot card with *Bind* / *Release* /
-*Open*. **Validate** lists: no Start / several, a Choice without options, a dangling Jump, an unreachable node, a visual node without
+*Open*. **D93 (C7):** *Make frame ▸* from a Dialogue node opens Generate in Tree mode with one subject card linked per speaker (the
+version the shot's stage binds to that character, its figure's pose; the first line as its speaker's action, "saying …") and the scene
+linked to the node's place. **Validate** lists: no Start / several, a Choice without options, a dangling Jump, an unreachable node, a visual node without
 a shot or with a non-final version — advisory rows that select the node on click. **Play ▶** walks the graph from Start in the
 Stage: the bound clip plays (its proxy), the lines show under it, choices are buttons, conditions read the variables, actions set
 them, *Restart* resets them; **no model is ever invoked** (loom R143) — authored content or nothing.

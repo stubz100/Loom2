@@ -61,6 +61,8 @@ ALLOW: dict[str, str] = {
     "*.kind": "the recipe union's discriminator (pydantic picks the model with it)",
     "T2I.style_id": "provenance (D85): the Story style's id, resolved into style_text at submit by story.resolve_style (the job reads the text) — read by people and the Story suite",
     "Mention.asset_ids": "provenance (D73): the images a mention gave, stamped at submit by mentions.py and kept with the recipe in the manifest — read by people, not by the job",
+    "Mention.lora": "provenance (LT3): the version's LoRA the mention added to the slots, stamped by mentions.py (the slot itself is what runs) — the client restores the slots from it",
+    "Mention.lora_available": "provenance (LT3): the version's LoRA whether or not it was added, stamped by mentions.py — the mention chip's on / off reads it, the job does not",
     "Inpaint.image_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",
     "Inpaint.mask_blob": "10 §13 blob-fed request shape kept for compatibility; unused when document_id is given",
     "Settings.schema_version": "the record's own version (fsio)",

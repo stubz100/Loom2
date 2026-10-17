@@ -2646,7 +2646,8 @@ export interface components {
         };
         /**
          * BindingOut
-         * @description D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them).
+         * @description D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them). D93 (C6):
+         *     `role` subject, held (a prop the subject card `subject` holds) or scene (the place of the scene; `subject` None).
          */
         BindingOut: {
             /** Name */
@@ -2659,6 +2660,11 @@ export interface components {
              */
             refs: number[];
             /**
+             * Role
+             * @default subject
+             */
+            role: string;
+            /**
              * Skipped
              * @default 0
              */
@@ -2666,7 +2672,7 @@ export interface components {
             /** Span */
             span: string | null;
             /** Subject */
-            subject: number;
+            subject: number | null;
             /** Version */
             version: string | null;
         };
@@ -3827,6 +3833,8 @@ export interface components {
             lines: components["schemas"]["FlowLine"][];
             /** Options */
             options: components["schemas"]["FlowOption"][];
+            /** Place Id */
+            place_id: string | null;
             /**
              * Revision
              * @default 0
@@ -5512,10 +5520,20 @@ export interface components {
              */
             composed?: string | null;
             /**
+             * Figure
+             * @default null
+             */
+            figure?: string | null;
+            /**
              * Group Id
              * @default
              */
             group_id?: string;
+            /**
+             * Held By
+             * @default null
+             */
+            held_by?: number | null;
             /**
              * Lora
              * @default null
@@ -5541,6 +5559,11 @@ export interface components {
              * @default null
              */
             revision?: number | null;
+            /**
+             * Scene
+             * @default false
+             */
+            scene?: boolean;
             /** @default null */
             shot?: components["schemas"]["SubjectShot"] | null;
             /**
@@ -5568,8 +5591,12 @@ export interface components {
             asset_ids: string[];
             /** Composed */
             composed: string | null;
+            /** Figure */
+            figure: string | null;
             /** Group Id */
             group_id: string;
+            /** Held By */
+            held_by: number | null;
             /** Lora */
             lora: string | null;
             /** Lora Available */
@@ -5580,6 +5607,11 @@ export interface components {
             profile_id: string | null;
             /** Revision */
             revision: number | null;
+            /**
+             * Scene
+             * @default false
+             */
+            scene: boolean;
             shot: components["schemas"]["SubjectShotOut"] | null;
             /** Skipped */
             skipped: number | null;
@@ -7250,7 +7282,11 @@ export interface components {
             pose: components["schemas"]["Pose"] | null;
             /** Preset */
             preset: string | null;
+            /** Profile Id */
+            profile_id: string | null;
             transform: components["schemas"]["Transform"];
+            /** Version */
+            version: string | null;
             /**
              * Visible
              * @default true

@@ -148,3 +148,20 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; }
 .subject-sheet .colour-chip { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
 .subject-sheet .colour-chip i { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--line2); display: inline-block; }
 .preview-composed { color: var(--fg); }
+/* D93 (C6): the subject card's held prop and the scene's Cast place */
+.subject .head { flex-wrap: wrap; row-gap: 4px; }
+.subject .head > button, .subject .head .linked-to button, .subject .head .holds-btn { white-space: nowrap; }
+.subject .head .holds-btn { min-height: 0; padding: 0 6px; font-size: 11px; color: var(--fg2); }
+.subject .head .holds-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 2px 1px 1px; border: 1px solid var(--line2); border-radius: 12px; background: var(--bg1); }
+.subject .head .holds-chip button { min-height: 0; padding: 0 4px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--fg); }
+.subject .head .holds-chip img, .subject .head .holds-chip .glyph { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
+.subject .head .holds-chip .subject-slots { font-size: 11px; color: var(--fg2); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+.scene-linked { display: flex; flex-direction: column; gap: 6px; }
+.scene-linked .head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.scene-linked .linked-to { display: inline-flex; align-items: center; gap: 5px; padding: 1px 4px 1px 1px; border: 1px solid var(--line2); border-radius: 12px; background: var(--bg1); color: var(--fg); font-size: 12px; }
+.scene-linked .linked-to img, .scene-linked .linked-to .glyph { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
+.scene-linked .linked-to button { min-height: 0; padding: 0 4px; font-size: 11px; }
+.scene-linked .version-chip { min-height: 0; padding: 0 6px; font-size: 11px; border: 1px solid var(--line2); border-radius: 9px; background: var(--bg2); color: var(--fg2); }
+.scene-linked .version-chip.pinned { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 55%, var(--line2)); }
+.scene-linked .subject-slots { font-size: 11px; color: var(--fg2); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+.scene-linked .subject-slots.cut { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }

@@ -39,7 +39,7 @@ COMPOSED = "Mara, a wiry woman, cropped black hair, wearing a long grey coat, #C
 def test_the_composition_rule(c: dict):
     v = ProfileVersion.model_validate({"id": "v1", "group_id": "g", **c["sheet"]})
     shot = SubjectShot(**c["shot"]) if c["shot"] else None
-    assert compose_sheet(v, shot, c["name"]) == c["out"]
+    assert compose_sheet(v, shot, c["name"], c.get("cls", "character")) == c["out"]
 
 
 # ---- the record: migration on read, fields, PATCH ---------------------------------------------------------------------------------------

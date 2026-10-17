@@ -3,6 +3,7 @@
 // version's label (a costume, an age, a look — shown on Generate's version chip). Every field shows at once and saves after a pause, one
 // save at a time with the profile's revision (storyStore.setSheet, D90 B14); a final version's sheet is read-only, its label is not.
 // The line under it is what a mention and every linked subject carry (the composition rule, sheet.ts), so the author sees it as sent.
+// D93 (C6): a place or a prop has no outfit (the rule does not send one) — its appearance is its look, its colours and marks apply.
 import { Plus, X } from 'lucide-react'
 import type { Profile, ProfileVersion } from '../../api/types'
 import { composeSheet } from '../generate/sheet'
@@ -16,7 +17,8 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
   const open = v.state === 'open'
   const colours = v.colours ?? []
   const setColour = (k: number, patch: Partial<ProfileVersion['colours'][number]>) => setSheet({ colours: colours.map((c, j) => (j === k ? { ...c, ...patch } : c)) })
-  const sent = composeSheet(v)
+  const worn = p.cls === 'character'                                       // D93 (C6): a place or a prop wears nothing
+  const sent = composeSheet(v, null, '', p.cls)
   return (
     <div className="cast-sheet" role="group" aria-label={`${p.name}'s sheet`}>
       <label htmlFor="cast-label">version</label>
@@ -25,10 +27,11 @@ export function CastSheet({ p, v }: { p: Profile; v: ProfileVersion }) {
           title="Shown on Generate's version chip and in the version selector" onChange={(e) => setSheet({ label: e.target.value })} /></div>
       <label htmlFor="cast-appearance">appearance</label>
       <textarea id="cast-appearance" rows={3} value={v.appearance} readOnly={!open} aria-label="appearance" onChange={(e) => setSheet({ appearance: e.target.value })}
-        placeholder={`${p.name}'s look — face, hair, build: e.g. a wiry woman in her thirties, cropped black hair, olive skin`} />
-      <label htmlFor="cast-outfit">outfit</label>
-      <input id="cast-outfit" type="text" value={v.outfit} readOnly={!open} aria-label="outfit" onChange={(e) => setSheet({ outfit: e.target.value })}
-        placeholder="the default clothes — a shot may wear another (Generate's subject card)" />
+        placeholder={p.cls === 'place' ? `${p.name}'s look — e.g. a stone quay at dusk, fishing boats, wet cobbles` : p.cls === 'prop' ? `${p.name}'s look — e.g. a brass compass with a cracked glass`
+          : `${p.name}'s look — face, hair, build: e.g. a wiry woman in her thirties, cropped black hair, olive skin`} />
+      {worn && <><label htmlFor="cast-outfit">outfit</label>
+        <input id="cast-outfit" type="text" value={v.outfit} readOnly={!open} aria-label="outfit" onChange={(e) => setSheet({ outfit: e.target.value })}
+          placeholder="the default clothes — a shot may wear another (Generate's subject card)" /></>}
       <label>colours</label>
       <div className="sheet-colours" aria-label="bound colours">
         {colours.map((c, k) => (

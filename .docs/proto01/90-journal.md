@@ -4871,3 +4871,48 @@ split by file so that no two hands touched the same module.
   `compare.mp4` ((a) seed 20261019 | (b) seed 20261018), `results.jsonl`, `score_summary.json`, `state.json`, `run.log`. Code:
   `engine/spikes/e22_layers.py`, `e22_score.py` (new, not committed). Not done: I1 / I4 by eye only (no pose metric); 3 seeds per arm;
   no report.md (the tables are here).
+
+## 2026-10-17 22:53 — proto01_animate revised · the author's six notes worked into 01 and 02
+
+The author reviewed `.docs/proto01_animate` and sent six notes. Both documents are revised; 01 §8 maps each note to where it went.
+
+- **1 · The performance is a proxy.** Wan Animate's output is a model of the final, like the clay, so post-processing is the render, not
+  a polish. Read from the pinned `WanAnimateToVideo`:
+  - one output frame per pose frame, with no frame rate of its own;
+  - `continue_motion` fixes a batch's first frames with *any* images (1, 5, 9, …);
+  - there is no end-frame input;
+  - the reference is centre-cropped to the clip's size.
+
+  Hence two frame rates to measure: F16 (resample, RIFE) and F24 (Stage's poses as they are: 72 new frames = exactly 3 s). And two welds:
+  W1 chains the last 5 frames; W2 starts every batch from a Stage keyframe still as a one-frame `continue_motion`, so each batch can be
+  re-taken alone. The geometry welds by construction and the identity is re-anchored in every batch, so the risk left at a join is
+  appearance drift.
+- **2 · Steps 3 and 4 swapped.** The Stage set comes first and the plate is generated from it; the moving plate comes after the camera
+  keys.
+- **3 · Move against Replace** is its own spike, E23b, on the same shot, layers and batches. E23a (one layer: F16/F24 × W1/W2) comes
+  first.
+- **4 · Post-processing in three separate stages**, every idea an arm of E24:
+  - A, the layer pass: an amount and a model per layer; a face crop; per-frame i2i with the neighbouring frames as references (FLUX.2 dev
+    up to 10, Klein 9B KV up to 4); keyframes + flow;
+  - B, the image stream: RIFE, native 24, in-betweens from refined keyframes, other rates;
+  - C, the final polish, faithful and keeping shadows and light: Wan low-σ, LTX low strength, a structure-locked LTX + IC-LoRA depth
+    from the shot's Stage depth (the candidate I expect most from), VACE only with a download decision, FLUX.2 dev with neighbours.
+
+  The catch is cost: FLUX.2 dev per frame is ≈ 2.7–4.3 h per 10 s layer at the spec times, and more today under RAM pressure (owed). Its
+  fix comes before E24.
+- **5 · The motion library.** The old loom's `Godot4-MixamoLibraries` checkout is catprisbrey's *Godot4-OpenAnimationLibraries*:
+  - its former README says the Mixamo files were removed for Adobe's terms (6.2.E);
+  - what is left is game sets (MeleeLib, ShooterLib, a faulty locomotion set) as Godot `.res` (zstd) on Godot's humanoid skeleton;
+  - no licence is declared (the old loom's notes called them CC0), some clips carry a `mixamo_com` track, and there are few acting moves;
+  - not used.
+
+  Mixamo itself is free in your own films but not to redistribute (Adobe's FAQ, to re-read against the live terms). So the plan is an
+  FBX / glTF importer with retargeting onto the 12-joint mannequin (CA1), the author's clips in a local folder (the old loom's
+  `mixamo_animations/` already holds `Walking.fbx`, usable in E23a), and a verified CC0 starter set to ship. A licence check (02 §2)
+  comes before any fetch. The coarse rig drops wrists, ankles and fingers; COCO-18 does not need them.
+- **6 · The animation reference at casting.** One per Cast version: 16:9, full body, A-pose, colours bound, an optional back view and
+  test animation. It moved from CA8 into a new first wave, CA0.
+
+Plan now: §2 licence check → E23a → E23b → E24 → a D-number → CA0–CA8 (≈ 26–30 days; CA0 and CA1 may start beside the spikes). Still open
+for the author (01 §7): the starter library and the Mixamo downloads, camera moves, joins, the delivery rate (24 or 25 fps), the time
+budget per shot, props, lip-sync. Nothing decided or run.

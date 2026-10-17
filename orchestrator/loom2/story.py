@@ -27,6 +27,7 @@ from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
 from .models import registry
 
 if TYPE_CHECKING:
+    from .catalogue import Catalogue
     from .groups import GroupStore
     from .recipes import T2I
     from .workspace import Workspace
@@ -43,6 +44,10 @@ VersionState = Literal["open", "final"]
 
 class StaleWorld(ValueError):
     """The client's change is based on an older revision (→ 409)."""
+
+
+class VersionLocked(ValueError):
+    """D93 (A2): a final profile version refuses new images (→ 423 with the reason)."""
 
 
 class StaleProfile(ValueError):
@@ -919,7 +924,7 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if hero_asset_id:
             groups.move([("asset", hero_asset_id)], g.id)
             groups.update(g.id, cover_id=hero_asset_id)
-        v = ProfileVersion(id="v1", group_id=g.id, hero_asset_id=hero_asset_id, stub=stub.strip() or name)
+        v = ProfileVersion(id="v1", group_id=g.id, hero_asset_id=hero_asset_id, stub=stub.strip())   # D93 (A9): empty by default — the name alone describes nothing
         p = Profile(name=name, cls=cls, current="v1", versions=[v])
         check_profile(p)
         self.save_profile(p)
@@ -1018,6 +1023,66 @@ class StoryStore(_ShotMixin, _FlowMixin):
         p = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p
+
+    def ensure_candidates(self, pid: str, vid: str | None, groups: GroupStore) -> tuple[Profile, str, bool]:
+        """The version's candidates page — made on first use (Expand, a casting run from Generate, "as a candidate"): (profile, its id, made)."""
+        p = self.profile(pid)
+        if p is None:
+            raise KeyError(pid)
+        v = p.version(vid)
+        if v.candidates_group_id and v.candidates_group_id in groups.groups:
+            return p, v.candidates_group_id, False
+        gid = groups.create(f"{p.name} · {v.id} · candidates").id
+        return self.set_candidates(pid, v.id, gid), gid, True
+
+    def add_assets(self, pid: str, vid: str | None, ids: list[str], role: Literal["hero", "reference", "candidate"], groups: GroupStore,
+                   cat: Catalogue) -> dict[str, Any]:
+        """D93 (A2) "Add to character ▸": images into a version — the hero (it joins the reference set as its cover), the reference set or the
+        candidates page. An image from Unprocessed or from this version's own candidates page moves; one that lives on any other page (an
+        album page, another profile's set) is copied and the original stays where it is — said in the reply, never taken silently. A final
+        version refuses (VersionLocked)."""
+        p = self.profile(pid)
+        if p is None:
+            raise KeyError(pid)
+        v = p.version(vid)
+        if v.state != "open":
+            raise VersionLocked(f"{p.name} {v.id} is final — its look is fixed; make a new version to add to it")
+        if not ids:
+            raise ValueError("no images given")
+        if role == "hero" and len(ids) != 1:
+            raise ValueError("one image is the hero")
+        for aid in ids:
+            r = cat.get(aid)
+            if r is None or r.trashed_at is not None or r.kind != "image":
+                raise ValueError(f"{aid} is not an image in the Catalogue")
+        made = False
+        if role == "candidate":
+            p, target, made = self.ensure_candidates(pid, v.id, groups)
+            v = p.version(v.id)
+        else:
+            target = v.group_id
+        own = {v.candidates_group_id} - {None, target}
+        out, moved, copied, already = [], [], {}, []
+        for aid in dict.fromkeys(ids):
+            where = groups.parent.get(("asset", aid))
+            if where == target:
+                already.append(aid); out.append(aid)
+            elif where is None or where in own:
+                groups.move([("asset", aid)], target)
+                moved.append(aid); out.append(aid)
+            else:
+                dup = cat.duplicate(aid)
+                if dup is None:
+                    raise ValueError(f"{aid} could not be copied")
+                groups.move([("asset", dup.id)], target)
+                copied[aid] = dup.id; out.append(dup.id)
+        updated = cat.patch_many([a for a in out if a not in already], {"state": "keep"}) if role in ("hero", "reference") else []   # as Cast's keep does
+        if role == "hero":
+            groups.update(target, cover_id=out[0])
+            versions = [x.model_copy(update={"hero_asset_id": out[0]}) if x.id == v.id else x for x in p.versions]
+            p = p.model_copy(update={"versions": versions, "revision": p.revision + 1, "updated_at": utc_now()})
+            self.save_profile(p)
+        return {"profile": p, "group_id": target, "role": role, "asset_ids": out, "moved": moved, "copied": copied, "already": already, "made_page": made, "updated": updated}
 
     def delete_profile(self, pid: str, groups: GroupStore | None = None) -> bool:
         """The record goes; its groups and images stay in the album (unlocked again)."""

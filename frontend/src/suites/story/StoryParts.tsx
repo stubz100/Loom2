@@ -527,7 +527,7 @@ function CastPage() {
         <div className="cast-fields">
           <h2>{p.name} <span className="muted">— {CLASS_LABEL[p.cls]} — {v.id} ({open ? 'open' : 'final'})</span></h2>
           <label className="stub"><span>prompt stub</span>
-            <textarea rows={2} value={v.stub} aria-label="prompt stub" readOnly={!open} placeholder="the clause a @mention carries into a prompt — e.g. Mara, a wiry courier in a grey coat" onChange={(e) => sy().setStub(e.target.value)} />
+            <textarea rows={2} value={v.stub} aria-label="prompt stub" readOnly={!open} placeholder={`describe ${p.name}'s look — e.g. ${p.name}, a wiry courier in a long grey coat, red scarf (the clause a @mention and a linked subject carry)`} onChange={(e) => sy().setStub(e.target.value)} />
           </label>
           <div className="counts"><span>reference set · <b>{refs.length}</b></span><span>candidates · <b>{cands.length}</b></span>{v.candidates_group_id === null && <span className="hint">(none expanded yet)</span>}</div>
         </div>
@@ -545,7 +545,7 @@ function CastPage() {
       <section>
         <h3>Candidates <span className="hint">newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
         {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
-        <div className="cand-strip" role="list">
+        <div className="story-cands" role="list">
           {cands.map((a) => <Candidate key={a.id} a={a} picked={picked.includes(a.id)} />)}
         </div>
       </section>
@@ -610,7 +610,7 @@ function ShotBoard() {
       <section>
         <h3>Takes <span className="hint">everything tried for this version · ✓ use makes one the frame or the clip</span></h3>
         {!v.takes.length && <div className="empty">No takes yet.</div>}
-        <div className="cand-strip" role="list">
+        <div className="story-cands" role="list">
           {[...v.takes].reverse().map((t) => <Take key={`${t.kind}:${t.id}`} kind={t.kind} id={t.id} current={(t.kind === 'image' ? v.frame_asset_id : v.clip_id) === t.id} clipsById={clipsById} />)}
         </div>
       </section>

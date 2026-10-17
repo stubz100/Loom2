@@ -391,6 +391,18 @@ class MentionOut(Out):
     version: str | None = None
     lora: str | None = None                       # LT3: the version's LoRA the mention added to the slots
     lora_available: str | None = None             # LT3: the version's LoRA, added or not (the chip's on / off)
+    subject: int | None = None                    # D92: the subject card (its index in prompt_json.subjects) linked to this profile
+    skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room
+
+
+class BindingOut(Out):
+    """D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them)."""
+    subject: int
+    name: str | None = None
+    profile_id: str | None = None
+    refs: list[int] = []
+    span: str | None = None                       # 'reference images 1–3' — the words the prompt carries when the model binds
+    skipped: int = 0                              # the set's images that did not fit
 
 
 class T2IPreview(Open):
@@ -414,6 +426,8 @@ class T2IPreview(Open):
     ref_notes: int = 0                            # D73: kept references whose note went into the prompt
     ref_list: list[RefOut] = []                   # D73: the kept references in order (explicit, then those the mentions gave)
     mentions: list[MentionOut] = []               # D73: the mentions, resolved and stamped
+    bind_refs: bool = False                       # D93 (A3): the prompt binds each linked subject to its references (the model's spec, or the recipe)
+    bindings: list[BindingOut] = []               # D93 (A3): what each linked subject got — the card shows its slots, the Preview what was left out
     style_id: str | None = None                   # D85: the Story style carried, and the fragment appended after the prompt
     style_text: str | None = None
     model_id: str
@@ -676,6 +690,18 @@ class TimelineList(Out):
 
 class ProfileList(Out):
     items: list[Profile]
+
+
+class ProfileAdded(Out):
+    """D93 (A2): assets added to a profile version — as the hero, into the reference set or as candidates. An asset from Unprocessed or
+    the version's own candidates page moves; one from any other page is copied (`copied`: original → copy) and the original stays."""
+    profile: Profile
+    group_id: str                                 # the page they are on now
+    role: Literal["hero", "reference", "candidate"]
+    asset_ids: list[str]                          # the ids on that page, in the order asked (a copy's id where one was made)
+    moved: list[str] = []
+    copied: dict[str, str] = {}
+    already: list[str] = []                       # on that page before
 
 
 class ShotList(Out):

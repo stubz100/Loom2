@@ -8,7 +8,7 @@ import { CaseSensitive, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
-import { sep } from '../../frame/commands'
+import { markUsed, sep } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
@@ -17,7 +17,9 @@ import { setRailTab } from '../../frame/suiteRegistry'
 import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
 import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
-import { dropRefs, honoursNegative, refDropFor, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
+import { dropRefs, honoursNegative, refDropFor, runOnSubject, useGenerate, type ModelCap, type Panel as PanelState, type Subject } from './generateStore'
+import { bindingLines, castOffer, nameOnly, needsLook, sentIndex, slotsOf } from './subjectCast'
+import { CastButton, SubjectSlots, SubjectWarn } from './SubjectLink'
 import { entriesOf, entryTile, useLibrary } from '../story/libraryStore'
 import { profilesForMentions, sy, useStory } from '../story/storyStore'
 import { LoraSlots } from './LoraSlots'
@@ -67,7 +69,7 @@ function PresetRow({ field, value, onChange, section }: { field: FieldKey; value
 }
 
 /** One prompt field: its input (with @ for the multiline ones), its preset icons and the + that adds the words to the World library. */
-function Field({ label, field, value, onChange, multiline, placeholder, rows, section }: { label?: string; field: FieldKey; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; rows?: number; section: string }) {
+function Field({ label, field, value, onChange, multiline, placeholder, rows, section, id, after }: { label?: string; field: FieldKey; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; rows?: number; section: string; id?: string; after?: React.ReactNode }) {
   const [naming, setNaming] = useState<string | null>(null)
   const mention = useMentions(value, onChange)
   const commit = () => { if (naming !== null) void useLibrary.getState().add(field, value, naming.trim()).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (Story · World)`, 'info') }); setNaming(null) }
@@ -77,8 +79,8 @@ function Field({ label, field, value, onChange, multiline, placeholder, rows, se
       <div className="field">
         <div className="row">
           {multiline
-            ? <textarea value={value} rows={rows} onChange={(e) => onChange(e.target.value)} onKeyUp={mention.onKeyUp} placeholder={placeholder} />
-            : <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />}
+            ? <textarea id={id} value={value} rows={rows} onChange={(e) => onChange(e.target.value)} onKeyUp={mention.onKeyUp} placeholder={placeholder} />
+            : <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />}
           {multiline && mention.button}
           <button type="button" className="preset-btn" disabled={!value.trim()} title={`Add the current ${FIELD_LABEL[field]} to the library (Story · World)`} aria-label={`add ${FIELD_LABEL[field]} to the library`} onClick={() => setNaming('')}><Plus size={13} /></button>
         </div>
@@ -90,6 +92,7 @@ function Field({ label, field, value, onChange, multiline, placeholder, rows, se
             <button className="quiet" onClick={() => setNaming(null)}>Cancel</button>
           </div>
         )}
+        {after}
         <PresetRow field={field} value={value} onChange={onChange} section={section} />
       </div>
     </>
@@ -137,15 +140,25 @@ function SubjectCard({ i, s }: { i: number; s: Subject }) {
   const set = (patch: Partial<Subject>) => g.setSubject(i, patch)
   const linked = useStory((x) => (s.profile_id ? x.profiles.find((p) => p.id === s.profile_id) : undefined))
   const hero = linked?.versions.find((v) => v.id === linked.current)?.hero_asset_id
+  // D93 (A1, A3, A9): the link's slots in the prompt, the casting run, and what the description still lacks
+  const pm = s.profile_id ? g.preview?.mentions?.find((m) => m.profile_id === s.profile_id) : undefined
+  const offer = s.profile_id ? castOffer(linked, pm?.asset_ids?.length ?? 0) : null
+  const slots = s.profile_id && g.panel.prompt_mode === 'tree' ? slotsOf(g.preview?.bindings, sentIndex(g.panel.tree.subjects ?? [], i)) : null
+  const name = linked?.name ?? ''
+  markUsed('gen.subject.cast')
   return (
     <div className={`subject${s.profile_id ? ' linked' : ''}`}>
       <div className="head"><b>subject {i + 1}</b>
         {s.profile_id && <span className="linked-to" title="its reference set and LoRA follow through the profile mention">
           {hero ? <img src={api.thumbUrl(hero, 256)} alt="" /> : <span className="glyph">{fieldGlyph(linked?.cls ?? 'character')}</span>}{linked?.name ?? 'a Cast profile'}
           <button className="quiet" aria-label={`unlink subject ${i + 1}`} title="Unlink: a free subject again (the words stay)" onClick={() => g.unlinkSubject(i)}><X size={11} /> unlink</button></span>}
+        <SubjectSlots slots={slots} />
         <span className="spacer" /><button className="quiet" title="Remove this subject" onClick={() => g.removeSubject(i)}><X size={12} /> remove</button></div>
       <CastPicker s={s} i={i} />
-      <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(v) => set({ description: v })} placeholder={s.profile_id ? "the version's stub — edit for this picture" : 'who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")'} />
+      {offer && <div className="subject-cast-row"><CastButton offer={offer} onCast={() => runOnSubject(i, 'gen.subject.cast')} /></div>}
+      <Field section="prompt" label="description" field="subject.description" multiline rows={2} value={s.description} onChange={(v) => set({ description: v })} id={`gen-subject-desc-${i}`}
+        placeholder={s.profile_id ? `describe ${name || 'the character'}'s look — e.g. a wiry courier in a long grey coat, red scarf` : 'who/what; literal text in quotes; bind colours here ("a #F2A93B brass compass")'}
+        after={s.profile_id ? <SubjectWarn name={name} nameOnly={nameOnly(s.description, name)} ask={g.castAsk === i && needsLook(s.description, name)} refs={pm?.asset_ids?.length ?? 0} /> : null} />
       <Field section="prompt" label="position" field="subject.position" value={s.position ?? ''} onChange={(v) => set({ position: v })} placeholder="where in frame" />
       <Field section="prompt" label="action" field="subject.action" value={s.action ?? ''} onChange={(v) => set({ action: v })} />
       <Field section="prompt" label="pose" field="subject.pose" value={s.pose ?? ''} onChange={(v) => set({ pose: v })} />
@@ -449,6 +462,9 @@ function PreviewSection() {
     <details id="gen-sec-preview" className="gen-sec preview-sec">
       <summary>Preview · the prompt as sent{pv ? ` (${pv.prompt_mode === 'json' ? 'JSON in the Mistral template' : pv.prompt_mode === 'prose' ? 'prose for Klein' : 'plain text'})` : ''}</summary>
       <div className="preview-box">{pv?.serialized_prompt || (previewing ? '…' : '(empty prompt)')}</div>
+      {!!pv?.bindings?.length && <ul className="preview-bindings" aria-label="subjects and their reference images">{/* D93 (A3): what each linked subject got, what was left out */}
+        {bindingLines(pv.bindings, pv.max_refs).map((t) => <li key={t}>{t}</li>)}
+        {!pv.bind_refs && <li className="muted">this model reads the references by their notes — the subjects are not bound in its prompt</li>}</ul>}
     </details>
   )
 }

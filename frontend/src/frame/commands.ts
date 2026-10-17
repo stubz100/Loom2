@@ -134,8 +134,11 @@ export function keyLabel(keys?: string): string {
 export function titleFor(c: Command, label = c.label): string { return c.keys ? `${label} (${keyLabel(c.keys)})` : label }
 
 // ---- menus --------------------------------------------------------------------------------------------------
+/** D93 (A2): a per-item menu entry — `on` runs `f` with the entry's item set (the command's `when` and `run` read it), e.g. one profile of
+ *  "Add to character ▸" (commands take no arguments, D90's per-item pattern). */
+export type OnItem = <T>(f: () => T) => T
 export type MenuItem =
-  | { cmd: string; label?: string; checked?: boolean }
+  | { cmd: string; label?: string; checked?: boolean; on?: OnItem }
   | { label: string; icon?: IconType; keys?: string; run: () => void; disabled?: boolean; danger?: boolean; checked?: boolean }
   | { sep: true }
   | { label: string; icon?: IconType; items: MenuItem[] }

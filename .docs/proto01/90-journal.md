@@ -4344,3 +4344,58 @@ split by file so that no two hands touched the same module.
   its picture → a Generate tile → Edit in Story · World; a subject linked to a character → the job's mention and references).
 - Owed: the author's click-through and a look at the pack; Places as scene / background subjects; a picture album per entry
   (`group_id` is there); reorder by drag (the Move commands do it).
+
+## 2026-10-17 12:53 — D93 accepted · Cast ↔ subject made real, in three phases
+
+- Reviewed the D92 link on a copy of stubz001 (screenshots sent to the author): char01 has no hero, its stub is "char01", 0 references; the
+  linked subject brings "@char01 · 0 images" and the prompt sends "char01"; no route sends a result back to an existing character; the
+  prompt does not bind references to subjects. Suggested nine changes; the author: "Let's do it according to your plan" → **D93**:
+  phase A (Cast from Generate, Add to character ▸, references bound per subject, an empty stub by default), B (a live character sheet,
+  the version chip), C (places and props, a subject per speaker from a Dialogue node, Stage figures bound to characters).
+
+## 2026-10-17 13:42 — D93 phase A built · Cast from Generate, Add to character ▸, references bound per subject, an empty stub
+
+- **A1 · Cast from Generate.** A subject card linked to a character offers **"Give <name> a look"** while the current version has no hero
+  and its mention gives no references, **"More looks for <name>"** after (command `gen.subject.cast`, the card's button; a final version:
+  disabled with the reason). The description must say the look: empty or only the name → the field takes the focus and the card says
+  "describe <name>'s look first". The run is the panel as it stands (its count, 4 by default) with origin `{suite generate, surface cast,
+  ref profile, payload {version, group_id, profile_id}}`; the finisher already places on `payload.group_id`, so the results land on the
+  version's candidates page — made on demand by `POST /story/profiles/{pid}/candidates` (`StoryStore.ensure_candidates`, which Expand now
+  uses too; a final version 423). The toast offers "Open <name> in Cast"; "Go to origin" goes to the profile (`origin.storyPlace`).
+- **A2 · Add to character ▸** on every result — the tile menu (Catalogue, Generate's grid, the loupe's More), the Inspector's one-asset
+  "Add to character ▾": the profile the image was made for first under "made for" (its recipe's profile mentions, a subject-linked one
+  first), then Characters, Props, Places; each `<name> · v1 ▸` with "as the hero" / "into the reference set" / "as a candidate" (commands
+  `cat.addTo.hero|reference|candidate`, run on the entry's profile through the new per-item menu entry `{cmd, on}` — ContextMenu wraps the
+  command's `when` and `run`). Server `POST /story/profiles/{pid}/versions/{vid}/add` (`StoryStore.add_assets`): from Unprocessed or the
+  version's own candidates page an image **moves**; from any other page it is **copied** and the original stays (the reply and the toast
+  say so); the hero joins the reference set as its cover; hero / reference are marked keep; a final version answers 423 with the reason.
+  Cast's own "Make it the hero" now goes through the same route, so a hero picked from the candidates is in the reference set (before, it
+  stayed on the candidates page and the mention gave 0 images — the stubz001 gap).
+- **A3 · references bound per subject.** `mentions.py` keeps its fair turns, then puts each mention's images together (subject order;
+  explicit references first) and stamps `skipped` (the set's images that did not fit). `graphs.subject_bindings` / `serialize_prompt`, per
+  family by the spec's new `inputs.bind_refs` (on for Klein and dev; recipe `bind_refs` overrides): prose (Klein) — "Mara (reference
+  images 1–2), a courier" with the bound images' "Image N shows" sentences dropped; JSON (dev) — the subject object gets `"reference":
+  "reference images 2–4"`, `references` keeps only unbound notes. `/recipes/preview` gains `bindings` [{subject, name, refs, span, skipped}]
+  and `bind_refs`; the card shows its slots ("refs 1–3", "· 1 left out"), the Preview lists each binding and what was cut (T8). The client
+  sends the subject's index among the subjects actually sent (a blank card before it no longer shifts the link). Generate's preview now
+  re-resolves when a mentioned set or profile moves (`group.changed` / `story.changed`).
+- **A9 · the stub.** A new profile's stub starts empty (server and Cast); its placeholder asks for the look; a subject description that is
+  only the linked profile's name warns under the field. Existing stubs are not rewritten.
+- **Found on the way:** Edit's `.cand-strip` (absolute, edit.css) leaked onto Story's candidates once Edit had loaded — the candidates
+  floated over the Cast header. Story's strip is `.story-cands` now.
+- **Rig** (`scripts/d93_bind_rig.py`, Klein 9B KV, Draft 960 × 544, seeds 20261017–22; two characters made through the app — a hero each
+  plus two looks with the hero as reference, added "into the reference set" with A2's route; stubs give a role, not a look; four slots →
+  two each, one per set left out and said): **off** (D73 sentences) FaceSim own 0.269 / cross 0.128 (margin 0.141), right 5 / 6, one swap,
+  and 4 of 6 renders had **three or four people** (the per-image sentences read as more women); **on** (bound) own **0.442** / cross 0.124
+  (margin **0.319**), right **6 / 6**, no swap, always exactly two people. 137–143 s per image in both arms (four 576² references at
+  Draft), peak 12.33 GB. The binding stays on by default (`inputs.bind_refs = true`). Sheet: engine/spikes/out/d93/sheet.jpg (local).
+- **Tests:** offline **371** under full and open (`test_cast_subject_d93.py` +9: the span words, Klein prose split 2 / 2 with skipped,
+  dev JSON with an explicit note kept, no binding in text mode or unlinked, the cut at the limit counted, the empty stub, add move / copy /
+  candidate page / hero, the routes incl. 423 and 422, a casting run on the fake engine landing in the candidates; `test_mentions_d73`
+  updated for the grouped order; parity fixture: two summary keys per t2i recipe, no graph changed; route snapshot +2); Vitest **292**
+  (+14: the offer states, the warning and the ask, the slots and the Preview lines, the sent index, the menu order with "made for" and
+  the per-item entries); lint 88; build, settings audit (232 / 0), model literals, agents check, OpenAPI current; smoke **33 / 33** under
+  full and open (new: a character without a look gets candidates from Generate and one becomes its hero via Add to character ▸; D73's
+  scenario now expects the grouped order). Screenshots: frontend/node_modules/.e2e/d93a/ (local).
+- **Owed:** the binding measured on dev (JSON) — on by spec, not yet rigged; the author's click-through; phases B (the live character
+  sheet, the version chip) and C (places and props, a subject per speaker, Stage figures bound).

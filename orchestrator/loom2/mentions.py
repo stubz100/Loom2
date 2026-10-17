@@ -6,7 +6,8 @@ two groups both get images, and they only fill the room the model has left after
 never pushes a reference out. Each reference it adds carries the group's name as its note ("Image 2 shows the hero") and the group id
 in `mention`; the mention is stamped with the group's revision and the asset ids it gave (lineage at write time, loom lesson 7). A
 stamped mention is not resolved again, so re-running a stored recipe uses the same images. The Story workspace (14) will resolve
-AssetProfiles behind the same function.
+AssetProfiles behind the same function. D93 (A3): after the turns, each mention's images are put together (a linked subject's first, in
+subject order) so the prompt can bind a subject to its range; the images left out for room are stamped as `skipped`.
 """
 from __future__ import annotations
 
@@ -102,8 +103,14 @@ def resolve_mentions(recipe: T2I, groups: GroupStore | None, catalogue: Catalogu
                 note = f"{triggers[m.group_id]}, {note}"
             refs.append(RefImage(asset_id=aid, note=note, mention=m.group_id))
             room -= 1
+    # D93 (A3): the turns share the room fairly; then each mention's images sit together (subject order first), so a subject can name its
+    # own range ("reference images 1–3") — the explicit references keep their places in front
+    order = sorted(range(len(todo)), key=lambda i: (todo[i].subject is None, todo[i].subject if todo[i].subject is not None else 0, i))
+    mine = {m.group_id for m in todo}
+    refs = [r for r in refs if r.mention not in mine] + [r for i in order for r in refs if r.mention == todo[i].group_id]
+    skipped = {m.group_id: len([a for a in queues[m.group_id] if a not in taken]) for m in todo}
     stamped = [m if m.revision is not None else Mention(group_id=m.group_id, name=names[m.group_id], revision=groups.groups[m.group_id].revision,
                                                         asset_ids=given[m.group_id], profile_id=m.profile_id, version=m.version, lora=m.lora, lora_available=m.lora_available,
-                                                        subject=m.subject)
+                                                        subject=m.subject, skipped=skipped[m.group_id])
                for m in recipe.mentions]
     return recipe.model_copy(update={"refs": refs, "mentions": stamped, "loras": loras})

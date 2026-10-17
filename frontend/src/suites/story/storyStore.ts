@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
-import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
+import type { Clip, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
@@ -142,6 +142,11 @@ export interface StoryState {
   lockVersion: () => Promise<void>
   deleteProfile: () => Promise<void>
   curate: (ids: string[], verdict: 'keep' | 'reject') => Promise<void>
+  /** D93 (A1): the version's candidates page (made when it has none) — a casting run from Generate lands there. Its id, or null (said). */
+  ensureCandidates: (pid: string, vid: string) => Promise<string | null>
+  /** D93 (A2) "Add to character ▸": images into a profile's current version as the hero, into the reference set or as candidates — moved
+   *  from Unprocessed or its candidates, copied from any other page (the toast says so, with "Open <name> in Cast"). */
+  addToProfile: (pid: string, ids: string[], role: ProfileAdded['role']) => Promise<ProfileAdded | null>
   expand: (preset: string, seeds: number, tier: 'draft' | 'full') => Promise<{ batch_id: string; job_ids: string[]; cells: number } | null>
   pick: (id: string | null, additive?: boolean) => void
   setCastFilter: (f: ProfileClass | 'all') => void
@@ -458,7 +463,36 @@ export const useStory = create<StoryState>()((set, get) => {
       updateProfile({ ...p, name })
       if (name.trim()) queueProfile(p.id, { name: name.trim() })                                     // a blank name is not sent (the server refuses it)
     },
-    setHero: async (assetId) => { const v = get().version(); if (v) await patchWith({ versions: [{ id: v.id, hero_asset_id: assetId }] }) },
+    setHero: async (assetId) => {                                            // D93 (A2): a hero joins the reference set as its cover (the add route)
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      if (!assetId) { await patchWith({ versions: [{ id: v.id, hero_asset_id: null }] }); return }
+      try {
+        replaceProfile((await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_ids: [assetId], role: 'hero' } }))).profile)
+        set({ picked: get().picked.filter((i) => i !== assetId) })
+        await get().loadPages()
+      } catch (e) { toast(`Make it the hero: ${detail(e)}`) }
+    },
+    ensureCandidates: async (pid, vid) => {
+      try {
+        const next = await unwrap(http.POST('/story/profiles/{pid}/candidates', { params: { path: { pid } }, body: { version: vid } }))
+        set({ profiles: get().profiles.some((x) => x.id === next.id) ? get().profiles.map((x) => (x.id === next.id ? next : x)) : [next, ...get().profiles] })
+        return next.versions.find((v) => v.id === vid)?.candidates_group_id ?? null
+      } catch (e) { toast(`Candidates: ${detail(e)}`); return null }
+    },
+    addToProfile: async (pid, ids, role) => {
+      const p = get().profiles.find((x) => x.id === pid)
+      if (!p || !ids.length) return null
+      try {
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/add', { params: { path: { pid, vid: p.current } }, body: { asset_ids: ids, role } }))
+        set({ profiles: get().profiles.map((x) => (x.id === pid ? r.profile : x)) })
+        if (get().profileId === pid) void get().loadPages()
+        const copies = Object.keys(r.copied).length
+        const what = role === 'hero' ? `is ${p.name}'s hero` : role === 'reference' ? `${ids.length === 1 ? 'is' : 'are'} in ${p.name}'s reference set` : `${ids.length === 1 ? 'is a candidate' : 'are candidates'} of ${p.name}`
+        useSession.getState().toast(`${ids.length === 1 ? 'The image' : `${ids.length} images`} ${what}${copies ? ` — ${copies === ids.length ? 'as a copy' : `${copies} as copies`}; the original${copies === 1 ? ' stays' : 's stay'} on ${copies === 1 ? 'its page' : 'their pages'}` : ''}`, 'success',
+          { label: `Open ${p.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: pid, version: p.current })) })
+        return r
+      } catch (e) { toast(`Add to ${p.name}: ${detail(e)}`); return null }
+    },
     newVersion: async () => {
       const p = get().profile(); if (!p) return
       set({ busy: true })

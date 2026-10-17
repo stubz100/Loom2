@@ -443,9 +443,56 @@ def _then(text: str, more: str) -> str:
     return f"{text}{'' if text[-1] in '.!?' else '.'} {more}"
 
 
-def ref_notes(recipe: T2I, spec: ModelSpec) -> list[tuple[int, str]]:
-    """(index, note) of the kept references that have a note — 1-based, the numbering the prompt uses ('image 1')."""
-    return [(i + 1, r.note.strip()) for i, r in enumerate(kept_refs(recipe, spec)) if r.note and r.note.strip()]
+def ref_notes(recipe: T2I, spec: ModelSpec, bound: set[int] | None = None) -> list[tuple[int, str]]:
+    """(index, note) of the kept references that have a note — 1-based, the numbering the prompt uses ('image 1'). D93 (A3): the ones a
+    subject binds (`bound`) are said by the subject instead."""
+    return [(i + 1, r.note.strip()) for i, r in enumerate(kept_refs(recipe, spec)) if r.note and r.note.strip() and (i + 1) not in (bound or set())]
+
+
+def binds_refs(recipe: T2I, spec: ModelSpec) -> bool:
+    """D93 (A3): whether the prompt binds linked subjects to their references — the recipe's choice, else the model's spec."""
+    return bool(spec.inputs.refs_max) and (recipe.bind_refs if recipe.bind_refs is not None else spec.inputs.bind_refs)
+
+
+def ref_span(idx: list[int]) -> str:
+    """'reference image 2', 'reference images 1–3', 'reference images 1, 3' (the words the prompt and the subject card use)."""
+    if len(idx) == 1:
+        return f"reference image {idx[0]}"
+    run = idx == list(range(idx[0], idx[0] + len(idx)))
+    return f"reference images {idx[0]}–{idx[-1]}" if run else "reference images " + ", ".join(map(str, idx))
+
+
+def subject_bindings(recipe: T2I, spec: ModelSpec) -> list[dict[str, Any]]:
+    """D93 (A3): each subject card linked to a profile (a resolved mention with `subject`) and the kept references its mention gave, 1-based;
+    `skipped` counts the set's images that did not fit (left out by the resolver, or cut at the model's limit). Only subjects the prompt
+    has (tree / JSON modes)."""
+    subs = (recipe.prompt_json or {}).get("subjects") if recipe.prompt_mode in ("tree", "json") else None
+    if not isinstance(subs, list):
+        return []
+    kept = kept_refs(recipe, spec)
+    out = []
+    for m in recipe.mentions:
+        if m.subject is None or not m.profile_id or m.subject >= len(subs) or not isinstance(subs[m.subject], dict) or any(b["subject"] == m.subject for b in out):
+            continue
+        idx = [i + 1 for i, r in enumerate(kept) if r.mention == m.group_id]
+        cut = len([r for r in recipe.refs[len(kept):] if r.mention == m.group_id])
+        out.append({"subject": m.subject, "name": m.name, "profile_id": m.profile_id, "refs": idx, "span": ref_span(idx) if idx else None, "skipped": (m.skipped or 0) + cut})
+    return out
+
+
+def _bind_subject(sub: dict, name: str, span: str, prose: bool) -> dict:
+    """D93 (A3): a subject that names its references the way its family reads them — a JSON field for the JSON-prompted models
+    (`"reference": "reference images 1–3"`), the name with the range in brackets leading the description in prose ("Mara (reference
+    images 1–3), a wiry courier …")."""
+    if not prose:
+        return {**sub, "reference": span}
+    d = str(sub.get("description") or "").strip()
+    lead = f"{name} ({span})"
+    if d.lower().startswith(name.lower()):
+        d = lead + d[len(name):]
+    else:
+        d = f"{lead}, {d}" if d else lead
+    return {**sub, "description": d}
 
 
 def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, str]:
@@ -454,12 +501,18 @@ def serialize_prompt(recipe: T2I, spec: ModelSpec | None = None) -> tuple[str, s
     image ("Image 2 shows the hero."); @mentions read as the plain name."""
     spec = spec or registry.get(recipe.model_id) or registry.SPECS[registry.default_model("t2i")]
     names = sorted((m.name for m in recipe.mentions if m.name), key=len, reverse=True)
-    notes = ref_notes(recipe, spec)
+    binds = [b for b in subject_bindings(recipe, spec) if b["refs"]] if binds_refs(recipe, spec) else []   # D93 (A3)
+    notes = ref_notes(recipe, spec, {i for b in binds for i in b["refs"]})
     sentences = " ".join(f"Image {i} shows {n.rstrip('.')}." for i, n in notes)
     style = (recipe.style_text or "").strip()                                   # D85: the Story style's fragment, appended after the prompt (loom R104)
     prompt_text = _unmention(recipe.prompt_text.strip(), names)
     if recipe.prompt_mode in ("tree", "json") and recipe.prompt_json:
         tree = {k: v for k, v in _unmention(recipe.prompt_json, names).items() if v not in (None, "", [], {})}
+        if binds and isinstance(tree.get("subjects"), list):                   # D93 (A3): each linked subject names its own references
+            subs = list(tree["subjects"])
+            for b in binds:
+                subs[b["subject"]] = _bind_subject(subs[b["subject"]], b["name"] or "", b["span"], not spec.sampling.json_prompt)
+            tree["subjects"] = subs
         if style:                                                               # the tree's own style slot (04 §3c) takes the fragment, after what is there
             cur = tree.get("style")
             tree["style"] = f"{cur}, {style}" if isinstance(cur, str) and cur.strip() else style
@@ -557,6 +610,8 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
     if w * h > 4_200_000 or w < 64 or h < 64:
         raise CompileError(f"size {w}×{h} outside the 64 px – 4 MP range")
     text, mode = serialize_prompt(recipe, spec)
+    bind = binds_refs(recipe, spec)
+    bindings = subject_bindings(recipe, spec)                                   # D93 (A3): what each linked subject got (the card shows its slots)
     return {"model_id": recipe.model_id, "te_id": resolve_te_id(spec, recipe.te_id) if spec.roles.te else None, "width": w, "height": h, "steps": steps, "guidance": guidance, "cfg": cfg,
             "sampler": sampler, "scheduler": scheduler, "turbo": turbo, "turbo_strength": float(recipe.turbo_strength) if turbo else None,
             "distilled": sm.distilled, "negative_used": bool(recipe.negative) and not sm.distilled,
@@ -564,7 +619,8 @@ def effective_params(recipe: T2I, roster: Roster | None = None) -> dict[str, Any
             "tiled_vae": bool(recipe.tiled_vae), "tile_size": int(recipe.tile_size) if recipe.tiled_vae else None,
             "prompt_mode": mode, "serialized_prompt": text, "word_count": word_count(text), "token_estimate": int(word_count(text) * 1.4) + 8,
             "refs": min(len(recipe.refs), refs_max), "max_refs": refs_max, "refs_dropped": max(0, len(recipe.refs) - refs_max),
-            "ref_notes": len(ref_notes(recipe, spec)), "loras": loras_summary(recipe.loras, roster),
+            "ref_notes": len(ref_notes(recipe, spec, {i for b in bindings for i in b["refs"]} if bind else None)), "loras": loras_summary(recipe.loras, roster),
+            "bind_refs": bind, "bindings": bindings,
             "style_id": recipe.style_id, "style_text": recipe.style_text}                                   # D85: what the Story style added (the manifest keeps both)
 
 

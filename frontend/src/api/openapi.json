@@ -1,6 +1,33 @@
 {
   "components": {
     "schemas": {
+      "AddBody": {
+        "properties": {
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "hero",
+              "reference",
+              "candidate"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_ids",
+          "role"
+        ],
+        "title": "AddBody",
+        "type": "object"
+      },
       "AdjustmentLayer": {
         "properties": {
           "blend": {
@@ -771,6 +798,71 @@
         "title": "BindBody",
         "type": "object"
       },
+      "BindingOut": {
+        "description": "D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "refs": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "skipped": {
+            "default": 0,
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subject",
+          "name",
+          "profile_id",
+          "refs",
+          "span",
+          "skipped"
+        ],
+        "title": "BindingOut",
+        "type": "object"
+      },
       "BlobPut": {
         "properties": {
           "bytes": {
@@ -822,6 +914,23 @@
           "cancelled"
         ],
         "title": "Cancelled",
+        "type": "object"
+      },
+      "CandidatesBody": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "CandidatesBody",
         "type": "object"
       },
       "Capabilities": {
@@ -5998,6 +6107,11 @@
       "Inputs": {
         "additionalProperties": false,
         "properties": {
+          "bind_refs": {
+            "default": false,
+            "title": "Bind Refs",
+            "type": "boolean"
+          },
           "refs_max": {
             "default": 0,
             "title": "Refs Max",
@@ -7711,6 +7825,18 @@
             "default": null,
             "title": "Revision"
           },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Skipped"
+          },
           "subject": {
             "anyOf": [
               {
@@ -7809,6 +7935,28 @@
             ],
             "title": "Revision"
           },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
           "version": {
             "anyOf": [
               {
@@ -7829,7 +7977,9 @@
           "profile_id",
           "version",
           "lora",
-          "lora_available"
+          "lora_available",
+          "subject",
+          "skipped"
         ],
         "title": "MentionOut",
         "type": "object"
@@ -8850,6 +9000,69 @@
           "updated_at"
         ],
         "title": "Profile",
+        "type": "object"
+      },
+      "ProfileAdded": {
+        "description": "D93 (A2): assets added to a profile version — as the hero, into the reference set or as candidates. An asset from Unprocessed or\nthe version's own candidates page moves; one from any other page is copied (`copied`: original → copy) and the original stays.",
+        "properties": {
+          "already": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Already",
+            "type": "array"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "copied": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Copied",
+            "type": "object"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "moved": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Moved",
+            "type": "array"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          },
+          "role": {
+            "enum": [
+              "hero",
+              "reference",
+              "candidate"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "group_id",
+          "role",
+          "asset_ids",
+          "moved",
+          "copied",
+          "already"
+        ],
+        "title": "ProfileAdded",
         "type": "object"
       },
       "ProfileCreate": {
@@ -12059,6 +12272,18 @@
             "default": null,
             "title": "Base Shift"
           },
+          "bind_refs": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bind Refs"
+          },
           "cfg": {
             "anyOf": [
               {
@@ -12344,6 +12569,19 @@
               }
             ],
             "title": "Base Shift"
+          },
+          "bind_refs": {
+            "default": false,
+            "title": "Bind Refs",
+            "type": "boolean"
+          },
+          "bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BindingOut"
+            },
+            "title": "Bindings",
+            "type": "array"
           },
           "cfg": {
             "title": "Cfg",
@@ -20454,6 +20692,59 @@
         ]
       }
     },
+    "/story/profiles/{pid}/candidates": {
+      "post": {
+        "description": "D93 (A1): the version's candidates page, made when it has none (as Expand does) — a casting run from Generate sends its results\nthere through its origin's `group_id`. A final version refuses (423).",
+        "operationId": "profile_candidates_story_profiles__pid__candidates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidatesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Candidates",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/profiles/{pid}/expand": {
       "post": {
         "description": "One queued T2I job per coverage cell of the preset (× seeds), in one batch, each with the hero as reference 1 and the cell's sentence\nafter the stub; the results land on the version's candidates page (made on the first Expand) with `params.coverage_cell`.",
@@ -20598,6 +20889,68 @@
           }
         },
         "summary": "Profile New Version",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/add": {
+      "post": {
+        "description": "D93 (A2) \"Add to character ▸\": images from anywhere into a version — as the hero (onto the reference set as its cover), into the\nreference set, or as candidates. From Unprocessed or the version's candidates page they move; from any other page they are copied\n(the reply says which). A final version answers 423 with the reason.",
+        "operationId": "profile_add_story_profiles__pid__versions__vid__add_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileAdded"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Add",
         "tags": [
           "story"
         ]

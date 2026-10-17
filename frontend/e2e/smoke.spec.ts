@@ -324,7 +324,8 @@ test('@mentions (D73): "@hero walks into @tavern" — both groups give reference
   await expect(page.locator('.mention-chips .mchip')).toHaveCount(2)
   await expect(page.locator('.ref-from-mentions .ref-slot')).toHaveCount(4)             // turns: hero, tavern, hero, tavern — the model's 4
   await expect(page.locator('.mchip', { hasText: heroName })).toContainText('2 images')
-  await expect(page.locator('.preview-box')).toContainText(`${heroName} walks into ${tavernName}. Image 1 shows ${heroName}. Image 2 shows ${tavernName}.`)
+  // D93 (A3): then each group's images together — hero 1–2, tavern 3–4
+  await expect(page.locator('.preview-box')).toContainText(`${heroName} walks into ${tavernName}. Image 1 shows ${heroName}. Image 2 shows ${heroName}. Image 3 shows ${tavernName}.`)
   const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
   await go.click()
   const job = await expect.poll(async () => (await api<{ items: { status: string; recipe: { mentions?: { group_id: string; revision: number; asset_ids: string[] }[] } }[] }>('GET', '/jobs')).items
@@ -1391,4 +1392,61 @@ test('a subject is a Cast character (D92 · UI7): the subject card picks a profi
   expect(job.recipe.refs?.some((r) => r.asset_id === hero && r.mention === m.group_id)).toBe(true)   // the hero rides as a reference
   await card.locator('button[aria-label="unlink subject 1"]').click()
   await expect(page.locator('.mention-chips .mchip', { hasText: name })).toHaveCount(0)
+})
+
+test('Cast from Generate (D93 · A1, A2): a character without a look gets candidates from Generate, and one becomes its hero via Add to character ▸', async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `Noor ${Date.now().toString(36)}`
+  type Version = { id: string; state: string; group_id: string; candidates_group_id: string | null; hero_asset_id: string | null; stub: string }
+  type ProfileLite = { id: string; name: string; current: string; versions: Version[] }
+  const prof = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character' })              // no hero, no references
+  expect(prof.versions[0].stub).toBe('')                                                                  // A9: the stub starts empty
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
+  await page.locator('.gen-tree .full button', { hasText: 'subject' }).click()
+  const card = page.locator('.gen-tree .subject').last()
+  await card.locator(`[aria-label^="subject"][aria-label$="from the Cast"] button[aria-label="${name}"]`).click()
+  const desc = card.locator('textarea').first()
+  await expect(desc).toHaveValue(name)                                                                     // no stub: the name alone …
+  await expect(card.locator('.subject-warn')).toHaveText('the model only sees the name — describe the look')   // … and the card says so
+  const cast = card.locator('button.subject-cast')
+  await expect(cast).toHaveText(new RegExp(`Give ${name} a look`))
+  await cast.click()                                                                                       // the run asks for words first
+  await expect(card.locator('.subject-warn.ask')).toContainText(`describe ${name}'s look first`)
+  await expect(desc).toBeFocused()
+  await desc.fill(`${name}, a red-haired diver in a yellow wetsuit`)
+  await expect(card.locator('.subject-warn')).toHaveCount(0)
+  await expect(page.locator('.panel .foot button.primary', { hasText: /^Generate/ })).toBeEnabled({ timeout: 30_000 })
+  await cast.click()
+  const toast = page.locator('.toast', { hasText: `as ${name}'s candidates` })
+  await expect(toast).toBeVisible()
+  type JobLite = { id: string; status: string; origin?: { surface: string; ref?: string | null; payload?: { group_id?: string } }; result?: { asset_ids?: string[] } }
+  const mine = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === prof.id)
+  await expect.poll(async () => { const js = await mine(); return js.length > 0 && js.every((j) => j.status === 'done') }, { timeout: 60_000 }).toBe(true)
+  const p1 = await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)
+  const cand = p1.versions[0].candidates_group_id!
+  const made = (await mine()).flatMap((j) => j.result?.asset_ids ?? [])
+  expect((await mine()).every((j) => j.origin?.payload?.group_id === cand)).toBe(true)
+  await expect.poll(async () => Object.keys((await api<{ assets: Record<string, unknown> }>('GET', `/groups/${cand}`)).assets).sort().join()).toBe([...made].sort().join())   // all on the candidates page
+  // Add to character ▸ on a result tile: the profile it was made for first, "as the hero"
+  const tile = page.locator(`.cat-grid .tile[data-id="${made[0]}"]`)
+  await expect(tile).toBeVisible({ timeout: 20_000 })
+  await tile.click({ button: 'right' })
+  await page.locator('.ctx-menu .item.sub', { hasText: 'Add to character' }).hover()
+  await expect(page.locator('.ctx-menu .heading', { hasText: 'made for' })).toBeVisible()
+  await page.locator('.ctx-menu .ctx-menu > .item.sub', { hasText: `${name} · v1` }).first().hover()    // the profile's own submenu (not its parent's row)
+  await page.locator('.ctx-menu .ctx-menu .ctx-menu button.item', { hasText: 'as the hero' }).click()
+  await expect(page.locator('.toast', { hasText: `is ${name}'s hero` })).toBeVisible()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].hero_asset_id).toBe(made[0])
+  const ref = (await api<{ group: { cover_id: string | null; items: { id: string }[] } }>('GET', `/groups/${p1.versions[0].group_id}`)).group
+  expect(ref.cover_id).toBe(made[0])                                                                       // moved from the candidates onto the reference set
+  expect(ref.items.map((i) => i.id)).toContain(made[0])
+  await expect(cast).toHaveText(new RegExp(`More looks for ${name}`), { timeout: 20_000 })                // the card follows: it has a look now
+  await expect(card.locator('.subject-slots')).toHaveText(/^ref 1$/)                                      // its hero is reference image 1 in the prompt
+  // the toast's way to Cast: the candidates are there
+  await page.locator('.toast button', { hasText: `Open ${name} in Cast` }).first().click()
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+  await expect(page.locator('.cand-card')).toHaveCount(made.length - 1)
 })

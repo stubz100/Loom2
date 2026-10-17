@@ -1,7 +1,7 @@
 // The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Judge, Tags,
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
-import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, Wand2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
 import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -13,7 +13,7 @@ import { useKeymap } from '../../frame/keymap'
 import { CommandCard } from '../../frame/CommandButton'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum, type PathStep } from './albumStore'
-import { moveToMenu } from './catalogueCommands'
+import { addToCharacterMenu, moveToMenu } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { selectedOrPrimary } from './catalogueStore'
 import { notePlacements } from './placement'
@@ -251,6 +251,7 @@ function One({ a }: { a: Asset }) {
           <Btn icon={<Shuffle size={14} />} label="Variations" run={() => runCommand('cat.variations')} disabled={!a.params?.recipe} title="New seeds (V)" />
           <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Generate" />
           <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? 'Unpin' : 'Pin for compare'} run={() => runCommand('cat.pin')} title={c.compare.includes(a.id) ? `Unpin (C${c.compare.indexOf(a.id) + 1}, C)` : 'Pin for compare (C)'} />
+          {a.kind === 'image' && !a.trashed_at && <Btn icon={<UserRoundPlus size={14} />} label="Add to character ▾" run={(e) => showMenu(e, addToCharacterMenu().items)} title="Into a Cast profile: as the hero, into the reference set or as a candidate (D93)" />}
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />
         </div>
       </Section>

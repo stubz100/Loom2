@@ -7,11 +7,13 @@ import { isDocumentPreview, isT2IPreview, type Asset, type Capabilities, type Do
 import type { components } from '../../api/schema'
 import { defaultModel, resolveModel } from '../../store/modelCaps'
 import type { DragPayload } from '../../frame/drag'
+import { runCommand } from '../../frame/commands'
 import { refDrop } from '../../frame/dropRules'
 import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { profilesForMentions as profilesNow, styleFor } from '../story/storyStore'
 import type { Profile } from '../../api/types'
+import { castOrigin, keptSubject, needsLook, sentIndex } from './subjectCast'
 
 /** A subject card of the Tree prompt. D92: `profile_id` links it to a Cast character or prop — its version's reference set and LoRA ride on
  *  the profile mention the link records (never sent in the prompt itself). */
@@ -80,7 +82,7 @@ export function cleanTree(t: Tree): Record<string, unknown> {
     if (v === undefined || v === null || v === '') continue
     if (Array.isArray(v)) {
       if (k === 'subjects') {
-        const subs = (v as Subject[]).filter((s) => (s.description || s.action || s.pose || s.position || '').trim()).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'profile_id' && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's
+        const subs = (v as Subject[]).filter(keptSubject).map((s) => Object.fromEntries(Object.entries(s).filter(([k, x]) => k !== 'profile_id' && x !== '' && x != null)))   // D92: the link is the mention's, not the prompt's
         if (subs.length) out[k] = subs
       } else if (v.length) out[k] = v
     } else if (typeof v === 'object') {
@@ -142,7 +144,7 @@ export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
     width: p.width, height: p.height, steps: p.steps, guidance: p.guidance, cfg: p.cfg, sampler: p.sampler, scheduler: p.scheduler, turbo: p.turbo && (cap?.turbo ?? true),
     turbo_strength: p.turbo_strength, weight_dtype: p.weight_dtype, te_device: p.te_device, te_id: p.te_id, base_shift: shift ? p.base_shift : null, max_shift: shift ? p.max_shift : null, tiled_vae: p.tiled_vae, tile_size: p.tile_size,
     seeds: seedList, refs: p.refs.map((r) => ({ asset_id: r.asset_id, note: r.note })), ref_max_px: p.ref_max_px, loras: p.loras, auto_lora: p.auto_lora,
-    mentions: mentionsInUse(p).map((m) => { const si = linkedSubject(p, m.profile_id)                 // D85: a profile mention names its profile; D92: and the card it links
+    mentions: mentionsInUse(p).map((m) => { const si = sentIndex(p.tree.subjects ?? [], linkedSubject(p, m.profile_id))   // D85: a profile mention names its profile; D92: and the card it links (D93: its index among the subjects sent)
       return { group_id: m.group_id, name: m.name, ...(m.profile_id ? { profile_id: m.profile_id } : {}), ...(si >= 0 ? { subject: si } : {}) } }),
     style_id: styleFor(p.style_id),                                                                    // D85: resolved to its fragment by the server at preview and submit
   }
@@ -223,13 +225,17 @@ export interface GenerateState {
   unlinkSubject: (i: number) => void
   /** D92 (Cast's "Use as a subject in Generate"): the Tree prompt with a subject card linked to the profile. */
   useAsSubject: (profile: Profile) => void
+  /** D93 (A1): "Give <name> a look" / "More looks for <name>" on a linked card — the panel's images as the version's candidates (the page
+   *  made when it has none); the description must say the look first (`castAsk` marks the card and its field takes the focus). */
+  castLook: (i: number) => Promise<Job[] | null>
+  castAsk: number | null
   setCamera: (patch: Partial<Camera>) => void
   treeToJson: () => void
   jsonToTree: () => boolean
   refreshPreview: () => Promise<void>
   /** `origin` (D66) says where the request was made; the panel's own submissions default to Generate's results — or, while the For chip
    *  is set (D90, 02 §5), to the shot version it names. */
-  generate: (stage?: boolean, origin?: JobOrigin) => Promise<Job[] | null>
+  generate: (stage?: boolean, origin?: JobOrigin, said?: { text: string; action?: { label: string; run: () => void } }) => Promise<Job[] | null>
   variations: (asset: Asset, n?: number, origin?: JobOrigin) => Promise<void>
   rerun: (asset: Asset, origin?: JobOrigin) => Promise<void>
   loadFromAsset: (asset: Asset, keepSeeds?: boolean) => void
@@ -251,6 +257,14 @@ export interface GenerateState {
   deletePreset: (name: string) => Promise<void>
   /** D92: World's Rename… of a saved panel (its picture goes with it). */
   renamePreset: (from: string, to: string) => Promise<boolean>
+}
+
+/** D93 (A1): the subject card a per-item command acts on (its button sets it first; the run clears it, so the palette never acts on a
+ *  stale card — D90's per-item pattern). */
+export const subjectItem: { i?: number } = {}
+export function runOnSubject(i: number, id: string): boolean {
+  subjectItem.i = i
+  try { return runCommand(id) } finally { subjectItem.i = undefined }
 }
 
 /** D92: the newest result of a Generate job (a saved panel's picture when it is saved). */
@@ -285,7 +299,7 @@ export function dropRefs(p: DragPayload): void {
 export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
-      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [],
+      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [], castAsk: null,
       angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, presetText: {},
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
@@ -360,6 +374,25 @@ export const useGenerate = create<GenerateState>()(
         if (at === subs.length) get().addSubject()
         get().linkSubject(at, profile)
       },
+      castLook: async (i) => {
+        const p = get().panel, sub = p.tree.subjects?.[i], ss = useSession.getState()
+        const prof = sub?.profile_id ? profilesNow().find((x) => x.id === sub.profile_id) : undefined
+        const v = prof?.versions.find((x) => x.id === prof.current)
+        if (!sub || !prof || !v || p.prompt_mode !== 'tree') return null
+        if (v.state !== 'open') { ss.toast(`${prof.name} ${v.id} is final — make a new version to cast it again`, 'error'); return null }
+        if (needsLook(sub.description, prof.name)) {                          // the casting run renders the words: ask for them first
+          set({ castAsk: i })
+          window.setTimeout(() => (document.getElementById(`gen-subject-desc-${i}`) as HTMLTextAreaElement | null)?.focus(), 30)
+          return null
+        }
+        set({ castAsk: null })
+        const { useStory } = await import('../story/storyStore')
+        const gid = await useStory.getState().ensureCandidates(prof.id, v.id)
+        if (!gid) return null
+        return get().generate(false, castOrigin(prof.id, v.id, gid), {
+          text: ` — they land as ${prof.name}'s candidates (keep ✓ the good ones, make one the hero)`,
+          action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
+      },
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
       treeToJson: () => get().set({ json_text: JSON.stringify(cleanTree(get().panel.tree), null, 2), prompt_mode: 'json' }),
       jsonToTree: () => {
@@ -378,7 +411,7 @@ export const useGenerate = create<GenerateState>()(
         } finally { if (seq === previewSeq) set({ previewing: false }) }
       },
 
-      generate: async (stage = false, asked) => {
+      generate: async (stage = false, asked, said) => {
         const s = useSession.getState()
         const base = asked ?? originFor('generate', GENERATE_ORIGIN)              // D90 (02 §5): the For chip's shot gets the results as takes
         const lp = asked ? null : get().appliedPreset                             // D92: made from an applied saved panel — its picture follows the result
@@ -388,7 +421,7 @@ export const useGenerate = create<GenerateState>()(
           const jobs = await unwrap(http.POST('/jobs', { body: { recipe: recipeFromPanel(get().panel), stage, origin } }))
           const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
           set({ lastBatch: batch, show: 'batch' })
-          s.toast((stage ? `Queued ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''} for later` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`) + (f ? ` for ${forLabel(f)} — they land as its takes` : ''), 'success')
+          s.toast((stage ? `Queued ${jobs.jobs.length} job${jobs.jobs.length > 1 ? 's' : ''} for later` : `Queued ${jobs.jobs.length} image${jobs.jobs.length > 1 ? 's' : ''}`) + (f ? ` for ${forLabel(f)} — they land as its takes` : said?.text ?? ''), 'success', said?.action)
           await s.refreshAll()
           if (get().panel.seed_mode === 'increment') get().set({ seed: get().panel.seed + get().panel.count })
           return jobs.jobs
@@ -476,6 +509,13 @@ export const useGenerate = create<GenerateState>()(
       merge: (persisted, current) => { const p = (persisted ?? {}) as Partial<GenerateState>; return { ...current, ...p, panel: { ...DEFAULT_PANEL, ...(p.panel ?? {}) } } } },
   ),
 )
+
+/** D93: a mentioned set or profile moved on the server (a hero added, references kept) — the preview resolves the mentions again, so the
+ *  subject cards' slots and the casting offer follow. */
+export function mentionsMoved(what: { groups?: string[]; profile?: string }): void {
+  const ms = mentionsInUse(useGenerate.getState().panel)
+  if (ms.some((m) => (what.groups ?? []).includes(m.group_id) || (!!what.profile && m.profile_id === what.profile))) schedulePreview(useGenerate.getState)
+}
 
 function schedulePreview(get: () => GenerateState) {
   if (previewTimer) window.clearTimeout(previewTimer)

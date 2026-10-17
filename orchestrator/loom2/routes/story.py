@@ -17,9 +17,9 @@ from ..origin import JobOrigin
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
-from ..schemas import Curated, Deleted, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
+from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
-from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -119,7 +119,7 @@ class ProfileCreate(BaseModel):
     name: str
     cls: ProfileClass = "character"
     hero_asset_id: str | None = None              # moves onto the version's reference page as its cover
-    stub: str = ""                                # the clause a mention carries; the name when empty
+    stub: str = ""                                # the clause a mention carries; D93 (A9): empty stays empty (the Cast field says to describe the look)
 
 
 class CurateBody(BaseModel):
@@ -133,6 +133,15 @@ class ExpandBody(BaseModel):
     seeds_per_cell: int = Field(1, ge=1, le=4)
     tier: str | None = None                       # draft (default) | full — the project format's aspect at the tier's height
     style_id: str | None = None
+
+
+class CandidatesBody(BaseModel):
+    version: str | None = None                    # the current one when absent
+
+
+class AddBody(BaseModel):
+    asset_ids: list[str] = Field(min_length=1)
+    role: Literal["hero", "reference", "candidate"]
 
 
 def _changed(svc, p: Profile) -> None:
@@ -259,6 +268,57 @@ async def profile_curate(svc: Svc, pid: str, vid: str, body: CurateBody):
     return {"kept": ids if body.verdict == "keep" else [], "rejected": ids if body.verdict == "reject" else []}
 
 
+@router.post("/story/profiles/{pid}/candidates", response_model=Profile)
+async def profile_candidates(svc: Svc, pid: str, body: CandidatesBody):
+    """D93 (A1): the version's candidates page, made when it has none (as Expand does) — a casting run from Generate sends its results
+    there through its origin's `group_id`. A final version refuses (423)."""
+    ws, _, _ = svc.require_project()
+    groups = svc.require_groups()
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(body.version)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if v.state != "open":
+        raise HTTPException(423, f"{p.name} {v.id} is final — its look is fixed; make a new version to cast it again")
+    p, gid, made = await asyncio.to_thread(store.ensure_candidates, pid, v.id, groups)
+    if made:
+        svc.group_changed([gid, groups.parent.get(("group", gid), "root")])
+        _changed(svc, p)
+    return p.model_dump()
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/add", response_model=ProfileAdded)
+async def profile_add(svc: Svc, pid: str, vid: str, body: AddBody):
+    """D93 (A2) "Add to character ▸": images from anywhere into a version — as the hero (onto the reference set as its cover), into the
+    reference set, or as candidates. From Unprocessed or the version's candidates page they move; from any other page they are copied
+    (the reply says which). A final version answers 423 with the reason."""
+    ws, cat, _ = svc.require_project()
+    groups = svc.require_groups()
+    store = StoryStore(ws)
+    before = {a: groups.parent.get(("asset", a)) for a in body.asset_ids}
+    try:
+        r = await asyncio.to_thread(store.add_assets, pid, vid, body.asset_ids, body.role, groups, cat)
+    except KeyError as e:
+        raise HTTPException(404, f"not found: {e}")
+    except VersionLocked as e:
+        raise HTTPException(423, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    for dup in r["copied"].values():
+        if (rec := await asyncio.to_thread(cat.get, dup)) is not None:
+            svc.hub.broadcast("asset.created", rec.model_dump())
+    for rec in r.pop("updated"):
+        svc.hub.broadcast("asset.updated", rec.model_dump())
+    made = r.pop("made_page")
+    svc.group_changed(sorted({r["group_id"], *(g for a, g in before.items() if g and a in r["moved"])} | ({groups.parent.get(("group", r["group_id"]), "root")} if made else set())))
+    _changed(svc, r["profile"])
+    return {**r, "profile": r["profile"].model_dump()}
+
+
 @router.post("/story/profiles/{pid}/expand", response_model=Expanded)
 async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
     """One queued T2I job per coverage cell of the preset (× seeds), in one batch, each with the hero as reference 1 and the cell's sentence
@@ -284,11 +344,9 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
     fmt = ws.load().format
     h = 1080 if body.tier == "full" else 544
     w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
-    gid = v.candidates_group_id if v.candidates_group_id and v.candidates_group_id in groups.groups else None
-    if gid is None:
-        gid = (await asyncio.to_thread(groups.create, f"{p.name} · {v.id} · candidates")).id
-        p = await asyncio.to_thread(store.set_candidates, pid, v.id, gid)
-        v = p.version(v.id)
+    p, gid, made = await asyncio.to_thread(store.ensure_candidates, pid, v.id, groups)   # D93: one place makes the candidates page
+    v = p.version(v.id)
+    if made:
         svc.group_changed([gid])
     try:
         planned = plan_expand(p, v, body.preset, variant, seeds_per_cell=body.seeds_per_cell, width=w, height=h, style_id=body.style_id, tier=body.tier or "draft", group_id=gid)

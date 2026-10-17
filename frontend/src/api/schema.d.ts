@@ -1917,6 +1917,27 @@ export interface paths {
         patch: operations["profile_patch_story_profiles__pid__patch"];
         trace?: never;
     };
+    "/story/profiles/{pid}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Candidates
+         * @description D93 (A1): the version's candidates page, made when it has none (as Expand does) — a casting run from Generate sends its results
+         *     there through its origin's `group_id`. A final version refuses (423).
+         */
+        post: operations["profile_candidates_story_profiles__pid__candidates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/expand": {
         parameters: {
             query?: never;
@@ -1972,6 +1993,28 @@ export interface paths {
          * @description A full copy of the current version (its reference set duplicated), open, now the current one.
          */
         post: operations["profile_new_version_story_profiles__pid__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/profiles/{pid}/versions/{vid}/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Add
+         * @description D93 (A2) "Add to character ▸": images from anywhere into a version — as the hero (onto the reference set as its cover), into the
+         *     reference set, or as candidates. From Unprocessed or the version's candidates page they move; from any other page they are copied
+         *     (the reply says which). A final version answers 423 with the reason.
+         */
+        post: operations["profile_add_story_profiles__pid__versions__vid__add_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2310,6 +2353,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AddBody */
+        AddBody: {
+            /** Asset Ids */
+            asset_ids: string[];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "hero" | "reference" | "candidate";
+        };
         /** AdjustmentLayer */
         AdjustmentLayer: {
             /**
@@ -2591,6 +2644,30 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /**
+         * BindingOut
+         * @description D93 (A3): a subject card linked to a profile and the reference images its mention gave (1-based, as the prompt numbers them).
+         */
+        BindingOut: {
+            /** Name */
+            name: string | null;
+            /** Profile Id */
+            profile_id: string | null;
+            /**
+             * Refs
+             * @default []
+             */
+            refs: number[];
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
+            /** Span */
+            span: string | null;
+            /** Subject */
+            subject: number;
+        };
         /** BlobPut */
         BlobPut: {
             /** Bytes */
@@ -2611,6 +2688,11 @@ export interface components {
         Cancelled: {
             /** Cancelled */
             cancelled: string;
+        };
+        /** CandidatesBody */
+        CandidatesBody: {
+            /** Version */
+            version?: string | null;
         };
         /** Capabilities */
         Capabilities: {
@@ -4743,6 +4825,11 @@ export interface components {
         /** Inputs */
         Inputs: {
             /**
+             * Bind Refs
+             * @default false
+             */
+            bind_refs?: boolean;
+            /**
              * Refs Max
              * @default 0
              */
@@ -5448,6 +5535,11 @@ export interface components {
              */
             revision?: number | null;
             /**
+             * Skipped
+             * @default null
+             */
+            skipped?: number | null;
+            /**
              * Subject
              * @default null
              */
@@ -5477,6 +5569,10 @@ export interface components {
             profile_id: string | null;
             /** Revision */
             revision: number | null;
+            /** Skipped */
+            skipped: number | null;
+            /** Subject */
+            subject: number | null;
             /** Version */
             version: string | null;
         };
@@ -5861,6 +5957,40 @@ export interface components {
             versions: components["schemas"]["ProfileVersion"][];
             /** Voice Id */
             voice_id: string | null;
+        };
+        /**
+         * ProfileAdded
+         * @description D93 (A2): assets added to a profile version — as the hero, into the reference set or as candidates. An asset from Unprocessed or
+         *     the version's own candidates page moves; one from any other page is copied (`copied`: original → copy) and the original stays.
+         */
+        ProfileAdded: {
+            /**
+             * Already
+             * @default []
+             */
+            already: string[];
+            /** Asset Ids */
+            asset_ids: string[];
+            /**
+             * Copied
+             * @default {}
+             */
+            copied: {
+                [key: string]: string;
+            };
+            /** Group Id */
+            group_id: string;
+            /**
+             * Moved
+             * @default []
+             */
+            moved: string[];
+            profile: components["schemas"]["Profile"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "hero" | "reference" | "candidate";
         };
         /** ProfileCreate */
         ProfileCreate: {
@@ -7216,6 +7346,11 @@ export interface components {
              */
             base_shift?: number | null;
             /**
+             * Bind Refs
+             * @default null
+             */
+            bind_refs?: boolean | null;
+            /**
              * Cfg
              * @default null
              */
@@ -7366,6 +7501,16 @@ export interface components {
         T2IPreview: {
             /** Base Shift */
             base_shift?: number | null;
+            /**
+             * Bind Refs
+             * @default false
+             */
+            bind_refs?: boolean;
+            /**
+             * Bindings
+             * @default []
+             */
+            bindings?: components["schemas"]["BindingOut"][];
             /** Cfg */
             cfg: number;
             /** Count */
@@ -12150,6 +12295,41 @@ export interface operations {
             };
         };
     };
+    profile_candidates_story_profiles__pid__candidates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidatesBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     profile_expand_story_profiles__pid__expand_post: {
         parameters: {
             query?: never;
@@ -12238,6 +12418,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_add_story_profiles__pid__versions__vid__add_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileAdded"];
                 };
             };
             /** @description Validation Error */

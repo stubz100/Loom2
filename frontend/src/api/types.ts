@@ -66,6 +66,8 @@ export interface Backend { host: string; port: number; token: string }
 
 // ---- recipe preview (POST /recipes/preview answers per recipe kind) --------------------------------------------------
 export type T2IPreview = S['T2IPreview']
+export type Binding = S['BindingOut']                         // D93 (A3): a linked subject and the reference images its mention gave
+export type ProfileAdded = S['ProfileAdded']                  // D93 (A2): Add to character ▸ — what moved, what was copied
 export type I2VPreview = S['I2VPreview']
 export type DocumentPreview = S['DocumentPreview']
 export type AnyPreview = T2IPreview | I2VPreview | DocumentPreview          // D64: /recipes/preview plans every kind

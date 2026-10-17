@@ -1,7 +1,7 @@
 // Catalogue commands (08 §3/§6, 07 §3c): one definition each; the grid keys, the strip icons, the inspector verbs
 // and the right-click menus (tile, grid, group header, loupe) all read from here. They act on whichever
 // catalogue store instance is on screen (the Catalogue itself or Generate's results).
-import { ArrowLeftRight, Wand2, Box, Check, Clapperboard, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftRight, Wand2, Box, Check, Clapperboard, ImageUp, ImagePlus, Inbox as InboxIcon, MapPin, Package, UserRound, ChevronLeft, Eraser, ImageUpscale, Orbit, ChevronRight, Circle, Columns2, Copy, Expand, GitBranch, ExternalLink, Film, FolderInput, FolderPlus, Image, Images, Inbox, Layers, ListTree, Pencil, Pin, PinOff, RotateCcw, Search, Shrink, Shuffle, SquareCheck, SquareX, Star, Tag, Trash, Undo, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { ApiError, http, unwrap } from '../../api/client'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { openWith } from '../../frame/openWith'
@@ -13,6 +13,8 @@ import { catView } from './viewKeys'
 import { allPlaced } from './placement'
 import type { JobOrigin } from '../../api/types'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
+import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
+import { profilesForMentions, useStory } from '../story/storyStore'
 
 export const GROUP_MODES: [GroupMode, string][] = [['batch', 'Batch'], ['lineage', 'Lineage'], ['session', 'Session'], ['model', 'Model'], ['none', 'None']]
 
@@ -107,6 +109,15 @@ registerCommands([
           if (p) { reg.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }
         }) },
   })),
+  // D93 (A2): "Add to character ▸" — the selection into a Cast profile's current version (the menu entry names the profile: castTarget)
+  ...([['hero', 'as the hero', ImageUp], ['reference', 'into the reference set', ImagePlus], ['candidate', 'as a candidate', InboxIcon]] as const).map(([role, how, icon]) => ({
+    id: `cat.addTo.${role}`, scope: 'catalogue' as const, label: `Add to character ${how}`, icon, placement: ['context', 'inspector'] as ['context', 'inspector'],
+    hint: role === 'hero' ? 'it joins the reference set as its cover' : role === 'candidate' ? 'onto the version\'s candidates page' : 'moved from Unprocessed or its candidates, copied from any other page',
+    when: () => { const p = castTarget.pid ? useStory.getState().profiles.find((x) => x.id === castTarget.pid) : undefined
+      const imgs = ids().filter((i) => cat().byId(i)?.kind === 'image')
+      return !!p && p.versions.find((v) => v.id === p.current)?.state === 'open' && imgs.length > 0 && imgs.length === ids().length && (role !== 'hero' || imgs.length === 1) && !inTrash() },
+    run: () => { const pid = castTarget.pid; const list = ids(); if (pid) void useStory.getState().addToProfile(pid, list, role) },
+  })),
   // P18 (D84): a 3D prop from the image — Pixal3D as a background job, its cost said before it is queued; the mesh lands in the Catalogue
   { id: 'cat.start.mesh', scope: 'catalogue', label: 'Make a 3D prop…', icon: Box, placement: ['inspector', 'context'],
     when: () => !!primary() && primary()!.kind === 'image' && !!useSession.getState().capabilities?.mesh?.model_id,
@@ -148,6 +159,9 @@ export function moveToMenu(): MenuItem {
   ] }
 }
 
+/** D93 (A2): "Add to character ▸" for the selection — the profiles the primary was made for first (its recipe's profile mentions). */
+export const addToCharacterMenu = () => addToCastMenu(profilesForMentions(), madeFor(primary()))
+
 /** D90 (01 §11.4): a clip's tile — Make a shot sits at the menu's top level and the image starts are left out. */
 const clipTile = () => primary()?.kind === 'video'
 /** Right-click on a tile (the tile has been made primary / selected by the caller). */
@@ -157,6 +171,7 @@ export function tileMenu(): MenuItem[] {
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.keep' }, { cmd: 'cat.reject' }, { cmd: 'cat.unstate' }, rateMenu(), { cmd: 'cat.tag' }, sep,
     { cmd: 'cat.reference' }, { cmd: 'cat.loadInGenerate' }, { cmd: 'cat.rerun' }, { cmd: 'cat.variations' }, { cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }, ...(clipTile() ? [{ cmd: 'cat.start.shot' }] : []), sep,
+    ...(clipTile() || inTrash() ? [] : [addToCharacterMenu()]),
     ...(clipTile() ? [] : [{ label: 'Start from this image', icon: Image, items: [{ cmd: 'cat.start.removeBg' }, { cmd: 'cat.start.upscale' }, { cmd: 'cat.start.angle' }, { cmd: 'cat.start.mesh' }, sep, { cmd: 'cat.start.character' }, { cmd: 'cat.start.place' }, { cmd: 'cat.start.prop' }] } as MenuItem, sep]),
     { cmd: 'cat.pin', label: cat().primary && cat().compare.includes(cat().primary!) ? 'Unpin' : 'Pin for compare' }, { cmd: 'cat.compare' }, sep,
     { cmd: 'cat.reveal' }, sep,

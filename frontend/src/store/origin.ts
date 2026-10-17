@@ -14,6 +14,8 @@ const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edi
 
 /** D90 (02 §5): `origin.surface` of a job made for a shot version (the server's `story.FOR_SHOT`). */
 export const FOR_SHOT = 'for_shot'
+/** D93 (A1): `origin.surface` of a casting run from Generate — its results land as a profile version's candidates (`payload.group_id`). */
+export const CAST = 'cast'
 export type Maker = 'generate' | 'animate'
 /** What a maker was opened for: a shot version (its name for the chip; the owner node when Make came from the Flow). */
 export interface MakeFor { kind: 'shot'; shot_id: string; version: string; name: string; node_id?: string | null }
@@ -41,6 +43,7 @@ export function storyPlace(o: Pick<Origin, 'suite' | 'surface' | 'ref' | 'payloa
   const p = o.payload ?? {}
   const ver = typeof p.version === 'string' ? p.version : null
   if (o.surface === FOR_SHOT) return typeof p.shot_id === 'string' ? { tab: 'shots', id: p.shot_id, version: ver } : null
+  if (o.surface === CAST && o.ref) return { tab: 'cast', id: o.ref, version: ver }                       // D93 (A1): a casting run from Generate → the profile's candidates
   if (o.suite !== 'story' || !o.ref) return null
   switch (o.surface) {
     case 'expand': case 'train': case 'lora_check': return { tab: 'cast', id: o.ref, version: ver }   // a profile version

@@ -48,7 +48,8 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   exposes the registry to the headed checks.
 - **Per-item commands (D90).** Commands take no arguments: a button on one item of a list (a take's ✓ use, a line's 🎙, a bin's +, a
   roster row's Fetch) sets the item first and runs the command (`storyItem` / `runOnItem` in `storyCommands.ts`, `binItem` in
-  `sequenceCommands.ts`, the selected model for `models.*`); the run clears it, so the palette never acts on a stale item.
+  `sequenceCommands.ts`, the selected model for `models.*`); the run clears it, so the palette never acts on a stale item. D93: a menu
+  entry does the same with `{ cmd, on }` — `on` wraps the command's `when` and `run` with its item set (`onProfile` in `story/addToCast.ts`).
 - **A modal owns its keys.** Every key hook skips targets inside `.modal`; a modal with commands of its own (Models & engine,
   `ModelsSheet.tsx`) takes the focus when it opens and dispatches its scope from its own `onKeyDown`.
 - **One transport (D90, 02 §8.2).** Animate, the Stage timeline and the Episode lane: Space play / pause, ← / → one frame, Shift+← / →

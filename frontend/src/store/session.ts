@@ -294,6 +294,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
     case 'group.changed':                                         // D34: placements moved; the tree, counts and open views follow
       void import('../suites/catalogue/albumStore').then((m) => void m.useAlbum.getState().load())
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onGroupChanged(((f.data as { ids?: string[] } | null)?.ids) ?? []))   // 17 SY1: a version's pages
+      void import('../suites/generate/generateStore').then((m) => m.mentionsMoved({ groups: ((f.data as { ids?: string[] } | null)?.ids) ?? [] }))   // D93: a mentioned set grew → the preview's references
       void import('../suites/catalogue/catalogueStore').then((m) => { for (const h of m.allCatalogueStores()) { const st = h.getState(); void st.refreshMeta(); if (st.q.folder === 'unprocessed' || st.q.group_id) void st.load({ keepSelection: true }) } })
       break
     case 'asset.created': case 'asset.updated': case 'asset.deleted':
@@ -312,6 +313,7 @@ export function applyEvent(f: EventFrame, set: (p: Partial<SessionState>) => voi
       break
     case 'story.changed':                                         // 17 (D85): the world (later profiles, shots, the flow) moved on the server
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onChanged(f.data as never))
+      void import('../suites/generate/generateStore').then((m) => { const d = f.data as { kind?: string; id?: string } | null; if (d?.kind === 'profile' && d.id) m.mentionsMoved({ profile: d.id }) })   // D93: a linked character got a hero
       break
     case 'lora.changed':                                          // 18 (D86) LT2: a LoRA trained or deleted — the registry and the versions' slots moved
       void import('../suites/story/storyStore').then((m) => m.useStory.getState().onLoraChanged(f.data as never))

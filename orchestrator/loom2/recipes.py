@@ -62,7 +62,8 @@ class Mention(BaseModel):
     version: str | None = None
     lora: str | None = None                       # LT3 (18 §3f): the version's LoRA the mention added to the slots (stamped)
     lora_available: str | None = None             # LT3: the version's LoRA whether or not it was added (the chip's on / off)
-    subject: int | None = Field(None, ge=0)       # D92: the Tree prompt's subject card linked to this profile (its index) — the link comes back with the recipe
+    subject: int | None = Field(None, ge=0)       # D92: the Tree prompt's subject card linked to this profile (its index in prompt_json.subjects) — the link comes back with the recipe
+    skipped: int | None = None                    # D93 (A3): the set's images left out for the model's room (stamped; the preview says so)
 
 
 class T2I(BaseModel):
@@ -96,6 +97,7 @@ class T2I(BaseModel):
     ref_max_px: int = 1024                        # references are downscaled to fit this square by default
     mentions: list[Mention] = Field(default_factory=list)   # D73: @mentioned groups ("@hero walks into @tavern")
     auto_lora: bool = True                        # LT3 (18 §3f): a profile mention adds its version's LoRA + trigger when the model takes it; off = this prompt without
+    bind_refs: bool | None = None                 # D93 (A3): each linked subject names its own reference images in the prompt; None = the model's spec (inputs.bind_refs)
     style_id: str | None = None                   # D85: the Story world's style this generation carries (one; None = no style)
     style_text: str | None = None                 # D85: its fragment, stamped at submit by story.resolve_style and appended after the prompt; None = unresolved
     tier: str | None = None

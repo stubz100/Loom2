@@ -104,6 +104,7 @@ class RefsSuggest(Strict):
 class Inputs(Strict):
     refs_max: int = 0
     refs_suggest: RefsSuggest | None = None
+    bind_refs: bool = False                        # D93 (A3): the prompt binds each linked subject to its reference images ("Mara (reference images 1–3)")
 
 
 class SamplePx(Strict):

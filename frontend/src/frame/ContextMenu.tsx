@@ -41,7 +41,8 @@ function resolve(it: MenuItem): Resolved | null {
     const c = command(it.cmd)
     if (!c) return null
     markUsed(c.id)
-    return { kind: 'item', label: it.label ?? c.label, icon: c.icon, keys: c.keys, run: c.run, disabled: !isEnabled(c), danger: c.danger, checked: it.checked }
+    const on = it.on ?? (<T,>(f: () => T) => f())                      // D93 (A2): a per-item entry sets its item around `when` and `run`
+    return { kind: 'item', label: it.label ?? c.label, icon: c.icon, keys: c.keys, run: () => on(c.run), disabled: !on(() => isEnabled(c)), danger: c.danger, checked: it.checked }
   }
   return { kind: 'item', label: it.label, icon: it.icon, keys: it.keys, run: it.run, disabled: !!it.disabled, danger: it.danger, checked: it.checked }
 }

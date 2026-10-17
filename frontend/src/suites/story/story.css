@@ -93,7 +93,7 @@
 .cov-grid td.thin { color: var(--fg3); background: color-mix(in srgb, var(--warn, #c7a23a) 12%, transparent); }
 .cov-grid td.one { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .cov-grid td.full { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--fg); }
-.cand-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.story-cands { display: flex; flex-wrap: wrap; gap: 8px; }   /* D93: its own name — Edit's .cand-strip is absolute (edit.css) and leaked over the Cast header once Edit had loaded */
 .cand-card { position: relative; width: 132px; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: var(--bg1); cursor: pointer; }
 .cand-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .cand-card .cell { display: block; padding: 2px 6px; font-size: 10px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,7 +1,7 @@
 // Generate suite (09; D90 02 §6): one scrolling Panel column (GenerateColumn.tsx — saved panels, prompt, references, look, camera, model,
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
-import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, RotateCcw, RotateCw, SlidersHorizontal, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownFromLine, Boxes, Bookmark, Camera, HardDriveDownload, Images, Orbit, Palette, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
@@ -12,8 +12,9 @@ import { askText, useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
-import { batchOf, modelPatch, submitBlock, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
-import { useStory } from '../story/storyStore'
+import { batchOf, modelPatch, subjectItem, submitBlock, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { castOffer } from './subjectCast'
+import { profilesForMentions, useStory } from '../story/storyStore'
 import { useLibrary } from '../story/libraryStore'
 import './generate.css'
 
@@ -129,6 +130,11 @@ registerCommands([
   { id: 'gen.savePreset', scope: 'generate', label: 'Save panel preset…', icon: Bookmark, keys: 'Ctrl+S', placement: ['panel'], run: () => { const g = useGenerate.getState(); void askText({ title: 'Save panel preset', text: 'Saves every field of the panel under this name; an existing preset of the same name is replaced.', initial: g.lastPreset ?? '', placeholder: 'preset name' }).then((n) => { if (n) void g.savePreset(n) }) } },
   // D90 (01 §11.2): the Foot's Fetch — Models & engine on the missing weights of the model picked
   { id: 'gen.fetchMissing', scope: 'generate', label: 'Fetch the missing weights…', icon: HardDriveDownload, placement: ['panel'], when: () => (useGenerate.getState().preview?.missing.length ?? 0) > 0, run: () => useSession.getState().openModels({ missing: true }) },
+  // D93 (A1): a linked subject card's casting run — "Give <name> a look" / "More looks for <name>" (the card's button sets the card first)
+  { id: 'gen.subject.cast', scope: 'generate', label: 'Give the character a look', icon: Sparkles, placement: ['panel'], hint: "the panel's images land as the linked character's candidates in Story · Cast",
+    when: () => { const i = subjectItem.i, g = useGenerate.getState(); const pid = i !== undefined ? g.panel.tree.subjects?.[i]?.profile_id : undefined
+      const o = pid ? castOffer(profilesForMentions().find((p) => p.id === pid)) : null; return !!o && !o.disabled && g.panel.prompt_mode === 'tree' && !!useSession.getState().project?.open },
+    run: () => { const i = subjectItem.i; if (i !== undefined) void useGenerate.getState().castLook(i) } },
   { id: 'gen.clearRefs', scope: 'generate', label: 'Clear references', icon: Images, placement: ['context', 'panel'], when: () => useGenerate.getState().panel.refs.length > 0, run: () => { const g = useGenerate.getState(); [...g.panel.refs].forEach((r) => g.removeRef(r.asset_id)) } },
 ])
 

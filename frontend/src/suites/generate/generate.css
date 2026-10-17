@@ -121,3 +121,12 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; }
 .subject .head .linked-to img, .subject .head .linked-to .glyph { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
 .subject .head .linked-to button { margin-left: 2px; min-height: 0; padding: 0 4px; font-size: 11px; }
 .subject > .preset-icons { grid-column: 1 / -1; }
+/* D93 (A1, A3, A9): a linked subject's slots in the prompt, its casting run, and what its description lacks */
+.subject .head .subject-slots { font-size: 11px; color: var(--fg2); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+.subject .head .subject-slots.cut { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.subject .subject-cast-row { grid-column: 1 / -1; display: flex; }
+.subject .subject-cast-row button { display: inline-flex; align-items: center; gap: 4px; margin-left: 0; }
+.subject-warn { color: var(--warn); font-size: 11px; margin: 2px 0 0; }
+.subject-warn.ask { color: var(--error); }
+.preview-bindings { margin: 6px 0 0; padding-left: 16px; font-size: 11px; color: var(--fg2); }
+.preview-bindings .muted { color: var(--fg3); }

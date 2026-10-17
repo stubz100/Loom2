@@ -4758,3 +4758,20 @@ split by file so that no two hands touched the same module.
   the figures' turn; the shadows from Klein rendering the room and the people together. → **D94**; the layers route stays the documented
   fallback. Weak points to work on: costume drift in the still (Ines's olive jacket in 2/3), the listener's action fading, the background
   breathing.
+
+## 2026-10-17 20:55 — Spike E22 started · complex action for both characters: one shared clip vs layers
+
+- The author, after D94: E21's actions were small (one talks, one stands), the easy case for one shared clip. E22 gives **both
+  characters a complex, different action at the same time** and compares **(a)** one Stage still (figures bound and turned towards
+  each other, Clay reference) animated once with both actions in one prompt, against **(b)** layers — the same blocking, each character
+  put into its own copy of the plate *facing as blocked* (E21's line-up fixed), animated alone with its own action, then stacked over the
+  plate with a plain alpha (no colour matching, no shadow work, no video pass — "we can refine that later"). Measured: does each character
+  do *its* action (motion and path per character, by eye on sheets), identity per character, swaps, time per shot. D94 stands until E22
+  says otherwise.
+
+## 2026-10-17 21:22 — SAM 3 verified against the Hub
+
+- The author's request for `facebook/sam3` was granted. `sam3.pt` on F: (3 450 062 241 bytes) has the Hub's LFS sha256
+  `9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e` — the ledger's hash recorded at 16:18 without a comparison now carries
+  `hf_sha256` / `hf_match: true` like the other sixteen. Every roster file on disk is now verified against its source except the two with
+  no repo in the roster (flux2-small-decoder, flux2-turbo-lora). Ledger backup in the session scratchpad. The token needed nothing new.

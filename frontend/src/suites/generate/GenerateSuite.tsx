@@ -12,18 +12,38 @@ import { askText, useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
-import { batchOf, modelPatch, subjectItem, submitBlock, useGenerate, type Panel as PanelState, type Subject } from './generateStore'
+import { batchOf, modelPatch, subjectItem, submitBlock, useGenerate, withoutForeignLinks, type Panel as PanelState, type Subject } from './generateStore'
+import { http, unwrap } from '../../api/client'
 import { castOffer } from './subjectCast'
 import { versionOf } from './sheet'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useLibrary } from '../story/libraryStore'
 import './generate.css'
 
+/** D93: drop the panel's links to profiles / groups the open project lacks (it is remembered across projects), with a toast. */
+async function pruneForeignLinks(): Promise<void> {
+  try {
+    const [profiles, tree] = await Promise.all([unwrap(http.GET('/story/profiles')), unwrap(http.GET('/groups/tree'))])
+    const groups = new Set<string>()
+    const walk = (n: { id: string; children: unknown[] }) => { groups.add(n.id); for (const c of n.children as { id: string; children: unknown[] }[]) walk(c) }
+    walk(tree)
+    const g = useGenerate.getState()
+    const { patch, dropped } = withoutForeignLinks(g.panel, new Set(profiles.items.map((x) => x.id)), groups)
+    if (!dropped) return
+    g.set(patch)
+    useSession.getState().toast(`${dropped} link${dropped === 1 ? '' : 's'} from another project removed from Generate — the words stay`, 'info')
+  } catch { /* no project or the server is busy: the preview says what is wrong */ }
+}
+
 function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities)
   const refresh = useGenerate((g) => g.refreshPreview)
-  useEffect(() => { if (project?.open) { void refresh(); void useLibrary.getState().load(); void useStory.getState().load() } }, [project?.path, refresh])   // D92: the tiles are the World library's; D85: the Style picker needs the world
+  useEffect(() => {
+    if (!project?.open) return
+    void refresh(); void useLibrary.getState().load(); void useStory.getState().load()
+    void pruneForeignLinks()                                                // D93: links remembered from another project
+  }, [project?.path, refresh])   // D92: the tiles are the World library's; D85: the Style picker needs the world
   // C3 (D26) / D65: no model yet, or a persisted one this build does not offer (dev under `open`) → the variant's t2i default, else the first listed
   useEffect(() => {
     const g = useGenerate.getState()

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Capabilities } from '../../api/types'
 import { useSession } from '../../store/session'
 import type { Job } from '../../api/types'
-import { cleanTree, DEFAULT_PANEL, latestResult, panelFromRecipe, recipeFromPanel, treeFromJson, type Panel, type Tree } from './generateStore'
+import { cleanTree, DEFAULT_PANEL, latestResult, panelFromRecipe, recipeFromPanel, treeFromJson, withoutForeignLinks, type Panel, type Tree } from './generateStore'
 
 const CAPS = {
   defaults: { t2i: 'fixture-turbo' },
@@ -232,5 +232,21 @@ describe('D93 (A3) the linked subject the server reads', () => {
     expect((r.prompt_json as { subjects: unknown[] }).subjects).toEqual([{}])                    // D93 (B4): a linked card sends no words — the server composes its sheet
     expect(r.mentions).toEqual([{ group_id: 'grp_m', name: 'Mara', profile_id: 'prf_m', subject: 0 }])
     expect(panelFromRecipe(r as unknown as Record<string, unknown>).tree?.subjects?.[0].profile_id).toBe('prf_m')
+  })
+})
+
+describe('withoutForeignLinks (D93)', () => {
+  it('drops links to profiles and groups the open project lacks, keeping the words', () => {
+    const p: Panel = { ...DEFAULT_PANEL, prompt_mode: 'tree', tree: {
+      scene_link: { profile_id: 'prf_gone_place', note: 'rain at dusk' },
+      subjects: [{ description: '', profile_id: 'prf_gone', shot_note: 'soaked, hood up', holds: { profile_id: 'prf_here_prop' } }, { description: 'a dog', profile_id: 'prf_here' }],
+    }, mentions: [{ group_id: 'g1', name: 'Gone', profile_id: 'prf_gone' }, { group_id: 'g2', name: 'Here', profile_id: 'prf_here' }, { group_id: 'g_album_gone', name: 'Harbour' }, { group_id: 'g_album', name: 'Docks' }] }
+    const { patch, dropped } = withoutForeignLinks(p, new Set(['prf_here', 'prf_here_prop']), new Set(['g_album', 'g2']))
+    expect(dropped).toBe(3)                                                   // prf_gone, prf_gone_place, g_album_gone
+    expect(patch.tree.subjects?.[0]).toMatchObject({ profile_id: undefined, description: 'soaked, hood up', holds: { profile_id: 'prf_here_prop' } })
+    expect(patch.tree.subjects?.[1].profile_id).toBe('prf_here')
+    expect(patch.tree).toMatchObject({ scene: 'rain at dusk', scene_link: undefined })
+    expect(patch.mentions?.map((m) => m.name)).toEqual(['Here', 'Docks'])
+    expect(withoutForeignLinks(p, new Set(['prf_gone', 'prf_gone_place', 'prf_here', 'prf_here_prop'])).dropped).toBe(0)   // nothing foreign
   })
 })

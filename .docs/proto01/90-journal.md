@@ -4512,3 +4512,12 @@ split by file so that no two hands touched the same module.
   with a bound figure on the rig (one image, unmeasured); a version pin for a speaker on the Flow node itself (only the stage's figure pins
   one today); links to profiles of another project stay in a persisted panel after a project switch (pre-existing since D92: the preview
   says "mentioned profile … does not exist" until the card is unlinked).
+
+## 2026-10-17 15:28 — D93 follow-up · Generate drops links remembered from another project
+
+- Phase C's report named a gap open since D92: Generate's panel is remembered across projects, so a subject / held prop / scene linked to
+  another project's Cast profile — or an @mention of another project's album group — stayed in the panel and the preview refused
+  ("mentioned profile … does not exist") until the card was unlinked by hand. Now, when Generate opens a project, `withoutForeignLinks`
+  drops every link the project lacks (a card keeps its words: its "this shot" line joins the description; the scene keeps its line) and a
+  toast says how many. Vitest 324 (+1), smoke 36 / 36 under full and open (the @mentions scenario failed once under `open` in a full run
+  and passed alone 4 / 4 and in the next full run — its known flakiness, D89; the cleanup writes nothing when nothing is foreign).

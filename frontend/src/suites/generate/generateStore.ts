@@ -322,6 +322,24 @@ export function latestResult(jobs: Record<string, Job>): string | null {
   return j ? ids(j)[0] : null
 }
 /** D93 (B4): a linked card's description as the server will compose it (from the Story store's copy of the profile) — JSON mode bakes it in. */
+/** D93: drop the links to Cast profiles and album groups the open project does not have — a panel remembered from another project
+ *  would otherwise block the preview ("mentioned profile … does not exist"). A card keeps its words (its "this shot" line joins the
+ *  description), the scene keeps its line; the count is of distinct profiles / groups dropped. */
+export function withoutForeignLinks(p: Panel, profiles: ReadonlySet<string>, groups?: ReadonlySet<string>): { patch: Pick<Panel, 'tree' | 'mentions'>; dropped: number } {
+  const gone = new Set<string>()
+  const foreign = (id?: string) => !!id && !profiles.has(id) && (gone.add(id), true)
+  const subjects = (p.tree.subjects ?? []).map((s) => {
+    let out = s
+    if (foreign(s.profile_id)) out = { ...out, profile_id: undefined, version: undefined, shot_outfit: undefined, shot_note: undefined, description: [s.description, s.shot_note].map((x) => x?.trim()).filter(Boolean).join(', ') }
+    if (out.holds && foreign(out.holds.profile_id)) out = { ...out, holds: undefined }
+    return out
+  })
+  let tree: Tree = p.tree.subjects ? { ...p.tree, subjects } : { ...p.tree }
+  if (tree.scene_link && foreign(tree.scene_link.profile_id)) tree = { ...tree, scene: tree.scene_link.note ?? '', scene_link: undefined }
+  const mentions = (p.mentions ?? []).filter((m) => (m.profile_id ? !foreign(m.profile_id) : !(groups && !groups.has(m.group_id) && (gone.add(m.group_id), true))))
+  return { patch: { tree, mentions }, dropped: gone.size }
+}
+
 export function linkedWords(s: Subject, profiles: Profile[] = profilesNow()): string | null {
   const p = s.profile_id ? profiles.find((x) => x.id === s.profile_id) : undefined
   return p ? composeSheet(versionOf(p, s.version), { outfit: s.shot_outfit, note: s.shot_note }, p.name, p.cls) : null

@@ -4775,3 +4775,15 @@ split by file so that no two hands touched the same module.
   `9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e` — the ledger's hash recorded at 16:18 without a comparison now carries
   `hf_sha256` / `hf_match: true` like the other sixteen. Every roster file on disk is now verified against its source except the two with
   no repo in the roster (flux2-small-decoder, flux2-turbo-lora). Ledger backup in the session scratchpad. The token needed nothing new.
+
+## 2026-10-17 22:17 — proto01_animate · the clay-animation idea documented for the author's review
+
+- The author proposed animating each character from Stage's clay animation through Wan Animate, layer by layer, in 77-frame batches,
+  then post-processing (a v2v pass or per-frame i2i) — and asked for a review and a document before building. Written:
+  `.docs/proto01_animate/00-README.md`, `01-clay-animation.md` (the eight steps reviewed: the background generated *from* the Stage set,
+  not apart from it; an animation reference per Cast version; motion presets as the real bottleneck; **Wan Animate has no end-frame input**
+  — batches chain through `continue_motion` (the pinned `WanAnimateToVideo` node: reference, pose, face video, background video +
+  character mask, continue_motion); **16 fps model frames vs the 24 fps Stage timeline** — 77 frames = 4.8 s ≈ 115 Stage frames, stride
+  72 with a 5-frame overlap; Move vs Replace mode; the post-processing options against E21's v2v result and the per-frame-i2i flicker
+  risk) and `02-implementation-plan.md` (spikes E23 core pipeline and E24 post-processing with bars, a decision gate, waves CA1–CA8 ≈
+  22–25 days). Open questions for the author in 01 §7. Nothing decided; E22 still running.

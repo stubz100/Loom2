@@ -4683,3 +4683,68 @@ split by file so that no two hands touched the same module.
 - **D93's row amended** (decision log): the binding is off by default on FLUX.2 dev, on for Klein; the exact-pose limit.
 - **Owed:** FLUX.2 dev ran at 290–560 s per image in the 18:03 run (its usual 66–110 s) — the engine reloaded every model per job under
   "RAM pressure cache" with the GPU idle; to be looked at on its own.
+
+## 2026-10-17 18:55 — Spike E21 started · two characters in one animated shot by layers
+
+- The author: the goal is animation, not images; each character animates well alone, none of our models animates two characters from
+  one prompt — "generate each part of the image separately … then merge it, and perhaps sync the lights and shadows with i2i". Agreed
+  with one change: keep the characters apart *through* the animation (a merged still is as hard to animate as a generated pair). E21
+  compares, on one static-camera two-character dialogue shot blocked in Stage (Mara and Ines, scratch project): **(a)** one composite still
+  → one image-to-video clip; **(b)** layers — a plate from the set without figures, each character inpainted into its own copy of the plate
+  at its figure's mask / pose with its references, each copy animated alone, merged over the steady plate by the difference to the plate
+  (character + its shadow) cleaned by its mask, depth order from Stage; **(b2)** (b) plus a light video-to-video pass to unify the light.
+  Measured: identity per character (FaceSim per frame vs a single-character clip), swaps, seam visibility, background flicker, time per
+  shot, peak VRAM. The result decides a D-number; nothing is built into the app before it.
+
+## 2026-10-17 20:26 — Spike E21 result · two characters by layers: it works, (a) stays the default, layers as the fallback, no v2v
+
+- **Setup** (`engine/spikes/e21_passes.mjs`, `e21_layers.py run|score`, `e21_score.py`; outputs `engine/spikes/out/e21/`, local). A
+  static two-shot blocked on the E10 page (the `room` set, camera (0, 1.05, 4.3) fov 30°, Mara `stand` at x −1, Ines `arms_crossed` at
+  x +1); scratch copy of D93 C's project → `F:\loom2-projects\e21-layers-20261017-190731` (+ `_state-…`), a private orchestrator; seeds
+  20261017–19. Every clip is Wan 2.2 I2V Draft through the app (832×480, 81 f @ 16 fps, Lightning 2 + 2).
+  **(a)** Stage clay (Klein 9B) with both figures bound with ranges → one I2V clip with both actions in the prompt.
+  **(b)** plate = clay on the empty set's pass (seed 1 drew a man, seed 2 empty, picked by a face check) → each character into its own
+  copy (the plate with that figure's mannequin as image 1, hero + first look as images 2–3, Klein 9B Fill-Match from `build_inpaint`
+  with the references chained on as `build_t2i` does — the app's inpaint takes no references; mask = silhouette + 24 px + a shadow
+  ellipse under the feet) → each copy animated alone (one-character prompt) → per-frame SAM 3 masks → numpy merge over the steady plate
+  (colour lock on a ring, alpha = max(SAM, difference to the plate inside SAM ∪ silhouette ∪ shadow zone), ≈ 5 px feather).
+  **(b2)** (b) + Wan low-noise expert + Lightning low over the VAE-encoded merged clip from σ 0.3 (shift 1, denoise 0.3), conditioned on
+  the merged first frame — core nodes. **(banim)** (b) with Mara by Wan Animate (E19's graph) on a pose sequence drawn from the Stage
+  keypoints (stand → point, two beats), 2 seeds.
+
+  | arm | Mara own (min) | Ines own (min) | swaps | bg flicker | seam grad ratio | band step | shadow kept | s / shot |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | (a) | 0.203 (0.083) | 0.257 (0.143) | 0 | 1.67 | — | — | — | 311–333 |
+  | **(b)** | **0.246** (0.129) | **0.313** (0.216) | 0 | **0.00** | 0.93–0.95 | 4.2–4.8 | 0.83–0.91 | 577–692 |
+  | (b2) | 0.197 (0.101) | 0.270 (0.188) | 0 | 0.94 | 0.92–0.95 | 5.0–6.3 | 0.89–1.02 | 877–956 |
+  | (banim) | 0.204 (0.126) | 0.300 (0.216) | 0 | 0.00 | 0.93–0.95 | 4.2–5.9 | 0.80–0.90 | 735–742 |
+  | ceiling: each layer alone | 0.245 (0.127) | 0.309 (0.211) | — | 1.0–2.0 | — | — | — | — |
+
+  FaceSim on every 8th frame vs the hero (faces ≈ 40 px: advisory, and frontal faces score higher, which favours (b)); seam = luminance
+  gradient in the 0.05–0.95 alpha band of the merged clip ÷ the same pixels in the layer clip, band step = |merged − layer| there (0–255);
+  flicker = temporal luminance std over the background outside every figure / mask / shadow zone; shadow kept = darkened share of the
+  feet ellipse, merged ÷ layer clip. Steps: clay still 69–78 s (10.9–11.8 GB), plate 11–19 s, copy 16 s warm (53–79 cold, ≤ 12.3 GB), Wan
+  I2V 232–264 s (12.7 GB), Animate 285–326 s (13.5 GB), SAM 3 masks 17–21 s (1.8 GB), merge 16 s CPU, v2v 239–307 s (13.2 GB). No OOM.
+- **What it showed.** (a) held both identities on this shot (3 / 3, no swap). The two face each other, so the eye lines read as a
+  conversation, but the action split is loose: Mara's gesture fades after 1–2 s in 2 / 3 seeds, the nod is barely visible, and the
+  background breathes. The stills are the risk (Ines in olive instead of yellow in 2 / 3). (b) equals each character's own clip
+  (±0.004), with no swap, a steady background, seams invisible at Draft, each action controlled by its own prompt, and one character
+  can be re-taken alone. **But** both characters stand frontal and look at the camera (each layer knows nothing of the other — a
+  line-up, not a conversation). The shadows are round blobs the mask ellipse allowed, not cast from the window light. The plate kept two
+  set blocks as grey clay. And it takes twice the GPU time. (b2): σ 0.3 changes nothing visible, costs 4–5 min, brings the flicker
+  back and lowers FaceSim by ≈ 0.05 — the shared plate already gives every layer the same light. (banim): it follows the drawn pose (it
+  even turns Mara towards Ines), but the gestures are smaller than I2V's and FaceSim is lower (0.204 vs 0.251 on the same seeds).
+- **SAM 3 video tracking is in v0.39.0 but fails with our `sam3.pt`:** `SAM3_VideoTrack` crashes ("can't assign a tuple to a
+  torch.HalfTensor" — `SAM3Tracker.track_video` returns a tensor where the node expects a dict; it looks written for SAM 3.1 multiplex
+  weights). The fallback, `SAM3_Detect` on every frame with one box around the figure's area (AI Select's box path), followed the
+  gesturing hands cleanly. No node added, no engine patch.
+- **Recommendation (for the D-number):** keep (a) as the default for a static two-shot with the characters apart. Build (b) without the
+  v2v pass as the tool for when (a) fails, or when each character's action must be controlled or re-taken. The app would need
+  references on the inpaint graph, a plate render (the Stage camera with the figures hidden), per-frame SAM 3 box masks (VideoTrack once
+  it works with our weights), the compositor (≈ 16 s of CPU per shot), the figure's facing written into the copy prompt (the eye line),
+  and a shadow shaped by the light rather than an ellipse. Not v2v. Animate only when the blocking must be exact.
+- **Not done:** no nod metric (no head pose); (a)'s room is a different generation from (b)'s plate, so there is no shadow number for
+  (a); 3 seeds (Animate 2). The engine/spikes/out/e21/report.md the brief asked for was not written (the tables are here and in
+  `results.jsonl`). Files: `engine/spikes/e21_passes.mjs`, `e21_layers.py`, `e21_score.py` (new, not committed); outputs: `sheet_a.jpg`,
+  `sheet_b.jpg`, `sheet_b2.jpg`, `sheet_banim.jpg`, `a_|b_|b2_|banim_|layerMara_|layerInes_seedN.mp4`, `compare.mp4` (seed 20261017),
+  `results.jsonl`, `state.json` (local, ≈ 0.9 GB with the frames).

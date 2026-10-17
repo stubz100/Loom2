@@ -4748,3 +4748,13 @@ split by file so that no two hands touched the same module.
   `results.jsonl`). Files: `engine/spikes/e21_passes.mjs`, `e21_layers.py`, `e21_score.py` (new, not committed); outputs: `sheet_a.jpg`,
   `sheet_b.jpg`, `sheet_b2.jpg`, `sheet_banim.jpg`, `a_|b_|b2_|banim_|layerMara_|layerInes_seedN.mp4`, `compare.mp4` (seed 20261017),
   `results.jsonl`, `state.json` (local, ≈ 0.9 GB with the frames).
+
+## 2026-10-17 20:40 — D94 · two-character shots are one Stage still, animated once (E21 arm a)
+
+- The author watched E21's `compare.mp4` and chose arm (a): "the characters are facing each other and the shadows are also pretty accurate
+  (they are not blobs). That should be our way forward." How it was made: Stage blocking (room, fixed camera 1280×720 fov 30°, Mara at x −1
+  turned +35°, Ines at x +1 turned −35°, both bound to their characters, D93 C) → Render frame by Clay reference on Klein 9B with the
+  references bound per figure → Wan 2.2 I2V Draft (832×480, 81 frames, Lightning) with a prompt naming both actions. The facing came from
+  the figures' turn; the shadows from Klein rendering the room and the people together. → **D94**; the layers route stays the documented
+  fallback. Weak points to work on: costume drift in the still (Ines's olive jacket in 2/3), the listener's action fading, the background
+  breathing.

@@ -94,3 +94,6 @@
 .shot-tab .ref-slot .fig-badge { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--bg0) 75%, transparent); color: var(--fg); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shot-tab .figure-lines { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--fg2); }
 .shot-tab .figure-lines .muted { color: var(--fg3); }
+
+/* journal 2026-10-17 18:03: a figure the method has no reference room for */
+.figure-lines li.warn { color: var(--warn); }

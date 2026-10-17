@@ -331,7 +331,7 @@
   "problems": [],
   "summary": {
    "base_shift": null,
-   "bind_refs": true,
+   "bind_refs": false,
    "bindings": [],
    "cfg": 1.0,
    "distilled": false,
@@ -368,7 +368,7 @@
   "problems": [],
   "summary": {
    "base_shift": null,
-   "bind_refs": true,
+   "bind_refs": false,
    "bindings": [],
    "cfg": 1.0,
    "distilled": false,

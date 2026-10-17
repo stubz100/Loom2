@@ -16,6 +16,11 @@ sum beats its own. Reported per arm: mean own / cross, margin, right / swapped c
 
   orchestrator/.venv/Scripts/python.exe scripts/d93c_stage_rig.py [--source F:/loom2-projects/d93-bind-20261017-131210] [--seeds 6]
 Writes engine/spikes/out/d93c/sheet.jpg and appends a JSON line to engine/spikes/out/d93c/runs.jsonl.
+
+The exact-pose method (`--method refcontrol --sheet sheet_refcontrol.jpg`; Klein base 9B + the RefControl pose LoRA, the pose pass as
+image 1): it takes one reference (`max_refs` 1), so the binding fits figure 1's first image only (image 2) and figure 2 is said by its
+words. `none` there needs a reference too (the method refuses none) — Mara's hero in the deck, as the Render tab took it before C8.
+Per side (left = Mara, right = Ines) the mean own / cross is reported as well.
 """
 from __future__ import annotations
 
@@ -51,10 +56,13 @@ def main() -> int:
     ap.add_argument("--engine-port", type=int, default=8188)
     ap.add_argument("--seeds", type=int, default=6)
     ap.add_argument("--arms", default="none,off,on")
+    ap.add_argument("--method", default="", help="a Stage method (caps.stage.methods); default: the first that takes ≥ 2 references (clay)")
+    ap.add_argument("--sheet", default="sheet.jpg")
     a = ap.parse_args()
     arms_run = [x for x in a.arms.split(",") if x]
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    state, project = Path(a.projects) / f"_state-d93c-{stamp}", Path(a.projects) / f"d93c-stage-{stamp}"
+    tag = f"d93c-stage-{a.method}-{stamp}" if a.method else f"d93c-stage-{stamp}"
+    state, project = Path(a.projects) / f"_state-{tag}", Path(a.projects) / tag
     if port_busy(a.engine_port):
         print("engine port busy — stop the running engine first"); return 2
     shutil.copytree(a.source, project)                                                   # a scratch copy: phase A's project stays as it was
@@ -76,7 +84,8 @@ def main() -> int:
         for p in (mara, ines):
             heroes.append(image_of(o, p["versions"][0]["hero_asset_id"]))
         caps = o.http.get("/capabilities").json()["stage"]["methods"]   # type: ignore[union-attr]
-        method = next(m for m, c in caps.items() if (c.get("max_refs") or 0) >= 2 and c.get("health") != "missing")
+        method = a.method or next(m for m, c in caps.items() if (c.get("max_refs") or 0) >= 2 and c.get("health") != "missing")
+        check(f"{method}: weights {caps[method].get('health')}", caps[method].get("health") in ("present", "verified"), json.dumps(caps[method].get("missing")))
         check(f"the method that takes references: {method} ({caps[method]['model_id']}, {caps[method]['max_refs']} references)", True)
         st = o.http.post("/stages", json={"name": "D93 C8"}).json()   # type: ignore[union-attr]
         doc = {**st, "objects": [{"id": "fig_left", "kind": "mannequin", "name": "Figure 1", "preset": "adult", "transform": {"pos": [-1.2, 0, 0], "rot": [0, 0, 0], "scale": [1, 1, 1]},
@@ -104,15 +113,22 @@ def main() -> int:
         figures = [{"profile_id": mara["id"], "figure": "fig_left"}, {"profile_id": ines["id"], "figure": "fig_right"}]
         words = "From left to right in image 1: figure 1 is Mara, a courier; figure 2 is Ines, a lighthouse keeper."
         base = {"kind": "stage_shot", "stage_id": st["id"], "camera_id": "cam_1", "passes": passes, "method": method, "width": W, "height": H}
-        recipes = {"none": {**base, "prompt_text": f"{words} {SCENE}"},
+        room = int(caps[method]["max_refs"])
+        deck = [{"asset_id": mara["versions"][0]["hero_asset_id"]}] if room == 1 else []   # exact pose refuses no reference: none takes Mara's hero
+        recipes = {"none": {**base, "prompt_text": f"{words} {SCENE}", "refs": deck},
                    "off": {**base, "prompt_text": SCENE, "mentions": figures, "bind_refs": False},
                    "on": {**base, "prompt_text": SCENE, "mentions": figures, "bind_refs": True}}
         for arm in arms_run:
             pv = o.http.post("/recipes/preview", json={"recipe": recipes[arm]}).json()   # type: ignore[union-attr]
             prompts[arm] = pv["params"]["prompt"]
-            if arm == "on":
+            if arm == "on" and room == 1:
+                check("on: figure 1 names its one image, figure 2 its words", "figure 1 is Mara (reference image 2)" in prompts[arm] and "figure 2 is Ines, " in prompts[arm], prompts[arm][-260:])
+                check("on: the one slot is figure 1's", [x.get("figure") for x in pv["params"]["ref_list"]] == [1], json.dumps(pv["params"]["ref_list"]))
+            elif arm == "on":
                 check("on: each figure names its range", "figure 1 is Mara (reference images 2–3)" in prompts[arm] and "figure 2 is Ines (reference image 4)" in prompts[arm], prompts[arm][-260:])
                 check("on: the deck says which slots are a figure's", [x["figure"] for x in pv["params"]["ref_list"]] == [1, 1, 2], json.dumps(pv["params"]["ref_list"]))
+            elif arm == "off" and room == 1:
+                check("off: no range (exact pose says no per-image sentence)", "(reference image" not in prompts[arm] and "figure 1 is Mara" in prompts[arm], prompts[arm][-260:])
             elif arm == "off":
                 check("off: D73's sentences, no range", "Image 2 shows Mara" in prompts[arm] and "(reference image" not in prompts[arm])
             for seed in seeds:
@@ -137,9 +153,11 @@ def main() -> int:
         m = [r for r in rs if "own" in r]
         own = [x for r in m for x in r["own"]]
         cross = [x for r in m for x in r["cross"]]
+        side = lambda key, k: round(float(np.mean([r[key][k] for r in m])), 3) if m else None  # noqa: E731
         return {"n": len(rs), "two_faces": len(m), "own_mean": round(float(np.mean(own)), 3) if own else None, "cross_mean": round(float(np.mean(cross)), 3) if cross else None,
                 "margin": round(float(np.mean(own) - np.mean(cross)), 3) if own else None, "right": sum(1 for r in m if r["right"]), "swapped": sum(1 for r in m if r["swapped"]),
-                "per_seed": [{k: v for k, v in r.items() if k != "image"} for r in rs]}
+                "own_left": side("own", 0), "cross_left": side("cross", 0), "own_right": side("own", 1), "cross_right": side("cross", 1),
+                "faces": [r["faces"] for r in rs], "per_seed": [{k: v for k, v in r.items() if k != "image"} for r in rs]}
 
     res = {arm: summary(rs) for arm, rs in rows.items()}
     th = 180
@@ -149,21 +167,22 @@ def main() -> int:
     d = ImageDraw.Draw(sheet)
     for k, im in enumerate(heroes):
         sheet.paste(im.resize((th, th)), (8 + k * (th + 8), 26)); d.text((8 + k * (th + 8), 8), f"hero · {('Mara', 'Ines')[k]}", fill=(220, 220, 220))
-    clay = Image.open(PASSES / "clay.png").convert("RGB")
-    sheet.paste(clay.resize((tw, th)), (8 + 2 * (th + 8), 26)); d.text((8 + 2 * (th + 8), 8), "clay pass · figure 1 left, figure 2 right", fill=(220, 220, 220))
+    pname = "pose" if method == "refcontrol" else "clay"
+    clay = Image.open(PASSES / f"{pname}.png").convert("RGB")
+    sheet.paste(clay.resize((tw, th)), (8 + 2 * (th + 8), 26)); d.text((8 + 2 * (th + 8), 8), f"{pname} pass · figure 1 left, figure 2 right", fill=(220, 220, 220))
     for r_, arm in enumerate(rows):
         y = 8 + (r_ + 1) * (th + 30)
         s = res[arm]
         d.text((8, y), f"{arm} · own {s['own_mean']} cross {s['cross_mean']} · right {s['right']}/{s['two_faces']} · {round(float(np.mean(timings[arm] or [0])), 1)} s", fill=(240, 180, 60))
         for c, row in enumerate(rows[arm]):
             sheet.paste(row["image"].resize((tw, th)), (8 + c * (tw + 8), y + 18))
-    sheet.save(OUT / "sheet.jpg", quality=88)
+    sheet.save(OUT / a.sheet, quality=88)
     line = {"stamp": stamp, "project": str(project), "method": method, "seeds": seeds, "size": [W, H], "vram_peak_gb": round(vram.peak, 2),
             "timings_s": {k: [round(v, 1) for v in vs] for k, vs in timings.items()}, "prompts": prompts, "result": res}
     with (OUT / "runs.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
     print(json.dumps({k: v for k, v in line.items() if k != "result"} | {"result": {arm: {k: v for k, v in s.items() if k != "per_seed"} for arm, s in res.items()}}, ensure_ascii=False, indent=1))
-    print(f"sheet: {OUT / 'sheet.jpg'}")
+    print(f"sheet: {OUT / a.sheet}")
     return 0
 
 

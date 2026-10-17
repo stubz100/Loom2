@@ -30,7 +30,7 @@ from test_graph_parity_d64 import _pin_review  # noqa: E402
 from test_groups_d34 import _png, _setup  # noqa: E402
 
 KLEIN = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and not s.sampling.json_prompt and s.inputs.refs_max == 4 and s.inputs.bind_refs)
-DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6 and s.inputs.bind_refs)
+DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6)   # the D93 rig turned its default off: the tests ask for the binding
 CLAY = stage_spec("clay")
 PASSES = {"clay": "ast_clay", "pose": "ast_pose"}
 
@@ -78,7 +78,7 @@ def test_the_place_is_the_scene_and_binds_its_images_klein(tmp_path: Path):
 def test_dev_json_leads_the_scene_with_its_range(tmp_path: Path):
     _, cat, groups, ids, st, mara, _, harbour, _ = _world(tmp_path)
     r = T2I(model_id=DEV, prompt_mode="tree", prompt_json={"subjects": [{"description": ""}]},
-            mentions=[Mention(profile_id=harbour.id, name="Harbour", scene=True), Mention(profile_id=mara.id, name="Mara", subject=0)])
+            mentions=[Mention(profile_id=harbour.id, name="Harbour", scene=True), Mention(profile_id=mara.id, name="Mara", subject=0)], bind_refs=True)
     out = resolve_mentions(r, groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
     tree = json.loads(serialize_prompt(out, registry.SPECS[DEV])[0])
     assert tree["subjects"][0]["reference"] == "reference images 1–3"                                        # the subject's set first, though written second
@@ -99,7 +99,7 @@ def test_a_held_prop_is_said_and_bound_to_its_holder_in_both_families(tmp_path: 
     assert [(b["role"], b["subject"], b["refs"]) for b in ep["bindings"]] == [("subject", 0, [1, 2]), ("subject", 1, [3]), ("held", 1, [4])]
     off, _ = serialize_prompt(out.model_copy(update={"bind_refs": False}), registry.SPECS[KLEIN])           # unbound: the words, and D73's sentence per image
     assert "curly red hair, holding a brass compass with a cracked glass" in off and "Image 4 shows Compass, a brass compass" in off
-    dev = resolve_mentions(T2I(model_id=DEV, prompt_mode="tree", prompt_json=tree, mentions=ms), groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
+    dev = resolve_mentions(T2I(model_id=DEV, prompt_mode="tree", prompt_json=tree, mentions=ms, bind_refs=True), groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
     j = json.loads(serialize_prompt(dev, registry.SPECS[DEV])[0])
     assert j["subjects"][1]["holding"] == {"description": "a brass compass with a cracked glass", "reference": "reference images 7–8"}
 

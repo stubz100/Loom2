@@ -66,7 +66,7 @@ class VoicesSettings(BaseModel):
 STYLE_SAMPLE_PROMPT = "a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her"
 SWATCH_PROMPTS: dict[str, str] = {   # `{value}` is the preset; a neutral subject so the swatch shows the value, not the subject
     "lighting": "a simple still life of a white sphere on a table, {value}",
-    "mood": "an empty street corner, {value} mood",
+    "mood": "close-up portrait of a person's face and shoulders, {value} mood, the expression and the light show it",   # a face carries a mood (the expression and the light); the empty street corner made the four dark moods one picture (journal 2026-10-17, mood_swatch_scenes.py)
     "style": "a lighthouse on a cliff, {value}",
     "background": "{value}, empty, no people",
     "scene": "{value}",
@@ -74,6 +74,14 @@ SWATCH_PROMPTS: dict[str, str] = {   # `{value}` is the preset; a neutral subjec
     "subject.pose": "a plain grey mannequin figure, {value}, full body, simple studio backdrop",
     "subject.description": "{value}, simple studio backdrop",
     "text": "a lighthouse on a cliff. {value}",                                             # the lead text says what kind of picture: shown on the style scene
+}
+
+
+# Every earlier built-in scene: Settings › Samples saves the whole map, so a scene the author never changed was stored verbatim and pinned
+# the old default (the street-corner mood, journal 2026-10-17 18:03). A stored entry equal to one of these reads as "the built-in".
+PAST_SWATCH_DEFAULTS: dict[str, frozenset[str]] = {
+    "mood": frozenset({"an empty street corner, {value} mood"}),
+    "text": frozenset({"{value}"}),
 }
 
 
@@ -102,7 +110,7 @@ class SampleSettings(BaseModel):
         out = dict(SWATCH_PROMPTS)
         for field, t in v.items():
             t = t.strip()
-            if t:
+            if t and t not in PAST_SWATCH_DEFAULTS.get(field, ()):   # a built-in saved verbatim follows the built-in, old or new (2026-10-17)
                 out[field] = t if "{value}" in t else f"{t}, {{value}}"
         return out
 

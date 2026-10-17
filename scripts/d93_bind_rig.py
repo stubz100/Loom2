@@ -13,12 +13,18 @@ faces are nearer their own hero. Reported per arm: mean own, mean cross, margin 
 
   orchestrator/.venv/Scripts/python.exe scripts/d93_bind_rig.py [--projects F:/loom2-projects] [--port 8769] [--seeds 6] [--model klein-9b-kv]
 Writes engine/spikes/out/d93/sheet.jpg and appends a JSON line to engine/spikes/out/d93/runs.jsonl.
+
+Another model on the same two characters (the owed FLUX.2 dev JSON binding): `--source` copies a project that already holds Mara and Ines
+(phase A's) to a new scratch project — the original is not touched — and runs only the two arms there; `--turbo` runs the model's Turbo
+preset (Generate's default on dev), `--sheet` names the contact sheet:
+  … scripts/d93_bind_rig.py --model flux2-dev-fp8mixed --turbo --source F:/loom2-projects/d93-bind-20261017-131210 --sheet sheet_dev.jpg
 """
 from __future__ import annotations
 
 import argparse
 import io
 import json
+import shutil
 import sys
 import threading
 import time
@@ -85,9 +91,13 @@ def main() -> int:
     ap.add_argument("--engine-port", type=int, default=8188)
     ap.add_argument("--seeds", type=int, default=6)
     ap.add_argument("--model", default="klein-9b-kv")
+    ap.add_argument("--source", default="", help="a project holding Mara and Ines already: copied, the arms run on the copy")
+    ap.add_argument("--turbo", action="store_true", help="the model's Turbo preset (dev: 8 steps)")
+    ap.add_argument("--sheet", default="sheet.jpg")
     a = ap.parse_args()
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    state, project = Path(a.projects) / f"_state-d93-{stamp}", Path(a.projects) / f"d93-bind-{stamp}"
+    tag = f"d93-bind-{a.model}-{stamp}" if a.source else f"d93-bind-{stamp}"
+    state, project = Path(a.projects) / f"_state-{tag}", Path(a.projects) / tag
     if port_busy(a.engine_port):
         print("engine port busy — wait for the running job to finish"); return 2
     OUT.mkdir(parents=True, exist_ok=True)
@@ -100,9 +110,18 @@ def main() -> int:
     prompts: dict[str, str] = {}
     timings: dict[str, list[float]] = {"off": [], "on": []}
     try:
-        check("project created", o.http.post("/project", json={"path": str(project), "name": "D93 binding", "size_cap_gb": 20}).status_code == 200)   # type: ignore[union-attr]
         profiles = []
-        for name, role, look in CHARS:
+        if a.source:
+            shutil.copytree(a.source, project)                                           # a scratch copy: the source project stays as it was
+            r = o.http.post("/project/open", json={"path": str(project)})   # type: ignore[union-attr]
+            check("the scratch copy opened", r.status_code == 200, r.text[:120])
+            profs = {p["name"]: p for p in o.http.get("/story/profiles").json()["items"]}   # type: ignore[union-attr]
+            for name, _, _ in CHARS:
+                profiles.append(profs[name])
+                heroes.append(image_of(o, profs[name]["versions"][0]["hero_asset_id"]))
+        else:
+            check("project created", o.http.post("/project", json={"path": str(project), "name": "D93 binding", "size_cap_gb": 20}).status_code == 200)   # type: ignore[union-attr]
+        for name, role, look in ([] if a.source else CHARS):
             j = run_job(o, {"kind": "t2i", "model_id": a.model, "prompt_mode": "text", "prompt_text": PORTRAIT.format(look=look), "width": 576, "height": 576, "seeds": [11]})
             check(f"{name}: the hero", j["status"] == "done", f"{j.get('wall_s')} s {j.get('error') or ''}"[:120])
             hero = j["result"]["asset_ids"][0]
@@ -121,15 +140,18 @@ def main() -> int:
             hero_emb.append(f[0][1] if f else None)
         mentions = [{"profile_id": p["id"], "name": c[0], "subject": i} for i, (p, c) in enumerate(zip(profiles, CHARS))]
         for arm in ("off", "on"):
-            recipe = {"kind": "t2i", "model_id": a.model, "prompt_mode": "tree", "prompt_json": SCENE, "mentions": mentions, "bind_refs": arm == "on", "width": W, "height": H}
+            recipe = {"kind": "t2i", "model_id": a.model, "prompt_mode": "tree", "prompt_json": SCENE, "mentions": mentions, "bind_refs": arm == "on", "width": W, "height": H,
+                      **({"turbo": True} if a.turbo else {})}
             pv = o.http.post("/recipes/preview", json={"recipe": recipe}).json()   # type: ignore[union-attr]
             prompts[arm] = pv["serialized_prompt"]
+            sp = pv["serialized_prompt"]
             if arm == "on":
-                check("the preview binds both subjects", [b["refs"] for b in pv["bindings"]] == [[1, 2], [3, 4]] and "Mara (reference images 1–2)" in pv["serialized_prompt"],
-                      json.dumps(pv["bindings"])[:200])
-                check("what was left out is said", [b["skipped"] for b in pv["bindings"]] == [1, 1])
+                refs = [b["refs"] for b in pv["bindings"]]
+                check("the preview binds both subjects, each its own contiguous range", len(refs) == 2 and all(r and r == list(range(r[0], r[-1] + 1)) for r in refs)
+                      and refs[0][-1] < refs[1][0] and ("Mara (reference image" in sp or '"reference":"reference image' in sp), json.dumps(pv["bindings"])[:240])
+                check("what was left out is said", all("skipped" in b for b in pv["bindings"]), json.dumps([b.get("skipped") for b in pv["bindings"]]))
             else:
-                check("off: D73's sentences", "Image 1 shows Mara" in pv["serialized_prompt"] and "(reference images" not in pv["serialized_prompt"])
+                check("off: D73's per-image notes, no range", ("Image 1 shows Mara" in sp or '"references"' in sp) and "(reference image" not in sp and '"reference":"reference image' not in sp, sp[-300:])
             for seed in seeds:
                 j = run_job(o, {**recipe, "seeds": [seed]})
                 ok = j["status"] == "done"
@@ -170,13 +192,13 @@ def main() -> int:
         d.text((8, y), f"bind_refs {arm} · own {res[arm]['own_mean']} cross {res[arm]['cross_mean']} · right {res[arm]['right']}/{res[arm]['two_faces']}", fill=(240, 180, 60))
         for c, row in enumerate(arms[arm]):
             sheet.paste(row["image"].resize((tw, th)), (8 + c * (tw + 8), y + 18))
-    sheet.save(OUT / "sheet.jpg", quality=88)
-    line = {"stamp": stamp, "model": a.model, "seeds": seeds, "size": [W, H], "vram_peak_gb": round(vram.peak, 2),
+    sheet.save(OUT / a.sheet, quality=88)
+    line = {"stamp": stamp, "model": a.model, "turbo": a.turbo, "source": a.source, "project": str(project), "seeds": seeds, "size": [W, H], "vram_peak_gb": round(vram.peak, 2),
             "timings_s": {k: [round(v, 1) for v in vs] for k, vs in timings.items()}, "prompts": prompts, "result": res}
     with (OUT / "runs.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
     print(json.dumps({k: v for k, v in line.items() if k != "result"} | {"result": {arm: {k: v for k, v in s.items() if k != "per_seed"} for arm, s in res.items()}}, ensure_ascii=False, indent=1))
-    print(f"sheet: {OUT / 'sheet.jpg'}")
+    print(f"sheet: {OUT / a.sheet}")
     return 0
 
 

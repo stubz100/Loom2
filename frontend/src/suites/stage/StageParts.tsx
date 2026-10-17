@@ -249,7 +249,9 @@ function ShotTab() {
         {room - figSlots.length > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
       </div>
       {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
-        {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}</ul>}
+        {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}
+        {/* journal 2026-10-17 18:03: exact pose (one reference slot) drew both figures as figure 1's character; clay carried each one's images */}
+        {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this method has room for {method?.max_refs ?? 1} reference image{(method?.max_refs ?? 1) === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method with more room (Clay reference)</li>}</ul>}
       {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right.</p>}
       {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
       {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}

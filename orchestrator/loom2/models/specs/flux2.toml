@@ -11,6 +11,6 @@ roles.te = { default = "mistral3-small-flux2-fp8" }
 roles.vae = "flux2-vae"
 sampling = { steps = 20, guidance = 4.0, cfg = 1.0, weight_dtype = "default", json_prompt = true, turbo = { lora = "flux2-turbo-lora", steps = 8 }, edit_steps = 8, edit_guidance = 4.0, edit_negative = "zero_out", model_shift = 2.02, cfg_fixed = true, cfg_note = "dev is guidance-distilled: CFG stays 1.0" }
 recipes = { default_for = ["t2i"], t2i = true, i2i = true, inpaint = ["fill", "outpaint"], inpaint_hero = true }
-inputs = { refs_max = 10, bind_refs = true }
+inputs = { refs_max = 10, bind_refs = false }   # D93 rig (journal 2026-10-17 18:03, d93_bind_rig.py --source): dev keeps both identities from D73's notes alone (FaceSim own 0.80 when placed right) and the ranges only moved who stands where — right 4/6 off, 2/6 on — so the JSON binding is off by default; a recipe's bind_refs still turns it on
 geometry = { size_mult = 16, tiers = { thumb = [896, 512], draft = [960, 544], full = [1920, 1088] } }
 estimates = { vram_gb = 14.0, base_seconds = 65.0, turbo_seconds = 40.0, doc_seconds = 270.0 }

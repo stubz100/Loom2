@@ -4584,3 +4584,102 @@ split by file so that no two hands touched the same module.
   -delete-confirm, library-drag / -after-drop, speaker-chip-menu / speaker-chips.
 - **Owed:** the author's click-through; the headed Edit check of Flatten on WebGPU when the GPU is free; SAM 3's Hub hash (needs access to
   the gated repo); a stage-wins hint on the Flow node card itself (the Inspector says it).
+
+## 2026-10-17 18:03 — Owed rig measurements · FLUX.2 dev's JSON binding (off by default now), exact pose with bound figures, a mood scene that shows the mood
+
+- **1 · FLUX.2 dev's JSON binding** (owed since D93 A). `scripts/d93_bind_rig.py` gained `--source` (copies a project that already holds
+  the characters — phase A's `d93-bind-20261017-131210`, untouched — to `F:\loom2-projects\d93-bind-flux2-dev-fp8mixed-20261017-153415`
+  with its `_state-…`), `--turbo` and `--sheet`; the same Mara and Ines (a hero + two looks each, sheets that give a role), dev fp8 +
+  Turbo (Generate's default, 8 steps) at Draft 960 × 544, seeds 20261017–22. dev takes ten references, so both sets go in whole: off =
+  D73's `references: [{index, note}]` (six notes), on = `"reference": "reference images 1–3"` / `"4–6"` in the subject objects.
+
+  | arm | FaceSim own | cross | margin | right | swapped | two people | extra people | s / image | peak |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | off (notes) | **0.561** | 0.390 | **0.171** | **4 / 6** | 2 | 6 / 6 | 0 | 302–557 (449) | 14.47 GB |
+  | on (ranges) | 0.350 | 0.575 | −0.225 | 2 / 6 | 4 | 6 / 6 | 0 | 484–577 (527) | |
+
+  dev keeps **both identities in every frame in both arms** (own ≈ 0.70–0.85 whenever the two stand on their own side) and never adds a
+  person — Klein's phase-A failure (D73's per-image sentences read as more women) does not happen on dev. What decides the score is only
+  who stands left: binding put Mara on the right in 4 of 6 (one blend in each arm: a red-haired Mara off, a capped Mara in Ines's jacket
+  on). **Decision: `inputs.bind_refs = false` for dev** (`models/specs/flux2.toml`) — the ranges do not help there; a recipe's `bind_refs`
+  still turns them on, and with them off dev's held props and places go unbound too (D73's notes, "holding" as a plain string; those two
+  were never rigged on dev). Klein keeps the binding (phase A: own 0.27 → 0.44). The tests that asked dev for the binding now ask the
+  recipe (`test_cast_subject_d93`, `test_character_sheet_d93b`, `test_places_props_figures_d93c` — the DEV pick no longer needs the flag;
+  +1 assert that dev's default is unbound); the parity fixture's two dev summaries say `bind_refs: false` (graphs unchanged).
+  **Timing note:** 290 s for the first image rising to 560 s (8 steps at 30 → 62 s/it) with six 576² references, the engine reloading the
+  encoder, VAE and transformer for every job ("RAM pressure cache"); the GPU's 3D engine was idle while sampling and the disks quiet — dev
+  with many references is far off its 66–110 s single-image figure and worth its own look. Sheet: `engine/spikes/out/d93/sheet_dev.jpg`
+  (local), the line in `runs.jsonl`.
+- **2 · exact pose with bound figures** (owed since D93 C). `/capabilities.stage.methods.refcontrol`: Klein base 9B + the RefControl pose
+  LoRA, weights verified, **max_refs 1**. `scripts/d93c_stage_rig.py` gained `--method` / `--sheet` and per-side means; the copy of phase
+  A → `F:\loom2-projects\d93c-stage-refcontrol-20261017-171246`; ST3's pose pass (walking left, pointing right), the figures bound to Mara
+  and Ines, 1280 × 720, seeds 20261017–22. **What fits:** one image — figure 1's first reference as image 2; figure 2 gets none and is said
+  by its words. `none` needs a reference too (the method refuses none): Mara's hero in the deck, as the Render tab took it before C8.
+
+  | arm | own | cross | margin | right | swapped | own left (Mara) | own / cross right (Ines) | s / image | peak |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | none (deck + words) | 0.146 | 0.105 | 0.041 | 0 / 6 | 2 | 0.303 | −0.012 / 0.252 | 118–142 (124) | 11.37 GB |
+  | off (bound, no range) | 0.146 | 0.105 | 0.041 | 0 / 6 | 2 | 0.303 | −0.012 / 0.252 | 118–124 (120) | |
+  | on ("figure 1 is Mara (reference image 2)") | 0.147 | 0.102 | 0.046 | 0 / 6 | 1 | 0.313 | −0.019 / 0.252 | 117–118 (118) | |
+
+  none and off send the same prompt with the same image 2, and the renders are identical (deterministic); on is within noise. The poses
+  are exact in every frame, but **both figures become Mara** (black bob, grey coat; the right face is nearer Mara's hero than Ines's) — one
+  reference slot cannot carry two characters, bound or not. **Decision: no flag.** The binding neither helps nor hurts on exact pose, and
+  there is no per-method switch to set: `graphs.stage_binds` reads the method model's `inputs.bind_refs`, which for Klein base 9B also
+  governs its t2i binding (a per-method flag would be code — `spec.py` + `graphs.stage_binds` — not done here). What would help is saying
+  it: exact pose shows only figure 1's character; for two bound characters use clay (phase C: right 5 / 6). Sheet:
+  `engine/spikes/out/d93c/sheet_refcontrol.jpg` (local), log `run_refcontrol.log`.
+- **3 · the mood swatches** (the author: tense, melancholic, eerie and lonely look alike). New `scripts/mood_swatch_scenes.py`: a temporary
+  orchestrator (own state, scratch project), per scene `PUT /settings` (Settings › Samples' mood scene) and the eight built-in moods through
+  `POST /preset-icons/make` on the default sample model (Klein 4B, 512², 2.6 s a swatch warm, device peak 13.2 GB), seeds 90 (the pack's),
+  91, 92. Scores are means over the three seeds; *dark* = the four dark moods. D89's proxies (layout = 1 − correlation of 32² z-normalised
+  greyscale, colour = ΔE of 8² Lab) plus two structural ones, added after the sheets disagreed with the layout score (the z-normalisation
+  turns the faint differences between near-black frames into large distances; `--rescore` recomputes all from the saved PNGs): 1 − SSIM
+  (128² grey, 7² windows) and the mean absolute luminance difference (32², 0–255).
+
+  | scene | layout (8) | colour (8) | layout (dark) | colour (dark) | 1 − SSIM (8) | **1 − SSIM (dark)** | lum (8) | **lum (dark)** |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | corner (before): "an empty street corner, {value} mood" | 0.557 | 195 | 0.213 | 106 | 0.656 | 0.294 | 73.4 | 10.4 |
+  | **face**: "close-up portrait of a person's face and shoulders, {value} mood, the expression and the light show it" | 0.279 | 97 | 0.137 | 98 | **0.700** | **0.494** | 54.3 | 18.6 |
+  | room: "a single person in a sparse room by a window, full figure, {value} mood, the posture and the light show it" | 0.261 | 94 | 0.239 | 63 | 0.512 | 0.360 | 48.9 | 20.5 |
+  | landscape: "a wide open landscape with a road under a big sky, {value} mood, the weather and the light show it" | 0.195 | 162 | 0.126 | 79 | 0.476 | 0.290 | 59.1 | 30.1 |
+  | quay: "a lone figure on a harbour quay, wide shot, {value} mood, the weather, the light and the posture show it" | 0.143 | 189 | 0.075 | 100 | 0.405 | 0.237 | 56.2 | 27.2 |
+
+  On the sheets (`engine/spikes/out/mood/sheet_s90|91|92.png`, local) the corner's four dark moods are one dark corner (s90: the same
+  picture four times) — its high layout score is that artefact; the corner changes only brightness and colour. Landscape and quay change
+  the sky (all four dark ones a storm), room the light around a dark figure. **The face separates them**: a scowl (tense), a sad downcast
+  face (melancholic), a teal half-lit face in near darkness (eerie), and the bright four by their smiles and light — expression and light
+  together, readable at tile size, and still a mood rather than a subject (the light carries the atmosphere). Its nearest pair stays
+  melancholic ~ lonely (1 − SSIM 0.12–0.27, the corner's 0.08–0.26). **Decision:** `config.SWATCH_PROMPTS["mood"]` = the face scene
+  (`test_preset_icons_d90`'s blank-is-the-default assertion follows it); `pytest -k "preset or sample or swatch or library or settings"`
+  41 passed.
+  **The author's pack remade:** `.loom2_state/preset_icons` copied to `preset_icons.before-20261017-175624` first; `scripts/swatch_pack.py
+  --only` with the eight moods (Klein 4B, seed 90, the new default scene): 8 / 8 in 36.5 s, peak 11.98 GB, installed through
+  `PresetIconStore.store_from` — index 67 entries, the same keys, only the 8 mood entries and files changed, every entry has its file.
+  Sheet: `engine/spikes/out/sm/pack_sheet_redo.png` (local).
+  **The author's settings pin the old scene:** `.loom2_state/app.json` holds `settings.samples.swatch_prompts.mood = "an empty street
+  corner, {value} mood"` — the old default saved verbatim with the rest of Samples (not an edit of theirs), and a stored entry wins over
+  the default (`SampleSettings._swatches`), so a mood swatch made from the app (Make a picture, a new World entry) still uses the corner
+  until that entry is blanked in Settings › Samples. Not changed here (app state, the author's setting). Their sample model is also set to
+  Lumina 2 (`settings.samples.model_id`): new swatches from the app run on Lumina, the pack on Klein 4B.
+- **Files:** `orchestrator/loom2/models/specs/flux2.toml` (dev `bind_refs = false`), `orchestrator/loom2/config.py` (the mood scene),
+  `orchestrator/tests/test_cast_subject_d93.py`, `test_character_sheet_d93b.py`, `test_places_props_figures_d93c.py`,
+  `test_preset_icons_d90.py`, `orchestrator/tests/fixtures/graph_parity.json`, `scripts/d93_bind_rig.py`, `scripts/d93c_stage_rig.py`,
+  `scripts/mood_swatch_scenes.py` (new); outputs under `engine/spikes/out/d93`, `d93c`, `mood`, `sm` (local). Not committed.
+- **Tests:** offline **411** under full and open; model literals 0, settings audit 239 / 0. Smoke not run (its binding scenarios use Klein
+  4B and clay, untouched by the dev flag).
+- **Owed:** D93's row in 13 still says the binding is on for dev; dev's slowness with six references (above); a per-method binding flag or
+  an "only figure 1's character" hint for exact pose; the author blanks Settings › Samples' mood scene to get the face for new swatches.
+
+## 2026-10-17 18:04 — Follow-ups to the 18:03 measurements · saved built-in scenes follow the built-in, exact pose says its limit
+
+- **The author's saved mood scene was the old default verbatim:** Settings › Samples saves the whole scene map, so an untouched scene pinned
+  the built-in of its day (`app.json` held "an empty street corner, {value} mood") and the new face scene would never reach the app.
+  `config.PAST_SWATCH_DEFAULTS` lists every earlier built-in per field; a stored entry equal to one reads as the current built-in, an
+  author's own scene stays (their style prompt — their own text — is untouched). Their app state was not edited; it reads correctly.
+  Their sample model is Lumina 2 (D91), so swatches made from the app run on Lumina while the installed pack is Klein 4B's.
+- **Exact pose has one reference slot:** with two bound figures it drew both as figure 1's character (0/6 right in every arm). The Render
+  deck now says which figures only get words and points to Clay for several characters.
+- **D93's row amended** (decision log): the binding is off by default on FLUX.2 dev, on for Klein; the exact-pose limit.
+- **Owed:** FLUX.2 dev ran at 290–560 s per image in the 18:03 run (its usual 66–110 s) — the engine reloaded every model per job under
+  "RAM pressure cache" with the GPU idle; to be looked at on its own.

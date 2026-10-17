@@ -26,7 +26,7 @@ from test_lifecycle import Rig  # noqa: E402
 
 # D65: no model ids — the families by what their specs say
 KLEIN = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and not s.sampling.json_prompt and s.inputs.refs_max == 4 and s.inputs.bind_refs)
-DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6 and s.inputs.bind_refs)
+DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6)   # the D93 rig turned its default off: the tests ask for the binding
 
 
 def _cast(tmp_path: Path, n: int = 8):
@@ -74,7 +74,7 @@ def test_klein_prose_binds_each_subject_to_its_contiguous_range_within_the_limit
 
 def test_dev_json_puts_the_range_into_the_subject_object_and_keeps_other_notes(tmp_path: Path):
     _, cat, groups, ids, st, mara, ines = _cast(tmp_path)
-    r = _two_subjects(DEV, mara, ines, refs=[RefImage(asset_id=ids[7], note="the lamp")])
+    r = _two_subjects(DEV, mara, ines, refs=[RefImage(asset_id=ids[7], note="the lamp")], bind_refs=True)
     out = resolve_mentions(r, groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
     assert [x.asset_id for x in out.refs] == [ids[7], ids[0], ids[1], ids[2], ids[3], ids[4], ids[5]]   # the explicit one first, then each set whole
     text, mode = serialize_prompt(out, registry.SPECS[DEV])
@@ -82,6 +82,8 @@ def test_dev_json_puts_the_range_into_the_subject_object_and_keeps_other_notes(t
     assert mode == "json" and tree["subjects"][0]["reference"] == "reference images 2–4" and tree["subjects"][1]["reference"] == "reference images 5–7"
     assert tree["subjects"][0]["description"] == "Mara, a wiry courier in a grey coat"                  # the JSON family reads the field, not a rewritten text
     assert tree["references"] == [{"index": 1, "note": "the lamp"}]                                     # only the unbound reference keeps its note
+    default = json.loads(serialize_prompt(out.model_copy(update={"bind_refs": None}), registry.SPECS[DEV])[0])   # dev's spec: off (the D93 rig)
+    assert "reference" not in default["subjects"][0] and len(default["references"]) == 7
 
 
 def test_no_binding_without_a_linked_subject_or_in_text_mode(tmp_path: Path):

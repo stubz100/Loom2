@@ -29,7 +29,7 @@ from test_lifecycle import Rig  # noqa: E402
 TESTS = Path(__file__).resolve().parent
 CASES = json.loads((TESTS / "fixtures" / "sheet_compose.json").read_text(encoding="utf-8"))["cases"]
 KLEIN = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and not s.sampling.json_prompt and s.inputs.refs_max == 4 and s.inputs.bind_refs)
-DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6 and s.inputs.bind_refs)
+DEV = next(i for i, s in registry.SPECS.items() if s.recipes.t2i and s.sampling.json_prompt and s.inputs.refs_max >= 6)   # the D93 rig turned its default off: the tests ask for the binding
 SHEET = {"appearance": "Mara, a wiry woman, cropped black hair", "outfit": "a long grey coat", "colours": [{"hex": "#c0392b", "object": "rain jacket"}], "marks": "a scar over the left eyebrow"}
 COMPOSED = "Mara, a wiry woman, cropped black hair, wearing a long grey coat, #C0392B rain jacket, a scar over the left eyebrow"
 
@@ -156,7 +156,7 @@ def test_a_linked_subject_is_composed_at_resolve_and_stamped(tmp_path: Path):
     ep = effective_params(out)
     assert ep["serialized_prompt"] == text and ep["bindings"][0]["version"] == "v1"
     # the shot's outfit replaces the sheet's; dev's JSON carries the composed description in the field
-    out = resolve_mentions(_linked(DEV, p, shot=SubjectShot(outfit="a yellow oilskin")), groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
+    out = resolve_mentions(_linked(DEV, p, shot=SubjectShot(outfit="a yellow oilskin")).model_copy(update={"bind_refs": True}), groups, cat, registry.SPECS[DEV].inputs.refs_max, st)
     tree = json.loads(serialize_prompt(out, registry.SPECS[DEV])[0])
     assert tree["subjects"][0]["description"] == "Mara, a wiry woman, cropped black hair, wearing a yellow oilskin, #C0392B rain jacket, a scar over the left eyebrow"
     assert tree["subjects"][0]["reference"] == "reference images 1–2"

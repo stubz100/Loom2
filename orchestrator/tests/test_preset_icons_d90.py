@@ -95,7 +95,7 @@ def test_make_plans_one_staged_job_per_item(tmp_path: Path, variant: str):
         made = c.post("/preset-icons/make", json={"items": [{"field": "mood", "value": "dusk"}, {"field": "lighting", "value": "moonlight"}]}).json()
         assert [j["recipe"]["prompt_text"] for j in made["jobs"]] == ["a quiet harbour at dusk", "a chair, moonlight"]
         s = c.put("/settings", json={"samples": {"style_prompt": "  ", "swatch_prompts": {"mood": ""}}}).json()["samples"]
-        assert s["swatch_prompts"]["mood"] == "an empty street corner, {value} mood" and s["style_prompt"].startswith("a woman in a long coat")
+        assert s["swatch_prompts"]["mood"] == "close-up portrait of a person's face and shoulders, {value} mood, the expression and the light show it" and s["style_prompt"].startswith("a woman in a long coat")
 
 
 def test_file_and_delete_routes(tmp_path: Path):
@@ -145,3 +145,11 @@ async def test_the_finisher_stores_the_swatch(tmp_path: Path, object_info):
         assert any(f["type"] == "preset_icons.changed" and f["data"]["keys"] == [key] for f in rig.hub.recent)
     finally:
         await rig.close()
+
+
+def test_a_saved_old_built_in_scene_follows_the_new_built_in():
+    """2026-10-17: Settings › Samples stored the whole map, so an untouched mood scene pinned the old street corner; a stored entry equal to an
+    earlier built-in reads as the current built-in, an author's own scene stays."""
+    from loom2.config import SWATCH_PROMPTS, SampleSettings
+    s = SampleSettings.model_validate({"swatch_prompts": {"mood": "an empty street corner, {value} mood", "lighting": "a chair, {value}"}})
+    assert s.swatch_prompts["mood"] == SWATCH_PROMPTS["mood"] and s.swatch_prompts["lighting"] == "a chair, {value}"

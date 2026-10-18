@@ -70,11 +70,11 @@ Recipes are pydantic models in `orchestrator/loom2/recipes.py`; weights in `orch
   1157 s cold vs 279 s with the Q4_K_M GGUF encoder, D31). Measure cold and warm.
 - The engine runs with `--reserve-vram` (`Settings.engine.reserve_vram_gb`, 1.5) so the editor's WebGPU canvas keeps headroom.
 - **`--vram-headroom` is per model (D98, D100).** `Settings.engine.vram_headroom_gb` (5.0) applies unless a spec sets
-  `engine.vram_headroom_gb`; Wan Animate sets 0.
+  `engine.vram_headroom_gb` (none does since E30a lifted Wan Animate's exemption, 2026-10-18).
   - ComfyUI reads the value once, at launch, so the queue asks `ensure_running(model_headroom(recipe))` and the supervisor restarts the
     engine when the value changes. The job's log says so.
-  - A new model's quality is checked at a fixed seed with and without it: with the headroom, Wan Animate's clip changed and was not
-    deterministic.
+  - Judge a headroom by several runs per arm, alternating: Wan Animate is not deterministic at a fixed seed (PCK 0.6–1.0 across 14
+    runs), so one or two runs prove nothing (E30a).
 - SAM 3 box prompts read output 1 and need `editor_state {}` (review C32).
 - Models without `recipes.i2i` (the distilled ones) reject I2I and tiled refine. A spec's Turbo LoRA (`sampling.turbo`) is optional in
   t2i (the recipe's `turbo`) but always chained in the Edit graphs (`_flux2_loaders`), and `recipe_weights` lists it accordingly.

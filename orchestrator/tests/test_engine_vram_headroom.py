@@ -55,15 +55,18 @@ def test_a_model_may_ask_for_its_own_headroom(tmp_path: Path):
     assert EngineSupervisor(a).headroom_for(0.0) is None                                        # a typed flag decides for every model
 
 
-def test_wan_animate_runs_without_the_headroom():
+def test_a_spec_value_reaches_the_queue(monkeypatch):
+    """E30a (2026-10-18 20:53) lifted Wan Animate's exemption: no spec sets a headroom today, so every model runs with the engine-wide
+    value; a spec that sets one is read by the queue."""
     from loom2.models import registry
     from loom2.queue import model_headroom
     from loom2.recipes import parse_recipe
+    assert all(s.engine.vram_headroom_gb is None for s in registry.SPECS.values())
     animate = next(s for s in registry.SPECS.values() if s.graph == "wan_animate")
-    assert animate.engine.vram_headroom_gb == 0.0
-    assert model_headroom(parse_recipe({"kind": "i2v", "model_id": animate.id, "start_asset": "ast_1"}), "full") == 0.0
-    t2i = next(s for s in registry.SPECS.values() if s.recipes.t2i)
-    assert model_headroom(parse_recipe({"kind": "t2i", "model_id": t2i.id}), "full") is None
+    recipe = parse_recipe({"kind": "i2v", "model_id": animate.id, "start_asset": "ast_1"})
+    assert model_headroom(recipe, "full") is None
+    monkeypatch.setattr(animate.engine, "vram_headroom_gb", 2.0)
+    assert model_headroom(recipe, "full") == 2.0
 
 
 def test_the_engine_restarts_only_when_the_headroom_changes(tmp_path: Path):

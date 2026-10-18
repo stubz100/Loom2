@@ -5619,3 +5619,25 @@ Every CN4 run on record:
 - `cn_acceptance.py --vram-headroom` now forces the value through `flags`, so the A/B still compares both arms with D100 in place.
 
 **E30a (started 20:20):** Wan Animate on CN4's walk_dolly, seed 0, eight runs alternating headroom 0 and 5, one GPU job at a time.
+
+## 2026-10-18 20:53 — E30a: Wan Animate keeps D98's headroom; D100's exemption lifted
+
+Wan Animate on CN4's walk_dolly at seed 0, eight runs alternating headroom 0 and 5 GB through `cn_acceptance.py --vram-headroom`
+(forced through `flags`). One GPU job at a time, a fresh orchestrator and engine for each run.
+
+| Run | Headroom 0: PCK · FaceSim · wall | Headroom 5 GB: PCK · FaceSim · wall |
+| --- | --- | --- |
+| 1 | 0.986 · 0.137 / 0.143 / 0.073 · 262.7 s | 1.0 · 0.183 / 0.181 / 0.12 · 199.4 s |
+| 2 | 0.896 · 0.207 / 0.191 / 0.201 · 278.2 s | 1.0 · 0.215 / 0.162 / 0.188 · 198.1 s |
+| 3 | 0.986 · 0.088 / 0.112 / 0.105 · 261.1 s | 1.0 · 0.133 / 0.106 / 0.144 · 200.5 s |
+| 4 | 0.806 · 0.167 / 0.174 / 0.143 · 255.3 s | 0.993 · 0.223 / 0.173 / 0.217 · 196.6 s |
+| mean | PCK 0.919, FaceSim ≈ 0.145 | PCK 0.998, FaceSim ≈ 0.170 |
+
+- **Every run on record (14):** at 0: 1.0, 0.993, 0.993, 0.743 and the four above; at 5 GB: 0.778, 0.597 and the four above.
+  - Three of the 14 are under CN4's 0.8 bar, at both settings: that is Wan Animate's own spread at a fixed seed.
+  - The two bad 5 GB runs this evening were that spread, not the headroom.
+- **D100 is applied as it says:** E30 decides. Wan Animate drops its `engine.vram_headroom_gb = 0` and runs with the engine-wide 5 GB
+  again. Its estimates are 200 s (Draft and `guide_seconds`).
+- The per-model value stays in the spec schema and the supervisor, tested and unused.
+- E30's other arms (Wan 2.2 I2V, LTX-2.3, Klein 9B) are dropped. They were asked because of a premise this run removed.
+- **Lesson** (engine `AGENTS.md`): judge a setting on Wan Animate by several alternating runs per arm, never one or two.

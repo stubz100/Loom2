@@ -4975,3 +4975,39 @@ Written up as `.docs/proto01_animate/03-image-and-animate-suites.md`. Nothing de
 
 **FilmCraft** (`F:\source\repos\filmcraft`, a Premiere clone, MIT/Apache) is noted as a later model for Episode. Six questions for the
 author are in 03 §9.
+
+## 2026-10-18 10:15 — D95 · three making tabs (Story · Image · Animate); the preview route explained; Catalogue ideas mocked up
+
+The author answered proto01_animate 03 §9:
+
+- three tabs, yes for now;
+- stills from a stage made in Image while the stage is edited in Animate, yes ("the Catalogue will probably play a role … mock up a few
+  ideas");
+- Edit's left panel as one column, yes;
+- Animate without a right Inspector, yes on trial;
+- Episode stays the cut in Story, with FilmCraft as its model later. **Animate first, Story afterwards.**
+
+Recorded as **D95** in 13.
+
+**Question 5, the EffectCraft route, was answered with an explanation** (03 §5.2). The final render is always the pinned CLI (R2). The
+choice is where the interactive preview runs:
+
+- **R1, WebAssembly in the page:** no frame copies, a prebuilt `.wasm`, works in browser dev and the e2e, and a crash only kills a
+  worker. Its limits are 4 GB and slower CPU-side work.
+- **Native, with every frame read back and sent to the page** (≈ 38 MB/s at Draft 24 fps):
+  - R3 inside the Tauri shell: rebuilds ≈ 650 packages in every installer, a crash takes the window, no browser mode. Not proposed.
+  - New: **R3b**, a native preview server beside the orchestrator with frames over loopback HTTP, as the native fallback.
+
+E27 measures R1 first, R3b only if R1 misses ≥ 12 fps scrubbing at Draft with ComfyUI running.
+
+**The Catalogue ideas** are in a new `04-catalogue-for-making.md`, with four mockups (HTML → Edge screenshots in `img/`, using E21/E22
+spike frames):
+
+- **C1:** a Bin inside Image and Animate.
+- **C2:** work made for a shot lands on an automatic shot page laid out in lanes (frames · from the stage · layers · takes and final).
+- **C3:** every object is an item (stages, motion, compositions, layers, characters, voices, with kind badges and Type chips).
+- **C4:** lineage across media, from the characters to the Episode take.
+- C5–C7 are smaller: gather for a shot, group chips, stage stills on the stage's page.
+
+A suggested order ties C1 and C3 to IM1 / AN1 / CA1 / AE1 and leaves C2, C4 and C5–C7 to the Story pass. Four questions for the
+author.

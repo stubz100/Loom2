@@ -1,7 +1,7 @@
 # 03 · Two making suites, Image and Animate, and an animation editor
 
-Status: **proposal, 2026-10-18, for the author to refine.** Nothing is decided or built. If the author accepts the direction, it becomes a
-D-number (D95) before any work (the house rule). The effectcraft route gets its own D-number after its spike (§5).
+Status: **accepted as D95, 2026-10-18** (the author's answers in §9), except the EffectCraft route for the preview (§5.2), which waits
+for spike E27 and the author's choice. Animate comes first, Story after. Nothing is built yet.
 
 The author (2026-10-18):
 
@@ -197,7 +197,42 @@ a **pinned, prebuilt artifact** with a build script and a CI check, rebuilt only
 | **R1 · WebAssembly facade** | a small crate over `engine` + `render` + `gpu` (no `ui-egui`, no encoders) with wasm-bindgen: `execute(cmd, json)`, `render_frame(comp, t, scale)`; run in a Web Worker on the webview's WebGPU | the **interactive preview**: scrubbing, playing, every edit visible at once | **proposed**, if E27 finds the size and speed acceptable |
 | **R2 · CLI sidecar** | the pinned `effectcraft-cli` binary, driven by the orchestrator as a job (`render` of a `.ecproj` to PNG / ProRes / H.264) | the **final render and export**, at full size, in the queue like every other job (stall handling, staging, lineage) | **proposed** |
 | R3 · link into the Tauri shell | the engine crates inside `src-tauri`, frames to the webview over a custom protocol | the preview, natively | not proposed: it makes the thin shell a 380k-line build, breaks the browser dev mode (`dev.ps1 -Browser`), and needs a readback and IPC for every preview frame |
+| R3b · a native preview server | the pinned engine as a sidecar beside the orchestrator, frames over loopback HTTP | the preview, natively, if R1 is too slow | **the native fallback** (explained below) |
 | R4 · a loom2 compositor of its own | Mediabunny decode + a WebGPU / Pixi canvas compositor for layers, blends, opacity and transforms; EffectCraft only for export | the fallback | **the fallback**, if R1 fails E27 |
+
+**The difference between R1 and the native routes, explained** (the author's question 5, 2026-10-18).
+
+The final render is R2 in every case: the pinned command-line tool, run by the orchestrator as a job. The question is only **where the
+interactive preview runs**, the frames you see while scrubbing and editing. There are two kinds of answer:
+
+- **R1, inside the page.** The engine is compiled to WebAssembly and runs in a Web Worker of the webview, the same place loom2's React
+  UI and Edit's canvas run. It draws with the webview's WebGPU straight into a canvas.
+- **Native, outside the page.** The engine runs as ordinary Rust on the machine and sends finished frames to the page. Two ways:
+  - **R3:** linked into the Tauri shell, with frames over the shell's IPC;
+  - **R3b:** a small preview server the orchestrator starts beside ComfyUI (EffectCraft already has a control channel), with frames over
+    loopback HTTP, the way Edit's pixels travel today.
+
+| | **R1 · WebAssembly in the page** | **R3 / R3b · native engine, frames sent to the page** |
+| --- | --- | --- |
+| A frame on screen | rendered on the GPU into the canvas; nothing is copied | rendered on the GPU, **read back** to the CPU, sent over IPC or HTTP, uploaded again: ≈ 1.6 MB a frame at 832×480 (≈ 38 MB/s at 24 fps), ≈ 8 MB at 1080p. Adds latency to every scrub |
+| Speed of heavy effects | the GPU path is about the same; the CPU fallback is slower (WebAssembly threads, SIMD) | full native speed, every CPU thread |
+| Memory | at most 4 GB (32-bit WebAssembly); EffectCraft's web build caps its caches at 512 + 256 MB | no such limit |
+| Video decode | in the page (EffectCraft's pure-Rust decoders on the CPU, or loom2 feeding frames from Mediabunny / WebCodecs, hardware decode) | native, multi-threaded |
+| Browser dev mode and the Playwright smoke | **work as today** (`dev.ps1 -Browser`, Edge against the orchestrator) | R3 exists only inside the Tauri app, so the browser and the e2e cannot see the editor. R3b works in the browser too |
+| Building loom2 | one prebuilt `.wasm`, pinned with a checksum and a build script (D59's pattern); the app build needs no Rust | R3: the shell compiles EffectCraft's ≈ 650 packages (Rust ≥ 1.95, git dependencies) in every installer build and CI run. R3b: one prebuilt binary, pinned like the CLI |
+| A crash in the engine | kills the worker; the editor restarts it, and the app stays up | R3: takes the whole app window down. R3b: kills the sidecar; the orchestrator restarts it |
+| GPU sharing with ComfyUI (16 GB) | through the browser's GPU process, like Edit | another native GPU device on the same card |
+| Fits loom2's rules | yes: the shell stays thin, pixels never cross Tauri IPC | R3 no (pixels over IPC); R3b yes (loopback HTTP) |
+
+**In short.**
+
+- **R1** keeps everything in the page: no copying, nothing new to build in the app, and it works in the browser and the tests. Its
+  limits are WebAssembly's: memory, and CPU-side speed.
+- **The native routes** are faster for heavy work, at the cost of sending every preview frame across a process boundary.
+  - **R3** (in the shell) also costs build time and crash isolation, and loses the browser mode. **Not proposed.**
+  - **R3b** (a preview server beside the orchestrator) keeps those, and is **the native fallback** if E27 finds R1 too slow or too big.
+
+Spike E27 measures R1 first, and R3b only if R1 misses the bar (scrubbing at ≥ 12 fps at Draft size with ComfyUI running).
 
 **The document.**
 
@@ -271,7 +306,7 @@ check. The waves of this document are named **IM** (Image), **AN** (Animate) and
 | **UX0 · Review and wireframes** | §6: the inventory for three tabs, the wireframes, the click paths; the author's corrections | 2–3 | the author signs off the wireframes; every inventory row has a home |
 | **IM1 · The Image suite** | Generate → **Image**; Edit becomes Image's second mode (Make ⇄ Edit in place, ← Results, Edit ✎ on tiles, double-click, E, the switch); Edit's left panel becomes one scrolling column; Save writes a new version with lineage; *Use as reference*; ☰ › New document; deep-link aliases; the Edit tab removed; Ctrl+1–3 re-assigned; the e2e smoke and the command audit updated | 3–4 | the e2e smoke under both variants; a headed edit check (WebGPU) inside Image; no function of the inventory lost |
 | **AN1 · The Animate shell** | the one column with the jump rail and scroll sync (§4.2's sections); Stage moves in (its tabs become Scene, Motion, Camera; its viewport becomes the *Clay* level); today's Animate becomes the *Image to video* card of Performance; the viewer's three levels and Compare; **one timeline and one transport** (Stage's keys + the clip scrubber); no right Inspector (the Selection section); Clips as a Catalogue view; *From a stage* in Image; the Stage tab removed | 6–8 | every Stage and Animate function reachable (the inventory); the e2e smoke; the existing rig checks for Stage stills and clips (ST3, CN4) still pass |
-| **E27 · Spike: EffectCraft as the engine** (beside E23) | build the R1 facade at a pinned commit (no egui, no encoders): its size (raw and compressed), the start-up time, the preview frame time for a 3-layer 832×480 composition with a mask, a blur and a track matte, at 24 fps, in the webview on the RX 9070 XT (headed, WebGPU); the memory, with ComfyUI running beside it; the R2 CLI render of the same composition, CPU against GPU and against the preview (≤ 1/255); our toolchain (Rust ≥ 1.95; the shell declares 1.90) | 2–3 | a D-number: R1 + R2, or R4 + R2, with the numbers |
+| **E27 · Spike: EffectCraft as the engine** (beside E23) | build the R1 facade (and R3b only if R1 misses the bar) at a pinned commit (no egui, no encoders): its size (raw and compressed), the start-up time, the preview frame time for a 3-layer 832×480 composition with a mask, a blur and a track matte, at 24 fps, in the webview on the RX 9070 XT (headed, WebGPU); the memory, with ComfyUI running beside it; the R2 CLI render of the same composition, CPU against GPU and against the preview (≤ 1/255); our toolchain (Rust ≥ 1.95; the shell declares 1.90) | 2–3 | a D-number: R1 + R2, R3b + R2 or R4 + R2, with the numbers |
 | **AE1 · The composition** | the shot version's composition (`.ecproj` in a loom2 record, fsio, lineage, the pin); the orchestrator writes it from a single clip and from the clay assembly (with CA6); a `comp_render` job through the CLI (R2) with staging, stall handling and its cost; the pinned binary with a build script and `--check` in CI (D59's pattern) | 3–4 | a composition written, rendered and reopened byte-identical; the render matches the preview |
 | **AE2 · Viewer and timeline** | the R1 worker (or R4); layer rows with trim, slip and move; transform and opacity keys (drag, ease and hold by right-click); blend modes, opacity, track mattes, solo / hide / lock, parenting; the pen tool for masks; undo through the engine's history; every action a command with a mouse placement | 6–8 | a 3-layer shot edited by mouse alone; scrubbing at ≥ 12 fps at Draft size; undo and redo across every action |
 | **AE3 · Effects and colour** | the curated ≈ 20 effects as icon presets with their parameters in the column; colour (Curves, Levels, Lumetri basic) with a before/after | 3–4 | each effect's preview matches the CLI render; presets apply in one click |
@@ -302,12 +337,13 @@ check. The waves of this document are named **IM** (Image), **AN** (Animate) and
 | Moving Stage and Edit breaks habits and links | deep-link aliases; the inventory in UX0; the e2e smoke and the command audit |
 | H.264 / HEVC encoding carries patent licensing separate from copyright | the author's D17 reading before shipping those encoders; ProRes, PNG and VP9 / AV1 need no such reading for a storyboard master |
 
-## 9. Questions for the author
+## 9. Questions for the author — answered 2026-10-18 (D95)
 
-1. **Three tabs:** Story · Image · Animate, with the Stage and Edit tabs gone?
-2. **Stills from a stage:** made in Image (*From a stage*) while the stage itself is edited in Animate, or should Stage stills stay in
-   Animate?
-3. **Edit's left panel** as one scrolling column too, like Make's?
-4. **Animate without a right Inspector** (the Selection section in the column), to keep it from stretching sideways?
-5. **The EffectCraft route:** the WebAssembly preview + the CLI render (recommended, after E27), or the native link in the shell?
-6. **Episode:** keep it as the cut in Story (FilmCraft as its model later, if it needs tracks), with Animate's editor for one shot?
+| # | Question | The author's answer |
+| --- | --- | --- |
+| 1 | Three tabs: Story · Image · Animate? | **Yes**, for now |
+| 2 | Stills from a stage made in Image, the stage edited in Animate? | **Yes**. The Catalogue will play a role here, grouping images, videos and other objects efficiently: ideas mocked up in [04](04-catalogue-for-making.md) |
+| 3 | Edit's left panel as one scrolling column? | **Yes** |
+| 4 | Animate without a right Inspector? | **Yes, on trial**; it can be reinstated |
+| 5 | The EffectCraft route? | **Explanation asked**; given in §5.2 ("The difference between R1 and the native routes"). Open until E27 |
+| 6 | Episode stays the cut in Story? | **Yes**, with FilmCraft as its model for later enrichment. **Animate first, Story afterwards** |

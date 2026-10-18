@@ -245,7 +245,8 @@ export function EditorCanvas() {
     const want: 'webgpu' | 'webgl' = devOverride === 'webgl' || (devOverride !== 'webgpu' && pref === 'webgl') ? 'webgl' : 'webgpu'
     const boot = async (preference: 'webgpu' | 'webgl') => {        // D69: sized here and by the ResizeObserver below (not resizeTo, which would follow a hidden host to 0 × 0)
       const a = new Application()
-      await a.init({ preference, background: CANVAS_COLOURS[useSession.getState().ui.theme].background, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, width: host.clientWidth || 1, height: host.clientHeight || 1, powerPreference: 'high-performance', autoStart: false })
+      await a.init({ preference, background: CANVAS_COLOURS[useSession.getState().ui.theme].background, antialias: false, resolution: window.devicePixelRatio || 1, autoDensity: true, width: host.clientWidth || 1, height: host.clientHeight || 1, powerPreference: 'high-performance', autoStart: false,
+        useBackBuffer: true })   // WebGL2: Pixi skips every blendRequired filter (our blend modes, adjustment layers) without a back buffer — they drew as Normal (headed grid 2026-10-18); WebGPU ignores it
       return a
     }
     /** D3 fallback probe: draw a white 4×4 sprite and read it back through the path the exact-compare uses. A renderer

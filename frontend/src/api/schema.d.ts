@@ -3431,6 +3431,11 @@ export interface components {
              * @default 420
              */
             stall_timeout_s: number;
+            /**
+             * Vram Headroom Gb
+             * @default 5
+             */
+            vram_headroom_gb: number;
         };
         /** EngineState */
         EngineState: {

@@ -111,7 +111,8 @@ class EngineSupervisor:
         e = self.app.settings.engine
         state = self.app.state_dir
         reserve = [] if "--reserve-vram" in e.flags or not e.reserve_vram_gb else ["--reserve-vram", str(float(e.reserve_vram_gb))]
-        return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, "--log-stdout",
+        headroom = [] if "--vram-headroom" in e.flags or not e.vram_headroom_gb else ["--vram-headroom", str(float(e.vram_headroom_gb))]
+        return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, *headroom, "--log-stdout",
                 "--extra-model-paths-config", e.extra_model_paths,
                 "--output-directory", str(state / "engine_out"), "--temp-directory", str(state / "engine_tmp"),
                 "--user-directory", str(state / "engine_user")]

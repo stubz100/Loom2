@@ -62,7 +62,7 @@ def test_weights_estimate_and_padding(tmp_path: Path):
     w = graphs.recipe_weights(_r())
     assert {ANIM, "clip-vision-h", "lightx2v-i2v-4step", "umt5-xxl-fp8", "wan21-vae"} <= set(w) and "ltx23-ic-lora-union" not in w
     p = plan(_r())
-    assert p.estimate["seconds"] == 285.0 and "E19" in p.estimate["source"] and p.vram_gb == 14.5 and p.params["guide"] if "guide" in p.params else True
+    assert p.estimate["seconds"] == 128.0 and "E19" in p.estimate["source"] and p.vram_gb == 14.5 and p.params["guide"] if "guide" in p.params else True
     src = tmp_path / "hero.png"
     Image.new("RGB", (400, 600), (180, 60, 40)).save(src)                                         # a portrait hero
 
@@ -137,7 +137,7 @@ def test_capabilities_name_the_animate_method(tmp_path: Path):
     with TestClient(create_app(state)) as cl:
         caps = cl.get("/capabilities").json()
         an = caps["stage"]["animate"]
-        assert an and an["model_id"] == ANIM and an["kinds"] == ["pose"] and an["seconds"] == 285.0 and an["frames_max"] == 77 and an["figures_max"] == 1
+        assert an and an["model_id"] == ANIM and an["kinds"] == ["pose"] and an["seconds"] == 128.0 and an["frames_max"] == 77 and an["figures_max"] == 1
         assert an["size"] == [832, 480] and an["frame_step"] == 4 and an["health"] != "missing"
         assert caps["stage"]["clip"]["model_id"] == LTX                                         # the IC-LoRA method stays
         assert ANIM not in [m["model_id"] for m in caps["i2v"]["models"]] if isinstance(caps["i2v"].get("models"), list) else ANIM not in caps["i2v"].get("models", {})

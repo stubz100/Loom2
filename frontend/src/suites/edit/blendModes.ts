@@ -169,7 +169,10 @@ export function registerBlendModes(): void {
     if (name === 'normal') continue
     const F = class extends BlendModeFilter {
       static extension = { name, type: ExtensionType.BlendMode }
-      constructor() { super({ gl: { functions: GL_FUNCS, main: glMain(mode) }, gpu: { functions: WGSL_FUNCS, main: wgslMain(mode) } }) }
+      constructor() {
+        super({ gl: { functions: GL_FUNCS, main: glMain(mode) }, gpu: { functions: WGSL_FUNCS, main: wgslMain(mode) } })
+        this.resolution = 'inherit'   // as adjustFilters.ts: the backdrop copy is at the target's resolution; at 1 (Pixi's default) a view scale ≠ 1 (zoom × dpr) drew a shifted, scaled ghost of the backdrop (headed check 2026-10-18)
+      }
     }
     extensions.add(F)
   }
@@ -180,6 +183,7 @@ export function registerBlendModes(): void {
         gl: { functions: '', main: 'finalColor = front.a > 0.0 ? vec4(front.rgb / front.a, 1.0) : vec4(0.0);' },
         gpu: { functions: '', main: 'out = vec4<f32>(0.0); if (front.a > 0.0) { out = vec4<f32>(front.rgb / front.a, 1.0); }' },
       })
+      this.resolution = 'inherit'
     }
   })
 }

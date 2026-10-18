@@ -25,7 +25,7 @@ export function SettingsModal() {
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
         thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
-          stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb } })
+          stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
   }
@@ -53,6 +53,8 @@ export function SettingsModal() {
           <span className="hint">no engine event for this long while a job runs → the job fails, the engine restarts, the queue pauses (TDR watchdog, 06 §10)</span>
           <label>Reserve VRAM (GB)</label><input type="number" min={0} max={8} step={0.5} value={draft.engine.reserve_vram_gb ?? 1.5} onChange={(e) => setEngine({ reserve_vram_gb: Number(e.target.value) })} />
           <span className="hint">ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas</span>
+          <label>Job headroom (GB)</label><input type="number" min={0} max={10} step={0.5} value={draft.engine.vram_headroom_gb ?? 5} onChange={(e) => setEngine({ vram_headroom_gb: Number(e.target.value) })} />
+          <span className="hint">ComfyUI --vram-headroom: VRAM kept free for a job's activations so they never spill to shared memory (FLUX.2 dev with references ran 4× slower without it)</span>
           <h4>App</h4>
           <label>Theme</label>
           <select value={s.ui.theme} onChange={(e) => s.setUi({ theme: e.target.value as Theme })}>{THEMES.map(([t, l]) => <option key={t} value={t}>{l}</option>)}</select>

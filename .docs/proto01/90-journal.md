@@ -5197,3 +5197,66 @@ The author's answers:
 
 **Still running in the background:** the FLUX.2 dev slowness investigation, then the headed Flatten check on WebGPU, one after the other
 (D97). Their results get their own entry.
+
+## 2026-10-18 15:41 — D98 · 5 GB job headroom (FLUX.2 dev's slowness found); Edit blend modes on screen and on WebGL2 fixed; Flatten headed passes
+
+Owed items checked, one GPU job at a time (D97), by a helper agent with temporary state and scratch projects (all deleted afterwards).
+
+**FLUX.2 dev's slowness (owed since 2026-10-17 18:03).**
+
+- **Cause.** Under DynamicVRAM (comfy-aimdo) a job's activations are "counted but never refused". With more reference tokens the
+  driver placed part of the working set in WDDM **shared** memory, read over PCIe:
+  - compute busy at 50–125 %, the copy engine ≈ 1 %;
+  - Task Manager's 3D graph idle, because ROCm uses the compute queue — hence "GPU idle" yesterday;
+  - Get-Counter at 4 refs: dedicated 14.48 GB and shared 3.66 GB, at 69 s/it.
+- **Not the cause:** weights on D: (all on F:); "RAM pressure cache" (only the default startup line, free RAM ≥ 92 GB); attention (SDPA
+  34 ms a call).
+- **Flags tried:** `--disable-dynamic-vram` helped 4 refs but hurt 0 refs. `--vram-headroom 3` still spilled. **`--vram-headroom 5`**
+  kept shared memory flat.
+- **The change:** new `Settings.engine.vram_headroom_gb = 5.0`. The supervisor appends `--vram-headroom` unless `flags` has it (the
+  author's app.json stores the flags verbatim) or it is 0. A field in Settings › Engine ("Job headroom (GB)"). `test_engine_vram_headroom.py`
+  (3 tests). API types regenerated.
+- **Measured, headroom 0 → 5** (s per image or clip, Draft):
+
+  | Model | 0 GB | 5 GB |
+  | --- | --- | --- |
+  | FLUX.2 dev Turbo, 0 refs | 63–110 | 38–56 |
+  | FLUX.2 dev Turbo, 4 refs | 564 | 150–170 |
+  | FLUX.2 dev Turbo, 6 refs | 1000 | 238 |
+  | Wan 2.2 I2V | 259–272 | 117–128 (sampling equal; the decode had spilled) |
+  | Wan Animate (77 frames) | 283–297 | 125–128 |
+  | LTX-2.3 | 176–273 | 128–131 |
+  | Krea 2 Turbo (warm) | 7.2 | 9.2 |
+  | Chroma (warm) | 19.5 | 23.6 |
+
+  Klein 9B, Z-Image, SD 3.5 Medium and Large Refine, Qwen-Edit Angle and Lumina 2 are equal or faster. No OOM anywhere.
+- **Recorded as D98**, amending D13's runtime flags. Wan / Wan Animate / LTX Draft estimates lowered to 125 / 128 / 130 s (labels
+  "≈ 2 min"; the graph-parity snapshot's only change is that label). FLUX.2 dev's spec estimates are unchanged: they hold without
+  references; with 4–6 refs it is ≈ 150–240 s.
+
+**Edit › Flatten, headed on WebGPU (owed since 2026-10-17 16:18): pass.**
+
+- Stack: a hidden layer, an invert at 40 %, a masked multiply at 80 %, an isolated screen group.
+- GPU vs exact: p99 1 before, **0 after** Flatten, both by right-click Layer ▸ and by the layers footer More ▾. 0 after Undo and redo.
+- The toast reads "Flattened 6 layers … (1 hidden discarded)". The exact flatten is byte-equal before and after.
+
+**Two Edit bugs found on the way, both fixed:**
+
+1. **Backdrop-reading blend modes drew a shifted, scaled ghost on screen at a view scale ≠ 1** (zoom × dpr). The multiply stage was p99
+   92–110 against its own flatten. `compareWithExact` renders at document size, so it could not see it.
+   - Cause: Pixi's `BlendModeFilter` passes no resolution (default 1), while the backdrop copy is at the target's resolution. It is the
+     same cause as the adjustment layers' 2026-10-11 fix (97d419f).
+   - Fix: `this.resolution = 'inherit'` on every blend filter (`blendModes.ts`) → p99 **1** at fit and at 100 %.
+   - WebGPU regression: grid 120/120, adjscreen and cmpdiag pass.
+2. **On WebGL2 every non-normal blend mode drew as Normal** (grid failing all modes).
+   - Cause: Pixi 8.22 skips every `blendRequired` filter on WebGL without `useBackBuffer: true`. loom2 never set it, so it was not a
+     recent regression. The 2026-10-10 "cmpdiag on WebGL2" no longer held.
+   - Fix: `useBackBuffer: true` in `EditorCanvas.tsx`'s `init` (WebGPU ignores it) → WebGL2 grid **120/120**, multiply p99 1,
+     adjscreen passes.
+   - **Open on WebGL2** (the fallback only): cmpdiag 38 failing cases, now in `suites/edit/AGENTS.md` invariant 17:
+     - semi-transparent results come back premultiplied (a missing un-premultiply);
+     - the view sticks after an invert with a feathered mask.
+
+**Checks:** offline 415 under full and open; Vitest 341; e2e smoke 38/38; build and lint clean (88 warnings); settings_audit,
+model_literals_check, agents_check and export_openapi --check clean. Screenshots: `engine/spikes/out/flatten/` and `flatten/fix/`
+(local).

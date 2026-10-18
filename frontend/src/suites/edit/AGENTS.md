@@ -83,6 +83,12 @@ Verified at ceb638d on 2026-10-10. Specs: `.docs/proto01/10-ui-suite-edit.md` (l
 16. **`smartselect/pcwasm.wasm` is a committed build artifact (D59).** Never edit or rebuild it casually: `scripts/build_pcwasm.py` rebuilds it
    from `frontend/wasm/pcwasm` against the PhotoCraft checkout beside this repository at the pinned commit and records the SHA-256 that CI checks. WebAssembly needs
    `'wasm-unsafe-eval'` in the Tauri CSP (`csp_check.py` probes the Worker under the production policy).
+17. **Every `blendRequired` filter renders at `resolution: 'inherit'`, and the renderer has `useBackBuffer: true` (2026-10-18).**
+    Pixi's `BlendModeFilter` passes no resolution (default 1), while the backdrop copy is at the target's resolution: at a view scale
+    ≠ 1 (zoom × dpr) a blend mode drew a shifted ghost of the backdrop on screen (`compareWithExact` renders at document size and
+    cannot see it — check on the stage, headed). On WebGL2 Pixi skips every `blendRequired` filter without a back buffer, so blend
+    modes and adjustments drew as Normal. Open on WebGL2 (the fallback): `cmpdiag` fails 38 cases — semi-transparent results come
+    back premultiplied, and the view sticks after an invert with a feathered mask.
 
 ## Renderer selection
 

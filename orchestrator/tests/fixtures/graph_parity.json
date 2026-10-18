@@ -135,7 +135,7 @@
    "fps": 16,
    "frames": 81,
    "height": 480,
-   "label": "Draft \u00b7 Lightning 2 + 2 (\u2248 4 min at 480p)",
+   "label": "Draft \u00b7 Lightning 2 + 2 (\u2248 2 min at 480p)",
    "lora_high": true,
    "lora_low": true,
    "model_id": "wan22-i2v-high-fp8",

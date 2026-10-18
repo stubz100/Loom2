@@ -40,6 +40,8 @@ class EngineSettings(BaseModel):
     restart_every_jobs: int = 0          # 0 = never; HIP launch-failure mitigation knob (06 §10)
     stall_timeout_s: int = 420           # no engine event for this long while a job runs → job fails, engine restarts, queue pauses (TDR 2026-10-05)
     reserve_vram_gb: float = 1.5         # ComfyUI --reserve-vram: headroom for the desktop and the editor's WebGPU canvas on the same card
+    vram_headroom_gb: float = 5.0        # ComfyUI --vram-headroom: DynamicVRAM keeps this much more free for the job's activations; without it the
+                                         # driver spills them to shared memory and FLUX.2 dev with 4–6 references ran 4× slower (2026-10-18 rig)
     health_timeout_s: float = 120.0
 
 

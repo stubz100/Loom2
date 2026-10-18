@@ -2723,6 +2723,11 @@
             "default": 420,
             "title": "Stall Timeout S",
             "type": "integer"
+          },
+          "vram_headroom_gb": {
+            "default": 5.0,
+            "title": "Vram Headroom Gb",
+            "type": "number"
           }
         },
         "required": [
@@ -2735,6 +2740,7 @@
           "restart_every_jobs",
           "stall_timeout_s",
           "reserve_vram_gb",
+          "vram_headroom_gb",
           "health_timeout_s"
         ],
         "title": "EngineSettings",

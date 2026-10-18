@@ -737,7 +737,7 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     finalizeWhy: (v) => {
       if (v.state === 'final') return null
-      if (!v.clip_id) return 'no clip yet — animate the shot (Stage · Render or Animate) and use the result as its clip'
+      if (!v.clip_id) return 'no clip yet — animate the shot (Animate: Performance, or a stage clip in Clay) and use the result as its clip'
       const c = get().clipsById[v.clip_id]
       const fmt = useSession.getState().project?.format
       if (!c) return `clip ${v.clip_id} is not loaded`

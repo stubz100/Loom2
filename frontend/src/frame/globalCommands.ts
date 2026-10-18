@@ -1,6 +1,6 @@
 // Global commands (07 §4): frame toggles, settings, help, the command palette. Suite switching stays on the
 // TopBar tabs (Ctrl+1…5) and is registered here so the help overlay lists it.
-import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, Pencil, RefreshCw, Settings, Sparkles } from 'lucide-react'
+import { Boxes, Clapperboard, FilePlus, Film, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, Pencil, RefreshCw, Settings, Shapes, Sparkles } from 'lucide-react'
 const CircleHelp = Info
 import { useSession } from '../store/session'
 import { TOP_TABS } from './railTabs'
@@ -28,15 +28,17 @@ registerCommands([
   { id: 'global.focus', scope: 'global', label: 'Focus mode (hide panel + inspector)', icon: Maximize2, keys: 'Tab', placement: ['rail', 'topbar'], run: () => s().setUi({ focusMode: !s().ui.focusMode }) },
   { id: 'global.density', scope: 'global', label: 'Toggle density', icon: LayoutGrid, placement: ['topbar'], run: () => s().setUi({ density: s().ui.density === 'compact' ? 'comfortable' : 'compact' }) },
   { id: 'global.refresh', scope: 'global', label: 'Refresh state', icon: RefreshCw, placement: ['topbar'], run: () => void s().refreshAll() },
-  // D90 (02 §3) → D95 (IM1): the tabs are Story · Image · Animate · Stage, keyed Ctrl+1–4 in their order (Stage moves into Animate with AN1);
+  // D90 (02 §3) → D95 (IM1, AN1): the tabs are Story · Image · Animate, keyed Ctrl+1–3 in their order;
   // Image's two modes, Make and Edit, keep their commands without a top-bar key (the column's switch, the palette, remapped keys); the
   // Catalogue is Story's third workspace and Models & engine a sheet in ☰
   { id: 'global.suite.story', scope: 'global', label: 'Story', keys: 'Ctrl+1', placement: ['topbar'], run: () => void openTop('story') },
   { id: 'global.suite.image', scope: 'global', label: 'Image', keys: 'Ctrl+2', placement: ['topbar'], run: () => void openTop('image') },
   { id: 'global.suite.generate', scope: 'global', label: 'Image · Make', icon: Sparkles, placement: ['topbar', 'panel'], run: () => s().setSuite('generate') },
   { id: 'global.suite.edit', scope: 'global', label: 'Image · Edit', icon: Pencil, placement: ['topbar', 'panel'], run: () => s().setSuite('edit') },
-  { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('animate') },
-  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
+  { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+3', placement: ['topbar'], run: () => void openTop('animate') },
+  // AN1: Animate's viewer levels (frame/AnimateLevels.tsx) — Clay is the stage suite (P13, D81), Performance the animate suite
+  { id: 'global.suite.stage', scope: 'global', label: 'Animate · Clay', icon: Shapes, placement: ['topbar', 'strip'], run: () => s().setSuite('stage') },
+  { id: 'global.animate.performance', scope: 'global', label: 'Animate · Performance', icon: Film, placement: ['topbar', 'strip'], run: () => s().setSuite('animate') },
   { id: 'global.suite.catalogue', scope: 'global', label: 'Catalogue (Story)', icon: Images, placement: ['rail'], run: () => s().setSuite('catalogue') },
   { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
   ...(['world', 'cast', 'catalogue', 'shots', 'flow', 'episode'] as const).map((w, i) => ({

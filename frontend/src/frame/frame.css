@@ -80,6 +80,7 @@ a { color: var(--accent); }
 .col-sec:last-child { border-bottom: none; }
 .col-sec-head { position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 0 4px; background: var(--bg1);
   font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg2); }
+.animate-levels { margin-right: 8px; }                                                      /* D95 (AN1): Clay | Performance */
 .panel .head .image-mode { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }   /* D95 (IM1): Make | Edit */
 .panel .head .image-back { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; min-height: 24px; font-size: 12px; }
 .panel .body, .inspector .body { flex: 1; overflow: auto; padding: 12px; }

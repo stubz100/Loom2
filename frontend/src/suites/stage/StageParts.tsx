@@ -3,6 +3,7 @@
 // button or a menu entry; keys are accelerators. Keep-alive (D69): the engine pauses while the suite is hidden and keeps its view. D93 (C8):
 // a figure is bound to a Cast character (the Inspector's tiles, "Bind to a character ▸"); the Outliner shows who; the Render tab's deck shows
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
+import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Camera, Eye, EyeOff, Lock, LockOpen } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
@@ -357,10 +358,11 @@ export function Strip() {
   const view = useStage((s) => s.view)
   const guides = useStage((s) => s.guides)
   const current = useStage((s) => s.current)
-  if (!current) return null
+  if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"><AnimateLevels /></div></div>
   return (
     <div className="stage-strip-wrap">
       <div className="stage-strip">
+        <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
         <CommandRow ids={['stage.view.free', 'stage.view.camera']} active={view === 'camera' ? 'stage.view.camera' : 'stage.view.free'} labels={{ 'stage.view.free': 'free', 'stage.view.camera': 'camera' }} />
         <CommandButton id="stage.guides" active={guides} />
         <CommandButton id="stage.frameAll" />

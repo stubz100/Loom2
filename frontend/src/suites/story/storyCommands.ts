@@ -250,7 +250,7 @@ const cmds: Command[] = [
   // D90 (01 §11.2): a take becomes the version's frame or clip (the take card's ✓ use and its right-click)
   { id: 'story.shot.useTake', scope: 'story', label: 'Use this take', icon: Check, placement: ['toolbar', 'context'], hint: 'a frame take becomes the version\'s frame, a clip take its clip', when: takeUsable,
     run: () => { const t = storyItem.take; storyItem.take = undefined; if (t) void sy().useTake(t.kind, t.id) } },
-  { id: 'story.shot.openStage', scope: 'story', label: 'Open in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
+  { id: 'story.shot.openStage', scope: 'story', label: 'Open the stage (Animate · Clay)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion()?.stage_id,
     run: () => { const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
   // D90 (02 §5): Make frame ▸ / Make clip ▸ — the maker opens with the For chip and its results come back as this version's takes; the
   // Stage routes open the version's camera (its results already become takes of the shots pointing at it)
@@ -369,8 +369,8 @@ export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
 }
 
 /** D90 (02 §5): the entries of "Make frame ▸" and "Make clip ▸" (the shot board, the Strip, the Inspector, the shot row's menu). */
-export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Image' }, { cmd: 'story.shot.makeFrameStage', label: 'in Stage (the camera)' }]
-export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'in Stage (the camera)' }, sep, { cmd: 'story.shot.lipsync' }]
+export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Image' }, { cmd: 'story.shot.makeFrameStage', label: 'on the stage (the camera, Animate · Clay)' }]
+export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'on the stage (the camera, Animate · Clay)' }, sep, { cmd: 'story.shot.lipsync' }]
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {
   return [{ label: 'Make frame', icon: ImagePlus, items: makeFrameItems() }, { label: 'Make clip', icon: Film, items: makeClipItems() }, sep,

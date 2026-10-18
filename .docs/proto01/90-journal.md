@@ -5374,3 +5374,22 @@ Screenshots for the author were taken by a temporary Playwright spec, deleted af
   passes.
 - Vite was stopped with a blanket `taskkill node.exe`. Next time it is stopped by its own process.
 
+
+## 2026-10-18 18:19 — AN1 step 1 · the Animate tab holds Stage as its Clay level
+
+AN1 (proto01_animate 03 §7) is built in steps; this is the first.
+
+- **The tabs are Story · Image · Animate** (Ctrl+1–3). The Stage tab is gone.
+- **Animate holds the animate and stage suites as its viewer levels:** **Performance** (today's Animate) and **Clay** (today's Stage), the
+  way Image holds Make and Edit.
+- `ui.animateLast` reopens the level last used. Pointing at the tab preloads that level.
+- **The level switch** (`frame/AnimateLevels.tsx`) starts the viewer strip of both. *Animate · Clay* (`global.suite.stage`) and
+  *Animate · Performance* (`global.animate.performance`) are its commands; Ctrl+3 opens the tab.
+- **Interim Story labels:** *Open the stage (Animate · Clay)*, *Make frame / clip ▸ on the stage*.
+- The column, the timeline, the Bin and From a stage follow in the next steps.
+
+**Tests:**
+
+- Vitest 341.
+- e2e 38/38, with an `openAnimate` helper. One test opened Animate after Stage and now lands on Clay, as designed, so it picks the level
+  explicitly.

@@ -1,6 +1,7 @@
 // Animate suite (11): Panel (Inputs / Model / Length & Size / Presets / Clips), Strip (view, speed, loop, onion, counter),
 // Stage (Mediabunny player · filmstrip · compare, transport, timeline with in/out, S/E, beats and harvested pins, live
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
+import { AnimateLevels } from '../../frame/AnimateLevels'
 import { useStageActive } from '../../frame/stageKeep'
 import { Lock, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
@@ -287,6 +288,7 @@ function Strip() {
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   return (
     <>
+      <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
       <CommandRow ids={['anim.view.player', 'anim.view.filmstrip', 'anim.view.compare']} active={`anim.view.${view}`} />
       <span className="spacer" />
       {clip && <span className="counter" style={{ fontFamily: 'var(--mono)' }}>frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)} · {clip.frames} f · {clip.w}×{clip.h} @ {clip.fps} fps</span>}

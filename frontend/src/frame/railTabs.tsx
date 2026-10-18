@@ -23,12 +23,12 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
 
 /** D90 (02 §3): a top-bar tab and the suites it shows. Story holds the Catalogue as its third workspace; the Catalogue stays a suite of its
  *  own underneath (its scope, keys, deep links and wide strip are unchanged), so the tab group is purely a matter of placement.
- *  D95 (IM1): Image holds Generate and Edit the same way, as its two modes Make and Edit (proto01_animate 03 §3); Stage keeps its tab until
- *  AN1 moves it into Animate. */
+ *  D95 (IM1): Image holds Generate and Edit the same way, as its two modes Make and Edit (proto01_animate 03 §3); (AN1) Animate holds the
+ *  animate and stage suites as its viewer levels, Performance and Clay (03 §4.1). */
 export interface TopTab { id: string; label: string; key: string; suites: string[] }
 export const TOP_TABS: TopTab[] = [
   { id: 'story', label: 'Story', key: '1', suites: ['story', 'catalogue'] }, { id: 'image', label: 'Image', key: '2', suites: ['generate', 'edit'] },
-  { id: 'animate', label: 'Animate', key: '3', suites: ['animate'] }, { id: 'stage', label: 'Stage', key: '4', suites: ['stage'] },
+  { id: 'animate', label: 'Animate', key: '3', suites: ['animate', 'stage'] },
 ]
 export const topTabOf = (suite: string): TopTab | undefined => TOP_TABS.find((t) => t.suites.includes(suite))
 

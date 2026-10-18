@@ -23,7 +23,7 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
   // D90 (02 §3): Story leads the tabs and holds the Catalogue (active under it); Models & engine is a sheet in ☰
-  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/, /^Stage/])
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/])
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
   await expect(page.locator('nav.rail button[aria-label="Catalogue"]')).toHaveClass(/active/)
   await page.locator('button[aria-label="app menu"]').click()
@@ -182,6 +182,13 @@ async function openImage(page: import('@playwright/test').Page, mode: 'Make' | '
   await page.locator('nav.tabs button.tab', { hasText: 'Image' }).click()
   await page.locator('.panel .head .image-mode .segmented button', { hasText: mode }).click()
   await expect(page.locator('.panel .head .image-mode .segmented button.active')).toHaveText(mode)
+}
+
+/** D95 (AN1): Animate's viewer levels — the Animate tab, then the strip's Clay | Performance switch. */
+async function openAnimate(page: import('@playwright/test').Page, level: 'Clay' | 'Performance'): Promise<void> {
+  await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
+  await page.locator('.animate-levels button', { hasText: level }).click()
+  await expect(page.locator('.animate-levels button.active')).toHaveText(level)
 }
 
 /** Press on `from`, carry the tile to `tab` and rest there until its suite is up (D71 spring-loaded tabs); the pointer stays down. */
@@ -446,7 +453,7 @@ test('a sequence (P17, D83 — in Story · Episode since 17 SY4): a fake-engine 
 
 test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Library, the Outliner lists them, the document saves and survives a reload', async ({ page }) => {
   await openApp(page, { suite: 'stage' })
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Stage/)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Animate/)
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
   const dialog = page.locator('.modal.ask')
   await dialog.locator('input').fill('Alley at night')
@@ -469,7 +476,7 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect(page.locator('.view-tag')).toContainText('35 mm')
   await page.screenshot({ path: 'node_modules/.e2e/stage-camera-view.png' })                     // a look for the journal: the framing rectangle over the set
   await page.reload()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Stage/)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Animate/)
   await page.locator('.stage-row', { hasText: 'Alley at night' }).click()
   await page.locator('nav.rail button[title^="Outliner"]').click()
   await expect(page.locator('.outl-row .kind')).toHaveCount(2)
@@ -700,7 +707,7 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   expect(Object.keys(m.params.licences)).toContain('dinov3-l')                                              // the weights' licences in the manifest
   await expect(tiles(page).first().locator('.badge-dot[title^="3D prop"]')).toBeVisible()                   // the newest tile wears the mesh badge
   // the Stage library lists it; one click places it; the viewport loads the GLB
-  await page.locator('nav.tabs button.tab', { hasText: 'Stage' }).click()
+  await openAnimate(page, 'Clay')
   await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
   await dialog.locator('input').fill('Props')
   await dialog.locator('button.primary').click()
@@ -908,7 +915,7 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   expect(shot.versions[0].camera_id).toBeTruthy()
   await expect(page.locator('.panel .foot .estimate')).toContainText(/no clip yet/)
   // back in Stage: the Shot tab renders the passes and generates (the fake engine answers) → the result lands on the shot as its frame
-  await page.locator('nav.tabs button.tab', { hasText: 'Stage' }).click()
+  await openAnimate(page, 'Clay')
   await page.locator('nav.rail button[title^="Render"]').click()
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
   await page.locator('.shot-tab .shot-prompt').fill('a gatehouse at dawn')
@@ -932,7 +939,7 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
     return (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
   }
   const draftClip = await submit(1024, 576)
-  await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
+  await openAnimate(page, 'Performance')
   type AnimateHook = { getState: () => { loadClips: () => Promise<void>; select: (id: string) => void } }
   await page.evaluate(async (id) => { const an = (window as unknown as { __loom2Animate: AnimateHook }).__loom2Animate.getState(); await an.loadClips(); an.select(id) }, draftClip)
   await page.locator('.transport button[aria-label^="Make a shot from this clip"]').click()
@@ -1130,7 +1137,7 @@ test("an episode (17 / SY4, D85): the Shots bin lists a final shot and adds it s
   expect(fx2.text).toContain('lane="-1"')
   expect(fx2.text).toContain('hasAudio="1"')
   // the Animate rail no longer has the tab
-  await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
+  await openAnimate(page, 'Performance')
   await expect(page.locator('nav.rail button[title^="Sequence"]')).toHaveCount(0)
 })
 

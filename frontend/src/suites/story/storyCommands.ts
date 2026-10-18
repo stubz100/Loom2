@@ -182,7 +182,7 @@ const cmds: Command[] = [
     run: () => openWorld(entry() ? 'library' : 'panels') },
   { id: 'story.world.entryEarlier', scope: 'story', label: 'Move earlier', icon: ChevronLeft, placement: ['inspector', 'context'], when: () => entryAt(-1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, -1) } },
   { id: 'story.world.entryLater', scope: 'story', label: 'Move later', icon: ChevronRight, placement: ['inspector', 'context'], when: () => entryAt(1), run: () => { const e = entry(); if (e) void useLibrary.getState().move(e.id, 1) } },
-  { id: 'story.world.applyPanel', scope: 'story', label: 'Apply in Generate', icon: Wand2, placement: ['inspector', 'context'], when: () => !!panelName(),
+  { id: 'story.world.applyPanel', scope: 'story', label: 'Apply in Image', icon: Wand2, placement: ['inspector', 'context'], when: () => !!panelName(),
     run: () => void panelPreset().then((x) => { if (!x?.p) return; x.g.applyPreset(x.p.name); useSession.getState().setSuite('generate') }) },
   { id: 'story.world.renamePanel', scope: 'story', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: () => !!panelName(),
     run: () => void panelPreset().then(async (x) => { if (!x?.p) return; const from = x.p.name
@@ -213,7 +213,7 @@ const cmds: Command[] = [
   { id: 'story.cast.train', scope: 'story', label: 'Train a LoRA…', icon: GraduationCap, placement: ['panel', 'inspector', 'context'],
     when: () => !!version()?.hero_asset_id && !!trainCaps()?.available && refsCount() >= (trainCaps()?.min_refs ?? 4) && !['staged', 'queued', 'running'].includes(trainJob()?.status ?? '') && !sy().busy,
     run: () => void askTrain() },
-  { id: 'story.cast.useLora', scope: 'story', label: 'Use in Generate', icon: Wand2, placement: ['inspector', 'context'], when: () => !!version()?.lora,
+  { id: 'story.cast.useLora', scope: 'story', label: 'Use in Image', icon: Wand2, placement: ['inspector', 'context'], when: () => !!version()?.lora,
     run: () => void sy().useLora(version()!.lora!) },
   { id: 'story.cast.checkLora', scope: 'story', label: 'Check the identity (8 images)', icon: ScanFace, placement: ['inspector', 'context'],
     when: () => !!version()?.lora && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.facesim?.available,
@@ -232,7 +232,7 @@ const cmds: Command[] = [
     run: () => { const g = version()?.candidates_group_id; if (g) openGroupPage(g) } },
   // SY2 · Shots
   { id: 'story.shot.new', scope: 'story', label: 'New shot…', icon: Clapperboard, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open,
-    run: () => void askText({ title: 'New shot', text: 'An empty shot: Make frame ▸ / Make clip ▸ on its board open Generate, Animate or a Stage camera for it, and what they make comes back as takes.', placeholder: 'shot name' })
+    run: () => void askText({ title: 'New shot', text: 'An empty shot: Make frame ▸ / Make clip ▸ on its board open Image, Animate or a Stage camera for it, and what they make comes back as takes.', placeholder: 'shot name' })
       .then((n) => { if (n?.trim()) void sy().createShot(n.trim()) }) },
   { id: 'story.shot.newVersion', scope: 'story', label: 'New version (copy)', icon: Copy, placement: ['strip', 'inspector', 'context'], when: () => !!shotVersion(),
     run: () => { const s = shot(); const v = shotVersion(); if (!s || !v) return
@@ -254,7 +254,7 @@ const cmds: Command[] = [
     run: () => { const v = shotVersion(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id) } },
   // D90 (02 §5): Make frame ▸ / Make clip ▸ — the maker opens with the For chip and its results come back as this version's takes; the
   // Stage routes open the version's camera (its results already become takes of the shots pointing at it)
-  { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Generate', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
+  { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeFrameFor(s, v) } },
   { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make frame in Stage', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
     run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id, shotSpeakers(shot())) } },
@@ -299,7 +299,7 @@ const cmds: Command[] = [
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
   // D90 (02 §4.2, §5): a node's board (an album group) and Make ▸ for its shot (the board's images as Generate's references)
-  { id: 'story.flow.makeFrame', scope: 'story', label: 'Make frame in Generate', icon: ImagePlus, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
+  { id: 'story.flow.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
     run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeFrameFor(s, v, n.id) } },
   { id: 'story.flow.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['inspector', 'context'], when: () => projectOpen() && !!nodeTarget() && !sy().play,
     run: () => { const s = nodeShot(); const v = nodeTarget(); const n = node(); if (s && v && n) void makeClipFor(s, v, n.id) } },
@@ -330,11 +330,11 @@ const cmds: Command[] = [
   { id: 'story.world.beatToNode', scope: 'story', label: 'Make a Flow node from this beat', icon: GitBranch, placement: ['inspector', 'context'], when: selBeat,
     run: () => { const s = selected(); if (s?.kind === 'beat') void sy().nodeFromBeat(s.id) } },
   // D92: subjects are Cast characters — Generate's Tree prompt with a subject card linked to the profile (its reference set and LoRA follow)
-  { id: 'story.cast.useAsSubject', scope: 'story', label: 'Use as a subject in Generate', icon: UserRoundPlus, placement: ['inspector', 'context'], when: () => !!profile() && profile()!.cls !== 'place',
+  { id: 'story.cast.useAsSubject', scope: 'story', label: 'Use as a subject in Image', icon: UserRoundPlus, placement: ['inspector', 'context'], when: () => !!profile() && profile()!.cls !== 'place',
     run: () => { const p = profile(); if (!p) return
       void Promise.all([import('../generate/generateStore'), import('../../frame/suiteRegistry')]).then(([g, r]) => {
         g.useGenerate.getState().useAsSubject(p); r.setRailTab('generate', 'prompt'); useSession.getState().setSuite('generate')
-        useSession.getState().toast(`${p.name} is a subject in Generate's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
+        useSession.getState().toast(`${p.name} is a subject in Image's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
   { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
     run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
@@ -369,7 +369,7 @@ export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
 }
 
 /** D90 (02 §5): the entries of "Make frame ▸" and "Make clip ▸" (the shot board, the Strip, the Inspector, the shot row's menu). */
-export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Generate' }, { cmd: 'story.shot.makeFrameStage', label: 'in Stage (the camera)' }]
+export const makeFrameItems = (): MenuItem[] => [{ cmd: 'story.shot.makeFrame', label: 'in Image' }, { cmd: 'story.shot.makeFrameStage', label: 'in Stage (the camera)' }]
 export const makeClipItems = (): MenuItem[] => [{ cmd: 'story.shot.makeClip', label: 'in Animate' }, { cmd: 'story.shot.makeClipStage', label: 'in Stage (the camera)' }, sep, { cmd: 'story.shot.lipsync' }]
 /** The right-click menu of a shot row (the shot is selected first). */
 export function shotMenu(): MenuItem[] {

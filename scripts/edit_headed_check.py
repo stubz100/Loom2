@@ -317,14 +317,13 @@ def tour(cdp: CDP, tmp: Path) -> list[str]:
         cdp.eval(run("edit.redo")); time.sleep(0.15)
     step("redo ×8", "1", f"{S}.future.length", f0)
     print("--- files")
-    cdp.eval(run("edit.save"))
+    before = api("GET", "/assets?limit=1000")
+    n_assets = before.get("total", len(before.get("items", []))) if isinstance(before, dict) else len(before)
+    cdp.eval(run("edit.save"))                                       # D95 (IM1): one Save — the document and a new Catalogue version
     t0 = time.time()
     while time.time() - t0 < 15 and cdp.eval(f"{S}.saving || {S}.docDirty"):
         time.sleep(0.3)
     step("save", "1", f"{S}.docDirty", False)
-    before = api("GET", "/assets?limit=1000")
-    n_assets = before.get("total", len(before.get("items", []))) if isinstance(before, dict) else len(before)
-    cdp.eval(run("edit.saveToCatalogue"))
     t0 = time.time()
     while time.time() - t0 < 15:
         after = api("GET", "/assets?limit=1000")
@@ -332,7 +331,7 @@ def tour(cdp: CDP, tmp: Path) -> list[str]:
         if n_after > n_assets:
             break
         time.sleep(0.4)
-    step(f"save to catalogue (assets {n_assets} → {n_after})", "1") if n_after > n_assets else (fails.append("save to catalogue") or print(f"FAIL save to catalogue (assets {n_assets} → {n_after})"))
+    step(f"save makes a Catalogue version (assets {n_assets} → {n_after})", "1") if n_after > n_assets else (fails.append("save version") or print(f"FAIL save makes a Catalogue version (assets {n_assets} → {n_after})"))
     cdp.eval(run("edit.exportPng"))
     t0 = time.time()                                                  # the export runs the exact flatten first — wait for it, not a fixed 2.5 s
     while time.time() - t0 < 20 and not list((tmp / "dl").glob("*.png")):

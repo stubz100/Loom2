@@ -205,6 +205,7 @@ class OpenDocument:
         with self._save_lock:
             _validate_modes(self.doc)
             self.doc.saved_at = utc_now()
+            self.doc.meta["save_seq"] = int(self.doc.meta.get("save_seq", 0)) + 1   # D95 (IM1): every write counts (saved_at has one-second steps)
             self.doc.schema_version = DOC_SCHEMA_VERSION      # D52: an older document is rewritten in the current format
             self.doc.has_selection = self.selection is not None
             merged = self.flatten()

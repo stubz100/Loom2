@@ -15,7 +15,7 @@ export const SHARED_KEYS: { scope: Scope; chord: string; ids: [string, string]; 
   { scope: 'edit', chord: 'backspace', ids: ['edit.sel.clear', 'edit.sel.magBack'], why: 'as Delete: the magnetic lasso takes Backspace first while it is active (D59)' },
   // byDispatch: settled by which handler sees the key first, not by `when`
   { scope: 'edit', chord: 'ctrl+1', ids: ['edit.view.100', 'global.suite.story'], byDispatch: true, why: 'useEditKeys (capture phase) takes Ctrl+1 for 100 % while a document is open and stops it (10 §5); elsewhere it opens the Story tab (D90)' },
-  { scope: 'edit', chord: 'ctrl+2', ids: ['edit.view.200', 'global.suite.generate'], byDispatch: true, why: 'as Ctrl+1: 200 % in Edit with a document open, the suite switch everywhere else' },
+  { scope: 'edit', chord: 'ctrl+2', ids: ['edit.view.200', 'global.suite.image'], byDispatch: true, why: 'as Ctrl+1: 200 % in Edit with a document open, the Image tab everywhere else (D95)' },
   // D72: keys that lived outside the registry until now
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.sel.polyClose'], why: 'with AI candidates showing, Enter keeps the visible one (it is registered first, as useEditKeys did before D72); else it closes an open polygon' },
   { scope: 'edit', chord: 'enter', ids: ['edit.cand.keep', 'edit.transform.apply'], why: 'Use the shown candidate is disabled while a transform is open, Apply only while one is' },

@@ -9,6 +9,7 @@ import { useSession } from '../store/session'
 import '../suites/animate/animateCommands'
 import { CatalogueSuite } from '../suites/catalogue/CatalogueSuite'
 import { GenerateSuite } from '../suites/generate/GenerateSuite'
+import { ImageModeSwitch } from './ImageModeSwitch'
 import { lazySuite, preloadSuite } from './lazySuite'
 import { DEFAULT_RAIL, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
 
@@ -24,11 +25,13 @@ export interface SuiteDef {
   keepAlive?: boolean                     // D69: the Stage stays mounted (hidden) after the first visit — see frame/stageKeep.ts
   PrimaryAction?: ComponentType
   panelTitle?: string                     // D90: a one-column Panel (Generate) names the suite, not the rail button it scrolled to
+  PanelHead?: ComponentType               // D95 (IM1): controls in the panel head after the title (Image's Make | Edit switch)
 }
 
 export const SUITE_DEFS: Record<string, SuiteDef> = {
   catalogue: CatalogueSuite, generate: GenerateSuite,
-  edit: lazySuite({ id: 'edit', rail: DEFAULT_RAIL.edit, keepAlive: true }, () => import('../suites/edit/EditSuite').then((m) => m.EditSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
+  edit: lazySuite({ id: 'edit', rail: DEFAULT_RAIL.edit, keepAlive: true, panelTitle: 'Image', PanelHead: ImageModeSwitch },   // D95 (IM1): Image's Edit mode, one column
+    () => import('../suites/edit/EditSuite').then((m) => m.EditSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
   animate: lazySuite({ id: 'animate', rail: DEFAULT_RAIL.animate, keepAlive: true }, () => import('../suites/animate/AnimateSuite').then((m) => m.AnimateSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
   models: lazySuite({ id: 'models', rail: DEFAULT_RAIL.models }, () => import('../suites/models/ModelsSuite').then((m) => m.ModelsSuite), ['Panel', 'Strip', 'Stage', 'Inspector']),
   stage: lazySuite({ id: 'stage', rail: DEFAULT_RAIL.stage, keepAlive: true }, () => import('../suites/stage/StageSuite').then((m) => m.StageSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),   // P13 / ST1 (D81): three.js, its own WebGL2 canvas

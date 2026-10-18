@@ -43,6 +43,7 @@ class DocumentCreate(BaseModel):
 class FlattenRequest(BaseModel):
     to_catalogue: bool = True
     name: str | None = None
+    reuse_unchanged: bool = False    # D95 (IM1, UX0 #4): Edit's one Save — no second Catalogue version of a document unchanged since the last one
 
 
 class ExportRequest(BaseModel):
@@ -131,6 +132,11 @@ async def documents_save(svc: Svc, doc_id: str):
 async def documents_flatten(svc: Svc, doc_id: str, body: FlattenRequest):
     _, cat, _ = svc.require_project()
     od = await asyncio.to_thread(svc.require_documents().get, doc_id)
+    if body.to_catalogue and body.reuse_unchanged:          # unchanged = not written since the last version (`save_seq` counts every write, pixels included)
+        last, seq = od.doc.meta.get("last_flatten_asset"), od.doc.meta.get("last_flatten_seq")
+        prev = await asyncio.to_thread(cat.get, last) if last and seq is not None and seq == od.doc.meta.get("save_seq") else None
+        if prev is not None and not prev.trashed_at:
+            return {"asset": prev.model_dump(), "reused": True}
     merged = await asyncio.to_thread(od.flatten)
     out = svc.ws.temp_dir / "flatten" / f"{doc_id}.png"   # type: ignore[union-attr]
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +152,7 @@ async def documents_flatten(svc: Svc, doc_id: str, body: FlattenRequest):
         updated = await asyncio.to_thread(cat.patch, src.id, {"has_document": True})
         svc.hub.broadcast("asset.updated", updated.model_dump())   # type: ignore[union-attr]
     od.doc.meta["last_flatten_asset"] = rec.id
+    od.doc.meta["last_flatten_seq"] = od.doc.meta.get("save_seq")
     svc.hub.broadcast("asset.created", rec.model_dump())
     return {"asset": rec.model_dump()}
 

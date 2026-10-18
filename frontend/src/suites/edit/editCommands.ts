@@ -1,8 +1,9 @@
 // Edit commands (10 §4/§6/§10, 07 §3c): one definition each for the strip icons, the Layers toolbar, the
 // canvas and layer right-click menus, the keys and the help overlay.
-import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, ClipboardCopy, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderInput, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bandage, Check, Circle, CircleDashed, Clapperboard, ClipboardCopy, Orbit, ClipboardPaste, Copy, Crop, Dices, Expand, Eraser, Eye, EyeOff, FileDown, FileImage, FlipHorizontal, FlipVertical, FolderPlus, Group, Hand, Hourglass, ImageUpscale, Lasso, Layers, Layers2, Link, Lock, LockOpen, Maximize, Merge, Minus, MousePointer2, Paintbrush, PaintBucket, Pencil, Pipette, Plus, Redo2, RotateCcw, RotateCw, Save, Scan, ScanFace, Scissors, Shuffle, SlidersHorizontal, Sparkles, Square, SquareCheck, SquareDashed, SquareX, Trash, Undo2, Wand2, WandSparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
+import { useMakeFor } from '../../store/origin'
 import { ADJUSTMENT_DEFAULTS, FILTER_DEFAULTS, findNode, useEditor, type Node, type Tool } from './editorStore'
 import { magnetic } from './smartselect/magnetic'
 import { typeLabel } from './labels'
@@ -63,8 +64,13 @@ registerCommands([
   // history / files
   { id: 'edit.undo', scope: 'edit', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['strip', 'context'], when: () => ed().history.length > 0, run: () => ed().undo() },
   { id: 'edit.redo', scope: 'edit', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', alt: ['Ctrl+Y'], placement: ['strip', 'context'], when: () => ed().future.length > 0, run: () => ed().redo() },
-  { id: 'edit.save', scope: 'edit', label: 'Save', icon: Save, keys: 'Ctrl+S', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().save() },
-  { id: 'edit.saveToCatalogue', scope: 'edit', label: 'Save to Catalogue', icon: FolderInput, keys: 'Ctrl+Shift+S', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().saveToCatalogue() },
+  // D95 (IM1, UX0 #4): one Save — the document and a new Catalogue version with lineage (Save to Catalogue merged into it); #23 with a Shot
+  { id: 'edit.save', scope: 'edit', label: 'Save', icon: Save, keys: 'Ctrl+S', placement: ['panel', 'context'], when: hasDoc, hint: 'the document and a new version in the Catalogue, with lineage; unchanged since the last version: no second one', run: () => void ed().saveVersion() },
+  // D95 (IM1, UX0 #8): a new camera angle of what is in Edit — Save makes (or keeps) its Catalogue version, the New angle sheet opens on it
+  { id: 'edit.ai.angle', scope: 'edit', label: 'New angle…', icon: Orbit, placement: ['panel'], when: hasDoc, hint: 'save, then the New angle sheet with this image as its source',
+    run: () => void ed().saveVersion().then((id) => { if (id) void import('../../frame/openWith').then((m) => m.openWith(id, { suite: 'generate', slot: 'angle' })) }) },
+  { id: 'edit.saveForShot', scope: 'edit', label: 'Save and use as the Shot\'s frame', icon: Clapperboard, keys: 'Ctrl+Shift+S', placement: ['panel', 'context'], when: () => hasDoc() && !!useMakeFor.getState().generate,
+    hint: 'Image is making for a Shot (the For chip): save, and the new version becomes that Shot version\'s frame', run: () => { const f = useMakeFor.getState().generate; if (f) void ed().saveVersion({ forShot: f }) } },
   { id: 'edit.exportPng', scope: 'edit', label: 'Export PNG', icon: FileImage, keys: 'Ctrl+Shift+E', placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPng() },
   { id: 'edit.exportPsd', scope: 'edit', label: 'Export PSD', icon: FileDown, placement: ['panel', 'context'], when: hasDoc, run: () => void ed().exportPsd() },
   { id: 'edit.close', scope: 'edit', label: 'Close document', icon: X, placement: ['panel', 'context'], when: hasDoc, run: () => { if (!ed().docDirty) { ed().closeDocument(); return } void askConfirm({ title: 'Close without saving?', text: 'The latest changes are not saved. Cancel and Save (Ctrl+S) to keep them, or close and lose them.', okLabel: 'Close without saving', danger: true }).then((ok) => { if (ok) ed().closeDocument() }) } },
@@ -82,8 +88,8 @@ registerCommands([
       const shown = ed().doc!.layers.filter((n) => n.visible)
       if (shown.some((n) => n.kind !== 'raster')) { useSession.getState().toast('Merge visible merges pixel layers only: hide the groups, adjustment and filter layers first, or use Flatten image (it folds in everything exactly)', 'info'); return }
       ed().mergeNodes(shown.map((n) => n.id)) } },
-  // D90 (UI6, owed): Flatten image — everything (groups, masks, modes, adjustment and filter layers) into one layer, exactly as Save to Catalogue renders it
-  { id: 'edit.layer.flatten', scope: 'edit', label: 'Flatten image', icon: Layers, placement: ['context'], when: () => !ed().transform && !flattenBlocker(ed().doc), hint: 'every layer into one, exactly as Save to Catalogue renders it; hidden layers are discarded', run: () => { void ed().flattenImage() } },
+  // D90 (UI6, owed): Flatten image — everything (groups, masks, modes, adjustment and filter layers) into one layer, exactly as Save renders its version
+  { id: 'edit.layer.flatten', scope: 'edit', label: 'Flatten image', icon: Layers, placement: ['context'], when: () => !ed().transform && !flattenBlocker(ed().doc), hint: 'every layer into one, exactly as Save renders its Catalogue version; hidden layers are discarded', run: () => { void ed().flattenImage() } },
   { id: 'edit.layer.mergeDown', scope: 'edit', label: 'Merge down', icon: Merge, keys: 'Ctrl+E', placement: ['toolbar', 'context'], when: () => activeRaster() || ed().targetIds().length > 1, hint: 'with several layers selected: merge them', run: () => ed().mergeNodes(ed().targetIds()) },
   { id: 'edit.layer.up', scope: 'edit', label: 'Move layer up', icon: ArrowUp, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'up') },
   { id: 'edit.layer.down', scope: 'edit', label: 'Move layer down', icon: ArrowDown, placement: ['toolbar', 'context'], when: () => !!active(), run: () => ed().moveNode(ed().activeId!, 'down') },
@@ -240,7 +246,7 @@ export function canvasMenu(): MenuItem[] {
   const selection: MenuItem[] = [{ cmd: 'edit.sel.all' }, { cmd: 'edit.sel.none' }, { cmd: 'edit.sel.invert' }, { label: 'Modify', icon: SquareDashed, items: modify }, { cmd: 'edit.sel.refine' }, { cmd: 'edit.sel.fromLayer' }, { cmd: 'edit.sel.quickMask', label: st.quickMask ? 'Leave quick mask' : 'Quick mask' }, { cmd: 'edit.sel.clear' }, { cmd: 'edit.sel.crop' }, { cmd: 'edit.mask.fromSelection' }]
   const layer: MenuItem[] = [{ cmd: 'edit.layer.new' }, { cmd: 'edit.layer.newGroup' }, { cmd: 'edit.layer.duplicate' }, { cmd: 'edit.layer.mergeDown' }, { cmd: 'edit.layer.mergeVisible' }, { cmd: 'edit.layer.flatten' }, { cmd: 'edit.layer.group' }, { label: 'Add adjustment', icon: SlidersHorizontal, items: adjustmentMenu() }, { label: 'Add filter', icon: Sparkles, items: filterMenu() }, { label: 'Transform', icon: Scan, items: transformItems() }, { cmd: 'edit.layer.delete' }]
   const view: MenuItem[] = [{ cmd: 'edit.view.zoomIn' }, { cmd: 'edit.view.zoomOut' }, { cmd: 'edit.view.fit' }, { cmd: 'edit.view.100' }, { cmd: 'edit.view.200' }, sep, { cmd: 'edit.view.grid', checked: st.pixelGrid }, { cmd: 'edit.view.overlay', checked: st.overlay }, { cmd: 'edit.view.before', checked: st.before }]
-  const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveToCatalogue' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.close' }]   // D90 (01 §11.6): Compare moved to Info › Diagnostics
+  const files: MenuItem[] = [{ cmd: 'edit.save' }, { cmd: 'edit.saveForShot' }, { cmd: 'edit.exportPng' }, { cmd: 'edit.exportPsd' }, sep, { cmd: 'edit.close' }]   // D90 (01 §11.6): Compare moved to Info › Diagnostics
   const tools: MenuItem[] = TOOLS.map(([tool, label]) => ({ cmd: `edit.tool.${tool}`, label, checked: st.tool === tool }))
   // D90 (02 §9): AI ▸ beside the selection — Select subject runs at once, the others open the AI tab on their operation
   const ai: MenuItem = { label: 'AI', icon: Sparkles, items: [{ cmd: 'edit.ai.subject' }, ...AI_SHOW.map(([op]) => ({ cmd: `edit.ai.show.${op}` }))] }

@@ -18,6 +18,7 @@ import { castOffer } from './subjectCast'
 import { versionOf } from './sheet'
 import { profilesForMentions, useStory } from '../story/storyStore'
 import { useLibrary } from '../story/libraryStore'
+import { ImageModeSwitch } from '../../frame/ImageModeSwitch'
 import './generate.css'
 
 /** D93: drop the panel's links to profiles / groups the open project lacks (it is remembered across projects), with a toast. */
@@ -31,7 +32,7 @@ async function pruneForeignLinks(): Promise<void> {
     const { patch, dropped } = withoutForeignLinks(g.panel, new Set(profiles.items.map((x) => x.id)), groups)
     if (!dropped) return
     g.set(patch)
-    useSession.getState().toast(`${dropped} link${dropped === 1 ? '' : 's'} from another project removed from Generate — the words stay`, 'info')
+    useSession.getState().toast(`${dropped} link${dropped === 1 ? '' : 's'} from another project removed from Image — the words stay`, 'info')
   } catch { /* no project or the server is busy: the preview says what is wrong */ }
 }
 
@@ -124,7 +125,7 @@ function Stage() {
   const project = useSession((s) => s.project)
   const r = useGenerateResults()
   useEffect(() => { if (project?.open) { void r.load(); void r.refreshMeta() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (!project?.open) return <div className="placeholder"><div><h2>Generate</h2>open or create a project to begin</div></div>
+  if (!project?.open) return <div className="placeholder"><div><h2>Image</h2>open or create a project to begin</div></div>
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
       <Interim />
@@ -201,7 +202,7 @@ export const GenerateSuite: SuiteDef = {
     { id: 'look', label: 'Look', icon: <Palette size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> },
     { id: 'size', label: 'Size & count', icon: <SlidersHorizontal size={18} /> }],
   Panel, Strip: withResults(StripWithKeys), Stage: withResults(Stage), Inspector: withResults(CatInspector),
-  PrimaryAction, panelTitle: 'Generate',
+  PrimaryAction, panelTitle: 'Image', PanelHead: ImageModeSwitch,   // D95 (IM1): Image's Make mode
 }
 
 export type { Asset, PanelState, Subject }

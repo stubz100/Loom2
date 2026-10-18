@@ -1,5 +1,5 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
-// Layers / Properties / History / Info; Save · Save to Catalogue · Export as the pinned primary actions.
+// Layers / Properties / History / Info; Save (the document and a Catalogue version, D95) · Export as the pinned primary actions.
 import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -12,6 +12,8 @@ import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { setRailTab, type SuiteDef } from '../../frame/suiteRegistry'
+import { useColumnSync } from '../../frame/columnSync'
+import { useMakeFor } from '../../store/origin'
 import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
 import { adjustmentMenu, filterMenu, layerMenu, MORE_TOOLS, TOOLS as TOOL_TABLE } from './editCommands'
@@ -395,7 +397,10 @@ function AiTab() {
   const advanced = (id: string, body: ReactNode) => <div className="full ai-advanced"><Section id={`ai-advanced-${id}`} title="Advanced" defaultOpen={false}><div className="tool-opts">{body}</div></Section></div>
   return (
     <div>
-      <div className="segmented" style={{ marginBottom: 10 }}>{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => { if (k !== p.op) setP({ op: k, candidates: opCandidates(c, k) }) }}>{l}</button>)}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+        <div className="segmented">{ops.map(([k, l]) => <button key={k} className={p.op === k ? 'active' : ''} onClick={() => { if (k !== p.op) setP({ op: k, candidates: opCandidates(c, k) }) }}>{l}</button>)}</div>
+        <CommandButton id="edit.ai.angle" text label="Angle ▸" />{/* D95 (UX0 #8): the New angle sheet, one implementation */}
+      </div>
       {p.op === 'select' && <SelectControls />}
       {p.op !== 'select' && <div className="tool-opts">
         {p.op === 'inpaint' && <>
@@ -537,27 +542,46 @@ function EncoderPick({ model }: { model: string }) {
   </select></>
 }
 
+// D95 (IM1, UX0): Edit's five rail tabs are one scrolling column, like Image · Make's; the rail jumps to a section and follows the scroll
+const EDIT_SECTIONS = ['tools', 'brushes', 'selection', 'ai', 'documents'] as const
+const EDIT_SECTION: Record<(typeof EDIT_SECTIONS)[number], [string, () => React.ReactElement]> = {
+  tools: ['Tool options', () => <ToolOptions />], brushes: ['Brushes', () => <BrushesTab />], selection: ['Selection', () => <SelectionTab />],
+  ai: ['AI', () => <AiTab />], documents: ['Documents', () => <DocumentsTab />],
+}
+
+function EditColumn({ tab }: { tab: string }) {
+  const host = useRef<HTMLDivElement>(null)
+  useColumnSync(host, 'edit', EDIT_SECTIONS, 'edit-sec-', tab)
+  return (
+    <div ref={host} className="col-column edit-column">
+      {EDIT_SECTIONS.map((id) => (
+        <section key={id} id={`edit-sec-${id}`} className="col-sec">
+          <h4 className="col-sec-head"><span>{EDIT_SECTION[id][0]}</span></h4>
+          {EDIT_SECTION[id][1]()}
+        </section>
+      ))}
+    </div>
+  )
+}
+
 function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   if (!project?.open) return <span className="muted">Open or create a project.</span>
-  if (tab === 'brushes') return <BrushesTab />
-  if (tab === 'selection') return <SelectionTab />
-  if (tab === 'ai') return <AiTab />
-  if (tab === 'documents') return <DocumentsTab />
-  return <ToolOptions />
+  return <EditColumn tab={tab} />
 }
 
 function PrimaryAction() {
   const doc = useEditor((s) => s.doc)
   const dirty = useEditor((s) => s.docDirty)
   const saving = useEditor((s) => s.saving)
+  const forShot = useMakeFor((f) => !!f.generate)                       // D95 (UX0 #23): only while Image makes for a Shot (the For chip)
   if (!doc) return <div><span className="muted">no document open</span></div>
-  markUsed('edit.save')
+  markUsed('edit.save'); markUsed('edit.saveForShot')
   return (
     <div>
       <button className="primary" disabled={saving} onClick={() => runCommand('edit.save')} title="Save (Ctrl+S)">{saving ? 'Saving…' : dirty ? 'Save •' : 'Save'}</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        <CommandButton id="edit.saveToCatalogue" text /><CommandButton id="edit.exportPng" text /><CommandButton id="edit.exportPsd" text /><CommandButton id="edit.close" text />
+        {forShot && <CommandButton id="edit.saveForShot" text />}<CommandButton id="edit.exportPng" text /><CommandButton id="edit.exportPsd" text /><CommandButton id="edit.close" text />
       </div>
     </div>
   )
@@ -936,7 +960,7 @@ function PropertiesTab() {
             <label>clip</label><label className="chk"><input type="checkbox" checked={n.clip} onChange={(e) => ed().updateNode(n.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
             <label /><button type="button" className="quiet" style={{ justifySelf: 'start' }} disabled={!defaults} onClick={() => { if (defaults) { start(); setParams(JSON.parse(JSON.stringify(defaults))); commit(`${n.type} reset`) } }}>Reset to defaults</button>
           </div>
-          <p className="hint">Previewed on the canvas with the compositor's own formulas; rendered exactly in the orchestrator on Save to Catalogue / Export.{editor && n.type !== 'color_balance' ? ' The histogram shows the visible pixel layers below this one.' : ''}</p>
+          <p className="hint">Previewed on the canvas with the compositor's own formulas; rendered exactly in the orchestrator on Save / Export.{editor && n.type !== 'color_balance' ? ' The histogram shows the visible pixel layers below this one.' : ''}</p>
         </Section>
       )}
       {n.mask && (

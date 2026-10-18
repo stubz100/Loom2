@@ -1,6 +1,6 @@
 // D90 (UI6, owed until 2026-10-17): Edit › Flatten image, as Photoshop's — every layer of the document (groups, masks, blend modes,
 // clipping, adjustment and filter layers; hidden layers are discarded) becomes one raster layer whose pixels are the server's exact
-// flatten (`POST /documents/{id}/export` format "raw", the same `OpenDocument.flatten` Save to Catalogue and the PNG export write).
+// flatten (`POST /documents/{id}/export` format "raw", the same `OpenDocument.flatten` Save's Catalogue version and the PNG export write).
 // Pure parts here (tested); the store's `flattenImage` fetches the pixels and records one undo step.
 import type { DocumentStack, Node } from './editorStore'
 

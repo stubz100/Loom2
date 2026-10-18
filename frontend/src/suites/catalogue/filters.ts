@@ -15,7 +15,7 @@ export interface FilterDef {
 }
 
 const opt = (c: CatalogueState, label: string, checked: boolean, patch: Partial<Query>): MenuItem => ({ label, checked, run: () => void c.setQuery(patch) })
-const SOURCES: [string, string][] = [['generate', 'Generate'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['animate', 'Animate'], ['extract', 'Frame extract'], ['import', 'Imported']]
+const SOURCES: [string, string][] = [['generate', 'Generated'], ['inpaint', 'Inpaint'], ['refine', 'Refine'], ['upscale', 'Upscale'], ['animate', 'Animate'], ['extract', 'Frame extract'], ['import', 'Imported']]
 const DATES: [string, string][] = [['today', 'Today'], ['last_session', 'Last session'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']]
 const day = (iso?: string) => iso?.slice(0, 10) ?? '…'
 

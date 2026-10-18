@@ -658,6 +658,7 @@ class PixelsPut(Out):
 
 class FlattenedToCatalogue(Out):
     asset: AssetRecord
+    reused: bool = False         # D95 (IM1): `reuse_unchanged` found the document unchanged since its last version and returned that one
 
 
 class FlattenedToFile(Out):

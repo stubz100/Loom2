@@ -248,10 +248,10 @@ function One({ a }: { a: Asset }) {
         <div className="igrid">
           <Btn icon={<Pencil size={14} />} label="Edit" run={() => runCommand('cat.edit')} title="Open in Edit (E)" />
           <Btn icon={<Film size={14} />} label="Animate ▾" run={(e) => showMenu(e, [{ cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }])} />
-          <Btn icon={<Images size={14} />} label="Reference" run={() => runCommand('cat.reference')} title="Use as reference in Generate (R)" />
+          <Btn icon={<Images size={14} />} label="Reference" run={() => runCommand('cat.reference')} title="Use as reference in Image (R)" />
           <Btn icon={<RotateCcw size={14} />} label="Re-run" run={() => runCommand('cat.rerun')} disabled={!a.params?.recipe} title="Re-run with the same seed (Ctrl+R)" />
           <Btn icon={<Shuffle size={14} />} label="Variations" run={() => runCommand('cat.variations')} disabled={!a.params?.recipe} title="New seeds (V)" />
-          <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Generate" />
+          <CmdBtn id="cat.loadInGenerate" icon={<Wand2 size={14} />} label="Load in Image" />
           <Btn icon={<Pin size={14} />} label={c.compare.includes(a.id) ? 'Unpin' : 'Pin for compare'} run={() => runCommand('cat.pin')} title={c.compare.includes(a.id) ? `Unpin (C${c.compare.indexOf(a.id) + 1}, C)` : 'Pin for compare (C)'} />
           {a.kind === 'image' && !a.trashed_at && <Btn icon={<UserRoundPlus size={14} />} label="Add to character ▾" run={(e) => showMenu(e, addToCharacterMenu().items)} title="Into a Cast profile: as the hero, into the reference set or as a candidate (D93)" />}
           <Btn icon={<MoreHorizontal size={14} />} label="More ▾" run={(e) => showMenu(e, actionsMore(a))} />

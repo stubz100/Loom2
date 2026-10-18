@@ -20,6 +20,7 @@ interface UiState {
   panelWidth: number; inspectorWidth: number; dismissedBanners: string[]
   panelWidths?: Record<string, number>; inspectorWidths?: Record<string, number>   // D90 (02 §3.1): dragged widths per suite; absent = the suite's default
   storyLast?: 'story' | 'catalogue'                                            // D90: the Story tab returns to the workspace last open under it
+  imageLast?: 'generate' | 'edit'                                              // D95 (IM1): the Image tab returns to the mode last open under it (Make or Edit)
 }
 
 export interface SessionState {
@@ -144,7 +145,7 @@ export const useSession = create<SessionState>()(
 
       setSuite: (suite) => {
         if (suite === 'models') { get().openModels({ missing: true }); return }   // D90 (02 §7): the old routes (the Fetch buttons) open the sheet on the missing weights
-        set({ ui: { ...get().ui, suite, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}) } })
+        set({ ui: { ...get().ui, suite, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}) } })
       },
       openModels: (o = {}) => set({ modelsSheet: { tab: o.tab ?? 'roster', missing: !!o.missing } }),
       closeModels: () => set({ modelsSheet: null }),

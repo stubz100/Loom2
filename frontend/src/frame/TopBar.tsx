@@ -6,9 +6,10 @@ import { runCommand } from './commands'
 import { preloadSuite } from './lazySuite'
 import { THEMES } from './theme'
 import { TOP_TABS, topTabOf, type TopTab } from './railTabs'
-import { openTopTab } from './topTabs'
+import { openTopTab, preloadOf } from './topTabs'
 import { onlyAssets, useDropTarget, type DragPayload, type DropVerdict } from './drag'
-import { editOpenDrop, startDrop } from './dropRules'
+import { editOpenDrop, layerDrop, startDrop } from './dropRules'
+import { editPresence } from './editPresence'
 import { dropRefs, refDropFor } from '../suites/generate/generateStore'
 
 function useOutside(onClose: () => void) {
@@ -21,10 +22,18 @@ function useOutside(onClose: () => void) {
   return ref
 }
 
-/** What a quick drop on a suite tab does (D71): Edit opens the first image, Generate adds references (capped), Animate starts. */
+/** The verb a drop on the Image tab does, by the mode last open under it (D95, UX0 #3): in Make the tiles become references; in Edit they become
+ *  layers of the open document, or the first image opens when none is open. */
+type ImageDrop = 'refs' | 'layers' | 'open'
+function imageDrop(): ImageDrop {
+  const u = useSession.getState().ui
+  if ((u.imageLast ?? 'generate') === 'generate') return 'refs'
+  return editPresence.hasDoc ? 'layers' : 'open'
+}
+
+/** What a quick drop on a suite tab does (D71): Image adds references or layers (above), Animate starts. */
 function tabDrop(id: string, p: DragPayload): DropVerdict | null {
-  if (id === 'edit') return editOpenDrop(p).verdict
-  if (id === 'generate') return refDropFor(p).verdict
+  if (id === 'image') { const m = imageDrop(); return m === 'refs' ? refDropFor(p).verdict : m === 'layers' ? layerDrop(p).verdict : editOpenDrop(p).verdict }
   if (id === 'animate') return startDrop(p, { tab: true }).verdict
   return null
 }
@@ -35,8 +44,12 @@ const SPRING_MS = 600
  *  and carries on, so a tile reaches a particular slot there; a quick drop does the tab's own verb. */
 function SuiteTab({ t, active, onOpen }: { t: TopTab; active: boolean; onOpen: () => void }) {
   const { ref, over } = useDropTarget((p) => onlyAssets(p) && !!tabDrop(t.id, p)?.ok, (p) => {
-    if (t.id === 'edit') { const id = editOpenDrop(p).open; if (id) void import('../suites/edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }
-    else if (t.id === 'generate') dropRefs(p)
+    if (t.id === 'image') {
+      const m = imageDrop()
+      if (m === 'refs') dropRefs(p)
+      else if (m === 'layers') { const ids = layerDrop(p).take; void import('../suites/edit/editorStore').then((e) => ids.forEach((id) => void e.useEditor.getState().addLayerFromAsset(id))) }
+      else { const id = editOpenDrop(p).open; if (id) void import('../suites/edit/editorStore').then((e) => e.useEditor.getState().openFromAsset(id)) }
+    }
     else if (t.id === 'animate') {
       const r = startDrop(p, { tab: true })
       void import('../suites/animate/animateStore').then((m) => {
@@ -57,7 +70,7 @@ function SuiteTab({ t, active, onOpen }: { t: TopTab; active: boolean; onOpen: (
     return () => window.clearTimeout(timer)
   }, [over, active])
   return (
-    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}${over && !active ? ' spring' : ''}`} onClick={onOpen} onPointerEnter={() => preloadSuite(t.id)} title={`${t.label} (Ctrl+${t.key})${t.id === 'edit' ? ' · drop a Catalogue tile here to open it' : t.id === 'generate' ? ' · drop tiles here as references' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
+    <button ref={ref} className={`tab${active ? ' active' : ''}${over ? ' drop-over' : ''}${over && !active ? ' spring' : ''}`} onClick={onOpen} onPointerEnter={() => preloadSuite(preloadOf(t))} title={`${t.label} (Ctrl+${t.key})${t.id === 'image' ? ' · drop tiles here: references in Make, layers in Edit' : t.id === 'animate' ? ' · drop a tile here as the start frame (two tiles: start and end)' : ''}`}>
       {t.label}<kbd>Ctrl+{t.key}</kbd>
     </button>
   )
@@ -107,6 +120,7 @@ export function TopBar() {
       {menu === 'app' && (
         <div className="menu app-menu-list" style={{ left: 8 }}>
           <button onClick={() => { setMenu(null); s.openModels() }}><Boxes size={14} style={{ verticalAlign: '-2px' }} /> Models & engine…</button>
+          {s.project?.open && <button onClick={() => { setMenu(null); runCommand('global.start.newDocument') }}>New document…</button>}{/* D95 (UX0 #3): open a blank document in Image · Edit */}
           <div className="sep" />
           <button onClick={() => { setMenu(null); s.openSettings(true) }}>Settings… <kbd>Ctrl+,</kbd></button>
           <button onClick={() => { setMenu(null); s.setHelp(true) }}>Commands and keys <kbd>?</kbd></button>

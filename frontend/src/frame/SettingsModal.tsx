@@ -91,7 +91,7 @@ export function SettingsModal() {
               <input type="text" aria-label={`${field} icon scene`} value={t} onChange={(e) => set({ samples: { ...draft.samples, swatch_prompts: { ...draft.samples.swatch_prompts, [field]: e.target.value } } })} />
             </Fragment>
           ))}
-          <span className="hint">the scenes of Generate's look-preset icons; {'{value}'} is the preset (added at the end when left out). Clear a field and Save to get its default back. Existing samples and icons stay — remake one from its right-click menu.</span>
+          <span className="hint">the scenes of Image's look-preset icons; {'{value}'} is the preset (added at the end when left out). Clear a field and Save to get its default back. Existing samples and icons stay — remake one from its right-click menu.</span>
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

@@ -10,7 +10,7 @@ import { useSession } from './session'
 
 type Origin = NonNullable<Job['origin']>
 
-const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Generate', edit: 'Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', story: 'Story', api: 'API' }
+const SUITE_LABEL: Record<Origin['suite'], string> = { generate: 'Image', edit: 'Image · Edit', animate: 'Animate', catalogue: 'Catalogue', stage: 'Stage', story: 'Story', api: 'API' }
 
 /** D90 (02 §5): `origin.surface` of a job made for a shot version (the server's `story.FOR_SHOT`). */
 export const FOR_SHOT = 'for_shot'

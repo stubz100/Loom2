@@ -38,6 +38,6 @@ describe('storyPlace (F24)', () => {
     expect(storyPlace({ suite: 'stage', surface: 'shot', ref: 'stg_1', payload: { camera_id: 'cam_1' } })).toBeNull()      // Stage's own "shot" stays Stage's
     expect(storyPlace({ suite: 'story', surface: 'expand', ref: null, payload: null })).toBeNull()
     expect(storyPlace({ suite: 'generate', surface: FOR_SHOT, ref: null, payload: {} })).toBeNull()
-    expect(originLabel({ suite: 'generate', surface: FOR_SHOT, ref: null, payload: { shot_id: 'sht_1', version: 'v2' } })).toBe('Generate · for a shot · sht_1 v2')
+    expect(originLabel({ suite: 'generate', surface: FOR_SHOT, ref: null, payload: { shot_id: 'sht_1', version: 'v2' } })).toBe('Image · for a shot · sht_1 v2')
   })
 })

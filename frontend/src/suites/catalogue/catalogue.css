@@ -17,6 +17,9 @@
 .tile.fill .thumb img { object-fit: cover; }
 .tile .label { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 6px; font-size: 11px; color: var(--fg3); white-space: nowrap; overflow: hidden; }
 .tile .badges { position: absolute; top: 4px; left: 4px; display: flex; gap: 3px; }
+/* D95 (IM1): ✎ Edit on Image's result tiles, shown on hover and on the selected tile */
+.tile .tile-edit { position: absolute; top: 4px; right: 4px; padding: 1px 7px; min-height: 0; font-size: 11px; border-radius: var(--radius); background: rgba(0,0,0,.72); color: #eee; border: 1px solid var(--line2); opacity: 0; }
+.tile:hover .tile-edit, .tile.selected .tile-edit, .tile .tile-edit:focus-visible { opacity: 1; }
 .tile .badge-dot { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font-size: 11px; background: var(--overlay); color: var(--fg); }
 .tile .badge-dot.keep { color: var(--keep); } .tile .badge-dot.reject { color: var(--reject); }
 .tile .stars { position: absolute; top: 4px; right: 4px; font-size: 10px; color: var(--accent); background: var(--overlay); border-radius: 4px; padding: 1px 4px; }

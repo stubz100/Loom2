@@ -7,7 +7,7 @@ import { useKeymap } from './keymap'
 import './menu.css'
 
 const GESTURES: Record<string, [string, string][]> = {
-  catalogue: [['Ctrl-click / Shift-click', 'toggle / range select (also: the arrow keys with Shift)'], ['Double-click', 'open in the loupe (also: right-click → Open in loupe)'], ['Drag tiles to Generate', 'use as reference (also: right-click → Use as reference)']],
+  catalogue: [['Ctrl-click / Shift-click', 'toggle / range select (also: the arrow keys with Shift)'], ['Double-click', 'open in the loupe (also: right-click → Open in loupe); in Image\'s results it opens Edit'], ['Drag tiles to the Image tab', 'references in Make, layers in Edit (also: right-click → Use as reference)']],
   edit: [['Alt-click eye', 'solo the layer (also: right-click → Solo)'], ['Shift-click mask thumbnail', 'enable / disable the mask (also: right-click → Mask)'], ['Double-click layer', 'rename (also: right-click → Rename…)'], ['Shift / Alt while selecting', 'add / subtract (also: the mode control in Tool options)'], ['Space + drag, middle button', 'pan (also: the Hand tool)'], ['Ctrl + wheel', 'zoom at the pointer (also: the zoom buttons)']],
   generate: [['Drag tiles onto the reference slots', 'add references (also: right-click a tile → Use as reference)'], ['Right-click a preset icon', 'add or remove it, remake its sample, remove your own preset'], ['Scroll the Panel', 'the rail follows the section you are in (D90)']],
   // D90 (01 §11.2): the gestures of Animate, Stage and Story, with their menu or button equivalents

@@ -1,6 +1,7 @@
 # 03 · UX0 — the UI/UX review before the build (Image and Animate)
 
-Status: **for the author's corrections, 2026-10-18.** This is the first wave of the build order
+Status: **accepted by the author, 2026-10-18 — all 23 recommendations of §4** (D99). IM1 is built on them (journal 2026-10-18 17:56).
+This is the first wave of the build order
 ([proto01_animate/07](../proto01_animate/07-build-order.md)). Nothing is built until the author has corrected these wireframes. After
 the build, UX9 walks the same paths in the app.
 

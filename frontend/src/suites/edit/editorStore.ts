@@ -1,5 +1,6 @@
 // Edit suite state (10): the open document (stack + pixels), view, tools and options, selection, history,
 // and persistence against /documents. Pixels live in LayerPixels (canvas + texture); the store holds references.
+import { editPresence } from '../../frame/editPresence'
 import { create } from 'zustand'
 import { DEV_HOOKS } from '../../devHooks'
 import { persist } from 'zustand/middleware'
@@ -143,7 +144,9 @@ export interface EditorState {
   /** sync, then write the .ora when it lags the open document; `quiet` (autosave) shows no "Saved" toast. */
   save: (opts?: { quiet?: boolean }) => Promise<boolean>
   resync: () => Promise<void>
-  saveToCatalogue: () => Promise<void>
+  /** D95 (IM1, UX0 #4): Edit's one Save — the document and a new Catalogue version with lineage (the same one again while unchanged);
+   *  `forShot`: then the version becomes that Shot version's frame (UX0 #23). The new (or kept) version's asset id, or null. */
+  saveVersion: (o?: { forShot?: { shot_id: string; version: string; name: string } }) => Promise<string | null>
   exportPng: () => Promise<void>
   exportPsd: () => Promise<void>
   // tools / view
@@ -948,14 +951,21 @@ export const useEditor = create<EditorState>()(
             await get().mergeServerLayers(added, group)
           } catch { /* the next event or save reconciles */ }
         },
-        saveToCatalogue: async () => {
+        saveVersion: async (o = {}) => {
           const { doc } = get()
-          if (!doc) return
-          if (!(await get().save())) return                          // the flatten runs on the saved document
+          if (!doc) return null
+          if (!(await get().save({ quiet: true }))) return null       // the flatten runs on the saved document
           try {
-            const r = await unwrap(http.POST('/documents/{doc_id}/flatten', { params: { path: { doc_id: doc.id } }, body: { to_catalogue: true } }))
-            useSession.getState().toast('asset' in r ? `Saved to Catalogue as ${r.asset.id}` : 'Flattened', 'success')
-          } catch (e) { useSession.getState().toast(`Save to Catalogue failed: ${(e as ApiError).detail ?? e}`, 'error') }
+            const r = await unwrap(http.POST('/documents/{doc_id}/flatten', { params: { path: { doc_id: doc.id } }, body: { to_catalogue: true, reuse_unchanged: true } }))
+            if (!('asset' in r)) return null
+            const id = r.asset.id
+            if (o.forShot) {
+              const f = o.forShot
+              await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/take', { params: { path: { sid: f.shot_id, vid: f.version } }, body: { kind: 'image', id, use: true } }))
+              useSession.getState().toast(`Saved · ${r.reused ? 'unchanged, the same version' : 'a new version'} is ${f.name}'s frame now`, 'success')
+            } else useSession.getState().toast(r.reused ? 'Saved · unchanged since the last version (no new one in the Catalogue)' : `Saved · a new version in the Catalogue (${id})`, 'success')
+            return id
+          } catch (e) { useSession.getState().toast(`Save failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
         },
         exportPng: async () => {
           const { doc } = get()
@@ -1760,3 +1770,4 @@ export { walk }
 
 // dev: DevTools, the headed check and the e2e smoke read the store before any canvas exists (the canvas sets __loom2App too)
 if (DEV_HOOKS) (window as unknown as { __loom2Editor?: typeof useEditor }).__loom2Editor = useEditor
+useEditor.subscribe((st) => { editPresence.hasDoc = !!st.doc })                        // D95 (IM1): the Image tab drops layers into an open document

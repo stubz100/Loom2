@@ -1,5 +1,6 @@
 // The AI panel's settings (10 §4): one small store shared by the AI tab and the A-tool options so both views edit
-// the same values; it is UI state only (not persisted) — recipes carry everything that matters into the manifest.
+// the same values; it is UI state only — recipes carry everything that matters into the manifest. D95 (IM1, UX0 #22): the operation last
+// chosen is remembered in this browser (a per-viewer convenience; nothing breaks without it).
 import { create } from 'zustand'
 import { DEV_HOOKS } from '../../devHooks'
 
@@ -32,5 +33,14 @@ export const AI_DEFAULT: AiPanelState = {
   selModel: null, selMode: 'subject', selText: '', selThreshold: 0.5, selOp: 'replace', selExpand: 0, selFeather: 2, selRefine: false, blend: 'feather', matchColour: false, prefill: false,
 }
 
-export const useAiPanel = create<AiPanelState & { set: (p: Partial<AiPanelState>) => void }>()((set) => ({ ...AI_DEFAULT, set: (p) => set(p) }))
+const OP_KEY = 'loom2.edit.aiOp'
+const OPS: AiOp[] = ['select', 'inpaint', 'refine', 'upscale', 'outpaint']
+function lastOp(): AiOp {
+  try { const v = localStorage.getItem(OP_KEY) as AiOp | null; return v && OPS.includes(v) ? v : AI_DEFAULT.op } catch { return AI_DEFAULT.op }
+}
+
+export const useAiPanel = create<AiPanelState & { set: (p: Partial<AiPanelState>) => void }>()((set) => ({
+  ...AI_DEFAULT, op: lastOp(),
+  set: (p) => { if (p.op) { try { localStorage.setItem(OP_KEY, p.op) } catch { /* private window: not remembered */ } } set(p) },
+}))
 if (DEV_HOOKS) (globalThis as unknown as { __loom2AiPanel?: unknown }).__loom2AiPanel = useAiPanel   // read by edit_headed_check.py kit (D63)

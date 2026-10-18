@@ -3598,6 +3598,11 @@
             ],
             "title": "Name"
           },
+          "reuse_unchanged": {
+            "default": false,
+            "title": "Reuse Unchanged",
+            "type": "boolean"
+          },
           "to_catalogue": {
             "default": true,
             "title": "To Catalogue",
@@ -3611,10 +3616,16 @@
         "properties": {
           "asset": {
             "$ref": "#/components/schemas/AssetRecord"
+          },
+          "reused": {
+            "default": false,
+            "title": "Reused",
+            "type": "boolean"
           }
         },
         "required": [
-          "asset"
+          "asset",
+          "reused"
         ],
         "title": "FlattenedToCatalogue",
         "type": "object"

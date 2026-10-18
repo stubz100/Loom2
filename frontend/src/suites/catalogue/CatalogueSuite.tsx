@@ -3,7 +3,7 @@
 // the inspector. Generate shows its results with the same Stage and Inspector and, until its own pass, the older Strip below.
 import { mediaOf } from '../../frame/drag'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Asset } from '../../api/types'
 import type { SuiteDef } from '../../frame/suiteRegistry'
@@ -13,7 +13,8 @@ import { useSession } from '../../store/session'
 import { Compare, Loupe } from './Loupe'
 import { Tile } from './Tile'
 import { selectedOrPrimary, type GroupHeader, type GroupMode, type Sort } from './catalogueStore'
-import { useActiveCatalogue, useCat } from './catalogueContext'
+import { CatalogueStoreCtx, useActiveCatalogue, useCat } from './catalogueContext'
+import { useGenerateResults } from './catalogueStore'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
@@ -135,6 +136,9 @@ export function Stage() {
   }, [c.loupe, compareOpen])
   const fill = useSession((st) => st.ui.thumbFit === 'fill')
   const caption = useSession((st) => st.ui.caption)
+  // D95 (IM1, UX0 #1): in Image's results a double-click (and the tile's ✎) opens the image in Edit, in place; in the Catalogue it opens the loupe
+  const inResults = useContext(CatalogueStoreCtx) === useGenerateResults
+  const editAsset = useCallback((id: string) => { void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }, [])
   const [fileOver, setFileOver] = useState(false)
   useEffect(() => listenFileDrop({                                 // OS files dropped on the grid are imported (into Unprocessed)
     over: (inside) => setFileOver(inside),
@@ -237,7 +241,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={(id) => c.openLoupe(id)} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={inResults ? editAsset : (id) => c.openLoupe(id)} onEdit={inResults ? editAsset : undefined} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
             </div>
           )
         })}

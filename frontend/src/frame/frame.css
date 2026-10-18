@@ -74,6 +74,14 @@ a { color: var(--accent); }
 .panel { grid-area: panel; position: relative; display: flex; flex-direction: column; width: var(--panel-w, 320px); min-width: 0; background: var(--bg1); border-right: 1px solid var(--line); overflow: hidden; }
 .panel.closed, .inspector.closed { width: 0; border: none; }
 .panel .head, .inspector .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--fg2); font-weight: 600; }
+/* D95 (IM1): a one-column panel's sections (Image · Edit; Image · Make keeps its gen-* classes), the head sticky under the panel head */
+.col-column { display: flex; flex-direction: column; gap: 4px; }
+.col-sec { padding: 6px 0 12px; border-bottom: 1px solid var(--line); scroll-margin-top: 4px; }
+.col-sec:last-child { border-bottom: none; }
+.col-sec-head { position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 0 4px; background: var(--bg1);
+  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg2); }
+.panel .head .image-mode { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }   /* D95 (IM1): Make | Edit */
+.panel .head .image-back { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; min-height: 24px; font-size: 12px; }
 .panel .body, .inspector .body { flex: 1; overflow: auto; padding: 12px; }
 .panel .foot { padding: 12px; border-top: 1px solid var(--line); }
 .panel .foot button.primary { width: 100%; }

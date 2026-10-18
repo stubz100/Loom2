@@ -69,7 +69,8 @@ delivers **no HTML5 drag events inside the page**. All internal drags use the po
   unit-tested) and use it for `accept`, `drop` and `describe` alike, so what the ghost says is what the drop does. A refusing target
   with a reason does not block an accepting parent (`resolveTarget`).
 
-Current drop sites: TopBar suite tabs (Edit opens, Generate adds references, Animate sets start/end), Generate reference slots, Animate
+Current drop sites: TopBar suite tabs (Image: references in Make, layers in Edit or the first image opened when no document is open —
+D95, `editPresence.ts`; Animate sets start/end), Generate reference slots, Animate
 slots and beats, the Edit canvas and empty stage, Places rows, pane bodies, album pages.
 
 ## Rule 3 — no native dialogs

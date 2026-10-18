@@ -5304,3 +5304,73 @@ model_literals_check, agents_check and export_openapi --check clean. Screenshots
   Three shortcuts would save up to 8 clicks.
 - `.docs/proto01_UI/03-ux0-review.md` collects **23 decisions to confirm, each with a recommendation**: Image 1–8, Animate 9–18, keys
   19–20, shortcuts 21–23. IM1 starts when the author has accepted or corrected them.
+
+## 2026-10-18 17:56 — UX0 accepted (D99); IM1 built · the Image tab (Make ⇄ Edit in place), Edit as one column, one Save
+
+The author accepted all 23 UX0 decisions as recommended: **D99**. IM1 is built on them (proto01_animate 03 §7).
+
+**Tabs:**
+
+- **Story · Image · Animate · Stage**, keyed Ctrl+1–4. Stage stays until AN1.
+- **Image holds the generate and edit suites as its two modes**, the way Story holds the Catalogue (`railTabs.TOP_TABS`).
+- `ui.imageLast` returns the tab to the mode last open. Pointing at the tab preloads Edit (`topTabs.preloadOf`).
+- `global.suite.image` (Ctrl+2). *Image · Make* and *Image · Edit* keep their commands, without keys; Ctrl+2's shared chord with Edit's
+  200 % is re-declared.
+- **A drop on the tab:** references in Make; in Edit, layers of the open document, or the first image opened when none is
+  (`frame/editPresence.ts`, written by the editor store, so the frame never imports the lazy editor).
+
+**The Make | Edit switch** (`frame/ImageModeSwitch.tsx`) sits in both modes' panel head, through a new `SuiteDef.PanelHead`. In Edit,
+**← Results** goes back to Make. The panel title is "Image" in both.
+
+**Edit is one scrolling column:** Tool options · Brushes · Selection · AI · Documents. The jump rail and the scroll stay in sync through a
+new shared hook, `frame/columnSync.ts`, which Generate's column now uses too. Shared section classes are `col-column` / `col-sec` /
+`col-sec-head`.
+
+**Getting into Edit:**
+
+- **✎ Edit** on Image's result tiles (hover and selected).
+- **A double-click on a result opens Edit** (UX0 #1). In the Catalogue it still opens the loupe.
+- The tile prop is `onEdit`. The grid knows it is Image's results from its store context.
+
+**One Save** (UX0 #4):
+
+- `edit.save` (Ctrl+S) runs `saveVersion()`: it saves the document, then `POST /documents/{id}/flatten {to_catalogue, reuse_unchanged}`.
+- **The server returns the last version while the document's write counter has not moved:** `meta.save_seq`, counted in
+  `OpenDocument.save`, against `meta.last_flatten_seq`. `saved_at` has one-second steps, which a test caught, so it is not used.
+- `FlattenedToCatalogue.reused` is the new field. Lineage is as before (parent = the document's source).
+- **Save to Catalogue is gone** (merged).
+- `edit.saveForShot` (Ctrl+Shift+S), *Save and use as the Shot's frame* (UX0 #23), shows only while the For chip names a Shot. It posts
+  the version as the Shot version's image take with `use`.
+
+**The AI section** remembers its last operation in this browser (UX0 #22) and has **Angle ▸** (`edit.ai.angle`): save, then the New
+angle sheet on that version (UX0 #8). **☰ › New document…** is new (UX0 #3).
+
+**Labels:** "Generate" as a place became "Image" in the menus, tooltips, toasts, help, the keyboard settings, the origin chip and
+Story's *Make frame in Image*. The *Generate n ▶* verb stays.
+
+**Tests:**
+
+| Check | Result |
+| --- | --- |
+| Offline | **416** under full and open (new `test_edit_save_version_d95.py`) |
+| Vitest | **341** |
+| e2e smoke | **38/38** under full and open (an `openImage` helper; tab, label and Save expectations updated) |
+| Lint | 89 (+1: the new `EditColumn` component in EditSuite.tsx, the file's existing only-export-components kind) |
+| Build | clean |
+| Audits | settings_audit, model_literals_check, agents_check and export_openapi --check clean |
+
+**Headed on WebGPU (visible Edge, Vite on 1420, nothing else on the GPU), all passed:**
+
+- `render` 5;
+- `aipanel` 15;
+- `kit` 31 (every Edit menu in every tool);
+- `tour` 104, including "save makes a Catalogue version (assets 1 → 2)" (the script follows the one Save).
+
+Screenshots for the author were taken by a temporary Playwright spec, deleted afterwards.
+
+**Two slips, both repaired:**
+
+- A stray `git stash` set the working tree aside. It was restored at once with `stash pop`; the stash list is empty and the type check
+  passes.
+- Vite was stopped with a blanket `taskkill node.exe`. Next time it is stopped by its own process.
+

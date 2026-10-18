@@ -3753,6 +3753,11 @@ export interface components {
             /** Name */
             name?: string | null;
             /**
+             * Reuse Unchanged
+             * @default false
+             */
+            reuse_unchanged?: boolean;
+            /**
              * To Catalogue
              * @default true
              */
@@ -3761,6 +3766,11 @@ export interface components {
         /** FlattenedToCatalogue */
         FlattenedToCatalogue: {
             asset: components["schemas"]["AssetRecord"];
+            /**
+             * Reused
+             * @default false
+             */
+            reused: boolean;
         };
         /** FlattenedToFile */
         FlattenedToFile: {

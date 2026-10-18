@@ -23,7 +23,7 @@ test('open the project: the Catalogue grid shows tiles and their thumbnails load
   await projectTab.click()
   await expect(page.locator('.menu.project-menu')).toHaveCount(0)
   // D90 (02 §3): Story leads the tabs and holds the Catalogue (active under it); Models & engine is a sheet in ☰
-  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Generate/, /^Edit/, /^Animate/, /^Stage/])
+  await expect(page.locator('nav.tabs button.tab:not(.project-tab)')).toHaveText([/^Story/, /^Image/, /^Animate/, /^Stage/])
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
   await expect(page.locator('nav.rail button[aria-label="Catalogue"]')).toHaveClass(/active/)
   await page.locator('button[aria-label="app menu"]').click()
@@ -139,18 +139,18 @@ test('Animate: the tile menu fills the start and the end slots', async ({ page }
   }
 })
 
-test('send-to by drag (D71): a tile held on the Generate tab opens it, the ghost says what a drop adds, a slot takes it, a repeat is refused', async ({ page }) => {
+test('send-to by drag (D71): a tile held on the Image tab opens it (Make), the ghost says what a drop adds, a slot takes it, a repeat is refused', async ({ page }) => {
   await openApp(page, { suite: 'catalogue' })
   const tile = tiles(page).nth(3)
   const id = (await tile.getAttribute('data-id'))!
-  const tab = page.locator('nav.tabs button.tab', { hasText: 'Generate' })
+  const tab = page.locator('nav.tabs button.tab', { hasText: 'Image' })
   const hint = page.locator('.drag-ghost .drop-hint')
   const from = await centre(tile), onTab = await centre(tab)
   await page.mouse.move(from.x, from.y)
   await page.mouse.down()
   await page.mouse.move(from.x + 12, from.y + 8, { steps: 3 })
   await page.mouse.move(onTab.x, onTab.y, { steps: 10 })
-  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+ — or hold to open Generate$/)
+  await expect(hint).toHaveText(/^✓ Add as reference 1 of \d+ — or hold to open Image$/)
   // resting on the tab for 600 ms opens Generate; the drag carries on to a particular slot
   await expect(page.locator('.ref-slots')).toBeVisible()
   await expect(page.locator('.drag-ghost')).toBeVisible()
@@ -177,6 +177,13 @@ test('send-to by drag (D71): a tile held on the Generate tab opens it, the ghost
   await expect(page.locator('.ref-slots .ref-slot img')).toHaveCount(1)
 })
 
+/** D95 (IM1): Image's modes — the Image tab, then the panel head's Make | Edit switch. */
+async function openImage(page: import('@playwright/test').Page, mode: 'Make' | 'Edit'): Promise<void> {
+  await page.locator('nav.tabs button.tab', { hasText: 'Image' }).click()
+  await page.locator('.panel .head .image-mode .segmented button', { hasText: mode }).click()
+  await expect(page.locator('.panel .head .image-mode .segmented button.active')).toHaveText(mode)
+}
+
 /** Press on `from`, carry the tile to `tab` and rest there until its suite is up (D71 spring-loaded tabs); the pointer stays down. */
 async function carryAndHold(page: import('@playwright/test').Page, from: { x: number; y: number }, tab: string, up: string): Promise<void> {
   const onTab = await centre(page.locator('nav.tabs button.tab', { hasText: tab }))
@@ -201,8 +208,9 @@ test('spring-loaded tabs (D71) in Animate and Edit: hold, then drop on the end s
   await expect(end.locator('img')).toHaveAttribute('src', new RegExp(id))
   await expect(page.locator('.slots .slot').nth(0).locator('img')).toHaveCount(0)        // the end slot only
 
+  await openImage(page, 'Edit')                                                          // D95: the Image tab springs open on its last mode
   await openCatalogue(page)
-  await carryAndHold(page, await centre(tiles(page).nth(6)), 'Edit', '.edit-empty')
+  await carryAndHold(page, await centre(tiles(page).nth(6)), 'Image', '.edit-empty')
   const stage = await centre(page.locator('.edit-empty'))
   await page.mouse.move(stage.x, stage.y, { steps: 8 })
   await expect(page.locator('.drag-ghost .drop-hint')).toHaveText('✓ Open in Edit')
@@ -239,7 +247,7 @@ test('quick actions (D71): "Select subject" in the Inspector reaches Edit with A
   await expect(card).toBeEnabled()
   await card.click()
   await expect.poll(() => editorTool(page), { timeout: 30_000 }).toEqual({ doc: true, tool: 'ai', op: 'select', sel: 'subject' })
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Edit/)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
   await expect(page.locator('nav.rail button.active[title^="AI"]')).toBeVisible()
 
   await openApp(page, { suite: 'edit', tool: 'ai', ai: 'upscale' })
@@ -346,7 +354,7 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   test.setTimeout(150_000)                                                             // the reload + WebGL boot takes long on the CI runners
   await page.route(/EditSuite-[\w-]+\.js$/, (r) => r.abort('failed'))               // the network refuses Edit's code (the idle preload hits it too)
   await openApp(page, { suite: 'catalogue' })
-  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await openImage(page, 'Edit')
   await expect(page.locator('.stage .render-error')).toContainText("Edit's code could not be loaded")
   await expect(page.locator('.render-error')).toHaveCount(1)                          // one explanation, in the middle; the panel says one line
   await expect(page.locator('.render-error-line')).toContainText('Edit is not available')
@@ -354,10 +362,10 @@ test('a suite whose code fails to load says so and recovers (no blank window): t
   await openCatalogue(page)
   await expect(tiles(page).first()).toBeVisible()
   await page.unroute(/EditSuite-[\w-]+\.js$/)
-  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await openImage(page, 'Edit')
   await page.locator('.stage .render-error').getByRole('button', { name: 'Reload the app' }).click()   // the browser keeps a failed module: reload
   await expect(page.locator('.frame')).toBeVisible()
-  await page.locator('nav.tabs button.tab', { hasText: 'Edit' }).click()
+  await openImage(page, 'Edit')
   await expect(page.locator('.edit-empty')).toBeVisible({ timeout: 90_000 })         // the code loads this time (the CI runner takes long over the reload + WebGL boot; 45 s failed once on the open runner, 2026-10-13)
 })
 
@@ -729,7 +737,7 @@ test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a l
   expect(sample.length === 1 && sample[0].params.style_id === style.id).toBe(true)                             // the sample ran under the style, on its group
   expect(w.default_style).toBe(w.styles[0].id)                                                               // the first style made is the default
   // Generate: the picker lists it and says what it appends; the job records the style and the text that ran
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await page.locator('nav.rail button[title^="Model"]').click()                                               // Klein 4B: the one model the e2e tree holds in both variants
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await page.locator('nav.rail button[title^="Prompt"]').click()                                              // switches the tab (a click on the active tab would fold the panel)
@@ -840,7 +848,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   expect(rec.dataset.setting).toBe('plain studio background')
   await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(4)  // Cast ✓ · Expand ✓ · Train ✓ · Lock ✓
   // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await page.locator('nav.rail button[title^="Model"]').click()
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await expect(page.locator('.panel select[aria-label="LoRA slot 1"] option', { hasText: `${name} v1 · Klein 4B · 100 steps` })).toHaveCount(1)   // LT2: the trained LoRA fits the 4B base
@@ -1268,7 +1276,7 @@ test('lora slots (18 / LT1, D25): the Model tab lists the loras folder\'s file f
   await expect(page.locator('.panel input[aria-label="LoRA strength 1"]')).toHaveCount(0)
 })
 
-test('makers in context (D90 · UI4): "Make frame ▸ in Generate" on a Story shot opens Generate with the For chip, the node\'s line and the board\'s image as a reference; the fake engine\'s images land as the version\'s takes, and Back returns to the shot', async ({ page }) => {
+test('makers in context (D90 · UI4): "Make frame ▸ in Image" on a Story shot opens Image with the For chip, the node\'s line and the board\'s image as a reference; the fake engine\'s images land as the version\'s takes, and Back returns to the shot', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `For ${Date.now().toString(36)}`
   type ShotLite = { id: string; name: string; versions: { id: string; frame_asset_id: string | null; takes: { kind: string; id: string }[] }[] }
@@ -1289,8 +1297,8 @@ test('makers in context (D90 · UI4): "Make frame ▸ in Generate" on a Story sh
   await openApp(page, { suite: 'story', tab: 'shots' })                                                       // the panel keeps Klein 4B (persisted)
   await page.locator(`.story-row.shot-row[data-id="${shot.id}"]`).click()
   await page.locator('.shot-board .make-row button[aria-label="Make frame"]').click()
-  await page.locator('.ctx-menu button.item', { hasText: 'in Generate' }).click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
+  await page.locator('.ctx-menu button.item', { hasText: 'in Image' }).click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
   const chip = page.locator('.panel [data-testid="for-chip"]')
   await expect(chip).toContainText(`For: ${name} · v1`)
   await page.locator('nav.rail button[title^="Prompt"]').click()
@@ -1315,7 +1323,7 @@ test('makers in context (D90 · UI4): "Make frame ▸ in Generate" on a Story sh
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)
   await expect(page.locator('.story-strip b')).toHaveText(name)
   await expect(page.locator('.shot-board .take-card')).toHaveCount(count)
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await chip.locator('button[aria-label^="Stop making for the shot"]').click()
   await expect(chip).toHaveCount(0)
 })
@@ -1342,7 +1350,7 @@ test('the World library (D92 · UI7): an entry added in Story · World gets its 
   await expect(field.locator(`button[aria-label="${name}"] img`)).toBeVisible({ timeout: 45_000 })
   expect(await page.locator('.preset-icon .tile').evaluateAll((ts) => ts.filter((t) => !t.querySelector('svg, img')).length)).toBe(0)   // D92: a glyph or a picture, never letters
   // Generate: the tile in the Look section's lighting row; a click puts the words in the field
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await page.locator('nav.rail button[title^="Prompt"]').click()
   await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
   await page.locator('nav.rail button[title^="Look"]').click()
@@ -1422,7 +1430,7 @@ test('Cast from Generate (D93 · A1, A2): a character without a look gets candid
   await expect(page.locator('#cast-appearance')).toBeFocused()
   await page.locator('#cast-appearance').fill(`${name}, a red-haired diver in a yellow wetsuit`)
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${prof.id}`)).versions[0].appearance).toBe(`${name}, a red-haired diver in a yellow wetsuit`)
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await expect(card.locator('.subject-sheet')).toContainText('a red-haired diver in a yellow wetsuit')   // the card follows Cast
   await expect(card.locator('.subject-warn')).toHaveCount(0)
   await expect(page.locator('.panel .foot button.primary', { hasText: /^Generate/ })).toBeEnabled({ timeout: 30_000 })
@@ -1480,7 +1488,7 @@ test('a live character sheet (D93 · B4, B5): an outfit edited in Cast shows on 
   await expect.poll(async () => { const v = (await api<ProfileLite>('GET', `/story/profiles/${p1.id}`)).versions[1]; return `${v.outfit}|${v.colours.map((c) => `${c.hex} ${c.object}`).join()}` }).toBe('a yellow oilskin|#C0392B oilskin')
   await page.screenshot({ path: 'node_modules/.e2e/d93b-smoke-cast.png' })
   // Generate: the subject linked to the character shows the edited sheet, the chip says the version
-  await page.locator('nav.tabs button.tab', { hasText: 'Generate' }).click()
+  await openImage(page, 'Make')
   await page.locator('nav.rail button[title^="Model"]').click()
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()   // takes references
   await page.locator('nav.rail button[title^="Prompt"]').click()
@@ -1552,8 +1560,8 @@ test('a subject per speaker, a place, a prop (D93 · C6, C7): the Flow Inspector
   await page.locator('.inspector select[aria-label="where (a Cast place)"]').selectOption(quay.id)
   await expect.poll(async () => (await nodeOf()).place_id).toBe(quay.id)
   await expect(page.locator(`.flow-node[data-id="${node.id}"] .place`)).toHaveText(`@ ${quay.name}`)
-  await page.locator('.inspector button', { hasText: 'Make frame in Generate' }).click()
-  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Generate/)
+  await page.locator('.inspector button', { hasText: 'Make frame in Image' }).click()
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
   await expect(page.locator('#gen-sec-prompt .segmented button.active')).toHaveText('Tree')
   const cards = page.locator('.gen-tree .subject.linked')
   await expect(cards).toHaveCount(2)
@@ -1638,7 +1646,7 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   expect(job.result?.serialized_prompt).toContain(`From left to right in image 1: figure 1 is ${ana.name} (reference image 2), a short woman in a red raincoat; figure 2 is ${bo.name} (reference image 3), a lanky boy with a green cap.`)
 })
 
-test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a blend mode and an adjustment into one layer, exactly as the server flattens; Undo brings the layers back; Save to Catalogue still matches', async ({ page }) => {
+test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a blend mode and an adjustment into one layer, exactly as the server flattens; Undo brings the layers back; Save (D95: the document and a Catalogue version) still matches', async ({ page }) => {
   type Ed = { getState: () => { doc: { id: string; layers: { id: string; name: string; kind: string }[] } | null; addLayer: (k: string, extra?: Record<string, unknown>) => unknown; updateNode: (id: string, p: Record<string, unknown>) => void; groupNodes: (ids: string[]) => void; duplicateNodes: (ids: string[]) => void; undo: () => void; save: () => Promise<boolean>; docDirty: boolean } }
   const ed = () => page.evaluate(() => { const s = (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState(); return { layers: s.doc!.layers.map((n) => ({ id: n.id, name: n.name, kind: n.kind })), dirty: s.docDirty } })
   const raw = async (docId: string): Promise<Buffer> => {
@@ -1679,13 +1687,13 @@ test('Flatten image (D90 · UI6): the canvas menu\'s Layer ▸ folds a group, a 
   await page.evaluate(() => (window as unknown as { __loom2Editor: Ed }).__loom2Editor.getState().save())
   expect((await api<{ layers: unknown[] }>('GET', `/documents/${docId}`)).layers).toHaveLength(1)
   expect((await raw(docId)).equals(before)).toBe(true)                                                 // the one layer renders what the stack rendered
-  // Save to Catalogue after the flatten: a new asset from the same pixels
+  // Save after the flatten (D95: one Save writes the document and a Catalogue version): a new asset from the same pixels
   const last = async () => (await api<{ meta: { last_flatten_asset?: string } }>('GET', `/documents/${docId}`)).meta.last_flatten_asset ?? null
   const a0 = await last()
   await page.locator('.edit-canvas canvas').click({ button: 'right', position: { x: 40, y: 40 } })
   await page.locator('.ctx-menu .item.sub', { hasText: /^Document/ }).hover()
-  await page.locator('.ctx-menu .ctx-menu button.item', { hasText: 'Save to Catalogue' }).click()
-  await expect(page.locator('.toast', { hasText: /^Saved to Catalogue as / })).toBeVisible()
+  await page.locator('.ctx-menu .ctx-menu button.item', { has: page.locator('.lbl', { hasText: /^Save$/ }) }).click()
+  await expect(page.locator('.toast', { hasText: /^Saved · a new version in the Catalogue/ })).toBeVisible()
   await expect.poll(last).not.toBe(a0)
   expect((await api<{ params: { layers: number } }>('GET', `/assets/${await last()}`)).params.layers).toBe(1)                // flattened from the one-layer document
   // Undo (the layers footer's More ▾ has it too): the three layers again

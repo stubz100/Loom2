@@ -1,6 +1,6 @@
 // Global commands (07 §4): frame toggles, settings, help, the command palette. Suite switching stays on the
 // TopBar tabs (Ctrl+1…5) and is registered here so the help overlay lists it.
-import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, RefreshCw, Settings, Sparkles } from 'lucide-react'
+import { Boxes, Clapperboard, FilePlus, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, Pencil, RefreshCw, Settings, Sparkles } from 'lucide-react'
 const CircleHelp = Info
 import { useSession } from '../store/session'
 import { TOP_TABS } from './railTabs'
@@ -28,13 +28,15 @@ registerCommands([
   { id: 'global.focus', scope: 'global', label: 'Focus mode (hide panel + inspector)', icon: Maximize2, keys: 'Tab', placement: ['rail', 'topbar'], run: () => s().setUi({ focusMode: !s().ui.focusMode }) },
   { id: 'global.density', scope: 'global', label: 'Toggle density', icon: LayoutGrid, placement: ['topbar'], run: () => s().setUi({ density: s().ui.density === 'compact' ? 'comfortable' : 'compact' }) },
   { id: 'global.refresh', scope: 'global', label: 'Refresh state', icon: RefreshCw, placement: ['topbar'], run: () => void s().refreshAll() },
-  // D90 (02 §3): the tabs are Story · Generate · Edit · Animate · Stage, keyed Ctrl+1–5 in their order; the Catalogue is Story's third
-  // workspace and Models & engine a sheet in ☰ — their commands stay (palette, remapped keys) without a top-bar key
+  // D90 (02 §3) → D95 (IM1): the tabs are Story · Image · Animate · Stage, keyed Ctrl+1–4 in their order (Stage moves into Animate with AN1);
+  // Image's two modes, Make and Edit, keep their commands without a top-bar key (the column's switch, the palette, remapped keys); the
+  // Catalogue is Story's third workspace and Models & engine a sheet in ☰
   { id: 'global.suite.story', scope: 'global', label: 'Story', keys: 'Ctrl+1', placement: ['topbar'], run: () => void openTop('story') },
-  { id: 'global.suite.generate', scope: 'global', label: 'Generate', keys: 'Ctrl+2', placement: ['topbar'], run: () => s().setSuite('generate') },
-  { id: 'global.suite.edit', scope: 'global', label: 'Edit', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('edit') },
-  { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('animate') },
-  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+5', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
+  { id: 'global.suite.image', scope: 'global', label: 'Image', keys: 'Ctrl+2', placement: ['topbar'], run: () => void openTop('image') },
+  { id: 'global.suite.generate', scope: 'global', label: 'Image · Make', icon: Sparkles, placement: ['topbar', 'panel'], run: () => s().setSuite('generate') },
+  { id: 'global.suite.edit', scope: 'global', label: 'Image · Edit', icon: Pencil, placement: ['topbar', 'panel'], run: () => s().setSuite('edit') },
+  { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+3', placement: ['topbar'], run: () => s().setSuite('animate') },
+  { id: 'global.suite.stage', scope: 'global', label: 'Stage', keys: 'Ctrl+4', placement: ['topbar'], run: () => s().setSuite('stage') },   // P13 (D81)
   { id: 'global.suite.catalogue', scope: 'global', label: 'Catalogue (Story)', icon: Images, placement: ['rail'], run: () => s().setSuite('catalogue') },
   { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
   ...(['world', 'cast', 'catalogue', 'shots', 'flow', 'episode'] as const).map((w, i) => ({
@@ -46,7 +48,7 @@ registerCommands([
   { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },
   { id: 'global.start.generate', scope: 'global', label: 'Generate an image', icon: Sparkles, placement: ['toolbar'], when: () => !!s().project?.open,
     run: () => { s().setSuite('generate'); void import('./suiteRegistry').then((m) => m.setRailTab('generate', 'prompt')) } },
-  { id: 'global.start.newDocument', scope: 'global', label: 'New document', icon: FilePlus, placement: ['toolbar'], when: () => !!s().project?.open,
+  { id: 'global.start.newDocument', scope: 'global', label: 'New document', icon: FilePlus, placement: ['toolbar', 'topbar'], when: () => !!s().project?.open,   // D95 (UX0 #3): also in ☰
     run: () => void openWith(null, { suite: 'edit' }).then(() => import('../suites/edit/editorStore')).then((m) => m.useEditor.getState().newDocument(1920, 1080)) },
   { id: 'global.start.animate', scope: 'global', label: 'Animate from an image', icon: Clapperboard, placement: ['toolbar'], when: () => !!s().project?.open,
     run: () => { s().setSuite('catalogue'); s().toast('Pick an image, then Animate ▾ under the loupe or in the Inspector (Shift+A), or drag it onto the Animate tab', 'info') } },

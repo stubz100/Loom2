@@ -14,7 +14,7 @@ import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
 import { aspectGlyph, fieldGlyph, tierGlyph } from '../../frame/presetGlyphs'
-import { setRailTab } from '../../frame/suiteRegistry'
+import { useColumnSync } from '../../frame/columnSync'
 import { byOrder } from '../../store/modelCaps'
 import { askConfirm, useSession } from '../../store/session'
 import { appendValue, FIELD_LABEL, REPLACE, type FieldKey } from './fieldPresets'
@@ -572,25 +572,7 @@ function showPreview(): void {
 // ------------------------------------------------------------------ the column and its rail sync
 export function GenerateColumn({ tab }: { tab: string }) {
   const host = useRef<HTMLDivElement>(null)
-  const fromScroll = useRef(false)
-  const active = useRef(tab)
-  useEffect(() => {                                                       // a rail click (or a deep link) scrolls to its section
-    active.current = tab
-    if (fromScroll.current) { fromScroll.current = false; return }
-    document.getElementById(`gen-sec-${tab}`)?.scrollIntoView({ block: 'start' })
-  }, [tab])
-  useEffect(() => {                                                       // … and scrolling moves the rail's highlight
-    const body = host.current?.closest('.body') as HTMLElement | null
-    if (!body) return
-    const h = () => {
-      const top = body.getBoundingClientRect().top + 24
-      let cur: string = SECTION_IDS[0]
-      for (const id of SECTION_IDS) { const el = document.getElementById(`gen-sec-${id}`); if (el && el.getBoundingClientRect().top <= top) cur = id }
-      if (cur !== active.current) { active.current = cur; fromScroll.current = true; setRailTab('generate', cur) }
-    }
-    body.addEventListener('scroll', h, { passive: true })
-    return () => body.removeEventListener('scroll', h)
-  }, [])
+  useColumnSync(host, 'generate', SECTION_IDS, 'gen-sec-', tab)        // the rail and the scroll, both ways (frame/columnSync.ts)
   return (
     <div ref={host} className="gen-column">
       <ForChip maker="generate" />{/* D90 (02 §5): opened for a shot — the results come back as its takes */}

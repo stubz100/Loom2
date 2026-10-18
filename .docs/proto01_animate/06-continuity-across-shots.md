@@ -1,6 +1,7 @@
 # 06 · Continuity across Shots — options
 
-Status: **options for the author, 2026-10-18.** Nothing decided.
+Status: **decided by the author, 2026-10-18** (§5): templates and copies (O2, O3) for now, linked within a scene with *Make
+independent*; no Scene record (O1) and no continuity check (O5) for now.
 
 The author (2026-10-18): *"[We] will probably have to introduce shot templates and object copying, so two shots in the same environment
 would look the same. Let's write down a few options to solve this."*
@@ -135,9 +136,20 @@ Things that change during the story (a torn sleeve, a glass emptied, night falli
 | Repair | A6 healing patch, **O6** scene grade and shot-match in the cut | with AE4; with RC4 |
 | Story time | **O7** versions pinned per scene | with O1 (versions exist) |
 
-## 5. Questions for the author
+## 5. Questions — answered by the author, 2026-10-18
 
-1. Is **O1** (a Scene that owns the shared parts, Shots link to it) the model you want, or do you prefer copies with templates (O2)
-   alone?
-2. **Linked by default:** within a scene, should a new Shot link the shared parts (O1 / O3), with *Make independent* to break away?
-3. **O5:** is an advisory continuity check welcome, or only the visual comparison?
+| # | Question | Answer |
+| --- | --- | --- |
+| 1 | O1 (a Scene record) or templates and copies? | **Copies with templates are enough for now**: O2 + O3, no Scene record |
+| 2 | Linked by default within a scene, *Make independent* to break away? | **Yes** |
+| 3 | An advisory continuity check (O5)? | **No**: the story may need a character to change across Shots within a scene |
+
+**What is built, then (in RC2):**
+
+- **O2 · templates:** *New Shot from this Shot*, and saved templates in the World Library.
+- **O3 · copies:** within a scene, a new Shot **links** the shared parts (set, plate, light, cast versions, props, grade) as linked copies.
+  *Make independent* breaks a part away; an independent copy is the Catalogue's *Duplicate*.
+- **O4** (prevention while generating) stays with CA0, CA2 and CA3.
+- **O6** (match in the cut) stays with RC4.
+- **O7** (versions over story time) works through the existing versions.
+- **O1 and O5 are not built.**

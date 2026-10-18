@@ -5260,3 +5260,47 @@ Owed items checked, one GPU job at a time (D97), by a helper agent with temporar
 **Checks:** offline 415 under full and open; Vitest 341; e2e smoke 38/38; build and lint clean (88 warnings); settings_audit,
 model_literals_check, agents_check and export_openapi --check clean. Screenshots: `engine/spikes/out/flatten/` and `flatten/fix/`
 (local).
+
+## 2026-10-18 17:01 — Continuity answered; the build starts with UX0 · inventory, wireframes and paths for the author's corrections
+
+**Continuity (06 §5), the author's answers:**
+
+- copies with templates are enough for now: O2 + O3, no Scene record (O1);
+- linked by default within a scene, with *Make independent* to break away;
+- **no continuity check** (O5): "the story might require a character to change across shots within a scene".
+
+06 and 07 are updated: RC2 carries the templates and the linked copies.
+
+**"If everything is settled, let's start with the implementation"**: wave **UX0**, the first of the build order (07).
+
+- **The inventory** (`.docs/proto01_UI/03-ux0-inventory.md`, by a helper agent, checked against the code at 17cb22c; every G1–G41,
+  E1–E80, A1–A33 and S1–S28 row appears once):
+
+  | Suite | Rows | same | moved | merged | renamed | split | dropped |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Generate | 55 | 53 | 0 | 0 | 0 | 1 | 1 (Upsample, gone since D90) |
+  | Edit | 89 | 49 | 37 | 3 | 0 | 0 | 0 |
+  | Animate | 43 | 3 | 27 | 8 | 3 | 2 | 0 |
+  | Stage | 37 | 3 | 24 | 8 | 0 | 2 | 0 |
+
+  It adds the functions in the code but not in 01, the routes into the makers, the 14 functions the new model adds, a proposed single key
+  set, and what would be lost as written:
+  - Close document;
+  - Animate's clip / frames / lineage tabs;
+  - image planes and Rename without a mouse home;
+  - Animate's saved panels in browser storage.
+- **Seven wireframes** (HTML mock rendered in Edge with real loom2 frames, `.docs/proto01_UI/img/ux0-w1…w7`):
+  - W1 Image › Make, W2 Image › Edit in place;
+  - Animate at the Clay (W3), Performance (W4) and Final (W5) levels;
+  - W6 the Graph view;
+  - W7 at 1280 × 800.
+- **The canonical paths, in clicks:**
+  - P1, character → image → edit → the Shot's frame: 14;
+  - P2, Shot → stage → motion → performance → edit → take → the cut: 20;
+  - P3, the quick image-to-video take: 4;
+  - P4, edit any picture: 3 + the edit;
+  - P5, change a motion and re-take only what it touches: 2 + the edit.
+
+  Three shortcuts would save up to 8 clicks.
+- `.docs/proto01_UI/03-ux0-review.md` collects **23 decisions to confirm, each with a recommendation**: Image 1–8, Animate 9–18, keys
+  19–20, shortcuts 21–23. IM1 starts when the author has accepted or corrected them.

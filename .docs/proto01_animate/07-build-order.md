@@ -23,14 +23,14 @@ Status: **the plan, 2026-10-18.** It orders the waves of [02](02-implementation-
 | # | Phase | Waves | GPU | Days |
 | --- | --- | --- | --- | --- |
 | **0** | **UI/UX review** | **UX0**: the inventory for three tabs, wireframes of Image and Animate (column, viewer levels, timeline, Bin drawer, Graph view), the click paths; the author's corrections | no | 2–3 |
-| 1 | **Re-house** what exists | **IM1** Image (Make ⇄ Edit, Edit's one column) · **AN1** Animate shell (Stage moves in, one column, one timeline and transport, Clay level, the Bin drawer C1) · **RC0** the recipe record (05) with the Scene link (06 O1, if chosen) | headed checks only | 13–17 |
+| 1 | **Re-house** what exists | **IM1** Image (Make ⇄ Edit, Edit's one column) · **AN1** Animate shell (Stage moves in, one column, one timeline and transport, Clay level, the Bin drawer C1) · **RC0** the recipe record (05) | headed checks only | 13–17 |
 | 2 | **Foundations without the GPU** | **CA0** animation references and the body on the Cast sheet (characters and props) · **CA1** the motion library (FBX / glTF import, two-level dummy, root paths, foot lock) | rig check at the end | 8–11 |
 | 3 | **Spikes**, one at a time | **E23a** frame rate and seamless joins → **E23b** Move vs Replace → **E28** props → **E29** lip-sync → **E25** hands in the guide → **E27** the EffectCraft preview server → **E24** post-processing (E26 only if creatures are wanted) | yes, serial | ≈ 8 |
 | — | **Decision gate** | a D-number per spike group: rate and joins, mode and plates, props, lip-sync, the preview route, the post stages | — | — |
 | 4 | **The animation editor** | **AE1** the composition · **AP1** the preview server and its quality controls · **AE2** viewer and timeline · **AE3** effects and colour | AP1, AE3 rig checks | 16–21 |
 | 5 | **The clay pipeline** | **CA2** layers, light and props · **CA3** the plate (projection, depth-guided video) · **CA4** the batch planner · **CA5** layer jobs · **CA6** assembly into an AE1 composition · **AE4** AI passes on layers (CA7's post stages) · **AE5** the output as a take | yes, each wave's acceptance | 20–25 |
 | 6 | **Review** | **UX9**: the paths in the built app; the author's testing documents; the register fixed | headed checks | 1–2 |
-| 7 | **Story pass** | **RC1** the recipe graph (in the Flow and in Animate) · **RC2** the Shot node (Flow node + shot), templates (06 O2), linked / independent copies (O3) · **RC3** the cut from the Flow (voice only) · **O5** the continuity check · **RC4** the FilmCraft study, then the cut editor (with O6) | rig checks | 15–20 + RC4's build |
+| 7 | **Story pass** | **RC1** the recipe graph (in the Flow and in Animate) · **RC2** the Shot node (Flow node + shot), templates (06 O2), linked copies within a scene with *Make independent* (O3) · **RC3** the cut from the Flow (voice only) · **RC4** the FilmCraft study, then the cut editor (with O6) | rig checks | 15–20 + RC4's build |
 
 **Roughly 85–110 working days** before RC4's build. Phases 1 and 2 need no GPU beyond short headed checks, so they can be built while
 the author reviews UX0's results. Phase 3's spikes are the only long GPU work before phase 5.

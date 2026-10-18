@@ -47,3 +47,6 @@ bench/corpus/*/
 # S1 spike build output
 orchestrator/native/pcalgo/target/
 frontend/wasm/pcwasm/target/
+
+# Mixamo clips the author downloads (Adobe terms: never redistributed — proto01_animate 01 step 5)
+mixamo/

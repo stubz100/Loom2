@@ -5094,3 +5094,53 @@ Recorded as **D96**. 05 is rewritten as accepted:
 - AE5 uses EffectCraft's render settings (Best, Full, rate, motion blur, frame blending, colour depth, Proxy Use off) and output
   modules.
 - 03's total is 36–48 days.
+
+## 2026-10-18 12:26 — The author's answers to the open questions; scratch projects deleted; Mixamo clips checked; props and lip-sync in the plan
+
+**Clay (01 §7):**
+
+- **Small camera moves first, no limit**: the depth-guided plate stays for large moves (CA3).
+- **No crossfades at batch joins**, only between Shots in the cut. The weld is W1: the 5 carried frames are dropped from the next batch,
+  so the join is a plain cut. W2 is retired for joins; W3 repairs a visible seam with a healing patch. E23a now measures F16 and F24
+  seams and drift.
+- **Draft first, HD later.**
+- **Props work exactly like characters except the skeleton**. New 01 §10: Cast props with versions and animation references, bound
+  Stage props, transform keys, parented to a hand when held. Methods P1 (cut-out), P2 (depth-guided) and P3 (with the holder): spike
+  E28.
+- **Test lip-sync**. New 01 §11: L1 S2V as the layer, L2 S2V as Wan Animate's face video, L3 a post model only with approval. Spike E29.
+
+**Dummies (01 §9):**
+
+- two editing levels on one figure: Simple blocks, Detailed refines hands, feet and fine motion, keys mapped between them;
+- humanoids (N1) only for now;
+- the body on the Cast sheet (CA0).
+
+02's spikes now total ≈ 5.5 days and the CA waves 30–35 days.
+
+**Catalogue (04 §4):**
+
+- keep every idea as an idea;
+- C2's for-shot landing by default, yes;
+- the Bin is a collapsible drawer like the render queue;
+- "which kinds matter most" is explained (stages and motion first, compositions and layers later, Cast's kinds with the Bin) and stays
+  open.
+
+**The new layout is fine, and will change with the plan.** The Resolve import is deferred by the author.
+
+**Deleted, at the author's request**, after a look at each: the scratch projects and their state copies in `F:\loom2-projects`, about
+2 GB, none of them in the app's recents:
+
+- `d93-bind-…`, `d93-bind-flux2-dev-fp8mixed-…`;
+- `d93c-stage-…`, `d93c-stage-refcontrol-…`;
+- `e21-layers-…`, `e22-action-…`.
+
+The acceptance projects, `stubz001` and `synthetic-10k` are kept.
+
+**Mixamo.** The author's downloads are in `mixamo/` at the repo root, now in `.gitignore` (never redistributed). Seven clips checked:
+
+- FBX 7.7 ASCII, without skin, 65 `mixamorig:` bones, centimetres, 24 fps (TimeMode 11);
+- all load in three.js's FBXLoader (headless node);
+- root motion kept: *Start Walking* +1.99 m, *Slow Jog Backwards* −1.26 m, *Zombie Stand Up* hips +0.65 m.
+
+There is no official bulk download (community scripts use an undocumented API; not recommended). A shortlist of clips to fetch is in
+01 step 5.

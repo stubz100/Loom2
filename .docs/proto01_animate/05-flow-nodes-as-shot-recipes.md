@@ -97,9 +97,10 @@ needs its 4–5 connected components even for one image:
 | **Frame** (an image: the 4–5 components) | model and its preset; prompt (scene, subjects with their actions); references (slots, groups, mentions; bound per subject); Look (style, lighting, mood, camera angle); size / tier; LoRAs; encoder; seed and count | Image's Make column (D90–D93) |
 | **Animation reference** | per character version: A-pose, 16:9, colours bound | CA0 |
 | **Plate** | still, projection or depth-guided video; model; the World style | 01 step 4, CA3 |
-| **Keyframe stills** | method (Exact pose / Clay); references; one per figure per batch (W2) | Stage Render, CA4 |
-| **Performance** | method (image-to-video / pose-driven / depth-guided); model and preset (steps, CFG, shift); length and rate (F16 / F24); batches and weld (W1 / W2); mode (Move / Replace); prompt and negative; beats; seed | Animate, CN4, CA4 / CA5 |
-| **Lip-sync** (experimental) | the line; the preset | D88 |
+| **Start still** | method (Exact pose / Clay); references; one per figure for batch 1, and the references of a W3 repair | Stage Render, CA4 |
+| **Performance** | method (image-to-video / pose-driven / depth-guided); model and preset (steps, CFG, shift); length and rate (F16 / F24); batches with seamless W1 joins (no crossfade); mode (Move / Replace); prompt and negative; beats; seed | Animate, CN4, CA4 / CA5 |
+| **Lip-sync** (to test) | the line; the route (L1 S2V layer / L2 S2V as Wan Animate's face video / L3 a post model); the preset | D88, 01 §11, E29 |
+| **Prop** | the Cast prop and version; its animation reference; transform keys and its parent (a hand); its method (P1 cut-out / P2 depth-guided / P3 with the holder) | 01 §10, E28, CA2 |
 | **Composition** | layers, blend modes, mattes, masks, keys, effects and colour; the preview quality (AP1) | 03 AE1–AE3, AP1 |
 | **Finish** | per layer: amount and model; the image stream; the polish; healing patches | 01 step 8, E24, AE4 |
 | **Take** | render settings (quality, resolution, rate, motion blur, frame blending, colour depth); output modules; the take used; finalize (the format gate) | 03 AE5, 17 §3c |

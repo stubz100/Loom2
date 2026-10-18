@@ -1,11 +1,11 @@
 # 02 · Animation from clay — implementation plan
 
-Status: **proposal, 2026-10-17; revised twice the same evening after the author's notes** (01 §8, §9). It follows the reviewed pipeline in
+Status: **proposal, 2026-10-17; revised after the author's notes of 2026-10-17 and 2026-10-18** (01 §8–§11). It follows the reviewed pipeline in
 [01](01-clay-animation.md). The order:
 
 1. The author refines 01.
 2. A licence check for the motion sources (§2).
-3. Three spikes, and two more for the dummies (§3).
+3. The spikes (§3): the pipeline, post-processing, the dummies, props and lip-sync.
 4. A decision: a D-number (§4).
 5. The build waves (§5).
 
@@ -16,7 +16,7 @@ Each wave ends measured on the rig, as every wave has ("no milestone closes with
 - **Two proxies before the final** (01 §1): the clay (Stage) and the performance (Wan Animate). Post-processing is the render.
 - **One figure per Wan Animate run** (E19). A shot is assembled from layers that share one Stage document, camera and frame range.
 - **Stage is the single source** of motion, camera, masks, depth order and shadow direction. Everything downstream is derived and
-  re-derivable: delete a layer's clip and re-take it alone; with W2, one batch of it.
+  re-derivable: delete a layer's clip and re-take it alone (a batch re-take re-runs the batches after it: joins are seamless).
 - **Cost before running** (D79's pattern): a shot shows its batches × layers × minutes, and runs staged unless the author says run now.
 - **Results are takes on the Story shot** (D93 `for_shot`), with lineage to the stage revision, the pose sequences and the reference.
 - **Display == reality (T8):** the batch plan and the frames per batch the UI shows are what the jobs run.
@@ -33,14 +33,14 @@ Each wave ends measured on the rig, as every wave has ("no milestone closes with
 
 ## 3. Spikes first
 
-### E23a · One layer: the frame rate and the weld (≈ ½ day of work, ≈ 1.5 h of rig time)
+### E23a · One layer: the frame rate and seamless joins (≈ ½ day of work, ≈ 1.5 h of rig time)
 
-The question: on a long single-character shot, which frame rate (F16 or F24) and which weld (W1 chain or W2 keyframe starts) give clean
-joins with the identity held?
+The question: on a long single-character shot, which frame rate (F16 or F24) gives seamless W1 joins (no crossfade, the author 2026-10-18) with the identity held, and how much do they drift (W3 repairs)?
 
 **The shot.** About 10 s, Mara alone in E22's set:
 
-- she walks along a path (the starter set's `Walk_Loop`, retargeted onto the dummy by spike code), then turns and points (keys);
+- she walks along a path (Mixamo's *Start Walking* from the author's `mixamo/` folder, or the starter set's `Walk_Loop`, retargeted
+  onto the dummy by spike code), then turns and points (keys);
 - a locked-off camera, so the plate is not a variable;
 - Move mode (CN4's), with the animation reference made by hand to 01 step 2's rules (16:9, full body, A-pose, colours bound).
 
@@ -48,10 +48,9 @@ joins with the identity held?
 
 | Arm | Frame rate | Weld | Batches |
 | --- | --- | --- | --- |
-| F16·W1 | poses resampled to 16 fps, RIFE to 24 | chain: `continue_motion` = the last 5 frames | 3 |
-| F16·W2 | 16 fps | keyframe starts: a Stage keyframe still (Exact pose, the binding) as a 1-frame `continue_motion`, crossfade over the overlap | 3 |
-| F24·W1 | Stage's 24 fps poses as they are | chain | 4 |
-| F24·W2 | 24 fps | keyframe starts | 4 |
+| F16 | poses resampled to 16 fps, RIFE to 24 | W1: `continue_motion` = the last 5 frames, dropped from the next batch's output; a plain cut | 3 |
+| F24 | Stage's 24 fps poses as they are | W1 | 4 |
+| W3 | the arm with the worst join | a healing patch over the ± 4 frames around it, the start still and the animation reference as references | — |
 
 **Measures and bars:**
 
@@ -59,12 +58,12 @@ joins with the identity held?
 | --- | --- | --- |
 | Pose fidelity | PCK@0.1 against Stage's keypoints | ≥ 0.8 (E19) |
 | Identity | FaceSim every 8th frame against the reference; the drop from batch 1 to the last batch | drop ≤ 0.05 |
-| Joins | seam ratio at each join (E17's metric); appearance difference over the overlap (LPIPS in the figure's mask) | seam ≤ 1.5 (E17) |
+| Joins | seam ratio at each join (E17's metric), no crossfade; drift = appearance difference between the frames either side of a join (LPIPS in the figure's mask) | seam ≤ 1.5 (E17) and no jump visible to the author |
 | Motion speed (F24) | by eye: do hair and cloth look slowed down? | the author's eye |
 | Interpolation (F16) | ghosting on fast limbs after RIFE | by eye |
 | Time and VRAM | per batch, per shot | peak ≤ 14.5 GB |
 
-**For the author:** `compare.mp4` (the four arms side by side), the joins as strips (the 10 frames around each join), and a contact sheet.
+**For the author:** `compare.mp4` (the arms side by side), the joins as strips (the 10 frames around each join), and a contact sheet.
 
 ### E23b · Two layers: Move against Replace (≈ 1 day of work, ≈ 2–3 h of rig time)
 
@@ -74,7 +73,8 @@ The question (note 3): which Wan Animate mode does the app use? It runs with E23
 
 - **Mara** walks along a path and turns.
 - **Ines** sits down and points.
-- **The camera** makes a slow dolly-in with a slight pan.
+- **The camera** makes a slow dolly-in with a slight pan (small moves first; larger moves are not ruled out, 2026-10-18: R2's
+  depth-guided plate is needed for them).
 
 **Arms:**
 
@@ -137,12 +137,26 @@ foot sliding. It decides whether the pose pass draws hands; the Detailed dummy i
 One quadruped clip from a CC0 rigged animal, its depth (+ mask) sequence from Stage driving LTX-2.3 + IC-LoRA depth (exists) vs Wan VACE
 with depth (a download, a decision), with the creature's reference image. Bars as E23: identity, the shape kept, the background stable.
 
+### E28 · Props as layers (≈ 1 day) — 01 §10
+
+In E22's set: one rigid prop moved by keys (a box slid along the floor: P1, a cut-out in the composition), one opening door (P2:
+depth-guided, LTX-2.3 + IC-LoRA depth from the door's Stage depth and mask sequence, with its reference), and one cup held by Mara (P1
+parented to the hand vs P3 drawn inside her Wan Animate layer). Measured: the shape kept, identity against the prop's reference, the
+contact with the hand, the shadow, time.
+
+### E29 · Lip-sync in the clay route (≈ 1 day) — 01 §11
+
+One character, one English line of about 4 s, in a Stage shot with body motion: L1 (S2V as the layer) against L2 (an S2V talking head
+as Wan Animate's face video, the body following the Stage pose); L3 (a lip-sync post model) only if the author approves a candidate,
+since it would be a new custom node. Measured: lip-sync (E18's r), body PCK against Stage (must not drop for L2), identity, time.
+
 ## 4. Decision gate
 
 After E23a, E23b and E24, a D-number records, with the numbers:
 
 - the frame rate (F16 / F24);
-- the weld (W1 / W2 / W3);
+- the frame rate's seams and drift (W1, with W3 repairs where needed);
+- the prop methods (E28: P1 / P2 / P3) and the lip-sync route (E29: L1 / L2 / L3);
 - the mode (Move / Replace);
 - the plate method(s);
 - the post-processing per stage (A / B / C), or none;
@@ -157,13 +171,13 @@ parallel with the spikes.
 
 | Wave | Content | Effort | Acceptance (rig) |
 | --- | --- | --- | --- |
-| **CA0 · The animation reference in Cast** (note 6) | per Cast version: *Make an animation reference* (16:9, full body, A-pose, plain background, colours bound, Klein 9B with the sheet's references), shown beside the coverage grid; an optional back view; an optional test animation (a turn on the spot); lineage; commands and menus (D32) | 1.5–2 | three characters × two versions: the reference animates in the test with PCK ≥ 0.8 and no ghost or crop |
-| **CA1 · The motion library** (note 5) | the **Detailed dummy** (the starter set's skinned mannequin, male / female, as a per-figure detail level beside today's Simple one, 01 §9a H3; proportion controls for humanoid creatures, §9b N1) with hand presets; an FBX / glTF importer (three.js loaders): bone mapping (Mixamo names and the starter set's), rest-pose correction, scale, retargeting onto the mannequin's 12 joints, the hips' translation as root motion, baked to keys at 24 fps; a **local motion folder** in Settings (outside the repo, never bundled) and a **starter set** that ships (per §2); a library browser with previews on the mannequin; **root motion along a path** drawn on the floor; **foot lock**; trim, speed, **blend** from one clip into the next; presets and keys by hand stay | 7–9 | a walk along a curved path into a turn and a point, from the library, in < 2 min of clicks; feet do not slide (≤ 2 cm); a Mixamo FBX from the local folder imports and plays |
-| **CA2 · Layers and light** | a Layers panel in Stage (figures and props → layers, the plate = the set; a held prop joins its holder); a **key light** with its direction matched to the plate; a **shadow pass** per figure (Move) | 2 | the shadow pass lines up with the plate's light by eye on 3 plates |
-| **CA3 · The plate** | the plate still from the empty set and the shot camera (Clay reference, the World style) as an app action; the **2.5D projection** along the camera path (three.js); per the decision, the **depth-guided plate video** | 3 | a dolly-in and a pan without visible stretching at Draft; the projected plate's frames match the still plate at frame 1 |
-| **CA4 · The batch planner** | shot range → batches at the decided rate (F16: resampled; F24: as keyed), 77 frames, 5 carried / 72 new; per figure: pose and mask sequences; per batch: the plate frames and (W2) a **keyframe still** per figure (Exact pose with the binding, the reference and the previous still as references); the plan with its cost; staged by default | 2–3 | a 10 s shot plans 3 (F16) or 4 (F24) batches per layer; the frames per batch the UI shows are what the jobs get (T8) |
-| **CA5 · Layer jobs** | one Wan Animate job per layer per batch (Move or Replace per the decision), started from the previous batch (W1) or the keyframe still (W2); origin and lineage; **re-take one layer or one batch** | 3 | a 10 s two-character shot runs end to end on the queue; a re-take of one layer (or one batch, W2) leaves the rest untouched |
-| **CA6 · Assembly** | Replace: the masked paste chain far → near · Move: the per-frame matte (SAM 3 guided by Stage's masks), depth order per frame, the shadow pass; joins crossfaded; PNG-sequence master per layer with alpha + h264 proxy | 3 | seams and joins within E23's bars on the acceptance shot |
+| **CA0 · The animation reference in Cast** (note 6) | the **body on the Cast sheet** (height, build, proportions, attachments) that shapes the figure's dummy (01 §9); per Cast version (characters and **props**, 01 §10): *Make an animation reference* (16:9, full body, A-pose, plain background, colours bound, Klein 9B with the sheet's references), shown beside the coverage grid; an optional back view; an optional test animation (a turn on the spot); lineage; commands and menus (D32) | 1.5–2 | three characters × two versions: the reference animates in the test with PCK ≥ 0.8 and no ghost or crop |
+| **CA1 · The motion library** (note 5) | the **Detailed dummy** as a second editing level on the same figure (the starter set's skinned mannequin, male / female: block with the Simple dummy, refine hands, feet and finer motion on the Detailed one; keys map between them; 01 §9a; proportion controls for humanoid creatures, §9b N1) with hand presets; an FBX (binary and ASCII) / glTF importer for the Mixamo rig (65 `mixamorig:` bones, centimetres, 24 fps) and the Quaternius rigs (three.js loaders): bone mapping (Mixamo names and the starter set's), rest-pose correction, scale, retargeting onto the mannequin's 12 joints, the hips' translation as root motion, baked to keys at 24 fps; a **local motion folder** in Settings (outside the repo, never bundled) and a **starter set** that ships (per §2); a library browser with previews on the mannequin; **root motion along a path** drawn on the floor; **foot lock**; trim, speed, **blend** from one clip into the next; presets and keys by hand stay | 7–9 | a walk along a curved path into a turn and a point, from the library, in < 2 min of clicks; feet do not slide (≤ 2 cm); a Mixamo FBX from the local folder imports and plays |
+| **CA2 · Layers and light** | a Layers panel in Stage (figures and props → layers, the plate = the set); **props bound to Cast props** like figures, moved by transform keys and **parented to a hand** when held (01 §10); a **key light** with its direction matched to the plate; a **shadow pass** per figure and prop (Move); the prop performance method E28 keeps (P1 cut-out / P2 depth-guided / P3 with the holder) | 3 | the shadow pass lines up with the plate's light by eye on 3 plates; a held cup stays in the hand through a walk |
+| **CA3 · The plate** | the plate still from the empty set and the shot camera (Clay reference, the World style) as an app action; the **2.5D projection** along the camera path (three.js) for small moves; the **depth-guided plate video** for large ones (camera moves have no limit, 2026-10-18) | 3–4 | a dolly-in and a pan without visible stretching at Draft; an orbit with the depth-guided plate; the projected plate's frames match the still plate at frame 1 |
+| **CA4 · The batch planner** | shot range → batches at the decided rate (F16: resampled; F24: as keyed), 77 frames, 5 carried / 72 new; per figure: pose and mask sequences; per batch: the plate frames; per figure a **start still** for batch 1 (Exact pose with the binding); W1 joins (5 frames carried, dropped from the next batch, no blend); the plan with its cost; staged by default | 2–3 | a 10 s shot plans 3 (F16) or 4 (F24) batches per layer; the frames per batch the UI shows are what the jobs get (T8) |
+| **CA5 · Layer jobs** | one Wan Animate job per layer per batch (Move or Replace per the decision), started from the previous batch (W1); origin and lineage; **re-take one layer**, or a batch and the ones after it; a **W3 repair** (a healing patch around a join) when a seam shows | 3 | a 10 s two-character shot runs end to end on the queue; a re-take of one layer leaves the other layers untouched |
+| **CA6 · Assembly** | Replace: the masked paste chain far → near · Move: the per-frame matte (SAM 3 guided by Stage's masks), depth order per frame, the shadow pass; batch joins are plain cuts (no crossfade, the author); PNG-sequence master per layer with alpha + h264 proxy | 3 | seams and joins within E23's bars on the acceptance shot |
 | **CA7 · The final** | what E24 keeps, per stage: the **layer pass** (amount and model per layer), the **image stream** (rate, in-betweens), the **final polish**; each a step with its cost, re-runnable alone; the result as a **take on the Story shot** (D93) with lineage | 3–4 | the take plays in Story › Shots and exports through the Episode; its metrics within E24's bars |
 | **CA8 · UI** | Stage › an **Animate shot** panel: the batches on the timeline, the layers list with per-layer status and preview, Run all / Re-take layer / Re-take batch, the post stages with their amounts per layer, the cost; Story shot **Make clip ▸ in Stage (animated)** | 3 | the author's click-through of one shot from Cast to Episode |
 
@@ -175,7 +189,8 @@ parallel with the spikes.
 - CA7's post stages run as layer passes in the editor (AE4);
 - a UI/UX review comes before (UX0) and after (UX9) the build.
 
-**Total:** about 28–33 working days after the spikes, plus the spikes' ≈ 3.5 days (E26 another day if creatures are wanted). A
+**Total:** about 30–35 working days after the spikes, plus the spikes' ≈ 5.5 days (E23a/b, E24, E25, E28, E29; E26 another day if creatures
+are wanted). A
 non-human route (N3, depth-guided) is not in these waves; it follows E26 if the author wants it.
 
 **Later, not in this plan:**
@@ -194,7 +209,7 @@ non-human route (N3, depth-guided) is not in these waves; it follows E26 if the 
   - the compositor on synthetic layers;
   - the cost estimate;
   - the take's lineage;
-  - a fake-engine run of a 2-layer, 2-batch shot, W1 and W2.
+  - a fake-engine run of a 2-layer, 2-batch shot with W1 joins (the carried frames dropped, no blend).
 - **End-to-end smoke:** import a clip → key a shot → plan → run on the fake engine → the take appears on the shot.
 - **Rig:** `scripts/ca_acceptance.py`. The E23b shot through the app: PCK, FaceSim drop across joins, seam ratios, flicker, time,
   VRAM — the E23 bars; then the kept post stages against E24's bars.
@@ -208,7 +223,7 @@ non-human route (N3, depth-guided) is not in these waves; it follows E26 if the 
 | The coarse rig loses hands and feet | the COCO-18 guide does not need them; a finer rig later |
 | Pose-driven motion looks stiff | library clips carry natural timing; a post stage only if E24 earns it |
 | Faces small at Draft | the animation reference at a good size; a face-crop refine (A3) if it wins |
-| Joins visible | W1 or W2 by E23a's numbers, a crossfade over the overlap; re-take one batch (W2) |
+| Joins visible | W1 by construction; W3 repairs a visible seam with a healing patch around the join; never a crossfade (the author) |
 | Light mismatch (Move) | Replace mode if E23b confirms its relighting; else the shadow pass + the final polish (C3) |
 | The plate stretches on bigger moves | the depth-guided plate video for those shots |
 | GPU time | Draft first; stage the shot's runs (they queue overnight); re-take only what failed; FLUX.2 dev per frame only if its RAM-pressure slowness is fixed |

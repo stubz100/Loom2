@@ -1,7 +1,7 @@
 # 01 · Animation from clay — the pipeline, reviewed
 
-Status: **proposal, 2026-10-17; revised twice the same evening after the author's notes** (§8 lists them and where each one went; §9
-is the open question of the dummies). For the author to refine; no decision yet (00).
+Status: **proposal, 2026-10-17; revised after the author's notes of 2026-10-17 and 2026-10-18** (§8 lists them; §9 the dummies, §10
+props, §11 lip-sync). For the author to refine; no decision yet (00).
 
 ## 1. The idea
 
@@ -55,7 +55,7 @@ version (costume):
   jacket from yellow to olive). Cast shows it beside the coverage grid, with a command *Make an animation reference*, or a full-body
   cell marked as the reference.
 - **Optional: a back view** from the sheet. Wan Animate takes one reference and invents the back when a character turns away. When a
-  batch starts with the character facing away, the back view can be that batch's start still (step 6, W2).
+  Shot starts with the character facing away, the back view can be its start still (step 6).
 - **Optional: a test at casting.** A short test animation (a turn on the spot, 77 frames, ≈ 5 min) shows whether the reference animates
   well before any shot depends on it.
 
@@ -146,9 +146,28 @@ CC0 source or the author's Mixamo folder covers them.
 
 1. Sign in at **https://www.mixamo.com** with a free Adobe account.
 2. Pick a character (*X Bot* or *Y Bot* is fine; only the motion is kept) and search the *Animations* tab.
-3. Download with these settings: *Format* FBX Binary, *Skin* **Without Skin**, *Frames per second* 30, *Keyframe reduction* none.
+3. Download with these settings: *Format* FBX (binary or ASCII; both load), *Skin* **Without Skin**, *Frames per second* **24** (the
+   project's rate), *Keyframe reduction* none.
    Untick *In Place* for walks, so the clip keeps its root motion.
 4. Save the files into a local motion folder outside the repo, e.g. `F:/loom2-motion-mixamo/`, like the old loom's `mixamo_animations/`.
+
+**Checked 2026-10-18: the author's first downloads load.** Seven clips in `mixamo/` (git-ignored) load in three.js's FBXLoader:
+
+- FBX 7.7 ASCII, without skin;
+- **65 `mixamorig:` bones** (spine ×3, fingers, toes), centimetres, Y up, **24 fps**;
+- 0.7–13.8 s long;
+- root motion kept where it should be: *Start Walking* +1.99 m forward, *Slow Jog Backwards* −1.26 m, *Zombie Stand Up* hips +0.65 m.
+  *Body Block*, *Hip Hop Dancing* and *Double Dagger Stab* stay in place.
+
+The importer scales them by 0.01.
+
+**One by one is the only official way.** Unofficial browser scripts that bulk-download with your session exist, but they use Mixamo's
+undocumented API and may conflict with Adobe's terms on automated access. Not recommended.
+
+**Clips worth fetching first** (what the starter set lacks): pointing, waving, turns on the spot (left / right 90° and 180°),
+stepping back, sitting down / standing up from a chair, talking gestures (several), nodding / shaking the head, looking around,
+picking up / putting down, opening a door, a walk start and stop, a run start and stop, a phone call, reacting (surprise, laughing,
+crying).
 
 **The importer** (Stage is three.js, which has FBX and glTF loaders):
 
@@ -206,20 +225,22 @@ Mostly not, with one caveat:
 - **The caveat: appearance can drift.** Cloth folds, hair, colour and light drift over 72 frames. That is what a join shows, and what
   the weld must hide.
 
-Two ways to weld:
+**No crossfade at a batch join** (the author, 2026-10-18). A batch join must be seamless, a continuous shot. Crossfades happen only
+between Shots, in the cut. That settles the weld:
 
-| | **W1 · chain** | **W2 · keyframe starts** |
+| | **W1 · chain** (the weld) | W2 · keyframe starts (retired for joins) |
 | --- | --- | --- |
-| batch N+1 starts from | the last 5 frames of batch N (`continue_motion`) | a **Stage keyframe still** of that figure at the batch's first frame, as a one-frame start. It is made with Exact pose and the figure's binding, one figure (the method's one reference slot is enough for a layer); in the plate for Replace mode |
-| the join | continuous; drift accumulates over a long shot | batch N runs a few frames past the boundary and crossfades into batch N+1, which starts exactly on the keyframe; drift resets in every batch |
-| a re-take | that batch and every batch after it | **any batch alone** |
-| the risk | slow drift; a re-take cascades | each keyframe still is its own generation. If it differs from where batch N drifted to (a sleeve, the hair), the crossfade shows it. The stills therefore take the animation reference and the previous keyframe still as references, with bound colours |
+| batch N+1 starts from | the last 5 frames of batch N (`continue_motion`); those 5 frames are dropped from batch N+1's output, so the join is a plain cut inside continuous motion | a Stage keyframe still at the batch's first frame |
+| the join | continuous by construction | needs a blend, because batch N's end never equals the still. It would be a crossfade, so it is not used |
+| a re-take | that batch and every batch after it (the price of a seamless shot) | any batch alone |
+| the risk | slow drift over a long Shot (cloth, hair, light) | — |
 
-**W3**, a combination: chain the batches (W1) and use the keyframe stills only in post-processing, as references for the frames around
-each join (step 8, A4).
+- **W3 repairs drift where it shows.** If E23a finds drift or a visible seam, the keyframe still for that frame becomes the reference
+  of a healing patch (step 8, A6) over the few frames around the join. The join is repaired, not blended.
+- **Keyframe stills stay useful** as batch 1's start (the first frame's exact look, pose and light), as the back view when a figure
+  starts turned away, and as the references of W3.
 
-So the author's "keyframes at the first and every 77th frame" become **a keyframe still at the first frame of every batch**, every 72nd
-model frame. The frames two batches share are crossfaded. E23a measures W1 against W2.
+E23a measures W1's seams and drift at F16 and F24, and tries W3 on the worst join.
 
 **Batches for a 10 s shot (240 Stage frames), per layer:**
 
@@ -227,7 +248,7 @@ model frame. The frames two batches share are crossfaded. E23a measures W1 again
 | --- | --- | --- | --- |
 | F16 | 3 (160 model frames, stride 72) | ≈ 15 min | ≈ 30 min |
 | F24 | 4 (240 frames, stride 72) | ≈ 20 min | ≈ 40 min |
-| W2 adds | one keyframe still per batch per layer (Exact pose ≈ 74 s warm) | + ≈ 5 min | + ≈ 10 min |
+| a start still | one per layer for batch 1 (Exact pose ≈ 74 s warm) | + ≈ 1 min | + ≈ 2 min |
 
 ### 7) Wan Animate, layer by layer — Move and Replace, compared (note 3)
 
@@ -240,7 +261,7 @@ batches** and scores them side by side (02 §2).
 | Output | the character over its reference's background | the character **inside the plate**, relit by the model to the scene |
 | Assembly | matte each layer per frame (SAM 3 per frame worked in E21; Stage's mask pass guides it), stack in depth order | chain the layers: plate → far figure → near figure, each run inserting one character into the previous result. **Paste back only the masked region** (dilated, feathered), so the background never drifts |
 | Light and shadows | the character keeps its reference's light; shadows come from a Stage shadow pass | the model relights the character to the scene; contact shadows may come for free |
-| Keyframe stills (W2) | on the reference's plain background | inside the plate |
+| The start still | on the reference's plain background | inside the plate |
 | Risk | the light does not match; edges | each run re-renders the frame (hence the masked paste); the relighting is not measured on our engine yet |
 
 **What E23b scores in both modes:**
@@ -312,7 +333,7 @@ The requirement (note 4): the **most accurate and faithful** polish, one that **
 - **identity:** FaceSim;
 - **time.**
 
-**The last step of every route:** crossfade the joins, conform to the delivery rate (B1 / B2 / B4), and deliver the clip as a **take on
+**The last step of every route:** the batch joins are cuts inside continuous motion (no crossfade, W1), conform to the delivery rate (B1 / B2 / B4), and deliver the clip as a **take on
 the Story shot** (D93's `for_shot`). The Episode exports it as today.
 
 ## 3. The refined pipeline
@@ -325,14 +346,14 @@ Stage ─ set from blocks + shot camera ─► empty-set clay/depth pass ─► 
   │      motion: the library (imported, retargeted) + presets + keys by hand · camera keys        (24 fps timeline)
   │      moving plate: projection (small moves) / depth-guided plate video (large moves)
   │
-Batch planner ─ F16 or F24 (E23a) · 77 frames, 5 carried / 72 new · W1 chain or W2 keyframe stills (E23a)
-  │             per batch: plate frames; per figure: pose and mask sequences, a keyframe still (W2), a shadow pass (Move)
+Batch planner ─ F16 or F24 (E23a) · 77 frames, 5 carried / 72 new · W1 chain, seamless (no crossfade)
+  │             per batch: plate frames; per figure: pose and mask sequences, a start still, a shadow pass (Move)
   │             the cost shown before anything runs (D79's pattern)
   │
 THE PERFORMANCE ─ per layer, per batch: Wan Animate (Move or Replace, E23b), one figure per run
   │
 Assembly ─ Replace: masked paste, far → near   |   Move: per-frame matte (SAM 3 guided by Stage's mask), depth order, shadow pass
-  │         joins crossfaded
+  │         batch joins: plain cuts in continuous motion (W1; W3 repairs a visible seam)
   │
 THE FINAL (E24) ─ A layer pass (per layer, its own amount) ─► B image stream (rate, in-betweens) ─► C final polish (flattened)
   │
@@ -347,7 +368,7 @@ a take on the Story shot ─► Episode
 | Sets, figures bound to characters, cameras | ST1–ST3, D93 C8 | layers, a key light |
 | Keyframes: transforms, joint poses, camera | ST4 | **the motion library**: an FBX / glTF importer with retargeting, root motion along a path, foot lock, blends; a local motion folder; a starter set |
 | Pose / depth / mask passes per figure, sequences | ST3/ST4, CN4 | 16 or 24 fps, batches with overlap |
-| Wan Animate from a pose sequence (Move), one figure | CN4 (D87) | Replace mode (plate video + mask); chaining (W1) or keyframe starts (W2) |
+| Wan Animate from a pose sequence (Move), one figure | CN4 (D87) | Replace mode (plate video + mask); chaining (W1), seamless; W3 repairs |
 | Keyframe stills of one figure in its pose | Exact pose with the binding (D78, D93 C) | per batch, in the plate (Replace) |
 | Plate from the empty set | E21 (spike code) | in the app; 2.5D projection along the camera path; a depth-guided plate video |
 | Per-frame masks | E21 (SAM 3 per frame, spike code) | in the app (for Move) |
@@ -380,7 +401,7 @@ a take on the Story shot ─► Episode
 - **Non-human characters.** Wan Animate's guide is a human skeleton; creatures need another dummy and possibly another guide (§9).
 - **Liveliness.** Pose-driven motion is exact but can look stiff, with smaller gestures than free I2V (E21 banim). Faces and expressions
   come only from the model, because the mannequin has none.
-- **Joins.** Appearance drift at a join (W1) or a keyframe still that does not match (W2). Unmeasured on our engine.
+- **Joins.** Appearance drift across W1's joins over a long Shot. Unmeasured on our engine; W3 repairs it.
 - **F24.** Secondary motion may look slowed down, because the model's prior is 16 fps.
 - **Light integration.** Move keeps the reference's light; Replace's relighting is unmeasured.
 - **Hands and held props.** The mannequin has no fingers. A prop held across a join may change.
@@ -394,7 +415,7 @@ Answered by the notes of 2026-10-17 (§8):
 
 - ~~motion authoring~~ → a motion library, imported (note 5);
 - ~~one reference per shot or per batch~~ → one animation reference per version, made at casting (note 6); keyframe stills per batch
-  are tested as W2;
+  were tested as W2, now retired for joins (no crossfades, 2026-10-18);
 - ~~post-processing priority~~ → test everything, in three separate stages (note 4).
 
 Answered in the second round (2026-10-17):
@@ -405,15 +426,17 @@ Answered in the second round (2026-10-17):
 - ~~the time budget~~ → judged after the spikes, not before. FLUX.2 dev is a healing patch where it matters (A6), Klein 9B the faster
   per-frame option.
 
-Still open:
+Answered in the third round (2026-10-18):
 
-1. **Camera moves.** Are small moves (pan, tilt, a short dolly) enough at first? They allow the cheap projected plate.
-2. **Joins.** Is a short crossfade (about 5 frames) at each join acceptable, or should a join be invisible frame by frame?
-3. **Final size.** Draft (832×480) first and HD later?
-4. **Props.** A held prop goes in its character's layer. Should free props (a door, a car) be their own layers?
-5. **Faces and lip-sync.** Do talking shots need lip-sync in this route soon? Wan Animate can take a *face video* to drive expressions,
-   and S2V is the experimental lip-sync (D88).
-6. **Detailed and non-human dummies** — §9.
+- **Camera moves:** small moves first, but **no limit**. The projected plate covers small moves; the depth-guided plate video is
+  needed for large ones and stays in the plan (CA3).
+- **Joins:** **no crossfades at batch joins**; crossfades only between Shots, in the cut. The weld is W1 (step 6), with W3 repairs.
+- **Size:** **Draft (832×480) first, HD later.**
+- **Props:** **exactly like characters, except the skeleton** (§10).
+- **Lip-sync:** **test it in this route** (§11, spike E29).
+- **Dummies:** two editing levels; humanoids are enough for now; the Cast sheet carries the body (§9).
+
+Nothing in this section is open now.
 
 ## 8. The author's notes of 2026-10-17 and where they went
 
@@ -428,9 +451,10 @@ Still open:
 | 7 · *(second round)* A detailed dummy with hands and feet, optional; dummies for non-human characters | An open question with proposed solutions | §9 |
 | 8 · *(second round)* Get the open starter library; where to get Mixamo | Fetched (CC0, UAL 1 + 2, with skinned mannequins); the Mixamo steps written down | step 5 |
 | 9 · *(second round)* 24 fps is the default; why 25? | 24 stays; 25 matters only for a European TV master | §7, B4 |
+| 11 · *(third round, 2026-10-18)* Camera moves: small first, no limit · no crossfades at batch joins (only between Shots) · Draft first · props like characters without a skeleton · test lip-sync · two-level dummy, humanoids now, the body on the Cast sheet | W1 is the weld (W2 retired, W3 repairs); the depth-guided plate stays; §10 props (P1–P3, E28); §11 lip-sync (L1–L3, E29); §9 answers | steps 4, 6; §7; §9–§11 |
 | 10 · *(second round)* Times after the spikes; FLUX.2 dev as a healing patch on some areas; Klein 9B the faster option | Agreed: time estimates removed, A6 added, Klein 9B named first for per-frame work | step 8 |
 
-## 9. Open question: a detailed dummy, and dummies for non-human characters
+## 9. A detailed dummy, and dummies for non-human characters (answered 2026-10-18)
 
 The author (2026-10-17): *"Is it possible to upgrade the clay dummy to have proper hands and feet? Perhaps optional, if we want to focus
 on detailed hand / feet animation. We might also need to think about customising dummies for non-human animation (monsters, aliens …)."*
@@ -478,8 +502,59 @@ body-only.
 route, the depth-guided performance, which needs its own spike (E26) before any build: one quadruped clip from a CC0 rigged animal,
 LTX IC-LoRA depth vs Wan VACE depth, against the bars of E23 (identity, the shape kept, background stable).
 
-**Questions for the author:**
+**Answered by the author, 2026-10-18:**
 
-1. Hands and feet: **H3** (Simple and Detailed per figure), or replace the dummy with the Detailed one everywhere?
-2. Non-human: is **N1** (humanoid monsters and aliens) enough for now, or are quadrupeds and creatures (N3) needed soon?
-3. Should the Cast sheet carry a body (height, build, proportions, attachments), so the dummy is shaped from the character?
+1. **Two editing levels on one figure.** H3 is refined as one figure with two levels, not a per-figure choice:
+   - the **Simple** dummy blocks the coarse movement;
+   - the **Detailed** dummy (the starter set's skinned mannequin, 65 joints) refines hands, feet and the finer movement.
+
+   Keys made on Simple map onto Detailed (the shared joints). Refining adds the fingers, wrists, feet and the spine chain. The pose pass
+   uses the Detailed figure once it is refined (E25 decides whether it also draws hands).
+2. **Humanoids are enough for now (N1):** proportion controls and attachments. N2 and N3 are later.
+3. **Yes, the Cast sheet carries the body:** height, build, proportions and attachments shape the figure's dummy (CA0).
+
+## 10. Props — exactly like characters, except the skeleton
+
+The author (2026-10-18): props *"are going to [work] exactly like characters, except for the skeleton."*
+
+| Characters | Props |
+| --- | --- |
+| a Cast character with versions and a sheet | a **Cast prop** with versions and a sheet (Cast already has props, D85: "Make a character / place / prop") |
+| an animation reference per version (full body, 16:9) | an animation reference per version: the prop alone, centred and padded, 16:9, from a three-quarter view |
+| a Stage figure bound to the character (D93 C8) | a Stage **prop object bound to the Cast prop**, the same binding |
+| motion from the skeleton: library clips, keys, root paths | motion from **transform keys** only (position, rotation, scale) and **parenting**: a held prop is parented to the holder's hand (the Detailed dummy's hand bone) |
+| its own layer | **its own layer**; when held, its own layer parented to the hand, or drawn inside the holder's layer |
+| Wan Animate (pose-driven) | **no pose skeleton**, so another performance method (below) |
+
+**How a prop is performed** (spike E28 measures which):
+
+- **P1 · rigid, as a cut-out.** A prop that only moves (a cup carried, a box slid) is its reference still, cut out, and animated by its
+  transform keys in the composition (EffectCraft), lit by the shadow pass. No video generation, so it is cheap. It cannot show a new side.
+- **P2 · depth-guided.** A prop that turns or changes (a door opening, a car turning, a book opened) uses its depth and mask sequence
+  from Stage to drive a depth-guided video model (LTX-2.3 + IC-LoRA depth, which exists; D76), with its reference. This is the N3
+  route of §9b, for an object.
+- **P3 · with its holder.** A small held prop drawn inside the character's layer by Wan Animate. It is in the reference image, but the
+  pose guide does not know it, so it may drift. It is measured, not assumed.
+
+**Spike E28 (≈ 1 day):** one rigid prop (P1), one opening door (P2) and one held cup (P1 parented vs P3), in E22's set. Measured: the
+shape kept, identity against the prop's reference, the contact with the hand, the shadow, time.
+
+## 11. Lip-sync in this route — to test (spike E29)
+
+The author (2026-10-18): *"we should test lip-sync."* What exists:
+
+- **D88's experimental lip-sync:** Wan 2.2 S2V, English, ≤ 4.8 s, sync r 0.635 at Fast, 282 s.
+- **Wan Animate's own *face video* input:** a driving video of a face moves the character's expressions while the pose guide moves the
+  body.
+
+Three routes for a talking layer:
+
+| Route | How | Risk |
+| --- | --- | --- |
+| **L1 · S2V as the layer** | the character's talking clip from S2V (its animation reference + the voiced line), used as that character's layer | S2V does not follow the Stage pose: the body moves its own way |
+| **L2 · S2V drives Wan Animate's face** | an S2V talking head of the character (or a cropped face from L1) is the **face video** of the Wan Animate run, whose body follows the Stage pose | two runs per batch; does the mouth survive Wan Animate? |
+| **L3 · a lip-sync post pass** | a dedicated mouth-replacement model over the finished layer | a new custom node, so a decision (house rule 2) with a licence check |
+
+**Spike E29 (≈ 1 day):** one character, one English line of about 4 s, in a Stage shot with body motion. L1 against L2, and L3 only if
+the author approves a candidate. Measured: lip-sync (E18's metric r), body PCK against the Stage pose (must not drop for L2), identity,
+time.

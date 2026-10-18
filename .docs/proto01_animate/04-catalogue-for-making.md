@@ -182,9 +182,20 @@ same tree.
 | **C4** lineage | AE1 / CA6 (the composition), then the Story pass for the view | the edges must be written when the items are made; the view can come later |
 | C5–C7 | the Story pass | Story comes after Animate (D95) |
 
-## 4. Questions for the author
+## 4. Questions — answered by the author, 2026-10-18
 
-1. **Which ideas to keep**: C1, C2, C3, C4 (and C5–C7)?
-2. **C2:** should for-shot results land on the shot's page by default, or stay on the page they were made from (today's behaviour)?
-3. **C3:** which kinds matter most to you as items: stages, motion clips, compositions, layers, characters, voices?
-4. **The Bin's place in Image:** a drawer under the results, or a section at the end of the Make column?
+| # | Question | Answer |
+| --- | --- | --- |
+| 1 | Which ideas to keep? | **All of them, as ideas** to extend later. C4 is taken further as the recipe graph (05, D96) |
+| 2 | For-shot results on the shot's page by default? | **Yes** (when C2 is built) |
+| 3 | Which kinds matter most as items? | asked what "matter most" means; explained below, open |
+| 4 | The Bin in Image? | **a collapsible drawer, like the render queue** (the frame's dock), in Image and in Animate alike |
+
+**Question 3, explained.** Each new kind of item costs work: a thumbnail, a Type chip, a Catalogue entry for a record that lives
+elsewhere, its drag targets and its *used by*. The question is which kinds you would actually **look for, group or drag across Shots**
+in the Catalogue, so those come first. My reading:
+
+- **Stages and motion clips first.** They are reused across Shots: a set serves a whole scene, a walk serves every character.
+- **Compositions and layers later.** They belong to one Shot and are reached through its page (C2) and its recipe (05).
+- **Characters, places, props and voices** already have their home in Cast. As items they would mainly make them draggable from the
+  Bin, which could come with the Bin itself.

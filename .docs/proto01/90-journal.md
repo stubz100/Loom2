@@ -5011,3 +5011,45 @@ spike frames):
 
 A suggested order ties C1 and C3 to IM1 / AN1 / CA1 / AE1 and leaves C2, C4 and C5–C7 to the Story pass. Four questions for the
 author.
+
+## 2026-10-18 10:48 — The preview balanced between the page and a preview server; Flow nodes as shot recipes (proposals)
+
+**The preview.** The author: the in-page preview is not enough, but is not ruled out. They prefer a preview server beside the
+orchestrator working with the page, with quality steps down, and the final render as a backend job. They asked how EffectCraft does it.
+
+**EffectCraft's split, from its code and docs:**
+
+- **The viewer:** a resolution per composition (Auto / Full / Half / Third / Quarter / Custom); layer quality (Best / Draft /
+  Wireframe); Fast Previews (Adaptive Resolution down to ½–⅛ while dragging, Draft 3D, Fast Draft, Wireframe); a content-hashed layer
+  cache, a RAM preview cache filled when idle, a disk cache; proxies.
+- **The render queue:** Best, Full, on the project's renderer, with the encoders.
+- **Its web build** splits the work into the page (frames without effects on WebGPU), frame workers (project replicas synced by diffs,
+  `remote.rs`) and job workers.
+
+**03 §5.2a, the balance:**
+
+- the page draws T0 at once (cached layer frames, transforms, blends, mattes);
+- the native preview server (R3b, now the main preview) renders T1 at adaptive ¼–½ Draft while scrubbing, T2 Full Draft then Best at
+  rest, and T3 the idle cache for real-time playback, by priority, stepping down while ComfyUI runs;
+- the final render is a separate queued CLI job (R2);
+- R1 can take over T0 / T1 later.
+
+E27 is rescoped: the server plus T0. Bars: T1 ≥ 12 fps, T2 ≤ 150 ms, T3 real time, the final equal to T2 Best.
+
+**The Flow idea** (the author, on C4): each Flow node is a small shot (≤ 30 s) defined by a combination of elements, ComfyUI-like; the
+nodes build the movie, finished in a FilmCraft-like editor. Reviewed in the new `.docs/proto01_animate/05-flow-nodes-as-shot-recipes.md`:
+
+- **Two levels:** the story graph, and each node's **recipe**, which is C4 as a plan, so stale steps re-run alone with the cost first.
+  It is the original loom's model (a node owns its clip, continuity within a node, transitions between nodes;
+  `kb-storyboard01.md`).
+- **Animate becomes the node editor**: its column is the recipe's steps.
+- **Care points:**
+  - the name: today *Episode* is the cut. Options are A, the author's words (node = Episode, cut = Movie), or B, node = Shot (merged
+    with the Story shot), cut = Episode. Recommended: B;
+  - ComfyUI's paradigm with coarse loom2 steps, never ComfyUI's UI (D2, D15);
+  - a soft 30 s cap;
+  - one camera per node, with scene groups for coverage;
+  - the logic nodes stay, with a cut per route;
+  - the quick image-to-video case must stay quick.
+- **Waves:** RC0, the recipe record and staleness, comes with AN1 / AE1. RC1 (the recipe graph), RC2 (node = shot in the Flow), RC3 (a
+  cut from a route) and RC4 (the FilmCraft study) follow in the Story pass. Five questions for the author.

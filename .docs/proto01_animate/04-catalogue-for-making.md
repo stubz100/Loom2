@@ -131,6 +131,9 @@ page. A setting could choose.
 
 ### C4 · Lineage across media
 
+**The author chose it, 2026-10-18, and took it further:** a Flow node's recipe *is* this graph, as a plan, not only a record. See
+[05](05-flow-nodes-as-shot-recipes.md).
+
 ![C4: the lineage of a final shot](img/04-c4-lineage.jpg)
 
 **What it is:** the lineage view follows a final take back through every kind:

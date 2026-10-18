@@ -194,11 +194,11 @@ a **pinned, prebuilt artifact** with a build script and a CI check, rebuilt only
 
 | Route | What | For | Verdict |
 | --- | --- | --- | --- |
-| **R1 · WebAssembly facade** | a small crate over `engine` + `render` + `gpu` (no `ui-egui`, no encoders) with wasm-bindgen: `execute(cmd, json)`, `render_frame(comp, t, scale)`; run in a Web Worker on the webview's WebGPU | the **interactive preview**: scrubbing, playing, every edit visible at once | **proposed**, if E27 finds the size and speed acceptable |
+| **R1 · WebAssembly facade** | a small crate over `engine` + `render` + `gpu` (no `ui-egui`, no encoders) with wasm-bindgen: `execute(cmd, json)`, `render_frame(comp, t, scale)`; run in a Web Worker on the webview's WebGPU | the **interactive preview**: scrubbing, playing, every edit visible at once | **the page's share of the preview** (§5.2a), not the whole of it; kept open (the author: not ruled out) |
 | **R2 · CLI sidecar** | the pinned `effectcraft-cli` binary, driven by the orchestrator as a job (`render` of a `.ecproj` to PNG / ProRes / H.264) | the **final render and export**, at full size, in the queue like every other job (stall handling, staging, lineage) | **proposed** |
 | R3 · link into the Tauri shell | the engine crates inside `src-tauri`, frames to the webview over a custom protocol | the preview, natively | not proposed: it makes the thin shell a 380k-line build, breaks the browser dev mode (`dev.ps1 -Browser`), and needs a readback and IPC for every preview frame |
-| R3b · a native preview server | the pinned engine as a sidecar beside the orchestrator, frames over loopback HTTP | the preview, natively, if R1 is too slow | **the native fallback** (explained below) |
-| R4 · a loom2 compositor of its own | Mediabunny decode + a WebGPU / Pixi canvas compositor for layers, blends, opacity and transforms; EffectCraft only for export | the fallback | **the fallback**, if R1 fails E27 |
+| R3b · a native preview server | the pinned engine as a sidecar beside the orchestrator, frames over loopback HTTP | the preview tiers T1–T3, natively | **proposed: the main preview** (the author, 2026-10-18), in tandem with the page (§5.2a) |
+| R4 · a loom2 compositor of its own | Mediabunny decode + a WebGPU / Pixi canvas compositor for layers, blends, opacity and transforms; EffectCraft only for export | the fallback | **the page's first tier** (§5.2a): what the page can draw alone, instantly |
 
 **The difference between R1 and the native routes, explained** (the author's question 5, 2026-10-18).
 
@@ -232,7 +232,81 @@ interactive preview runs**, the frames you see while scrubbing and editing. Ther
   - **R3** (in the shell) also costs build time and crash isolation, and loses the browser mode. **Not proposed.**
   - **R3b** (a preview server beside the orchestrator) keeps those, and is **the native fallback** if E27 finds R1 too slow or too big.
 
-Spike E27 measures R1 first, and R3b only if R1 misses the bar (scrubbing at ≥ 12 fps at Draft size with ComfyUI running).
+**The author's answer (2026-10-18):** the in-page preview alone is not enough, but is not ruled out. The preview server beside the orchestrator is preferred, working **together with the page** to stream the best preview it can, with quality steps down. The final render is a backend job. §5.2a describes how EffectCraft separates the two, and the balanced design.
+
+
+### 5.2a · Preview and full render: how EffectCraft does it, and the balance for loom2
+
+**In EffectCraft** (read from its code and docs, v0.12.0), as in After Effects, one engine renders under two sets of options.
+
+**The viewer** (the interactive preview):
+
+- **Resolution** per composition: Auto (follows the zoom), Full, Half, Third, Quarter or Custom (every n-th pixel)
+  (`project::Resolution`).
+- **Layer quality:** Best, Draft or Wireframe.
+- **Fast Previews:**
+  - *Adaptive Resolution* drops the resolution while you drag, down to a set limit (½, ¼ or ⅛). A playing preview keeps the viewer's
+    resolution.
+  - *Draft* turns off 3D lights, depth of field and shadows, and uses faster effects.
+  - *Fast Draft* and *Wireframe* go further.
+- **Caches:**
+  - a **layer cache**, keyed by content hash, so an unchanged layer is not rendered again;
+  - a footage frame cache;
+  - a **RAM preview cache**, filled for the work area so it plays in real time ("Cache Frames When Idle" fills it after a second without
+    input);
+  - an optional **disk cache** that survives sessions.
+- **Proxies:** a footage item or a composition can have a lighter stand-in file for editing. The render chooses whether to use it.
+
+**The render queue** (the final): render settings (quality Best, resolution Full, frame rate, motion blur, frame blending, effects,
+colour depth) plus output modules (the encoders). Every frame renders on the project's renderer, so runs are repeatable.
+
+**In its browser build the work is already split three ways** (`docs/web.md`):
+
+- **The page** draws frames without effects itself, on WebGPU (no copy).
+- **Frame workers** hold a replica of the project and render the rest. They are kept up to date by **diffs**: a slider drag sends a
+  few hundred bytes, not the project. A render request names the revision, time and render options, and a stale revision is refused
+  (`engine/src/remote.rs`).
+- **Job workers** run the render queue, apart from the viewer.
+
+So the author's guess is right: **one engine with a preview mode and a full-render mode** is how EffectCraft itself works.
+
+**The balance for loom2: the page and a preview server, in tandem.**
+
+```
+ page (React + WebGPU)                    preview server (native EffectCraft, beside the orchestrator)
+ ─────────────────────                    ──────────────────────────────────────────────────────────────
+ T0  draws at once what it can:           holds a replica of the composition (diff sync by revision,
+     cached layer frames, transforms,     EffectCraft's remote protocol), renders on request:
+     opacity, blend modes, mattes         T1  while scrubbing or dragging: adaptive resolution (¼–½),
+     (no effects), so a drag never              Draft quality — the frame lands in ≈ 1 frame time
+     waits                                T2  when the playhead stops: Full at Draft, then Best
+ shows the best frame it has; swaps       T3  when idle: the work area into the RAM / disk cache,
+ in a better one when it arrives              so playback is real time at the chosen quality
+                                          frames over loopback HTTP (raw at ¼, JPEG/WebP or raw at full)
+
+ final render: a queued orchestrator job, `effectcraft-cli render` (Best, Full, the encoders) — a separate process (R2)
+```
+
+- **Progressive refinement.** The page always shows the best frame it holds and swaps in a better one when the server sends it: T0
+  instantly, T1 while moving, T2 at rest, T3 for playback.
+- **Priority.** The server renders the frame under the playhead first, then a few frames around it (prefetch), then the idle cache.
+  A newer revision cancels older requests.
+- **Quality steps down under load.** While ComfyUI runs a job (the orchestrator knows), the server lowers its resolution floor and
+  can move to its CPU renderer, so a generation is never starved of VRAM. The step taken shows in the viewer ("¼ · Draft").
+- **Preview and final are two processes.** The long-lived preview server and the queued render job are separate, so a long render
+  never blocks scrubbing, and a crash in one does not take the other.
+- **R1 stays possible.** If WebAssembly proves fast enough later, it can take over T0 and T1 in the page, and the server keeps T2,
+  T3 and the final.
+
+**E27 (rescoped):**
+
+- build the preview server over `effectcraft-host` (no egui) with the diff sync and a frame endpoint;
+- measure T1, T2 and T3 on a 3-layer 832×480 composition with a mask, a blur and a track matte, with ComfyUI idle and running;
+- measure T0 in the page (a WebGPU compositor of cached layer frames, R4's code);
+- R1 only as a comparison, if time allows.
+
+**Bars:** T1 ≥ 12 fps while scrubbing; T2 Full Draft ≤ 150 ms a frame; T3 real-time playback after the cache fills; the final equal to
+T2 Best (≤ 1/255).
 
 **The document.**
 
@@ -306,7 +380,7 @@ check. The waves of this document are named **IM** (Image), **AN** (Animate) and
 | **UX0 · Review and wireframes** | §6: the inventory for three tabs, the wireframes, the click paths; the author's corrections | 2–3 | the author signs off the wireframes; every inventory row has a home |
 | **IM1 · The Image suite** | Generate → **Image**; Edit becomes Image's second mode (Make ⇄ Edit in place, ← Results, Edit ✎ on tiles, double-click, E, the switch); Edit's left panel becomes one scrolling column; Save writes a new version with lineage; *Use as reference*; ☰ › New document; deep-link aliases; the Edit tab removed; Ctrl+1–3 re-assigned; the e2e smoke and the command audit updated | 3–4 | the e2e smoke under both variants; a headed edit check (WebGPU) inside Image; no function of the inventory lost |
 | **AN1 · The Animate shell** | the one column with the jump rail and scroll sync (§4.2's sections); Stage moves in (its tabs become Scene, Motion, Camera; its viewport becomes the *Clay* level); today's Animate becomes the *Image to video* card of Performance; the viewer's three levels and Compare; **one timeline and one transport** (Stage's keys + the clip scrubber); no right Inspector (the Selection section); Clips as a Catalogue view; *From a stage* in Image; the Stage tab removed | 6–8 | every Stage and Animate function reachable (the inventory); the e2e smoke; the existing rig checks for Stage stills and clips (ST3, CN4) still pass |
-| **E27 · Spike: EffectCraft as the engine** (beside E23) | build the R1 facade (and R3b only if R1 misses the bar) at a pinned commit (no egui, no encoders): its size (raw and compressed), the start-up time, the preview frame time for a 3-layer 832×480 composition with a mask, a blur and a track matte, at 24 fps, in the webview on the RX 9070 XT (headed, WebGPU); the memory, with ComfyUI running beside it; the R2 CLI render of the same composition, CPU against GPU and against the preview (≤ 1/255); our toolchain (Rust ≥ 1.95; the shell declares 1.90) | 2–3 | a D-number: R1 + R2, R3b + R2 or R4 + R2, with the numbers |
+| **E27 · Spike: EffectCraft as the engine** (beside E23) | §5.2a: the preview server (R3b) with tiers T1–T3 + the page tier T0 (R4's compositor); R1 only as a comparison; at a pinned commit (no egui; no encoders in the preview): its size (raw and compressed), the start-up time, the preview frame time for a 3-layer 832×480 composition with a mask, a blur and a track matte, at 24 fps, in the webview on the RX 9070 XT (headed, WebGPU); the memory, with ComfyUI running beside it; the R2 CLI render of the same composition, CPU against GPU and against the preview (≤ 1/255); our toolchain (Rust ≥ 1.95; the shell declares 1.90) | 2–3 | a D-number: R1 + R2, R3b + R2 or R4 + R2, with the numbers |
 | **AE1 · The composition** | the shot version's composition (`.ecproj` in a loom2 record, fsio, lineage, the pin); the orchestrator writes it from a single clip and from the clay assembly (with CA6); a `comp_render` job through the CLI (R2) with staging, stall handling and its cost; the pinned binary with a build script and `--check` in CI (D59's pattern) | 3–4 | a composition written, rendered and reopened byte-identical; the render matches the preview |
 | **AE2 · Viewer and timeline** | the R1 worker (or R4); layer rows with trim, slip and move; transform and opacity keys (drag, ease and hold by right-click); blend modes, opacity, track mattes, solo / hide / lock, parenting; the pen tool for masks; undo through the engine's history; every action a command with a mouse placement | 6–8 | a 3-layer shot edited by mouse alone; scrubbing at ≥ 12 fps at Draft size; undo and redo across every action |
 | **AE3 · Effects and colour** | the curated ≈ 20 effects as icon presets with their parameters in the column; colour (Curves, Levels, Lumetri basic) with a before/after | 3–4 | each effect's preview matches the CLI render; presets apply in one click |

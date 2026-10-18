@@ -36,3 +36,49 @@ def test_a_flag_in_flags_wins_and_zero_leaves_it_out(tmp_path: Path):
     b = AppState(tmp_path / "b")
     b.settings.engine.vram_headroom_gb = 0
     assert "--vram-headroom" not in EngineSupervisor(b)._argv()
+
+
+# ---- D100: the headroom is per model (a spec's engine.vram_headroom_gb); the engine restarts when the next job's model wants another --------
+class _Alive:
+    pid = 1
+
+    def poll(self):
+        return None
+
+
+def test_a_model_may_ask_for_its_own_headroom(tmp_path: Path):
+    sup = EngineSupervisor(AppState(tmp_path))
+    assert sup.headroom_for(None) == 5.0 and sup.headroom_for(0.0) == 0.0
+    assert "--vram-headroom" not in sup._argv(0.0) and sup._argv(2.5)[sup._argv(2.5).index("--vram-headroom") + 1] == "2.5"
+    a = AppState(tmp_path / "f")
+    a.settings.engine.flags = [*a.settings.engine.flags, "--vram-headroom", "3"]
+    assert EngineSupervisor(a).headroom_for(0.0) is None                                        # a typed flag decides for every model
+
+
+def test_wan_animate_runs_without_the_headroom():
+    from loom2.models import registry
+    from loom2.queue import model_headroom
+    from loom2.recipes import parse_recipe
+    animate = next(s for s in registry.SPECS.values() if s.graph == "wan_animate")
+    assert animate.engine.vram_headroom_gb == 0.0
+    assert model_headroom(parse_recipe({"kind": "i2v", "model_id": animate.id, "start_asset": "ast_1"}), "full") == 0.0
+    t2i = next(s for s in registry.SPECS.values() if s.recipes.t2i)
+    assert model_headroom(parse_recipe({"kind": "t2i", "model_id": t2i.id}), "full") is None
+
+
+def test_the_engine_restarts_only_when_the_headroom_changes(tmp_path: Path):
+    import asyncio
+    sup = EngineSupervisor(AppState(tmp_path))
+    calls: list[float | None] = []
+
+    async def restart(model_gb=None):
+        calls.append(model_gb)
+        sup.headroom_gb = sup.headroom_for(model_gb)
+        return {}
+    sup.restart = restart                                                                        # type: ignore[method-assign]
+    sup.proc = _Alive()                                                                          # type: ignore[assignment]
+    sup.headroom_gb = 5.0
+    assert asyncio.run(sup.ensure_running(None)) is False and calls == []                      # the engine-wide value: as launched
+    assert asyncio.run(sup.ensure_running(0.0)) is True and calls == [0.0]                     # Wan Animate: restarted without it
+    assert asyncio.run(sup.ensure_running(0.0)) is False and calls == [0.0]                    # the next Wan Animate job: no restart
+    assert asyncio.run(sup.ensure_running(None)) is True and calls == [0.0, 5.0]               # back to an image model

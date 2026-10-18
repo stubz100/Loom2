@@ -137,7 +137,7 @@ def test_capabilities_name_the_animate_method(tmp_path: Path):
     with TestClient(create_app(state)) as cl:
         caps = cl.get("/capabilities").json()
         an = caps["stage"]["animate"]
-        assert an and an["model_id"] == ANIM and an["kinds"] == ["pose"] and an["seconds"] == 128.0 and an["frames_max"] == 77 and an["figures_max"] == 1
+        assert an and an["model_id"] == ANIM and an["kinds"] == ["pose"] and an["seconds"] == 260.0 and an["frames_max"] == 77 and an["figures_max"] == 1
         assert an["size"] == [832, 480] and an["frame_step"] == 4 and an["health"] != "missing"
         assert caps["stage"]["clip"]["model_id"] == LTX                                         # the IC-LoRA method stays
         assert ANIM not in [m["model_id"] for m in caps["i2v"]["models"]] if isinstance(caps["i2v"].get("models"), list) else ANIM not in caps["i2v"].get("models", {})

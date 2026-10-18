@@ -81,6 +81,17 @@ class JobRecord(BaseModel):
     origin: JobOrigin | None = None             # D66: the suite / surface that asked (echoed on events and on the assets it makes)
 
 
+
+def model_headroom(recipe: Any, variant: str) -> float | None:
+    """D100: the VRAM headroom the job's model asks the engine for (its spec's `engine.vram_headroom_gb`); None = the engine-wide setting."""
+    from .recipes import StageShot, stage_model_id
+    try:
+        mid = stage_model_id(recipe, variant) if isinstance(recipe, StageShot) else getattr(recipe, "model_id", None)
+    except ValueError:
+        return None
+    spec = registry.get(mid) if isinstance(mid, str) and mid else None
+    return spec.engine.vram_headroom_gb if spec is not None else None
+
 class JobQueue:
     def __init__(self, ws: Workspace, app: AppState, engine: EngineSupervisor, roster: Roster, catalogue: Catalogue, hub: EventHub) -> None:
         self.documents: DocumentStore | None = None      # set by Services once the project is open (M5 edit jobs)
@@ -686,7 +697,9 @@ class JobQueue:
                 self._complete(job, engine=False)
                 return
             try:
-                await self.engine.ensure_running()
+                want = model_headroom(recipe, job.variant)
+                if await self.engine.ensure_running(want):                  # D100: this model wants another headroom — the engine was restarted
+                    job.log_tail.append(f"engine restarted with --vram-headroom {self.engine.headroom_gb:g} GB for this model (D100)")
             except (RuntimeError, OSError) as e:                        # C2: launch failure → hold the queue, keep the job
                 self._engine_unavailable(job, f"engine could not start: {e}")
                 return

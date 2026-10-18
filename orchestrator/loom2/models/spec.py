@@ -150,6 +150,12 @@ class Estimates(Strict):
     cold_seconds: float | None = None              # P18: the same job with nothing resident (shown beside the warm figure)
 
 
+class EngineHints(Strict):
+    """D100: what the engine is launched with while this model runs (ComfyUI reads these once, at launch — the supervisor restarts it on a
+    change). None = the engine-wide setting."""
+    vram_headroom_gb: float | None = Field(None, ge=0.0, le=16.0)   # --vram-headroom for this model (0 = none); D98's engine-wide value when absent
+
+
 class ModelSpec(Strict):
     id: str                                        # the roster id of the main weight
     family: str
@@ -167,6 +173,7 @@ class ModelSpec(Strict):
     inputs: Inputs = Field(default_factory=Inputs)
     geometry: Geometry = Field(default_factory=Geometry)
     estimates: Estimates = Field(default_factory=Estimates)
+    engine: EngineHints = Field(default_factory=EngineHints)   # D100
     video: Video | None = None
 
     def weights(self, te_id: str | None = None, turbo: bool = False) -> list[str]:

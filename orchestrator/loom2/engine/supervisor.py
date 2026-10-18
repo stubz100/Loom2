@@ -91,6 +91,7 @@ class EngineSupervisor:
         self._lock = asyncio.Lock()
         self.version: dict | None = None
         self.in_job_object = False
+        self.headroom_gb: float | None = None          # D100: the --vram-headroom the running engine was launched with (None: a flag in `flags` decides)
 
     # ---- state ------------------------------------------------------------------------------------
     def state(self) -> dict:
@@ -100,6 +101,7 @@ class EngineSupervisor:
             "port": self.app.settings.engine.port, "started_at": self.started_at, "uptime_s": round(time.time() - self.started_at, 1) if alive and self.started_at else None,
             "jobs_since_start": self.jobs_since_start, "restarts": self.restarts, "last_error": self.last_error,
             "log": str(self.log_path) if self.log_path else None, "version": self.version, "job_object": alive and self.in_job_object,
+            "vram_headroom_gb": self.headroom_gb if alive else None,
         }
 
     def _emit(self) -> None:
@@ -107,17 +109,26 @@ class EngineSupervisor:
             self.on_state(self.state())
 
     # ---- lifecycle --------------------------------------------------------------------------------
-    def _argv(self) -> list[str]:
+    def headroom_for(self, model_gb: float | None) -> float | None:
+        """D100: the headroom an engine for this model is launched with — the model's own value, else the engine-wide setting; None when a
+        `--vram-headroom` typed into `flags` decides for every model."""
+        e = self.app.settings.engine
+        if "--vram-headroom" in e.flags:
+            return None
+        return float(model_gb if model_gb is not None else (e.vram_headroom_gb or 0.0))
+
+    def _argv(self, model_gb: float | None = None) -> list[str]:
         e = self.app.settings.engine
         state = self.app.state_dir
         reserve = [] if "--reserve-vram" in e.flags or not e.reserve_vram_gb else ["--reserve-vram", str(float(e.reserve_vram_gb))]
-        headroom = [] if "--vram-headroom" in e.flags or not e.vram_headroom_gb else ["--vram-headroom", str(float(e.vram_headroom_gb))]
+        h = self.headroom_for(model_gb)
+        headroom = ["--vram-headroom", str(h)] if h else []
         return [e.python, e.main, "--listen", e.host, "--port", str(e.port), *e.flags, *reserve, *headroom, "--log-stdout",
                 "--extra-model-paths-config", e.extra_model_paths,
                 "--output-directory", str(state / "engine_out"), "--temp-directory", str(state / "engine_tmp"),
                 "--user-directory", str(state / "engine_user")]
 
-    async def start(self) -> dict:
+    async def start(self, model_gb: float | None = None) -> dict:
         async with self._lock:
             if self.proc is not None and self.proc.poll() is None:
                 return self.state()
@@ -139,7 +150,8 @@ class EngineSupervisor:
             self._log_fh = self.log_path.open("ab")
             env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"}
             try:
-                self.proc = subprocess.Popen(self._argv(), cwd=str(Path(e.main).parent), stdout=self._log_fh, stderr=subprocess.STDOUT, env=env,
+                self.headroom_gb = self.headroom_for(model_gb)
+                self.proc = subprocess.Popen(self._argv(model_gb), cwd=str(Path(e.main).parent), stdout=self._log_fh, stderr=subprocess.STDOUT, env=env,
                                              creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0))
             except Exception as ex:
                 self._log_fh.close()
@@ -204,22 +216,30 @@ class EngineSupervisor:
         except Exception:
             pass
 
-    async def restart(self) -> dict:
+    async def restart(self, model_gb: float | None = None) -> dict:
+        """Stop and start again — with the headroom the engine had (a hang, the restart-every-N policy) unless a model asks for another."""
+        keep = self.headroom_gb if model_gb is None else model_gb
         await self.stop()
         self.restarts += 1
-        return await self.start()
+        return await self.start(keep)
 
-    async def ensure_running(self) -> None:
-        """Called by the queue before every job: (re)start if dead or if the restart-every-N policy says so."""
+    async def ensure_running(self, model_gb: float | None = None) -> bool:
+        """Called by the queue before every job: (re)start if dead, if the restart-every-N policy says so, or (D100) if the job's model wants
+        another headroom than the supervised engine was launched with. Returns whether the engine was (re)started for the headroom."""
         e = self.app.settings.engine
         alive = self.proc is not None and self.proc.poll() is None
+        want = self.headroom_for(model_gb)
+        if alive and want is not None and self.headroom_gb is not None and want != self.headroom_gb:
+            await self.restart(want)
+            return True
         if alive and e.restart_every_jobs and self.jobs_since_start >= e.restart_every_jobs:
             await self.restart()
-            return
+            return False
         if not alive and not await self.client.is_up():
             if self.proc is not None:
                 self.restarts += 1
-            await self.start()
+            await self.start(model_gb)
+        return False
 
     async def health(self) -> dict:
         up = await self.client.is_up()

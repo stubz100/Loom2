@@ -36,7 +36,8 @@ graph = "wan_animate"
 roles.te = { default = "umt5-xxl-fp8" }
 roles.vae = "wan21-vae"
 roles.extra = { clip_vision = "clip-vision-h", lightning = "lightx2v-i2v-4step" }
-recipes = { animate = true, guide_seconds = 128.0, guide_figures = 1 }   # 285 → 128 s with the 5 GB job headroom (journal 2026-10-18)
+recipes = { animate = true, guide_seconds = 260.0, guide_figures = 1 }   # D100: without the headroom (128 s with it, but the clip changed and lost the pose — journal 2026-10-18 20:00)
+engine = { vram_headroom_gb = 0.0 }   # D100: Wan Animate runs without D98's headroom until spike E30 (PCK 0.993 at 0; 0.778 / 0.597 at 5, not deterministic)
 geometry = { size_mult = 16, frame_step = 4, fps = 16, frames = 77, size = [832, 480] }
 estimates = { vram_gb = 14.5 }
 
@@ -45,7 +46,7 @@ label = "Wan 2.2 Animate-14B · pose-driven"
 negative = "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
 
 [model.video.presets]
-draft = { label = "Draft · LightX2V 4 steps (≈ 2 min for 77 frames at 480p)", steps = 4, cfg_high = 1.0, shift = 8.0, seconds = 128.0 }
+draft = { label = "Draft · LightX2V 4 steps (≈ 4–5 min for 77 frames at 480p)", steps = 4, cfg_high = 1.0, shift = 8.0, seconds = 260.0 }
 
 # Wan 2.2 S2V-14B (D88 XL, experimental): a talking clip from one image and a spoken line. E18 (journal 2026-10-15): English lines follow
 # the audio (sync 0.49–0.72; German 0.32–0.37 — wav2vec2-large-*english*), 906–999 s for 77 frames at 832×480 at 20 steps, 520–566 s at 10.

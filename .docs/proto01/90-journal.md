@@ -5587,3 +5587,35 @@ The recipe record comes with Animate (07 phase 1). The details are in 05 §4 *As
 
 **Next in 07:** phase 1 is done (UX0, IM1, AN1, RC0). Phase 2 is CA0 (animation references and the body on the Cast sheet) and CA1
 (the motion library).
+
+## 2026-10-18 20:20 — Correction to 20:00: Wan Animate is not deterministic at a fixed seed; D100 built; E30a started
+
+**The 20:00 entry is wrong in one claim.** It said headroom 0 "reproduces the 2026-10-15 acceptance exactly" and called the 5 GB runs
+"not deterministic", as if the run without headroom were.
+
+- **Only the PCK number matched (0.993).** FaceSim did not: 0.171 / 0.245 / 0.168 today against 0.139 / 0.149 / 0.191 on 2026-10-15.
+- **The two 2026-10-15 runs already differed from each other** (PCK 1.0 and 0.993).
+- **So Wan Animate gives a different clip from the same seed and inputs either way.**
+
+Every CN4 run on record:
+
+| Headroom | PCK@0.1 per run | Wall time |
+| --- | --- | --- |
+| 0 | 1.0, 0.993 (2026-10-15); 0.993, 0.743 (today, the 0.743 through D100's per-model value) | 260–298 s |
+| 5 GB | 0.778, 0.597 | 200–212 s |
+
+- The lean toward 0 is there, but on too few runs to be a finding, and the CN4 bar (≥ 0.8) is missed at 0 too, one run in four.
+- **D100 was accepted on the wrong claim.** The author is told so. The per-model value is kept as a precaution until E30a says
+  otherwise.
+
+**D100 as built:**
+
+- `ModelSpec.engine.vram_headroom_gb` (`EngineHints`); Wan Animate sets 0, so its estimates return to 260 s Draft.
+- `EngineSupervisor.headroom_for` / `ensure_running(model_gb)` restart the engine when the next job's model wants another value, and
+  the job's log says so. A `--vram-headroom` in `flags` still decides for every model.
+- `queue.model_headroom(recipe, variant)`.
+- Tests: `test_engine_vram_headroom` +3; `test_animate_cn4`'s estimate is now 260.
+- The rig run through the per-model value launched without headroom (269 s) and scored PCK 0.743, the run counted above.
+- `cn_acceptance.py --vram-headroom` now forces the value through `flags`, so the A/B still compares both arms with D100 in place.
+
+**E30a (started 20:20):** Wan Animate on CN4's walk_dolly, seed 0, eight runs alternating headroom 0 and 5, one GPU job at a time.

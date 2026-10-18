@@ -1267,6 +1267,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/project/animate-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Animate Presets Get
+         * @description D95 (AN1, UX0 #11): Animate's saved panels, a project record (they lived in the browser before).
+         */
+        get: operations["animate_presets_get_project_animate_presets_get"];
+        /** Animate Presets Put */
+        put: operations["animate_presets_put_project_animate_presets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/project/close": {
         parameters: {
             query?: never;
@@ -2470,6 +2491,31 @@ export interface components {
             revision: number;
             /** Total */
             total: number;
+        };
+        /** AnimatePanel */
+        AnimatePanel: {
+            /** Name */
+            name: string;
+            /** Panel */
+            panel: {
+                [key: string]: unknown;
+            };
+            /** Saved At */
+            saved_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnimatePanels */
+        AnimatePanels: {
+            /** Last */
+            last: string | null;
+            /** Presets */
+            presets: components["schemas"]["AnimatePanel"][];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
         };
         /** AssetDeletedEvent */
         AssetDeletedEvent: {
@@ -11139,6 +11185,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    animate_presets_get_project_animate_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimatePanels"];
+                };
+            };
+        };
+    };
+    animate_presets_put_project_animate_presets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimatePanels"];
                 };
             };
             /** @description Validation Error */

@@ -219,3 +219,48 @@ def set_panel_thumb(project_dir: Path, name: str, asset_id: str) -> bool:
         hit.thumb_asset_id = asset_id
         atomic_write_json(panels_path(project_dir), cur.model_dump())
         return True
+
+
+# D95 (AN1, UX0 #11): Animate's saved panels — a project record like Image's (they lived in the browser until now; the client imports them
+# once). A panel is Animate's form without its frames (start, end, beats); the record keeps whatever fields the client sends.
+ANIM_PANELS_SCHEMA_VERSION = 1
+
+
+class AnimatePanel(BaseModel):
+    model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)   # D38: present in every reply
+    name: str
+    panel: dict[str, Any] = Field(default_factory=dict)
+    saved_at: str = Field(default_factory=utc_now)
+
+
+class AnimatePanels(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = ANIM_PANELS_SCHEMA_VERSION
+    presets: list[AnimatePanel] = Field(default_factory=list)
+    last: str | None = None
+
+
+def animate_panels_path(project_dir: Path) -> Path:
+    return Path(project_dir) / "animate" / "presets.json"
+
+
+def read_animate_panels(project_dir: Path) -> AnimatePanels:
+    return AnimatePanels.model_validate(read_json_or(animate_panels_path(project_dir), {}))
+
+
+def put_animate_panels(project_dir: Path, body: dict[str, Any]) -> AnimatePanels:
+    """Replace the list as the client sends it (distinct, non-empty names; `last` one of them or none)."""
+    with _lock:
+        nxt = AnimatePanels.model_validate({**body, "schema_version": ANIM_PANELS_SCHEMA_VERSION})
+        names = [p.name.strip() for p in nxt.presets]
+        if any(not n for n in names) or len(set(names)) != len(names):
+            raise ValueError("saved panels need distinct names")
+        for p in nxt.presets:                                     # the frames never belong to a saved panel
+            for k in ("start", "end", "beats"):
+                p.panel.pop(k, None)
+        if nxt.last is not None and nxt.last not in names:
+            nxt.last = None
+        animate_panels_path(project_dir).parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(animate_panels_path(project_dir), nxt.model_dump())
+        return nxt
+

@@ -196,6 +196,65 @@
         "title": "AlbumNode",
         "type": "object"
       },
+      "AnimatePanel": {
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "panel": {
+            "additionalProperties": true,
+            "title": "Panel",
+            "type": "object"
+          },
+          "saved_at": {
+            "title": "Saved At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "panel",
+          "saved_at"
+        ],
+        "title": "AnimatePanel",
+        "type": "object"
+      },
+      "AnimatePanels": {
+        "properties": {
+          "last": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/AnimatePanel"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "presets",
+          "last"
+        ],
+        "title": "AnimatePanels",
+        "type": "object"
+      },
       "AssetDeletedEvent": {
         "properties": {
           "data": {
@@ -19400,6 +19459,69 @@
           }
         },
         "summary": "Project Create",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/animate-presets": {
+      "get": {
+        "description": "D95 (AN1, UX0 #11): Animate's saved panels, a project record (they lived in the browser before).",
+        "operationId": "animate_presets_get_project_animate_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimatePanels"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Animate Presets Get",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "operationId": "animate_presets_put_project_animate_presets_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimatePanels"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Animate Presets Put",
         "tags": [
           "projects"
         ]

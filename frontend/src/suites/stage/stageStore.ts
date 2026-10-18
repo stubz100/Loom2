@@ -260,9 +260,11 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   renderGuide: async () => {
     const s = useSession.getState()
-    const cur = get().current, cam = get().activeCamera(), render = get().sequenceRenderer
+    const cur = get().current, cam = get().activeCamera()
     if (!cur || !cam) { s.toast('No camera to render the sequence from', 'error'); return false }
-    if (!render) { s.toast('The viewport is not ready to render', 'error'); return false }
+    if (!get().sequenceRenderer) (await import('./headless')).ensureHeadless()   // D95 (AN1): no viewport on screen — the headless engine
+    const render = get().sequenceRenderer
+    if (!render) { s.toast('The stage is not ready to render', 'error'); return false }
     set({ rendering: true, rendered: { done: 0, total: 0 } })
     try {
       await flushSave(get, set)
@@ -332,9 +334,11 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   renderPasses: async () => {
     const s = useSession.getState()
-    const cur = get().current, cam = get().activeCamera(), render = get().passRenderer
+    const cur = get().current, cam = get().activeCamera()
     if (!cur || !cam) { s.toast('No camera to render the passes from', 'error'); return false }
-    if (!render) { s.toast('The viewport is not ready to render', 'error'); return false }
+    if (!get().passRenderer) (await import('./headless')).ensureHeadless()       // D95 (AN1): Image's From a stage — no viewport on screen
+    const render = get().passRenderer
+    if (!render) { s.toast('The stage is not ready to render', 'error'); return false }
     set({ rendering: true })
     try {
       await flushSave(get, set)

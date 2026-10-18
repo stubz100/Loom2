@@ -1787,3 +1787,32 @@ test('the Bin (D95 · AN1, 04 C1): the Dock\'s Bin tab shows the Catalogue in Im
   await openCatalogue(page)
   await expect(page.locator('.dock .dock-tabs')).toHaveCount(0)                                             // Story has the Catalogue itself
 })
+
+test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames it by right-click, shows the passes in Scene; Image · Make has From a stage', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Plane test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Plane test')
+  await openSection(page, 'Scene')
+  await expect(page.locator('.passes-row')).toContainText('No passes yet for')                              // #16: the passes at a glance
+  await page.locator('.lib-grid button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
+  const bin = page.locator('.dock .bin')
+  await expect(bin).toBeVisible()
+  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
+  await bin.locator('.bin-grid .tile').first().dblclick()                                                    // the Clay level's verb: an image plane
+  const row = page.locator('.outl-row', { has: page.locator('.kind', { hasText: 'plane' }) })
+  await expect(row).toHaveCount(1)
+  await row.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Rename/ }).click()                                // D32: rename has a mouse placement
+  await dialog.locator('input').fill('Backdrop')
+  await dialog.locator('button.primary').click()
+  await expect(row.locator('.name')).toHaveText('Backdrop')
+  await openImage(page, 'Make')                                                                              // #5: stills from the stage in Image
+  await page.locator('.gen-source .segmented button', { hasText: 'From a stage' }).click()
+  await expect(page.locator('.from-stage select[aria-label="the stage"] option:checked')).toHaveText('Plane test')
+  await expect(page.locator('.from-stage select[aria-label="the camera"]')).toBeVisible()
+  await page.locator('.gen-source .segmented button', { hasText: 'Prompt' }).click()
+  await expect(page.locator('.from-stage')).toHaveCount(0)
+})

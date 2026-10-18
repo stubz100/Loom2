@@ -5464,3 +5464,41 @@ AN1 (proto01_animate 03 §7) is built in steps; this is the first.
 
 **Tests:** a new e2e scenario (the Bin in Make adds a reference, in Animate sets the start frame, and is absent in Story). e2e 39/39 under
 full and open; Vitest 341; build clean; lint 73.
+
+## 2026-10-18 19:24 — AN1 step 5 · From a stage in Image, passes without a viewport, Animate presets in the project, the Clay level's loose ends
+
+- **Image · Make has a source switch: *Prompt | From a stage*** (UX0 #5). From a stage loads lazily, so Image's eager bundle carries no
+  three.js (`stage/FromStage.tsx`). It holds:
+  - a stage and a camera picker;
+  - the stage's still form (`ShotTab stillsOnly`: method, the pass as image 1, the references with the figures' slots, prompt, size,
+    results);
+  - the stage's foot.
+  Ctrl+Enter (`gen.generate`) runs the stage's Render frame while the source is a stage. The stage itself is still edited in Animate ·
+  Clay.
+- **Passes render without the viewport** (`stage/headless.ts`). A headless `StageEngine` on a detached canvas (never started, no loop)
+  renders the passes and sequences when no viewport has registered its renderers. `renderPasses` / `renderGuide` fall back to it; the
+  viewport puts its own back when it mounts.
+- **Story's routes follow the tabs:**
+  - *Make frame ▸ from the stage* opens Image on From a stage at the shot's camera;
+  - *Make clip ▸ on the stage* opens Animate · Clay with the stage card;
+  - both bind the shot's speakers to the figures (#21: the clip route did not before).
+- **Animate's saved panels are a project record** (UX0 #11): `animate/presets.json`, GET / PUT `/project/animate-presets`
+  (`library.read_animate_panels` / `put_animate_panels`). The record keeps no frames, names are distinct, and `last` is one of the names.
+  Presets this browser held are moved into the project once, with a toast. The H3 card is hidden.
+- **The Clay level's loose ends:**
+  - *Add image plane…* in Scene and on the viewport's right-click opens the Bin. At the Clay level, a Bin double-click (or right-click ›
+    *Add to the stage*) puts the image on the stage as a plane at the viewport's centre; a drag still lands it under the pointer (#18).
+  - *Rename…* for objects and *Rename camera…* are commands on the right-click (D32); before this, renaming was a double-click only.
+    Camera rows in the Outliner and Camera section have their own menu (look through, set from the view, to the shot, rename, add,
+    delete).
+  - Scene ends with a passes line for the active camera (none / current / behind the scene, with *Render passes*) (#16).
+
+**Tests:**
+
+- Offline: 417 under full and open, with a new `test_animate_presets_d95.py`. The D37 route snapshot gained the two preset routes.
+- e2e: 40/40 under full and open. A new scenario covers a plane from the Bin at Clay, the right-click rename, the passes line, and From a
+  stage in Make.
+- Vitest 341; build clean; lint 75 (two fast-refresh notes for the lazy foot in GenerateSuite).
+- Audits clean: settings, model literals, agent docs, OpenAPI.
+
+**Still open:** one undo history per Shot (#13, with AE1). Animate's Clips section stays until the Bin carries the clip verbs.

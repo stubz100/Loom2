@@ -135,9 +135,18 @@ interface AnimateState {
   sendFrameToEdit: () => Promise<void>
   useFrameAsStart: () => Promise<void>
   setState: (state: 'keep' | 'reject' | 'none') => Promise<void>
+  /** D95 (AN1, UX0 #11): the saved panels are a project record (`/project/animate-presets`); presets this browser still holds from before
+   *  are moved into the project once (the first load that finds the project's list empty). */
+  loadPresets: () => Promise<void>
   savePreset: (name: string) => void
   applyPreset: (name: string) => void
   deletePreset: (name: string) => void
+}
+
+/** Write the saved panels to the project (the server drops the frames). A failure is said; the list stays as it is on screen. */
+async function putPresets(presets: { name: string; panel: AnimPanel; saved_at: string }[], last: string | null): Promise<void> {
+  try { await unwrap(http.PUT('/project/animate-presets', { body: { presets: presets.map((p) => ({ name: p.name, panel: p.panel, saved_at: p.saved_at })), last } as never })) }
+  catch (e) { useSession.getState().toast(`Saving the Animate presets failed: ${(e as ApiError).detail ?? e}`, 'error') }
 }
 
 let previewTimer: ReturnType<typeof setTimeout> | null = null
@@ -370,11 +379,27 @@ export const useAnimate = create<AnimateState>()(
         try { const a = await unwrap(http.PATCH('/assets/{asset_id}', { params: { path: { asset_id: c.asset_id } }, body: { state } })); set({ assets: { ...get().assets, [a.id]: a } }) } catch (e) { useSession.getState().toast(`Could not mark the clip: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
-      savePreset: (name) => set({ presets: [...get().presets.filter((p) => p.name !== name), { name, panel: { ...get().panel, start: null, end: null, beats: [] }, saved_at: new Date().toISOString() }], lastPreset: name }),
+      loadPresets: async () => {
+        try {
+          const r = await unwrap(http.GET('/project/animate-presets'))
+          const local = get().presets
+          if (!r.presets.length && local.length) {                                       // this browser's presets from before: into the project, once
+            await putPresets(local, get().lastPreset)
+            useSession.getState().toast(`${local.length} Animate preset${local.length === 1 ? '' : 's'} moved from this browser into the project`, 'info')
+            return
+          }
+          set({ presets: r.presets.map((p) => ({ name: p.name, panel: { ...DEFAULT_PANEL, ...(p.panel as Partial<AnimPanel>), start: null, end: null, beats: [] }, saved_at: p.saved_at })), lastPreset: r.last ?? null })
+        } catch { /* no project open */ }
+      },
+      savePreset: (name) => {
+        set({ presets: [...get().presets.filter((p) => p.name !== name), { name, panel: { ...get().panel, start: null, end: null, beats: [] }, saved_at: new Date().toISOString() }], lastPreset: name })
+        void putPresets(get().presets, name)
+      },
       applyPreset: (name) => { const p = get().presets.find((x) => x.name === name); if (p) { get().set({ ...p.panel, start: get().panel.start, end: get().panel.end }); set({ lastPreset: name }) } },
-      deletePreset: (name) => set({ presets: get().presets.filter((p) => p.name !== name) }),
+      deletePreset: (name) => { set({ presets: get().presets.filter((p) => p.name !== name) }); void putPresets(get().presets, get().lastPreset === name ? null : get().lastPreset) },
     }),
-    { name: 'loom2.animate', partialize: (s) => ({ panel: s.panel, presets: s.presets, lastPreset: s.lastPreset, speed: s.speed, loop: s.loop, onion: s.onion, extractEvery: s.extractEvery }) as never },
+    // D95 (AN1): the presets are the project's now — no longer written to this browser (an older copy is read once and moved, loadPresets)
+    { name: 'loom2.animate', partialize: (s) => ({ panel: s.panel, speed: s.speed, loop: s.loop, onion: s.onion, extractEvery: s.extractEvery }) as never },
   ),
 )
 

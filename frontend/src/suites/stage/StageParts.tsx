@@ -22,7 +22,7 @@ import type { Asset, StageCamera } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
-import { viewport, viewportMenu } from './stageCommands'
+import { viewport, viewportMenu, cameraMenu } from './stageCommands'
 import { effectiveJoints, st, useStage, type ShotState } from './stageStore'
 import './stage.css'
 
@@ -85,8 +85,26 @@ export function LibraryAdd() {
           <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
             <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
           </button>))}</div>
-        <p className="hint">Image planes: drop a Catalogue tile on the viewport (it lands where the pointer is). Each card adds at the viewport's centre.</p>
+        <h4>Image planes</h4>
+        <div className="lib-grid"><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
+        <p className="hint">From the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre.</p>
       </>
+    </div>
+  )
+}
+
+/** D95 (AN1, UX0 #16): the active camera's passes at a glance in Scene — rendered or not, current or behind the scene — and Render passes. */
+export function PassesRow() {
+  const current = useStage((s) => s.current)
+  const cam = useStage((s) => s.activeCamera())
+  const entry = useStage((s) => s.passesEntry())
+  const stale = useStage((s) => s.passesStale())
+  const rendering = useStage((s) => s.rendering)
+  if (!current || !cam) return null
+  return (
+    <div className="stage-panel passes-row">
+      <span className="hint">{entry ? `Passes · ${cam.name} · ${Object.keys(entry.assets).length} at ${entry.size.w}×${entry.size.h} · ${stale ? `revision ${entry.revision}, the scene moved on` : 'current'}` : `No passes yet for ${cam.name}`}</span>
+      <CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : entry && !stale ? 'Render again' : 'Render passes'} />
     </div>
   )
 }
@@ -113,7 +131,8 @@ export function OutlinerTab() {
       ))}
       <h4>Cameras</h4>
       {current.cameras.map((c) => (
-        <div key={c.id} className={`outl-row${current.active_camera === c.id ? ' active' : ''}`} onClick={() => st().setActiveCamera(c.id)}>
+        <div key={c.id} className={`outl-row${current.active_camera === c.id ? ' active' : ''}`} onClick={() => st().setActiveCamera(c.id)}
+          onContextMenu={(e) => { e.preventDefault(); st().setActiveCamera(c.id); showMenu(e, cameraMenu()) }}>
           <Camera size={13} /><span className="name">{c.name}</span><span className="meta">{c.focal_mm} mm</span>
         </div>
       ))}
@@ -132,6 +151,7 @@ export function CamerasTab() {
       <div className="head"><b>Cameras</b><CommandButton id="stage.camera.add" /></div>
       {current.cameras.map((c) => (
         <div key={c.id} className={`outl-row${current.active_camera === c.id ? ' active' : ''}`} onClick={() => st().setActiveCamera(c.id)}
+          onContextMenu={(e) => { e.preventDefault(); st().setActiveCamera(c.id); showMenu(e, cameraMenu()) }}
           onDoubleClick={() => void askText({ title: 'Rename camera', initial: c.name }).then((n) => { if (n?.trim()) st().updateCamera(c.id, { name: n.trim() }) })}>
           <Camera size={13} /><span className="name">{c.name}</span><span className="meta">{c.focal_mm} mm</span>
         </div>
@@ -191,7 +211,8 @@ export function PosesTab() {
 // ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), image 1
 // locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
 // Generate when stale (or by the button), the results land below with lineage to the passes.
-export function ShotTab() {
+/** `stillsOnly` (D95, Image's From a stage): the stills without the clip fold, which belongs to Animate. */
+export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
   const current = useStage((s) => s.current)
   const cam = useStage((s) => s.activeCamera())
   const sh = useStage((s) => s.shot)
@@ -277,7 +298,7 @@ export function ShotTab() {
       <h4>Results{stills.length ? ` · ${stills.length}` : ''}</h4>
       {!stills.length && <span className="hint">None yet — the frames of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
       <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
-      <ClipSection clips={clips} />
+      {!stillsOnly && <ClipSection clips={clips} />}
     </div>
   )
 }

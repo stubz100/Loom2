@@ -31,6 +31,13 @@ const playClip = (a: Asset) => void import('../animate/animateStore').then(async
 interface Verb { label: string; run: () => void }
 
 /** The verbs of a Bin tile, the mode's likely one first (the double-click). */
+/** An image plane at the viewport's centre on the open stage (the stage's code loads with it; the Clay level has it loaded already). */
+function addPlane(id: string): void {
+  void Promise.all([import('../stage/stageStore'), import('../stage/stageCommands')]).then(([s, c]) => {
+    if (!s.st().addObject('plane', null, c.viewport.centre?.() ?? [0, 0, 0], id)) useSession.getState().toast('Open a stage first (the Shot section)', 'info')
+  })
+}
+
 function verbs(a: Asset, suite: string): Verb[] {
   if (a.kind === 'video') return [{ label: 'Play in Animate', run: () => playClip(a) }]
   if (a.kind !== 'image') return []
@@ -38,7 +45,8 @@ function verbs(a: Asset, suite: string): Verb[] {
   const rest: Verb[] = [{ label: 'Use as a reference (Image · Make)', run: () => asReference(a.id) }, { label: 'Open in Image · Edit', run: () => openInEdit(a.id) },
     { label: 'Set as the start frame (Animate)', run: () => asStart(a.id) }]
   const first = suite === 'animate' || suite === 'stage' ? rest[2] : suite === 'generate' ? rest[0] : null
-  return [...edit, ...(first ? [first] : []), ...rest.filter((x) => x !== first)]
+  const plane: Verb[] = suite === 'stage' ? [{ label: 'Add to the stage (image plane)', run: () => addPlane(a.id) }] : []   // D95 (AN1, UX0 #18): the Clay level's verb
+  return [...edit, ...plane, ...(first ? [first] : []), ...rest.filter((x) => x !== first)]
 }
 
 export function Bin() {
@@ -77,7 +85,7 @@ export function Bin() {
           <input type="search" aria-label="search the Bin" placeholder="search" value={q.search} onChange={(e) => void useBin.getState().setQuery({ search: e.target.value })} />
           <span className="meta">{loading ? 'loading…' : `${shown.length}${total != null && total > shown.length ? ` of ${total}` : ''}`}</span>
           <span className="spacer" />
-          <span className="meta">drag a tile where it is used · double-click: {suite === 'animate' || suite === 'stage' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>
+          <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>
         </div>
         <div className="bin-grid" onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (

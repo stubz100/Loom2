@@ -6,7 +6,7 @@
 // letters — and a subject card picks a Cast character or prop by its hero image. D93 (C6): the scene picks a Cast place the same way (its
 // sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand as runCommandId, sep } from '../../frame/commands'
@@ -570,12 +570,34 @@ function showPreview(): void {
 }
 
 // ------------------------------------------------------------------ the column and its rail sync
+// D95 (AN1, UX0 #5): the source at the top of Make — the prompt, or a stage's stills (the stage's own form, loaded with its code)
+const FromStage = lazy(() => import('../stage/FromStage'))
+function SourceSwitch() {
+  const source = useGenerate((g) => g.source)
+  return (
+    <div className="gen-source">
+      <span className="segmented" role="group" aria-label="Make from">
+        <button type="button" className={source === 'prompt' ? 'active' : ''} aria-pressed={source === 'prompt'} onClick={() => useGenerate.setState({ source: 'prompt' })} title="Make from the prompt, references and look">Prompt</button>
+        <button type="button" className={source === 'stage' ? 'active' : ''} aria-pressed={source === 'stage'} onClick={() => useGenerate.setState({ source: 'stage' })} title="Stills from a stage: its figures and camera (the stage itself is edited in Animate · Clay)">From a stage</button>
+      </span>
+    </div>
+  )
+}
+
 export function GenerateColumn({ tab }: { tab: string }) {
   const host = useRef<HTMLDivElement>(null)
+  const source = useGenerate((g) => g.source)
   useColumnSync(host, 'generate', SECTION_IDS, 'gen-sec-', tab)        // the rail and the scroll, both ways (frame/columnSync.ts)
+  if (source === 'stage') return (
+    <div ref={host} className="gen-column">
+      <ForChip maker="generate" /><SourceSwitch />
+      <Suspense fallback={<span className="hint">Loading the stage…</span>}><FromStage /></Suspense>
+    </div>
+  )
   return (
     <div ref={host} className="gen-column">
       <ForChip maker="generate" />{/* D90 (02 §5): opened for a shot — the results come back as its takes */}
+      <SourceSwitch />
       <SavedSection />
       <PromptSection />
       <RefsSection />

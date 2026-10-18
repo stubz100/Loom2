@@ -3,7 +3,7 @@
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { useStageActive } from '../../frame/stageKeep'
-import { Lock, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
@@ -19,7 +19,7 @@ import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
 import { ForChip } from '../story/ForChip'
 import { useColumnSync } from '../../frame/columnSync'
-import { CamerasTab, LibraryAdd, OutlinerTab, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
+import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
 import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
 import './animate.css'
@@ -106,7 +106,6 @@ function ModelTab() {
   const loraHigh = !!pp?.lora_high
   const distilled = Object.entries(cur?.preset_params ?? {}).find(([, x]) => x.lora_high)     // the preset whose high expert runs a distilled LoRA
   const cap1 = (k: string) => k.charAt(0).toUpperCase() + k.slice(1)
-  const h3 = useSession((s) => !!s.settings?.h3_licence_confirmed)
   const presetLabel = (k: string) => cur?.presets[k] ?? k
   return (
     <div className="anim-form">
@@ -121,10 +120,7 @@ function ModelTab() {
             <span className={`badge ${m.health} health`}>{m.health === 'missing' ? `fetch ${m.approx_gb} GB` : m.health}</span>
           </button>
         })}
-        <button className={`model-card locked${h3 ? ' confirmed' : ''}`} disabled title={h3 ? 'Licence confirmed (D17) — the H3 graph and weights arrive post-MVP (04 §5b)' : 'MiniMax H3 unlocks once Settings records that the EU licence application is filed (D17)'}>
-          <b>{h3 ? null : <Lock size={12} />} H3 (hero)</b><small>MiniMax H3 FL2VA · 864×480 · 5 s · ≈ 13 min</small>
-          <small>{h3 ? 'licence confirmed · graph + weights post-MVP (04 §5b)' : 'locked: confirm the licence application in Settings (D17)'}</small>
-        </button>
+        {/* D99 (UX0 #15): the H3 hero card stays hidden until its graph and weights are wired (it was a permanently locked card) */}
       </div>
       <label>preset</label>
       <div className="segmented">{(['draft', 'motion', 'quality'] as const).map((k) => <button key={k} className={p.preset === k ? 'active' : ''} onClick={() => an().set({ preset: k, steps: null, cfg: null })} title={presetLabel(k)}>{k}</button>)}</div>
@@ -245,7 +241,7 @@ function ClipsTab() {
 function useAnimateLoad(): void {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities?.i2v)
-  useEffect(() => { if (project?.open) an().refreshPreview() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { an().refreshPreview(); void an().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // C3 / D65: no model yet, or a persisted one this build does not offer (LTX under `open`) → the variant's i2v default
   const def = useSession((s) => s.capabilities?.defaults.i2v)
   useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
@@ -302,7 +298,7 @@ function AnimateColumnBody({ tab }: { tab: string }) {
   return (
     <div ref={host} className="col-column anim-column">
       <Sec id="shot" title="Shot"><ForChip maker="animate" /><StageList /></Sec>
-      <Sec id="scene" title="Scene"><LibraryAdd /><OutlinerTab /></Sec>
+      <Sec id="scene" title="Scene"><LibraryAdd /><OutlinerTab /><PassesRow /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>
       <Sec id="performance" title="Performance" tools={<RouteSwitch />}>

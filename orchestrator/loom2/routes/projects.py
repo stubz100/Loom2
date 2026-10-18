@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..library import SavedPanels, put_panels, read_panels
+from ..library import AnimatePanels, SavedPanels, put_animate_panels, put_panels, read_animate_panels, read_panels
 from ..schemas import ProjectInfo, Recents
 from ..workspace import Workspace
 from .deps import Svc
@@ -70,6 +70,23 @@ async def presets_put(svc: Svc, body: dict):
     except ValueError as e:
         raise HTTPException(422, str(e))
     svc.hub.broadcast("story.changed", {"kind": "panels", "revision": 0})
+    return out.model_dump()
+
+
+@router.get("/project/animate-presets", response_model=AnimatePanels)
+async def animate_presets_get(svc: Svc):
+    """D95 (AN1, UX0 #11): Animate's saved panels, a project record (they lived in the browser before)."""
+    ws, _, _ = svc.require_project()
+    return (await asyncio.to_thread(read_animate_panels, ws.path)).model_dump()
+
+
+@router.put("/project/animate-presets", response_model=AnimatePanels)
+async def animate_presets_put(svc: Svc, body: dict):
+    ws, _, _ = svc.require_project()
+    try:
+        out = await asyncio.to_thread(put_animate_panels, ws.path, body)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     return out.model_dump()
 
 

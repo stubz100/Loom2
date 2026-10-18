@@ -2,7 +2,7 @@
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
 import { ArrowDownFromLine, Boxes, Bookmark, Camera, Hand, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
 import { type SuiteDef } from '../../frame/suiteRegistry'
@@ -57,7 +57,15 @@ function Panel({ tab }: { tab: string }) {
 }
 
 /** The pinned primary action with its estimate and disabled reasons (09 §3 foot); New angle has its own sheet now (D90, AngleTab.tsx). */
+// D95 (AN1, UX0 #5): From a stage's foot is the stage's (Render frame), loaded with its code
+const FromStageFoot = lazy(() => import('../stage/FromStage').then((m) => ({ default: m.FromStageFoot })))
 function PrimaryAction() {
+  const source = useGenerate((g) => g.source)
+  if (source === 'stage') return <Suspense fallback={null}><FromStageFoot /></Suspense>
+  return <PromptFoot />
+}
+
+function PromptFoot() {
   const g = useGenerate()
   const s = useSession()
   markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset'); markUsed('gen.fetchMissing')
@@ -138,7 +146,8 @@ const withResults = (C: React.ComponentType) => function Wrapped() { return <Cat
 
 const canSubmit = () => !submitBlock(useGenerate.getState(), !!useSession.getState().project?.open)   // D90 (B4): what disables the Foot's buttons
 registerCommands([
-  { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(false) },
+  { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], when: () => useGenerate.getState().source === 'stage' || canSubmit(),
+    run: () => { if (useGenerate.getState().source === 'stage') runCommand('stage.shot.generate'); else void useGenerate.getState().generate(false) } },   // D95: From a stage → the stage's Render frame
   { id: 'gen.stage', scope: 'generate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(true) },
   // P14 (D82): the Angle tab — the five moves are buttons on the pad; the verb has no key (Ctrl+Enter stays Generate's)
   { id: 'gen.angle.generate', scope: 'generate', label: 'New angle', icon: Orbit, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id,

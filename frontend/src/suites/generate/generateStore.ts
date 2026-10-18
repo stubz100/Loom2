@@ -237,6 +237,7 @@ export interface GenerateState {
   show: 'batch' | 'session' | 'all'; lastBatch: string | null; pinned: string[]
   angle: AngleState; anglePreview: DocumentPreview | null; anglePreviewError: string | null
   angleOpen: boolean                                       // D90 (02 §6.1): New angle is a sheet on an image, not a Generate tab
+  source: 'prompt' | 'stage'                               // D95 (AN1, UX0 #5): Make from the prompt, or From a stage (stills; the stage is edited in Animate)
   presetText: Record<string, boolean>                      // D90 (02 §6.3): the sections that show the words under their preset icons
   setPresetText: (section: string, on: boolean) => void
   /** LT1: what the slots may hold for the panel's model (GET /loras); loadLoras prunes slots that do not fit after a model change. */
@@ -377,7 +378,7 @@ export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
       panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [], castAsk: null,
-      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, presetText: {},
+      angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, source: 'prompt', presetText: {},
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
       loadLoras: async (modelId) => {

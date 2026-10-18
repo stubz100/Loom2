@@ -5,7 +5,7 @@ import { useSuite } from './suiteRegistry'
 export function Inspector() {
   const open = useSession((s) => s.ui.inspectorOpen)
   const suite = useSuite()
-  if (!open) return <aside className="inspector closed" />
+  if (!open || suite.noInspector) return <aside className="inspector closed" />   // D95 (AN1): Animate keeps the selection in its column
   const SuiteInspector = suite.Inspector
   return (
     <aside className="inspector">

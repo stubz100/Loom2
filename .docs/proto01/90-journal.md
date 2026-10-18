@@ -5393,3 +5393,34 @@ AN1 (proto01_animate 03 §7) is built in steps; this is the first.
 - Vitest 341.
 - e2e 38/38, with an `openAnimate` helper. One test opened Animate after Stage and now lands on Clay, as designed, so it picks the level
   explicitly.
+
+## 2026-10-18 18:43 — AN1 step 2 · Animate's one column at both levels; no right Inspector
+
+- **One column for Clay and Performance:** *Shot* (the For chip, the stages) · *Scene* (what to add, the Outliner) · *Motion* (poses and
+  joints; the viewport's joint pickers show while Motion is active) · *Camera* · *Performance* · *Clips* · *Selection*. Plate, Edit, Finish
+  and Output join with CA3, AE1 and AE5.
+- **Shared, not swapped:** both levels use one rail (`railTabs.sharedKeyOf`: the stage suite's rail state and panel width are Animate's),
+  the same column component (`AnimateColumn`) and foot (`AnimateFoot`). The panel defaults to 30 %.
+- **Performance has two cards** (`routeStore.ts`):
+  - *Image to video*: today's form (start / end, prompt, beats, model, length, presets);
+  - *From the stage*: Stage's old Render tab (stills and the clip fold).
+
+  The foot's verb follows the card: *Animate ▶* / *Queue*, or *Render frame ▶* / *New stage…*. The first open at the Clay level starts on
+  the stage's card.
+- **No right Inspector** (D95, on trial; `SuiteDef.noInspector`). *Selection* shows:
+  - at Clay, the stage's object, else the stage and its active camera;
+  - at Performance, the clip as three folds: Clip, Frames, Lineage (UX0 #17).
+- **Stage's parts split** for the column: `StageList`, `LibraryAdd`, `StageSelection`, `StageFoot`, `useStageLoad`.
+- **The column ends with room** (60 vh), so every section can reach the top and the rail follows it. Before this, the rail could not
+  highlight a late section of a short column.
+- **Old names fixed** in hints, Help and a toast: Library, Inputs and Clips tab.
+
+**Tests:**
+
+- e2e 38/38 under full and open:
+  - the Stage tests go through an `openSection` helper that scrolls instead of clicking the rail (a click on the active button folds
+    the panel, D90);
+  - a `stageRoute` helper picks *From the stage*;
+  - locators are scoped to sections (`#anim-sec-camera`);
+  - one floor click moved to the bottom-left, because the viewport now reaches the toasts.
+- Vitest 341, build clean, lint 72 (from 89).

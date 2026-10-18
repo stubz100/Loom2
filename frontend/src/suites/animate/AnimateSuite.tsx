@@ -4,7 +4,7 @@
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { useStageActive } from '../../frame/stageKeep'
 import { Lock, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
@@ -18,6 +18,9 @@ import { askText, useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
 import { ForChip } from '../story/ForChip'
+import { useColumnSync } from '../../frame/columnSync'
+import { CamerasTab, LibraryAdd, OutlinerTab, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
+import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
@@ -238,15 +241,89 @@ function ClipsTab() {
   )
 }
 
-function Panel({ tab }: { tab: string }) {
+/** The form's preview and model default, kept current while Animate's column is up. */
+function useAnimateLoad(): void {
   const project = useSession((s) => s.project)
   const caps = useSession((s) => s.capabilities?.i2v)
   useEffect(() => { if (project?.open) an().refreshPreview() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // C3 / D65: no model yet, or a persisted one this build does not offer (LTX under `open`) → the variant's i2v default
   const def = useSession((s) => s.capabilities?.defaults.i2v)
   useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
+}
+
+// D95 (AN1, proto01_animate 03 §4.2, UX0 #9): Animate's one column, the same at both viewer levels — Shot · Scene · Motion · Camera ·
+// Performance · Clips · Selection (Plate, Edit, Finish and Output join with CA3, AE1 and AE5). The rail jumps to a section and follows the
+// scroll. Stage's parts (StageParts.tsx) and Animate's own fill the sections; the right Inspector is gone (Selection).
+export const ANIM_SECTIONS = ['shot', 'scene', 'motion', 'camera', 'performance', 'clips', 'selection'] as const
+
+function Sec({ id, title, tools, children }: { id: string; title: string; tools?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section id={`anim-sec-${id}`} className="col-sec">
+      <h4 className="col-sec-head"><span>{title}</span><span className="spacer" />{tools}</h4>
+      {children}
+    </section>
+  )
+}
+
+/** Performance's two cards: a clip from a start image (today's form), or stills and clips from the stage (Stage's Render). */
+function RouteSwitch() {
+  const route = useAnimRoute((r) => r.route)
+  return (
+    <span className="segmented" role="group" aria-label="Performance route">
+      <button type="button" className={route === 'i2v' ? 'active' : ''} aria-pressed={route === 'i2v'} onClick={() => useAnimRoute.getState().set('i2v')} title="A clip from a start (and end) image: the prompt says the motion">Image to video</button>
+      <button type="button" className={route === 'stage' ? 'active' : ''} aria-pressed={route === 'stage'} onClick={() => useAnimRoute.getState().set('stage')} title="From the stage: stills and clips from its passes (clay, depth, pose)">From the stage</button>
+    </span>
+  )
+}
+
+/** The selected clip in Selection: what it is and its verbs, the frames harvested from it, its lineage (UX0 #17: three folds). */
+function ClipSelection() {
+  const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
+  if (!clip) return <span className="hint">No clip selected — clips appear in the Clips section as they finish.</span>
+  return (
+    <div className="clip-selection">
+      <details open><summary>Clip</summary><ClipTab clip={clip} /></details>
+      <details><summary>Frames</summary><FramesTab clip={clip} /></details>
+      <details><summary>Lineage</summary><LineageTab clip={clip} /></details>
+    </div>
+  )
+}
+
+function AnimateColumnBody({ tab }: { tab: string }) {
+  useStageLoad(); useAnimateLoad()
+  const host = useRef<HTMLDivElement>(null)
+  useColumnSync(host, 'animate', ANIM_SECTIONS, 'anim-sec-', tab)
+  const level = useSession((s) => s.ui.suite)
+  const route = useAnimRoute((r) => r.route)
+  useEffect(() => {                                                       // the first open at the Clay level starts on the stage's card
+    const r = useAnimRoute.getState()
+    if (!r.chosen && level === 'stage') useAnimRoute.setState({ route: 'stage' })
+  }, [level])
+  return (
+    <div ref={host} className="col-column anim-column">
+      <Sec id="shot" title="Shot"><ForChip maker="animate" /><StageList /></Sec>
+      <Sec id="scene" title="Scene"><LibraryAdd /><OutlinerTab /></Sec>
+      <Sec id="motion" title="Motion"><PosesTab /></Sec>
+      <Sec id="camera" title="Camera"><CamerasTab /></Sec>
+      <Sec id="performance" title="Performance" tools={<RouteSwitch />}>
+        {route === 'i2v' ? <><InputsTab /><h4>Model</h4><ModelTab /><h4>Length &amp; size</h4><LengthTab /><h4>Presets</h4><PresetsTab /></> : <ShotTab />}
+      </Sec>
+      <Sec id="clips" title="Clips"><ClipsTab /></Sec>
+      <Sec id="selection" title="Selection">{level === 'stage' ? <StageSelection /> : <ClipSelection />}</Sec>
+    </div>
+  )
+}
+
+export function AnimateColumn({ tab }: { tab: string }) {
+  const project = useSession((s) => s.project)
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  return <><ForChip maker="animate" />{tab === 'model' ? <ModelTab /> : tab === 'length' ? <LengthTab /> : tab === 'presets' ? <PresetsTab /> : tab === 'clips' ? <ClipsTab /> : <InputsTab />}</>   // D90 (02 §5): the For chip on every tab
+  return <AnimateColumnBody tab={tab} />
+}
+
+/** The foot follows Performance's card: Animate ▶ / Queue for image to video, Render frame (or New stage) for the stage. */
+export function AnimateFoot() {
+  const route = useAnimRoute((r) => r.route)
+  return route === 'stage' ? <StageFoot /> : <PrimaryAction />
 }
 
 function PrimaryAction() {
@@ -458,7 +535,7 @@ function Stage() {
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
-        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : <>set a start frame (Shift+A on a Catalogue tile, or drop it on the Inputs slot), write the motion, Animate ▶
+        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : <>set a start frame (Shift+A on a Catalogue tile, or drop it on Performance's start slot), write the motion, Animate ▶
           {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Catalogue" /></div>}</>}</div>
           : view === 'player' ? <Player clip={clip} frame={frame} onion={onion} /> : view === 'filmstrip' ? <Filmstrip clip={clip} /> : <Compare clip={clip} />}
       </div>
@@ -553,22 +630,8 @@ function LineageTab({ clip }: { clip: Clip }) {
   )
 }
 
-function Inspector() {
-  const [tab, setTab] = useState<'clip' | 'frames' | 'lineage'>('clip')
-  const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
-  if (!clip) return <span className="hint">No clip selected — clips appear here as they finish, or pick one in the Clips panel.</span>
-  return (
-    <div>
-      <div className="tabs2">{(['clip', 'frames', 'lineage'] as const).map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
-      {tab === 'clip' && <ClipTab clip={clip} />}
-      {tab === 'frames' && <FramesTab clip={clip} />}
-      {tab === 'lineage' && <LineageTab clip={clip} />}
-    </div>
-  )
-}
-
 export const AnimateSuite: SuiteDef = {
   id: 'animate',
   rail: DEFAULT_RAIL.animate,
-  Panel, Strip: StripWithKeys, Stage, Inspector, PrimaryAction, keepAlive: true,
+  Panel: AnimateColumn, Strip: StripWithKeys, Stage, Inspector: () => null, PrimaryAction: AnimateFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
 }

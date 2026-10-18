@@ -1,5 +1,6 @@
 import { useSession } from '../store/session'
 import { Resizer } from './Resizer'
+import { sharedKeyOf } from './railTabs'
 import { useSuite, useSuiteRail } from './suiteRegistry'
 
 export function Panel() {
@@ -12,7 +13,7 @@ export function Panel() {
   return (
     <aside className="panel">
       <div className="head">{suite.panelTitle ?? tab?.label ?? suite.id}{suite.PanelHead && <suite.PanelHead />}</div>
-      <div className="body"><SuitePanel key={suite.id} tab={active} /></div>
+      <div className="body"><SuitePanel key={sharedKeyOf(suite.id)} tab={active} /></div>{/* AN1: Animate's two levels keep one column (and its scroll) */}
       <Resizer side="panel" />
       {suite.PrimaryAction ? <div className="foot"><suite.PrimaryAction key={suite.id} /></div> : suite.primary && <div className="foot"><button className="primary" disabled={suite.primary.disabled} onClick={suite.primary.run}>{suite.primary.label}</button></div>}
     </aside>

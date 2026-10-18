@@ -46,10 +46,10 @@ function devHook(): Record<string, unknown> {
 if (DEV_HOOKS) devHook()
 
 // ------------------------------------------------------------------ Panel
-function LibraryTab() {
+/** D95 (AN1): the project's stages — Animate's Shot section. */
+export function StageList() {
   const current = useStage((s) => s.current)
   const stages = useStage((s) => s.stages)
-  const meshes = useStage((s) => s.meshes)
   return (
     <div className="stage-panel">
       <div className="stage-list">
@@ -61,7 +61,18 @@ function LibraryTab() {
           </button>
         ))}
       </div>
-      {current && <>
+    </div>
+  )
+}
+
+/** D95 (AN1): what can be put on the stage — Animate's Scene section (with the Outliner). */
+export function LibraryAdd() {
+  const current = useStage((s) => s.current)
+  const meshes = useStage((s) => s.meshes)
+  if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
+  return (
+    <div className="stage-panel">
+      <>
         <h4>Figures</h4>
         <div className="lib-grid">{Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => <CommandButton key={p} id={`stage.add.mannequin.${p}`} text label={m.label} />)}</div>
         <h4>Sets</h4>
@@ -75,15 +86,15 @@ function LibraryTab() {
             <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
           </button>))}</div>
         <p className="hint">Image planes: drop a Catalogue tile on the viewport (it lands where the pointer is). Each card adds at the viewport's centre.</p>
-      </>}
+      </>
     </div>
   )
 }
 
-function OutlinerTab() {
+export function OutlinerTab() {
   const current = useStage((s) => s.current)
   const selected = useStage((s) => s.selected)
-  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  if (!current) return null
   const rename = (id: string, name: string) => void askText({ title: 'Rename', initial: name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(id, { name: n.trim() }) })
   return (
     <div className="stage-panel">
@@ -110,11 +121,11 @@ function OutlinerTab() {
   )
 }
 
-function CamerasTab() {
+export function CamerasTab() {
   const current = useStage((s) => s.current)
   const view = useStage((s) => s.view)
   const cam = useStage((s) => s.activeCamera())
-  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.camera.add'); markUsed('stage.camera.setFromView'); markUsed('stage.camera.delete'); markUsed('stage.view.camera'); markUsed('stage.frameAll')
   return (
     <div className="stage-panel">
@@ -146,12 +157,12 @@ function CamerasTab() {
 
 // ST2 (16 §3d): presets (built-in + the project's saved ones), the pose verbs, the selected joint's angles. While this tab is open the
 // viewport shows the joint pickers: click a joint for the rotate gizmo, click a hand / foot handle and drag it (two-bone IK).
-function PosesTab() {
+export function PosesTab() {
   const current = useStage((s) => s.current)
   const o = useStage((s) => s.object(s.selected))
   const joint = useStage((s) => s.selectedJoint)
   const userPoses = useStage((s) => s.userPoses)
-  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
   if (!o || o.kind !== 'mannequin') return <div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">Select a figure — then click a joint for the rotate gizmo, or drag a hand / foot handle.</span></div>
   const joints = effectiveJoints(o)
@@ -180,7 +191,7 @@ function PosesTab() {
 // ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), image 1
 // locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
 // Generate when stale (or by the button), the results land below with lineage to the passes.
-function ShotTab() {
+export function ShotTab() {
   const current = useStage((s) => s.current)
   const cam = useStage((s) => s.activeCamera())
   const sh = useStage((s) => s.shot)
@@ -204,7 +215,7 @@ function ShotTab() {
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && shotRefDrop(d, room).ok,
     (d) => { d.items.filter((i) => i.kind === 'asset' && i.media !== 'video').slice(0, room).forEach((i) => st().addShotRef(i.id)) }, (d) => shotRefDrop(d, room))
   markUsed('stage.shot.generate'); markUsed('stage.shot.passes')
-  if (!current) return <span className="hint">Open or make a stage in the Library tab.</span>
+  if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   const image1 = method?.image1 ?? 'clay'
   const passId = entry?.assets[image1]
   return (
@@ -308,39 +319,30 @@ function ClipSection({ clips }: { clips: Asset[] }) {
   )
 }
 
-export function Panel({ tab }: { tab: string }) {
+/** The project's stages, poses and meshes, loaded when a project opens (Animate's column mounts it, D95 AN1). */
+export function useStageLoad(): void {
   const project = useSession((s) => s.project)
   useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  if (tab === 'outliner') return <OutlinerTab />
-  if (tab === 'cameras') return <CamerasTab />
-  if (tab === 'poses') return <PosesTab />
-  if (tab === 'shot') return <ShotTab />
-  return <LibraryTab />
 }
 
-export function PrimaryAction() {
-  const saving = useStage((s) => s.saving)
+/** The foot while Animate's Performance card is From the stage (D95 AN1): New stage, else Render frame ×n with its estimate. */
+export function StageFoot() {
   const current = useStage((s) => s.current)
   const rendering = useStage((s) => s.rendering)
   const pv = useStage((s) => s.shotPreview)
   const err = useStage((s) => s.shotPreviewError)
   const count = useStage((s) => s.shot.count)
   const cam = useStage((s) => s.activeCamera())
-  const { active: tab } = useSuiteRail()
   markUsed('stage.new')
   if (!current) return <div><button className="primary" onClick={() => runCommand('stage.new')}>New stage…</button></div>
-  if (tab === 'shot') {                                                                                       // ST3: the verb and its estimate
-    const missing = pv?.missing ?? []
-    const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
-    return (
-      <div>
-        <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the frame (Ctrl+Enter)">Render frame{count > 1 ? ` ×${count}` : ''} ▶</button>
-        <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
-      </div>
-    )
-  }
-  return <div className="estimate"><span className={`dot ${saving ? 'tight' : 'ok'}`} />{saving ? 'saving…' : `saved · revision ${current.revision}`}</div>
+  const missing = pv?.missing ?? []                                                                            // ST3: the verb and its estimate
+  const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
+  return (
+    <div>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the frame (Ctrl+Enter)">Render frame{count > 1 ? ` ×${count}` : ''} ▶</button>
+      <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
+    </div>
+  )
 }
 
 // ------------------------------------------------------------------ Strip
@@ -419,7 +421,7 @@ function Viewport() {
   const guides = useStage((s) => s.guides)
   const frameReq = useStage((s) => s.frameRequest)
   const selectedJoint = useStage((s) => s.selectedJoint)
-  const poseMode = useSuiteRail().active === 'poses'                                   // ST2: the Poses tab shows the joint pickers
+  const poseMode = useSuiteRail().active === 'motion'                                  // ST2 → D95 (AN1): the Motion section shows the joint pickers
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
     (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
@@ -508,12 +510,12 @@ function Vec({ label, v, onChange, step = 0.05 }: { label: string; v: number[]; 
   )
 }
 
-export function Inspector() {
+/** D95 (AN1): the stage's selection — an object, else the stage and its active camera — in Animate's Selection section. */
+export function StageSelection() {
   const current = useStage((s) => s.current)
   const o = useStage((s) => s.object(s.selected))
   const cam = useStage((s) => s.activeCamera())
   const saving = useStage((s) => s.saving)
-  const { active: tab } = useSuiteRail()
   if (!current) return <span className="hint">No stage open.</span>
   if (o) {
     const t = o.transform
@@ -531,14 +533,18 @@ export function Inspector() {
       </div>
     )
   }
-  if (tab === 'cameras' && cam) return <div className="stage-insp"><h4>{cam.name}</h4><Vec label="position" v={cam.pos} onChange={(pos) => st().updateCamera(cam.id, { pos })} /><Vec label="target" v={cam.target} onChange={(target) => st().updateCamera(cam.id, { target })} /><div className="kv"><span>focal</span><span>{cam.focal_mm} mm on {cam.sensor_mm} mm</span></div><div className="verbs"><CommandRow ids={['stage.camera.setFromView', 'stage.view.camera']} /></div></div>
   return (
     <div className="stage-insp">
       <h4>{current.name} <span className="hint">{saving ? '· saving…' : `· revision ${current.revision}`}</span></h4>
       <div className="kv"><span>frame</span><span>{current.size.w}×{current.size.h} @ {current.size.fps} fps (the project format)</span></div>
       <div className="kv"><span>contents</span><span>{current.objects.length} objects · {current.cameras.length} cameras</span></div>
       <div className="verbs"><CommandRow ids={['stage.rename', 'stage.delete']} /></div>
-      <p className="hint">Select an object in the viewport or the Outliner to edit it. Add from the Library tab or the viewport's right-click menu.</p>
+      {cam && <>{/* the active camera's placement (its lens and verbs are in the Camera section) */}
+        <h4>{cam.name}</h4>
+        <Vec label="position" v={cam.pos} onChange={(pos) => st().updateCamera(cam.id, { pos })} />
+        <Vec label="target" v={cam.target} onChange={(target) => st().updateCamera(cam.id, { target })} />
+      </>}
+      <p className="hint">Select an object in the viewport or the Scene's Outliner to edit it. Add from the Scene section or the viewport's right-click menu.</p>
     </div>
   )
 }

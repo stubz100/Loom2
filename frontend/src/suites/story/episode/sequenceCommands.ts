@@ -78,7 +78,7 @@ registerCommands([
   { id: 'story.episode.exportFcpxml', scope: 'story', label: 'Export FCPXML 1.10', icon: FileDown, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void exportChecked('fcpxml') },
   { id: 'story.episode.render', scope: 'story', label: 'Render a draft clip (CPU)', icon: Clapperboard, placement: ['inspector', 'context'], when: () => hasSeq() && !!sq().lane?.clips.length, run: () => void sq().render() },
   { id: 'story.episode.openClip', scope: 'story', label: 'Open the clip in the player', icon: Pause, placement: ['inspector', 'context'], when: hasSel,
-    run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Clips tab)', 'info') } },
+    run: () => { const l = sq().lane!; const c = l.clips[sq().selected!]; an().select(c.source); useSession.getState().toast('Opened in the clip player (Animate · Performance)', 'info') } },
 ])
 
 /** Right-click on a lane clip (selected by the caller) or on the lane's empty space. */

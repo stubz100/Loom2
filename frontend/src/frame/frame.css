@@ -76,6 +76,7 @@ a { color: var(--accent); }
 .panel .head, .inspector .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--fg2); font-weight: 600; }
 /* D95 (IM1): a one-column panel's sections (Image · Edit; Image · Make keeps its gen-* classes), the head sticky under the panel head */
 .col-column { display: flex; flex-direction: column; gap: 4px; }
+.col-column::after { content: ''; flex: none; height: 60vh; }   /* room below the last section, so every section can scroll to the top and the rail follows it */
 .col-sec { padding: 6px 0 12px; border-bottom: 1px solid var(--line); scroll-margin-top: 4px; }
 .col-sec:last-child { border-bottom: none; }
 .col-sec-head { position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 0 4px; background: var(--bg1);

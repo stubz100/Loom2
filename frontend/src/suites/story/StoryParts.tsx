@@ -52,6 +52,7 @@ function devHook(): Record<string, unknown> {
     loadProfiles: () => sy().loadProfiles(), selectProfile: (id: string | null, v?: string | null) => sy().selectProfile(id, v), loadPages: () => sy().loadPages(),
     createProfile: (name: string, cls: ProfileClass, hero?: string | null, appearance?: string) => sy().createProfile(name, cls, hero, appearance),
     expand: (preset: string, seeds = 1, tier: 'draft' | 'full' = 'draft') => sy().expand(preset, seeds, tier), curate: (ids: string[], verdict: 'keep' | 'reject') => sy().curate(ids, verdict),
+    animTest: (pid: string, vid: string, stage = false) => import('./animTest').then((m) => m.runAnimTest(pid, vid, stage)),   // CA0: scripts/ca0_acceptance.py --parts test
     lock: () => sy().lockVersion(), newVersion: () => sy().newVersion(), setStub: (s: string) => sy().setSheet({ appearance: s }), setSheet: (patch: Record<string, unknown>) => sy().setSheet(patch as never),
     train: (opts: Record<string, unknown> = {}) => { sy().setTrainOpts(opts as never); return sy().train() }, loras: () => sy().loras, loadLoras: () => sy().loadLoras(),
     useLora: (id: string) => sy().useLora(id), deleteLora: (id: string) => sy().deleteLora(id), checkLora: (id: string) => sy().checkLora(id),
@@ -525,12 +526,33 @@ function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
       <div className="anim-ref-row">
         {slot('front', v.anim_ref_asset_id, p.cls === 'prop' ? 'reference' : 'front')}
         {p.cls === 'character' && slot('back', v.anim_ref_back_asset_id, 'back (optional)')}
+        {p.cls === 'character' && <AnimTestSlot clipId={v.anim_test_clip_id ?? null} />}
         <div className="verbs">
           <CommandButton id="story.cast.makeAnimRef" text />
           {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text />}
+          {p.cls === 'character' && <CommandButton id="story.cast.testAnimRef" text />}
         </div>
       </div>
     </section>
+  )
+}
+
+/** CA0: the version's latest test animation (a turn on the spot) — its first frame, played in Animate. */
+function AnimTestSlot({ clipId }: { clipId: string | null }) {
+  const [got, setGot] = useState<{ clip: string; asset: string | null } | null>(null)   // the clip's first-frame asset, keyed by the clip it belongs to
+  useEffect(() => {
+    let live = true
+    if (clipId) void unwrap(http.GET('/clips/{clip_id}', { params: { path: { clip_id: clipId } } })).then((c) => { if (live) setGot({ clip: clipId, asset: c.asset_id ?? null }) }).catch(() => undefined)
+    return () => { live = false }
+  }, [clipId])
+  const thumb = got && got.clip === clipId ? got.asset : null
+  markUsed('story.cast.playAnimTest')
+  return (
+    <div className={`anim-ref-slot${clipId ? '' : ' empty'}`} data-side="test" onDoubleClick={() => runCommand('story.cast.playAnimTest')}
+      onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.playAnimTest' }, { cmd: 'story.cast.testAnimRef' }])}>
+      {thumb ? <img src={api.thumbUrl(thumb, 512)} alt="the test animation" /> : <span className="hint">{clipId ? 'the test clip' : 'test: none yet'}</span>}
+      <span className="cell">test · a turn{clipId ? ' — right-click to play' : ''}</span>
+    </div>
   )
 }
 

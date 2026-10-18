@@ -281,6 +281,8 @@ class ClipFinisher:
             await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id, _run(job, recipe, q))
         if job.origin and job.origin.surface == "lipsync" and job.origin.ref:   # D88 XL: a take on the shot version
             await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False, _run(job, recipe, q))
+        if job.origin and job.origin.surface == "anim_test" and job.origin.ref:   # CA0: the reference's test animation → the version's
+            await asyncio.to_thread(_anim_test_result, q, job.origin.ref, job.origin.payload or {}, rec.id)
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
             await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "clip", [rec.id], _use(job.origin.payload), _run(job, recipe, q))
             await _chain(q, job.origin.payload or {})
@@ -416,6 +418,16 @@ def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str)
             q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
     except Exception as e:  # noqa: BLE001
         q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"animation reference not set: {e}"})
+
+
+def _anim_test_result(q: JobQueue, pid: str, payload: dict, clip_id: str) -> None:
+    """CA0: a reference's test animation is recorded on its version (the latest one). Never the job's failure."""
+    from ..story import StoryStore
+    try:
+        p = StoryStore(q.ws).set_anim_test(pid, str(payload.get("version") or ""), clip_id)
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    except Exception as e:  # noqa: BLE001
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"test animation not recorded: {e}"})
 
 
 def _panel_thumb(q: JobQueue, name: str, asset_id: str) -> None:

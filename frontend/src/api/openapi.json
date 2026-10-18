@@ -286,6 +286,77 @@
         "title": "AnimRefQueued",
         "type": "object"
       },
+      "AnimTestQueued": {
+        "properties": {
+          "guide_asset_id": {
+            "title": "Guide Asset Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "guide_asset_id",
+          "model_id"
+        ],
+        "title": "AnimTestQueued",
+        "type": "object"
+      },
+      "AnimTestUpload": {
+        "description": "CA0: a turn on the spot rendered by the client from the version's body (the Stage's own pose renderer) — PNG frames put through\n`PUT /blobs/{sha}`, in order, with their COCO-18 keypoints.",
+        "properties": {
+          "fps": {
+            "default": 16,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "frames": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "keypoints": {
+            "default": [],
+            "items": {},
+            "title": "Keypoints",
+            "type": "array"
+          },
+          "prompt_text": {
+            "default": "",
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "size",
+          "frames"
+        ],
+        "title": "AnimTestUpload",
+        "type": "object"
+      },
       "AnimatePanel": {
         "additionalProperties": true,
         "properties": {
@@ -9794,6 +9865,17 @@
             ],
             "title": "Anim Ref Back Asset Id"
           },
+          "anim_test_clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Test Clip Id"
+          },
           "appearance": {
             "default": "",
             "maxLength": 1000,
@@ -9940,6 +10022,7 @@
           "body",
           "anim_ref_asset_id",
           "anim_ref_back_asset_id",
+          "anim_test_clip_id",
           "derived_from",
           "created_at",
           "locked_at"
@@ -22514,6 +22597,68 @@
           }
         },
         "summary": "Profile Anim Ref Pick",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/anim-test": {
+      "post": {
+        "description": "CA0 (01 step 2): test the animation reference before a shot depends on it — the pose sequence becomes a video asset on the\nversion's candidates page, and one Wan Animate job (the Stage's animate method) performs it with the reference as the character.",
+        "operationId": "profile_anim_test_story_profiles__pid__versions__vid__anim_test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimTestUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimTestQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Anim Test",
         "tags": [
           "story"
         ]

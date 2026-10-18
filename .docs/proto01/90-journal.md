@@ -5728,3 +5728,54 @@ All are commands (D32).
 - Vitest 347; lint 75; build and audits clean.
 
 **Next:** step 3, the test animation (a turn on the spot through Wan Animate) and CA0's acceptance (PCK ≥ 0.8, no ghost or crop).
+
+## 2026-10-18 21:54 — CA0 step 3 · *Test it: a turn on the spot*; CA0's acceptance on the rig: 5 of 6 over the bar
+
+**The test animation** (01 step 2: "a short test at casting shows whether the reference animates well before any shot depends on it"):
+
+- **Cast's *Test it: a turn on the spot…*** asks the cost first. It then draws the pose sequence **in the page** with the Stage's own
+  pass renderer (`stage/turnTest.ts`), loaded lazily so Story's bundle has no three.js. The drawing is a scratch document that is never
+  saved: one figure with the version's body, in the reference's A-pose, turning 360° in front of a 35 mm camera that frames it at about
+  70 % of the height, with the pose model's frames, rate and size from `/capabilities.stage.animate` (77 frames, 16 fps, 832×480).
+- **`POST /story/profiles/{pid}/versions/{vid}/anim-test`** encodes the frames into a pose-sequence video (lineage stage-pass, its
+  keypoints) on the version's candidates page. It queues one job on the pose-driven model (Wan Animate) with the reference as the
+  character.
+- **The finisher** records the clip on the version (`anim_test_clip_id`). Cast shows it beside the front and back slots, with *Play the
+  test in Animate*. A prop has no skeleton, so it gets no test.
+- **The Story dev hook** gets `animTest(pid, vid, stage)` for the rig.
+
+**CA0's acceptance** (`scripts/ca0_acceptance.py --parts ref,test`; 02 §5: three characters × two versions, "the reference animates in
+the test with PCK ≥ 0.8 and no ghost or crop"):
+
+- **Order of work, for D97:** the six references were made first (all 18/18 points, A-pose, 1280×720, 10–37 s). The six turns were
+  drawn in a visible Edge (1.1–1.3 s each), every job queued **staged**, and the queue released only after the browser closed, so the
+  page's WebGL never ran beside a GPU job.
+- **Scoring:** SDPose on every 8th frame against the turn's own keypoints, plus a ghost check (a second person in any scored frame).
+
+| Character · costume | PCK@0.1 | Ghost frames | Wall |
+| --- | --- | --- | --- |
+| Mara · cloak | **0.728 (miss)** | 0 | 119 s |
+| Mara · market | 0.933 | 0 | 118 s |
+| Bram · watch | 0.906 | 0 | 185 s |
+| Bram · storm (oilskin) | 0.850 | 0 | 187 s |
+| Grak (2.4 m ogre, horns) · smith | 0.817 | 0 | 186 s |
+| Grak · feast | 0.822 | 0 | 188 s |
+
+- **Contact sheet** (`engine/spikes/out/ca0/test_sheet.jpg`, the turn's quarters): all six turn a full circle on the spot, keep their
+  face, costume and colours, and get a plausible back. Nothing is cropped and no second figure appears. The ogre keeps its horns and
+  build.
+- **The one miss is Mara in the long hooded cloak.** Her arms are inside the cloak for most of the turn, so the arm points cannot be seen
+  and score as misses. This is my reading of the frames, not a per-joint measurement. The clip itself turns as asked. The bar is not
+  changed after the fact: CA0 is **5 of 6**, and the author's look at the sheet is owed.
+- **The script crashed writing its results row** (two numpy booleans), after all scoring. The row was rebuilt from the run's log and
+  marked so; the bug is fixed.
+
+**Tests:**
+
+- Offline 435 under full and open (`test_anim_ref_ca0.py` +2: the route's checks, staging and guide asset; the clip recorded by the
+  finisher).
+- e2e 43/43 under full and open. The new scenario draws the turn in headless Edge, checks one figure in every keypoint frame, and the
+  fake engine's clip lands in the test slot.
+- Vitest 347; lint 75 (a set-state-in-effect in the test slot fixed); build and audits clean.
+
+**CA0 is built** (the body, the reference, the test). **Next in 07 phase 2: CA1, the motion library.**

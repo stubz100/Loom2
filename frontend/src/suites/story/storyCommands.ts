@@ -221,6 +221,11 @@ const cmds: Command[] = [
     run: () => void sy().setAnimRef('front', null) },
   { id: 'story.cast.clearAnimRefBack', scope: 'story', label: 'Clear the back view', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.anim_ref_back_asset_id,
     run: () => void sy().setAnimRef('back', null) },
+  { id: 'story.cast.testAnimRef', scope: 'story', label: 'Test it: a turn on the spot…', icon: Play, hint: 'the reference performs a turn through the pose-driven model (the cost is asked first)',
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && !!useSession.getState().capabilities?.stage?.animate,
+    run: () => void import('./animTest').then((m) => m.testAnimRef()) },
+  { id: 'story.cast.playAnimTest', scope: 'story', label: 'Play the test in Animate', icon: Film, placement: ['inspector', 'context'], when: () => !!version()?.anim_test_clip_id,
+    run: () => void import('./animTest').then((m) => m.playAnimTest()) },
   { id: 'story.cast.lock', scope: 'story', label: 'Mark final', icon: Lock, hint: 'the version\'s reference set becomes read-only; a retake is a new version', placement: ['strip', 'inspector', 'context'], when: () => openVersion() && !!version()?.hero_asset_id && !sy().busy,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
       void askConfirm({ title: `Mark ${p.name} ${v.id} final?`, okLabel: 'Mark final', text: 'The reference set becomes read-only (the album refuses changes on its page) and the character sheet is fixed (the label can still change); @mentions keep resolving to it. A retake is a new version.' }).then((ok) => { if (ok) void sy().lockVersion() }) } },

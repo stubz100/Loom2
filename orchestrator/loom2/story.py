@@ -169,6 +169,7 @@ class ProfileVersion(BaseModel):
     body: Body | None = None                      # CA0: a character's body for its Stage dummy (None = the default adult); places and props have none
     anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
+    anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
@@ -1136,6 +1137,20 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if side == "back" and cur.cls != "character":
             raise ValueError("only a character has a back view")
         setattr(v, field, asset_id)
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_anim_test(self, pid: str, vid: str, clip_id: str | None) -> Profile:
+        """CA0: the version's latest test animation (a clip). No revision guard, a final version too (a product, like its reference)."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.anim_test_clip_id = clip_id
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

@@ -2088,6 +2088,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/anim-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Anim Test
+         * @description CA0 (01 step 2): test the animation reference before a shot depends on it — the pose sequence becomes a video asset on the
+         *     version's candidates page, and one Wan Animate job (the Stage's animate method) performs it with the reference as the character.
+         */
+        post: operations["profile_anim_test_story_profiles__pid__versions__vid__anim_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/curate": {
         parameters: {
             query?: never;
@@ -2637,6 +2658,48 @@ export interface components {
             job_ids: string[];
             /** Model Id */
             model_id: string;
+        };
+        /** AnimTestQueued */
+        AnimTestQueued: {
+            /** Guide Asset Id */
+            guide_asset_id: string;
+            /** Job Id */
+            job_id: string;
+            /** Model Id */
+            model_id: string;
+        };
+        /**
+         * AnimTestUpload
+         * @description CA0: a turn on the spot rendered by the client from the version's body (the Stage's own pose renderer) — PNG frames put through
+         *     `PUT /blobs/{sha}`, in order, with their COCO-18 keypoints.
+         */
+        AnimTestUpload: {
+            /**
+             * Fps
+             * @default 16
+             */
+            fps?: number;
+            /** Frames */
+            frames: string[];
+            /**
+             * Keypoints
+             * @default []
+             */
+            keypoints?: unknown[];
+            /**
+             * Prompt Text
+             * @default
+             */
+            prompt_text?: string;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
         };
         /** AnimatePanel */
         AnimatePanel: {
@@ -6431,6 +6494,8 @@ export interface components {
             anim_ref_asset_id: string | null;
             /** Anim Ref Back Asset Id */
             anim_ref_back_asset_id: string | null;
+            /** Anim Test Clip Id */
+            anim_test_clip_id: string | null;
             /**
              * Appearance
              * @default
@@ -13259,6 +13324,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnimRefQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_anim_test_story_profiles__pid__versions__vid__anim_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimTestUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimTestQueued"];
                 };
             };
             /** @description Validation Error */

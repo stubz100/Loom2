@@ -102,3 +102,91 @@ def test_the_routes(tmp_path: Path):
         assert cl.put(f"/story/profiles/{p['id']}/versions/v9/anim-ref", json={"side": "front", "asset_id": None}).status_code == 404
         place = cl.post("/story/profiles", json={"name": "Quay", "cls": "place"}).json()
         assert cl.post(f"/story/profiles/{place['id']}/versions/v1/anim-ref", json={}).status_code == 422
+
+
+# ---- step 3: the test animation (a turn on the spot) -------------------------------------------------------------------------------------
+def _png_bytes(i: int) -> bytes:
+    import io
+    from PIL import Image
+    b = io.BytesIO()
+    Image.new("RGB", (64, 36), (i * 20, 0, 0)).save(b, format="PNG")
+    return b.getvalue()
+
+
+def test_the_test_route(tmp_path: Path):
+    import hashlib
+    from test_graph_parity_d64 import _pin_review
+    state = tmp_path / "state"
+    AppState(state).update_settings({"engine": {"python": str(tmp_path / "missing.exe"), "health_timeout_s": 1}, "models_root": str(tmp_path / "models"),
+                                     "mounted_model_trees": [], "variant": "full"})
+    _pin_review().full_roster(tmp_path / "models")
+    app = create_app(state)
+    anim = registry.animate_specs()[0]
+    with TestClient(app, headers={"X-Loom-Token": app.state.services.app.token}) as cl:
+        assert cl.post("/project", json={"path": str(tmp_path / "p"), "name": "p", "size_cap_gb": 10}).status_code == 200
+        ref = app.state.services.catalogue.ingest_file(_png(tmp_path / "r.png")).id
+        p = cl.post("/story/profiles", json={"name": "Mara", "cls": "character", "appearance": "Mara"}).json()
+        shas = []
+        for i in range(9):
+            data = _png_bytes(i)
+            sha = hashlib.sha256(data).hexdigest()
+            assert cl.put(f"/blobs/{sha}", content=data).status_code == 200
+            shas.append(sha)
+        body = {"fps": 16, "size": {"w": 64, "h": 36}, "frames": shas, "keypoints": [[[[10, 10, 1]] * 18]] * 9, "stage": True}
+        r = cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-test", json=body)
+        assert r.status_code == 422 and "reference first" in r.json()["detail"]
+        cl.put(f"/story/profiles/{p['id']}/versions/v1/anim-ref", json={"side": "front", "asset_id": ref})
+        r = cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-test", json=body)
+        assert r.status_code == 200, r.text
+        out = r.json()
+        assert out["model_id"] == anim.id
+        job = next(j for j in cl.get("/jobs").json()["items"] if j["id"] == out["job_id"])
+        rec = job["recipe"]
+        assert job["status"] == "staged" and job["origin"]["surface"] == "anim_test" and rec["start_asset"] == ref
+        assert rec["guide"]["asset_id"] == out["guide_asset_id"] and rec["guide"]["kind"] == "pose" and rec["frames"] == 9 and rec["fps"] == 16
+        g = cl.get(f"/assets/{out['guide_asset_id']}").json()
+        assert g["kind"] == "video" and g["params"]["pass"] == "pose-sequence" and g["frames"] == 9
+        assert cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-test", json={**body, "frames": shas[:3]}).status_code == 422         # too short
+        assert cl.post(f"/story/profiles/{p['id']}/versions/v1/anim-test", json={**body, "frames": ["a" * 64] * 9}).status_code == 422   # not uploaded
+        prop = cl.post("/story/profiles", json={"name": "Cup", "cls": "prop"}).json()
+        assert cl.post(f"/story/profiles/{prop['id']}/versions/v1/anim-test", json=body).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_the_test_clip_is_recorded_on_the_version(tmp_path: Path, object_info: dict):
+    import av
+    import numpy as np
+    from PIL import Image
+    from test_graph_parity_d64 import _pin_review
+    rig = Rig(tmp_path, object_info)
+    try:
+        _pin_review().full_roster(tmp_path / "models")
+        rig.roster.scan()
+        groups = rig.queue.groups = GroupStore(rig.ws, rig.catalogue)
+        st = StoryStore(rig.ws)
+        src = tmp_path / "src"
+        src.mkdir()
+        Image.new("RGB", (640, 360), (120, 160, 90)).save(src / "ref.png")
+        ref = rig.catalogue.ingest_file(src / "ref.png", move=False, suite="story")
+        p = st.create_profile("Mara", "character", groups, appearance="Mara")
+        st.set_anim_ref(p.id, "v1", "front", ref.id)
+        mp4 = src / "turn.mp4"
+        with av.open(str(mp4), "w") as c:
+            s = c.add_stream("libx264", rate=16)
+            s.width, s.height, s.pix_fmt = 64, 36, "yuv420p"
+            for i in range(9):
+                for pkt in s.encode(av.VideoFrame.from_ndarray(np.full((36, 64, 3), i * 20, np.uint8), format="rgb24")):
+                    c.mux(pkt)
+            for pkt in s.encode():
+                c.mux(pkt)
+        guide = rig.catalogue.ingest_file(mp4, kind="video", move=False, suite="story", lineage_kind="stage-pass", params={"pass": "pose-sequence", "keypoints": [[[[10, 10, 1]] * 18]] * 9})
+        rig.queue.load()
+        await rig.queue.start()
+        anim = registry.animate_specs()[0].id
+        job = rig.queue.submit({"kind": "i2v", "model_id": anim, "start_asset": ref.id, "prompt_text": "Mara turns", "frames": 9, "fps": 16, "width": 832, "height": 480,
+                                "guide": {"asset_id": guide.id, "kind": "pose"}}, origin=JobOrigin(suite="story", surface="anim_test", ref=p.id, payload={"version": "v1"}))[0]
+        done = await rig.wait(job.id, timeout=60)
+        assert done.status == "done", done.error
+        assert st.profile(p.id).version("v1").anim_test_clip_id == done.result["clip_id"]
+    finally:
+        await rig.close()

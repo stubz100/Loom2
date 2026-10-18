@@ -11,7 +11,7 @@ import { BoundTag, FigureCharacter } from './FigureBinding'
 import { bindItems } from './stageCommands'
 import { st, useStage } from './stageStore'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, appearance: '', outfit: '',
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, appearance: '', outfit: '',
   colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const prof = (id: string, name: string, cls: Profile['cls'], versions: ProfileVersion[]): Profile => ({ id, name, cls, current: versions[0].id, schema_version: 2, revision: 0, voice_id: null, created_at: '', updated_at: '', versions })
 const MARA = prof('prf_m', 'Mara', 'character', [ver({ group_id: 'grp_m', hero_asset_id: 'ast_hm' }), ver({ id: 'v2', label: 'winter', group_id: 'grp_m2', hero_asset_id: 'ast_hm2' })])

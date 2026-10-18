@@ -1885,3 +1885,31 @@ test('an animation reference in Cast (CA0, 01 step 2): Make an animation referen
   await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_back_asset_id).toBe(otherId)
   await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(otherId))
 })
+
+test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference', async ({ page }) => {
+  test.setTimeout(120_000)
+  const name = `Bram ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const ref = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  type ProfileLite = { id: string; revision: number; versions: { id: string; anim_test_clip_id: string | null }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, an old captain` })
+  await api('PATCH', `/story/profiles/${p.id}`, { revision: p.revision, versions: [{ id: 'v1', body: { height_m: 1.9, build: 'broad', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, attachments: [] } }] })
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await expect(page.locator('.anim-ref-slot[data-side="test"]')).toContainText('none yet')
+  await page.locator('.anim-ref button', { hasText: /^Test it/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/a turn on the spot/i)
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_test_clip_id, { timeout: 90_000 }).toBeTruthy()
+  type JobLite = { recipe: { guide?: { asset_id: string; kind: string }; start_asset?: string; frames?: number }; origin: { surface: string } | null }
+  const job = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.origin?.surface === 'anim_test')!
+  expect(job.recipe.start_asset).toBe(ref)
+  type Guide = { kind: string; frames: number; params: { keypoints: number[][][][] } }
+  const guide = await api<Guide>('GET', `/assets/${job.recipe.guide!.asset_id}`)
+  expect(guide.kind).toBe('video')
+  expect(guide.params.keypoints.length).toBe(guide.frames)
+  expect(guide.params.keypoints.every((f) => f.length === 1)).toBe(true)                         // one figure in every frame
+  await expect(page.locator('.anim-ref-slot[data-side="test"] img')).toBeVisible({ timeout: 15_000 })
+})

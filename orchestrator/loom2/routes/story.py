@@ -7,18 +7,19 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..fsio import new_id, utc_now
 from ..origin import JobOrigin
+from ..models import registry
 from ..clips import ClipStore
 from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
-from ..stages import StageStore
+from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
 from ..story import FOR_SHOT, NODE_TYPES, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
@@ -421,6 +422,82 @@ async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody)
     await svc.queue.flush()
     _changed(svc, p)
     return {"job_ids": [j.id for j in jobs], "group_id": gid, "model_id": planned[0][0]["model_id"]}
+
+
+class AnimTestUpload(BaseModel):
+    """CA0: a turn on the spot rendered by the client from the version's body (the Stage's own pose renderer) — PNG frames put through
+    `PUT /blobs/{sha}`, in order, with their COCO-18 keypoints."""
+    fps: int = Field(16, ge=1, le=60)
+    size: dict[str, int]
+    frames: list[str]
+    keypoints: list[Any] = []
+    prompt_text: str = ""
+    stage: bool = False
+
+
+class AnimTestQueued(BaseModel):
+    job_id: str
+    guide_asset_id: str
+    model_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/anim-test", response_model=AnimTestQueued)
+async def profile_anim_test(svc: Svc, pid: str, vid: str, body: AnimTestUpload):
+    """CA0 (01 step 2): test the animation reference before a shot depends on it — the pose sequence becomes a video asset on the
+    version's candidates page, and one Wan Animate job (the Stage's animate method) performs it with the reference as the character."""
+    ws, catalogue, _ = svc.require_project()
+    groups = svc.require_groups()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "character":
+        raise HTTPException(422, "a test animation is for a character (a prop has no skeleton)")
+    if not v.anim_ref_asset_id:
+        raise HTTPException(422, "make the animation reference first")
+    spec = next((s for s in registry.animate_specs() if registry.offered(s, svc.app.settings.variant)), None)
+    if spec is None:
+        raise HTTPException(422, "no pose-driven model in this build")
+    if len(body.frames) < 9:
+        raise HTTPException(422, "a test needs at least nine frames")
+    paths = []
+    for i, sha in enumerate(body.frames):
+        if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            raise HTTPException(422, f"frame {i}: a blob id is a lowercase sha256")
+        f = ws.temp_dir / "blobs" / sha
+        if not f.is_file():
+            raise HTTPException(422, f"frame {i}: blob {sha[:12]}… was not uploaded (PUT /blobs/{{sha}} first)")
+        paths.append(f)
+    p, gid, made = await asyncio.to_thread(store.ensure_candidates, pid, v.id, groups)
+    if made:
+        svc.group_changed([gid])
+    out = store.dir / "anim_tests" / f"{pid}-{v.id}-{new_id('tst')}.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(encode_guide, paths, out, body.fps)
+    origin = JobOrigin(suite="story", surface="anim_test_guide", ref=pid, payload={"version": v.id})
+    params = {"profile_id": pid, "version": v.id, "pass": "pose-sequence", "frames": len(paths), "fps": body.fps, "size": body.size, "keypoints": body.keypoints}
+    rec = await asyncio.to_thread(catalogue.ingest_file, out, kind="video", in_place=True, suite="story", lineage_kind="stage-pass", origin=origin, params=params,
+                                  prompt_text=f"{p.name} · a turn on the spot (pose)", frames=len(paths), fps=float(body.fps),
+                                  w=int(body.size.get("w", 0)) or None, h=int(body.size.get("h", 0)) or None)
+    rec = await asyncio.to_thread(catalogue.make_thumbs, rec, paths[0])
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    await asyncio.to_thread(groups.move, [("asset", rec.id)], gid)
+    w, h = (spec.geometry.size or [int(body.size.get("w", 832)), int(body.size.get("h", 480))])[:2]
+    recipe = {"kind": "i2v", "model_id": spec.id, "start_asset": v.anim_ref_asset_id, "frames": len(paths), "fps": body.fps, "width": w, "height": h,
+              "prompt_text": body.prompt_text or f"{p.name} turns slowly on the spot, a full turn, arms relaxed, plain background", "preset": "draft",
+              "guide": {"asset_id": rec.id, "kind": "pose", "strength": 1.0}, "seeds": [0]}
+    try:
+        jobs = svc.queue.submit(recipe, stage=body.stage, origin=JobOrigin(suite="story", surface="anim_test", ref=pid, payload={"version": v.id}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id, "guide_asset_id": rec.id, "model_id": spec.id}
 
 
 @router.put("/story/profiles/{pid}/versions/{vid}/anim-ref", response_model=Profile)

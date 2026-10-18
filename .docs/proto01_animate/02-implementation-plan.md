@@ -167,6 +167,14 @@ parallel with the spikes.
 | **CA7 · The final** | what E24 keeps, per stage: the **layer pass** (amount and model per layer), the **image stream** (rate, in-betweens), the **final polish**; each a step with its cost, re-runnable alone; the result as a **take on the Story shot** (D93) with lineage | 3–4 | the take plays in Story › Shots and exports through the Episode; its metrics within E24's bars |
 | **CA8 · UI** | Stage › an **Animate shot** panel: the batches on the timeline, the layers list with per-layer status and preview, Run all / Re-take layer / Re-take batch, the post stages with their amounts per layer, the cost; Story shot **Make clip ▸ in Stage (animated)** | 3 | the author's click-through of one shot from Cast to Episode |
 
+**Doc [03](03-image-and-animate-suites.md) (2026-10-18, proposed) changes this plan:**
+
+- the clay waves are built into a re-housed Animate suite (UX0, IM1 and AN1 first);
+- CA6 writes an EffectCraft composition (AE1) instead of a flat clip;
+- CA8 folds into AN1 and AE2;
+- CA7's post stages run as layer passes in the editor (AE4);
+- a UI/UX review comes before (UX0) and after (UX9) the build.
+
 **Total:** about 28–33 working days after the spikes, plus the spikes' ≈ 3.5 days (E26 another day if creatures are wanted). A
 non-human route (N3, depth-guided) is not in these waves; it follows E26 if the author wants it.
 

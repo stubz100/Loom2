@@ -4939,3 +4939,39 @@ The author's second notes:
 - **24 fps** stays the delivery rate; 25 matters only for a European TV master, so B4 is later.
 - **Times are judged after the spikes.** The estimates are removed. A6 is new: a FLUX.2 dev *healing patch* on a region over a frame
   range. Klein 9B is named first for per-frame work.
+
+## 2026-10-18 09:34 — proto01_animate 03 · Image and Animate as the two making suites; an animation editor on EffectCraft (proposal)
+
+The author's direction:
+
+- Generate becomes **Image**, with Edit under it, reachable from anywhere in the making.
+- Animate is rearranged for the clay process, with **Stage moving into it** and **Generate's one-column layout**.
+- A **UI/UX review** goes into the plan.
+- `F:\source\repos\effectcraft` is to be the basis of the animation editor.
+
+Written up as `.docs/proto01_animate/03-image-and-animate-suites.md`. Nothing decided; D95 if the author accepts.
+
+**EffectCraft, reviewed (v0.12.0, `f36b2b3e`, 2026-10-17):**
+
+- A clean-room **After Effects in pure Rust**: ≈ 380k lines, 32 crates, 307 effects, 623 engine commands, 3,564 tests.
+- MIT OR Apache-2.0; no GPL and no FFmpeg; pure-Rust codecs (with FilmCraft's).
+- **Alpha** (its roadmap: ≈ 45 % ready for real work), 2,060 commits in 17 days.
+- The model is After Effects' (a composition of layers with property trees and keyframes, `.ecproj` JSON).
+- The engine crates are UI-free and build for wasm32, with a CPU reference renderer, a wgpu renderer and a CLI.
+- Its UI is **egui**, so none of it can be used inside loom2's React app.
+
+**The proposal:**
+
+- **Three top tabs.** Story (Episode stays the cut), Image (Make ⇄ Edit in place; Stage stills as *From a stage*), Animate (one
+  column: Shot, Scene, Motion, Camera, Plate, Performance, Edit, Finish, Selection, Output).
+- **Animate's layout:** no right Inspector; one timeline and one transport under the viewer, which shows the shot at three levels
+  (Clay, Performance, Final).
+- **An After Effects-style compositing editor for one shot.** loom2's own React UI over EffectCraft's engine, by D59's pinned-artifact
+  pattern: a WebAssembly facade for the preview (R1, if spike E27 finds it small and fast enough; else R4, a compositor of our own), and
+  the pinned CLI for final renders as orchestrator jobs (R2). A shot version owns one `.ecproj` composition in a loom2 record.
+- **Waves:** UX0 review and wireframes → IM1 Image → AN1 Animate shell → E27 (beside E23) → AE1 composition → AE2 viewer and timeline →
+  AE3 effects and colour → AE4 AI passes on layers → AE5 output → UX9 review. About 32–43 days. CA8 folds into AN1 / AE2; CA6 writes an
+  AE1 composition.
+
+**FilmCraft** (`F:\source\repos\filmcraft`, a Premiere clone, MIT/Apache) is noted as a later model for Episode. Six questions for the
+author are in 03 §9.

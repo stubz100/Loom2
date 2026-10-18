@@ -2,6 +2,9 @@
 // markers; no licence question, proven to carry a blocking), the three E10 sets, primitive props, and image planes from Catalogue
 // assets. Pure builders: no DOM, no store. Lifted from frontend/src/spikes/e10Stage.ts; the pose presets are the ones E10 scored.
 import * as THREE from 'three'
+import { BUILD_WIDTH, DEFAULT_BODY, bodyDims, type Body, type Limbs } from './body'
+
+export { bodyDims, type Body, type Limbs } from './body'
 
 export const JOINTS = ['root', 'spine', 'neck', 'head', 'r_shoulder', 'r_elbow', 'l_shoulder', 'l_elbow', 'r_hip', 'r_knee', 'l_hip', 'l_knee'] as const
 export type Joint = (typeof JOINTS)[number]
@@ -30,50 +33,79 @@ function limb(parent: THREE.Object3D, length: number, radius: number, mat: THREE
   parent.add(m)
 }
 
-/** Set a mannequin's joint rotations (degrees; joints a pose leaves out go back to rest). */
+/** Set a mannequin's joint rotations (degrees; joints a pose leaves out go back to rest). The root's height follows the figure's legs
+ *  (CA0: `userData.hip`, the standing hip height; 0.95 for the default dummy). */
 export function applyPose(J: Record<Joint, THREE.Object3D>, pose: Pose, joints?: Record<string, number[]>): void {
   for (const n of JOINTS) {
     const e = (joints?.[n] as Euler3 | undefined) ?? pose.j[n] ?? [0, 0, 0]
     J[n].rotation.set(rad(e[0]), rad(e[1]), rad(e[2]), 'YXZ')
   }
-  J.root.position.y = pose.rootY ?? 0.95
+  const hip = (J.root.userData.hip as number | undefined) ?? 0.95
+  J.root.position.y = (pose.rootY ?? 0.95) * (hip / 0.95)
 }
 
-export interface Mannequin { root: THREE.Object3D; joints: Record<Joint, THREE.Object3D>; markers: THREE.Object3D[] }
+export interface Mannequin { root: THREE.Object3D; joints: Record<Joint, THREE.Object3D>; markers: THREE.Object3D[]; limbs: Limbs }
 
-/** One posed mannequin (1.75 m) and its COCO-18 marker objects (nose, neck, shoulders, elbows, wrists, hips, knees, ankles, eyes, ears). */
-export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?: Record<string, number[]>): Mannequin {
+/** One posed mannequin and its COCO-18 marker objects (nose, neck, shoulders, elbows, wrists, hips, knees, ankles, eyes, ears). Without a
+ *  body it is E10's 1.75 m dummy, unchanged; with one (CA0) its lengths, widths and height follow the Cast sheet, and its attachments
+ *  ride on their joints (in the clay, depth and mask passes; never in the pose pass — they carry no marker). */
+export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?: Record<string, number[]>, b?: Body | null): Mannequin {
   const J = Object.fromEntries(JOINTS.map((n) => [n, new THREE.Object3D()])) as Record<Joint, THREE.Object3D>
+  const x = b ?? DEFAULT_BODY
+  const { limbs, hip, scale } = bodyDims(b)
+  const w = BUILD_WIDTH[x.build] ?? 1, t = x.torso, hd = x.head
   const root = J.root
-  const marker = (parent: THREE.Object3D, x: number, y: number, z: number) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o }
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.18), mat); root.add(pelvis)
+  root.userData.hip = hip
+  const marker = (parent: THREE.Object3D, mx: number, my: number, mz: number) => { const o = new THREE.Object3D(); o.position.set(mx, my, mz); parent.add(o); return o }
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32 * w, 0.16, 0.18 * w), mat); root.add(pelvis)
   root.add(J.spine); J.spine.position.set(0, 0.06, 0)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.2), mat); torso.position.y = 0.22; J.spine.add(torso)
-  J.spine.add(J.neck); J.neck.position.set(0, 0.44, 0)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38 * w * x.shoulders, 0.42 * t, 0.2 * w), mat); torso.position.y = 0.22 * t; J.spine.add(torso)
+  J.spine.add(J.neck); J.neck.position.set(0, 0.44 * t, 0)
   J.neck.add(J.head); J.head.position.set(0, 0.06, 0)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 14), mat); head.position.y = 0.1; head.scale.set(0.9, 1.1, 1); J.head.add(head)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11 * hd, 20, 14), mat); head.position.y = 0.1 * hd; head.scale.set(0.9, 1.1, 1); J.head.add(head)
   const neckMarker = marker(J.neck, 0, 0, 0)
-  const nose = marker(J.head, 0, 0.08, 0.11), rEye = marker(J.head, -0.035, 0.12, 0.09), lEye = marker(J.head, 0.035, 0.12, 0.09)
-  const rEar = marker(J.head, -0.095, 0.1, 0), lEar = marker(J.head, 0.095, 0.1, 0)
+  const nose = marker(J.head, 0, 0.08 * hd, 0.11 * hd), rEye = marker(J.head, -0.035 * hd, 0.12 * hd, 0.09 * hd), lEye = marker(J.head, 0.035 * hd, 0.12 * hd, 0.09 * hd)
+  const rEar = marker(J.head, -0.095 * hd, 0.1 * hd, 0), lEar = marker(J.head, 0.095 * hd, 0.1 * hd, 0)
+  const sx = 0.21 * x.shoulders * (b ? 0.5 + 0.5 * w : 1)
   const arm = (shoulder: Joint, elbow: Joint, side: number) => {
-    J.spine.add(J[shoulder]); J[shoulder].position.set(side * 0.21, 0.4, 0)
-    limb(J[shoulder], 0.29, 0.055, mat)
-    J[shoulder].add(J[elbow]); J[elbow].position.set(0, -0.29, 0)
-    limb(J[elbow], 0.27, 0.045, mat)
-    return [marker(J[shoulder], 0, 0, 0), marker(J[elbow], 0, 0, 0), marker(J[elbow], 0, -0.27, 0)]
+    J.spine.add(J[shoulder]); J[shoulder].position.set(side * sx, 0.4 * t, 0)
+    limb(J[shoulder], limbs.upper_arm, 0.055 * w, mat)
+    J[shoulder].add(J[elbow]); J[elbow].position.set(0, -limbs.upper_arm, 0)
+    limb(J[elbow], limbs.forearm, 0.045 * w, mat)
+    return [marker(J[shoulder], 0, 0, 0), marker(J[elbow], 0, 0, 0), marker(J[elbow], 0, -limbs.forearm, 0)]
   }
   const [rS, rE, rW] = arm('r_shoulder', 'r_elbow', -1), [lS, lE, lW] = arm('l_shoulder', 'l_elbow', 1)
-  const leg = (hip: Joint, knee: Joint, side: number) => {
-    root.add(J[hip]); J[hip].position.set(side * 0.1, -0.04, 0)
-    limb(J[hip], 0.44, 0.07, mat)
-    J[hip].add(J[knee]); J[knee].position.set(0, -0.44, 0)
-    limb(J[knee], 0.43, 0.055, mat)
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.24), mat); foot.position.set(0, -0.44, 0.06); J[knee].add(foot)
-    return [marker(J[hip], 0, 0, 0), marker(J[knee], 0, 0, 0), marker(J[knee], 0, -0.43, 0)]
+  const leg = (hipJ: Joint, knee: Joint, side: number) => {
+    root.add(J[hipJ]); J[hipJ].position.set(side * 0.1 * w, -0.04, 0)
+    limb(J[hipJ], limbs.thigh, 0.07 * w, mat)
+    J[hipJ].add(J[knee]); J[knee].position.set(0, -limbs.thigh, 0)
+    limb(J[knee], limbs.shin, 0.055 * w, mat)
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1 * w, 0.06, 0.24), mat); foot.position.set(0, -limbs.shin - 0.01, 0.06); J[knee].add(foot)
+    return [marker(J[hipJ], 0, 0, 0), marker(J[knee], 0, 0, 0), marker(J[knee], 0, -limbs.shin, 0)]
   }
   const [rH, rK, rA] = leg('r_hip', 'r_knee', -1), [lH, lK, lA] = leg('l_hip', 'l_knee', 1)
+  if (b) for (const a of b.attachments) attach(J, a, mat, x)
   applyPose(J, pose, joints)
-  return { root, joints: J, markers: [nose, neckMarker, rS, rE, rW, lS, lE, lW, rH, rK, rA, lH, lK, lA, rEye, lEye, rEar, lEar] }
+  let top: THREE.Object3D = root
+  if (scale !== 1) { top = new THREE.Group(); top.add(root); top.scale.setScalar(scale) }     // the height: one uniform scale over the whole figure
+  return { root: top, joints: J, markers: [nose, neckMarker, rS, rE, rW, lS, lE, lW, rH, rK, rA, lH, lK, lA, rEye, lEye, rEar, lEar], limbs }
+}
+
+/** CA0 (01 §9b N1): a rigid attachment on its joint (the kind's own place unless the sheet names one), in clay like the figure. */
+function attach(J: Record<Joint, THREE.Object3D>, a: Body['attachments'][number], mat: THREE.Material, x: Body): void {
+  const s = a.size, hd = x.head, t = x.torso
+  const at = (j: string | null, fallback: Joint) => J[(j && (JOINTS as readonly string[]).includes(j) ? j : fallback) as Joint]
+  const mesh = (geo: THREE.BufferGeometry, parent: THREE.Object3D, px: number, py: number, pz: number, rx = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.rotation.set(rx, 0, rz); parent.add(m)
+  }
+  if (a.kind === 'horns') for (const side of [-1, 1]) mesh(new THREE.ConeGeometry(0.025 * s, 0.1 * s, 10), at(a.joint, 'head'), side * 0.06 * hd, 0.2 * hd + 0.04 * s, 0.02, 0, -side * 0.35)
+  else if (a.kind === 'ears') for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.035 * s, 10, 8), at(a.joint, 'head'), side * 0.11 * hd, 0.15 * hd, 0)
+  else if (a.kind === 'antennae') for (const side of [-1, 1]) mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.16 * s, 6), at(a.joint, 'head'), side * 0.04 * hd, 0.22 * hd + 0.08 * s, 0, 0, -side * 0.3)
+  else if (a.kind === 'hat') mesh(new THREE.CylinderGeometry(0.11 * hd, 0.13 * hd, 0.12 * s, 20), at(a.joint, 'head'), 0, 0.21 * hd + 0.05 * s, 0)
+  else if (a.kind === 'wings') for (const side of [-1, 1]) mesh(new THREE.BoxGeometry(0.4 * s, 0.5 * s, 0.02), at(a.joint, 'spine'), side * 0.22 * s, 0.32 * t, -0.13, 0, side * 0.35)
+  else if (a.kind === 'backpack') mesh(new THREE.BoxGeometry(0.3 * s, 0.36 * s, 0.14 * s), at(a.joint, 'spine'), 0, 0.24 * t, -0.17)
+  else if (a.kind === 'tail') mesh(new THREE.CylinderGeometry(0.015 * s, 0.04 * s, 0.6 * s, 10), at(a.joint, 'root'), 0, -0.05 - 0.2 * s, -0.12 - 0.2 * s, -0.9)
+  else mesh(new THREE.SphereGeometry(0.06 * s, 12, 10), at(a.joint, 'spine'), 0, 0.2, 0.12)
 }
 
 export const SET_PRESETS = ['room', 'street', 'deck', 'empty'] as const

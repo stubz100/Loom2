@@ -14,6 +14,13 @@ export const CHAINS: Record<Chain, { upper: Joint; lower: Joint; a: number; b: n
   l_leg: { upper: 'l_hip', lower: 'l_knee', a: LIMB.thigh, b: LIMB.shin, bend: [0, 0, -1] },
 }
 
+/** CA0: a figure's chain with its own bone lengths (a body from the Cast sheet changes them; the default dummy's are LIMB). */
+export function figureChain(limbs: { upper_arm: number; forearm: number; thigh: number; shin: number }, chain: Chain) {
+  const c = CHAINS[chain]
+  const arm = chain === 'r_arm' || chain === 'l_arm'
+  return { ...c, a: arm ? limbs.upper_arm : limbs.thigh, b: arm ? limbs.forearm : limbs.shin }
+}
+
 const deg = THREE.MathUtils.radToDeg
 const DOWN = new THREE.Vector3(0, -1, 0)
 

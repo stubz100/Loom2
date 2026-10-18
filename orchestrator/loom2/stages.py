@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .body import Body
 from .fsio import atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
@@ -50,6 +51,7 @@ class StageObject(BaseModel):
     billboard: bool = True                         # planes face the camera
     profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame
     version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one
+    body: Body | None = None                       # CA0: the bound version's body, copied when bound and kept in step by the client (None = the preset's dummy)
 
 
 class StageCamera(BaseModel):

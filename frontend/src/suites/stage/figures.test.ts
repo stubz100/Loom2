@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { StageObject } from '../../api/types'
 import { figureMentions, figuresByScreen, prebind, screenX } from './figures'
 
-const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
+const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, body: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   parent: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {} }, billboard: false, profile_id: null, version: null, ...extra })
 const CAM = { pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0 }
 

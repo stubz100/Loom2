@@ -215,6 +215,23 @@
 .cast-sheet textarea, .cast-sheet > input { width: 100%; box-sizing: border-box; font: inherit; color: var(--fg); }
 .cast-sheet textarea { resize: vertical; }
 .cast-sheet .sheet-label { display: flex; align-items: center; gap: 8px; }
+/* CA0: the body on the sheet — fields beside a front-view silhouette (the default adult as a ghost) */
+.cast-body { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.cast-body.empty { flex-direction: column; gap: 4px; }
+.cast-body .body-fields { display: grid; gap: 4px; flex: 1 1 220px; min-width: 0; }
+.cast-body .body-row { display: grid; grid-template-columns: 92px 1fr auto; gap: 6px; align-items: center; }
+.cast-body .body-row input[type=number] { width: 70px; }
+.cast-body .body-row.attachments { align-items: start; }
+.cast-body .body-att { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }
+.cast-body .body-att input[type=text] { flex: 1 1 80px; min-width: 60px; }
+.cast-body .body-att input[type=range] { width: 70px; }
+.body-silhouette { flex: 0 0 auto; background: var(--bg2); border-radius: var(--radius); }
+.body-silhouette .metre { stroke: var(--border); stroke-dasharray: 2 3; }
+.body-silhouette text { fill: var(--fg3); font-size: 8px; }
+.body-silhouette .ghost circle, .body-silhouette .ghost rect { fill: none; stroke: var(--fg3); stroke-dasharray: 2 2; }
+.body-silhouette .ghost line { stroke: var(--fg3); opacity: .25; stroke-linecap: round; }
+.body-silhouette .figure circle, .body-silhouette .figure rect { fill: var(--accent-dim); }
+.body-silhouette .figure line { stroke: var(--accent-dim); stroke-linecap: round; }
 .cast-sheet .sheet-label input { flex: 1; max-width: 320px; }
 .cast-sheet .sheet-colours { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cast-sheet .sheet-colour { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 2px; border: 1px solid var(--line2); border-radius: 14px; background: var(--bg1); }

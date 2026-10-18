@@ -5641,3 +5641,48 @@ Wan Animate on CN4's walk_dolly at seed 0, eight runs alternating headroom 0 and
 - The per-model value stays in the spec schema and the supervisor, tested and unused.
 - E30's other arms (Wan 2.2 I2V, LTX-2.3, Klein 9B) are dropped. They were asked because of a premise this run removed.
 - **Lesson** (engine `AGENTS.md`): judge a setting on Wan Animate by several alternating runs per arm, never one or two.
+
+## 2026-10-18 21:00 — CA0 step 1 · the body on the Cast sheet shapes the Stage dummy
+
+CA0 (07 phase 2; 02 §5; 01 §9, answer 3). A Cast character's version can carry a **body**:
+
+- height (0.3–4 m);
+- a build (slim, average, broad, heavy);
+- proportions as factors of the default dummy (head, torso, shoulders, arms, legs);
+- up to six rigid **attachments** (tail, horns, ears, wings, antennae, hat, backpack, other) on their own joint or one the sheet names.
+
+The 01 §9b N1 route covers ogres, aliens, children and giants this way.
+
+**Server:**
+
+- `loom2/body.py` (`Body`, `BodyAttachment`). `ProfileVersion.body` is a sheet field: read-only once final, copied into a new version.
+  A place or a prop is refused a body.
+- `StageObject.body` holds the bound version's copy.
+- The body is part of the sheet's fingerprint, so a body change makes a shot's stage still stale (RC0). A version without one keeps the
+  fingerprint of before.
+
+**Client:**
+
+- **Cast:** a body section on the sheet (`CastBody.tsx`): height, build, sliders, attachments, *Reset proportions*, *Remove the body*.
+  Beside it, a front-view silhouette drawn from the dummy's own numbers, with the default adult as a ghost and a line per metre.
+  Story's bundle draws it without three.js (`stage/body.ts`).
+- **The dummy:** `builders.mannequin(…, body)` lengthens and widens the limbs, torso and head, and stands the figure at the sheet's
+  height with its feet on the floor (one uniform scale). The attachments ride on their joints in the clay, depth and mask passes; they
+  have no pose markers.
+- **IK** uses the figure's own bones (`ik.figureChain`).
+- **A figure without a body is E10's dummy, unchanged** (the clay reference's PCK 0.86 rests on it).
+- **Stage:** binding a figure copies the version's body; opening a stage and every Cast change bring bound figures in step
+  (`syncBodies`, one undo step "body from Cast"). A figure taking a body stands at scale 1.
+- The selection says "body from Cast — 2.40 m · heavy · horns".
+
+**Tests:**
+
+- Offline 430 under full and open (`test_body_ca0.py`, 2).
+- Vitest 347 (`body.test.ts`, 6: a 2.0 m broad adult, a 1.2 m child with a big head and a 2.6 m ogre each stand at their height
+  ±6 cm with their feet on the floor; IK lengths; attachments outside the markers; the default dummy unchanged).
+- e2e 41/41 under full and open. The new scenario gives a character a 2.4 m heavy body with horns in Cast, and its bound figure takes
+  it when the stage opens. Screenshot: `node_modules/.e2e/ca0-body-stage.png`.
+- Lint 75; build and audits clean.
+- **Rig owed with CA0's acceptance:** a clay still of a body-shaped figure.
+
+**Next:** CA0 step 2, *Make an animation reference*.

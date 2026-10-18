@@ -2830,6 +2830,75 @@ export interface components {
             /** Sha256 */
             sha256: string;
         };
+        /**
+         * Body
+         * @description CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.
+         *     Height in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.
+         */
+        Body: {
+            /**
+             * Arms
+             * @default 1
+             */
+            arms: number;
+            /** Attachments */
+            attachments: components["schemas"]["BodyAttachment"][];
+            /**
+             * Build
+             * @default average
+             * @enum {string}
+             */
+            build: "slim" | "average" | "broad" | "heavy";
+            /**
+             * Head
+             * @default 1
+             */
+            head: number;
+            /**
+             * Height M
+             * @default 1.75
+             */
+            height_m: number;
+            /**
+             * Legs
+             * @default 1
+             */
+            legs: number;
+            /**
+             * Shoulders
+             * @default 1
+             */
+            shoulders: number;
+            /**
+             * Torso
+             * @default 1
+             */
+            torso: number;
+        };
+        /**
+         * BodyAttachment
+         * @description CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its
+         *     clay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).
+         */
+        BodyAttachment: {
+            /** Joint */
+            joint: ("root" | "spine" | "head" | "r_shoulder" | "l_shoulder" | "r_elbow" | "l_elbow") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tail" | "horns" | "ears" | "wings" | "antennae" | "hat" | "backpack" | "other";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Size
+             * @default 1
+             */
+            size: number;
+        };
         /** BulkPatch */
         BulkPatch: {
             /** Changes */
@@ -6297,6 +6366,7 @@ export interface components {
              * @default
              */
             appearance: string;
+            body: components["schemas"]["Body"] | null;
             /** Candidates Group Id */
             candidates_group_id: string | null;
             /** Colours */
@@ -7594,6 +7664,7 @@ export interface components {
              * @default true
              */
             billboard: boolean;
+            body: components["schemas"]["Body"] | null;
             /**
              * Colour Id
              * @default 0

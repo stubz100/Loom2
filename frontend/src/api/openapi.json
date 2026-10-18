@@ -965,6 +965,144 @@
         "title": "BlobPut",
         "type": "object"
       },
+      "Body": {
+        "description": "CA0 (D94, 01 §9 answer 3): the body on the Cast sheet — it shapes the figure's Stage dummy when the figure is bound to this version.\nHeight in metres; the proportions are factors of the default dummy (1 = the 1.75 m adult); the build widens or narrows it.",
+        "properties": {
+          "arms": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Arms",
+            "type": "number"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/BodyAttachment"
+            },
+            "maxItems": 6,
+            "title": "Attachments",
+            "type": "array"
+          },
+          "build": {
+            "default": "average",
+            "enum": [
+              "slim",
+              "average",
+              "broad",
+              "heavy"
+            ],
+            "title": "Build",
+            "type": "string"
+          },
+          "head": {
+            "default": 1.0,
+            "maximum": 2.5,
+            "minimum": 0.5,
+            "title": "Head",
+            "type": "number"
+          },
+          "height_m": {
+            "default": 1.75,
+            "maximum": 4.0,
+            "minimum": 0.3,
+            "title": "Height M",
+            "type": "number"
+          },
+          "legs": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Legs",
+            "type": "number"
+          },
+          "shoulders": {
+            "default": 1.0,
+            "maximum": 1.8,
+            "minimum": 0.6,
+            "title": "Shoulders",
+            "type": "number"
+          },
+          "torso": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.6,
+            "title": "Torso",
+            "type": "number"
+          }
+        },
+        "required": [
+          "height_m",
+          "build",
+          "head",
+          "torso",
+          "shoulders",
+          "arms",
+          "legs",
+          "attachments"
+        ],
+        "title": "Body",
+        "type": "object"
+      },
+      "BodyAttachment": {
+        "description": "CA0 (01 §9b N1): a rigid part that follows a joint of the figure — a tail, horns, folded wings. Shown on the Stage dummy and in its\nclay and depth passes; not in the pose pass (Wan Animate guesses its motion from the reference).",
+        "properties": {
+          "joint": {
+            "anyOf": [
+              {
+                "enum": [
+                  "root",
+                  "spine",
+                  "head",
+                  "r_shoulder",
+                  "l_shoulder",
+                  "r_elbow",
+                  "l_elbow"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joint"
+          },
+          "kind": {
+            "enum": [
+              "tail",
+              "horns",
+              "ears",
+              "wings",
+              "antennae",
+              "hat",
+              "backpack",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Note",
+            "type": "string"
+          },
+          "size": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.2,
+            "title": "Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "joint",
+          "size",
+          "note"
+        ],
+        "title": "BodyAttachment",
+        "type": "object"
+      },
       "BulkPatch": {
         "properties": {
           "changes": {
@@ -9550,6 +9688,16 @@
             "title": "Appearance",
             "type": "string"
           },
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Body"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "candidates_group_id": {
             "anyOf": [
               {
@@ -9677,6 +9825,7 @@
           "marks",
           "trigger",
           "lora",
+          "body",
           "derived_from",
           "created_at",
           "locked_at"
@@ -12728,6 +12877,16 @@
             "title": "Billboard",
             "type": "boolean"
           },
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Body"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "colour_id": {
             "default": 0,
             "title": "Colour Id",
@@ -12835,7 +12994,8 @@
           "pose",
           "billboard",
           "profile_id",
-          "version"
+          "version",
+          "body"
         ],
         "title": "StageObject",
         "type": "object"

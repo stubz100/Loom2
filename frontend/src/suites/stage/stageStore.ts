@@ -11,6 +11,22 @@ import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
 import { figureMentions, prebind as prebindOf } from './figures'
 import type { Keypoint } from './passes'
+import { profilesForMentions, useStory } from '../story/storyStore'
+
+/** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
+ *  undefined = the character is not loaded (the figure keeps what it has). */
+function castBody(profileId: string | null | undefined, version: string | null | undefined): StageObject['body'] | undefined {
+  if (!profileId) return null
+  const p = useStory.getState().profiles.find((x) => x.id === profileId)
+  if (!p) return undefined
+  return p.versions.find((x) => x.id === (version ?? p.current))?.body ?? null
+}
+/** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it). */
+function withBody(o: StageObject, body: StageObject['body'] | undefined): StageObject {
+  if (body === undefined || JSON.stringify(o.body ?? null) === JSON.stringify(body)) return o
+  const scale = body && !o.body ? [1, 1, 1] : o.transform.scale
+  return { ...o, body, transform: { ...o.transform, scale } }
+}
 
 export interface PoseDef { preset?: string | null; joints: Record<string, number[]> }
 // ---- ST3 (16 §3e / §7): the Shot tab ----
@@ -155,6 +171,8 @@ interface StageState {
    *  null when the counts differ (the author binds them). */
   /** D93 (C8): bind the speakers to the figures left to right; D93 follow-up: a newly bound figure wears the node's pin (`version`). */
   prebindSpeakers: (speakers: { id: string; version?: string | null }[]) => number | null
+  /** CA0: bound figures take their Cast version's body (on open, and whenever the profiles change). */
+  syncBodies: () => void
 }
 
 let saveTimer: number | null = null
@@ -435,6 +453,7 @@ export const useStage = create<StageState>()((set, get) => ({
       set({ current: st, selected: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
         shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
       void get().loadShots(); void get().refreshShotPreview()
+      if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
     } catch (e) { useSession.getState().toast(`Open stage failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   rename: async (name) => { const cur = get().current; if (!cur || !name.trim()) return; set({ current: { ...cur, name: name.trim() } }); await save(get, set) },
@@ -473,7 +492,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {} } : null, billboard: kind === 'plane', profile_id: null, version: null }
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
@@ -502,7 +521,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!src) return
     const nid = newId(src.kind === 'mannequin' ? 'fig' : src.kind)
     const copy: StageObject = { ...src, id: nid, name: `${src.name} copy`, transform: { ...src.transform, pos: [src.transform.pos[0] + 0.6, src.transform.pos[1], src.transform.pos[2]] }, locked: false,
-      profile_id: null, version: null }                                                   // D93 (C8): one figure per character — the copy is unbound
+      profile_id: null, version: null, body: null }                                                   // D93 (C8): one figure per character — the copy is unbound
     get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'duplicate')
     set({ selected: nid })
   },
@@ -535,8 +554,8 @@ export const useStage = create<StageState>()((set, get) => ({
   bindFigure: (id, profileId, version = null) => {
     const o = get().object(id)
     if (!o || o.kind !== 'mannequin') return
-    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, profile_id: profileId, version: profileId ? version : null }
-      : profileId && x.profile_id === profileId ? { ...x, profile_id: null, version: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? withBody({ ...x, profile_id: profileId, version: profileId ? version : null }, castBody(profileId, version))
+      : profileId && x.profile_id === profileId ? { ...x, profile_id: null, version: null, body: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
     void get().refreshShotPreview()
   },
   figureMentions: () => { const d = get().sampledDoc(); return d ? figureMentions(d.objects, d.cameras.find((c) => c.id === d.active_camera) ?? d.cameras[0]) : [] },
@@ -546,10 +565,20 @@ export const useStage = create<StageState>()((set, get) => ({
     const map = prebindOf(d.objects, get().activeCamera(), speakers)
     if (!map) return null
     const pinOf = (pid: string) => speakers.find((s) => s.id === pid)?.version ?? null
-    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => (x.id in map ? { ...x, profile_id: map[x.id], version: x.profile_id === map[x.id] ? x.version : pinOf(map[x.id]) } : x)) }), 'bind the speakers')
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((x) => { if (!(x.id in map)) return x; const ver = x.profile_id === map[x.id] ? x.version : pinOf(map[x.id]); return withBody({ ...x, profile_id: map[x.id], version: ver }, castBody(map[x.id], ver)) }) }), 'bind the speakers')
     void get().refreshShotPreview()
     return Object.keys(map).length
   },
+  syncBodies: () => {
+    const d = get().current
+    if (!d || !d.objects.some((o) => o.kind === 'mannequin' && o.profile_id)) return
+    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o))
+    if (next.every((o, i) => o === d.objects[i])) return
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) }), 'body from Cast')
+  },
 }))
+
+// CA0: a Cast sheet's body edited (or the profiles loaded) — the open stage's bound figures follow
+useStory.subscribe((s, prev) => { if (s.profiles !== prev.profiles) st().syncBodies() })
 
 export const st = () => useStage.getState()

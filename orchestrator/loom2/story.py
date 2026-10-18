@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
 from .models import registry
+from .body import Body
 from .shot_recipe import RecipeRun, ShotRecipe, add_run, default_template, stamps_for, step_of
 
 if TYPE_CHECKING:
@@ -143,7 +144,7 @@ class SheetColour(BaseModel):
     object: str = Field("", max_length=80)
 
 
-SHEET_FIELDS = ("appearance", "outfit", "colours", "marks")
+SHEET_FIELDS = ("appearance", "outfit", "colours", "marks", "body")
 
 
 class ProfileVersion(BaseModel):
@@ -165,6 +166,7 @@ class ProfileVersion(BaseModel):
     marks: str = Field("", max_length=400)            # distinguishing features: a scar, a tattoo, glasses
     trigger: str | None = None
     lora: str | None = None
+    body: Body | None = None                      # CA0: a character's body for its Stage dummy (None = the default adult); places and props have none
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
@@ -247,6 +249,8 @@ def check_profile(p: Profile) -> None:
         raise ValueError("a profile has at least one version and their ids are unique")
     if p.current not in ids:
         raise ValueError(f"current version {p.current} is not one of the versions")
+    if p.cls != "character" and any(v.body is not None for v in p.versions):
+        raise ValueError("only a character has a body (CA0) — a place or a prop has none")
 
 
 # ---- shots (SY2, 17 §3c) ------------------------------------------------------------------------------------------------------------

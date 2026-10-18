@@ -119,7 +119,9 @@ def _fp(*parts: Any) -> str:
 
 def sheet_fp(v: Any) -> str:
     """A Cast version's words and pins as a fingerprint: what a mention of it composes (the sheet), its hero and its LoRA."""
-    return _fp(v.appearance, v.outfit, [c.model_dump() for c in v.colours], v.marks, v.hero_asset_id, v.trigger, v.lora, v.label)
+    body = getattr(v, "body", None)
+    return _fp(v.appearance, v.outfit, [c.model_dump() for c in v.colours], v.marks, v.hero_asset_id, v.trigger, v.lora, v.label,
+               *([body.model_dump()] if body is not None else []))   # CA0: the body shapes the dummy, so the passes (absent body: the old fingerprint)
 
 
 def stamps_for(recipe: dict[str, Any], *, frame_asset_id: str | None, stage_id: str | None, stage_revision: int | None, story: Any) -> dict[str, Any]:

@@ -9,8 +9,8 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
-import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Joint, type Mannequin } from './builders'
-import { CHAINS, eulerDeg, solveTwoBone, type Chain } from './ik'
+import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
+import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
@@ -227,7 +227,7 @@ export class StageEngine {
     const e = this.entries.get(id)
     if (!e?.figure) return
     this.endPosing()
-    const c = CHAINS[chain]
+    const c = figureChain(e.figure.limbs, chain)
     const lower = e.figure.joints[c.lower]
     const proxy = new THREE.Object3D()
     proxy.position.copy(lower.localToWorld(new THREE.Vector3(0, -c.b, 0)))
@@ -243,7 +243,7 @@ export class StageEngine {
     if (!this.ik) return
     const e = this.entries.get(this.ik.id)
     if (!e?.figure) return
-    const c = CHAINS[this.ik.chain]
+    const c = figureChain(e.figure.limbs, this.ik.chain)
     const upper = e.figure.joints[c.upper], lower = e.figure.joints[c.lower]
     const parent = upper.parent!
     parent.updateWorldMatrix(true, false)
@@ -283,7 +283,7 @@ export class StageEngine {
     const e = this.selectedId ? this.entries.get(this.selectedId) : undefined
     if (!e?.figure) return null
     e.holder.updateWorldMatrix(true, true)
-    const c = (CHAINS as Record<string, (typeof CHAINS)[Chain] | undefined>)[at]
+    const c = at in CHAINS ? figureChain(e.figure.limbs, at as Chain) : undefined
     const p = c ? e.figure.joints[c.lower].localToWorld(new THREE.Vector3(0, -c.b, 0)) : e.figure.joints[at as Joint].getWorldPosition(new THREE.Vector3())
     p.project(this.camera())
     const r = this.canvas.getBoundingClientRect()
@@ -327,7 +327,7 @@ export class StageEngine {
     for (const o of doc.objects) {
       seen.add(o.id)
       let e = this.entries.get(o.id)
-      if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id) {
+      if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)) {
         if (e) { this.scene.remove(e.holder) }
         e = this.build(o)
         this.entries.set(o.id, e)
@@ -373,7 +373,7 @@ export class StageEngine {
     let figure: Mannequin | undefined
     let pickers: THREE.Object3D[] | undefined
     if (o.kind === 'mannequin') {
-      figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints)
+      figure = mannequin(this.clayMat, POSES[o.pose?.preset ?? 'stand'] ?? POSES.stand, o.pose?.joints, (o as { body?: Body | null }).body)   // CA0: the bound character's body
       body = figure.root
       // ST2: a picker sphere on every joint (FK) and a handle at each hand and foot (IK), hidden until pose mode
       pickers = []
@@ -384,7 +384,7 @@ export class StageEngine {
       }
       for (const [chain, c] of Object.entries(CHAINS)) {
         const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), this.ikMat)
-        m.position.set(0, -c.b, 0); m.userData.ik = chain; m.renderOrder = 11; m.visible = false
+        m.position.set(0, -figureChain(figure.limbs, chain as Chain).b, 0); m.userData.ik = chain; m.renderOrder = 11; m.visible = false
         figure.joints[c.lower].add(m); pickers.push(m)
       }
     } else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)

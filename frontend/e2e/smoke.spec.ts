@@ -1830,3 +1830,35 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await page.locator('.gen-source .segmented button', { hasText: 'Prompt' }).click()
   await expect(page.locator('.from-stage')).toHaveCount(0)
 })
+
+test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment saved with the sheet; a stage figure bound to the character takes the body when the stage opens', async ({ page }) => {
+  const name = `Grak ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  type Body = { height_m: number; build: string; attachments: { kind: string }[] }
+  type ProfileLite = { id: string; versions: { id: string; body: Body | null }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a hulking ogre` })
+  expect(p.versions[0].body).toBeNull()
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await page.locator('.cast-body button', { hasText: 'body' }).click()
+  await page.locator('.cast-body input[aria-label="height in metres"]').fill('2.4')
+  await page.locator('.cast-body .segmented button', { hasText: 'heavy' }).click()
+  await page.locator('.cast-body button', { hasText: 'attachment' }).click()
+  await page.locator('.cast-body select[aria-label="attachment 1"]').selectOption('horns')
+  await expect(page.locator('svg.body-silhouette')).toHaveAttribute('aria-label', 'silhouette, 2.40 m')
+  await expect.poll(async () => { const b = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body; return b ? `${b.height_m}|${b.build}|${b.attachments.map((a) => a.kind).join()}` : null }).toBe('2.4|heavy|horns')
+  // a stage with a figure bound to the character, no body yet: opening it in Animate · Clay gives the figure the sheet's body
+  const st = await api<{ id: string } & Record<string, unknown>>('POST', '/stages', { name: `Cave ${name}` })
+  const fig = { id: 'obj_grak', kind: 'mannequin', name: 'Grak', preset: 'adult', profile_id: p.id, version: null, body: null }
+  await api('PUT', `/stages/${st.id}`, { ...st, objects: [fig] })
+  await openAnimate(page, 'Clay')
+  await page.locator('.stage-row', { hasText: `Cave ${name}` }).click()
+  await expect.poll(async () => (await api<{ objects: { body: Body | null }[] }>('GET', `/stages/${st.id}`)).objects[0].body?.height_m ?? null, { timeout: 10_000 }).toBe(2.4)
+  await openSection(page, 'Scene')
+  await page.locator('.outl-row', { hasText: 'Grak' }).click()
+  await expect(page.locator('#anim-sec-selection')).toContainText('from Cast — 2.40 m · heavy · horns')
+  await page.locator('.stage-row', { hasText: `Cave ${name}` }).click()
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m
+})

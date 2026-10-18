@@ -5502,3 +5502,41 @@ full and open; Vitest 341; build clean; lint 73.
 - Audits clean: settings, model literals, agent docs, OpenAPI.
 
 **Still open:** one undo history per Shot (#13, with AE1). Animate's Clips section stays until the Bin carries the clip verbs.
+
+## 2026-10-18 20:00 — AN1 on the rig: Stage's stills and clip and CN4 still pass; D98's headroom changes Wan Animate (Q19)
+
+AN1's acceptance (03 §7) asks that the existing Stage and Animate rig checks still pass after the move into the Animate tab. They ran
+one GPU job at a time, as D97 requires.
+
+**`st_acceptance.py`** (the stage opened at `suite=stage`, now Animate · Clay; the passes rendered by its viewport; jobs from the store):
+
+| What | Result | Bar |
+| --- | --- | --- |
+| clay still | cold 59.6 s, warm 13.1 s; PCK@0.1 1.0 / 1.0 | warm ≤ 45 s |
+| exact pose still | cold 141.3 s, warm 137.3 s; PCK 1.0 / 0.972 | warm ≤ 150 s, PCK ≥ 0.8 |
+| ST4 clip (keyed dolly, depth guide, LTX-2.3 + IC-LoRA, 49 frames) | 118.3 s; PCK 0.992 | ≤ 300 s, PCK ≥ 0.5 |
+| lineage and origin on every result | all present | — |
+
+- **The last check of the first run, the page-error sweep, crashed** on a CDP keepalive timeout: the pose scoring kept Python busy
+  between calls. Fixed in `edit_headed_check.CDP`: no websocket keepalive (`ping_interval=None`).
+- **A second, short pass** (clay ×1 and the clip) was spoiled by my own edit: `session.ts`, changed during the run, made Vite reload the
+  page and drop the open stage.
+- **The third pass** had no page errors. Its clay still kept the grey mannequin as a figure, with the heroine beside it (PCK 0.5); the
+  clip from that still scored 0.299. That is the clay method's known failure mode for a sampled still, not the UI move: the earlier run
+  in the same hour scored 1.0, and its clip 0.992. The clay method has no PCK bar.
+
+**`cn_acceptance.py --parts animate`** (CN4, API only; Wan Animate on E11's walk_dolly, seed 0):
+
+| Headroom | PCK@0.1 | FaceSim | Wall time |
+| --- | --- | --- | --- |
+| 5 GB (D98 default), first run | 0.778 (FAIL) | 0.178 / 0.135 / 0.136 | 212 s |
+| 0 (new `--vram-headroom` option) | **0.993** (pass) | 0.171 / 0.245 / 0.168 | 260 s |
+| 5 GB, repeat | 0.597 (FAIL) | 0.159 / 0.18 / 0.152 | 200 s |
+
+- **Headroom 0 reproduces the 2026-10-15 acceptance exactly.** With 5 GB kept free, the same seed gives a different clip each time,
+  and both missed the bar.
+- **D98 was measured for speed only.** This is recorded as open question **Q19**, with a proposed default: a per-model headroom, Wan
+  Animate at 0 until spike E30 compares 3 seeds per arm on Wan Animate, Wan 2.2 I2V, LTX-2.3 and Klein 9B.
+- **D98 itself is unchanged** until the author answers.
+
+**AN1 closes on the rig** in the configuration CN4 was accepted in. The Stage paths pass their bars.

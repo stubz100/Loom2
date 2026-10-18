@@ -435,6 +435,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--parts", default="voice")
     ap.add_argument("--tier", default="both", choices=["draft", "cloning", "both"])
+    ap.add_argument("--vram-headroom", type=float, default=None, help="Settings.engine.vram_headroom_gb for this run (D98; 0 = off) — an A/B of the engine's headroom")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="loom2-cn-"))
@@ -448,7 +449,7 @@ def main() -> int:
         except Exception:
             pass
     AppState(tmp / "state").update_settings({"models_root": os.environ.get("LOOM2_MODELS", "F:/loom2-models"), "mounted_model_trees": [], "variant": "full",
-                                             "engine": {"port": engine_port}})
+                                             "engine": {"port": engine_port, **({"vram_headroom_gb": a.vram_headroom} if a.vram_headroom is not None else {})}})
     env = {**os.environ, "LOOM2_TOKEN": TOKEN, "PYTHONIOENCODING": "utf-8"}
     orch_log = (OUT / "orchestrator.log").open("w", encoding="utf-8")
     argv = [sys.executable, "-m", "loom2.main", "--port", str(PORT), "--state", str(tmp / "state")]

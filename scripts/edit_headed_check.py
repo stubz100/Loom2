@@ -84,7 +84,7 @@ def api(method: str, path: str, body=None):
 
 class CDP:
     def __init__(self, ws_url: str) -> None:
-        self.ws = connect(ws_url, max_size=50 * 2**20)
+        self.ws = connect(ws_url, max_size=50 * 2**20, ping_interval=None)   # no keepalive: CPU-bound scoring between calls starved the pongs (st_acceptance 2026-10-18)
         self.n = 0
         self.events: list[dict] = []
 

@@ -138,8 +138,9 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | Q16 | ~~Accept D28?~~ **Resolved 2026-10-04 → D28 accepted** | 06 §3, 12 M1 | — |
 | Q17 | ~~Klein object-removal recipe?~~ **Resolved 2026-10-05 by E8b**: neutralise the hole in the reference image (`klein_icm_hole`, 10 s warm) or LanPaint "Prompt First" λ 8 (21 s); both cleared the crates that every reference-fed Klein graph kept. The Remove verb uses the hole recipe with a background-only prompt | 04 §4, 10 | — |
 | Q18 | **Wan VAE time**: decoding 81 × 832×480 frames takes 131–134 s and the start-image encode 36–40 s — 54 % of a 315 s clip (sampling 104–130 s). Try MIOpen on for the 3D convs (E7 measured image VAEs only), `VAEDecodeTiled` temporal tiling, and a lightweight preview VAE | 04 §5, 12 E4 | measure in M6 before the Animate suite sets its progress expectations |
+| Q19 | **D98's headroom changes Wan Animate's output** (found 2026-10-18 20:00, AN1's CN4 re-check). At seed 0 on the same inputs: headroom 0 → PCK@0.1 **0.993** (the 2026-10-15 acceptance reproduced exactly, FaceSim 0.17 / 0.25 / 0.17, 260 s); headroom 5 → **0.778**, then **0.597** on a repeat (not deterministic; FaceSim 0.14–0.18; 200–212 s). The weights stream differently with 5 GB kept free, and the sampler sees other numbers. The ST4 LTX clip held (0.992) and the stills were not compared at a fixed seed. Keep D98 for every model, exempt Wan Animate, or make the headroom a per-model value? | 13 D98, CN4, the clay waves (Wan Animate is CA5's performance model) | **A per-model headroom in the spec (`engine.vram_headroom_gb`, the engine-wide value when absent) with Wan Animate at 0 until spike E30** (3 seeds per arm, headroom 0 vs 5, on Wan Animate, Wan 2.2 I2V, LTX-2.3 and Klein 9B — determinism, pose and FaceSim, one GPU job at a time) says which models keep it |
 
-Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-06.
+Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-06; Q19 is open as of 2026-10-18.
 
 ## Post-MVP backlog (ordered 2026-10-07, M7 slice 5)
 

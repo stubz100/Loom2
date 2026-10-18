@@ -5053,3 +5053,44 @@ nodes build the movie, finished in a FilmCraft-like editor. Reviewed in the new 
   - the quick image-to-video case must stay quick.
 - **Waves:** RC0, the recipe record and staleness, comes with AN1 / AE1. RC1 (the recipe graph), RC2 (node = shot in the Flow), RC3 (a
   cut from a route) and RC4 (the FilmCraft study) follow in the Story pass. Five questions for the author.
+
+## 2026-10-18 11:09 — D96 · the Story Flow is a shot-flow; EffectCraft's preview model in the build plan
+
+The author answered 05:
+
+- **B**: the Flow node and the Story shot merge into one **Shot**; Episode stays the cut.
+- **One camera per Shot.**
+- **≈ 30 s as a guideline**: a warning, not a block.
+- **The recipe graph opens both** in the Flow and in Animate.
+- **The cut:** each Shot's content is rendered onto a video lane of the FilmCraft-like edit suite, where the movie is processed and
+  rendered.
+- ComfyUI's way of working, not ComfyUI.
+- **"We should not sacrifice features for simplicity"**: like a ComfyUI workflow's 4–5 components for one image, every important part
+  must be covered by the shot-flow.
+
+Recorded as **D96**. 05 is rewritten as accepted:
+
+- §3 holds a **coverage table**: every step's important parts, from Character to Take, with the Frame step's model, prompt, references,
+  Look, size, LoRAs, encoder and seed.
+- Templates prefill a recipe and hide no step.
+- The recipe graph is shared with Animate's Graph view.
+- The cut follows a Shot's new take, with a cut per route.
+- RC0 is now 4–5 days, with the coverage check as a test (D60's pattern). RC1–RC4 come in the Story pass.
+
+**03's build plan takes EffectCraft's own preview model.**
+
+- **New wave AP1** (4–5 days, after E27):
+  - the tiers T0–T3, with priority and cancellation;
+  - viewer resolution (Auto · Full · Half · Third · Quarter);
+  - layer quality (Best · Draft · Wireframe);
+  - Fast Previews (Off · Adaptive with ½ · ¼ · ⅛ · Draft · Fast Draft · Wireframe);
+  - the layer, RAM-preview (cache when idle) and disk caches with budgets in Settings › Animate (D60 audit);
+  - proxies;
+  - step-down while ComfyUI runs;
+  - a status chip that matches the frame shown (T8);
+  - the server's lifecycle.
+- E27 is rewritten around the preview server.
+- AE2 uses the tiers.
+- AE5 uses EffectCraft's render settings (Best, Full, rate, motion blur, frame blending, colour depth, Proxy Use off) and output
+  modules.
+- 03's total is 36–48 days.

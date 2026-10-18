@@ -22,14 +22,27 @@ Each wave ends measured on the rig, as every wave has ("no milestone closes with
 - **Display == reality (T8):** the batch plan and the frames per batch the UI shows are what the jobs run.
 - **Licences (D17 / D26):** motion clips the author downloads stay in the author's local folder. Only clips with a verified open licence
   ship.
+- **One job on the GPU at a time (D97):** spikes and rig runs one after another; the build order is in [07](07-build-order.md).
+- **Everything is kept, inside the project directory** (the author, 2026-10-18): batch masters, layers, start stills, takes,
+  compositions and caches. A retention setting may come later; nothing is pruned now.
 
 ## 2. Licence check for the motion
 
 - **Done (2026-10-17):** the starter set. Quaternius' *Universal Animation Library* 1 and 2 [Standard] are CC0 1.0 (each archive's
   `License.txt`); fetched with the author's yes to `F:/loom2-models/motion/` (`SOURCES.md` holds the URLs and sha256). 87 clips and
   skinned mannequins with fingers and feet (01 step 5, §9).
-- **Owed:** re-read Adobe's live terms and Mixamo FAQ for use in films, a local library, and pose sequences from the clips fed to a
-  generative model; record the reading with D17's licence notes. Mixamo clips stay in the author's local folder either way.
+- **Done (2026-10-18): Adobe's Mixamo terms read.**
+  - The FAQ allows the characters and animations royalty-free in personal, commercial and non-profit projects, films and games
+    included.
+  - The **Mixamo Additional Terms §1** (2021-06-23): *"You will not … use the Services or Software (or any content, data, output, or
+    other information received or derived from the Services or Software) to directly or indirectly create, train, test, or otherwise
+    improve any machine learning algorithms or artificial intelligence systems, including … models, or weights."*
+  - **Consequence:**
+    - spikes, rig checks, tests and the development of loom2 use **CC0 motion only**;
+    - Mixamo clips are the author's own creative input at use time, in their local folder;
+    - frames made from Mixamo-driven clips must never train a LoRA (LT wave, D86).
+
+  This is a reading for D17, not legal advice. The author decides.
 
 ## 3. Spikes first
 
@@ -39,8 +52,8 @@ The question: on a long single-character shot, which frame rate (F16 or F24) giv
 
 **The shot.** About 10 s, Mara alone in E22's set:
 
-- she walks along a path (Mixamo's *Start Walking* from the author's `mixamo/` folder, or the starter set's `Walk_Loop`, retargeted
-  onto the dummy by spike code), then turns and points (keys);
+- she walks along a path (the CC0 starter set's `Walk_Loop`, retargeted onto the dummy by spike code; never a Mixamo clip, §2),
+  then turns and points (keys);
 - a locked-off camera, so the plate is not a variable;
 - Move mode (CN4's), with the animation reference made by hand to 01 step 2's rules (16:9, full body, A-pose, colours bound).
 

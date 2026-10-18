@@ -188,7 +188,7 @@ same tree.
 | --- | --- | --- |
 | 1 | Which ideas to keep? | **All of them, as ideas** to extend later. C4 is taken further as the recipe graph (05, D96) |
 | 2 | For-shot results on the shot's page by default? | **Yes** (when C2 is built) |
-| 3 | Which kinds matter most as items? | asked what "matter most" means; explained below, open |
+| 3 | Which kinds matter most as items? | **left to the implementation**: whatever is easiest and most consistent (decided below) |
 | 4 | The Bin in Image? | **a collapsible drawer, like the render queue** (the frame's dock), in Image and in Animate alike |
 
 **Question 3, explained.** Each new kind of item costs work: a thumbnail, a Type chip, a Catalogue entry for a record that lives
@@ -199,3 +199,13 @@ in the Catalogue, so those come first. My reading:
 - **Compositions and layers later.** They belong to one Shot and are reached through its page (C2) and its recipe (05).
 - **Characters, places, props and voices** already have their home in Cast. As items they would mainly make them draggable from the
   Bin, which could come with the Bin itself.
+
+**Decided (the author left it to the implementation, 2026-10-18).**
+
+- **One generic mechanism, built once:** a Catalogue item that points at a record living elsewhere, with its kind, a thumbnail, a
+  Type chip, drag targets and *used by*.
+- **Each kind is registered when its record is built**, so no kind gets a pass of its own:
+  - stage with AN1;
+  - motion clips with CA1;
+  - compositions and layers with AE1 / CA6;
+  - Cast's kinds with the Bin (C1).

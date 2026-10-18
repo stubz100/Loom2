@@ -119,7 +119,8 @@ The selection is shared: a step selected in the graph opens its section in Anima
 - Each Shot's **used take is rendered onto a video lane** of the cut editor, in the order of a route through the Flow. A branching story
   gives one cut per route.
 - When a Shot gets a new used take, its clip on the lane updates, and the cut marks it as changed.
-- The movie is finished in that editor (transitions, audio, titles, grading) and **rendered as a backend job**.
+- The movie is finished in that editor (transitions, the **voice** lane, titles, grading) and **rendered as a backend job**. Sound is
+  **voice only**: no music and no sound effects (the author, 2026-10-18).
 - The editor is modelled on FilmCraft (RC4's study), which replaces today's single-lane Episode in the Story pass.
 
 ## 4. The model

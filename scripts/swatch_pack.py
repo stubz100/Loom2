@@ -7,7 +7,7 @@ background, subject action / pose, lead text — the frontend's `needsPicture`; 
 batch through `POST /preset-icons/make` (run now, the pack's one seed). Per job the wall seconds; the engine's peak VRAM over the pack; the
 output sane (the swatch size, not black or flat). A contact sheet goes to engine/spikes/out/sm/pack_sheet.png for a look, and the pack is
 installed into the app's state (`.loom2_state/preset_icons`, LOOM2_STATE overrides; the swatches there before are moved aside to
-`preset_icons.before-<stamp>/` first). `--only field=value;…` remakes the named ones with `--seed` (a broken swatch, after a look).
+`preset_icons.<its model>-<stamp>/` first). `--only field=value;…` remakes the named ones with `--seed` (a broken swatch, after a look).
 
     orchestrator/.venv/Scripts/python.exe scripts/swatch_pack.py [--only "mood=eerie;style=photoreal" --seed 91] [--no-install]
 """
@@ -62,6 +62,16 @@ def contact_sheet(rows: list[tuple[str, str, Image.Image | None]], path: Path, c
     sheet.save(path)
 
 
+def pack_model(pack: Path) -> str:
+    """The model most of a pack's swatches were made on (its index's lineage), for the name of the copy set aside; "unknown" without one."""
+    try:
+        items = json.loads((pack / "index.json").read_text(encoding="utf-8")).get("items", {})
+    except (OSError, ValueError):
+        return "unknown"
+    models = [i.get("model_id") for i in items.values() if i.get("model_id")]
+    return max(set(models), key=models.count) if models else "unknown"
+
+
 def install(state_tmp: Path, made: list[tuple[str, str]], only: bool) -> Path:
     """The swatches into the app's state, through its own store (the file first, then the index); the old ones moved aside first."""
     from loom2.config import default_state_dir
@@ -69,7 +79,7 @@ def install(state_tmp: Path, made: list[tuple[str, str]], only: bool) -> Path:
     real = default_state_dir()
     dst = real / "preset_icons"
     if dst.is_dir() and not only:
-        aside = real / f"preset_icons.before-{time.strftime('%Y%m%d-%H%M%S')}"
+        aside = real / f"preset_icons.{pack_model(dst)}-{time.strftime('%Y%m%d-%H%M%S')}"   # named by the model most of it was made on (2026-10-18)
         shutil.copytree(dst, aside)
         log(f"the swatches there before: copied to {aside}")
     src, store = PresetIconStore(state_tmp), PresetIconStore(real)

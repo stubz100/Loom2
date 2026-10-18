@@ -5144,3 +5144,56 @@ The acceptance projects, `stubz001` and `synthetic-10k` are kept.
 
 There is no official bulk download (community scripts use an undocumented API; not recommended). A shortlist of clips to fetch is in
 01 step 5.
+
+## 2026-10-18 13:01 — D97 one GPU job at a time; storage, sound, testing documents; continuity options; the build order; Mixamo's AI clause
+
+The author's answers:
+
+- **The Catalogue's kinds:** left to the implementation, so the easiest consistent way is taken. One generic "record item" mechanism, and
+  each kind registered when its record is built (04).
+- **Storage:** keep everything, inside the project directory; a setting later.
+- **Sound:** voice only, no music or sound effects. `D:\_soundPacks` is for testing only, never linked.
+- **Continuity across Shots:** write down options for templates and object copying. New `06-continuity-across-shots.md`:
+  - O1, a Scene record Shots link to;
+  - O2, Shot templates;
+  - O3, linked or independent copies;
+  - O4, locking the look (the hero plate as reference, one animation reference, bound colours, the key light on the set);
+  - O5, a continuity check;
+  - O6, matching in the cut;
+  - O7, state over story time.
+
+  A combination is suggested; three questions for the author.
+- **Strictly one job on the GPU at a time.** The author had to RMA a GPU for overheating. Recorded as **D97** and as **house rule 10 in
+  CLAUDE.md**. The preview server leaves the GPU for its CPU renderer while the queue runs a job (03 §5.2a, AP1, E27, risks).
+- **Help with testing** comes as small testing documents.
+- **HD and the rest: later.**
+- **The Lumina icon pack:** no restore, rename only. The two copies set aside in `.loom2_state` are now named by their model:
+  - `preset_icons.lumina-image-2-20261016` (64 Lumina swatches);
+  - `preset_icons.klein-4b-20261017-before-moods`.
+
+  `scripts/swatch_pack.py` names future copies by the pack's majority model (`pack_model`, checked on the three packs;
+  model_literals_check 0).
+- **UX0 is the first step of the implementation plan.** New `07-build-order.md` puts every wave of 02, 03, 05 and 06 in one order:
+  1. UX0;
+  2. re-house (IM1, AN1, RC0);
+  3. foundations (CA0, CA1);
+  4. the spikes, serial on the GPU (E23a → E23b → E28 → E29 → E25 → E27 → E24);
+  5. the decision gate;
+  6. the editor (AE1, AP1, AE2, AE3);
+  7. the clay pipeline (CA2–CA6, AE4, AE5);
+  8. UX9;
+  9. the Story pass (RC1–RC4, O5).
+
+  About 85–110 days, with the rules on top.
+
+**Adobe's Mixamo terms, read (owed since 2026-10-17).**
+
+- The FAQ allows royalty-free use in films and games.
+- The **Mixamo Additional Terms §1** (2021-06-23) forbid using anything "received or derived from the Services" to "directly or
+  indirectly create, train, test, or otherwise improve" any ML or AI system, models or weights.
+- Hence: spikes, rig checks, tests and loom2's development use **CC0 motion only**. E23a's walk is the starter set's `Walk_Loop`, not
+  *Start Walking*. Frames from Mixamo-driven clips never train a LoRA. The author's clips are their creative input at use time.
+- A reading for D17, not legal advice.
+
+**Still running in the background:** the FLUX.2 dev slowness investigation, then the headed Flatten check on WebGPU, one after the other
+(D97). Their results get their own entry.

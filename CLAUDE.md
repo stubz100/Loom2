@@ -59,6 +59,8 @@ pull request, and builds both installers on pushes to `main` and on tags.
 8. **Small drafts by default (D18):** 16:9 project format, Draft tier first, FHD optional.
 9. **Commits** follow the existing style: one long summary line naming the journal entry, what changed, test counts and rig results; then
    the attribution trailer. Commit only what belongs to the change.
+10. **One job on the GPU at a time (D97).** The author's hardware rule: never run two GPU workloads side by side (generations, renders,
+    training, spikes, rig checks, headed WebGPU checks). They take turns through the queue; exceptions are a decision.
 
 ## Layout
 

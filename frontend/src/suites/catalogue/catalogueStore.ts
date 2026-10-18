@@ -279,7 +279,10 @@ export const useCataloguePane2 = createCatalogueStore('loom2.catalogue.pane2', {
 /** Generate's result grid: the same machinery filtered to this suite, grouped by batch (09 §4). */
 export const useGenerateResults = createCatalogueStore('loom2.generate-results', { suite: 'generate', group: 'batch' })
 /** Every live catalogue store, for events that reload them all. */
-export const allCatalogueStores = () => [useCatalogue, useCataloguePane2, useGenerateResults]
+/** D95 (AN1, 04 C1): the Bin — the Catalogue as a drawer of the Dock in Image and Animate; opens on the whole Library. */
+export const useBin = createCatalogueStore('loom2.bin', { folder: 'all', group: 'none' })
+
+export const allCatalogueStores = () => [useCatalogue, useCataloguePane2, useGenerateResults, useBin]
 
 async function patchMany(ids: string[], changes: Record<string, unknown>, set: (p: Partial<CatalogueState>) => void, get: () => CatalogueState) {
   if (!ids.length) return

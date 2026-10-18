@@ -21,6 +21,7 @@ interface UiState {
   panelWidths?: Record<string, number>; inspectorWidths?: Record<string, number>   // D90 (02 §3.1): dragged widths per suite; absent = the suite's default
   storyLast?: 'story' | 'catalogue'                                            // D90: the Story tab returns to the workspace last open under it
   imageLast?: 'generate' | 'edit'                                              // D95 (IM1): the Image tab returns to the mode last open under it (Make or Edit)
+  dockTab?: 'queue' | 'bin'                                                     // D95 (AN1, 04 C1): the Dock shows the render queue or the Bin
   animateLast?: 'animate' | 'stage'                                            // D95 (AN1): the Animate tab returns to the level last open (Performance or Clay)
 }
 

@@ -5447,3 +5447,20 @@ AN1 (proto01_animate 03 §7) is built in steps; this is the first.
 - e2e 38/38.
 - The headed `animate` check, 17 steps, passed: player, harvested frames, onion skin, the frames track, compare. Vite was stopped by its
   PID this time.
+
+## 2026-10-18 18:59 — AN1 step 4 · the Bin: the Catalogue as a drawer of the Dock in Image and Animate (04 C1)
+
+- **The Dock's line has a *Queue | Bin* switch** in Image (Make, Edit) and Animate (Clay, Performance). `ui.dockTab` remembers it.
+  Story has none: it has the Catalogue itself.
+- **The Bin** (`catalogue/Bin.tsx`) runs on a Catalogue store of its own (`useBin`, in `allCatalogueStores`, so asset events reach
+  it). It holds:
+  - the places: Unprocessed, the Library, the album's top groups;
+  - a type filter (All · Images · Clips) and a search box;
+  - the tiles, which drag wherever tiles are taken (references, start slots, layers).
+- **A double-click does the mode's likely verb:** a reference in Make, a layer in Edit with a document open, the start frame in Animate,
+  play for a clip. **The right-click lists all of them.**
+- **Animate's Clips section stays for now:** it carries the clip verbs (keep / reject, re-run, variations) that the Bin does not offer
+  yet.
+
+**Tests:** a new e2e scenario (the Bin in Make adds a reference, in Animate sets the start frame, and is absent in Story). e2e 39/39 under
+full and open; Vitest 341; build clean; lint 73.

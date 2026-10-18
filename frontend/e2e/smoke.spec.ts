@@ -1767,3 +1767,23 @@ test('a group\'s "used by" (D92 §4.2): a Cast version\'s reference set says so 
   await used.locator('button.link', { hasText: `${name} v1 · references` }).click()
   await expect(page.locator('.cast-page h2')).toContainText(name)
 })
+
+test('the Bin (D95 · AN1, 04 C1): the Dock\'s Bin tab shows the Catalogue in Image and Animate; a double-click adds a reference in Make and sets the start frame in Animate', async ({ page }) => {
+  await openApp(page, { suite: 'generate' })
+  await expect(page.locator('.dock .dock-tabs')).toBeVisible()
+  await page.locator('.dock .dock-tabs button', { hasText: 'Bin' }).click()
+  const bin = page.locator('.dock .bin')
+  await expect(bin).toBeVisible()
+  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
+  const tile = bin.locator('.bin-grid .tile').first()
+  await expect(tile).toBeVisible()
+  const id = (await tile.getAttribute('data-id'))!
+  await tile.dblclick()                                                                                      // Make: a reference
+  await expect(page.locator('.ref-slots .ref-slot img').first()).toHaveAttribute('src', new RegExp(id))
+  await openAnimate(page, 'Performance')
+  await expect(page.locator('.dock .bin')).toBeVisible()                                                    // the Bin stays open across Image and Animate
+  await page.locator('.dock .bin .bin-grid .tile').nth(1).dblclick()                                        // Animate: the start frame
+  await expect(page.locator('.slots .slot').first().locator('img')).toBeVisible()
+  await openCatalogue(page)
+  await expect(page.locator('.dock .dock-tabs')).toHaveCount(0)                                             // Story has the Catalogue itself
+})

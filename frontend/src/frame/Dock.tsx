@@ -5,6 +5,10 @@ import { canGoToOrigin, goToOrigin, originLabel } from '../store/origin'
 import { useSession } from '../store/session'
 import { sep, type MenuItem } from './commands'
 import { showMenu } from './ContextMenu'
+import { Bin } from '../suites/catalogue/Bin'
+
+/** D95 (AN1, 04 C1): where the Bin is offered — Image (Make, Edit) and Animate (Clay, Performance); Story has the Catalogue itself. */
+const BIN_SUITES = new Set(['generate', 'edit', 'animate', 'stage'])
 
 function JobRow({ j }: { j: Job }) {
   const cancelJob = useSession((s) => s.cancelJob)
@@ -48,6 +52,9 @@ export function Dock() {
   const open = useSession((s) => s.ui.dockOpen)
   const setUi = useSession((s) => s.setUi)
   const pauseQueue = useSession((s) => s.pauseQueue)
+  const suite = useSession((s) => s.ui.suite)
+  const tab = useSession((s) => (BIN_SUITES.has(s.ui.suite) ? s.ui.dockTab ?? 'queue' : 'queue'))
+  const pick = (t: 'queue' | 'bin') => (e: React.MouseEvent) => { e.stopPropagation(); setUi({ dockTab: t, dockOpen: open && tab === t ? false : true }) }
   // derived in a memo, never in a selector: a selector returning a fresh object re-renders forever
   const { running, queued, recent } = useMemo(() => {
     const all = Object.values(jobs).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
@@ -59,6 +66,10 @@ export function Dock() {
     <footer className={`dock${open ? ' open' : ''}`}>
       <div className="line" onClick={() => setUi({ dockOpen: !open })}>
         <ChevronUp size={14} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
+        {BIN_SUITES.has(suite) && <span className="segmented dock-tabs" role="group" aria-label="Dock">
+          <button className={tab === 'queue' ? 'active' : ''} onClick={pick('queue')} title="The render queue">Queue</button>
+          <button className={tab === 'bin' ? 'active' : ''} onClick={pick('bin')} title="The Bin: the Catalogue in a drawer — drag a tile where it is used">Bin</button>
+        </span>}
         {active ? (
           <>
             <span>Running: {String((active.recipe as { model_id?: string }).model_id ?? active.kind)} {active.progress_text}</span>
@@ -74,7 +85,8 @@ export function Dock() {
           </button>
         )}
       </div>
-      {open && (
+      {open && tab === 'bin' && <Bin />}
+      {open && tab === 'queue' && (
         <div className="cols">
           <div className="col">
             <h4>Active</h4>

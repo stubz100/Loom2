@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
 from .models import registry
+from .shot_recipe import RecipeRun, ShotRecipe, add_run, default_template, stamps_for, step_of
 
 if TYPE_CHECKING:
     from .catalogue import Catalogue
@@ -273,6 +274,7 @@ class ShotVersion(BaseModel):
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     finalized_at: str | None = None
+    recipe: ShotRecipe | None = None              # RC0 (D96, 05 §4): the steps that made the frame and the clip, their runs and stamps (shot_recipe.py)
 
 
 class Shot(BaseModel):
@@ -642,7 +644,7 @@ class _ShotMixin:
         src = cur.version()
         n = max(int(v.id[1:]) for v in cur.versions if v.id[1:].isdigit()) + 1
         v = ShotVersion(id=f"v{n}", stage_id=src.stage_id, camera_id=src.camera_id, stage_revision=src.stage_revision, frame_asset_id=src.frame_asset_id,
-                        clip_id=src.clip_id, derived_from=src.id)
+                        clip_id=src.clip_id, derived_from=src.id, recipe=src.recipe.model_copy(deep=True) if src.recipe else None)   # RC0: the plan and its history carry over
         s = cur.model_copy(update={"versions": [*cur.versions, v], "current": v.id, "revision": cur.revision + 1, "updated_at": utc_now()})
         check_shot(s)
         self.save_shot(s)
@@ -670,6 +672,41 @@ class _ShotMixin:
         self.save_shot(s)
         return s
 
+    def record_run(self, sid: str, vid: str, recipe: dict[str, Any], *, outputs: list[str], job_id: str | None, seconds: float | None,
+                   stage_id: str | None = None, stage_revision: int | None = None) -> Shot | None:
+        """RC0 (D96): a job's run on the version's step for it — the resolved recipe, its stamps, its outputs and its wall time. None when the
+        version is final or no step takes the job's kind (nothing recorded)."""
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        where = step_of(recipe, v.frame_asset_id)
+        if v.state != "open" or where is None:
+            return None
+        stamps = stamps_for(recipe, frame_asset_id=v.frame_asset_id, stage_id=stage_id, stage_revision=stage_revision, story=self)
+        run = RecipeRun(job_id=job_id, kind=str(recipe.get("kind") or "?"), settings=recipe, stamps=stamps, outputs=outputs,
+                        seconds=round(seconds, 1) if seconds is not None else None)
+        r = add_run(v.recipe, default_template(v.stage_id), where[0], where[1], run)
+        versions = [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in cur.versions]
+        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_shot(s)
+        return s
+
+    def set_template(self, sid: str, vid: str, template: str) -> Shot:
+        """RC0: the version's recipe follows another template (its runs stay)."""
+        from .shot_recipe import TEMPLATES
+        if template not in TEMPLATES:
+            raise ValueError(f"no recipe template {template!r}")
+        cur = self.shot(sid)
+        if cur is None:
+            raise KeyError(sid)
+        v = cur.version(vid)
+        r = (v.recipe or ShotRecipe()).model_copy(update={"template": template})
+        versions = [x.model_copy(update={"recipe": r}) if x.id == vid else x for x in cur.versions]
+        s = cur.model_copy(update={"versions": versions, "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_shot(s)
+        return s
+
     def finalize_shot(self, sid: str, vid: str, clip_size: tuple[int, int] | None, fmt: tuple[int, int]) -> Shot:
         cur = self.shot(sid)
         if cur is None:
@@ -692,14 +729,20 @@ class _ShotMixin:
         p.unlink()
         return True
 
-    def record_stage_result(self, stage_id: str, camera_id: str, kind: str, ref_id: str, stage_revision: int | None) -> list[Shot]:
+    def record_stage_result(self, stage_id: str, camera_id: str, kind: str, ref_id: str, stage_revision: int | None,
+                            run: dict[str, Any] | None = None, skip: str | None = None) -> list[Shot]:
         """A stage camera's result (ST3's frame, ST4's clip) becomes a take of every shot whose current open version points at that
-        camera — and its frame / clip when that slot is still empty (17 §3c: ST4's "Story L3 link")."""
+        camera — and its frame / clip when that slot is still empty (17 §3c: ST4's "Story L3 link"). RC0: with `run` ({recipe, job_id,
+        seconds}), the job is recorded on the version's recipe too."""
         out = []
         for s in self.shots():
             v = s.version()
-            if v.state == "open" and v.stage_id == stage_id and v.camera_id == camera_id:
-                out.append(self.add_take(s.id, v.id, kind, ref_id, use=None, stage_revision=stage_revision))
+            if v.state == "open" and v.stage_id == stage_id and v.camera_id == camera_id and s.id != skip:   # skip: the shot the job was made for records it itself
+                s = self.add_take(s.id, v.id, kind, ref_id, use=None, stage_revision=stage_revision)
+                if run is not None:
+                    s = self.record_run(s.id, v.id, run["recipe"], outputs=[ref_id], job_id=run.get("job_id"), seconds=run.get("seconds"),
+                                        stage_id=stage_id, stage_revision=stage_revision) or s
+                out.append(s)
         return out
 
 

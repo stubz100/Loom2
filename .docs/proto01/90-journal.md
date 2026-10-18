@@ -5540,3 +5540,50 @@ one GPU job at a time, as D97 requires.
 - **D98 itself is unchanged** until the author answers.
 
 **AN1 closes on the rig** in the configuration CN4 was accepted in. The Stage paths pass their bars.
+
+## 2026-10-18 20:01 — RC0 · the recipe record, its staleness and *Run stale* (D96, 05 §4)
+
+The recipe record comes with Animate (07 phase 1). The details are in 05 §4 *As built*.
+
+- **The record.** A shot version gains a `recipe` (`orchestrator/loom2/shot_recipe.py`): a template plus steps; each step keeps its
+  last six runs.
+  - **A run** holds the resolved recipe, the stamps, the outputs (the takes), the job id and the wall time.
+  - **Recorded when a job made for the version finishes:** a For-chip frame or clip, a stage camera's still or clip, a lip-sync take.
+  - **The steps today:** `frame`, `clip` (it reads `frame` when it started from the version's frame) and `lipsync`.
+  - **A new version copies the recipe.**
+- **The stamps** are what a run read that can change after it: a stage's revision, a mentioned group's revision, a Cast version's sheet
+  fingerprint, the world style's fragment, and the frame a clip started from.
+- **Staleness is computed on request** (`GET /story/shots/{sid}/recipe`):
+  - the run that counts is the one whose output the version uses (else the last), so trying takes never makes a step stale;
+  - a step after a stale one is stale ("after start still");
+  - the reasons are in words: "the stage moved on (revision 3 → 5)", "the references of @Mara changed", "Mara v1's sheet changed",
+    "the frame changed".
+- **The templates** (`GET /story/recipe-templates`, `PUT …/template`): Image to video, From the stage, Clay one / two characters, and
+  Dialogue with voice. The clay steps are listed as *planned*, each with the wave that makes it runnable; a template hides nothing.
+- **The coverage of 05 §3 as a test.** Every important part of the frame, stage still and clip steps is a field of the typed recipe;
+  the settings audit (D60) already proves each field reaches the compiler.
+- ***Run stale*** (`POST …/run-stale`; `dry` gives the plan):
+  - the plan and its cost go into a confirm;
+  - a stage still gets fresh passes from the client, rendered headless when the stage is off screen (AN1 step 5's engine);
+  - the stale steps queue in order, re-run with their seeds, mentions resolved against today's groups and sheets, and a clip started from
+    the new frame;
+  - their results become the version's frame and clip; the steps after them follow as each finishes (`chain`);
+  - a depth-guided clip or an edit is left to the author by hand.
+- **The UI.** The recipe list (state dots, reasons, cost, template picker, ↻ and *Run stale steps…*) sits in Story's shot Inspector and
+  under Animate's For chip. A `story.changed` event for the shot refetches it. The commands are `story.shot.runStale` (Inspector and the
+  shot's right-click menu) and `anim.for.runStale` (panel).
+- **One fix on the way:** a stage still made *for* a shot was recorded twice, through the camera match and the For origin. The camera
+  match now skips that shot.
+
+**Tests:**
+
+- Offline: 425 under full and open; `test_shot_recipe_rc0.py` has 8 tests, among them a lifecycle in which a changed reference group
+  makes the frame and clip stale, and *Run stale* makes the frame again, then the clip from it by itself, after which both are fresh.
+- e2e: 40/40 under full and open. The shot scenario now checks the recipe after the stage's still, then moves the stage on: the still
+  shows stale with the reason, the confirm names the passes, and the passes render headless in Story. The new still arrives and the
+  step is fresh again.
+- Vitest 341 (the command audit caught `story.shot.runStale` missing from the shot's menu); lint 75; build and audits clean.
+- No rig run: the jobs are the existing recipes, resubmitted.
+
+**Next in 07:** phase 1 is done (UX0, IM1, AN1, RC0). Phase 2 is CA0 (animation references and the body on the Cast sheet) and CA1
+(the motion library).

@@ -2100,6 +2100,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/recipe-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recipe Templates
+         * @description RC0 (D96, 05 §3): the shot recipe templates — every step named, the clay pipeline's with the wave that makes them runnable.
+         */
+        get: operations["recipe_templates_story_recipe_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots": {
         parameters: {
             query?: never;
@@ -2135,6 +2155,27 @@ export interface paths {
         head?: never;
         /** Shot Patch */
         patch: operations["shot_patch_story_shots__sid__patch"];
+        trace?: never;
+    };
+    "/story/shots/{sid}/recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shot Recipe
+         * @description RC0 (D96, 05 §4): a shot version's recipe — its steps in the template's order, each fresh, stale (with the reasons), missing or
+         *     planned, with the last run's cost; a step after a stale one is stale.
+         */
+        get: operations["shot_recipe_story_shots__sid__recipe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/story/shots/{sid}/versions": {
@@ -2195,6 +2236,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/shots/{sid}/versions/{vid}/run-stale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shot Run Stale
+         * @description RC0 (D96, 05 §4): *Run stale* — the stale steps in dependency order with their cost; the first ones queued now (their results
+         *     become the version's frame / clip), the server steps after them queued as each finishes. A stage still needs its passes (the client
+         *     renders them and sends them); a stage-guided clip and an edit are made again by hand.
+         */
+        post: operations["shot_run_stale_story_shots__sid__versions__vid__run_stale_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/shots/{sid}/versions/{vid}/take": {
         parameters: {
             query?: never;
@@ -2209,6 +2272,23 @@ export interface paths {
          * @description Record a take (an image or a clip) on an open version; `use` makes it the frame / clip.
          */
         post: operations["shot_take_story_shots__sid__versions__vid__take_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/story/shots/{sid}/versions/{vid}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Shot Template */
+        put: operations["shot_template_story_shots__sid__versions__vid__template_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5979,6 +6059,26 @@ export interface components {
             /** W */
             w: number;
         };
+        /** PlanStep */
+        PlanStep: {
+            /** After */
+            after: string[];
+            /**
+             * How
+             * @enum {string}
+             */
+            how: "server" | "passes" | "stage" | "manual";
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string | null;
+            /** Label */
+            label: string;
+            /** Reasons */
+            reasons: string[];
+            /** Seconds */
+            seconds: number | null;
+        };
         /** Pose */
         Pose: {
             /** Joints */
@@ -6416,6 +6516,13 @@ export interface components {
              */
             type: "queue.state";
         };
+        /** QueuedStep */
+        QueuedStep: {
+            /** Job Ids */
+            job_ids: string[];
+            /** Step */
+            step: string;
+        };
         /** RasterLayer */
         RasterLayer: {
             /**
@@ -6555,6 +6662,88 @@ export interface components {
             recipe: {
                 [key: string]: unknown;
             };
+        };
+        /** RecipeOut */
+        RecipeOut: {
+            /** Label */
+            label: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Stale */
+            stale: number;
+            /** Stale Seconds */
+            stale_seconds: number;
+            /** Steps */
+            steps: components["schemas"]["RecipeStepOut"][];
+            /** Template */
+            template: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * RecipeRun
+         * @description One job's contribution to a step: what it ran with, what it read (stamps) and what it made.
+         */
+        RecipeRun: {
+            /** At */
+            at: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Kind */
+            kind: string;
+            /** Outputs */
+            outputs: string[];
+            /** Seconds */
+            seconds: number | null;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Stamps */
+            stamps: {
+                [key: string]: unknown;
+            };
+        };
+        /** RecipeStep */
+        RecipeStep: {
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: string[];
+            /** Runs */
+            runs: components["schemas"]["RecipeRun"][];
+        };
+        /** RecipeStepOut */
+        RecipeStepOut: {
+            /** At */
+            at: string | null;
+            /** Experimental */
+            experimental: boolean;
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: string[];
+            /** Job Id */
+            job_id: string | null;
+            /** Kind */
+            kind: string | null;
+            /** Label */
+            label: string;
+            /** Outputs */
+            outputs: string[];
+            /** Reasons */
+            reasons: string[];
+            /** Runs */
+            runs: number;
+            /** Seconds */
+            seconds: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "fresh" | "stale" | "missing" | "planned";
+            /** Wave */
+            wave: string | null;
         };
         /** Recipes */
         Recipes: {
@@ -6775,6 +6964,31 @@ export interface components {
         Restored: {
             /** Restored */
             restored: string[];
+        };
+        /** RunStaleBody */
+        RunStaleBody: {
+            /**
+             * Dry
+             * @default false
+             */
+            dry?: boolean;
+            /** Passes */
+            passes?: {
+                [key: string]: string;
+            } | null;
+        };
+        /** RunStaleOut */
+        RunStaleOut: {
+            /** Elsewhere */
+            elsewhere: string[];
+            /** Plan */
+            plan: components["schemas"]["PlanStep"][];
+            /** Queued */
+            queued: components["schemas"]["QueuedStep"][];
+            /** Seconds */
+            seconds: number;
+            /** Then */
+            then: string[];
         };
         /**
          * SampleModelCaps
@@ -7106,6 +7320,13 @@ export interface components {
             /** Items */
             items: components["schemas"]["Shot"][];
         };
+        /** ShotRecipe */
+        ShotRecipe: {
+            /** Steps */
+            steps: components["schemas"]["RecipeStep"][];
+            /** Template */
+            template: string | null;
+        };
         /**
          * ShotTake
          * @description Something tried for a shot version: an image (a stage-shot result, a Catalogue image) or a clip; the version picks one of each.
@@ -7142,6 +7363,7 @@ export interface components {
             frame_asset_id: string | null;
             /** Id */
             id: string;
+            recipe: components["schemas"]["ShotRecipe"] | null;
             /** Stage Id */
             stage_id: string | null;
             /** Stage Revision */
@@ -7898,6 +8120,38 @@ export interface components {
             name: string;
         } & {
             [key: string]: unknown;
+        };
+        /** Template */
+        Template: {
+            /** Hint */
+            hint: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Steps */
+            steps: components["schemas"]["TemplateStep"][];
+        };
+        /** TemplateBody */
+        TemplateBody: {
+            /** Template */
+            template: string;
+        };
+        /** TemplateStep */
+        TemplateStep: {
+            /**
+             * Experimental
+             * @default false
+             */
+            experimental?: boolean;
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs?: string[];
+            /** Label */
+            label: string;
+            /** Wave */
+            wave?: string | null;
         };
         /** Timeline */
         Timeline: {
@@ -12873,6 +13127,26 @@ export interface operations {
             };
         };
     };
+    recipe_templates_story_recipe_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Template"][];
+                };
+            };
+        };
+    };
     shots_list_story_shots_get: {
         parameters: {
             query?: never;
@@ -13025,6 +13299,39 @@ export interface operations {
             };
         };
     };
+    shot_recipe_story_shots__sid__recipe_get: {
+        parameters: {
+            query?: {
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     shot_new_version_story_shots__sid__versions_post: {
         parameters: {
             query?: never;
@@ -13124,6 +13431,42 @@ export interface operations {
             };
         };
     };
+    shot_run_stale_story_shots__sid__versions__vid__run_stale_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunStaleBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunStaleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     shot_take_story_shots__sid__versions__vid__take_post: {
         parameters: {
             query?: never;
@@ -13137,6 +13480,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TakeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shot_template_story_shots__sid__versions__vid__template_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateBody"];
             };
         };
         responses: {

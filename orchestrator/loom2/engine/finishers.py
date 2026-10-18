@@ -26,6 +26,7 @@ from ..documents import GroupLayer, RasterLayer
 from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mask_from_engine, plan_region
 from ..fsio import StateError, new_id
 from ..models import registry
+from ..origin import JobOrigin
 from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..story import FOR_SHOT
@@ -94,13 +95,15 @@ class AssetFinisher:
             q.hub.broadcast("asset.updated", assets[i].model_dump())
         job.result["asset_ids"] = [a.id for a in assets]
         if isinstance(recipe, StageShot) and assets:                                            # 17 §3c: the frame of every shot pointing at this camera
-            await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id)
+            mine = job.origin.payload.get("shot_id") if job.origin and job.origin.surface == FOR_SHOT and job.origin.payload else None
+            await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id, _run(job, recipe, q), mine)
         if assets and job.origin and job.origin.surface == "lora_check":                        # 18 §3h (LT3): FaceSim against the hero, the record grows
             await asyncio.to_thread(_lora_check_result, q, job.origin.payload or {}, assets[0].id)
         if assets and job.origin and job.origin.surface == preset_icons.SURFACE:              # D90 (02 §6.3): the swatch pack, in app state
             await _swatch_result(job, assets[0], compiled.summary.get("model_id", getattr(recipe, "model_id", None)), q)
         if assets and job.origin and job.origin.surface == FOR_SHOT:                         # D90 (02 §5): made for a shot version → its takes
-            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "image", [a.id for a in assets], None)
+            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "image", [a.id for a in assets], _use(job.origin.payload), _run(job, recipe, q))
+            await _chain(q, job.origin.payload or {})                                           # RC0: Run stale goes on with the steps after it
         panel = (job.origin.payload or {}).get("saved_panel") if job.origin else None       # D92: made from an applied saved panel → its picture
         if assets and isinstance(panel, str) and panel:
             await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
@@ -273,11 +276,12 @@ class ClipFinisher:
                                        "origin": job.origin.model_dump() if job.origin else None})
         cam = (job.origin.payload or {}).get("camera_id") if job.origin else None
         if from_stage and recipe.guide and job.origin and job.origin.ref and isinstance(cam, str):      # 17 §3c: the clip of every shot pointing at this camera
-            await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id)
+            await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id, _run(job, recipe, q))
         if job.origin and job.origin.surface == "lipsync" and job.origin.ref:   # D88 XL: a take on the shot version
-            await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False)
+            await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False, _run(job, recipe, q))
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
-            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "clip", [rec.id], None)
+            await asyncio.to_thread(_shot_takes, q, job.origin.payload or {}, "clip", [rec.id], _use(job.origin.payload), _run(job, recipe, q))
+            await _chain(q, job.origin.payload or {})
         if facesim.available(q.app.settings.models_root):             # advisory, off the job's critical path
             q.side(identity_task(q, rec.id))
 
@@ -340,7 +344,48 @@ def _lora_check_result(q: JobQueue, payload: dict, asset_id: str) -> None:
         q.hub.broadcast("lora.changed", {"id": str(payload.get("lora_id") or ""), "profile_id": None, "version": None, "error": str(e)})
 
 
-def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool | None) -> None:
+def _run(job: JobRecord, recipe: Any, q: JobQueue) -> dict[str, Any]:
+    """RC0 (D96): what a shot's recipe records of a finished job — the resolved recipe it ran, its id and its wall time."""
+    return {"recipe": recipe.model_dump(), "job_id": job.id, "seconds": q.wall_s()}
+
+
+def _use(payload: dict | None) -> bool | None:
+    """RC0: a Run stale job's result replaces the version's frame / clip (`use: true`); a For-chip job fills an empty slot only."""
+    return True if (payload or {}).get("use") is True else None
+
+
+async def _chain(q: JobQueue, payload: dict) -> None:
+    """RC0 (D96, 05 §4): after a Run stale job, the steps of its plan that waited for it and run on the server are queued (one job at a time
+    as always, D97). Never the job's failure: a plan that cannot go on is said on the shot's event."""
+    chain = [c for c in payload.get("chain") or [] if isinstance(c, str)]
+    if not chain:
+        return
+    from ..stages import StageStore
+    from ..shot_recipe import StampReader, rerun_recipe, stale_plan, used_run
+    from ..story import StoryStore, for_shot_target
+    t = for_shot_target(payload)
+    if t is None:
+        return
+    try:
+        store = StoryStore(q.ws)
+        s = await asyncio.to_thread(store.shot, t[0])
+        v = s.version(t[1]) if s else None
+        if v is None or v.state != "open" or v.recipe is None:
+            return
+        plan = await asyncio.to_thread(stale_plan, v, StampReader(stages=StageStore(q.ws), groups=q.groups, story=store))
+        ready = [p for p in plan if p["id"] in chain and not p["after"] and p["how"] == "server"]
+        rest = [c for c in chain if c not in {p["id"] for p in ready}]
+        for p in ready:
+            run = used_run(v.recipe.step(p["id"]), v)
+            if run is None:
+                continue
+            q.submit(rerun_recipe(run, v), origin=JobOrigin(suite="animate", surface=FOR_SHOT, ref=None, payload={**payload, "chain": rest}))
+        await q.flush()
+    except Exception as e:                                                                      # noqa: BLE001 — never the job's failure
+        q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0], "revision": 0, "error": f"Run stale stopped: {e}"})
+
+
+def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool | None, run: dict[str, Any] | None = None) -> None:
     """Results recorded as takes of a shot version (payload {shot_id, version}): D88 XL's talking clip with `use=False` (never the version's
     clip until the author picks it); D90 (02 §5) a frame or clip made for the shot with `use=None` (it fills an empty slot, as a stage
     camera's result does). Never the job's failure: a version finalized meanwhile, or a shot deleted, leaves the results in the Catalogue."""
@@ -352,6 +397,8 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         store = StoryStore(q.ws)
         for ref in ids:
             s = store.add_take(t[0], t[1], kind, ref, use=use)
+        if run is not None:                                                                     # RC0: the job, as a run of the version's step
+            s = store.record_run(t[0], t[1], run["recipe"], outputs=ids, job_id=run.get("job_id"), seconds=run.get("seconds")) or s
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
@@ -367,13 +414,13 @@ def _panel_thumb(q: JobQueue, name: str, asset_id: str) -> None:
         q.hub.broadcast("story.changed", {"kind": "panels", "revision": 0, "error": str(e)})
 
 
-def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str) -> None:
+def _stage_result(q: JobQueue, stage_id: str, camera_id: str, kind: str, ref_id: str, run: dict[str, Any] | None = None, skip: str | None = None) -> None:
     """17 §3c: a stage camera's frame or clip is recorded as a take of the shots that point at the camera (their slot filled when empty)."""
     from ..stages import StageStore
     from ..story import StoryStore
     try:
         st = StageStore(q.ws).get(stage_id)
-        for s in StoryStore(q.ws).record_stage_result(stage_id, camera_id, kind, ref_id, st.revision if st else None):
+        for s in StoryStore(q.ws).record_stage_result(stage_id, camera_id, kind, ref_id, st.revision if st else None, run, skip):
             q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": None, "revision": 0, "error": str(e)})

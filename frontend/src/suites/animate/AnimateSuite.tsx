@@ -18,6 +18,7 @@ import { askText, useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
 import { ForChip } from '../story/ForChip'
+import { ForRecipe } from '../story/RecipeSteps'
 import { useColumnSync } from '../../frame/columnSync'
 import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
 import { useAnimRoute } from './routeStore'
@@ -297,7 +298,7 @@ function AnimateColumnBody({ tab }: { tab: string }) {
   }, [level])
   return (
     <div ref={host} className="col-column anim-column">
-      <Sec id="shot" title="Shot"><ForChip maker="animate" /><StageList /></Sec>
+      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" /><StageList /></Sec>
       <Sec id="scene" title="Scene"><LibraryAdd /><OutlinerTab /><PassesRow /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>

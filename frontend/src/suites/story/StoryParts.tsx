@@ -18,6 +18,7 @@ import { coverageGrid, readiness, rowsCovered } from './coverage'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
+import { RecipeSteps } from './RecipeSteps'
 import { StyleEditor, StyleGrid } from './StyleWorld'
 import { EntryEditor, LibraryGrid, PanelEditor, PanelGrid } from './LibraryWorld'
 import { useLibrary } from './libraryStore'
@@ -730,6 +731,7 @@ function ShotInspector() {
         <span>versions</span><span>{s.versions.length}</span>
       </div>
       {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
+      {v && <RecipeSteps shotId={s.id} version={v.id} editable={v.state === 'open'} run="story.shot.runStale" />}{/* RC0 (D96) */}
       {v && v.state === 'open' && <LipsyncBlock v={v} ownerNode={s.owner_node ?? null} />}
       <div className="verbs"><CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
     </div>

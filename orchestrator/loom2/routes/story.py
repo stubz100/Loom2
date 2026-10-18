@@ -19,7 +19,8 @@ from ..loras import LoraRegistry, publish, unpublish
 from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
-from ..story import NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
+from ..story import FOR_SHOT, NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -635,6 +636,137 @@ async def shot_take(svc: Svc, sid: str, vid: str, body: TakeBody):
         raise HTTPException(422, str(e))
     _shot_changed(svc, s)
     return s.model_dump()
+
+
+class RecipeStepOut(BaseModel):
+    id: str
+    label: str
+    inputs: list[str]
+    state: Literal["fresh", "stale", "missing", "planned"]
+    reasons: list[str]
+    wave: str | None
+    experimental: bool
+    runs: int
+    kind: str | None
+    seconds: float | None
+    job_id: str | None
+    outputs: list[str]
+    at: str | None
+
+
+class RecipeOut(BaseModel):
+    shot_id: str
+    version: str
+    template: str
+    label: str
+    steps: list[RecipeStepOut]
+    stale: int
+    stale_seconds: float
+
+
+class TemplateBody(BaseModel):
+    template: str
+
+
+class PlanStep(BaseModel):
+    id: str
+    label: str
+    how: Literal["server", "passes", "stage", "manual"]
+    kind: str | None
+    seconds: float | None
+    after: list[str]
+    reasons: list[str]
+
+
+class RunStaleBody(BaseModel):
+    dry: bool = False                             # the plan and its cost only (the confirm shows it)
+    passes: dict[str, str] | None = None          # a stage still's fresh passes (the client rendered them; `how: passes`)
+
+
+class QueuedStep(BaseModel):
+    step: str
+    job_ids: list[str]
+
+
+class RunStaleOut(BaseModel):
+    plan: list[PlanStep]
+    queued: list[QueuedStep]
+    then: list[str]                               # queued by the server when the steps before them finish
+    elsewhere: list[str]                          # made again by hand: a stage-guided clip (Animate · Clay), an edit (Image · Edit)
+    seconds: float
+
+
+@router.get("/story/recipe-templates", response_model=list[Template])
+async def recipe_templates():
+    """RC0 (D96, 05 §3): the shot recipe templates — every step named, the clay pipeline's with the wave that makes them runnable."""
+    return [t.model_dump() for t in TEMPLATES.values()]
+
+
+@router.get("/story/shots/{sid}/recipe", response_model=RecipeOut)
+async def shot_recipe(svc: Svc, sid: str, version: str | None = None):
+    """RC0 (D96, 05 §4): a shot version's recipe — its steps in the template's order, each fresh, stale (with the reasons), missing or
+    planned, with the last run's cost; a step after a stale one is stale."""
+    ws, _, _ = svc.require_project()
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(version)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    reader = StampReader(stages=StageStore(ws), groups=svc.groups, story=store)
+    out = await asyncio.to_thread(recipe_state, v, reader)
+    return {"shot_id": s.id, "version": v.id, **out}
+
+
+@router.put("/story/shots/{sid}/versions/{vid}/template", response_model=Shot)
+async def shot_template(svc: Svc, sid: str, vid: str, body: TemplateBody):
+    ws, _, _ = svc.require_project()
+    try:
+        s = await asyncio.to_thread(StoryStore(ws).set_template, sid, vid, body.template)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _shot_changed(svc, s)
+    return s.model_dump()
+
+
+@router.post("/story/shots/{sid}/versions/{vid}/run-stale", response_model=RunStaleOut)
+async def shot_run_stale(svc: Svc, sid: str, vid: str, body: RunStaleBody):
+    """RC0 (D96, 05 §4): *Run stale* — the stale steps in dependency order with their cost; the first ones queued now (their results
+    become the version's frame / clip), the server steps after them queued as each finishes. A stage still needs its passes (the client
+    renders them and sends them); a stage-guided clip and an edit are made again by hand."""
+    ws, _, q = svc.require_project()
+    store = StoryStore(ws)
+    s = await asyncio.to_thread(store.shot, sid)
+    if s is None:
+        raise HTTPException(404, "shot not found")
+    try:
+        v = s.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    if v.state != "open":
+        raise HTTPException(422, f"{s.name} {v.id} is final — make a new version to run it again")
+    plan = await asyncio.to_thread(stale_plan, v, StampReader(stages=StageStore(ws), groups=svc.groups, story=store))
+    total = round(sum(p["seconds"] or 0 for p in plan), 1)
+    elsewhere = [p["id"] for p in plan if p["how"] in ("stage", "manual")]
+    first = [p for p in plan if not p["after"] and (p["how"] == "server" or (p["how"] == "passes" and body.passes))]
+    then = [p["id"] for p in plan if p not in first and p["how"] == "server"]
+    if body.dry or not first:
+        return {"plan": plan, "queued": [], "then": then if first else [], "elsewhere": elsewhere, "seconds": total}
+    queued = []
+    try:
+        for p in first:
+            run = used_run(v.recipe.step(p["id"]), v)
+            recipe = rerun_recipe(run, v, body.passes if p["how"] == "passes" else None)
+            jobs = q.submit(recipe, origin=JobOrigin(suite="animate", surface=FOR_SHOT, ref=None, payload={"shot_id": s.id, "version": v.id, "use": True, "chain": then}))
+            queued.append({"step": p["id"], "job_ids": [j.id for j in jobs]})
+    except ValueError as e:
+        raise HTTPException(422, f"Run stale: {e}")
+    await q.flush()
+    return {"plan": plan, "queued": queued, "then": then, "elsewhere": elsewhere, "seconds": total}
 
 
 @router.post("/story/shots/{sid}/versions/{vid}/finalize", response_model=Shot)

@@ -946,6 +946,20 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()
   await expect(page.locator('.shot-board .shot-player img')).toBeVisible()
   await expect(page.locator('.shot-board .take-card.current')).toHaveCount(1)
+  await expect(page.locator('[data-testid="recipe"] .rs.fresh', { hasText: 'Start still' })).toBeVisible()   // RC0 (D96): the stage's still is a run of the recipe's frame step
+  await expect(page.locator('[data-testid="recipe"] .rs.missing', { hasText: 'Performance' })).toBeVisible()
+  // RC0: the stage moves on → the still is stale; Run stale asks with the plan, renders the passes here (the stage is not on screen) and makes it again
+  const stg0 = await api<{ id: string }>('GET', `/stages/${shot.versions[0].stage_id}`)
+  await api('PUT', `/stages/${stg0.id}`, stg0)
+  await page.locator('[data-testid="recipe"] button[aria-label="check the recipe again"]').click()
+  await expect(page.locator('[data-testid="recipe"] .rs.stale', { hasText: 'Start still' })).toContainText(/the stage moved on/)
+  const firstFrame = (await shotOf()).versions[0].frame_asset_id
+  await page.locator('[data-testid="recipe"] button', { hasText: /^Run stale/ }).click()
+  await expect(dialog).toContainText(/Run the stale steps again/)
+  await expect(dialog).toContainText(/the stage's passes are rendered first/)
+  await dialog.locator('button.primary').click()
+  await expect.poll(async () => (await shotOf()).versions[0].frame_asset_id, { timeout: 60_000 }).not.toBe(firstFrame)
+  await expect(page.locator('[data-testid="recipe"] .rs.fresh', { hasText: 'Start still' })).toBeVisible({ timeout: 15_000 })
   // Animate: a draft clip (the fake engine, nine frames) opened in the player → a second shot; its draft size is refused by the gate, with the reason
   const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
   const start = (await shotOf()).versions[0].frame_asset_id!

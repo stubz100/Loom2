@@ -143,6 +143,42 @@ The selection is shared: a step selected in the graph opens its section in Anima
 fields (title, lines, place, speaker versions, board, colour); the shot keeps its versions. A migration joins each bound node with its
 shot (sole ownership already pairs them, loom R146), and unbound shots become Shot nodes outside any route.
 
+**As built (RC0 step 1, 2026-10-18; `orchestrator/loom2/shot_recipe.py`):**
+
+- **A step keeps its runs, not one result.** Each job made for a version appends a *run* to its step: the resolved recipe (`settings`),
+  its `stamps`, its `outputs` (the takes), its wall time and job id. The last six are kept per step.
+- **The run that counts is the one whose output the version uses** (its frame, its clip). With none used, the last run counts. So trying
+  takes never makes a step stale; changing what the used take read does.
+- **The stamps** are what a run read that can change after it:
+  - `stage:<id>`, the stage's revision;
+  - `group:<id>`, a mentioned reference group's revision;
+  - `sheet:<profile>:<version>`, a fingerprint of the Cast version's sheet, hero and LoRA;
+  - `style:<id>`, the world style's fragment;
+  - `frame`, the frame a clip started from.
+
+  Assets are immutable and need no stamp. A manual take (*Use as the frame*) is not a run.
+- **The steps today** are `frame` (t2i, i2i, inpaint, reangle, stage still, upscale), `clip` (i2v; it reads `frame` when it started
+  from the version's frame) and `lipsync` (i2v with audio).
+- **The clay templates list their steps as *planned*,** each with the wave that makes it runnable, so a template shows every step and
+  hides none.
+- **The API:**
+  - `GET /story/shots/{sid}/recipe` returns the state, computed on request (nothing stored);
+  - `GET /story/recipe-templates` lists the templates;
+  - `PUT …/versions/{vid}/template` sets a version's template.
+- **A new version copies the recipe** (the plan and its history).
+- **The coverage of §3** is `shot_recipe.COVERAGE`. A test proves each part is a field of the typed recipe, and D60's settings audit
+  proves each field reaches the compiler.
+- ***Run stale*** (`POST …/versions/{vid}/run-stale`, `dry` for the plan):
+  - The stale steps in order, each with how it runs again:
+    - `server` resubmits the counted run's recipe;
+    - `passes` is a stage still: the client renders fresh passes, headless when the stage is not on screen;
+    - `stage` (a depth-guided clip) and `manual` (an edit) are made again by hand.
+  - The confirm shows the plan, each step's last cost and why it is stale.
+  - **Re-runs keep the seeds.** Mentions are unstamped, so they resolve against today's groups and sheets (version pins stay); the style
+    is re-read; a clip starts from the version's frame of now.
+  - **The results replace the version's frame and clip** (`use: true`); the old takes stay.
+  - **The server queues the steps after a step** (`chain`) as each finishes, one job at a time (D97).
+
 ## 5. How the suites fit
 
 | Suite | Role |

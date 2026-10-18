@@ -8955,6 +8955,75 @@
         "title": "PixelsPut",
         "type": "object"
       },
+      "PlanStep": {
+        "properties": {
+          "after": {
+            "items": {
+              "type": "string"
+            },
+            "title": "After",
+            "type": "array"
+          },
+          "how": {
+            "enum": [
+              "server",
+              "passes",
+              "stage",
+              "manual"
+            ],
+            "title": "How",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "how",
+          "kind",
+          "seconds",
+          "after",
+          "reasons"
+        ],
+        "title": "PlanStep",
+        "type": "object"
+      },
       "Pose": {
         "properties": {
           "joints": {
@@ -10053,6 +10122,27 @@
         "title": "QueueStateEvent",
         "type": "object"
       },
+      "QueuedStep": {
+        "properties": {
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "job_ids"
+        ],
+        "title": "QueuedStep",
+        "type": "object"
+      },
       "RasterLayer": {
         "properties": {
           "blend": {
@@ -10363,6 +10453,267 @@
           "recipe"
         ],
         "title": "RecipeBody",
+        "type": "object"
+      },
+      "RecipeOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "integer"
+          },
+          "stale_seconds": {
+            "title": "Stale Seconds",
+            "type": "number"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "version",
+          "template",
+          "label",
+          "steps",
+          "stale",
+          "stale_seconds"
+        ],
+        "title": "RecipeOut",
+        "type": "object"
+      },
+      "RecipeRun": {
+        "description": "One job's contribution to a step: what it ran with, what it read (stamps) and what it made.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "stamps": {
+            "additionalProperties": true,
+            "title": "Stamps",
+            "type": "object"
+          }
+        },
+        "required": [
+          "job_id",
+          "kind",
+          "settings",
+          "stamps",
+          "outputs",
+          "seconds",
+          "at"
+        ],
+        "title": "RecipeRun",
+        "type": "object"
+      },
+      "RecipeStep": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "inputs",
+          "runs"
+        ],
+        "title": "RecipeStep",
+        "type": "object"
+      },
+      "RecipeStepOut": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "experimental": {
+            "title": "Experimental",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "state": {
+            "enum": [
+              "fresh",
+              "stale",
+              "missing",
+              "planned"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "wave": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "inputs",
+          "state",
+          "reasons",
+          "wave",
+          "experimental",
+          "runs",
+          "kind",
+          "seconds",
+          "job_id",
+          "outputs",
+          "at"
+        ],
+        "title": "RecipeStepOut",
         "type": "object"
       },
       "Recipes": {
@@ -10864,6 +11215,76 @@
           "restored"
         ],
         "title": "Restored",
+        "type": "object"
+      },
+      "RunStaleBody": {
+        "properties": {
+          "dry": {
+            "default": false,
+            "title": "Dry",
+            "type": "boolean"
+          },
+          "passes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passes"
+          }
+        },
+        "title": "RunStaleBody",
+        "type": "object"
+      },
+      "RunStaleOut": {
+        "properties": {
+          "elsewhere": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Elsewhere",
+            "type": "array"
+          },
+          "plan": {
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            },
+            "title": "Plan",
+            "type": "array"
+          },
+          "queued": {
+            "items": {
+              "$ref": "#/components/schemas/QueuedStep"
+            },
+            "title": "Queued",
+            "type": "array"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "then": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Then",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan",
+          "queued",
+          "then",
+          "elsewhere",
+          "seconds"
+        ],
+        "title": "RunStaleOut",
         "type": "object"
       },
       "SampleModelCaps": {
@@ -11556,6 +11977,34 @@
         "title": "ShotList",
         "type": "object"
       },
+      "ShotRecipe": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          }
+        },
+        "required": [
+          "template",
+          "steps"
+        ],
+        "title": "ShotRecipe",
+        "type": "object"
+      },
       "ShotTake": {
         "description": "Something tried for a shot version: an image (a stage-shot result, a Catalogue image) or a clip; the version picks one of each.",
         "properties": {
@@ -11650,6 +12099,16 @@
             "title": "Id",
             "type": "string"
           },
+          "recipe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotRecipe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "stage_id": {
             "anyOf": [
               {
@@ -11700,7 +12159,8 @@
           "takes",
           "derived_from",
           "created_at",
-          "finalized_at"
+          "finalized_at",
+          "recipe"
         ],
         "title": "ShotVersion",
         "type": "object"
@@ -13445,6 +13905,91 @@
           "default"
         ],
         "title": "TeOption",
+        "type": "object"
+      },
+      "Template": {
+        "properties": {
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "hint",
+          "steps"
+        ],
+        "title": "Template",
+        "type": "object"
+      },
+      "TemplateBody": {
+        "properties": {
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "title": "TemplateBody",
+        "type": "object"
+      },
+      "TemplateStep": {
+        "properties": {
+          "experimental": {
+            "default": false,
+            "title": "Experimental",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "wave": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "TemplateStep",
         "type": "object"
       },
       "Timeline": {
@@ -21691,6 +22236,32 @@
         ]
       }
     },
+    "/story/recipe-templates": {
+      "get": {
+        "description": "RC0 (D96, 05 §3): the shot recipe templates — every step named, the clay pipeline's with the wave that makes them runnable.",
+        "operationId": "recipe_templates_story_recipe_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Template"
+                  },
+                  "title": "Response Recipe Templates Story Recipe Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Recipe Templates",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/shots": {
       "get": {
         "operationId": "shots_list_story_shots_get",
@@ -21885,6 +22456,65 @@
         ]
       }
     },
+    "/story/shots/{sid}/recipe": {
+      "get": {
+        "description": "RC0 (D96, 05 §4): a shot version's recipe — its steps in the template's order, each fresh, stale (with the reasons), missing or\nplanned, with the last run's cost; a step after a stale one is stale.",
+        "operationId": "shot_recipe_story_shots__sid__recipe_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Recipe",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/shots/{sid}/versions": {
       "post": {
         "operationId": "shot_new_version_story_shots__sid__versions_post",
@@ -22041,6 +22671,68 @@
         ]
       }
     },
+    "/story/shots/{sid}/versions/{vid}/run-stale": {
+      "post": {
+        "description": "RC0 (D96, 05 §4): *Run stale* — the stale steps in dependency order with their cost; the first ones queued now (their results\nbecome the version's frame / clip), the server steps after them queued as each finishes. A stage still needs its passes (the client\nrenders them and sends them); a stage-guided clip and an edit are made again by hand.",
+        "operationId": "shot_run_stale_story_shots__sid__versions__vid__run_stale_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStaleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStaleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Run Stale",
+        "tags": [
+          "story"
+        ]
+      }
+    },
     "/story/shots/{sid}/versions/{vid}/take": {
       "post": {
         "description": "Record a take (an image or a clip) on an open version; `use` makes it the frame / clip.",
@@ -22098,6 +22790,67 @@
           }
         },
         "summary": "Shot Take",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/shots/{sid}/versions/{vid}/template": {
+      "put": {
+        "operationId": "shot_template_story_shots__sid__versions__vid__template_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shot Template",
         "tags": [
           "story"
         ]

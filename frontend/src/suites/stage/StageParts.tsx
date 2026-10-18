@@ -371,7 +371,6 @@ export function Strip() {
         <span className="spacer" />
         <span className="hint">{current.name} · {current.size.w}×{current.size.h}</span>
       </div>
-      <Timeline />
     </div>
   )
 }
@@ -490,7 +489,7 @@ function Viewport() {
       </div>}
       {current && view === 'camera' && rect && guides && <div className="frame-guides" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}><i className="thirds" /><i className="centre" /></div>}
       {current && view === 'camera' && <div className="view-tag">camera view · {st().activeCamera()?.name} · {st().activeCamera()?.focal_mm} mm</div>}
-      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Library, or drop a Catalogue image.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
+      {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a Catalogue image.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
     </div>
   )
 }
@@ -500,7 +499,7 @@ export function Stage() {
   const current = useStage((s) => s.current)
   if (!project?.open) return <div className="placeholder"><div><h2>Stage</h2>open or create a project to begin</div></div>
   if (!current) return <div className="placeholder"><div><h2>Stage</h2>a blocking in 3D: a set, figures, props and cameras at the project size<div className="quick-cards"><CommandButton id="stage.new" text label="New stage…" /></div></div></div>
-  return <Viewport />
+  return <div className="stage-col"><Viewport /><Timeline /></div>   // D95 (AN1): the transport under the viewer, as at the Performance level
 }
 
 // ------------------------------------------------------------------ Inspector

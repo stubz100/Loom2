@@ -358,6 +358,7 @@ export function useAnimateKeys() {
 
 function Strip() {
   const view = useAnimate((s) => s.view)
+  const filmTrack = useAnimate((s) => s.filmTrack)
   const speed = useAnimate((s) => s.speed)
   const loop = useAnimate((s) => s.loop)
   const onion = useAnimate((s) => s.onion)
@@ -366,7 +367,8 @@ function Strip() {
   return (
     <>
       <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
-      <CommandRow ids={['anim.view.player', 'anim.view.filmstrip', 'anim.view.compare']} active={`anim.view.${view}`} />
+      <CommandRow ids={['anim.view.player', 'anim.view.compare']} active={`anim.view.${view}`} />
+      <CommandButton id="anim.view.filmstrip" active={filmTrack} />
       <span className="spacer" />
       {clip && <span className="counter" style={{ fontFamily: 'var(--mono)' }}>frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)} · {clip.frames} f · {clip.w}×{clip.h} @ {clip.fps} fps</span>}
       <span className="spacer" />
@@ -523,6 +525,7 @@ function Stage() {
   const clips = useAnimate((s) => s.clips)
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   const view = useAnimate((s) => s.view)
+  const filmTrack = useAnimate((s) => s.filmTrack)
   const frame = useAnimate((s) => s.frame)
   const onion = useAnimate((s) => s.onion)
   const running = useSession((s) => Object.values(s.jobs).some((j) => j.kind === 'i2v' && j.status === 'running'))
@@ -537,9 +540,10 @@ function Stage() {
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
         {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : <>set a start frame (Shift+A on a Catalogue tile, or drop it on Performance's start slot), write the motion, Animate ▶
           {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Catalogue" /></div>}</>}</div>
-          : view === 'player' ? <Player clip={clip} frame={frame} onion={onion} /> : view === 'filmstrip' ? <Filmstrip clip={clip} /> : <Compare clip={clip} />}
+          : view === 'compare' ? <Compare clip={clip} /> : <Player clip={clip} frame={frame} onion={onion} />}
       </div>
       {clip && <Transport clip={clip} />}
+      {clip && filmTrack && <Filmstrip clip={clip} />}{/* D99 (UX0 #14): the frames as a track over the timeline */}
       {clip && <Timeline clip={clip} />}
       <Interim />
     </div>

@@ -18,6 +18,8 @@ registerCommands([
   { id: 'anim.clearStart', scope: 'animate', label: 'Clear start frame', icon: X, placement: ['panel', 'context'], when: hasStart, run: () => an().setStart(null) },
   { id: 'anim.clearEnd', scope: 'animate', label: 'Clear end frame', icon: X, placement: ['panel', 'context'], when: () => !!an().panel.end, run: () => an().setEnd(null) },
   // transport — D90 (02 §8.2): the one key set of Animate, the Stage timeline and the Episode lane; `,` `.` and Shift+, / Shift+. stay as alternates
+  // D99 (UX0 #19): the viewer levels by number — 1 goes to Clay (the stage) from here; the strip's switch is their mouse home
+  { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => useSession.getState().setSuite('stage') },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
   { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },
@@ -34,18 +36,18 @@ registerCommands([
   { id: 'anim.loop', scope: 'animate', label: 'Loop', icon: Repeat, placement: ['strip', 'context'], run: () => useAnimate.setState({ loop: !an().loop }) },
   { id: 'anim.onion', scope: 'animate', label: 'Onion skin (start / end stills at 30 %)', icon: Eye, keys: 'N', placement: ['strip', 'context'], when: hasClip, run: () => useAnimate.setState({ onion: !an().onion }) },
   { id: 'anim.view.player', scope: 'animate', label: 'Player view', icon: Film, placement: ['strip'], run: () => an().setView('player') },
-  { id: 'anim.view.filmstrip', scope: 'animate', label: 'Filmstrip view', icon: Layers, placement: ['strip'], run: () => an().setView('filmstrip') },
+  { id: 'anim.view.filmstrip', scope: 'animate', label: 'Frames track (thumbnails on the timeline)', icon: Layers, placement: ['strip'], run: () => useAnimate.setState({ filmTrack: !an().filmTrack }) },   // D99 (UX0 #14)
   { id: 'anim.view.compare', scope: 'animate', label: 'Compare view', icon: Columns2, keys: 'C', placement: ['strip', 'context'], when: hasClip, run: () => an().setView(an().view === 'compare' ? 'player' : 'compare') },
   // frames
-  { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Catalogue', icon: Download, keys: 'F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
-  { id: 'anim.extractRange', scope: 'animate', label: 'Extract range (every k-th frame between in and out)', icon: Download, keys: 'Shift+F', placement: ['inspector', 'context'], when: hasClip, run: () => void an().extractRange() },
+  { id: 'anim.extractFrame', scope: 'animate', label: 'Extract frame to the Catalogue', icon: Download, keys: 'Alt+F', placement: ['inspector', 'context', 'toolbar'], when: hasClip, run: () => void an().extract([an().frame]) },
+  { id: 'anim.extractRange', scope: 'animate', label: 'Extract range (every k-th frame between in and out)', icon: Download, keys: 'Alt+Shift+F', placement: ['inspector', 'context'], when: hasClip, run: () => void an().extractRange() },
   { id: 'anim.sendToEdit', scope: 'animate', label: 'Send frame to Edit', icon: Sparkles, keys: 'E', placement: ['inspector', 'context'], when: hasClip, run: () => void an().sendFrameToEdit() },
   { id: 'anim.extend', scope: 'animate', label: 'Extend ▶ (experimental)', icon: Clapperboard, placement: ['inspector', 'context'],
     when: () => { const c = an().clip(); return !!c && !!useSession.getState().capabilities?.experimental?.extend.models[c.model_id] },
     run: () => void extendClip() },
   { id: 'anim.useAsStart', scope: 'animate', label: 'Use frame as next start', icon: Clapperboard, placement: ['inspector', 'context'], when: hasClip, run: () => void an().useFrameAsStart() },
   // clip verbs
-  { id: 'anim.keep', scope: 'animate', label: 'Keep', icon: Check, keys: 'Shift+K', placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('keep') },
+  { id: 'anim.keep', scope: 'animate', label: 'Keep', icon: Check, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('keep') },
   { id: 'anim.reject', scope: 'animate', label: 'Reject', icon: X, keys: 'X', placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().setState('reject') },
   { id: 'anim.variations', scope: 'animate', label: 'Variations (new seeds)', icon: Shuffle, keys: 'V', placement: ['inspector', 'context'], when: hasClip, run: () => void an().variations() },
   { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },

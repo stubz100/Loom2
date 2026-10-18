@@ -5424,3 +5424,26 @@ AN1 (proto01_animate 03 §7) is built in steps; this is the first.
   - locators are scoped to sections (`#anim-sec-camera`);
   - one floor click moved to the bottom-left, because the viewport now reaches the toasts.
 - Vitest 341, build clean, lint 72 (from 89).
+
+## 2026-10-18 18:51 — AN1 step 3 · one transport under the viewer, Animate's one key set, the frames track
+
+- **The transport is under the viewer at both levels.** Stage's timeline moved from the top strip to under the viewport
+  (`.stage-col`), as at the Performance level.
+- **Animate's key set** (D99, UX0 #19; 03-ux0-inventory.md §7):
+  - K stops the shuttle; **Shift+K keys the selection** (the object, else the camera); Alt+Shift+K removes the keys at the frame;
+  - Lock moves to Ctrl+L; look through the camera to 0; I / O lose their [ ] alternates;
+  - extract a frame on Alt+F, a range on Alt+Shift+F (F and Shift+F frame the selection and everything);
+  - Keep has no key (its button);
+  - **1 / 2** switch the viewer level (`anim.level.clay`, `stage.level.performance`; the level switch runs them).
+- **Ctrl+1–3 only ever switch the tabs:**
+  - Edit's 100 % and the loupe's 1:1 move to Ctrl+Alt+0, and 200 % to the menus;
+  - the three shared-chord declarations (Ctrl+1 / Ctrl+2) are gone from `keymap.SHARED_KEYS`.
+- **The filmstrip is a frames track** over the timeline (UX0 #14): `filmTrack`, toggled by *Frames track*. The viewer's views are Player
+  and Compare.
+
+**Tests:**
+
+- Vitest 341.
+- e2e 38/38.
+- The headed `animate` check, 17 steps, passed: player, harvested frames, onion skin, the frames track, compare. Vite was stopped by its
+  PID this time.

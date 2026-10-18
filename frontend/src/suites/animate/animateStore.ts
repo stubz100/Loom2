@@ -21,7 +21,7 @@ export interface AnimPanel {
 }
 export type AnimPreview = I2VPreview                       // D38: the server's i2v preview reply
 export interface AnimPresetSaved { name: string; panel: AnimPanel; saved_at: string }
-export type AnimView = 'player' | 'filmstrip' | 'compare'
+export type AnimView = 'player' | 'compare'                            // D99 (UX0 #14): the filmstrip is a track of the timeline (`filmTrack`), not a view
 
 /** 04 §9a / 11 §3c: native fps, Draft frame count, tier sizes, the frame rule and keyframe beats of a video model (the server snaps anyway). */
 export interface ModelRules { fps: number; frames: number; step: number; mult: number; draft: [number, number]; hd: [number, number]; portrait: [number, number]; square: [number, number]; short: string; beats: boolean }
@@ -96,7 +96,7 @@ interface AnimateState {
   panel: AnimPanel; presets: AnimPresetSaved[]; lastPreset: string | null
   preview: AnimPreview | null; previewError: string | null
   clips: Clip[]; current: string | null; assets: Record<string, Asset>; pins: Record<string, { frame: number; asset_id: string }[]>
-  view: AnimView; compareWith: string | null; playing: boolean; frame: number; speed: number; loop: boolean; onion: boolean
+  view: AnimView; filmTrack: boolean; compareWith: string | null; playing: boolean; frame: number; speed: number; loop: boolean; onion: boolean
   inPoint: number | null; outPoint: number | null; extractEvery: number; busy: string | null
   /** D90 (02 §9): the asset ids of the clips not in the Trash (null until asked), and the Clips tab's filter. */
   clipLive: Record<string, true> | null; clipFilter: ClipFilter
@@ -155,7 +155,7 @@ export const useAnimate = create<AnimateState>()(
     (set, get) => ({
       panel: DEFAULT_PANEL, presets: [], lastPreset: null, preview: null, previewError: null,
       clips: [], current: null, assets: {}, pins: {},
-      view: 'player', compareWith: null, playing: false, frame: 0, speed: 1, loop: true, onion: false, inPoint: null, outPoint: null, extractEvery: 8, busy: null,
+      view: 'player', filmTrack: false, compareWith: null, playing: false, frame: 0, speed: 1, loop: true, onion: false, inPoint: null, outPoint: null, extractEvery: 8, busy: null,
       clipLive: null, clipFilter: { q: '', state: 'all' },
 
       set: (patch) => { set({ panel: { ...get().panel, ...patch } }); get().refreshPreview() },
@@ -324,7 +324,7 @@ export const useAnimate = create<AnimateState>()(
         try { await unwrap(http.POST('/jobs', { body: { recipe, stage: false, origin: clipOrigin(c.id) } })); useSession.getState().toast(`Trying the same inputs on ${r.short}`, 'success') } catch (e) { useSession.getState().toast(`Try on ${r.short} failed: ${(e as ApiError).detail ?? e}`, 'error') }
       },
 
-      setView: (view) => set({ view, playing: view === 'filmstrip' ? false : get().playing }),
+      setView: (view) => set({ view }),
       setFrame: (n) => { const c = get().clip(); const max = c ? c.frames - 1 : 0; set({ frame: Math.max(0, Math.min(max, Math.round(n))) }) },
       step: (d) => { get().togglePlay(false); get().setFrame(get().frame + d) },
       togglePlay: (on) => { const c = get().clip(); if (!c) return; const next = on ?? !get().playing; if (next && get().frame >= get().range()[1]) set({ frame: get().range()[0] }); set({ playing: next }) },

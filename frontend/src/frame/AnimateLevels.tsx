@@ -6,11 +6,11 @@ import { markUsed, runCommand } from './commands'
 
 export function AnimateLevels() {
   const suite = useSession((s) => s.ui.suite)
-  markUsed('global.suite.stage'); markUsed('global.animate.performance')
+  markUsed('global.suite.stage'); markUsed('global.animate.performance'); markUsed('stage.level.performance'); markUsed('anim.level.clay')
   return (
     <span className="segmented animate-levels" role="group" aria-label="Animate level">
-      <button type="button" className={suite === 'stage' ? 'active' : ''} aria-pressed={suite === 'stage'} onClick={() => runCommand('global.suite.stage')} title="Clay: the stage — set, figures, cameras, motion keys">Clay</button>
-      <button type="button" className={suite === 'animate' ? 'active' : ''} aria-pressed={suite === 'animate'} onClick={() => runCommand('global.animate.performance')} title="Performance: the clips a model made from the shot (image to video, pose- or depth-guided)">Performance</button>
+      <button type="button" className={suite === 'stage' ? 'active' : ''} aria-pressed={suite === 'stage'} onClick={() => runCommand(suite === 'animate' ? 'anim.level.clay' : 'global.suite.stage')} title="Clay: the stage — set, figures, cameras, motion keys (1)">Clay</button>
+      <button type="button" className={suite === 'animate' ? 'active' : ''} aria-pressed={suite === 'animate'} onClick={() => runCommand(suite === 'stage' ? 'stage.level.performance' : 'global.animate.performance')} title="Performance: the clips a model made from the shot — image to video, pose- or depth-guided (2)">Performance</button>
     </span>
   )
 }

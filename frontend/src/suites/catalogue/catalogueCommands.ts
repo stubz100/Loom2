@@ -138,7 +138,7 @@ registerCommands([
     } },
   // D72: the loupe's and compare's own keys, now remappable (the buttons in their bars are these commands)
   { id: 'cat.loupe.fit', scope: 'catalogue', label: 'Fit to view', keys: 'Ctrl+0', placement: ['toolbar'], when: () => !!catView.fit, run: () => catView.fit?.() },
-  { id: 'cat.loupe.one', scope: 'catalogue', label: 'Actual pixels (1:1)', keys: 'Ctrl+1', placement: ['toolbar'], when: () => !!catView.one, run: () => catView.one?.() },
+  { id: 'cat.loupe.one', scope: 'catalogue', label: 'Actual pixels (1:1)', keys: 'Ctrl+Alt+0', placement: ['toolbar'], when: () => !!catView.one, run: () => catView.one?.() },
   { id: 'cat.compare.swap', scope: 'catalogue', label: 'Swap the compared images', icon: ArrowLeftRight, keys: 'Tab', placement: ['toolbar'], when: () => !!catView.swap, run: () => catView.swap?.() },
   { id: 'cat.lineage', scope: 'catalogue', label: 'Show lineage', icon: GitBranch, keys: 'L', placement: ['context', 'inspector'], when: () => !!cat().primary, run: () => cat().openLineage(cat().primary) },
 ])

@@ -2,7 +2,7 @@
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
 import { Aperture, Box, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, Layers, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
-import { askConfirm, askText } from '../../store/session'
+import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
@@ -32,7 +32,7 @@ registerCommands([
   tool('select', 'Select', MousePointer2, 'W'), tool('move', 'Move', Move3d, 'G'), tool('rotate', 'Rotate', Rotate3d, 'R'), tool('scale', 'Scale', Scaling, 'S'),
   { id: 'stage.snap', scope: 'stage', label: 'Snap (0.25 m · 15°)', icon: Magnet, keys: 'Q', placement: ['toolbar', 'context'], when: hasStage, run: () => st().setSnap(!st().snap) },
   { id: 'stage.view.free', scope: 'stage', label: 'Free view', icon: Eye, placement: ['strip'], when: hasStage, run: () => st().setView('free') },
-  { id: 'stage.view.camera', scope: 'stage', label: 'Camera view (look through)', icon: Video, keys: 'C', placement: ['strip', 'panel'], when: () => hasStage() && !!st().activeCamera(), run: () => st().setView(st().view === 'camera' ? 'free' : 'camera') },
+  { id: 'stage.view.camera', scope: 'stage', label: 'Camera view (look through)', icon: Video, keys: '0', placement: ['strip', 'panel'], when: () => hasStage() && !!st().activeCamera(), run: () => st().setView(st().view === 'camera' ? 'free' : 'camera') },
   { id: 'stage.guides', scope: 'stage', label: 'Framing guides', icon: Grid3x3, placement: ['strip'], when: hasStage, run: () => st().setGuides(!st().guides) },
   // D90 (02 §8.2): Shift+F, off Home (the transport's first frame) — beside F (frame the selection)
   { id: 'stage.frameAll', scope: 'stage', label: 'Frame everything', icon: Focus, keys: 'Shift+F', hint: 'F frames the selection; Home is the timeline\'s first frame',placement: ['strip', 'panel', 'context'], when: hasStage, run: () => st().frameView(null) },
@@ -42,7 +42,7 @@ registerCommands([
   ...PROP_PRESETS.map((p) => addCmd('prop', p, `Add prop · ${p}`, Box)),
   { id: 'stage.object.delete', scope: 'stage', label: 'Delete', icon: Trash2, keys: 'Delete', placement: ['inspector', 'context'], when: () => hasSel() && !sel()!.locked, run: () => st().removeObject(st().selected!) },
   { id: 'stage.object.duplicate', scope: 'stage', label: 'Duplicate', icon: Copy, keys: 'Ctrl+D', placement: ['inspector', 'context'], when: hasSel, run: () => st().duplicateObject(st().selected!) },
-  { id: 'stage.object.lock', scope: 'stage', label: 'Lock / unlock', icon: Lock, keys: 'L', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { locked: !o.locked }) } },
+  { id: 'stage.object.lock', scope: 'stage', label: 'Lock / unlock', icon: Lock, keys: 'Ctrl+L', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { locked: !o.locked }) } },
   { id: 'stage.object.hide', scope: 'stage', label: 'Hide / show', icon: EyeOff, keys: 'H', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { visible: !o.visible }) } },
   { id: 'stage.object.reset', scope: 'stage', label: 'Reset transform', icon: LockOpen, placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().setTransform(o.id, { pos: [o.transform.pos[0], 0, o.transform.pos[2]], rot: [0, 0, 0], scale: [1, 1, 1] }) } },
   { id: 'stage.camera.add', scope: 'stage', label: 'Add camera', icon: Camera, placement: ['panel', 'context'], when: hasStage, run: () => st().addCamera() },
@@ -69,6 +69,8 @@ registerCommands([
   { id: 'stage.shot.passes', scope: 'stage', label: 'Render the passes', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderPasses() },
   { id: 'stage.shot.clearRefs', scope: 'stage', label: 'Clear the references', icon: X, placement: ['panel'], when: () => st().shot.refs.length > 0, run: () => st().setShot({ refs: [] }) },
   // ST4: keyframes and the clip — D90 (02 §8.2): the transport keys of Animate and the Episode lane; the previous / next key moved to Alt+← / →
+  // D99 (UX0 #19): the viewer levels by number — 2 goes to Performance from here (1, Clay, is this level); the strip's switch is their mouse home
+  { id: 'stage.level.performance', scope: 'stage', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
   { id: 'stage.anim.play', scope: 'stage', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['strip'], when: hasStage, run: () => st().setPlaying(!st().playing) },
   { id: 'stage.anim.prev', scope: 'stage', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame - 1) },
   { id: 'stage.anim.next', scope: 'stage', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame + 1) },
@@ -78,11 +80,12 @@ registerCommands([
   { id: 'stage.anim.fwd10', scope: 'stage', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame + 10) },
   { id: 'stage.anim.first', scope: 'stage', label: 'First frame (range start)', icon: ChevronFirst, keys: 'Home', placement: ['strip'], when: hasStage, run: () => { st().setPlaying(false); st().setFrame(st().current!.range.start) } },
   { id: 'stage.anim.last', scope: 'stage', label: 'Last frame (range end)', icon: ChevronLast, keys: 'End', placement: ['strip'], when: hasStage, run: () => { st().setPlaying(false); st().setFrame(st().current!.range.end) } },
-  { id: 'stage.anim.keyCamera', scope: 'stage', label: 'Key the camera here', icon: Diamond, keys: 'K', placement: ['strip', 'context'], when: () => hasStage() && !!st().activeCamera(), run: () => st().keyCamera() },
-  { id: 'stage.anim.keyObject', scope: 'stage', label: 'Key the object here', icon: Diamond, keys: 'Shift+K', placement: ['strip', 'inspector', 'context'], when: hasSel, run: () => st().keyObject(st().selected!) },
-  { id: 'stage.anim.removeKey', scope: 'stage', label: 'Remove the keys at this frame', icon: X, placement: ['strip', 'context'], when: () => hasStage() && st().keyedFrames().includes(st().frame), run: () => st().removeKeyAt(st().frame) },
-  { id: 'stage.anim.setStart', scope: 'stage', label: 'Range starts here (in)', icon: Diamond, keys: 'I', alt: ['['], placement: ['strip'], when: hasStage, run: () => st().setRange(st().frame, Math.max(st().frame + 1, st().current!.range.end)) },
-  { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here (out)', icon: Diamond, keys: 'O', alt: [']'], placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
+  { id: 'stage.anim.keyCamera', scope: 'stage', label: 'Key the camera here', icon: Diamond, placement: ['strip', 'context'], when: () => hasStage() && !!st().activeCamera(), run: () => st().keyCamera() },
+  { id: 'stage.anim.keyObject', scope: 'stage', label: 'Key the selection here (the object; nothing selected: the camera)', icon: Diamond, keys: 'Shift+K', placement: ['strip', 'inspector', 'context'], when: () => hasStage() && (!!st().selected || !!st().activeCamera()),
+    run: () => { const id = st().selected; if (id) st().keyObject(id); else st().keyCamera() } },   // D99 (UX0 #19): Shift+K keys the selection, else the camera
+  { id: 'stage.anim.removeKey', scope: 'stage', label: 'Remove the keys at this frame', icon: X, keys: 'Alt+Shift+K', placement: ['strip', 'context'], when: () => hasStage() && st().keyedFrames().includes(st().frame), run: () => st().removeKeyAt(st().frame) },
+  { id: 'stage.anim.setStart', scope: 'stage', label: 'Range starts here (in)', icon: Diamond, keys: 'I', placement: ['strip'], when: hasStage, run: () => st().setRange(st().frame, Math.max(st().frame + 1, st().current!.range.end)) },
+  { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here (out)', icon: Diamond, keys: 'O', placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
   { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().guideEntry() && !!st().shotStart && !st().rendering && !!st().clipCaps(), run: () => void st().animateShot() },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },

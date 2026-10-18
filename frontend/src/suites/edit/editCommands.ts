@@ -173,8 +173,8 @@ registerCommands([
   { id: 'edit.view.zoomIn', scope: 'edit', label: 'Zoom in', icon: ZoomIn, keys: 'Ctrl++', alt: ['Ctrl+='], placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(ed().zoom * 1.25) },
   { id: 'edit.view.zoomOut', scope: 'edit', label: 'Zoom out', icon: ZoomOut, keys: 'Ctrl+-', placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(ed().zoom / 1.25) },
   { id: 'edit.view.fit', scope: 'edit', label: 'Fit to window', icon: Maximize, keys: 'Ctrl+0', placement: ['strip', 'context'], when: hasDoc, run: () => ed().requestFit() },
-  { id: 'edit.view.100', scope: 'edit', label: 'Zoom 100 %', keys: 'Ctrl+1', placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(1) },
-  { id: 'edit.view.200', scope: 'edit', label: 'Zoom 200 %', keys: 'Ctrl+2', placement: ['context'], when: hasDoc, run: () => ed().zoomTo(2) },
+  { id: 'edit.view.100', scope: 'edit', label: 'Zoom 100 %', keys: 'Ctrl+Alt+0', placement: ['strip', 'context'], when: hasDoc, run: () => ed().zoomTo(1) },
+  { id: 'edit.view.200', scope: 'edit', label: 'Zoom 200 %', placement: ['context'], when: hasDoc, run: () => ed().zoomTo(2) },
   { id: 'edit.view.grid', scope: 'edit', label: 'Pixel grid', placement: ['strip', 'context'], run: () => ed().setView({ pixelGrid: !ed().pixelGrid }) },
   { id: 'edit.view.overlay', scope: 'edit', label: 'Mask overlay', keys: 'Alt+\\', placement: ['strip', 'context'], run: () => ed().setView({ overlay: !ed().overlay }) },
   { id: 'edit.view.before', scope: 'edit', label: 'Before (hide the active layer)', keys: '\\', placement: ['strip', 'context'], hint: 'a click toggles; hold the key, or press and hold the strip\'s before button, to peek', when: hasDoc, run: () => ed().setView({ before: !ed().before }) },   // D72: useEditKeys holds it; D90 (01 §11.3): View ▸ and the strip toggle it

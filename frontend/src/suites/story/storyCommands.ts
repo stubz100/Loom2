@@ -1,6 +1,6 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -32,6 +32,7 @@ const sampleModel = () => { const ss = useSession.getState(); return pickSampleM
 const profile = () => sy().profile()
 const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
+const animRefable = () => { const c = profile()?.cls; return c === 'character' || c === 'prop' }   // CA0: a place has none
 const picked = () => sy().picked
 const trainJob = () => { const p = profile(); const v = version(); return p && v ? latestTrainJob(useSession.getState().jobs, p.id, v.id) : undefined }
 const trainCaps = () => useSession.getState().capabilities?.train
@@ -207,6 +208,19 @@ const cmds: Command[] = [
     run: () => void sy().curate(picked(), 'reject') },
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,
     run: () => void sy().setHero(picked()[0]) },
+  // CA0 (01 step 2, §10): the animation reference — characters (front, back) and props (front, a three-quarter view); a final version takes one too
+  { id: 'story.cast.makeAnimRef', scope: 'story', label: 'Make an animation reference', icon: PersonStanding, hint: 'full body, A-pose, 16:9, plain ground — two candidates from the sheet and references',
+    placement: ['panel', 'inspector', 'context'], when: () => animRefable() && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('front') },
+  { id: 'story.cast.makeAnimRefBack', scope: 'story', label: 'Make a back view', icon: PersonStanding, hint: 'the same A-pose from behind — for a shot that starts with the character turned away',
+    placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!useSession.getState().capabilities?.story?.model_id, run: () => void sy().makeAnimRef('back') },
+  { id: 'story.cast.useAsAnimRef', scope: 'story', label: 'Use as the animation reference', icon: PersonStanding, placement: ['context', 'inspector'], when: () => animRefable() && picked().length === 1,
+    run: () => void sy().setAnimRef('front', picked()[0]) },
+  { id: 'story.cast.useAsAnimRefBack', scope: 'story', label: 'Use as the back view', icon: PersonStanding, placement: ['context', 'inspector'], when: () => profile()?.cls === 'character' && picked().length === 1,
+    run: () => void sy().setAnimRef('back', picked()[0]) },
+  { id: 'story.cast.clearAnimRef', scope: 'story', label: 'Clear the animation reference', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.anim_ref_asset_id,
+    run: () => void sy().setAnimRef('front', null) },
+  { id: 'story.cast.clearAnimRefBack', scope: 'story', label: 'Clear the back view', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.anim_ref_back_asset_id,
+    run: () => void sy().setAnimRef('back', null) },
   { id: 'story.cast.lock', scope: 'story', label: 'Mark final', icon: Lock, hint: 'the version\'s reference set becomes read-only; a retake is a new version', placement: ['strip', 'inspector', 'context'], when: () => openVersion() && !!version()?.hero_asset_id && !sy().busy,
     run: () => { const p = profile(); const v = version(); if (!p || !v) return
       void askConfirm({ title: `Mark ${p.name} ${v.id} final?`, okLabel: 'Mark final', text: 'The reference set becomes read-only (the album refuses changes on its page) and the character sheet is fixed (the label can still change); @mentions keep resolving to it. A retake is a new version.' }).then((ok) => { if (ok) void sy().lockVersion() }) } },

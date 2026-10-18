@@ -2063,6 +2063,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/anim-ref": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Anim Ref Pick
+         * @description CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it.
+         */
+        put: operations["profile_anim_ref_pick_story_profiles__pid__versions__vid__anim_ref_put"];
+        /**
+         * Profile Anim Ref Make
+         * @description CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's
+         *     references and sheet; the results land on its candidates page, the first becomes the reference while it has none.
+         */
+        post: operations["profile_anim_ref_make_story_profiles__pid__versions__vid__anim_ref_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/curate": {
         parameters: {
             query?: never;
@@ -2571,6 +2596,47 @@ export interface components {
             revision: number;
             /** Total */
             total: number;
+        };
+        /** AnimRefBody */
+        AnimRefBody: {
+            /**
+             * Count
+             * @default 2
+             */
+            count?: number;
+            /**
+             * Side
+             * @default front
+             * @enum {string}
+             */
+            side?: "front" | "back";
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
+            /** Style Id */
+            style_id?: string | null;
+        };
+        /** AnimRefPick */
+        AnimRefPick: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Side
+             * @default front
+             * @enum {string}
+             */
+            side?: "front" | "back";
+        };
+        /** AnimRefQueued */
+        AnimRefQueued: {
+            /** Group Id */
+            group_id: string;
+            /** Job Ids */
+            job_ids: string[];
+            /** Model Id */
+            model_id: string;
         };
         /** AnimatePanel */
         AnimatePanel: {
@@ -6361,6 +6427,10 @@ export interface components {
          *     Schema 1 had one free-text `stub`: it is read as the appearance (the file is rewritten at the next save).
          */
         ProfileVersion: {
+            /** Anim Ref Asset Id */
+            anim_ref_asset_id: string | null;
+            /** Anim Ref Back Asset Id */
+            anim_ref_back_asset_id: string | null;
             /**
              * Appearance
              * @default
@@ -13117,6 +13187,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileAdded"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_anim_ref_pick_story_profiles__pid__versions__vid__anim_ref_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimRefPick"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_anim_ref_make_story_profiles__pid__versions__vid__anim_ref_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimRefBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimRefQueued"];
                 };
             };
             /** @description Validation Error */

@@ -107,6 +107,8 @@ class AssetFinisher:
         panel = (job.origin.payload or {}).get("saved_panel") if job.origin else None       # D92: made from an applied saved panel → its picture
         if assets and isinstance(panel, str) and panel:
             await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
+        if assets and job.origin and job.origin.surface == "anim_ref":                        # CA0: the first result is the reference while there is none
+            await asyncio.to_thread(_anim_ref_result, q, job.origin.ref, job.origin.payload or {}, assets[0].id)
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -402,6 +404,18 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
+
+
+def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> None:
+    """CA0: an animation-reference job's first result becomes the version's reference (or back view) while it has none; every result stays
+    on the candidates page for the author's pick. Never the job's failure."""
+    from ..story import StoryStore
+    try:
+        p = StoryStore(q.ws).set_anim_ref(str(pid or ""), str(payload.get("version") or ""), str(payload.get("side") or "front"), asset_id, only_if_empty=True)
+        if p is not None:
+            q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    except Exception as e:  # noqa: BLE001
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"animation reference not set: {e}"})
 
 
 def _panel_thumb(q: JobQueue, name: str, asset_id: str) -> None:

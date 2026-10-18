@@ -1862,3 +1862,26 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   await page.waitForTimeout(500)
   await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m
 })
+
+test('an animation reference in Cast (CA0, 01 step 2): Make an animation reference queues two candidates, the first fills the front slot; a candidate\'s right-click makes it the back view', async ({ page }) => {
+  test.setTimeout(90_000)
+  const name = `Ines ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const hero = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  type ProfileLite = { id: string; versions: { id: string; anim_ref_asset_id: string | null; anim_ref_back_asset_id: string | null }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: hero, appearance: `${name}, a dancer in a red dress` })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await expect(page.locator('.anim-ref-slot[data-side="front"]')).toContainText('none yet')
+  await page.locator('.anim-ref button', { hasText: /^Make an animation reference/ }).click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id, { timeout: 60_000 }).toBeTruthy()
+  const front = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_asset_id!
+  await expect(page.locator('.anim-ref-slot[data-side="front"] img')).toHaveAttribute('src', new RegExp(front))
+  await expect(page.locator('.story-cands .cand-card')).toHaveCount(2, { timeout: 30_000 })                         // both on the candidates page
+  const other = page.locator(`.story-cands .cand-card:not([data-id="${front}"])`).first()
+  const otherId = (await other.getAttribute('data-id'))!
+  await other.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /^Use as the back view/ }).click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].anim_ref_back_asset_id).toBe(otherId)
+  await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(otherId))
+})

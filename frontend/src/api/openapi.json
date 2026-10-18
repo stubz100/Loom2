@@ -196,6 +196,96 @@
         "title": "AlbumNode",
         "type": "object"
       },
+      "AnimRefBody": {
+        "properties": {
+          "count": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "side": {
+            "default": "front",
+            "enum": [
+              "front",
+              "back"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
+          },
+          "style_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style Id"
+          }
+        },
+        "title": "AnimRefBody",
+        "type": "object"
+      },
+      "AnimRefPick": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "side": {
+            "default": "front",
+            "enum": [
+              "front",
+              "back"
+            ],
+            "title": "Side",
+            "type": "string"
+          }
+        },
+        "title": "AnimRefPick",
+        "type": "object"
+      },
+      "AnimRefQueued": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_ids",
+          "group_id",
+          "model_id"
+        ],
+        "title": "AnimRefQueued",
+        "type": "object"
+      },
       "AnimatePanel": {
         "additionalProperties": true,
         "properties": {
@@ -9682,6 +9772,28 @@
       "ProfileVersion": {
         "description": "One version of a profile (loom §3.4): its reference set is an album group (`group_id`), its expansion candidates another; `open`\nis editable and expandable, `final` locks the group and the fields (a retake is a new version). `trigger` and `lora` wait for the\nLoRA wave (D25). D93 (B4): the version holds a character sheet — appearance (the look), outfit, bound colours and marks — composed into\nthe clause a mention and a linked subject carry (`compose_sheet`); a version is a costume, an age or a look, named by its `label`.\nSchema 1 had one free-text `stub`: it is read as the appearance (the file is rewritten at the next save).",
         "properties": {
+          "anim_ref_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Ref Asset Id"
+          },
+          "anim_ref_back_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anim Ref Back Asset Id"
+          },
           "appearance": {
             "default": "",
             "maxLength": 1000,
@@ -9826,6 +9938,8 @@
           "trigger",
           "lora",
           "body",
+          "anim_ref_asset_id",
+          "anim_ref_back_asset_id",
           "derived_from",
           "created_at",
           "locked_at"
@@ -22278,6 +22392,128 @@
           }
         },
         "summary": "Profile Add",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/anim-ref": {
+      "post": {
+        "description": "CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's\nreferences and sheet; the results land on its candidates page, the first becomes the reference while it has none.",
+        "operationId": "profile_anim_ref_make_story_profiles__pid__versions__vid__anim_ref_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimRefBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimRefQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Anim Ref Make",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "description": "CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it.",
+        "operationId": "profile_anim_ref_pick_story_profiles__pid__versions__vid__anim_ref_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnimRefPick"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Anim Ref Pick",
         "tags": [
           "story"
         ]

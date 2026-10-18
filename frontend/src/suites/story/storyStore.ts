@@ -140,6 +140,10 @@ export interface StoryState {
   /** D90 (B14): the name as typed — shown at once, saved after a pause (as the stub). */
   renameProfile: (name: string) => void
   setHero: (assetId: string | null) => Promise<void>
+  /** CA0 (01 step 2): make the version's animation reference (or its back view) — two candidates, the first used while none is set. */
+  makeAnimRef: (side: 'front' | 'back') => Promise<void>
+  /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
+  setAnimRef: (side: 'front' | 'back', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
   lockVersion: () => Promise<void>
   deleteProfile: () => Promise<void>
@@ -466,6 +470,19 @@ export const useStory = create<StoryState>()((set, get) => {
       const p = get().profile(); if (!p) return
       updateProfile({ ...p, name })
       if (name.trim()) queueProfile(p.id, { name: name.trim() })                                     // a blank name is not sent (the server refuses it)
+    },
+    makeAnimRef: async (side) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        const r = await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, count: 2 } }))
+        useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : 'animation references'} queued for ${p.name} — they land on the candidates page; the first becomes the reference while there is none`, 'info')
+        if (!v.candidates_group_id) await get().loadProfiles()
+      } catch (e) { toast(`Animation reference: ${detail(e)}`) }
+    },
+    setAnimRef: async (side, assetId) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/anim-ref', { params: { path: { pid: p.id, vid: v.id } }, body: { side, asset_id: assetId } }))) }
+      catch (e) { toast(`Animation reference: ${detail(e)}`) }
     },
     setHero: async (assetId) => {                                            // D93 (A2): a hero joins the reference set as its cover (the add route)
       const p = get().profile(); const v = get().version(); if (!p || !v) return

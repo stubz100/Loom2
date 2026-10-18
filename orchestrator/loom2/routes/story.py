@@ -20,7 +20,7 @@ from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
-from ..story import FOR_SHOT, NODE_TYPES, PRESETS, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -368,6 +368,77 @@ async def profile_expand(svc: Svc, pid: str, body: ExpandBody):
         raise HTTPException(422, str(e))
     _changed(svc, p)
     return {"batch_id": batch, "job_ids": [j.id for j in jobs], "cells": len(planned), "group_id": gid, "model_id": spec.id}
+
+
+# ---- the animation reference (CA0, proto01_animate 01 step 2) ----------------------------------------------------------------------------
+class AnimRefBody(BaseModel):
+    side: Literal["front", "back"] = "front"
+    count: int = Field(2, ge=1, le=4)
+    stage: bool = False                           # queued staged (released from the Queue)
+    style_id: str | None = None
+
+
+class AnimRefPick(BaseModel):
+    side: Literal["front", "back"] = "front"
+    asset_id: str | None = None                   # None clears it
+
+
+class AnimRefQueued(BaseModel):
+    job_ids: list[str]
+    group_id: str
+    model_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/anim-ref", response_model=AnimRefQueued)
+async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody):
+    """CA0: make a version's animation reference (or its back view) — 16:9 at the Draft height, the clay-reference model with the version's
+    references and sheet; the results land on its candidates page, the first becomes the reference while it has none."""
+    ws, _, _ = svc.require_project()
+    groups = svc.require_groups()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = StoryStore(ws)
+    p = await asyncio.to_thread(store.profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    fmt = ws.load().format
+    h = 720
+    w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    p, gid, made = await asyncio.to_thread(store.ensure_candidates, pid, v.id, groups)
+    if made:
+        svc.group_changed([gid])
+    try:
+        planned = plan_anim_ref(p, p.version(v.id), body.side, svc.app.settings.variant, width=w, height=h, count=body.count, group_id=gid, style_id=body.style_id)
+        jobs = []
+        for recipe, origin in planned:
+            jobs += svc.queue.submit(recipe, stage=body.stage, origin=JobOrigin.model_validate(origin))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    _changed(svc, p)
+    return {"job_ids": [j.id for j in jobs], "group_id": gid, "model_id": planned[0][0]["model_id"]}
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/anim-ref", response_model=Profile)
+async def profile_anim_ref_pick(svc: Svc, pid: str, vid: str, body: AnimRefPick):
+    """CA0: the author's pick — an image in the Catalogue becomes the version's animation reference (or back view); None clears it."""
+    ws, cat, _ = svc.require_project()
+    if body.asset_id:
+        rec = await asyncio.to_thread(cat.get, body.asset_id)
+        if rec is None or rec.trashed_at is not None or rec.kind != "image":
+            raise HTTPException(422, "the reference must be an image in the Catalogue")
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_anim_ref, pid, vid, body.side, body.asset_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
 
 
 # ---- LoRA training (LT2, 18 §3c) ------------------------------------------------------------------------------------------------------

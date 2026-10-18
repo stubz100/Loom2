@@ -5686,3 +5686,45 @@ The 01 §9b N1 route covers ogres, aliens, children and giants this way.
 - **Rig owed with CA0's acceptance:** a clay still of a body-shaped figure.
 
 **Next:** CA0 step 2, *Make an animation reference*.
+
+## 2026-10-18 21:19 — CA0 step 2 · *Make an animation reference*, measured on the rig
+
+Each Cast version of a character or prop gets an **animation reference**, the image Wan Animate is given (01 step 2, §10):
+
+- for a character, the whole figure facing the camera in a neutral A-pose, centred and padded in 16:9 on a plain ground;
+- for a prop, the object alone in a three-quarter view;
+- for a character, optionally a **back view** (the same A-pose from behind).
+
+**Server:**
+
+- `ProfileVersion.anim_ref_asset_id` / `anim_ref_back_asset_id`.
+- `story.plan_anim_ref` composes the job: the clay-reference model (as Expand: Klein 9B under `full`, 4B under `open`), the version's
+  sheet with its colours bound, its reference set as an @mention pinned to the version (its LoRA rides along, RC0 stamps it), the
+  reference sentence, and one seed per candidate. A place is refused.
+- `POST …/versions/{vid}/anim-ref` queues the candidates (two by default) at 16:9 and 720 high. They land on the version's candidates
+  page; the first becomes the reference while there is none (`_anim_ref_result`).
+- `PUT …/anim-ref` is the author's pick or a clear. A final version takes one too: the reference is the version's product, like its
+  LoRA.
+
+**Cast:** an *Animation reference* section with the front slot and the back slot, *Make an animation reference*, *Make a back view*,
+and on a candidate's right-click *Use as the animation reference* / *Use as the back view*. Each slot's right-click remakes or clears it.
+All are commands (D32).
+
+**Rig** (`scripts/ca0_acceptance.py --parts ref`, one GPU job at a time):
+
+- **The cast:** three characters × two versions. Mara (the bench heroine as hero) in a cloak and at the market; Bram, an old captain,
+  on watch and in a storm (sheet only); Grak, a 2.4 m ogre with a body and horns, as a smith and at a feast (sheet only).
+- **Every reference:** 1280×720, 12.2–16.3 s warm (37.6 s cold, Klein 9B).
+- **SDPose:** 18 of 18 points inside the frame and an A-pose in all six.
+- **The contact sheet** (`engine/spikes/out/ca0/refs_sheet.jpg`): each costume's colours are kept (the green cloak, the blue skirt, the
+  navy pea coat, the yellow oilskin, the brown apron, the red tabard); nothing is cropped; the backgrounds are plain grey.
+
+**Tests:**
+
+- Offline 433 under full and open (`test_anim_ref_ca0.py`, 3: the plan's prompt and limits, the first result taken and a pick
+  replacing it on a final version, the routes).
+- e2e 42/42 under full and open; the new scenario makes two candidates, the front slot fills, and a candidate's right-click makes the
+  back view.
+- Vitest 347; lint 75; build and audits clean.
+
+**Next:** step 3, the test animation (a turn on the spot through Wan Animate) and CA0's acceptance (PCK ≥ 0.8, no ghost or crop).

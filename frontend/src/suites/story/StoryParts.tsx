@@ -488,7 +488,7 @@ function WorldEditor() {
 function candidateMenu(id: string): MenuItem[] {
   const s = sy()
   if (!s.picked.includes(id)) s.pick(id)
-  return [{ cmd: 'story.cast.keep' }, { cmd: 'story.cast.reject' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.openCandidates' }]
+  return [{ cmd: 'story.cast.keep' }, { cmd: 'story.cast.reject' }, { cmd: 'story.cast.setHero' }, sep, { cmd: 'story.cast.useAsAnimRef' }, { cmd: 'story.cast.useAsAnimRefBack' }, sep, { cmd: 'story.cast.openCandidates' }]
 }
 
 function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
@@ -504,6 +504,33 @@ function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
         <button className="quiet" title="Reject" aria-label="reject" onClick={(e) => { e.stopPropagation(); void sy().curate([a.id], 'reject') }}>✕</button>
       </span>
     </div>
+  )
+}
+
+/** CA0 (01 step 2, §10): the version's animation reference — what Wan Animate is given for the character: full body, a neutral A-pose,
+ *  16:9 with the figure centred and padded (a portrait one loses its head and feet to the node's crop), a plain ground. A prop's is the
+ *  object alone in a three-quarter view. Made from the sheet and references; any candidate can be picked (its right-click). */
+function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
+  const slot = (side: 'front' | 'back', id: string | null | undefined, label: string) => (
+    <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side}
+      onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }] : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.clearAnimRef' }])}>
+      {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
+      <span className="cell">{label}</span>
+    </div>
+  )
+  markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack'); markUsed('story.cast.clearAnimRef'); markUsed('story.cast.clearAnimRefBack')
+  return (
+    <section className="anim-ref">
+      <h3>Animation reference <span className="hint">{p.cls === 'prop' ? 'the prop alone, a three-quarter view, 16:9' : 'full body, A-pose, 16:9, plain ground — what Wan Animate is given'}</span></h3>
+      <div className="anim-ref-row">
+        {slot('front', v.anim_ref_asset_id, p.cls === 'prop' ? 'reference' : 'front')}
+        {p.cls === 'character' && slot('back', v.anim_ref_back_asset_id, 'back (optional)')}
+        <div className="verbs">
+          <CommandButton id="story.cast.makeAnimRef" text />
+          {p.cls === 'character' && <CommandButton id="story.cast.makeAnimRefBack" text />}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -544,6 +571,7 @@ function CastPage() {
         </table>
         {grid.uncelled > 0 && <span className="hint">{grid.uncelled} reference{grid.uncelled === 1 ? '' : 's'} without a cell (the hero, imports).</span>}
       </section>
+      {(p.cls === 'character' || p.cls === 'prop') && <AnimRef p={p} v={v} />}
       <section>
         <h3>Candidates <span className="hint">newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
         {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}

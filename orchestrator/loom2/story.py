@@ -167,6 +167,8 @@ class ProfileVersion(BaseModel):
     trigger: str | None = None
     lora: str | None = None
     body: Body | None = None                      # CA0: a character's body for its Stage dummy (None = the default adult); places and props have none
+    anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
+    anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
@@ -573,6 +575,48 @@ def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant:
                       "style_id": style_id, "tier": tier}
             origin = {"suite": "story", "surface": "expand", "ref": profile.id, "payload": {"version": version.id, "cell": c, "group_id": group_id, "preset": preset}}
             out.append((recipe, origin))
+    return out
+
+
+ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
+AnimRefSide = Literal["front", "back"]
+
+
+def anim_ref_sentence(cls: str, side: str) -> str:
+    """CA0 (01 step 2, §10): what an animation reference shows — for a character the whole figure in a neutral A-pose (arms a little away
+    from the body, so they do not merge with the torso), centred and padded in the 16:9 frame on a plain ground, the back view the same
+    from behind; for a prop the object alone in a three-quarter view."""
+    if cls == "prop":
+        return ("The object alone, a three-quarter view, the whole object visible and centred with space around it, "
+                "on a plain light grey studio background, soft even light, no other objects, no text.")
+    view = "seen from directly behind, the back of the figure" if side == "back" else "facing the camera, front view"
+    return (f"Full-body character reference, {view}, standing in a neutral A-pose with the arms held a little away from the body and the "
+            "feet slightly apart, the whole figure from the top of the head to the feet visible and centred with space around it, "
+            "on a plain light grey studio background, soft even light, no props, no other people, no text.")
+
+
+def plan_anim_ref(profile: Profile, version: ProfileVersion, side: str, variant: str, *, width: int, height: int, count: int, group_id: str,
+                  style_id: str | None = None) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """CA0: the T2I jobs that make a version's animation reference — the clay-reference model (as Expand: Klein 9B under `full`, 4B under
+    `open`), the version's sheet composed (its colours bound) and its reference set as an @mention (pinned to the version, so its LoRA rides
+    along and RC0 stamps it), the reference sentence, one seed each. The results land on the version's candidates page; the first becomes
+    the reference while the version has none (the finisher)."""
+    if profile.cls == "place":
+        raise ValueError("a place has no animation reference — characters and props have one")
+    if side == "back" and profile.cls != "character":
+        raise ValueError("only a character has a back view")
+    spec = expand_spec(variant)
+    if spec is None:
+        raise ValueError("no model in this build makes an animation reference")
+    sheet = compose_sheet(version, name=profile.name, cls=profile.cls)
+    lead = f"{sheet}. " if sheet else f"{profile.name}. "
+    out = []
+    for i in range(max(1, min(4, int(count)))):
+        recipe = {"kind": "t2i", "model_id": spec.id, "prompt_mode": "text", "prompt_text": lead + anim_ref_sentence(profile.cls, side),
+                  "width": width, "height": height, "seeds": [i], "style_id": style_id, "tier": "draft",
+                  "mentions": [{"group_id": "", "name": profile.name, "profile_id": profile.id, "version": version.id}]}
+        origin = {"suite": "story", "surface": ANIM_REF_SURFACE, "ref": profile.id, "payload": {"version": version.id, "side": side, "group_id": group_id}}
+        out.append((recipe, origin))
     return out
 
 
@@ -1072,6 +1116,27 @@ class StoryStore(_ShotMixin, _FlowMixin):
                   "id": pid, "schema_version": PROFILE_SCHEMA_VERSION, "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         p = Profile.model_validate(merged)
         check_profile(p)
+        self.save_profile(p)
+        return p
+
+    def set_anim_ref(self, pid: str, vid: str, side: str, asset_id: str | None, *, only_if_empty: bool = False) -> Profile | None:
+        """CA0: a version's animation reference (front) or back view — the author's pick, or the first result of a make (`only_if_empty`).
+        No revision guard and a final version takes it too, like its LoRA: the reference is the version's product, not an edit of its sheet.
+        None when `only_if_empty` and the slot is taken."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        field = "anim_ref_back_asset_id" if side == "back" else "anim_ref_asset_id"
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        if only_if_empty and getattr(v, field):
+            return None
+        if side == "back" and cur.cls != "character":
+            raise ValueError("only a character has a back view")
+        setattr(v, field, asset_id)
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p
 

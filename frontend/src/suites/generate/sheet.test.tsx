@@ -14,7 +14,7 @@ import { SubjectCard } from './GenerateColumn'
 import { DEFAULT_PANEL, linkedWords, recipeFromPanel, useGenerate } from './generateStore'
 import { adoptDescription, composeSheet, versionItems, versionName, versionOf } from './sheet'
 
-const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, appearance: '', outfit: '',
+const ver = (v: Partial<ProfileVersion>): ProfileVersion => ({ id: 'v1', label: 'v1', state: 'open', group_id: 'grp_1', candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, appearance: '', outfit: '',
   colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null, ...v })
 const MARA: Profile = { id: 'prf_m', name: 'Mara', cls: 'character', current: 'v2', schema_version: 2, revision: 3, voice_id: null, created_at: '', updated_at: '',
   versions: [ver({ id: 'v1', label: 'rain gear', group_id: 'grp_m1', appearance: 'Mara, a wiry woman', outfit: 'a yellow oilskin', colours: [{ hex: '#F2A93B', object: 'oilskin' }], hero_asset_id: 'ast_h1' }),

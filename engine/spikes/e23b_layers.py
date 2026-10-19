@@ -73,6 +73,7 @@ SEEDS = [int(x) for x in os.environ.get("LOOM2_E23B_SEEDS", "20261021,20261022")
 ARMS = os.environ.get("LOOM2_E23B_ARMS", "M,R").split(",")
 WITH_CLAY = False                                             # E23c: also the lit clay sequences
 EXTRA_OBJECTS: list[dict] = []                                # E23c: a light object
+PREPARE = None                                                # E23d: (api) -> {name: extra figure fields} after the project opens (the proxies' assets)
 BODIES = os.environ.get("LOOM2_E23B_BODIES")                  # CA1b: the fitted bodies (scripts/ca1b_acceptance.py), by character name
 C0 = {"pos": [0.0, 1.05, 4.3], "target": [0.0, 0.95, 0.0], "focal_mm": 38, "sensor_mm": 36}      # E21's camera: the plate's
 C1 = {"pos": [-0.2, 1.03, 3.8], "target": [-0.3, 0.93, 0.0], "focal_mm": 38, "sensor_mm": 36}    # 0.5 m in, a slight pan left
@@ -196,7 +197,7 @@ STAGE_JS = """(async () => { try {
   st().setFrame(iEnd + 26); o = sampled('fig_i')
   st().setJoints('fig_i', { ...o.pose.joints, r_shoulder: [0, 0, -82], r_elbow: [0, 0, 0] })
   st().setRange(0, 240); st().setFrame(0)
-  await new Promise((r) => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, %CLAY% ? 8000 : 2000))
   const doc = st().current
   const R = st().sequenceRenderer
   if (!R) return { error: 'no sequence renderer' }
@@ -216,6 +217,8 @@ STAGE_JS = """(async () => { try {
   if (%CLAY%) {                                                  // E23c: the lit clay — the set alone, and each figure alone (its shadow)
     window.__e23b.set.clay = await Promise.all((await R(seq([]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
     for (const id of ['fig_m', 'fig_i']) window.__e23b[id].clay = await Promise.all((await R(seq([id]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
+    // E23d: the proxies seen (when the figures carry one), three frames each, to check their fit
+    for (const id of ['fig_m', 'fig_i']) window.__e23b[id].proxy = await Promise.all((await R([0, 80, 160].map((i) => seq([id])[i]), %W%, %H%, 'proxy', An.sampleDoc(doc, 0))).blobs.map(b64))
   }
   // E23c: the empty set's clay pass from the first frame's camera (the white set is made from it)
   st().setFrame(0)
@@ -264,14 +267,15 @@ def stage(a: argparse.Namespace) -> int:
             except Exception:
                 time.sleep(0.3)
         api("POST", "/project", {"path": str(tmp / "proj"), "name": "E23b", "size_cap_gb": 20})
+        extra = PREPARE(api) if PREPARE else {}
         st = api("POST", "/stages", {"name": "E23b"})
         cam = {**st["cameras"][0], **C0}
         tf = lambda pos, yaw=0: {"pos": pos, "rot": [0, yaw, 0], "scale": [1, 1, 1]}   # noqa: E731
         objs = [{"id": "set_a", "kind": "set", "name": "Room", "preset": "room", "transform": tf([0, 0, 0]), "colour_id": 3},
                 {"id": "fig_m", "kind": "mannequin", "name": "Mara", "preset": "adult", "transform": tf([MARA_PATH[0][0], 0, MARA_PATH[0][1]]),
-                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 1, "detail": "female", "path": MARA_PATH, **body_of("Mara")},
+                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 1, "detail": "female", "path": MARA_PATH, **body_of("Mara"), **extra.get("Mara", {})},
                 {"id": "fig_i", "kind": "mannequin", "name": "Ines", "preset": "adult", "transform": tf(INES_AT),
-                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female", **body_of("Ines")}, *EXTRA_OBJECTS]
+                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female", **body_of("Ines"), **extra.get("Ines", {})}, *EXTRA_OBJECTS]
         st = api("PUT", f"/stages/{st['id']}", {**st, "objects": objs, "cameras": [cam], "size": {**st["size"], "fps": 24}})
         url = f"http://127.0.0.1:{DEV}/?token=e23b&port={ORCH_PORT}&suite=stage"
         edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
@@ -320,6 +324,9 @@ def stage(a: argparse.Namespace) -> int:
             pull("window.__e23b.set.clay", g / "set" / "clay")
             for fid in FIGS:
                 pull(f"window.__e23b.{fid}.clay", g / fid / "clay")
+                (g / fid / "proxy").mkdir(parents=True, exist_ok=True)
+                for k, b in enumerate(cdp.eval(f"window.__e23b.{fid}.proxy || []", timeout=60)):
+                    (g / fid / "proxy" / f"{(0, 80, 160)[k]:04d}.png").write_bytes(base64.b64decode(b))
         clay = cdp.eval("window.__e23b.setClay || null", timeout=60)
         if clay:
             (g / "set_clay.png").write_bytes(base64.b64decode(clay))

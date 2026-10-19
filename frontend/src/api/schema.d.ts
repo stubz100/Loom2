@@ -7965,6 +7965,8 @@ export interface components {
             preset: string | null;
             /** Profile Id */
             profile_id: string | null;
+            /** Shadow Proxy */
+            shadow_proxy: string | null;
             transform: components["schemas"]["Transform"];
             /** Version */
             version: string | null;

@@ -13,6 +13,7 @@ import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMa
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
 import { measure } from './motion/path'
+import { bindProxy, type Proxy } from './proxy'
 import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
@@ -28,7 +29,7 @@ export interface EngineHooks {
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
 
-interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed }
+interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 
@@ -339,8 +340,8 @@ export class StageEngine {
       seen.add(o.id)
       let e = this.entries.get(o.id)
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
-        || (e.doc.detail ?? null) !== (o.detail ?? null)) {
-        if (e) { this.scene.remove(e.holder) }
+        || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null)) {
+        if (e) { this.scene.remove(e.holder); e.proxy?.dispose() }
         e = this.build(o)
         this.entries.set(o.id, e)
         this.scene.add(e.holder)
@@ -350,12 +351,13 @@ export class StageEngine {
       e.holder.rotation.set(rad(t.rot[0]), rad(t.rot[1]), rad(t.rot[2]))
       e.holder.scale.set(t.scale[0], t.scale[1], t.scale[2])
       e.holder.visible = o.visible
+      e.proxy?.meshes.forEach((m) => { m.visible = o.visible })                     // E23d: a hidden figure's proxy casts nothing
       if (e.figure && o.pose && !this.ik && (e.doc.pose?.preset !== o.pose.preset || JSON.stringify(e.doc.pose?.joints) !== JSON.stringify(o.pose.joints))) {
         applyPose(e.figure.joints, POSES[o.pose.preset ?? 'stand'] ?? POSES.stand, o.pose.joints)
       }
       e.doc = o
     }
-    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); e.proxy?.dispose(); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.syncLight(doc)
     this.followAll()
     this.syncPaths(doc)
@@ -465,7 +467,22 @@ export class StageEngine {
     holder.add(body)
     const entry: Entry = { holder, body, doc: o, figure, pickers }
     if (figure && o.detail) this.attachDetailed(entry, o.detail)
+    if (figure && o.shadow_proxy) this.attachProxy(entry, o.shadow_proxy)
     return entry
+  }
+  /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints, seen by the light only; the dummy then casts nothing. */
+  private attachProxy(e: Entry, assetId: string): void {
+    const id = e.doc.id
+    new GLTFLoader().loadAsync(api.assetUrl(assetId)).then((gltf) => {
+      if (this.disposed || this.entries.get(id) !== e || !e.figure) return
+      e.holder.updateMatrixWorld(true)
+      const px = bindProxy(gltf.scene, e.figure.joints, e.figure.limbs, e.holder, e.doc.pose ?? null)
+      for (const m of px.meshes) this.scene.add(m)
+      e.proxy = px
+      e.holder.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh) m.castShadow = false })
+      this.followAll()
+      this.dirty = true
+    }).catch((err) => this.hooks.onDetailError?.(id, `shadow proxy: ${err instanceof Error ? err.message : String(err)}`))
   }
   /** CA1: the Detailed level — the starter set's mannequin, loaded once and cloned, follows the figure's joints; the Simple shapes hide
    *  (the joints, pickers and markers stay: they drive the pose and carry the pose pass). Until it loads, or without it, the figure is Simple. */
@@ -475,7 +492,7 @@ export class StageEngine {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: e.doc.body?.hands, feet: e.doc.body?.feet })
-      d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true } })
+      d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = !e.proxy; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
       e.detailed = d
@@ -556,7 +573,7 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay', restoreDoc: StageDoc,
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     const r = this.passRenderer(w, h)
     let restore = () => {}
@@ -574,7 +591,7 @@ export class StageEngine {
         keypoints.push(kp)
         const wb = this.wholebody(camera, w, h)
         wholebody.push(wb)
-        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8)   // E23c: the lit clay (the light object's shadows)
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
           : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
       }
@@ -635,8 +652,20 @@ export class StageEngine {
     const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
     return () => { this.scene.overrideMaterial = prevOverride; this.scene.background = prevBg; for (const o of hidden) o.visible = true }
   }
-  private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number): Promise<Blob> {
-    this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg); r.render(this.scene, camera); return toBlob(r.domElement)
+  private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number, showProxies = false): Promise<Blob> {
+    this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg)
+    // E23d: the shadow proxies cast but are never seen. An override material would draw them, so the shadow map is made with them and
+    // the picture without them (the map kept); `showProxies` draws them (the fit check)
+    const proxies = showProxies ? [] : [...this.entries.values()].flatMap((e) => e.proxy?.meshes ?? []).filter((m) => m.visible)
+    if (proxies.length && r.shadowMap.enabled) {
+      r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true
+      r.render(this.scene, camera)
+      for (const m of proxies) m.visible = false
+      r.render(this.scene, camera)
+      for (const m of proxies) m.visible = true
+      r.shadowMap.autoUpdate = true
+    } else r.render(this.scene, camera)
+    return toBlob(r.domElement)
   }
   private depthFor(cam: StageCamera): THREE.ShaderMaterial {
     const dr = depthRange(Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2]))

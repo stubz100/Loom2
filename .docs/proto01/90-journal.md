@@ -6421,3 +6421,46 @@ mask's sense (the model reads 1 − mask: known = 1).
     Made from the A-pose animation reference and skinned to the Detailed figure's bones by proximity, it would cast the coat's and the
     hair's shadow in Stage's light. A cheaper stand-in: a shadow card carrying the character's matte.
   - Proposed as spike E23d, measured against the white set's shadows (the character's real outline).
+
+## 2026-10-19 22:10 — Spike E23d · a dummy shaped like the character: Stage's shadows from a Pixal3D mesh bound to the figure
+
+- **The author's idea after D105:** make the clay dummy look like the character ("it doesn't have to be perfect, just a dummy to
+  cast close enough shadows"). `engine/spikes/e23d_proxy.py meshes|stage|shadows|score`; outputs `out/e23d/`.
+- **The meshes** come through the app's image → mesh job (Pixal3D, D84) on the two animation references: Mara's in 252 s (cold) and
+  Ines' in 218 s, 19–24 MiB GLBs. One GPU job at a time.
+- **The proxy in Stage** (`StageObject.shadow_proxy`, a mesh asset; `stage/proxy.ts`):
+  - **Binding:** the mesh is bound to the figure's twelve joints in the reference's A-pose. It is scaled to the figure's height and
+    stood under it, and its front faces the figure's (a mesh made from a front view has the character's left at +X). Each vertex
+    takes its two nearest limb segments, weighted by inverse squared distance, in a `SkinnedMesh` whose bones are the joints.
+  - **Shadows:** the dummy then casts nothing, and a hidden figure's proxy casts nothing either.
+  - **Unseen:** the proxy's material writes no colour and no depth, so the viewport shows only its shadow.
+  - **The passes** override every material, so they render twice: once with the proxies for the shadow map, then without them, with
+    that map kept.
+  - **Two mistakes on the way:**
+    - A first version put the proxies on a render layer only the light's shadow camera saw. In three.js an object casts only if the
+      *main* camera's layers include it, so the proxies cast nothing.
+    - The meshes first faced backwards.
+  - `proxy_check.jpg`: the proxies follow Mara's walk and Ines' sit and point. The jacket stretches where sitting bends it.
+- **The card (MC):** the character's matte on a vertical card through the feet, turned to face the light (a card facing the camera
+  stands edge-on to this side light and casts a line), scaled to 1.70 m, traced back from every floor pixel. Its darkness is the
+  dummy shadow's median (0.36).
+- **Compared on E23c's shot** (M0's characters, seed 20261021, the window light): MS the dummy, MP the proxy, MC the card, MW the white
+  set's generated shadow. Against MW's shadow mask (ratio < 0.85, in the floor around each figure):
+
+  | | Mara IoU · area | Ines IoU · area |
+  | --- | --- | --- |
+  | MS · the dummy | 0.103 · 0.19 | 0.220 · 0.24 |
+  | **MP · the proxy** | **0.157 · 0.33** | **0.224 · 0.26** |
+  | MC · the card | 0.101 · 0.42 | 0.176 · 0.17 |
+
+  - MW's mask is a loose yardstick: the model also shades the white floor broadly. The proxy comes closest to it, and its shadow is
+    larger than the dummy's, as a coat's would be.
+  - **By eye** (`peek4.jpg`, `compare.mp4`): the proxy's shadows are the fullest and most like the characters' (Ines' jacket and
+    pointing arm), the dummy's are thin streaks, the card's faint, the white set's soft.
+- **Cost:** the meshes ≈ 4 min of GPU per character, once per Cast version; the shadows are Stage's (no generation).
+- **Tests** (the engine and schema change): offline 444 under full and open; Vitest 371 + 3 opt-in; e2e 47/47 under full and open;
+  lint 75; build clean.
+- **For the author:** `.docs/proto01_animate/13-testing-e23d.md` (`compare.mp4`: dummy | proxy / card | white set; `proxy_check.jpg`).
+- **Reading, pending the author's look:** the character-shaped proxy gives Stage the character's outline at no cost per shot.
+  - It is made once per Cast version, beside the animation reference and its fitted body.
+  - Its skinning by proximity is rough but enough for a shadow.

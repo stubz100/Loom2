@@ -13371,6 +13371,17 @@
             ],
             "title": "Profile Id"
           },
+          "shadow_proxy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shadow Proxy"
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform"
           },
@@ -13408,6 +13419,7 @@
           "version",
           "body",
           "detail",
+          "shadow_proxy",
           "path"
         ],
         "title": "StageObject",

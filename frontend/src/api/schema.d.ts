@@ -3013,6 +3013,16 @@ export interface components {
              */
             build: "slim" | "average" | "broad" | "heavy";
             /**
+             * Feet
+             * @default 1
+             */
+            feet: number;
+            /**
+             * Hands
+             * @default 1
+             */
+            hands: number;
+            /**
              * Head
              * @default 1
              */
@@ -3027,6 +3037,11 @@ export interface components {
              * @default 1
              */
             legs: number;
+            /**
+             * Neck
+             * @default 1
+             */
+            neck: number;
             /**
              * Shoulders
              * @default 1

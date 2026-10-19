@@ -55,7 +55,8 @@ function bonesOf(root: THREE.Object3D): Map<string, THREE.Object3D> {
  * figure's joint tree hangs from (the figure's own frame); `limbs` are the figure's limb lengths (builders.mannequin), so the
  * mannequin's segments are scaled to the figure's body.
  */
-export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: THREE.Object3D, J: Record<Joint, THREE.Object3D>, limbs: Limbs): Detailed {
+export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: THREE.Object3D, J: Record<Joint, THREE.Object3D>, limbs: Limbs,
+                             size: { hands?: number; feet?: number } = {}): Detailed {
   const bones = bonesOf(mannequin)
   const part = (p: Part) => bones.get(norm(RIGS[rig][p]))!
   for (const p of Object.keys(RIGS[rig]) as Part[]) if (!part(p)) throw new Error(`the mannequin has no bone for ${p} (${RIGS[rig][p]})`)
@@ -83,6 +84,9 @@ export function makeDetailed(mannequin: THREE.Object3D, rig: RigName, parent: TH
     const have = inFig(part(a)).distanceTo(inFig(part(b)))
     if (have > 1e-6) part(b).position.multiplyScalar(want / have)
   }
+  // CA1b (D104): the hands and feet at the character's size (the body's factors; the markers below ride on these bones)
+  for (const p of ['r_hand', 'l_hand'] as Part[]) part(p).scale.multiplyScalar(size.hands ?? 1)
+  for (const p of ['r_foot', 'l_foot'] as Part[]) part(p).scale.multiplyScalar(size.feet ?? 1)
   object.updateMatrixWorld(true)
   // rest rotations and directions in the figure's frame
   const figInv = new THREE.Quaternion()

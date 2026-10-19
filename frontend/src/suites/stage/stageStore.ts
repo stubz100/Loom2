@@ -10,7 +10,7 @@ import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, samp
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
 import { figureMentions, prebind as prebindOf } from './figures'
-import type { Keypoint } from './passes'
+import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory } from '../story/storyStore'
 
 /** CA0: the body of a bound figure's Cast version (its pinned version, else the character's current one); null = the preset's dummy;
@@ -45,7 +45,7 @@ export type ClipMethod = 'guided' | 'animate'
 type ClipCaps = { model_id: string; label: string; health: string; seconds?: number | null; kinds: string[]; fps?: number | null; frame_step?: number | null; size: number[]; frames_max?: number | null; figures_max?: number | null }
 /** A rendered pass sequence recorded under a camera's passes entry (`guides[kind]`). */
 export interface GuideEntry { asset_id: string; frames: number; fps: number; size: { w: number; h: number }; range: { start: number; end: number }; revision: number; rendered_at?: string }
-export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][] }>
+export type SequenceRenderer = (frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: GuideKind, restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void) => Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody?: (WholeBody | null)[][] }>
 /** A result of this stage: a shot carries `stage_id` in its params, a clip (ST4) only its job's origin. */
 const ofStage = (a: Asset, stageId: string): boolean => (a.params as { stage_id?: string }).stage_id === stageId || (a.origin?.suite === 'stage' && a.origin?.ref === stageId)
 const withCameraKey = (d: StageDoc, camId: string, key: CameraKey): StageDoc => { const k = keyframesOf(d); return { ...d, keyframes: { ...k, camera: { ...k.camera, [camId]: withKey(k.camera[camId], key) } } } }

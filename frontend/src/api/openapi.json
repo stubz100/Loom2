@@ -1155,6 +1155,20 @@
             "title": "Build",
             "type": "string"
           },
+          "feet": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Feet",
+            "type": "number"
+          },
+          "hands": {
+            "default": 1.0,
+            "maximum": 1.6,
+            "minimum": 0.5,
+            "title": "Hands",
+            "type": "number"
+          },
           "head": {
             "default": 1.0,
             "maximum": 2.5,
@@ -1174,6 +1188,13 @@
             "maximum": 1.6,
             "minimum": 0.5,
             "title": "Legs",
+            "type": "number"
+          },
+          "neck": {
+            "default": 1.0,
+            "maximum": 3.0,
+            "minimum": 0.5,
+            "title": "Neck",
             "type": "number"
           },
           "shoulders": {
@@ -1199,6 +1220,9 @@
           "shoulders",
           "arms",
           "legs",
+          "neck",
+          "hands",
+          "feet",
           "attachments"
         ],
         "title": "Body",

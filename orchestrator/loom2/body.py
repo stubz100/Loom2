@@ -32,4 +32,7 @@ class Body(BaseModel):
     shoulders: float = Field(1.0, ge=0.6, le=1.8)
     arms: float = Field(1.0, ge=0.6, le=1.6)
     legs: float = Field(1.0, ge=0.5, le=1.6)
+    neck: float = Field(1.0, ge=0.5, le=3.0)       # CA1b (D104): the neck's length (the head above the shoulders); fitted from the reference
+    hands: float = Field(1.0, ge=0.5, le=1.6)      # CA1b: the Detailed figure's hands (the pose pass draws them, D101)
+    feet: float = Field(1.0, ge=0.5, le=1.6)       # CA1b: the feet (the dummy's and the Detailed figure's)
     attachments: list[BodyAttachment] = Field(default_factory=list, max_length=6)

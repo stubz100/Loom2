@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { bakeKeys, thinKeys } from './bake'
-import { detectRig, norm, retarget } from './retarget'
+import { detectRig, norm, retarget, segmentFrame } from './retarget'
 
 function rig(facing = 0) {
   const root = new THREE.Group(); root.name = 'Armature'
@@ -63,6 +63,29 @@ describe('retargeting a clip onto the figure (CA1)', () => {
     const r = retarget(root, clip, { fps: 4, hip: 0.91 })
     expect(r.frames[4].offset[2]).toBeGreaterThan(0.9)                      // its walk is still the figure's forward
     expect(Math.abs(r.frames[4].offset[0])).toBeLessThan(1e-3)
+  })
+
+  it('keeps the knee a hinge and points the figure foot where the source foot points (CA1b)', () => {
+    const { root } = rig()
+    const turn = (deg: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (deg * Math.PI) / 180)
+    const bend = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.6)            // the right knee bends (shin back)
+    const out30 = turn(-30), roll25 = turn(25)                                                         // the foot turned out 30°, the calf rolled 25°
+    const clip = new THREE.AnimationClip('turn_out', 1, [
+      new THREE.QuaternionKeyframeTrack('foot_r.quaternion', [0, 1], [0, 0, 0, 1, out30.x, out30.y, out30.z, out30.w]),
+      new THREE.QuaternionKeyframeTrack('calf_r.quaternion', [0, 1], [0, 0, 0, 1, ...bend.clone().multiply(roll25).toArray()]),
+    ])
+    const r = retarget(root, clip, { fps: 4, hip: 0.91 })
+    const f = r.frames[4].joints
+    expect(Math.abs(f.r_knee[1])).toBeLessThan(0.5)                         // no twist at the knee (YXZ: [x, y, z])
+    expect(Math.abs(f.r_knee[2])).toBeLessThan(5)                         // a little sideways play: the foot's forward is squared to each segment
+    expect(Math.abs(f.l_knee[1])).toBeLessThan(0.5)
+    // the figure's foot: +Z through root → hip → knee; the source's: +Z through the foot's own turn from rest (the calf's roll included)
+    const foot = dirOf([f.root, f.r_hip, f.r_knee], [0, 0, 1]).setY(0).normalize()
+    root.updateMatrixWorld(true)
+    const want = new THREE.Vector3(0, 0, 1).applyQuaternion(roll25.clone().multiply(out30)).setY(0).normalize()
+    expect(foot.angleTo(want)).toBeLessThan((3 * Math.PI) / 180)
+    expect(segmentFrame(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, -1, 0))).toBeNull()        // a foot along its leg: no frame
+    expect(segmentFrame(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1))!.angleTo(new THREE.Quaternion())).toBeLessThan(1e-6)
   })
 
   it('bakes keys where the figure stands, turned with it, and thins them', () => {

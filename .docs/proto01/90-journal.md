@@ -6220,3 +6220,32 @@ mask's sense (the model reads 1 − mask: known = 1).
   - (2) **The white set** (E23c): a Move layer keeps the set's floor and blocks in white, so the model makes the contact and the
     shadows, and the layer blends onto the plate by them (the shadow as the layer ÷ the white set).
 - Q21 is resolved. **Next: the skeleton fix (CA1b).**
+
+## 2026-10-19 17:45 — CA1b step 1 · the legs retargeted as hinges, the neck point, the body's neck / hands / feet
+
+- **Stage's side of E23b's skeleton, measured** (`scripts/ca1b_skeleton_check.py`; a visible Edge, the app's code, no GPU job).
+  Detailed ♀ with Idle_Loop, Detailed ♂ with Sitting_Enter and a Simple figure with Walk_Loop. From the 18 keypoints and the D101
+  hand and foot markers (the sequence renderer now also returns the hand and foot points it draws):
+  - nose → neck 0.077–0.078 of the height (the references 0.16);
+  - hands (wrist → middle tip) 0.136–0.162 (the references 0.08–0.09);
+  - the female figure's shoulders 0.265, the male's 0.365;
+  - one foot's toes turned fully sideways.
+- **The cause of the sideways feet was the retargeter, not the markers.** Each leg segment was swung onto its source direction by a
+  minimal arc, which leaves the twist about the leg arbitrary: Idle_Loop put −42° of twist on a near-straight knee, and Sitting_Enter
+  splayed the hips +35 / −56°.
+  - **Fix:** a thigh's and a shin's rotation are built from two directions, the segment's own and the source foot's forward squared
+    to it (`segmentFrame`).
+  - So the knee is a hinge (twist ≈ 0; ≤ 5° of sideways play), the hip carries the leg's real turn-out (Idle's right leg 30° out,
+    as the source stands), and the figure's foot points where the source's foot points.
+  - Every segment still points exactly where the source's does: the opt-in starter test (seven real clips) passes unchanged.
+  - Vitest: a foot turned out 30° under a calf rolled 25° keeps the knee untwisted, and the figure's foot within 3° of the source's.
+- **The neck point is the shoulders' midpoint**, as OpenPose, SDPose and DWPose define it. It was 4 cm above them, on the neck joint.
+- **The body gains `neck`, `hands` and `feet`** (factors, default 1; D104):
+  - **neck:** the head above the shoulders (the dummy's top grows with it);
+  - **hands and feet:** the Detailed figure's hand and foot bones scale, and the D101 markers ride on them; the Simple dummy's feet
+    too.
+  - Cast's body editor has the three sliders, and *Reset proportions* resets them.
+  - OpenAPI and the frontend types are regenerated.
+- **Tests:** offline 437; Vitest 371 + 3 opt-in (the starter test run and passing); lint 75; typecheck clean.
+- **Next (step 2):** the `keypoints` job (SDPose wholebody + RT-DETR as a product path) and the body fitted from a version's
+  animation reference.

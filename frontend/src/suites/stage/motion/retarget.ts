@@ -46,6 +46,20 @@ export const LINKS: { joint: Joint; bone: Part; to: Part; from?: Part; rest: [nu
   { joint: 'l_knee', bone: 'l_calf', to: 'l_foot', rest: [0, -1, 0], parent: 'l_hip' },
 ]
 
+const LEGS: [Joint, Joint, Part, Part, Part][] = [['r_hip', 'r_knee', 'r_thigh', 'r_calf', 'r_foot'], ['l_hip', 'l_knee', 'l_thigh', 'l_calf', 'l_foot']]
+
+/** A leg segment's world rotation: its rest −Y onto the segment's direction and its rest +Z (the foot's forward) onto the foot's forward
+ *  made square to the segment; null when the foot points along the segment (the swing alone then decides). */
+export function segmentFrame(dir: THREE.Vector3, forward: THREE.Vector3): THREE.Quaternion | null {
+  if (dir.lengthSq() < 1e-10) return null
+  const y = dir.clone().normalize().negate()
+  const z = forward.clone().sub(y.clone().multiplyScalar(forward.dot(y)))
+  if (z.lengthSq() < 1e-4) return null
+  z.normalize()
+  const x = new THREE.Vector3().crossVectors(y, z)
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z))
+}
+
 export interface MotionFrame { joints: Record<Joint, number[]>; offset: [number, number, number] }
 export interface Retargeted { rig: RigName; fps: number; duration: number; frames: MotionFrame[]; travel: number }
 export interface RetargetOptions {
@@ -133,6 +147,14 @@ export function retarget(root: THREE.Object3D, clip: THREE.AnimationClip, opts: 
         if (want.lengthSq() > 1e-10) q.premultiply(new THREE.Quaternion().setFromUnitVectors(have.normalize(), want.normalize()))
       }
       world.set(l.joint, q)
+    }
+    // CA1b (D104): the legs from two directions — each segment's own and the source foot's forward — so the knee is a hinge (no twist left
+    // over from the rigs' different bone rolls: E23b's Idle had 42° on one knee) and the figure's foot points where the source's foot does
+    for (const [hipJ, kneeJ, thigh, calf, foot] of LEGS) {
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(now.rot[foot].clone().multiply(restInv[foot]))
+      const qh = segmentFrame(now.pos[calf].clone().sub(now.pos[thigh]), fwd)
+      const qk = segmentFrame(now.pos[foot].clone().sub(now.pos[calf]), fwd)
+      if (qh && qk) { world.set(hipJ, qh); world.set(kneeJ, qk) }
     }
     const joints = {} as Record<Joint, number[]>
     joints.root = eulerDeg(world.get('root')!)

@@ -445,7 +445,7 @@ export class StageEngine {
     void import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
-      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs)
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: e.doc.body?.hands, feet: e.doc.body?.feet })
       d.object.traverse((c) => { c.userData.stageId = id })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
@@ -528,12 +528,13 @@ export class StageEngine {
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
   async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose', restoreDoc: StageDoc,
-                       onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][] }> {
+                       onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     const r = this.passRenderer(w, h)
     let restore = () => {}
     try {
       const blobs: Blob[] = []
       const keypoints: Keypoint[][][] = []
+      const wholebody: (WholeBody | null)[][] = []                                   // CA1b: the hands and feet the pose pass draws, for measuring
       for (let i = 0; i < frames.length; i++) {
         const { cam, doc } = frames[i]
         this.sync(doc)
@@ -542,10 +543,12 @@ export class StageEngine {
         this.scene.updateMatrixWorld(true)
         const kp = this.keypoints(camera, w, h)
         keypoints.push(kp)
-        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h, this.wholebody(camera, w, h))))
+        const wb = this.wholebody(camera, w, h)
+        wholebody.push(wb)
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
       }
-      return { blobs, keypoints }
+      return { blobs, keypoints, wholebody }
     } finally {
       restore()
       r.dispose(); r.forceContextLoss()

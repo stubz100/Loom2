@@ -61,9 +61,9 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
   root.add(J.spine); J.spine.position.set(0, 0.06, 0)
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38 * w * x.shoulders, 0.42 * t, 0.2 * w), mat); torso.position.y = 0.22 * t; J.spine.add(torso)
   J.spine.add(J.neck); J.neck.position.set(0, 0.44 * t, 0)
-  J.neck.add(J.head); J.head.position.set(0, 0.06, 0)
+  J.neck.add(J.head); J.head.position.set(0, 0.06 * (x.neck ?? 1), 0)
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.11 * hd, 20, 14), mat); head.position.y = 0.1 * hd; head.scale.set(0.9, 1.1, 1); J.head.add(head)
-  const neckMarker = marker(J.neck, 0, 0, 0)
+  const neckMarker = marker(J.spine, 0, 0.4 * t, 0)                  // CA1b (D104): OpenPose's neck is the shoulders' midpoint, as SDPose and DWPose read people
   const nose = marker(J.head, 0, 0.08 * hd, 0.11 * hd), rEye = marker(J.head, -0.035 * hd, 0.12 * hd, 0.09 * hd), lEye = marker(J.head, 0.035 * hd, 0.12 * hd, 0.09 * hd)
   const rEar = marker(J.head, -0.095 * hd, 0.1 * hd, 0), lEar = marker(J.head, 0.095 * hd, 0.1 * hd, 0)
   const sx = 0.21 * x.shoulders * (b ? 0.5 + 0.5 * w : 1)
@@ -80,7 +80,8 @@ export function mannequin(mat: THREE.Material, pose: Pose = POSES.stand, joints?
     limb(J[hipJ], limbs.thigh, 0.07 * w, mat)
     J[hipJ].add(J[knee]); J[knee].position.set(0, -limbs.thigh, 0)
     limb(J[knee], limbs.shin, 0.055 * w, mat)
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1 * w, 0.06, 0.24), mat); foot.position.set(0, -limbs.shin - 0.01, 0.06); J[knee].add(foot)
+    const fs = x.feet ?? 1
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1 * w * fs, 0.06, 0.24 * fs), mat); foot.position.set(0, -limbs.shin - 0.01, 0.06 * fs); J[knee].add(foot)
     return [marker(J[hipJ], 0, 0, 0), marker(J[knee], 0, 0, 0), marker(J[knee], 0, -limbs.shin, 0)]
   }
   const [rH, rK, rA] = leg('r_hip', 'r_knee', -1), [lH, lK, lA] = leg('l_hip', 'l_knee', 1)

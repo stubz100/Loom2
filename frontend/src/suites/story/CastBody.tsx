@@ -7,8 +7,9 @@ import type { Profile, ProfileVersion } from '../../api/types'
 import { BUILD_WIDTH, DEFAULT_BODY, bodyDims, type Body } from '../stage/body'
 import { useStory } from './storyStore'
 
-const PROPORTIONS: [keyof Pick<Body, 'head' | 'torso' | 'shoulders' | 'arms' | 'legs'>, string, number, number][] = [
-  ['head', 'head size', 0.5, 2.5], ['torso', 'torso length', 0.6, 1.6], ['shoulders', 'shoulder width', 0.6, 1.8], ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6]]
+const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
+  ['head', 'head size', 0.5, 2.5], ['neck', 'neck length', 0.5, 3.0], ['torso', 'torso length', 0.6, 1.6], ['shoulders', 'shoulder width', 0.6, 1.8],
+  ['arms', 'arm length', 0.6, 1.6], ['legs', 'leg length', 0.5, 1.6], ['hands', 'hand size', 0.5, 1.6], ['feet', 'foot size', 0.5, 1.6]]
 const BUILDS: Body['build'][] = ['slim', 'average', 'broad', 'heavy']
 const KINDS: Body['attachments'][number]['kind'][] = ['tail', 'horns', 'ears', 'wings', 'antennae', 'hat', 'backpack', 'other']
 const JOINT_LABEL: Record<string, string> = { head: 'head', spine: 'back', root: 'hips', r_shoulder: 'right shoulder', l_shoulder: 'left shoulder', r_elbow: 'right forearm', l_elbow: 'left forearm' }
@@ -75,7 +76,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
           {open && <div className="body-row">
             <span />
             <span>
-              <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, torso: 1, shoulders: 1, arms: 1, legs: 1 })}>Reset proportions</button>
+              <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, hands: 1, feet: 1 })}>Reset proportions</button>
               <button type="button" className="quiet" title="No body of its own: the default 1.75 m dummy" onClick={() => setSheet({ body: null as never })}>Remove the body</button>
             </span>
           </div>}
@@ -101,7 +102,7 @@ function Silhouette({ b }: { b: Body }) {
     const armLen = d.limbs.upper_arm + d.limbs.forearm, legLen = d.limbs.thigh + d.limbs.shin
     return (
       <>
-        <circle cx={cx} cy={y(neck + 0.06 + 0.1 * x.head)} r={hw(0.11 * x.head)} />
+        <circle cx={cx} cy={y(neck + 0.06 * (x.neck ?? 1) + 0.1 * x.head)} r={hw(0.11 * x.head)} />
         <rect x={cx - hw(0.19 * w * x.shoulders)} y={y(neck)} width={hw(0.38 * w * x.shoulders)} height={hw(0.42 * x.torso + 0.06)} rx={2} />
         {[-1, 1].map((side) => <line key={`a${side}`} x1={cx + side * hw(sx)} y1={y(shoulderY)} x2={cx + side * hw(sx + 0.05)} y2={y(shoulderY - armLen)} strokeWidth={hw(0.1 * w)} />)}
         {[-1, 1].map((side) => <line key={`l${side}`} x1={cx + side * hw(0.1 * w)} y1={y(d.hip - 0.04)} x2={cx + side * hw(0.11 * w)} y2={y(d.hip - 0.04 - legLen)} strokeWidth={hw(0.13 * w)} />)}

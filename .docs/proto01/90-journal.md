@@ -6008,3 +6008,79 @@ a curved path of 4 points (about 5 m), Walk_Loop applied along it (feet locked, 
 **CA1 is built**; the author's three checks are owed. 07 phase 2 (CA0, CA1) is done. **Next, phase 3: the spikes, one at a time** —
 E23a (frame rate and seamless joins) → E23b (Move vs Replace) → E28 (props) → E29 (lip-sync) → E27 (the EffectCraft preview server) →
 E24 (post-processing). E25 is done (D101).
+
+## 2026-10-19 12:13 — Spike E23a · one layer: frame rate and seamless joins (W1 holds in motion, pops in a still hold; W3 per frame fails)
+
+**Setup** (`engine/spikes/e23a_joins.py guides|run|score|heal`; outputs `engine/spikes/out/e23a/`, local, ≈ 0.77 GB). One figure, a
+locked-off camera, Move mode, CA0's Mara reference (`out/ca0/refs/mara_v2.png`, made by CA0's anim-ref route: A-pose, full body, grey
+ground), padded as CN4 pads it.
+
+- **The motion.** The pose sequence came from the app's own code in a visible Edge on a Detailed ♀ figure (D101: hands and feet
+  drawn). The CC0 starter set's Walk_Loop was applied along a 6-point S path (≈ 5.4 m, feet locked, steered). She walks diagonally
+  towards the camera, crosses in front, stops at frame 149, turns to the camera with her feet together (to 165) and points
+  (keyed at 177). The pose holds to frame 240. This is 10 s at 24 fps.
+- **The camera.** At (0, 1.1, 5.0), 36 mm. The figure is 205–357 px tall in 832×480 and every keypoint stays inside the frame.
+  - A first layout started with her walking away; batch 1 then had no faces to measure, so I re-laid it.
+  - E22's room was swapped for the empty floor. Move mode keeps the reference's ground, and the room's cube would have hidden keypoints.
+- **How the batches chain.** Every batch is one Wan Animate Draft window: 77 frames, 4 steps, LightX2V, shift 8, CN4's graph.
+  - Chaining uses the engine's own inputs. `continue_motion` takes the previous batch's last 5 decoded frames.
+    `video_frame_offset` = 77 + 72·(k − 2) for batch k ≥ 2; the node seeks the pose window back 5 frames.
+  - The 5 re-made frames are dropped (W1: a plain cut, no crossfade). The last batch holds the final pose and is trimmed.
+- **The arms.** Each ran with seeds 20261019 and 20261020, alternating, one GPU job at a time:
+  - **F16**: the sequence sampled at 16 fps (161 frames, fractional Stage frames), 3 batches, conformed to 24 fps by RIFE v4.6 (D27).
+  - **F24**: 241 frames, 4 batches.
+
+**Results:**
+
+| Arm · seed | PCK@0.1 | FaceSim by batch | Batch time | Peak VRAM |
+| --- | --- | --- | --- | --- |
+| F16 · 19 | 0.939 | 0.31 → 0.40 → 0.49 | 122 / 112 / 112 s | 9.5 GB |
+| F16 · 20 | 0.929 | 0.33 → 0.47 → 0.55 | 112 / 112 / 112 s | 7.9 GB |
+| F24 · 19 | 0.946 | 0.28 → 0.28 → 0.42 → 0.39 | 112 × 4 s | 7.8 GB |
+| F24 · 20 | 0.921 | 0.31 → 0.32 → 0.52 → 0.57 | 112 × 4 s | 8.0 GB |
+
+- **Pose and time.** Pose fidelity is equal (mean 0.934 vs 0.933, bar 0.8). The time per batch is the same, so F24 costs a third
+  more for 10 s (448 s vs 336 s; RIFE adds 2.4 s).
+- **Identity.**
+  - No identity loss: the FaceSim "drop" is negative everywhere, which passes the bar trivially.
+  - FaceSim rises as she walks closer. Batch 1's faces are ≈ 15–20 px and turned; the last batch faces the camera at ≈ 40 px. So the
+    measure follows face size here, not drift.
+  - By eye on `sheet.jpg`: the same clothes, braids, satchel and colours through all four batches.
+- **Joins.** E17's ratio (the cut's grey step ÷ the previous batch's median step) is misleading at a corner or in a hold, so I also
+  scored each join against the local motion (the median of the 6 steps either side):
+
+  | Where the join falls | Joins | Local ratio | Colour drift (ΔE of the figure's mean, 3 frames either side) |
+  | --- | --- | --- | --- |
+  | **Inside motion**: F24 77 (walk), F16 77 (the path's corner) | 4 | **0.83–1.04** | 1.1–1.9 vs a baseline of 1.5–2.0 |
+  | At the walk's stop: F24 149 | 2 | 1.52–1.77 | 2.0–2.5 vs 1.6 |
+  | **In the still hold**: F24 221, F16 149 | 4 | **7.7–11.1** | 0.7–0.9 vs 0.12 |
+
+  - The carried frames are re-made faithfully (mean grey difference 0.42–0.81).
+  - In the still hold, the cut is a ≈ 1 px shift of the whole figure plus a faint tint change in the skirt. It is invisible at
+    thumbnail size, but visible in an 8× difference image, and the frames after it settle (step 1.2 → 0.46 → 0.37 → 0.29, against
+    0.12–0.18 in the hold).
+  - After RIFE, F16's joins read the same (in motion 2.2× the previous batch's median, about 1× local; the hold join still stands out).
+- **W3 on the worst join** (F24 · 19, frame 221, in the hold). Frames 217–225 were refined one by one with the app's Refine (Klein
+  base 9B, strength 0.35, the start still and the animation reference as ReferenceLatents) and pasted back in the figure's mask:
+  - **worse**: the step ratio across the patch rose from 7.65 to 16.2;
+  - colour drift fell a little (ΔE 0.72 → 0.56) and the face sharpened (FaceSim 0.39 → 0.47);
+  - 40 s a frame, 8.8 GB.
+
+  Independent refines flicker in a still hold; a per-frame A6 cannot heal a seam.
+- **Not measured.** LPIPS is not installed; the drift is the figure's mean colour shift instead.
+- **Owed to the author's eye** (02 §3): motion speed at F24 (hair and cloth slowed?) and ghosting after RIFE at F16, in `compare.mp4`
+  (2 × 2, both arms, both seeds, 24 fps).
+
+**Reading:**
+
+- **W1 is seamless where the figure moves.** The weak spot is a join inside a still hold. The batch planner should **place the joins
+  in motion**: shorter batches of 4n + 1 frames, so the cuts land on frames where Stage's keys move the figure. That is better than
+  repairing them.
+- **W3 as a per-frame refine is not a seam repair.** If a hold join cannot be avoided, the candidates are:
+  - a temporal method (A5's keyframe + flow, or a low-σ v2v over the batch's tail);
+  - a hold made by repeating frames (a still figure only).
+- **Frame rate.** F16 + RIFE matches F24 on pose and identity, with one join fewer per 10 s and 25 % less GPU time. It is also D27's
+  policy (master native, RIFE at export). **Recommendation: F16, unless the author's eye prefers F24's motion in `compare.mp4`.**
+  Recorded as **Q20**; the D-number follows at the decision gate (07).
+
+**For the author:** `.docs/proto01_animate/09-testing-e23a.md` (≈ 5 min: compare.mp4, the joins, the hold pop).

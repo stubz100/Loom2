@@ -141,8 +141,9 @@ materialised once already (ComfyUI-GGUF tekken tokenizer vs core 0.38.2) and was
 | Q17 | ~~Klein object-removal recipe?~~ **Resolved 2026-10-05 by E8b**: neutralise the hole in the reference image (`klein_icm_hole`, 10 s warm) or LanPaint "Prompt First" λ 8 (21 s); both cleared the crates that every reference-fed Klein graph kept. The Remove verb uses the hole recipe with a background-only prompt | 04 §4, 10 | — |
 | Q18 | **Wan VAE time**: decoding 81 × 832×480 frames takes 131–134 s and the start-image encode 36–40 s — 54 % of a 315 s clip (sampling 104–130 s). Try MIOpen on for the 3D convs (E7 measured image VAEs only), `VAEDecodeTiled` temporal tiling, and a lightweight preview VAE | 04 §5, 12 E4 | measure in M6 before the Animate suite sets its progress expectations |
 | Q19 | ~~D98's headroom changes Wan Animate's output~~ **Resolved 2026-10-18 → D100**: a per-model headroom, Wan Animate at 0 until spike E30 | 13 D98, CN4 | — |
+| Q20 | **E23a (2026-10-19): F16 + RIFE or F24 for clay shots; where the batch joins fall** — pose (PCK 0.934 / 0.933) and identity are equal, F24 costs a third more GPU time (one join more per 10 s); W1 joins are seamless inside motion (local ratio 0.83–1.04) but pop inside a still hold (7.7–11×, a ≈ 1 px shift and a faint tint), and W3 as a per-frame Klein refine makes the hold worse (7.65 → 16.2). Proposed: F16 + RIFE (D27), the batch planner places the joins in motion. The author's eye on `out/e23a/compare.mp4` (F24 motion speed, F16 ghosting) decides; a D-number at the decision gate | proto01_animate 02 §3, 09 | E23b runs with the answer |
 
-Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-06; Q19 was resolved as D100 on 2026-10-18.
+Q1–Q14, Q16 and Q17 are resolved; Q15 and Q18 are open as of 2026-10-06; Q19 was resolved as D100 on 2026-10-18; Q20 (E23a's frame rate and join placement) is open since 2026-10-19.
 
 ## Post-MVP backlog (ordered 2026-10-07, M7 slice 5)
 

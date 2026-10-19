@@ -50,6 +50,14 @@ Each wave ends measured on the rig, as every wave has ("no milestone closes with
 
 The question: on a long single-character shot, which frame rate (F16 or F24) gives seamless W1 joins (no crossfade, the author 2026-10-18) with the identity held, and how much do they drift (W3 repairs)?
 
+> **Run 2026-10-19** (journal 12:13, `engine/spikes/e23a_joins.py`).
+>
+> - Pose and identity are equal at F16 and F24, and F24 costs a third more GPU time.
+> - W1 is seamless inside motion (local ratio 0.83–1.04) but pops inside a still hold (7.7–11×).
+> - W3 as a per-frame refine made the hold worse (7.65 → 16.2).
+>
+> Proposed: F16 + RIFE, with the batch planner placing joins in motion (Q20). The author's look is in 09.
+
 **The shot.** About 10 s, Mara alone in E22's set:
 
 - she walks along a path (the CC0 starter set's `Walk_Loop`, retargeted onto the dummy by spike code; never a Mixamo clip, §2),

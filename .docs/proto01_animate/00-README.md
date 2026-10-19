@@ -18,6 +18,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [06](06-continuity-across-shots.md) | **Continuity across Shots** | options (2026-10-18): O1 a Scene record Shots link to, O2 Shot templates, O3 linked / independent copies, O4 locking the look when generating, O5 a continuity check, O6 matching in the cut, O7 state over story time; a suggested combination |
 | [07](07-build-order.md) | **The build order** | one list for 02, 03, 05 and 06, UX0 first; the author's rules (one GPU job at a time, everything kept in the project, voice only, small testing documents, CC0 motion for tests) |
 | [08](08-testing-ca1.md) | **Testing CA1** (for the author) | a Mixamo clip from the local folder, a walk along a path into a turn and a point in under 2 min, the Detailed level |
+| [09](09-testing-e23a.md) | **Looking at E23a** (for the author) | F16 + RIFE or F24 in compare.mp4, the joins while walking and in a still hold (Q20) |
 
 Background reading, in this order:
 

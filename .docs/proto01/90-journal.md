@@ -6185,3 +6185,38 @@ mask's sense (the model reads 1 − mask: known = 1).
   look changes this.
 
 **For the author:** `.docs/proto01_animate/10-testing-e23b.md` (≈ 5 min: compare.mp4, M against R).
+
+## 2026-10-19 17:10 — E23b decided → D103: Move; the skeletons need refining for the characters; the white set as E23c
+
+- **The author's look** (10-testing-e23b.md): "Move looks much better than replace. There is something wrong with the 'move'
+  skeletons though, both girls look like they have proportionally larger hand and feet, while they look short and stocky. I think move
+  is the way forward, perhaps some of the background items should remain when we separate the characters (like the floor, or the box)
+  but in white only - so it is easier to blend the images, but the shadows produced are accurate also. I'd go with move, but the
+  character skeletons need refining for the characters."
+- **Measured.** SDPose wholebody on the two animation references (the characters as cast), on Move's layers (frames where they
+  stand), and Stage's 18 keypoints, as ratios to the height (nose → ankles):
+
+  | | head (nose → neck) | shoulders | hips | leg | hand | foot |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Mara · reference | 0.161 | 0.230 | 0.124 | 0.474 | 0.089 | 0.044 |
+  | Mara · Stage | **0.107** | 0.209 | 0.099 | 0.556 | — | — |
+  | Mara · Move (2 seeds) | 0.142–0.175 | 0.206–0.224 | 0.099–0.122 | 0.457–0.465 | 0.093–0.129 | 0.048–0.185 |
+  | Ines · reference | 0.167 | 0.234 | 0.144 | 0.499 | 0.082 | 0.048 |
+  | Ines · Stage | **0.071** | **0.281** | 0.133 | 0.566 | — | — |
+  | Ines · Move (2 seeds) | **0.088–0.094** | 0.262–0.271 | 0.152–0.159 | 0.531–0.550 | **0.149–0.163** | **0.175–0.189** |
+
+  - Stage's head markers sit low and close: the nose is almost on the neck. Move follows them, so the head sinks into the shoulders.
+  - Ines' shoulders are wider than she is. Together these give "short and stocky".
+  - The drawn hands are long and spread, and the model makes them about 1.8× the reference's.
+  - In the guide (`peek_prop.jpg`), one foot's three markers sit ≈ 45 px from its ankle: a fault in the Detailed figure's foot
+    markers. The model answers with big boots.
+- **D103** (decision log):
+  - Move is the app's mode, with mattes by SAM 3 text detection kept inside the Stage mask.
+  - Before E24: (1) **the skeletons refined for the characters**:
+    - the head and foot markers fixed;
+    - the figure's proportions (head, neck, shoulders, hips, limbs, hands, feet) fitted to the character's animation reference,
+      measured by SDPose at casting into the Cast version's body;
+    - the proportion test above as the acceptance.
+  - (2) **The white set** (E23c): a Move layer keeps the set's floor and blocks in white, so the model makes the contact and the
+    shadows, and the layer blends onto the plate by them (the shadow as the layer ÷ the white set).
+- Q21 is resolved. **Next: the skeleton fix (CA1b).**

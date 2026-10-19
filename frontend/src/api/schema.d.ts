@@ -6359,6 +6359,10 @@ export interface components {
         };
         /** Pose */
         Pose: {
+            /** Extra */
+            extra: {
+                [key: string]: number[];
+            };
             /** Joints */
             joints: {
                 [key: string]: number[];
@@ -7886,6 +7890,8 @@ export interface components {
              * @default 0
              */
             colour_id: number;
+            /** Detail */
+            detail: ("male" | "female") | null;
             /** Id */
             id: string;
             /**

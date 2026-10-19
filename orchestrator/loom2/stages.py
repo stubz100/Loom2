@@ -33,6 +33,7 @@ class Pose(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     preset: str | None = None
     joints: dict[str, list[float]] = Field(default_factory=dict)         # joint name → [x, y, z] degrees (ST2 edits them; ST1 keeps presets)
+    extra: dict[str, list[float]] = Field(default_factory=dict)          # CA1: the Detailed level's own bones (fingers, wrists, feet …) → [x, y, z] degrees on their rest
 
 
 class StageObject(BaseModel):
@@ -52,6 +53,7 @@ class StageObject(BaseModel):
     profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame
     version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one
     body: Body | None = None                       # CA0: the bound version's body, copied when bound and kept in step by the client (None = the preset's dummy)
+    detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure (None = Simple)
 
 
 class StageCamera(BaseModel):

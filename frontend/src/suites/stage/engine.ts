@@ -11,7 +11,8 @@ import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
-import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName } from './passes'
+import { makeDetailed, type Detailed, type HandPreset } from './detailed'
+import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
 export interface EngineHooks {
@@ -19,13 +20,14 @@ export interface EngineHooks {
   onTransformed: (id: string, t: Transform) => void
   /** ST2: a joint was rotated or a hand / foot dragged — the figure's full joint map in degrees (YXZ). */
   onPosed: (id: string, joints: Record<string, number[]>) => void
+  onDetailError?: (id: string, message: string) => void          // CA1: the Detailed mannequin could not load (the figure stays Simple)
   onFreeCameraMoved?: () => void
   /** P18: a mesh asset's GLB arrived and a fitted view of it is ready — the store may make it the asset's thumbnail. */
   onMeshThumb?: (assetId: string, view: Blob) => void
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
 
-interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[] }
+interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
 
@@ -88,7 +90,7 @@ export class StageEngine {
     this.orbit.addEventListener('change', () => { this.dirty = true; this.hooks.onFreeCameraMoved?.() })
     this.gizmo = new TransformControls(this.free, canvas)
     this.gizmo.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !(e as unknown as { value: boolean }).value; this.dirty = true })
-    this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); this.dirty = true })
+    this.gizmo.addEventListener('objectChange', () => { if (this.ik) this.solveIk(); this.followAll(); this.dirty = true })
     this.gizmo.addEventListener('mouseUp', () => this.commitGizmo())
     this.scene.add(this.gizmo.getHelper())
     this.gizmo.enabled = false
@@ -327,7 +329,8 @@ export class StageEngine {
     for (const o of doc.objects) {
       seen.add(o.id)
       let e = this.entries.get(o.id)
-      if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)) {
+      if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
+        || (e.doc.detail ?? null) !== (o.detail ?? null)) {
         if (e) { this.scene.remove(e.holder) }
         e = this.build(o)
         this.entries.set(o.id, e)
@@ -344,6 +347,7 @@ export class StageEngine {
       e.doc = o
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    this.followAll()
     // cameras: helpers for the inactive ones, the active one drives the render camera
     const cams = new Set(doc.cameras.map((c) => c.id))
     for (const [id, h] of [...this.camHelpers]) if (!cams.has(id)) { this.scene.remove(h); this.camHelpers.delete(id) }
@@ -428,7 +432,33 @@ export class StageEngine {
     } else body = prop('block', this.clayMat)
     body.traverse((c) => { c.userData.stageId = o.id })
     holder.add(body)
-    return { holder, body, doc: o, figure, pickers }
+    const entry: Entry = { holder, body, doc: o, figure, pickers }
+    if (figure && o.detail) this.attachDetailed(entry, o.detail)
+    return entry
+  }
+  /** CA1: the Detailed level — the starter set's mannequin, loaded once and cloned, follows the figure's joints; the Simple shapes hide
+   *  (the joints, pickers and markers stay: they drive the pose and carry the pose pass). Until it loads, or without it, the figure is Simple. */
+  private attachDetailed(e: Entry, kind: 'male' | 'female'): void {
+    const id = e.doc.id
+    void import('./motion/mannequins').then((m) => m.mannequinClone(kind, this.clayMat)).then(({ root, rig }) => {
+      if (this.disposed || this.entries.get(id) !== e || !e.figure) return
+      e.holder.updateMatrixWorld(true)
+      const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs)
+      d.object.traverse((c) => { c.userData.stageId = id })
+      const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
+      e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
+      e.detailed = d
+      d.follow(e.figure.joints, e.doc.pose?.extra)
+      this.dirty = true
+    }).catch((err) => this.hooks.onDetailError?.(id, err instanceof Error ? err.message : String(err)))
+  }
+  /** CA1: a hand preset as the figure's `extra` bone turns — null while the figure is Simple (or its mannequin is still loading). */
+  handPreset(id: string, side: 'r' | 'l', preset: HandPreset): Record<string, number[]> | null {
+    return this.entries.get(id)?.detailed?.handPreset(side, preset) ?? null
+  }
+  /** CA1: every Detailed figure after its joints (a key, a gizmo drag, the IK, a sampled frame). */
+  followAll(): void {
+    for (const e of this.entries.values()) if (e.detailed && e.figure) { e.holder.updateMatrixWorld(true); e.detailed.follow(e.figure.joints, e.doc.pose?.extra) }
   }
 
   // ---- ST3: the passes ------------------------------------------------------------------------------------------------------------
@@ -454,13 +484,13 @@ export class StageEngine {
         if (!e.doc.visible) continue
         const hex = maskColour(i++); legend[hex] = e.doc.id
         const m = new THREE.MeshBasicMaterial({ color: hex })
-        e.body.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })
+        e.holder.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik) { swapped.push([mesh, mesh.material]); mesh.material = m } })   // CA1: the holder, so a Detailed mannequin is in its mask
       }
       blobs.mask = await this.shotWith(r, camera, null, 0x000000)
       for (const [mesh, mat] of swapped) mesh.material = mat
       swapped.length = 0
       const keypoints = this.keypoints(camera, w, h)
-      blobs.pose = await toBlob(drawPose(keypoints, w, h))
+      blobs.pose = await toBlob(drawPose(keypoints, w, h, this.wholebody(camera, w, h)))   // D101: a Detailed figure's hands and feet
       return { size: { w, h }, blobs: blobs as Record<PassName, Blob>, keypoints, legend }
     } finally {
       for (const [mesh, mat] of swapped) mesh.material = mat
@@ -487,7 +517,7 @@ export class StageEngine {
         this.scene.updateMatrixWorld(true)
         const kp = this.keypoints(camera, w, h)
         keypoints.push(kp)
-        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h)))
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h, this.wholebody(camera, w, h))))
         onProgress?.(i + 1, frames.length)
       }
       return { blobs, keypoints }
@@ -555,6 +585,15 @@ export class StageEngine {
   private keypoints(camera: THREE.Camera, w: number, h: number): Keypoint[][] {
     const figures = [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => e.figure!.markers)
     return projectMarkers(figures, camera, w, h)
+  }
+  /** D101: per figure (the order of `keypoints`), the Detailed figure's hands and feet, projected; null for a Simple figure. */
+  private wholebody(camera: THREE.Camera, w: number, h: number): (WholeBody | null)[] {
+    return [...this.entries.values()].filter((e) => e.figure && e.doc.visible).map((e) => {
+      const wb = e.detailed?.wholebody
+      if (!wb) return null
+      const [feet, left, right] = projectMarkers([wb.feet, wb.left, wb.right], camera, w, h)
+      return { feet, left, right }
+    })
   }
 
   // ---- render ---------------------------------------------------------------------------------------------------------------------

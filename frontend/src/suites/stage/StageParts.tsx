@@ -16,10 +16,11 @@ import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter } from './FigureBinding'
 import { MotionLibrary } from './motion/MotionLibrary'
+import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
-import type { Asset, StageCamera } from '../../api/types'
+import type { Asset, StageCamera, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
@@ -178,6 +179,33 @@ export function CamerasTab() {
 
 // ST2 (16 §3d): presets (built-in + the project's saved ones), the pose verbs, the selected joint's angles. While this tab is open the
 // viewport shows the joint pickers: click a joint for the rotate gizmo, click a hand / foot handle and drag it (two-bone IK).
+/** CA1 (01 §9a): the figure's level — Simple blocks, Detailed refines (the starter set's mannequin follows the same joints: keys, clips and
+ *  the pose pass are unchanged) — and, at the Detailed level, the hands' presets as turns of its finger bones (keyed with the pose). */
+function DetailLevel({ o }: { o: StageObject }) {
+  const detail = o.detail ?? null
+  const hand = (side: 'r' | 'l', preset: HandPreset) => {
+    const extra = viewport.handPreset?.(o.id, side, preset)
+    if (!extra) { useSession.getState().toast('The Detailed mannequin is not on screen yet (it loads from the starter set)', 'info'); return }
+    st().setExtra(o.id, extra, `${side === 'r' ? 'right' : 'left'} hand · ${preset}`)
+  }
+  return (
+    <div className="detail-level">
+      <div className="kv"><span>level</span>
+        <span className="segmented" role="group" aria-label="figure level">
+          {([[null, 'Simple'], ['male', 'Detailed ♂'], ['female', 'Detailed ♀']] as const).map(([k, label]) => (
+            <button key={label} type="button" className={detail === k ? 'active' : ''} aria-pressed={detail === k} title={k ? 'the starter set\'s skinned mannequin (fingers, feet, a spine of three) follows this figure' : 'the 12-joint dummy (blocking)'}
+              onClick={() => st().setDetail(o.id, k)}>{label}</button>))}
+        </span>
+      </div>
+      {detail && (['r', 'l'] as const).map((side) => (
+        <div key={side} className="kv"><span>{side === 'r' ? 'right hand' : 'left hand'}</span>
+          <span className="lib-grid hands">{HAND_PRESETS.map((p) => <button key={p} type="button" onClick={() => hand(side, p)} title={`${p} — the ${side === 'r' ? 'right' : 'left'} hand's fingers`}>{p}</button>)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function PosesTab() {
   const current = useStage((s) => s.current)
   const o = useStage((s) => s.object(s.selected))
@@ -194,6 +222,7 @@ export function PosesTab() {
     <MotionLibrary />{/* CA1: clips from the library first; presets and keys by hand below */}
     <div className="stage-panel">
       <div className="head"><b>{o.name}</b><span className="hint">pose · {o.pose?.preset ?? 'stand'}{Object.keys(o.pose?.joints ?? {}).length ? ' (edited)' : ''}</span></div>
+      <DetailLevel o={o} />
       <h4>Presets</h4>
       <div className="lib-grid">{POSE_NAMES.map((p) => <button key={p} className={o.pose?.preset === p && !Object.keys(o.pose?.joints ?? {}).length ? 'active' : ''} onClick={() => st().applyPose(o.id, p)}>{p}</button>)}</div>
       <h4>Saved in this project</h4>
@@ -459,16 +488,18 @@ function Viewport() {
       onPick: (id) => st().select(id),
       onTransformed: (id, t) => st().setTransform(id, t),
       onPosed: (id, joints) => st().setJoints(id, joints),
+      onDetailError: (_id, message) => useSession.getState().toast(`The Detailed mannequin did not load — the figure stays Simple: ${message}`, 'error'),   // CA1
       onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on) })   // ST3 / ST4
+    viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
     if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null }) }
+    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)

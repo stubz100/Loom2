@@ -16,7 +16,17 @@ export const COLOURS: [number, number, number][] = [[255, 0, 0], [255, 85, 0], [
 export function depthMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { near: { value: 1.0 }, far: { value: 20.0 } },
-    vertexShader: 'varying float vZ; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vZ = -mv.z; gl_Position = projectionMatrix * mv; }',
+    // CA1: three's skinning chunks, so a skinned figure (the Detailed dummy) is drawn as posed, not in its bind pose; inert for plain meshes
+    vertexShader: `#include <common>
+#include <skinning_pars_vertex>
+varying float vZ;
+void main(){
+#include <skinbase_vertex>
+#include <begin_vertex>
+#include <skinning_vertex>
+#include <project_vertex>
+vZ = -mvPosition.z;
+}`,
     fragmentShader: 'uniform float near; uniform float far; varying float vZ; void main(){ float d = clamp((1.0 / max(vZ, near) - 1.0 / far) / (1.0 / near - 1.0 / far), 0.0, 1.0); gl_FragColor = vec4(vec3(d), 1.0); }',
   })
 }
@@ -41,7 +51,19 @@ export function projectMarkers(markers: THREE.Object3D[][], cam: THREE.Camera, w
 }
 
 /** OpenPose COCO-18 as the ControlNet preprocessors draw it: limbs as soft ellipses, joints as dots, on black. */
-export function drawPose(keypoints: Keypoint[][], w: number, h: number): HTMLCanvasElement {
+/** D101 (spike E25): a Detailed figure's hands and feet for the pose pass — COCO-WholeBody's feet (left big toe, small toe, heel, then the
+ *  right's) and OpenPose's 21 hand points per hand (wrist; thumb, index, middle, ring, pinky from the knuckle to the tip). */
+export interface WholeBody { feet: Keypoint[]; left: Keypoint[]; right: Keypoint[] }
+export const HAND_EDGES: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [0, 9], [9, 10], [10, 11], [11, 12],
+  [0, 13], [13, 14], [14, 15], [15, 16], [0, 17], [17, 18], [18, 19], [19, 20]]
+/** HSV (h in 0–1, full saturation and value) as RGB — DWPose's hand edge colours. */
+const hue = (h: number): [number, number, number] => {
+  const i = Math.floor(h * 6), f = h * 6 - i, q = 1 - f
+  const [r, g, b] = [[1, f, 0], [q, 1, 0], [0, 1, f], [0, q, 1], [f, 0, 1], [1, 0, q]][i % 6]
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]
+}
+
+export function drawPose(keypoints: Keypoint[][], w: number, h: number, wholebody?: (WholeBody | null)[]): HTMLCanvasElement {
   const c = document.createElement('canvas'); c.width = w; c.height = h
   const g = c.getContext('2d')!
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h)
@@ -55,6 +77,21 @@ export function drawPose(keypoints: Keypoint[][], w: number, h: number): HTMLCan
       g.beginPath(); g.ellipse(0, 0, Math.hypot(x2 - x1, y2 - y1) / 2, r, 0, 0, Math.PI * 2); g.fill(); g.restore()
     })
     kp.forEach(([x, y, v], k) => { if (!v) return; g.fillStyle = `rgb(${COLOURS[k].join(',')})`; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill() })
+  }
+  // D101: the Detailed figures' feet (dots in the body's first six colours) and hands (rainbow edges, blue dots), as DWPose draws them
+  const handLine = Math.max(1, Math.round(r / 2))
+  for (const wb of wholebody ?? []) {
+    if (!wb) continue
+    wb.feet.forEach(([x, y, v], k) => { if (!v) return; g.fillStyle = `rgb(${COLOURS[k].join(',')})`; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill() })
+    for (const hand of [wb.right, wb.left]) {
+      HAND_EDGES.forEach(([a, b], k) => {
+        if (!hand[a]?.[2] || !hand[b]?.[2]) return
+        g.strokeStyle = `rgb(${hue(k / HAND_EDGES.length).join(',')})`; g.lineWidth = handLine
+        g.beginPath(); g.moveTo(hand[a][0], hand[a][1]); g.lineTo(hand[b][0], hand[b][1]); g.stroke()
+      })
+      g.fillStyle = 'rgb(0,0,255)'
+      for (const [x, y, v] of hand) { if (!v) continue; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill() }
+    }
   }
   return c
 }

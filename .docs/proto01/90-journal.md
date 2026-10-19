@@ -5887,3 +5887,57 @@ The question (01 §9a, before CA1 builds the Detailed level): does Wan Animate f
 DWPose's style and COCO-WholeBody order (left hand first). The Simple figure's pass stays body-only (E10's clay reference rests on it).
 
 Outputs under `engine/spikes/out/e25/` (git-ignored); contact sheet `sheet.jpg`.
+
+## 2026-10-19 08:55 — CA1 step 2 · the Detailed level: the starter set's mannequin follows the figure; hand presets; D101 in the pose pass
+
+**One figure, two editing levels** (01 §9a, the author's answer 1). A figure is **Simple** (the 12-joint dummy, for blocking) or
+**Detailed** (`StageObject.detail`: the starter set's skinned mannequin, Quaternius UAL2, male or female, 65 bones).
+
+**How it works** (`stage/detailed.ts`):
+
+- **The 12 joints stay the driver.** Picking, the gizmo, IK, keys, library clips and the pose markers are unchanged.
+- **The mannequin follows them every frame,** the exact inverse of the retargeter:
+  - each mapped bone points along its figure limb;
+  - the spine chain turns as one, so it stays straight along the figure's spine;
+  - the pelvis sits at the figure's root;
+  - the segment lengths follow the figure's body (CA0).
+- **The bones the figure lacks** (fingers, wrists, feet, clavicles, the spine between) take their own rotations: `Pose.extra`, keyed
+  and interpolated like the joints.
+- **Hand presets** per hand (open, relaxed, fist, point, grip, pinch) curl each finger about the axis across it and the palm's normal,
+  read from the mannequin's rest geometry, so they work across rigs.
+- **Loading** (`motion/mannequins.ts`): the mannequin is found among the starter files by content (a skinned mesh on a known rig; the
+  female by her file name), cloned per figure, and dressed in the stage's clay material. The Simple shapes hide; until the mannequin
+  loads, or without it, the figure is Simple, and a toast says why.
+- **The engine** follows after every sync, gizmo drag and IK step. The depth shader now includes three's skinning chunks (a skinned
+  figure would otherwise draw in its bind pose). The mask pass covers the whole object.
+
+**D101 in the pose pass:** a Detailed figure carries hand markers (wrist, three joints and the tip of each finger, the tip from the leaf
+bone) and foot markers (big toe, small toe, heel). The pose drawer adds them as DWPose draws them: feet as dots in the body's first
+colours, hands as rainbow edges with blue dots. A Simple figure is unchanged. The stored keypoints stay the 18 body points per figure, so
+the server's checks and the rig scoring are untouched.
+
+**UI:** the Motion section's figure panel gets a level switch (Simple · Detailed ♂ · Detailed ♀) and, at the Detailed level, the
+hands' preset rows. The library panel became a sibling of the poses panel.
+
+**Headed check with the real starter set** (`scripts/ca1_detailed_check.py`; visible Edge, no engine): a Simple figure walking, a
+Detailed male pointing with a fist on the left hand, and a Detailed female waving with her right hand pointing.
+
+- **Clay:** both mannequins posed as their figures, with the fist and the pointing hand visible.
+- **Depth:** skinned and posed, not in the bind pose.
+- **Pose:** the Simple figure body-only; the Detailed figures with both hands and feet.
+- Outputs under `engine/spikes/out/ca1/`.
+
+**Tests:**
+
+- Vitest 359 + 1 opt-in. `detailed.test.ts` (8) checks, on a synthetic Unreal rig:
+  - with the figure turned 0.7 rad, every mapped limb within 0.01 rad of the figure's, in five pose presets; the pelvis at the root;
+    the segment lengths matched;
+  - following through a pose change; a wrist turn of its own;
+  - a fist closing toward the palm;
+  - 21 + 21 + 6 markers that move with their bones, and none on a rig without fingers.
+- The test rig fixture now carries a skinned mesh (a cube per bone) and finger bones (14 KB).
+- e2e 45/45 under full and open. The new scenario switches a figure to Detailed, keys a fist as its finger bones, and renders the
+  passes.
+- Offline 437 under full and open; lint 75; build and audits clean.
+
+**Next:** step 3, root motion along a drawn path, foot lock, and blends between clips.

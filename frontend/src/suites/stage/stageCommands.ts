@@ -6,6 +6,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
+import type { HandPreset } from './detailed'
 import { profilesForMentions } from '../story/storyStore'
 import { useMotion } from './motion/motionStore'
 
@@ -13,7 +14,8 @@ const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
 const hasSel = () => !!sel()
 /** The viewport engine registers itself so the commands can place, frame and read the free view (engine.ts is not a store). */
-export const viewport: { centre?: () => number[]; freePose?: () => { pos: number[]; target: number[] }; frame?: (ids: string[] | null) => void; lookThrough?: () => void } = {}
+export const viewport: { centre?: () => number[]; freePose?: () => { pos: number[]; target: number[] }; frame?: (ids: string[] | null) => void; lookThrough?: () => void
+  handPreset?: (id: string, side: 'r' | 'l', preset: HandPreset) => Record<string, number[]> | null } = {}   // CA1: the mounted viewport's Detailed figures
 
 const tool = (id: Tool, label: string, icon: typeof MousePointer2, key: string): Command => ({
   id: `stage.tool.${id}`, scope: 'stage', label, icon, keys: key, placement: ['toolbar', 'context'], when: hasStage, run: () => st().setTool(id),

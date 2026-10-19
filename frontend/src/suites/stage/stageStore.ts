@@ -121,6 +121,10 @@ interface StageState {
   setRange: (start: number, end: number) => void
   keyCamera: () => void
   keyObject: (id: string) => void
+  /** CA1: the figure's level — Simple (null) or Detailed (the starter set's male / female mannequin follows its joints). */
+  setDetail: (id: string, detail: 'male' | 'female' | null) => void
+  /** CA1: turns of the Detailed level's own bones (fingers, wrists, feet …) merged into the figure's pose. */
+  setExtra: (id: string, extra: Record<string, number[]>, label?: string) => void
   /** CA1: a library clip's baked keys on a figure — the figure's keys in their frames replaced, the range grown to hold them (one undo step). */
   applyMotion: (id: string, keys: ObjectKey[], label: string) => void
   removeKeyAt: (frame: number) => void
@@ -250,8 +254,10 @@ export const useStage = create<StageState>()((set, get) => ({
   keyObject: (id) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
-    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints } } : null }), 'key object')
+    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) } } : null }), 'key object')
   },
+  setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail ? 'Detailed level' : 'Simple level'),
+  setExtra: (id, extra, label = 'hand') => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.pose ? { ...o, pose: { ...o.pose, extra: { ...(o.pose.extra ?? {}), ...extra } } } : o)) }), label),
   applyMotion: (id, keys, label) => {
     if (!keys.length) return
     const first = keys[0].frame, last = keys[keys.length - 1].frame
@@ -428,9 +434,9 @@ export const useStage = create<StageState>()((set, get) => ({
   setJoints: (id, joints) => {
     const o = get().object(id)
     if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
-    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: { preset: x.pose?.preset ?? 'stand', joints } } : x)) }), 'pose')
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: { preset: x.pose?.preset ?? 'stand', joints, extra: x.pose?.extra ?? {} } } : x)) }), 'pose')
   },
-  applyPose: (id, preset, joints = {}) => { get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, pose: { preset: preset ?? 'stand', joints } } : o)) }), 'pose preset'); set({ selectedJoint: null }) },
+  applyPose: (id, preset, joints = {}) => { get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, pose: { preset: preset ?? 'stand', joints, extra: o.pose?.extra ?? {} } } : o)) }), 'pose preset'); set({ selectedJoint: null }) },
   mirrorPose: (id) => { const o = get().object(id); if (o) get().setJoints(id, mirrorJoints(effectiveJoints(o))) },
   resetPose: (id) => get().applyPose(id, 'stand', {}),
   loadPoses: async () => { try { set({ userPoses: (await unwrap(http.GET('/stages/poses'))).poses as unknown as Record<string, PoseDef> }) } catch { set({ userPoses: {} }) } },
@@ -503,7 +509,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null }
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
@@ -532,7 +538,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!src) return
     const nid = newId(src.kind === 'mannequin' ? 'fig' : src.kind)
     const copy: StageObject = { ...src, id: nid, name: `${src.name} copy`, transform: { ...src.transform, pos: [src.transform.pos[0] + 0.6, src.transform.pos[1], src.transform.pos[2]] }, locked: false,
-      profile_id: null, version: null, body: null }                                                   // D93 (C8): one figure per character — the copy is unbound
+      profile_id: null, version: null, body: null, detail: src.detail ?? null }                        // D93 (C8): one figure per character — the copy is unbound
     get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'duplicate')
     set({ selected: nid })
   },

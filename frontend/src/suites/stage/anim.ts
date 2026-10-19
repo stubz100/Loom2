@@ -6,7 +6,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 
 export type Ease = 'linear' | 'ease'
 export interface CameraKey { frame: number; ease: Ease; pos: number[]; target: number[]; focal_mm: number }
-export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]> } | null }
+export interface ObjectKey { frame: number; ease: Ease; transform: { pos: number[]; rot: number[]; scale: number[] }; pose?: { preset?: string | null; joints: Record<string, number[]>; extra?: Record<string, number[]> } | null }
 export interface Keyframes { camera: Record<string, CameraKey[]>; objects: Record<string, ObjectKey[]> }
 
 export const EMPTY_KEYS: Keyframes = { camera: {}, objects: {} }
@@ -56,7 +56,10 @@ export function sampleObject(o: StageObject, keys: ObjectKey[] | undefined, fram
     const ja = pa?.joints ?? {}, jb = pb?.joints ?? {}
     const names = Object.keys(ja).filter((n) => n in jb)
     const joints = names.length && pa?.preset === pb?.preset ? Object.fromEntries(names.map((n) => [n, lerpDeg(ja[n], jb[n], w)])) : (near?.joints ?? {})
-    pose = { preset: near?.preset ?? 'stand', joints }
+    // CA1: the Detailed level's own bones interpolate the same way (a bone only one key has holds that key's turn)
+    const xa = pa?.extra ?? {}, xb = pb?.extra ?? {}
+    const extra = Object.fromEntries([...new Set([...Object.keys(xa), ...Object.keys(xb)])].map((n) => [n, xa[n] && xb[n] ? lerpDeg(xa[n], xb[n], w) : (w < 0.5 ? xa[n] ?? xb[n] : xb[n] ?? xa[n])]))
+    pose = { preset: near?.preset ?? 'stand', joints, extra }
   }
   return { ...o, transform, pose }
 }

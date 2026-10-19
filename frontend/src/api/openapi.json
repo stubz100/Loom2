@@ -9433,6 +9433,16 @@
       },
       "Pose": {
         "properties": {
+          "extra": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Extra",
+            "type": "object"
+          },
           "joints": {
             "additionalProperties": {
               "items": {
@@ -9457,7 +9467,8 @@
         },
         "required": [
           "preset",
-          "joints"
+          "joints",
+          "extra"
         ],
         "title": "Pose",
         "type": "object"
@@ -13201,6 +13212,21 @@
             "title": "Colour Id",
             "type": "integer"
           },
+          "detail": {
+            "anyOf": [
+              {
+                "enum": [
+                  "male",
+                  "female"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -13304,7 +13330,8 @@
           "billboard",
           "profile_id",
           "version",
-          "body"
+          "body",
+          "detail"
         ],
         "title": "StageObject",
         "type": "object"

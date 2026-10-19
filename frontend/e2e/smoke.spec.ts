@@ -1944,3 +1944,29 @@ test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in
   expect(d.range.end).toBeGreaterThanOrEqual(24)
   await page.screenshot({ path: 'node_modules/.e2e/ca1-motion-library.png' })
 })
+
+test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows its joints with the starter set\'s mannequin, a fist is keyed as its own bones, and the passes still render', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Detail test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Detail test')
+  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()
+  await openSection(page, 'Motion')
+  await page.locator('.detail-level .segmented button', { hasText: 'Detailed ♂' }).click()
+  type Doc = { name: string; objects: { detail: string | null; pose: { extra: Record<string, number[]> } | null }[] }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Detail test')!
+  await expect.poll(async () => (await doc())?.objects[0]?.detail ?? null, { timeout: 10_000 }).toBe('male')
+  // the mannequin loads from the starter folder (the e2e tree's test rig carries a skinned mesh); then the fist is the finger bones' turns
+  await expect.poll(async () => {
+    await page.locator('.detail-level .kv', { hasText: 'right hand' }).locator('button', { hasText: /^fist$/ }).click()
+    return Object.keys((await doc())?.objects[0]?.pose?.extra ?? {}).sort().join(',')
+  }, { timeout: 15_000 }).toBe('index_01_r,index_02_r,index_03_r,pinky_01_r')
+  // the passes render with the mannequin in them
+  await openAnimate(page, 'Clay')
+  await stageRoute(page)
+  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
+  await expect(page.locator('.shot-tab .pass-side')).toContainText(/\d+ passes · \d+×\d+/, { timeout: 30_000 })   // rendered: '5 passes · 1280×720 · current'
+  await page.screenshot({ path: 'node_modules/.e2e/ca1-detailed.png' })
+})

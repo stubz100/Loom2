@@ -41,7 +41,7 @@ describe('framePrefill / clipPrefill', () => {
   it('D93 (C7, C8): the stage of the shot gives each speaker the version and the pose its figure has', () => {
     const two = [{ ...profile('prf_m', 'Mara'), versions: [{ id: 'v1', group_id: 'g1' }, { id: 'v2', group_id: 'g2' }] } as unknown as Profile, profile('prf_j', 'Joe')]
     const d = node('dialogue', { lines: [line('prf_j', 'Hey.'), line('prf_m', 'Hi.')] })
-    const figs = [{ profile_id: 'prf_m', version: 'v2', pose: { preset: 'point', joints: {} } }, { profile_id: 'prf_j', version: null, pose: { preset: 'arms_crossed', joints: {} } }, { profile_id: null, version: null, pose: null }]
+    const figs = [{ profile_id: 'prf_m', version: 'v2', pose: { preset: 'point', joints: {}, extra: {} } }, { profile_id: 'prf_j', version: null, pose: { preset: 'arms_crossed', joints: {}, extra: {} } }, { profile_id: null, version: null, pose: null }]
     expect(framePrefill(d, two, figs).subjects).toEqual([{ profile_id: 'prf_j', action: 'saying Hey', pose: 'standing with arms crossed' }, { profile_id: 'prf_m', version: 'v2', pose: 'pointing' }])
     expect(framePrefill(d, two, [{ profile_id: 'prf_m', version: 'v9', pose: null }]).subjects[1]).toEqual({ profile_id: 'prf_m' })   // a version it no longer has: the current one
   })

@@ -12,7 +12,7 @@ import type { Joint } from '../builders'
 import { eulerDeg } from '../ik'
 
 export type RigName = 'rigify' | 'unreal' | 'mixamo'
-type Part = 'hips' | 'spineBase' | 'chest' | 'neck' | 'head' | 'r_upper' | 'r_lower' | 'r_hand' | 'l_upper' | 'l_lower' | 'l_hand'
+export type Part = 'hips' | 'spineBase' | 'chest' | 'neck' | 'head' | 'r_upper' | 'r_lower' | 'r_hand' | 'l_upper' | 'l_lower' | 'l_hand'
   | 'r_thigh' | 'r_calf' | 'r_foot' | 'l_thigh' | 'l_calf' | 'l_foot'
 
 /** Bone names per rig, as written in the files (matched after three.js's sanitising: no '.', ':', spaces; case-blind). */
@@ -32,7 +32,7 @@ export const RIGS: Record<RigName, Record<Part, string>> = {
 export const norm = (s: string) => s.replace(/[\s.:/[\]_-]/g, '').toLowerCase()
 
 /** The figure joint, the source bone it follows, the bone its direction points to, and the figure joint's rest direction. */
-const LINKS: { joint: Joint; bone: Part; to: Part; from?: Part; rest: [number, number, number]; parent: Joint | null }[] = [
+export const LINKS: { joint: Joint; bone: Part; to: Part; from?: Part; rest: [number, number, number]; parent: Joint | null }[] = [
   { joint: 'spine', bone: 'chest', to: 'neck', from: 'spineBase', rest: [0, 1, 0], parent: 'root' },     // the chest's twist, the whole spine's direction
   { joint: 'neck', bone: 'neck', to: 'head', rest: [0, 1, 0], parent: 'spine' },
   { joint: 'head', bone: 'head', to: 'head', rest: [0, 1, 0], parent: 'neck' },

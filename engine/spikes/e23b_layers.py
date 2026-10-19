@@ -61,7 +61,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "orchestrator"), str(ROOT / "scripts"), str(ROOT / "engine" / "spikes")]
 import e23a_joins as A  # noqa: E402  (shared: encode, grey, lab, Session, download, pad_reference, rife, label)
 
-OUT = ROOT / "engine" / "spikes" / "out" / "e23b"
+OUT = Path(os.environ.get("LOOM2_E23B_OUT") or ROOT / "engine" / "spikes" / "out" / "e23b")     # CA1b re-run: its own folder
 STATE = OUT / "state.json"
 MODELS = A.MODELS
 PLATE = ROOT / "engine" / "spikes" / "out" / "e22" / "stills" / "plate.png"
@@ -69,7 +69,9 @@ HEROES = ROOT / "engine" / "spikes" / "out" / "e22" / "heroes"
 W, H = A.W, A.H
 FPS, N = 16, 161                               # D102: F16, 10 s
 BATCH, CARRY = A.BATCH, A.CARRY
-SEEDS = [20261021, 20261022]
+SEEDS = [int(x) for x in os.environ.get("LOOM2_E23B_SEEDS", "20261021,20261022").split(",")]
+ARMS = os.environ.get("LOOM2_E23B_ARMS", "M,R").split(",")
+BODIES = os.environ.get("LOOM2_E23B_BODIES")                  # CA1b: the fitted bodies (scripts/ca1b_acceptance.py), by character name
 C0 = {"pos": [0.0, 1.05, 4.3], "target": [0.0, 0.95, 0.0], "focal_mm": 38, "sensor_mm": 36}      # E21's camera: the plate's
 C1 = {"pos": [-0.2, 1.03, 3.8], "target": [-0.3, 0.93, 0.0], "focal_mm": 38, "sensor_mm": 36}    # 0.5 m in, a slight pan left
 PLATE_W, PLATE_H = 1280, 720
@@ -213,6 +215,14 @@ STAGE_JS = """(async () => { try {
 } catch (e) { return { error: String(e && e.stack || e) } } })()"""
 
 
+def body_of(name: str) -> dict:
+    """CA1b: a figure's fitted body when LOOM2_E23B_BODIES names the file; the default dummy otherwise (E23b's first run)."""
+    if not BODIES:
+        return {}
+    b = json.loads(Path(BODIES).read_text(encoding="utf-8")).get(name)
+    return {"body": b} if b else {}
+
+
 def stage(a: argparse.Namespace) -> int:
     from edit_headed_check import CDP, EDGE
     from loom2.config import AppState
@@ -247,9 +257,9 @@ def stage(a: argparse.Namespace) -> int:
         tf = lambda pos, yaw=0: {"pos": pos, "rot": [0, yaw, 0], "scale": [1, 1, 1]}   # noqa: E731
         objs = [{"id": "set_a", "kind": "set", "name": "Room", "preset": "room", "transform": tf([0, 0, 0]), "colour_id": 3},
                 {"id": "fig_m", "kind": "mannequin", "name": "Mara", "preset": "adult", "transform": tf([MARA_PATH[0][0], 0, MARA_PATH[0][1]]),
-                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 1, "detail": "female", "path": MARA_PATH},
+                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 1, "detail": "female", "path": MARA_PATH, **body_of("Mara")},
                 {"id": "fig_i", "kind": "mannequin", "name": "Ines", "preset": "adult", "transform": tf(INES_AT),
-                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female"}]
+                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female", **body_of("Ines")}]
         st = api("PUT", f"/stages/{st['id']}", {**st, "objects": objs, "cameras": [cam], "size": {**st["size"], "fps": 24}})
         url = f"http://127.0.0.1:{DEV}/?token=e23b&port={ORCH_PORT}&suite=stage"
         edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
@@ -629,7 +639,7 @@ def run(a: argparse.Namespace) -> int:
         s.setdefault("boxes", {})[fid] = [int(max(0, xs.min() - 30)), int(max(0, ys.min() - 30)), int(min(W, xs.max() + 30)), int(min(H, ys.max() + 30))]
     save_state(s)
     done = {(r["arm"], r["seed"]) for r in s.get("runs", [])}
-    plan = [(arm, seed) for i, seed in enumerate(SEEDS) for arm in (("M", "R") if i % 2 == 0 else ("R", "M"))]
+    plan = [(arm, seed) for i, seed in enumerate(SEEDS) for arm in (("M", "R") if i % 2 == 0 else ("R", "M")) if arm in ARMS]
     with A.Session() as x:
         refs_ = {f: x.e.upload(A.pad_reference(OUT / "refs" / f"{FIGS[f].lower()}.png", OUT / "refs" / f"{FIGS[f].lower()}_padded.png")) for f in FIGS}
         poses = {f: x.e.upload(OUT / "stage" / f"pose_{f}.mp4") for f in FIGS}
@@ -802,6 +812,8 @@ def score(a: argparse.Namespace) -> int:
 
 def outputs(runs: list[dict], scores: list[dict]) -> None:
     seqs = {(r["arm"], r["seed"]): frames_of(OUT / "runs" / f"{r['arm']}_s{r['seed']}" / "rife24") for r in runs}
+    if not seqs:
+        return
     n = min(len(v) for v in seqs.values())
     tw, th = W // 2, H // 2
     grid = []

@@ -3,8 +3,8 @@ Detailed level (♀ and ♂) and one Simple figure, each given a CC0 clip from t
 the pose sequence rendered from a front camera at 832×480. Per frame it measures, from the 18 keypoints and the D101 hand and foot
 markers the pose pass draws:
 
-- **feet on their ankles**: the largest distance from a heel marker to its own ankle point, as a fraction of the figure's height in the
-  frame (nose → ankles), and how far the toes reach sideways (a foot turned out to the side shows here);
+- **feet on their ankles**: the largest distance from a heel marker to its own ankle point, as a fraction of the leg's length in the frame
+  (a seated figure's nose → ankles shrinks; the leg does not), and how far the toes reach sideways (a foot turned out shows here);
 - the **proportions** E23b compared with the characters' references (nose → neck, shoulders, hips, leg, arm, hand, foot), as ratios of the
   height, on frames where the figure stands facing the camera.
 
@@ -38,7 +38,7 @@ from edit_headed_check import CDP, EDGE  # noqa: E402
 PORT, TOKEN, DEV, DBG = 8788, "ca1b", 1420, 9340
 OUT = ROOT / "engine" / "spikes" / "out" / "ca1b"
 W, H = 832, 480
-BARS = {"foot_off": 0.06, "ratio": 0.10}
+BARS = {"foot_off": 0.15, "ratio": 0.10}
 FIGS = [  # id, level, clip, x
     ("fig_f", "female", "Idle_Loop", -1.2), ("fig_m", "male", "Sitting_Enter", 0.0), ("fig_s", None, "Walk_Loop", 1.2)]
 
@@ -87,17 +87,23 @@ def ratios(b: list, wb: dict | None) -> dict | None:
     hip = (b[8, :2] + b[11, :2]) / 2
     r = {"height_px": h, "head_neck": d(0, 1) / h, "torso": float(np.linalg.norm(b[1, :2] - hip)) / h, "shoulders": d(2, 5) / h, "hips": d(8, 11) / h,
          "leg": (d(8, 9) + d(9, 10) + d(11, 12) + d(12, 13)) / 2 / h, "arm": (d(2, 3) + d(3, 4) + d(5, 6) + d(6, 7)) / 2 / h}
+    if b[16, 2] > 0 and b[17, 2] > 0:
+        r["head_w"] = d(16, 17) / h                                    # ear to ear
     if wb:
         hs = [float(np.linalg.norm(np.array(hand[0][:2]) - np.array(hand[12][:2]))) for hand in (wb["left"], wb["right"]) if hand and hand[0][2] > 0 and hand[12][2] > 0]
         if hs:
             r["hand"] = float(np.median(hs)) / h
+        ps = [float(np.linalg.norm(np.array(hand[0][:2]) - np.array(hand[9][:2]))) for hand in (wb["left"], wb["right"]) if hand and hand[0][2] > 0 and hand[9][2] > 0]
+        if ps:
+            r["palm"] = float(np.median(ps)) / h                       # wrist → the middle finger's base (what the fit matches)
         f = np.array(wb["feet"], float)
         fl = [float(np.linalg.norm(f[k, :2] - f[k + 2, :2])) for k in (0, 3) if f[k, 2] > 0 and f[k + 2, 2] > 0]
         if fl:
             r["foot"] = float(np.median(fl)) / h
         # each heel against its own ankle (COCO-WholeBody: the left foot first; COCO-18: 13 = left ankle, 10 = right ankle) — a turned foot is
         # long in the frame, but its heel stays under its ankle
-        r["foot_off"] = max(float(np.linalg.norm(f[side + 2, :2] - b[ank_i, :2])) for side, ank_i in ((0, 13), (3, 10))) / h
+        leg2d = r["leg"] * h                                            # the heel against the leg's length (a seated figure's nose → ankles shrinks)
+        r["foot_off"] = max(float(np.linalg.norm(f[side + 2, :2] - b[ank_i, :2])) for side, ank_i in ((0, 13), (3, 10))) / leg2d
         # how far the toes turn from the figure's facing, seen from the front: the toe's sideways reach against the foot's length
         r["toe_side"] = max(abs(float(f[side, 0] - f[side + 2, 0])) for side in (0, 3)) / h
     return r
@@ -107,6 +113,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bodies", type=Path)
     ap.add_argument("--targets", type=Path)
+    ap.add_argument("--as", dest="as_", default=None, help="the character in bodies.json / targets.json to put on the standing ♀ figure (fig_f)")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     try:
@@ -114,6 +121,8 @@ def main() -> int:
     except Exception:
         print("the frontend dev server is not on 1420"); return 2
     bodies = json.loads(a.bodies.read_text(encoding="utf-8")) if a.bodies else {}
+    if a.as_:
+        bodies = {"fig_f": bodies[a.as_]}
     tmp = Path(tempfile.mkdtemp(prefix="loom2-ca1b-"))
     from loom2.config import AppState
     AppState(tmp / "state").update_settings({"models_root": os.environ.get("LOOM2_MODELS", "F:/loom2-models"), "mounted_model_trees": [], "variant": "full", "engine": {"port": 8199}})
@@ -164,6 +173,8 @@ def main() -> int:
                 (OUT / "pose_f_000.png").write_bytes(base64.b64decode(r.pop("png")))
             (OUT / "sequences.json").write_text(json.dumps(r), encoding="utf-8")
             targets = json.loads(a.targets.read_text(encoding="utf-8")) if a.targets else {}
+            if a.as_:
+                targets = {"fig_f": targets[a.as_]}
             for fid, level, clip, _ in FIGS:
                 rows = [ratios(k, wb) for k, wb in zip(r[fid]["keypoints"], r[fid]["wholebody"])]
                 rows = [x for x in rows if x]
@@ -175,7 +186,7 @@ def main() -> int:
                     summ["toe_side_max"] = round(max(x.get("toe_side", 0) for x in rows), 3)
                     if summ["foot_off_max"] > BARS["foot_off"]:
                         worst = max(range(len(rows)), key=lambda i: rows[i].get("foot_off", 0))
-                        failures.append(f"{fid} ({level}, {clip}): a heel {summ['foot_off_max']:.3f} of the height from its ankle (frame {worst}; bar {BARS['foot_off']})")
+                        failures.append(f"{fid} ({level}, {clip}): a heel {summ['foot_off_max']:.3f} of the leg from its ankle (frame {worst}; bar {BARS['foot_off']})")
                 result[fid] = {"level": level, "clip": clip, **summ}
                 print(fid, level, clip, summ)
                 for k, want in (targets.get(fid) or {}).items():

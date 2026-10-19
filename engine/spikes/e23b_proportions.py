@@ -55,28 +55,34 @@ def detect(e, path):
     return p
 
 
-rows = {}
-with A.Session() as x:
-    for name in ("mara", "ines"):
-        p = detect(x.e, OUT / "refs" / f"{name}.png")
-        rows[f"{name} reference"] = ratios(p["pose_keypoints_2d"], [p.get("hand_left_keypoints_2d"), p.get("hand_right_keypoints_2d")], p.get("foot_keypoints_2d"))
-        print(name, "keys:", [k for k in p.keys()])
-    for run in ("M_s20261021", "M_s20261022"):
-        for fid, name, frames in (("fig_m", "mara", (110, 140, 160)), ("fig_i", "ines", (0, 8, 16))):
-            acc = []
-            for f in frames:
-                p = detect(x.e, OUT / "runs" / run / fid / "chain" / f"{f:04d}.png")
-                if p:
-                    r = ratios(p["pose_keypoints_2d"], [p.get("hand_left_keypoints_2d"), p.get("hand_right_keypoints_2d")], p.get("foot_keypoints_2d"))
-                    if r:
-                        acc.append(r)
-            if acc:
-                rows[f"{name} Move {run[-2:]}"] = {k: round(float(np.median([a[k] for a in acc if k in a])), 3) for k in acc[0]}
-for fid, name, frames in (("fig_m", "mara", (110, 140, 160)), ("fig_i", "ines", (0, 8, 16))):
-    kp = json.loads((OUT / "stage" / fid / "keypoints.json").read_text(encoding="utf-8"))
-    acc = [ratios(kp[f]) for f in frames]
-    acc = [a for a in acc if a]
-    rows[f"{name} Stage"] = {k: round(float(np.median([a[k] for a in acc])), 3) for k in acc[0]}
-for k, v in rows.items():
-    print(f"{k:22s}", v)
-(OUT / "proportions.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
+
+def main() -> None:
+    rows = {}
+    with A.Session() as x:
+        for name in ("mara", "ines"):
+            p = detect(x.e, OUT / "refs" / f"{name}.png")
+            rows[f"{name} reference"] = ratios(p["pose_keypoints_2d"], [p.get("hand_left_keypoints_2d"), p.get("hand_right_keypoints_2d")], p.get("foot_keypoints_2d"))
+            print(name, "keys:", [k for k in p.keys()])
+        for run in ("M_s20261021", "M_s20261022"):
+            for fid, name, frames in (("fig_m", "mara", (110, 140, 160)), ("fig_i", "ines", (0, 8, 16))):
+                acc = []
+                for f in frames:
+                    p = detect(x.e, OUT / "runs" / run / fid / "chain" / f"{f:04d}.png")
+                    if p:
+                        r = ratios(p["pose_keypoints_2d"], [p.get("hand_left_keypoints_2d"), p.get("hand_right_keypoints_2d")], p.get("foot_keypoints_2d"))
+                        if r:
+                            acc.append(r)
+                if acc:
+                    rows[f"{name} Move {run[-2:]}"] = {k: round(float(np.median([a[k] for a in acc if k in a])), 3) for k in acc[0]}
+    for fid, name, frames in (("fig_m", "mara", (110, 140, 160)), ("fig_i", "ines", (0, 8, 16))):
+        kp = json.loads((OUT / "stage" / fid / "keypoints.json").read_text(encoding="utf-8"))
+        acc = [ratios(kp[f]) for f in frames]
+        acc = [a for a in acc if a]
+        rows[f"{name} Stage"] = {k: round(float(np.median([a[k] for a in acc])), 3) for k in acc[0]}
+    for k, v in rows.items():
+        print(f"{k:22s}", v)
+    (OUT / "proportions.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

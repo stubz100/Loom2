@@ -30,13 +30,13 @@ def test_the_dummy_front_view():
 
 
 def test_the_fit_finds_the_body_back():
-    want = Body(height_m=1.62, build="slim", neck=2.2, torso=1.05, shoulders=0.85, arms=0.95, legs=0.9, hands=0.75)
+    want = Body(height_m=1.62, build="slim", head=1.1, neck=2.2, torso=1.05, shoulders=0.85, arms=0.95, legs=0.9, hands=0.75)
     body, report = fit_body(dummy_ratios(want), Body(height_m=1.62, build="slim", feet=1.2))
-    for k in ("neck", "torso", "shoulders", "arms", "legs", "hands"):          # the ratios leave a little freedom (the widths are not fitted):
-        assert getattr(body, k) == pytest.approx(getattr(want, k), rel=0.03), k   # the factors come back within 3 %, the proportions exactly
-    got, wanted = dummy_ratios(body), dummy_ratios(want)
-    assert all(got[k] == pytest.approx(wanted[k], abs=1e-3) for k in ("head_neck", "torso", "shoulders", "leg", "arm", "palm"))
-    assert (body.height_m, body.build, body.head, body.feet) == (1.62, "slim", 1.0, 1.2)            # the author's: kept
+    for k in ("head", "neck", "torso", "shoulders", "arms", "legs", "hands"):  # the head anchors the scale: every factor comes back
+        assert getattr(body, k) == pytest.approx(getattr(want, k), abs=0.01), k
+    assert (body.height_m, body.build, body.feet) == (1.62, "slim", 1.2)                           # the author's: kept
+    drift, _ = fit_body({k: v for k, v in dummy_ratios(want).items() if k != "head_w"})            # without the ears the scale is loose, the ratios still met
+    assert all(dummy_ratios(drift)[k] == pytest.approx(dummy_ratios(want)[k], abs=2e-3) for k in ("head_neck", "torso", "shoulders", "leg", "arm"))
     assert all(abs(v["reference"] - v["fitted"]) < 1e-3 for v in report.values())
     wild, _ = fit_body({"head_neck": 0.9, "shoulders": 0.01})                                     # out of reach: held at the bounds
     assert wild.neck == 3.0 and wild.shoulders == 0.6
@@ -44,6 +44,7 @@ def test_the_fit_finds_the_body_back():
 
 def test_the_reference_measured():
     r = reference_ratios(fake_person({"head_neck": 0.17, "shoulders": 0.24, "palm": 0.07}))
+    assert r["head_w"] == pytest.approx(32 / 400, abs=1e-3)                                       # the fake's ears 32 px apart
     assert r["head_neck"] == pytest.approx(0.17, abs=2e-3) and r["shoulders"] == pytest.approx(0.24, abs=2e-3) and r["palm"] == pytest.approx(0.07, abs=2e-3)
     p = fake_person()
     p["pose_keypoints_2d"][10 * 3 + 2] = 0.0                                                      # an ankle not found: not a whole figure

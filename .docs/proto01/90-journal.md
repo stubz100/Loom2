@@ -6284,3 +6284,53 @@ mask's sense (the model reads 1 − mask: known = 1).
   - lint 75; build, the model-literal check and the settings audit clean; the route snapshot updated.
 - **Next (step 3):** the acceptance on the rig. The two E23b characters fitted by the app; Stage's ratios within ±10 % of their
   references (`ca1b_skeleton_check.py --bodies --targets`); then their Move layers made again, for the author's look.
+
+## 2026-10-19 18:23 — CA1b step 3 · acceptance: the two characters fitted by the app, Stage within ±10 %, the Move shot made again
+
+- **The fit, anchored.** The first fit on the rig ran Mara's body to the bounds (neck ×3.0, torso ×1.6) with every ratio met.
+  - The cause: the factors are relative to a dummy that is scaled to the height afterwards, so their overall size is nearly free.
+  - **Fix:** the head (ear to ear) and the hips' width join the measures (the hips' width is no factor's, so it anchors the scale).
+    The solve is a damped least squares in log factors (Levenberg–Marquardt, steps ≤ 0.2, inside the bounds).
+  - Offline: the round trip recovers every factor within 0.01; without the ears, the ratios are still met.
+- **On the rig, through the app** (`scripts/ca1b_acceptance.py`; the `keypoints` job, one GPU job at a time). Mara's fit took 16 s
+  cold, Ines' 1 s warm, one person found each.
+
+  | Factor | head | neck | torso | shoulders | arms | legs | hands |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Mara | 0.89 | 2.32 | 1.23 | 0.88 | 0.97 | 0.88 | 0.95 |
+  | Ines | 0.76 | 2.24 | 0.91 | 0.77 | 0.85 | 0.79 | 0.92 |
+
+  Every ratio is met within 0.0005.
+- **Stage, Mara's and Ines' bodies in turn** (`scripts/ca1b_skeleton_check.py --as …`; a standing Detailed ♀ figure in Idle_Loop):
+
+  | | nose → neck | torso | shoulders | hips | leg | arm | head (ears) | palm |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Mara · Stage / ref | 0.152 / 0.161 | 0.383 / 0.366 | 0.223 / 0.230 | 0.119 / 0.124 | 0.473 / 0.475 | 0.336 / 0.336 | 0.111 / 0.105 | 0.067 / 0.067 |
+  | Ines · Stage / ref | 0.159 / 0.167 | 0.351 / 0.335 | 0.227 / 0.234 | 0.139 / 0.144 | 0.498 / 0.499 | 0.343 / 0.344 | 0.111 / 0.104 | 0.068 / 0.068 |
+
+  - **The bar (±10 %) is met:** the worst measures are −5 % / +5 % / +6 %. The remainder is the Idle stance against the reference's
+    A-pose.
+  - The heels sit on their ankles: ≤ 0.09 of the leg (bar 0.15). The heel check now divides by the leg, because a seated figure's
+    nose → ankles shrinks.
+  - The unfitted dummy's nose → neck is 0.106–0.111 now (0.077 before the neck point moved).
+- **E23b's Move shot made again** with the fitted bodies (`LOOM2_E23B_OUT=…/ca1b/e23b_fit LOOM2_E23B_BODIES=…`; seed 20261021, both
+  layers; the new retarget and neck point too).
+  - **Stats:** 15 min of GPU (layers 411 + 340 s, mattes 88 + 55 s), peak 9.5 GB. PCK 0.984 / 1.000. Joins 1.05 / 1.25.
+    Background flicker = the plate's.
+  - Mara's reference ghost again (161 / 161 frames), cut by the Stage-guided matte.
+  - Ines' ankles touch the bottom edge in the last 2 s (seated, the camera in).
+  - **Proportions of the made characters** (SDPose where they stand; the references in brackets):
+
+    | | nose → neck | shoulders | leg | hand (to the tip) | foot |
+    | --- | --- | --- | --- | --- | --- |
+    | Mara · before → after | 0.142 → **0.173** (0.161) | 0.206 → **0.229** (0.230) | 0.465 → 0.456 (0.474) | 0.129 → **0.087** (0.089) | 0.185 → **0.045** (0.044) |
+    | Ines · before → after | 0.088 → **0.151** (0.167) | 0.262 → **0.229** (0.234) | 0.550 → **0.498** (0.499) | 0.149 → 0.137 (0.082) | 0.175 → 0.139 (0.048) |
+
+    Mara now matches her reference throughout. Ines' head and build are fixed. Her hands and feet are still large where they are
+    measured, her first frames: the pre-sit crouch, with the fingers spread and the feet turned out (Sitting_Enter's own splay). Those
+    are left to the author's eye.
+- **FaceSim** (faces 12–25 px) is still not conclusive.
+- **For the author:** `.docs/proto01_animate/11-testing-ca1b.md`: `out/ca1b/compare.mp4` (before | after, the same seed) and
+  `sheet.jpg`.
+- **Tests:** offline 444 under full and open; the check script and acceptance committed. **Next:** the author's look, then E23c (the
+  white set).

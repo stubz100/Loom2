@@ -1177,6 +1177,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/motion/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Motion Files */
+        get: operations["motion_files_motion_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/motion/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Motion File */
+        get: operations["motion_file_motion_files__file_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preset-icons": {
         parameters: {
             query?: never;
@@ -6154,6 +6188,52 @@ export interface components {
             /** Sha256 */
             sha256: string;
         };
+        /** MotionFile */
+        MotionFile: {
+            /** Bytes */
+            bytes: number;
+            /** Ext */
+            ext: string;
+            /** Id */
+            id: string;
+            /** Licence */
+            licence: string;
+            /** Name */
+            name: string;
+            /** Rel */
+            rel: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "starter" | "local";
+        };
+        /** MotionFiles */
+        MotionFiles: {
+            /** Items */
+            items: components["schemas"]["MotionFile"][];
+            /** Local Dir */
+            local_dir: string | null;
+            /** Starter Dir */
+            starter_dir: string | null;
+        };
+        /**
+         * MotionSettings
+         * @description CA1 (proto01_animate 02 §5): the motion library's folders. The starter set (CC0, ships with loom2) defaults to <models_root>/motion;
+         *     the local folder holds the author's own downloads (e.g. Mixamo FBX) — never bundled, never in CI or tests.
+         */
+        MotionSettings: {
+            /**
+             * Local Dir
+             * @default
+             */
+            local_dir: string;
+            /**
+             * Starter Dir
+             * @default
+             */
+            starter_dir: string;
+        };
         /** NodeCreate */
         NodeCreate: {
             /** Target */
@@ -7412,6 +7492,7 @@ export interface components {
              * @default F:/loom2-models
              */
             models_root: string;
+            motion: components["schemas"]["MotionSettings"];
             /** Mounted Model Trees */
             mounted_model_trees: string[];
             /**
@@ -11477,6 +11558,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelVerify"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    motion_files_motion_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotionFiles"];
+                };
+            };
+        };
+    };
+    motion_file_motion_files__file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

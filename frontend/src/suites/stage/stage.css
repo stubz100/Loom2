@@ -44,6 +44,18 @@
 .pose-card .quiet:hover { color: var(--danger, #e66); }
 .lib-grid button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
 /* ST3: the Shot tab */
+/* CA1: the motion library */
+.motion-lib .motion-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.motion-lib .motion-bar input[type=search] { flex: 1 1 120px; min-width: 80px; }
+.motion-lib .motion-list { display: grid; gap: 2px; max-height: 260px; overflow: auto; }
+.motion-lib .motion-file-head, .motion-lib .motion-clip { display: flex; justify-content: space-between; gap: 6px; width: 100%; text-align: left; background: transparent; border: 0; padding: 2px 4px; border-radius: 3px; color: var(--fg); cursor: pointer; }
+.motion-lib .motion-clip:hover, .motion-lib .motion-file-head:hover { background: var(--bg2); }
+.motion-lib .motion-clip.active { background: var(--accent-dim); }
+.motion-lib .motion-clips { display: grid; gap: 1px; padding-left: 14px; }
+.motion-lib small { color: var(--fg3); white-space: nowrap; }
+.motion-lib .motion-picked { margin-top: 8px; border-top: 1px solid var(--line2); padding-top: 6px; }
+.motion-lib .motion-picked input[type=number] { width: 56px; }
+.motion-preview canvas { width: 100%; height: 150px; display: block; border-radius: var(--radius); }
 .shot-tab .method-list { display: grid; gap: 4px; }
 .shot-tab .method { display: grid; text-align: left; justify-items: start; gap: 1px; padding: 6px 8px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); }
 .shot-tab .method.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }

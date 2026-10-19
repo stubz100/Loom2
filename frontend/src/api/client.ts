@@ -62,6 +62,13 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: BodyI
 export const api = {
   putBlob: async (sha256: string, bytes: ArrayBuffer | Blob) => call<{ sha256: string; bytes: number }>('PUT', `/blobs/${sha256}`, undefined, bytes),
   putThumbnail: async (assetId: string, png: Blob) => call<unknown>('PUT', `/assets/${assetId}/thumbnail`, undefined, png),   // P18: a client-rendered view
+  /** CA1: a file the client parses itself (a motion library glb / fbx), fetched with the token. */
+  getBytes: async (path: string): Promise<ArrayBuffer> => {
+    if (!backend) throw new ApiError(0, 'backend not discovered yet')
+    const res = await fetch(baseUrl() + path, { headers: { 'X-Loom-Token': backend.token } })
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+    return res.arrayBuffer()
+  },
   fileUrl: (path: string) => withKey(baseUrl() + path),
   thumbUrl: (assetId: string, size: 256 | 512 | 1024 = 256) => withKey(`${baseUrl()}/thumbs/${assetId}/${size}`),
   assetUrl: (assetId: string) => withKey(`${baseUrl()}/assets/${assetId}/file`),

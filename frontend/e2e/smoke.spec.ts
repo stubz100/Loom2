@@ -508,7 +508,7 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Adult/ }).click()                       // the empty-stage card adds (and selects) a figure
   await openSection(page, 'Motion')
-  await expect(page.locator('#anim-sec-motion .stage-panel .head b')).toHaveText('Figure 1')
+  await expect(page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) .head b')).toHaveText('Figure 1')
   type Doc = { name: string; objects: { kind: string; pose: { preset: string; joints: Record<string, number[]> } | null }[] }
   const figure = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Crossing')?.objects.find((o) => o.kind === 'mannequin')   // the save is debounced: may be absent at first
   const WALK: Record<string, number[]> = { r_shoulder: [22, 0, -6], r_elbow: [0, 0, 0] }                                 // builders.ts POSES.walk (the right arm)
@@ -1912,4 +1912,35 @@ test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spo
   expect(guide.params.keypoints.length).toBe(guide.frames)
   expect(guide.params.keypoints.every((f) => f.length === 1)).toBe(true)                         // one figure in every frame
   await expect(page.locator('.anim-ref-slot[data-side="test"] img')).toBeVisible({ timeout: 15_000 })
+})
+
+test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in the Motion section, one previewed and applied to a figure at the playhead as keys with its root motion', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Motion test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Motion test')
+  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                       // a figure, selected
+  await openSection(page, 'Motion')
+  const lib = page.locator('.motion-lib')
+  await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()                       // the e2e tree's starter folder holds the test rig
+  await expect(lib.locator('.motion-clip')).toHaveCount(2)
+  await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
+  await expect(lib.locator('.motion-clip', { hasText: 'Walk_RM' })).toContainText('moves')
+  await expect(lib.locator('.motion-preview')).toContainText('25 frames at 24 fps · unreal · 0.96 m')
+  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  type Doc = { id: string; name: string; range: { end: number }; objects: { id: string; transform: { pos: number[] } }[]; keyframes: { objects: Record<string, { frame: number; transform: { pos: number[] }; pose: { joints: Record<string, number[]> } }[]> } }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Motion test')!
+  await expect.poll(async () => Object.keys((await doc()).keyframes.objects ?? {}).length, { timeout: 10_000 }).toBe(1)
+  const d = await doc()
+  const keys = Object.values(d.keyframes.objects)[0]
+  const base = d.objects[0].transform.pos
+  expect(keys[0].frame).toBe(0)
+  expect(keys[keys.length - 1].frame).toBe(24)
+  expect(keys.length).toBeLessThan(25)                                                         // thinned
+  expect(keys[keys.length - 1].transform.pos[2] - base[2]).toBeCloseTo(0.958, 2)               // 1 m of the rig's hips, scaled by the hip heights
+  expect(Object.keys(keys[0].pose.joints)).toHaveLength(12)
+  expect(d.range.end).toBeGreaterThanOrEqual(24)
+  await page.screenshot({ path: 'node_modules/.e2e/ca1-motion-library.png' })
 })

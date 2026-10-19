@@ -24,7 +24,7 @@ export function SettingsModal() {
     setBusy(true)
     try {
       await s.saveSettings({ models_root: draft.models_root, mounted_model_trees: draft.mounted_model_trees, vram_budget_gb: draft.vram_budget_gb, hf_home: draft.hf_home,
-        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
+        thumbnail_sizes: draft.thumbnail_sizes, log_level: draft.log_level, samples: draft.samples, motion: draft.motion, engine: { flags: draft.engine.flags, restart_every_jobs: draft.engine.restart_every_jobs, port: draft.engine.port, health_timeout_s: draft.engine.health_timeout_s,
           stall_timeout_s: draft.engine.stall_timeout_s, reserve_vram_gb: draft.engine.reserve_vram_gb, vram_headroom_gb: draft.engine.vram_headroom_gb } })
       s.openSettings(false)
     } finally { setBusy(false) }
@@ -92,6 +92,14 @@ export function SettingsModal() {
             </Fragment>
           ))}
           <span className="hint">the scenes of Image's look-preset icons; {'{value}'} is the preset (added at the end when left out). Clear a field and Save to get its default back. Existing samples and icons stay — remake one from its right-click menu.</span>
+          <h4 id="settings-motion">Motion</h4>
+          {/* CA1 (proto01_animate 02 §5): the motion library's folders — the CC0 starter set ships; the local folder is the author's own */}
+          <label>Local motion folder</label>
+          <input type="text" aria-label="local motion folder" value={draft.motion.local_dir} placeholder="e.g. F:/loom2-motion-mixamo" onChange={(e) => set({ motion: { ...draft.motion, local_dir: e.target.value } })} />
+          <span className="hint">your own downloads (Mixamo FBX at 24 fps, without skin; glb / gltf) — listed in Animate's Motion library, never bundled or copied; Adobe's terms keep Mixamo clips out of anything that trains or tests AI</span>
+          <label>Starter set folder</label>
+          <input type="text" aria-label="starter motion folder" value={draft.motion.starter_dir} placeholder="blank = <models root>/motion" onChange={(e) => set({ motion: { ...draft.motion, starter_dir: e.target.value } })} />
+          <span className="hint">the CC0 clips that ship with loom2 (Quaternius' Universal Animation Library 1 and 2)</span>
           <h4 id="settings-keyboard">Keyboard</h4>
           <KeyboardSettings />
           <h4>Licences</h4>

@@ -7,6 +7,7 @@ import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
 import { profilesForMentions } from '../story/storyStore'
+import { useMotion } from './motion/motionStore'
 
 const hasStage = () => !!st().current
 const sel = () => st().object(st().selected)
@@ -46,6 +47,10 @@ registerCommands([
     run: () => { const o = sel()!; void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) }) } },
   { id: 'stage.add.plane', scope: 'stage', label: 'Add image plane…', icon: ImagePlus, placement: ['panel', 'context'], when: hasStage,
     run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true }); useSession.getState().toast('Pick an image in the Bin: drag it onto the viewport, or double-click it (right-click › Add to the stage)', 'info') } },
+  // CA1 (proto01_animate 01 step 5): the motion library
+  { id: 'stage.motion.apply', scope: 'stage', label: 'Apply the clip at the playhead', icon: Play, hint: 'the picked library clip on the selected figure, as keys from the playhead (one undo step)', placement: ['panel', 'context'],
+    when: () => sel()?.kind === 'mannequin' && !!useMotion.getState().picked && !useMotion.getState().applying, run: () => void useMotion.getState().apply() },
+  { id: 'stage.motion.refresh', scope: 'stage', label: 'List the motion files again', icon: Redo2, placement: ['panel'], when: hasStage, run: () => void useMotion.getState().refresh() },
   { id: 'stage.object.duplicate', scope: 'stage', label: 'Duplicate', icon: Copy, keys: 'Ctrl+D', placement: ['inspector', 'context'], when: hasSel, run: () => st().duplicateObject(st().selected!) },
   { id: 'stage.object.lock', scope: 'stage', label: 'Lock / unlock', icon: Lock, keys: 'Ctrl+L', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { locked: !o.locked }) } },
   { id: 'stage.object.hide', scope: 'stage', label: 'Hide / show', icon: EyeOff, keys: 'H', placement: ['inspector', 'context'], when: hasSel, run: () => { const o = sel()!; st().updateObject(o.id, { visible: !o.visible }) } },
@@ -120,7 +125,7 @@ export function bindItems(): MenuItem[] {
 export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
-      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, sep] : []),
+      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.toShot' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

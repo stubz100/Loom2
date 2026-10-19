@@ -217,7 +217,7 @@
 .cast-sheet .sheet-label { display: flex; align-items: center; gap: 8px; }
 /* CA0: the animation reference — 16:9 slots beside the coverage grid */
 .anim-ref-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-.anim-ref-slot { position: relative; width: 256px; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.anim-ref-slot { position: relative; width: 256px; aspect-ratio: 16 / 9; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .anim-ref-slot img { width: 100%; height: 100%; object-fit: contain; }
 .anim-ref-slot.empty { border-style: dashed; }
 .anim-ref-slot .cell { position: absolute; left: 4px; bottom: 3px; font-size: 11px; background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 0 4px; border-radius: 3px; }
@@ -233,7 +233,7 @@
 .cast-body .body-att input[type=text] { flex: 1 1 80px; min-width: 60px; }
 .cast-body .body-att input[type=range] { width: 70px; }
 .body-silhouette { flex: 0 0 auto; background: var(--bg2); border-radius: var(--radius); }
-.body-silhouette .metre { stroke: var(--border); stroke-dasharray: 2 3; }
+.body-silhouette .metre { stroke: var(--line2); stroke-dasharray: 2 3; }
 .body-silhouette text { fill: var(--fg3); font-size: 8px; }
 .body-silhouette .ghost circle, .body-silhouette .ghost rect { fill: none; stroke: var(--fg3); stroke-dasharray: 2 2; }
 .body-silhouette .ghost line { stroke: var(--fg3); opacity: .25; stroke-linecap: round; }

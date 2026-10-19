@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import subprocess
+import shutil
 import sys
 from pathlib import Path
 
@@ -89,6 +90,9 @@ def main() -> int:
                            "vae": str(next(models.glob("vae/*.safetensors"), models / "vae" / "none.safetensors"))}   # a local stand-in: no hub access
     settings["voices"] = {**settings["voices"], "python": sys.executable, "run": str(tests / "fake_tts.py")}   # CN2: the fake runner stands in for voices/tts.py
     settings["hf_home"] = str(state / "hf")
+    motion = models / "motion" / "test"                                                      # CA1: the library's test rig stands in for the starter set
+    motion.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(tests / "fixtures" / "motion" / "test_rig.glb", motion / "test_rig.glb")
     atomic_write_json(state / "app.json", AppRecord(settings=Settings.model_validate(settings)).model_dump())
 
     key = project_key(a.count)

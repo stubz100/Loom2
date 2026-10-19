@@ -5779,3 +5779,70 @@ the test with PCK ≥ 0.8 and no ghost or crop"):
 - Vitest 347; lint 75 (a set-state-in-effect in the test slot fixed); build and audits clean.
 
 **CA0 is built** (the body, the reference, the test). **Next in 07 phase 2: CA1, the motion library.**
+
+## 2026-10-19 08:12 — The author accepts CA0 (5 of 6, the cloak); CA1 step 1 · the motion library: import, retarget, apply
+
+**The author accepted CA0 on 2026-10-19** ("Everything looks good, let's carry on"), the hooded cloak's 0.728 included.
+
+**CA1 step 1** (07 phase 2; 02 §5; 01 step 5): clips from a library, retargeted onto the Stage figure and baked to its keys.
+
+**The files** (`loom2/motion.py`, `GET /motion/files`, `GET /motion/files/{id}`):
+
+- the CC0 **starter set**, Quaternius' Universal Animation Library 1 + 2 (glb only; its fbx copies and `_downloads` are skipped), from
+  `<models root>/motion` or Settings › Motion › starter folder;
+- the author's **local motion folder** (Settings › Motion; glb, gltf, fbx), for their own downloads such as Mixamo. These are never
+  bundled, and never in CI or tests: Adobe's Additional Terms §1. Each file carries its licence line.
+
+The orchestrator only lists and serves; the client parses with three.js (GLTFLoader, FBXLoader) and caches per session.
+
+**The retargeter** (`stage/motion/retarget.ts`, pure):
+
+- **Rigs:** Rigify `DEF-` (UAL1), Unreal (UAL2, the female mannequin) and `mixamorig`, recognised by their bone names after three.js's
+  sanitising.
+- **Facing:** read from the rest pose (right shoulder against left) and turned to the figure's +Z.
+- **Rotations:** each of the 12 joints takes its source bone's rotation from rest, after the rest directions are aligned (a T-pose arm
+  along X onto the hanging arm along −Y). Each segment is then swung onto where the source segment really points; the twist stays the
+  bone's. The spine follows the chest's twist and the spine-base-to-neck direction.
+- **Root motion:** the hips' travel, scaled by the hip heights above the ankles. The figure's body counts (CA0), so a child takes
+  shorter steps.
+- **Options:** trim, speed and in place.
+
+**Baking** (`motion/bake.ts`): one key per frame at the stage's rate, placed where the figure stands and turned with it, then thinned to
+what the linear in-between cannot rebuild (1°, 5 mm).
+
+**Measured on the real starter set** (an opt-in Vitest test, `LOOM2_MOTION_STARTER=…`; the set is not in CI):
+
+- 7 clips: Walk, Sitting_Enter, Idle, Pistol_Aim, Walk_Carry, ClimbUp_1m_RM, Farm_Harvest.
+- **Every limb and the spine point where the source segment points**, to 0.0° in every frame. The first version, rotations only, was
+  off by up to 40° (the spine folds three bones into one, and limbs bending around a twisted parent drifted); the swing step fixed it.
+- Root motion: Roll_RM 5.70 m; ClimbUp 1.02 m up and 1.88 m forward; the in-place loops stay in place.
+
+**In Animate's Motion section** (`MotionLibrary.tsx`, above the poses):
+
+- a source filter (All, Starter CC0, Local) and search;
+- files that open to their clips ("moves" marks root motion); a Mixamo FBX is one clip under its own name;
+- a picked clip **previews on a dummy** in its own small canvas, with trim, speed and in place;
+- ***Apply to <figure> at the playhead*** (`stage.motion.apply`, also on the figure's right-click) writes the keys in one undo step
+  (`applyMotion`: the figure's keys in those frames replaced, the range grown), with a toast stating frames, keys and travel.
+
+Settings › Motion holds the two folders.
+
+**Test rig:** `scripts/make_motion_fixture.py` writes `tests/fixtures/motion/test_rig.glb` (2.2 KB: the 17 mapped bones, Unreal-named,
+a T-pose, *Walk_RM* and *Wave_Loop*). The e2e tree's starter folder holds it.
+
+**Fixes on the way:**
+
+- An action that loops wraps to frame 0 at the clip's end (play once, clamped).
+- The undefined CSS token `--border` in the recipe, body and reference styles from the last two days (borders now draw: `--line2`).
+- The motion file route declared as a non-JSON reply (D38).
+- The posing scenario's locators scoped once the library became a sibling panel.
+
+**Tests:**
+
+- Offline 437 under full and open (`test_motion_ca1.py`, 2).
+- Vitest 351 + 1 opt-in (`retarget.test.ts`, 4: rigs, the arm and travel, a rig facing another way, bake and thinning).
+- e2e 44/44 under full and open. The new scenario opens the test rig in the library, previews *Walk_RM* (25 frames, 0.96 m) and applies
+  it: 12 joints per key, thinned, the travel 0.958 m.
+- Lint 75; build and audits clean.
+
+**Next:** step 2, the Detailed dummy as the second editing level; then the path, foot lock and blends.

@@ -121,6 +121,8 @@ interface StageState {
   setRange: (start: number, end: number) => void
   keyCamera: () => void
   keyObject: (id: string) => void
+  /** CA1: a library clip's baked keys on a figure — the figure's keys in their frames replaced, the range grown to hold them (one undo step). */
+  applyMotion: (id: string, keys: ObjectKey[], label: string) => void
   removeKeyAt: (frame: number) => void
   setGuideKind: (k: GuideKind) => void
   setClipMethod: (m: ClipMethod) => void
@@ -249,6 +251,15 @@ export const useStage = create<StageState>()((set, get) => ({
     const o = get().sampledDoc()?.objects.find((x) => x.id === id)
     if (!o) return
     get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints } } : null }), 'key object')
+  },
+  applyMotion: (id, keys, label) => {
+    if (!keys.length) return
+    const first = keys[0].frame, last = keys[keys.length - 1].frame
+    get().apply((d) => {
+      const k = keyframesOf(d)
+      const kept = (k.objects[id] ?? []).filter((x) => x.frame < first || x.frame > last)
+      return { ...d, keyframes: { ...k, objects: { ...k.objects, [id]: [...kept, ...keys].sort((a, b) => a.frame - b.frame) } }, range: { ...d.range, end: Math.max(d.range.end, last) } }
+    }, label)
   },
   removeKeyAt: (frame) => get().apply((d) => {
     const k = keyframesOf(d)

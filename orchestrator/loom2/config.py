@@ -64,6 +64,14 @@ class VoicesSettings(BaseModel):
     cloning_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"     # Apache-2.0; the GPU with the engine stopped (E20: 3–5 s a line at a 2.6 GB peak)
 
 
+class MotionSettings(BaseModel):
+    """CA1 (proto01_animate 02 §5): the motion library's folders. The starter set (CC0, ships with loom2) defaults to <models_root>/motion;
+    the local folder holds the author's own downloads (e.g. Mixamo FBX) — never bundled, never in CI or tests."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    starter_dir: str = ""                                    # empty = <models_root>/motion
+    local_dir: str = ""                                      # empty = none (Settings › Motion)
+
+
 # D90 (02 §4.1, §6.3): the scenes the sample images are rendered on — the defaults of Settings › Samples
 STYLE_SAMPLE_PROMPT = "a woman in a long coat beside an old bicycle on a cobbled street at dusk, a lit shop window behind her"
 SWATCH_PROMPTS: dict[str, str] = {   # `{value}` is the preset; a neutral subject so the swatch shows the value, not the subject
@@ -135,6 +143,7 @@ class Settings(BaseModel):
     reopen_last_project: bool = True
     h3_licence_confirmed: bool = False      # D17: the author confirms the MiniMax H3 community-licence application is filed
     samples: SampleSettings = Field(default_factory=SampleSettings)     # D90: the scenes of the style samples and the preset swatches
+    motion: MotionSettings = Field(default_factory=MotionSettings)      # CA1: the motion library's starter set and local folder
 
 
 class AppRecord(BaseModel):

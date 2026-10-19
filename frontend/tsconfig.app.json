@@ -23,5 +23,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // CA1: the opt-in check on the starter set reads files with Node (fs, process.env); Vitest compiles it, the app's DOM program does not
+  "exclude": ["src/**/*.starter.test.ts"]
 }

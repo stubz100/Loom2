@@ -9062,6 +9062,114 @@
         "title": "ModelVerify",
         "type": "object"
       },
+      "MotionFile": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "ext": {
+            "title": "Ext",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rel": {
+            "title": "Rel",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "starter",
+              "local"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source",
+          "rel",
+          "ext",
+          "bytes",
+          "licence"
+        ],
+        "title": "MotionFile",
+        "type": "object"
+      },
+      "MotionFiles": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MotionFile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "local_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Dir"
+          },
+          "starter_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starter Dir"
+          }
+        },
+        "required": [
+          "items",
+          "starter_dir",
+          "local_dir"
+        ],
+        "title": "MotionFiles",
+        "type": "object"
+      },
+      "MotionSettings": {
+        "description": "CA1 (proto01_animate 02 §5): the motion library's folders. The starter set (CC0, ships with loom2) defaults to <models_root>/motion;\nthe local folder holds the author's own downloads (e.g. Mixamo FBX) — never bundled, never in CI or tests.",
+        "properties": {
+          "local_dir": {
+            "default": "",
+            "title": "Local Dir",
+            "type": "string"
+          },
+          "starter_dir": {
+            "default": "",
+            "title": "Starter Dir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "starter_dir",
+          "local_dir"
+        ],
+        "title": "MotionSettings",
+        "type": "object"
+      },
       "NodeCreate": {
         "properties": {
           "target": {
@@ -12037,6 +12145,9 @@
             "title": "Models Root",
             "type": "string"
           },
+          "motion": {
+            "$ref": "#/components/schemas/MotionSettings"
+          },
           "mounted_model_trees": {
             "items": {
               "type": "string"
@@ -12101,7 +12212,8 @@
           "log_level",
           "reopen_last_project",
           "h3_licence_confirmed",
-          "samples"
+          "samples",
+          "motion"
         ],
         "title": "Settings",
         "type": "object"
@@ -20158,6 +20270,67 @@
         "summary": "Models Verify",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/motion/files": {
+      "get": {
+        "operationId": "motion_files_motion_files_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotionFiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Motion Files",
+        "tags": [
+          "motion"
+        ]
+      }
+    },
+    "/motion/files/{file_id}": {
+      "get": {
+        "operationId": "motion_file_motion_files__file_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Motion File",
+        "tags": [
+          "motion"
         ]
       }
     },

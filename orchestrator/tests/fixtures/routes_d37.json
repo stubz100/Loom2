@@ -42,6 +42,8 @@
  "GET /loras",
  "GET /models",
  "GET /models/unlisted",
+ "GET /motion/files",
+ "GET /motion/files/{file_id}",
  "GET /preset-icons",
  "GET /preset-icons/{key}/file",
  "GET /project",

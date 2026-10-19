@@ -15,6 +15,7 @@ import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter } from './FigureBinding'
+import { MotionLibrary } from './motion/MotionLibrary'
 import { useStageActive } from '../../frame/stageKeep'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
@@ -184,11 +185,13 @@ export function PosesTab() {
   const userPoses = useStage((s) => s.userPoses)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
-  if (!o || o.kind !== 'mannequin') return <div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">Select a figure — then click a joint for the rotate gizmo, or drag a hand / foot handle.</span></div>
+  if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">Select a figure — then click a joint for the rotate gizmo, or drag a hand / foot handle.</span></div></>
   const joints = effectiveJoints(o)
   const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
   const setJoint = (nv: number[]) => { if (joint) st().setJoints(o.id, { ...joints, [joint]: nv }) }
   return (
+    <>
+    <MotionLibrary />{/* CA1: clips from the library first; presets and keys by hand below */}
     <div className="stage-panel">
       <div className="head"><b>{o.name}</b><span className="hint">pose · {o.pose?.preset ?? 'stand'}{Object.keys(o.pose?.joints ?? {}).length ? ' (edited)' : ''}</span></div>
       <h4>Presets</h4>
@@ -205,6 +208,7 @@ export function PosesTab() {
       {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
       <p className="hint">Orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools.</p>
     </div>
+    </>
   )
 }
 

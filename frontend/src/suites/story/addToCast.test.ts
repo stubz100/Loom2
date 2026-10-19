@@ -8,7 +8,7 @@ import { addToCastItems, castTarget, madeFor, onProfile } from './addToCast'
 
 const p = (id: string, name: string, cls: Profile['cls'], state: 'open' | 'final' = 'open'): Profile => ({
   id, name, cls, current: 'v1', schema_version: 1, revision: 1, voice_id: null, created_at: '', updated_at: '',
-  versions: [{ id: 'v1', state, group_id: `grp_${id}`, candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, label: 'v1', appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null }],
+  versions: [{ id: 'v1', state, group_id: `grp_${id}`, candidates_group_id: null, hero_asset_id: null, body: null, anim_ref_asset_id: null, anim_ref_back_asset_id: null, anim_test_clip_id: null, body_fit_from: null, label: 'v1', appearance: '', outfit: '', colours: [], marks: '', trigger: null, lora: null, derived_from: null, created_at: '', locked_at: null }],
 })
 const PROFILES = [p('lamp', 'Lantern', 'prop'), p('dock', 'Harbour', 'place'), p('mara', 'Mara', 'character'), p('ines', 'Ines', 'character', 'final')]
 const words = (items: MenuItem[]) => items.map((i) => ('heading' in i ? `# ${i.heading}` : 'label' in i ? i.label : 'cmd' in i ? i.cmd : '—'))

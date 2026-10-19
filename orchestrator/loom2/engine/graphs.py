@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -1265,7 +1265,26 @@ def build_segment(recipe: Segment, roster: Roster, out_prefix: str, image_name: 
     return Compiled(graph=g, output_node="99", summary=summary | {"op": recipe.op, "expand": recipe.expand, "feather": recipe.feather}, serialized_prompt=recipe.text)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def build_keypoints(recipe: Keypoints, roster: Roster, image_name: str) -> Compiled:
+    """CA1b (D104): E10's scorer as a job — RT-DETR boxes the people, SDPose wholebody reads each one; PreviewAny returns the keypoints as
+    text (the finisher parses them; nothing is saved to the Catalogue)."""
+    spec = registry.get(recipe.model_id)
+    if spec is None or not spec.recipes.keypoints:
+        raise CompileError(f"{recipe.model_id!r} does not read body keypoints")
+    _, ckpt = roster.require(spec.id)
+    _, det = roster.require(spec.roles.extra["detector"])
+    g: dict[str, Any] = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}},
+        "2": {"class_type": "UNETLoader", "inputs": {"unet_name": det, "weight_dtype": "default"}},
+        "3": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "4": {"class_type": "RTDETR_detect", "inputs": {"model": ["2", 0], "image": ["3", 0], "threshold": 0.4, "class_name": "person", "max_detections": 6}},
+        "5": {"class_type": "SDPoseKeypointExtractor", "inputs": {"model": ["1", 0], "vae": ["1", 2], "image": ["3", 0], "batch_size": 1, "bboxes": ["4", 0]}},
+        "6": {"class_type": "PreviewAny", "inputs": {"source": ["5", 0]}},
+    }
+    return Compiled(graph=g, output_node="6", summary={"model_id": spec.id, "detector": spec.roles.extra["detector"], "asset_id": recipe.asset_id})
+
+
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -1302,6 +1321,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if "image" not in i:
             raise CompileError("image_to_mesh needs the uploaded source (pipeline.prepare_mesh)")
         c = build_mesh(recipe, roster, seed, out_prefix, i["image"])
+    elif isinstance(recipe, Keypoints):
+        i = inputs or {}
+        if "image" not in i:
+            raise CompileError("keypoints needs the uploaded image (pipeline.prepare_keypoints)")
+        c = build_keypoints(recipe, roster, i["image"])
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -1341,9 +1365,9 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         return [recipe.model_id]                                      # LT2: the base's transformer (its encoder comes from HF_HOME, its VAE from the hub)
     if isinstance(recipe, TTS):
         return []                                                     # CN2: the TTS models live in HF_HOME, not the roster
-    if isinstance(recipe, ImageToMesh):
+    if isinstance(recipe, (ImageToMesh, Keypoints)):
         spec = registry.get(recipe.model_id)
-        return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet
+        return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
         ids = spec.weights() if spec else [recipe.model_id]

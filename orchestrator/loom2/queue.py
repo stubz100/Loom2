@@ -731,7 +731,7 @@ class JobQueue:
                 self._fail(job, job.error or "engine reported an error")
                 return
             await self.irreversible(job)                     # C8: the engine's work is done; what follows must never run twice
-            files = self.follower.outputs(await self.engine.client.history(job.prompt_id))
+            files = self.follower.outputs(await self.engine.client.history(job.prompt_id), text=getattr(recipe, "kind", None) == "keypoints")
             if not files:
                 self._fail(job, "the engine finished but produced no output files")
                 return

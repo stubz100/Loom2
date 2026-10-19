@@ -145,6 +145,7 @@
  "POST /story/profiles/{pid}/versions/{vid}/add",
  "POST /story/profiles/{pid}/versions/{vid}/anim-ref",
  "POST /story/profiles/{pid}/versions/{vid}/anim-test",
+ "POST /story/profiles/{pid}/versions/{vid}/body/fit",
  "POST /story/profiles/{pid}/versions/{vid}/curate",
  "POST /story/profiles/{pid}/versions/{vid}/lock",
  "POST /story/shots",

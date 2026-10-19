@@ -2143,6 +2143,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/body/fit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Profile Body Fit
+         * @description CA1b (D104): fit the version's body to its animation reference — a short `keypoints` job (SDPose); the finisher writes the body
+         *     (the height, build, head, feet and attachments stay).
+         */
+        post: operations["profile_body_fit_story_profiles__pid__versions__vid__body_fit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/profiles/{pid}/versions/{vid}/curate": {
         parameters: {
             query?: never;
@@ -3076,6 +3097,13 @@ export interface components {
              * @default 1
              */
             size: number;
+        };
+        /** BodyFitQueued */
+        BodyFitQueued: {
+            /** Asset Id */
+            asset_id: string;
+            /** Job Id */
+            job_id: string;
         };
         /** BulkPatch */
         BulkPatch: {
@@ -6601,6 +6629,8 @@ export interface components {
              */
             appearance: string;
             body: components["schemas"]["Body"] | null;
+            /** Body Fit From */
+            body_fit_from: string | null;
             /** Candidates Group Id */
             candidates_group_id: string | null;
             /** Colours */
@@ -7104,6 +7134,11 @@ export interface components {
              * @default false
              */
             inpaint_hero?: boolean;
+            /**
+             * Keypoints
+             * @default false
+             */
+            keypoints?: boolean;
             /**
              * Lipsync
              * @default false
@@ -13515,6 +13550,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnimTestQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_body_fit_story_profiles__pid__versions__vid__body_fit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BodyFitQueued"];
                 };
             };
             /** @description Validation Error */

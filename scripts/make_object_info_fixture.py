@@ -22,6 +22,8 @@ CLASSES = [
     "ImagePadForOutpaint", "ImageScale", "ImageCrop", "Flux2Scheduler", "BasicGuider", "RandomNoise", "KSamplerSelect", "SamplerCustomAdvanced",
     "ModelSamplingFlux", "ModelSamplingSD3", "VAEDecodeTiled", "CFGGuider",
     # M5 slice 2: AI Select and the tiled refine
+    # CA1b (D104): body keypoints
+    "RTDETR_detect", "SDPoseKeypointExtractor", "PreviewAny",
     "CheckpointLoaderSimple", "SAM3_Detect", "CreateBoundingBoxes", "LoadBackgroundRemovalModel", "RemoveBackground", "MaskToImage", "ImageToMask",
     "SolidMask", "FeatherMask", "GrowMask", "InvertMask", "ThresholdMask", "PrimitiveString",
     # LanPaint (custom node, pinned)

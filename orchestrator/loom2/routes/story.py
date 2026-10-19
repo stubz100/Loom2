@@ -21,7 +21,7 @@ from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
-from ..story import FOR_SHOT, NODE_TYPES, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, body_fit_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -422,6 +422,37 @@ async def profile_anim_ref_make(svc: Svc, pid: str, vid: str, body: AnimRefBody)
     await svc.queue.flush()
     _changed(svc, p)
     return {"job_ids": [j.id for j in jobs], "group_id": gid, "model_id": planned[0][0]["model_id"]}
+
+
+class BodyFitQueued(BaseModel):
+    job_id: str
+    asset_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/body/fit", response_model=BodyFitQueued)
+async def profile_body_fit(svc: Svc, pid: str, vid: str):
+    """CA1b (D104): fit the version's body to its animation reference — a short `keypoints` job (SDPose); the finisher writes the body
+    (the height, build, head, feet and attachments stay)."""
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "character":
+        raise HTTPException(422, "only a character has a body to fit")
+    if not v.anim_ref_asset_id:
+        raise HTTPException(422, "make the animation reference first: the body is fitted to it")
+    try:
+        jobs = svc.queue.submit({"kind": "keypoints", "asset_id": v.anim_ref_asset_id}, origin=body_fit_origin(p.id, v.id))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id, "asset_id": v.anim_ref_asset_id}
 
 
 class AnimTestUpload(BaseModel):

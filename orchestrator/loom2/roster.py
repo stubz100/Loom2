@@ -54,6 +54,13 @@ ROSTER: list[RosterEntry] = [
     RosterEntry(id="birefnet", name="BiRefNet-general.safetensors", folder="background_removal", family="tools", role="tool",
                 repo="ZhengPeng7/BiRefNet", file="model.safetensors", license="mit", variants=["full", "open"], approx_gb=0.89,
                 note="subject matte for AI Select · Subject (core LoadBackgroundRemovalModel / RemoveBackground, 1024² input)"),
+    # CA1b (D104): body keypoints for fitting a figure to its character's animation reference (E10's scorer, now a product path)
+    RosterEntry(id="sdpose-wholebody", name="sdpose_wholebody_fp16.safetensors", folder="checkpoints", family="tools", role="tool",
+                repo="Comfy-Org/SDPose", file="checkpoints/sdpose_wholebody_fp16.safetensors", license="mit", variants=["full", "open"], approx_gb=1.92,
+                note="SDPose wholebody (core SDPoseKeypointExtractor): body, hands, feet and face keypoints of each boxed person"),
+    RosterEntry(id="rtdetr-v4", name="rt_detr_v4-x-hgnet_fp16.safetensors", folder="diffusion_models", family="tools", role="tool",
+                repo="Comfy-Org/SDPose", file="diffusion_models/rt_detr_v4-x-hgnet_fp16.safetensors", license="mit (Comfy-Org repack; RT-DETRv4 apache-2.0)",
+                variants=["full", "open"], approx_gb=0.12, note="RT-DETR v4 person boxes for SDPose (core RTDETR_detect)"),
     RosterEntry(id="sam3", name="sam3.pt", folder="sam3", family="tools", role="tool",
                 repo="facebook/sam3", file="sam3.pt", license="sam-license (gated)", variants=["full"], approx_gb=3.45,
                 note="SAM 3 detector + its text encoder in one checkpoint; loads through CheckpointLoaderSimple (the sam3 folder is mounted as a checkpoints path)"),

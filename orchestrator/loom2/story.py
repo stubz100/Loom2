@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .fsio import atomic_write_json, new_id, read_json, read_json_or, utc_now
 from .models import registry
 from .body import Body
+from .origin import JobOrigin
 from .shot_recipe import RecipeRun, ShotRecipe, add_run, default_template, stamps_for, step_of
 
 if TYPE_CHECKING:
@@ -169,6 +170,7 @@ class ProfileVersion(BaseModel):
     body: Body | None = None                      # CA0: a character's body for its Stage dummy (None = the default adult); places and props have none
     anim_ref_asset_id: str | None = None          # CA0 (01 step 2): the animation reference — full body, A-pose, 16:9, plain ground (a prop: alone, ¾ view)
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
+    body_fit_from: str | None = None              # CA1b (D104): the animation reference the body was last fitted to (an asset id); None = by hand
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
@@ -577,6 +579,13 @@ def plan_expand(profile: Profile, version: ProfileVersion, preset: str, variant:
             origin = {"suite": "story", "surface": "expand", "ref": profile.id, "payload": {"version": version.id, "cell": c, "group_id": group_id, "preset": preset}}
             out.append((recipe, origin))
     return out
+
+
+BODY_FIT_SURFACE = "body_fit"                    # CA1b (D104): origin.surface of a keypoints job that fits a version's body; payload {version}
+
+
+def body_fit_origin(pid: str, vid: str) -> JobOrigin:
+    return JobOrigin(suite="story", surface=BODY_FIT_SURFACE, ref=pid, payload={"version": vid})
 
 
 ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
@@ -1137,6 +1146,21 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if side == "back" and cur.cls != "character":
             raise ValueError("only a character has a back view")
         setattr(v, field, asset_id)
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_fitted_body(self, pid: str, vid: str, body: Body, asset_id: str) -> Profile:
+        """CA1b (D104): the version's body fitted to its animation reference (SDPose's proportions). Like the reference itself, a product of the
+        version (no revision guard, a final version too)."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.body, v.body_fit_from = body, asset_id
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

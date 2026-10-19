@@ -514,7 +514,7 @@ function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
 function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
   const slot = (side: 'front' | 'back', id: string | null | undefined, label: string) => (
     <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side}
-      onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }] : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.clearAnimRef' }])}>
+      onContextMenu={(e) => showMenu(e, side === 'back' ? [{ cmd: 'story.cast.makeAnimRefBack' }, { cmd: 'story.cast.clearAnimRefBack' }] : [{ cmd: 'story.cast.makeAnimRef' }, { cmd: 'story.cast.fitBody' }, { cmd: 'story.cast.clearAnimRef' }])}>
       {id ? <img src={api.thumbUrl(id, 512)} alt={label} /> : <span className="hint">{label}: none yet</span>}
       <span className="cell">{label}</span>
     </div>

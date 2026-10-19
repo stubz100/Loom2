@@ -6249,3 +6249,38 @@ mask's sense (the model reads 1 − mask: known = 1).
 - **Tests:** offline 437; Vitest 371 + 3 opt-in (the starter test run and passing); lint 75; typecheck clean.
 - **Next (step 2):** the `keypoints` job (SDPose wholebody + RT-DETR as a product path) and the body fitted from a version's
   animation reference.
+
+## 2026-10-19 18:40 — CA1b step 2 · SDPose as a product path: the body fitted to the animation reference
+
+- **The `keypoints` job** (D104). A `tools` spec `sdpose-wholebody` (graph `keypoints`, its detector `rtdetr-v4`). Both weights are on
+  disk since E10, MIT / Apache-2.0, offered under `open` too.
+  - The graph: CheckpointLoaderSimple + UNETLoader (RT-DETR) → `RTDETR_detect` → `SDPoseKeypointExtractor` → `PreviewAny`. All core
+    nodes of the pinned engine; the fixture gained the three classes, merged into the existing one so the newer weight enums stay.
+  - The follower passes `PreviewAny`'s text through for this kind only: the mesh graph prints text too.
+  - `KeypointsFinisher` puts the people found on the job's result, largest first. Nothing enters the Catalogue.
+- **The fit** (`body.py`). `dummy_ratios(body)` is the Stage dummy seen from the front in the A-pose, as SDPose reads people (builders.ts'
+  geometry; the nose → ankles height as the unit). `reference_ratios(person)` takes the same measures from an SDPose person:
+  - nose → neck, neck → hips, shoulders, hips, leg, arm;
+  - the palm (wrist → the middle finger's base), which stays the same however the fingers curl.
+
+  `fit_body` moves neck, torso, shoulders, arms, legs and hands until the dummy's ratios meet the reference's, within the fields'
+  bounds. The height, build, head, feet and attachments stay the author's. The Detailed hand's palm is 0.149 of the leg, measured on
+  Stage.
+  - On Ines' reference numbers the fit gives neck ×2.28, shoulders ×0.86, legs ×0.89, hands ×0.81. The proportions come back exactly;
+    the factors within 3 % (only the heights are fitted, so a little freedom is left).
+- **Where it runs:**
+  - a `body_fit` job: the finisher writes the version's body and `body_fit_from` (the reference it was fitted to);
+  - `POST /story/profiles/{pid}/versions/{vid}/body/fit` (characters with a reference; 422 otherwise);
+  - by itself, when a version's first animation reference lands and its body is untouched (queued from the async finisher; never the
+    reference job's failure).
+  - Cast: *Fit the body to the animation reference* (Ruler; a button in the body editor, in the reference's right-click menu and the
+    inspector), and a line saying the proportions were fitted.
+- **Tests:**
+  - offline 444 under full and open: `test_body_fit_ca1b.py` (7) covers the dummy's front view, the fit round trip, the reference
+    measured, the graph compiled against the engine's contract, the job fitting a version's body, the route, and the first reference
+    fitting an untouched body. The fake engine answers a keypoints graph with an A-pose person.
+  - Vitest 371 + 3 opt-in; e2e 47/47 under full and open (new: *Fit the body* in Cast → the neck from the fake reference, the height
+    kept).
+  - lint 75; build, the model-literal check and the settings audit clean; the route snapshot updated.
+- **Next (step 3):** the acceptance on the rig. The two E23b characters fitted by the app; Stage's ratios within ±10 % of their
+  references (`ca1b_skeleton_check.py --bodies --targets`); then their Move layers made again, for the author's look.

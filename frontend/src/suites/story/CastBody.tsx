@@ -5,6 +5,7 @@
 import { Plus, X } from 'lucide-react'
 import type { Profile, ProfileVersion } from '../../api/types'
 import { BUILD_WIDTH, DEFAULT_BODY, bodyDims, type Body } from '../stage/body'
+import { CommandButton } from '../../frame/CommandButton'
 import { useStory } from './storyStore'
 
 const PROPORTIONS: [keyof Pick<Body, 'head' | 'neck' | 'torso' | 'shoulders' | 'arms' | 'legs' | 'hands' | 'feet'>, string, number, number][] = [
@@ -27,6 +28,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
       <div className="cast-body empty">
         <span className="hint">The default dummy (a 1.75 m adult). A body shapes {p.name}'s figure on the stage — height, build, proportions, a tail or horns.</span>
         {open && <button type="button" className="quiet" onClick={() => setSheet({ body: DEFAULT_BODY as never })} title="Give this version a body of its own (starts as the default adult)"><Plus size={12} /> body</button>}
+        {open && v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
       </div>
     </>
   )
@@ -73,9 +75,11 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
                 onClick={() => set({ attachments: [...atts, { kind: 'tail', joint: null, size: 1, note: '' }] })}><Plus size={12} /> attachment</button>}
             </div>
           </div>
+          {v.body_fit_from && <div className="body-row"><span /><span className="hint">{v.body_fit_from === v.anim_ref_asset_id ? 'Proportions fitted to the animation reference' : 'Proportions fitted to an earlier animation reference'}</span></div>}
           {open && <div className="body-row">
             <span />
             <span>
+              {v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
               <button type="button" className="quiet" title="Proportions and build back to the default adult (the height and attachments stay)" onClick={() => set({ build: 'average', head: 1, neck: 1, torso: 1, shoulders: 1, arms: 1, legs: 1, hands: 1, feet: 1 })}>Reset proportions</button>
               <button type="button" className="quiet" title="No body of its own: the default 1.75 m dummy" onClick={() => setSheet({ body: null as never })}>Remove the body</button>
             </span>

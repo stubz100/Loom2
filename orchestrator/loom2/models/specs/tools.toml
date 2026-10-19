@@ -24,6 +24,15 @@ recipes = { default_for = ["segment"], segment = ["subject"] }
 estimates = { vram_gb = 2.5, doc_seconds = 2.5 }
 
 [[model]]
+id = "sdpose-wholebody"
+family = "tools"
+label = "Body keypoints · SDPose"
+graph = "keypoints"
+roles.extra = { detector = "rtdetr-v4" }
+recipes = { default_for = ["keypoints"], keypoints = true }   # CA1b (D104): a figure fitted to its character's animation reference
+estimates = { vram_gb = 3.0, doc_seconds = 4.0 }             # E10's scorer: 1–2 s a frame warm, the 1.9 GB checkpoint's load on top
+
+[[model]]
 id = "sam3"
 family = "tools"
 label = "SAM 3"

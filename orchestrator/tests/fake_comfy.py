@@ -23,6 +23,41 @@ from fastapi import FastAPI, Form, Request, UploadFile, WebSocket, WebSocketDisc
 from PIL import Image
 
 
+def fake_person(ratios: dict[str, float] | None = None, h: float = 400.0, cx: float = 416.0, top: float = 40.0) -> dict:
+    """CA1b: one SDPose person (OpenPose-18 body + 21-point hands) standing in the A-pose, drawn from proportions given as fractions of the
+    nose → ankles height — what the fake engine's keypoints graph returns."""
+    import math
+    r = {"head_neck": 0.16, "torso": 0.33, "shoulders": 0.23, "hips": 0.14, "leg": 0.5, "arm": 0.34, "palm": 0.06} | (ratios or {})
+    neck_y = top + r["head_neck"] * h
+    hip_y = neck_y + r["torso"] * h
+    ank_y = top + h
+    sh, hp = r["shoulders"] * h / 2, r["hips"] * h / 2
+    ax, ay = math.sin(math.radians(22)), math.cos(math.radians(22))
+    arm = r["arm"] * h
+    leg_drop = ank_y - hip_y
+    leg_dx = math.sqrt(max(0.0, (r["leg"] * h) ** 2 - leg_drop ** 2))      # the legs apart, so each is as long as the ratio says
+    pts = {0: (cx, top), 1: (cx, neck_y)}
+    for s, (i_s, i_e, i_w, i_h, i_k, i_a) in ((-1, (2, 3, 4, 8, 9, 10)), (1, (5, 6, 7, 11, 12, 13))):
+        pts[i_s] = (cx + s * sh, neck_y)
+        pts[i_e] = (cx + s * (sh + ax * arm / 2), neck_y + ay * arm / 2)
+        pts[i_w] = (cx + s * (sh + ax * arm), neck_y + ay * arm)
+        pts[i_h] = (cx + s * hp, hip_y)
+        pts[i_k] = (cx + s * (hp + leg_dx / 2), (hip_y + ank_y) / 2)
+        pts[i_a] = (cx + s * (hp + leg_dx), ank_y)
+    for i, (dx, dy) in {14: (-8, -6), 15: (8, -6), 16: (-16, 0), 17: (16, 0)}.items():
+        pts[i] = (cx + dx, top + dy)
+    body = [c for i in range(18) for c in (*pts[i], 0.9)]
+
+    def hand(i_w: int, s: int) -> list[float]:
+        wx, wy = pts[i_w]
+        out = []
+        for k in range(21):
+            t = 0 if k == 0 else 4 if k == 9 else (k - 1) % 4 + 1        # 9: the middle finger's base, a palm's length from the wrist
+            out += [wx + s * ax * r["palm"] * h * t / 4, wy + ay * r["palm"] * h * t / 4, 0.9]
+        return out
+    return {"pose_keypoints_2d": body, "hand_right_keypoints_2d": hand(4, -1), "hand_left_keypoints_2d": hand(7, 1), "foot_keypoints_2d": [], "face_keypoints_2d": []}
+
+
 class FakeComfy:
     def __init__(self, object_info: dict, output_dir: Path, *, behaviour: str = "success", color=(255, 0, 255, 255),
                  object_info_delay: float = 0.0) -> None:
@@ -122,6 +157,10 @@ class FakeComfy:
             gname = f"{gbase}_{sum(1 for p in gdir.glob(f'{gbase}_*.glb')) + 1:05d}_.glb"
             (gdir / gname).write_bytes(minimal_glb())
             outputs[save3d] = {"3d": [{"filename": gname, "subfolder": gsub, "type": "output"}]}
+        preview = next((k for k, n in graph.items() if n.get("class_type") == "PreviewAny"), None)
+        if preview and any(n.get("class_type") == "SDPoseKeypointExtractor" for n in graph.values()):
+            people = getattr(self, "people", None) or [fake_person()]                       # CA1b: the keypoints graph answers with text only
+            outputs = {preview: {"text": [json.dumps([{"people": people, "canvas_width": 832, "canvas_height": 480}])]}}
         self.histories[pid] = {"outputs": outputs, "status": {"completed": True, "status_str": "success"}}
         await self._send({"type": "executing", "data": {"prompt_id": pid, "node": None}})
         await self._send({"type": "execution_success", "data": {"prompt_id": pid}})

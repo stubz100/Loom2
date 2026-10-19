@@ -418,8 +418,17 @@ class TTS(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])   # one job (the queue's seed loop)
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS
+class Keypoints(BaseModel):
+    """CA1b (D104): the body keypoints of one image (SDPose wholebody on RT-DETR's person boxes) — the measure a figure is fitted to its
+    character by. The result is the people found (OpenPose-style JSON) on the job; with origin surface `body_fit` the finisher fits the Cast
+    version's body to them."""
+    kind: Literal["keypoints"] = "keypoints"
+    asset_id: str
+    model_id: str = _default("keypoints")
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints
 
 
 class RecipeEnvelope(BaseModel):

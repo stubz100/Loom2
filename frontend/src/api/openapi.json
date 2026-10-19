@@ -1288,6 +1288,24 @@
         "title": "BodyAttachment",
         "type": "object"
       },
+      "BodyFitQueued": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "asset_id"
+        ],
+        "title": "BodyFitQueued",
+        "type": "object"
+      },
       "BulkPatch": {
         "properties": {
           "changes": {
@@ -10035,6 +10053,17 @@
               }
             ]
           },
+          "body_fit_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Fit From"
+          },
           "candidates_group_id": {
             "anyOf": [
               {
@@ -10165,6 +10194,7 @@
           "body",
           "anim_ref_asset_id",
           "anim_ref_back_asset_id",
+          "body_fit_from",
           "anim_test_clip_id",
           "derived_from",
           "created_at",
@@ -11304,6 +11334,11 @@
           "inpaint_hero": {
             "default": false,
             "title": "Inpaint Hero",
+            "type": "boolean"
+          },
+          "keypoints": {
+            "default": false,
+            "title": "Keypoints",
             "type": "boolean"
           },
           "lipsync": {
@@ -22901,6 +22936,58 @@
           }
         },
         "summary": "Profile Anim Test",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/body/fit": {
+      "post": {
+        "description": "CA1b (D104): fit the version's body to its animation reference — a short `keypoints` job (SDPose); the finisher writes the body\n(the height, build, head, feet and attachments stay).",
+        "operationId": "profile_body_fit_story_profiles__pid__versions__vid__body_fit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BodyFitQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Body Fit",
         "tags": [
           "story"
         ]

@@ -27,9 +27,10 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Keypoints, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
-from ..story import FOR_SHOT
+from ..body import Body
+from ..story import BODY_FIT_SURFACE, FOR_SHOT, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
 from .pipeline import AnyRecipe, Submission
@@ -108,7 +109,12 @@ class AssetFinisher:
         if assets and isinstance(panel, str) and panel:
             await asyncio.to_thread(_panel_thumb, q, panel, assets[0].id)
         if assets and job.origin and job.origin.surface == "anim_ref":                        # CA0: the first result is the reference while there is none
-            await asyncio.to_thread(_anim_ref_result, q, job.origin.ref, job.origin.payload or {}, assets[0].id)
+            fit = await asyncio.to_thread(_anim_ref_result, q, job.origin.ref, job.origin.payload or {}, assets[0].id)
+            if fit:
+                try:
+                    q.submit({"kind": "keypoints", "asset_id": assets[0].id}, origin=body_fit_origin(*fit))
+                except Exception as e:  # noqa: BLE001 — the reference stands; the fit is offered by hand (Cast's button)
+                    job.log_tail.append(f"body fit not queued: {e}")
         place = (job.origin.payload or {}).get("group_id") if job.origin else None          # 17 §3b: an Expand's candidates land on the version's page
         if assets and isinstance(place, str) and q.groups is not None and place in q.groups.groups:
             try:
@@ -408,7 +414,7 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
 
 
-def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> None:
+def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> tuple[str, str] | None:
     """CA0: an animation-reference job's first result becomes the version's reference (or back view) while it has none; every result stays
     on the candidates page for the author's pick. Never the job's failure."""
     from ..story import StoryStore
@@ -416,8 +422,12 @@ def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str)
         p = StoryStore(q.ws).set_anim_ref(str(pid or ""), str(payload.get("version") or ""), str(payload.get("side") or "front"), asset_id, only_if_empty=True)
         if p is not None:
             q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+            v = p.version(str(payload.get("version") or ""))
+            if (payload.get("side") or "front") == "front" and p.cls == "character" and v.body_fit_from is None and (v.body is None or v.body == Body()):
+                return p.id, v.id                                      # CA1b: an untouched body is fitted at once (queued by the caller, on the loop)
     except Exception as e:  # noqa: BLE001
         q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"animation reference not set: {e}"})
+    return None
 
 
 def _anim_test_result(q: JobQueue, pid: str, payload: dict, clip_id: str) -> None:
@@ -496,7 +506,51 @@ class MeshFinisher:
         job.log_tail.append(f"mesh {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)" + (" with its view" if view else ", no view for the thumbnail"))
 
 
+class KeypointsFinisher:
+    """CA1b (D104): the people SDPose found go on the job's result (largest first); a `body_fit` job fits its Cast version's body to the
+    largest one. Nothing enters the Catalogue."""
+    frees_cache = False
+
+    async def finish(self, job: JobRecord, recipe: Keypoints, files: list[dict], sub: Submission, q: JobQueue) -> None:
+        import json
+        text = next((f["text"] for f in files if "text" in f), None)
+        if text is None:
+            raise ValueError("the engine finished but returned no keypoints")
+        frames = json.loads(text)
+        frame = (frames[0] if isinstance(frames, list) and frames else frames) or {}
+        people = sorted(frame.get("people") or [], key=lambda p: -sum((p.get("pose_keypoints_2d") or [])[2::3]))
+        job.result["people"] = people
+        job.result["canvas"] = [frame.get("canvas_width"), frame.get("canvas_height")]
+        job.log_tail.append(f"{len(people)} {'person' if len(people) == 1 else 'people'} found")
+        if job.origin and job.origin.surface == BODY_FIT_SURFACE:
+            await asyncio.to_thread(_body_fit_result, q, job, recipe, people)
+
+
+def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: list[dict]) -> None:
+    """CA1b: the version's body fitted to the reference's proportions (the height, build, head, feet and attachments stay). A reference that
+    shows no whole figure fails the job, so the author sees why."""
+    from ..body import Body, fit_body, reference_ratios
+    from ..story import StoryStore
+    if not people:
+        raise ValueError("no figure found in the animation reference")
+    measured = reference_ratios(people[0])
+    store = StoryStore(q.ws)
+    pid, vid = str(job.origin.ref or ""), str((job.origin.payload or {}).get("version") or "")
+    cur = store.profile(pid)
+    if cur is None:
+        raise ValueError(f"the profile {pid} is gone")
+    v = cur.version(vid)
+    body, report = fit_body(measured, v.body or Body())
+    p = store.set_fitted_body(pid, v.id, body, recipe.asset_id)
+    job.result["body"] = body.model_dump()
+    job.result["fit"] = report
+    job.log_tail.append("body fitted: " + ", ".join(f"{k} {body.model_dump()[k]}" for k in ("neck", "torso", "shoulders", "arms", "legs", "hands")))
+    q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+
+
 def finisher_for(recipe: AnyRecipe) -> Finisher:
+    if isinstance(recipe, Keypoints):
+        return KeypointsFinisher()
     if isinstance(recipe, ImageToMesh):
         return MeshFinisher()
     if isinstance(recipe, I2V):

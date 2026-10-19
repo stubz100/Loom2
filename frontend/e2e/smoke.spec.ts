@@ -1886,6 +1886,25 @@ test('an animation reference in Cast (CA0, 01 step 2): Make an animation referen
   await expect(page.locator('.anim-ref-slot[data-side="back"] img')).toHaveAttribute('src', new RegExp(otherId))
 })
 
+test('the body fitted to the animation reference (CA1b, D104): Fit the body measures the reference and the proportions follow, the height stays', async ({ page }) => {
+  test.setTimeout(90_000)
+  const name = `Ines ${Date.now().toString(36)}`
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const ref = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  type ProfileLite = { id: string; versions: { id: string; body_fit_from: string | null; body: { height_m: number; neck: number; shoulders: number } | null }[] }
+  const p = await api<ProfileLite>('POST', '/story/profiles', { name, cls: 'character', appearance: `${name}, a mechanic` })
+  await api('PUT', `/story/profiles/${p.id}/versions/v1/anim-ref`, { side: 'front', asset_id: ref })           // set by hand: no fit by itself
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  await page.locator(`.profile-row[data-id="${p.id}"]`).click()
+  await page.locator('.cast-body button', { hasText: /^Fit the body to the animation reference/ }).click()
+  await expect.poll(async () => (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body_fit_from, { timeout: 60_000 }).toBe(ref)
+  const body = (await api<ProfileLite>('GET', `/story/profiles/${p.id}`)).versions[0].body!
+  expect(body.height_m).toBe(1.75)                                                                    // the author's: unchanged
+  expect(body.neck).toBeGreaterThan(1.5)                                                              // the fake reference's long neck (0.16 of the height)
+  await expect(page.locator('.cast-body')).toContainText('Proportions fitted to the animation reference')
+  await expect(page.locator('.cast-body')).toContainText(`×${body.neck.toFixed(2)}`)                     // the neck slider shows the fitted factor
+})
+
 test('a test animation in Cast (CA0, 01 step 2): Test it draws a turn on the spot from the body here, the pose-driven model performs it with the reference, the clip lands beside the reference', async ({ page }) => {
   test.setTimeout(120_000)
   const name = `Bram ${Date.now().toString(36)}`

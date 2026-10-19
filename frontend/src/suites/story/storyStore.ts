@@ -142,6 +142,8 @@ export interface StoryState {
   setHero: (assetId: string | null) => Promise<void>
   /** CA0 (01 step 2): make the version's animation reference (or its back view) — two candidates, the first used while none is set. */
   makeAnimRef: (side: 'front' | 'back') => Promise<void>
+  /** CA1b (D104): fit the version's body to its animation reference (a short keypoints job; the profile updates when it lands). */
+  fitBody: () => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
   setAnimRef: (side: 'front' | 'back', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
@@ -478,6 +480,13 @@ export const useStory = create<StoryState>()((set, get) => {
         useSession.getState().toast(`${r.job_ids.length} ${side === 'back' ? 'back views' : 'animation references'} queued for ${p.name} — they land on the candidates page; the first becomes the reference while there is none`, 'info')
         if (!v.candidates_group_id) await get().loadProfiles()
       } catch (e) { toast(`Animation reference: ${detail(e)}`) }
+    },
+    fitBody: async () => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/body/fit', { params: { path: { pid: p.id, vid: v.id } } }))
+        useSession.getState().toast(`Measuring ${p.name}'s animation reference — the body's proportions follow in a few seconds (the height and build stay)`, 'info')
+      } catch (e) { toast(`Fit the body: ${detail(e)}`) }
     },
     setAnimRef: async (side, assetId) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

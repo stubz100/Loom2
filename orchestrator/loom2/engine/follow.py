@@ -162,11 +162,14 @@ class EngineFollower:
                 return True
 
     @staticmethod
-    def outputs(hist: dict | None) -> list[dict]:
+    def outputs(hist: dict | None, text: bool = False) -> list[dict]:
         files: list[dict] = []
         for node_out in ((hist or {}).get("outputs") or {}).values():
             for key in ("images", "gifs", "videos", "3d", "meshes", "files"):                # P18: Save3DAdvanced reports its GLB under "3d" …
                 for f in node_out.get(key, []) or []:
                     if isinstance(f, dict) and f.get("filename") and f.get("type", "output") == "output":   # … and a bare path list under "result" (skipped)
                         files.append({"filename": f["filename"], "subfolder": f.get("subfolder", "")})
+            for t in (node_out.get("text", []) or []) if text else []:                     # CA1b: PreviewAny's text (the keypoints job only)
+                if isinstance(t, str):
+                    files.append({"text": t})
         return files

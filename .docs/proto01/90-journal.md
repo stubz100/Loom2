@@ -5846,3 +5846,44 @@ a T-pose, *Walk_RM* and *Wave_Loop*). The e2e tree's starter folder holds it.
 - Lint 75; build and audits clean.
 
 **Next:** step 2, the Detailed dummy as the second editing level; then the path, foot lock and blends.
+
+## 2026-10-19 08:38 — Spike E25: Wan Animate follows drawn hands → D101
+
+The question (01 §9a, before CA1 builds the Detailed level): does Wan Animate follow hands and feet drawn in the pose guide?
+
+**Setup** (`engine/spikes/e25_hands.py`):
+
+- **Character:** CA0's Mara reference (the market version: full body, A-pose, hands visible).
+- **Clips:** two from the CC0 starter set with hand action, Idle_Talking_Loop (looped) and Interact (half speed, held), at 77 frames,
+  16 fps, 832×480.
+- **The guide's figure** comes straight from the source rig (a small glTF evaluator over the Rigify `DEF-` bones, fingers included).
+- **Drawn twice** by the engine's own DWPose drawer (`comfy_extras/pose/keypoint_draw.py`): **A** body only (COCO-18, as the Stage's
+  pass today) and **B** body + both hands (21 points each) + feet (6).
+- Every guide twice, A and B alternating, through the app's guide route and the Stage's animate method, one GPU job at a time
+  (117–162 s a run).
+
+**Scoring** (`e25_rescore.py`): SDPose on every 6th frame.
+
+- The first pass scored hands at 0.2 × the hand's own box (4–5 px for a 20 px hand) and read near zero in both arms, though the hands
+  were found in 89–95 % of the frames.
+- The re-score showed why: **SDPose's `hand_right` is the left hand of COCO-WholeBody's order**, the opposite of what I had assumed
+  from the drawer's comments. With sides matched and the hand points counted at 0.1 × the torso (PCKh-style, about 10 px):
+
+| Run | A: body only | B: body + hands + feet |
+| --- | --- | --- |
+| talk 0 | 0.203 | 0.423 |
+| talk 1 | 0.183 | 0.295 |
+| interact 0 | 0.093 | 0.377 |
+| interact 1 | 0.060 | 0.471 |
+| **mean** | **0.135** | **0.391** |
+
+- **The hands follow about three times better when they are drawn,** in every pair; the median error is 0.17 → 0.11 torso lengths.
+- **The body is equal:** PCK 0.997 (A) and 0.991 (B).
+- **The overlays** (`engine/spikes/out/e25/overlay_*.png`): with hands drawn, the raised hand's detected points lie on the guide's;
+  without, the hand closes into a fist off to the side.
+- The guide images were unaffected by the side mix-up: DWPose draws both hands in the same colours.
+
+**Decision D101:** a figure at the Detailed level adds its hands (from the mannequin's finger bones) and feet to the pose pass, in
+DWPose's style and COCO-WholeBody order (left hand first). The Simple figure's pass stays body-only (E10's clay reference rests on it).
+
+Outputs under `engine/spikes/out/e25/` (git-ignored); contact sheet `sheet.jpg`.

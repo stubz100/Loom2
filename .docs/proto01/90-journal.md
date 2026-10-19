@@ -6402,3 +6402,22 @@ mask's sense (the model reads 1 − mask: known = 1).
   - Stage's own shadow pass is a free alternative, or a complement: the model's shadows for soft contact, Stage's for the cast shadow;
   - placing the reference at the start is worth keeping in every Move layer;
   - camera moves come next: the floor shadows can be re-projected onto the floor plane.
+
+## 2026-10-19 21:33 — E23c decided → D105: both shadow sources stay; a character-shaped dummy is the next question
+
+- **The author's look:** "the stage shadows are very accurate, but they are not the real character's shadows, however, they are
+  rendered by the 3d engine … whereas the white set shadows are the real shadows of the character, but they created by the AI model …
+  I'd keep both for now - they both have potential to be the real thing."
+- **D105.** A character's shadow is its own layer in the composition (a ratio over the plate), from either source:
+  - Stage's shadow map from the dummy, with an exact direction and contact;
+  - the white set's generated shadow, with the character's real outline.
+
+  Every Move layer's reference is placed where its figure starts (the ghost gone).
+- **The author's two further ideas:**
+  - **A shadow-only layer refined by a model.** Image and video models are trained on whole scenes, so a shadow alone is outside what
+    they know. A refine belongs on the composited frame (E24's stage C), where the shadow sits in its room.
+  - **A dummy shaped like the character** (image → mesh, "it doesn't have to be perfect, just a dummy to cast close enough shadows").
+    The engine has Pixal3D as a product path (D84, P18: a textured GLB from one image, ≈ 4 min warm; TRELLIS.2 retired in E14).
+    Made from the A-pose animation reference and skinned to the Detailed figure's bones by proximity, it would cast the coat's and the
+    hair's shadow in Stage's light. A cheaper stand-in: a shadow card carrying the character's matte.
+  - Proposed as spike E23d, measured against the white set's shadows (the character's real outline).

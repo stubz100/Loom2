@@ -90,6 +90,13 @@ The question: on a long single-character shot, which frame rate (F16 or F24) giv
 
 The question (note 3): which Wan Animate mode does the app use? It runs with E23a's frame rate and weld.
 
+> **Run 2026-10-19** (journal 16:32, `engine/spikes/e23b_layers.py`).
+>
+> - **Move:** PCK 0.99–1.0, seamless joins. The reference's ghost is cut by the Stage-guided SAM 3 matte.
+> - **Replace:** needs the region blanked black (Wan 2.2's own preprocessing), keeps the black around dark clothes (PCK 0.75–0.83) and pops at a join, but integrates light best where the character covers the region.
+>
+> R2 was left out (the Render clip covers 5 s). Proposed: Move (Q21). The author's look is in 10.
+
 **The shot.** E22's set and characters (Mara and Ines), about 10 s:
 
 - **Mara** walks along a path and turns.

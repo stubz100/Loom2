@@ -6102,3 +6102,86 @@ ground), padded as CN4 pads it.
   - whether a RIFE conform follows the chain. D27's rife-ncnn-vulkan v4.6 takes ≈ 2.4 s for 10 s. The app has no conform step yet
     (D27 left it to export, post-MVP), so the planner (07 phase 4) brings it in for F16 shots.
 - **Next:** E23b (Move vs Replace), at F16 with W1.
+
+## 2026-10-19 16:32 — Spike E23b · two layers, Move against Replace: Move holds the pose and the joins; Replace integrates but needs the region blanked, and dark clothes keep the black
+
+**Setup** (`engine/spikes/e23b_layers.py refs|stage|plate|run|rematte|rtest|score`; outputs `engine/spikes/out/e23b/`, local, ≈ 4 GB of
+frames). D102's F16 with W1 chaining (3 batches of 77, continue_motion 5); seeds 20261021–22; one GPU job at a time. R2 (depth-guided
+plate video) was left out: LTX's Render clip covers 5 s, and the shot is 10 s.
+
+- **The characters.** E22's Mara and Ines (the scratch projects are gone): recreated as Cast profiles from E22's hero images, with
+  their animation references made by CA0's route (Klein 9B, 64 s and 16 s; full body, plain ground, colours bound).
+- **The blocking.** Done by the app in a visible Edge on E21's room, Detailed ♀ figures, CC0 clips:
+  - Mara walks a curved path from the back left (Walk_Loop along the path, feet locked; ends at frame 84), then turns to face Ines (100).
+  - Ines stands at the stool (the room's block at the origin), sits on it with Sitting_Enter (24 → 55), then points at Mara with her
+    right arm (arm keys, 81).
+  - The camera dollies in 0.5 m with a slight pan to the left (keys at 0 and 240).
+- **What Stage rendered** (per figure, the other hidden): the pose sequence and a depth sequence, plus the empty set's depth. A
+  figure's mask is where its render differs from the set's and is not behind the other figure's.
+- **The plate.** E21's plate moved along the camera path by 2.5D projection in spike code: each pixel's ray is cast onto the room's
+  blocks (builders.ts `room`) and looked up in the plate through E21's camera. 161 frames take 40 s on the CPU.
+  - The blocks match the plate's grey blocks (`plate_blocks.jpg`).
+  - Where the camera sees behind the stool, its side repeats the front (the stretch 01 expects).
+  - The plate's window wall sits further right than Stage's left wall.
+- **M · Move.** Each figure is made on its own reference.
+  - A SAM 3 matte per frame (E22's detection by text, "woman:2") is kept inside the figure's Stage mask grown by 36 px.
+  - The layers are stacked over the moving plate, far → near by camera distance, after contact shadows. Stage has no shadow pass, so
+    the shadows are a soft ellipse under the ankles, a stand-in.
+  - E21's one-box SAM path returned noise here, so the mattes were redone (`rematte`). No new generation was needed.
+- **R · Replace.** `background_video` is the moving plate, then for layer 2 the previous layer's result; `character_mask` is the
+  figure's Stage mask dilated 12 px; far → near.
+
+**What R needs in the masked region** (`rtest`, one batch each):
+
+- the plate's own pixels → no one is inserted (the first full R run: the empty room);
+- mid grey → kept as a flat grey cut-out with a face;
+- a clay dummy shaded from Stage's depth → the dummy is kept;
+- black, as Wan 2.2's own replace preprocessing does it (src_bg = frame · (1 − mask)) → the character is drawn, but the black stays
+  wherever she does not cover the region.
+
+So R pastes back only the character's own SAM 3 matte inside the region. The engine's node and the reference code agree on the
+mask's sense (the model reads 1 − mask: known = 1).
+
+**Results:**
+
+| Arm · seed | PCK Mara / Ines | Joins (local ratio, E23a) | GPU time per shot | Peak VRAM |
+| --- | --- | --- | --- | --- |
+| M · 21 | **0.987 / 1.000** | 1.07, 1.22 | 17.1 min (layers 409 + 477 s, mattes 90 + 53 s) | 9.7 GB |
+| M · 22 | **0.995 / 0.992** | 1.12, 1.39 | 13.6 min | 8.7 GB |
+| R · 21 | 0.754 / 0.923 | 2.46, **6.79** | 15.1 min | 8.7 GB |
+| R · 22 | 0.825 / 0.915 | 1.90, 1.73 | 13.8 min | 9.7 GB |
+
+- **Look, by eye** (`peek_all.jpg`, `sheet.jpg`, `compare.mp4`):
+  - **M** is clean in both seeds: Mara walks and turns, Ines sits on the stool and points at her. The layers keep their own flat
+    studio light, a slightly pasted look that E24's post stages are for.
+  - **R's Ines is the best-integrated figure of the spike**: lit by the room, seated on the stool, pointing.
+  - **R's Mara keeps the black fill in both seeds.** Her grey coat, black hair and trousers make the leftover black read as clothing,
+    to the model and to the matte, so it lowers her PCK too.
+- **Move's ghost.** In both seeds, Mara's Move layer kept a second, standing Mara where the reference shows her (161 of 161 frames)
+  while the posed Mara walked on the left. The Stage-guided matte cuts it away; it would show if the two overlapped.
+- **The other measures:**
+  - Background flicker equals the plate's own in every arm (1.53 vs 1.53).
+  - The band step: M 0.80–0.84 (the merge's edge softer than the layer's own edge against grey); R 0.98–1.0.
+- **Not conclusive:**
+  - FaceSim: the faces are 12–25 px. Mara's similarity is 0.09–0.23 (glasses, a far face), Ines' 0.15–0.36. Ines' drop under M is
+    0.05–0.07, at the bar; by eye identity holds in all four.
+  - The "ring drift" measure is invalid: it counts the character's own hair and coat beyond the mannequin's silhouette.
+  - The wall times (16.5–27 min) include the spike's slow CPU matte step. The GPU times above are the honest figures; every arm is
+    under the bar of 45 min a shot.
+
+**Reading:**
+
+- **Move is the app's mode.** It follows the poses (PCK ≥ 0.99), its joins are seamless, it doesn't depend on the clothes' colours,
+  and its layers are independent: a retake of one layer leaves the others alone. R chains layer 2 into layer 1's result.
+- **Replace integrates light and contact better** where the character covers the mannequin's region. But it needs the region
+  blanked, leaves the fill where she doesn't cover it (dark clothes keep it), follows the pose less well, and pops at joins (6.79).
+  It is a candidate for a later "integrate" pass on a finished Move layer: E24's stage C, or a relight pass.
+- **For the app's Move:**
+  - mattes by SAM 3 text detection, guided by Stage's mask;
+  - place the animation reference where the figure starts in the shot (its first frame's position and scale), not centred, against
+    the ghost (to measure);
+  - a real Stage shadow pass in place of the stand-in.
+- Recorded as **Q21** (proposed: Move); the D-number follows at the decision gate (07). **Next: E28 (props)**, unless the author's
+  look changes this.
+
+**For the author:** `.docs/proto01_animate/10-testing-e23b.md` (≈ 5 min: compare.mp4, M against R).

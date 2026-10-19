@@ -19,6 +19,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [07](07-build-order.md) | **The build order** | one list for 02, 03, 05 and 06, UX0 first; the author's rules (one GPU job at a time, everything kept in the project, voice only, small testing documents, CC0 motion for tests) |
 | [08](08-testing-ca1.md) | **Testing CA1** (for the author) | a Mixamo clip from the local folder, a walk along a path into a turn and a point in under 2 min, the Detailed level |
 | [09](09-testing-e23a.md) | **Looking at E23a** (for the author) | F16 + RIFE or F24 in compare.mp4, the joins while walking and in a still hold (Q20) |
+| [10](10-testing-e23b.md) | **Looking at E23b** (for the author) | Move against Replace in compare.mp4: the light, the black left around Mara, the joins (Q21) |
 
 Background reading, in this order:
 

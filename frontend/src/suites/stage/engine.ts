@@ -12,6 +12,7 @@ import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
 import { CHAINS, eulerDeg, figureChain, solveTwoBone, type Chain } from './ik'
 import { makeDetailed, type Detailed, type HandPreset } from './detailed'
+import { measure } from './motion/path'
 import { depthMaterial, depthRange, drawPose, maskColour, projectMarkers, toBlob, type Keypoint, type PassName, type WholeBody } from './passes'
 import type { RenderedPasses, Tool, Transform, View } from './stageStore'
 
@@ -169,7 +170,7 @@ export class StageEngine {
 
   // ---- tools --------------------------------------------------------------------------------------------------------------------
   setTool(tool: Tool, snap: boolean): void {
-    if (tool === 'select') { this.gizmo.enabled = false; this.gizmo.detach() } else {
+    if (tool === 'select' || tool === 'path') { this.gizmo.enabled = false; this.gizmo.detach() } else {
       this.gizmo.setMode(tool === 'move' ? 'translate' : tool === 'rotate' ? 'rotate' : 'scale')
       this.gizmo.enabled = true
       const sel = this.selectedId
@@ -348,6 +349,7 @@ export class StageEngine {
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
     this.followAll()
+    this.syncPaths(doc)
     // cameras: helpers for the inactive ones, the active one drives the render camera
     const cams = new Set(doc.cameras.map((c) => c.id))
     for (const [id, h] of [...this.camHelpers]) if (!cams.has(id)) { this.scene.remove(h); this.camHelpers.delete(id) }
@@ -455,6 +457,29 @@ export class StageEngine {
   /** CA1: a hand preset as the figure's `extra` bone turns — null while the figure is Simple (or its mannequin is still loading). */
   handPreset(id: string, side: 'r' | 'l', preset: HandPreset): Record<string, number[]> | null {
     return this.entries.get(id)?.detailed?.handPreset(side, preset) ?? null
+  }
+  // CA1: each figure's floor path, smoothed as a clip walks it, with its clicked points — a viewport guide, never in the passes
+  private paths = new Map<string, { key: string; obj: THREE.Object3D }>()
+  private pathMat = new THREE.LineBasicMaterial({ color: 0x5ad0ff })
+  private pathDot = new THREE.MeshBasicMaterial({ color: 0x5ad0ff })
+  private syncPaths(doc: StageDoc): void {
+    const seen = new Set<string>()
+    for (const o of doc.objects) {
+      const pts = (o.path ?? []) as number[][]
+      if (o.kind !== 'mannequin' || !pts.length) continue
+      seen.add(o.id)
+      const key = JSON.stringify(pts)
+      if (this.paths.get(o.id)?.key === key) continue
+      const old = this.paths.get(o.id)
+      if (old) this.scene.remove(old.obj)
+      const g = new THREE.Group(); g.userData.helper = 'path'
+      const smooth = measure(pts.map((p) => [p[0], p[1]] as [number, number])).points
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(smooth.map(([x, z]) => new THREE.Vector3(x, 0.01, z))), this.pathMat))
+      for (const [x, z] of pts) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), this.pathDot); d.position.set(x, 0.02, z); g.add(d) }
+      this.scene.add(g)
+      this.paths.set(o.id, { key, obj: g })
+    }
+    for (const [id, p] of [...this.paths]) if (!seen.has(id)) { this.scene.remove(p.obj); this.paths.delete(id) }
   }
   /** CA1: every Detailed figure after its joints (a key, a gizmo drag, the IK, a sampled frame). */
   followAll(): void {
@@ -569,6 +594,7 @@ export class StageEngine {
     const hidden: THREE.Object3D[] = []
     const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
     hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
+    for (const p of this.paths.values()) hide(p.obj)                                  // CA1: the floor paths are a guide
     for (const hlp of this.camHelpers.values()) hide(hlp)
     for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }
     const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial

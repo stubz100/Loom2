@@ -13263,6 +13263,23 @@
             ],
             "title": "Parent"
           },
+          "path": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
           "pose": {
             "anyOf": [
               {
@@ -13331,7 +13348,8 @@
           "profile_id",
           "version",
           "body",
-          "detail"
+          "detail",
+          "path"
         ],
         "title": "StageObject",
         "type": "object"

@@ -46,7 +46,12 @@ export function MotionLibrary() {
             <input type="number" aria-label="trim start (s)" min={0} step={0.1} value={m.start} onChange={(e) => m.set({ start: Math.max(0, Number(e.target.value) || 0) })} /> –{' '}
             <input type="number" aria-label="trim end (s)" min={0} step={0.1} value={m.end ?? ''} placeholder="end" onChange={(e) => m.set({ end: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })} /> s</span></div>
           <div className="kv"><span>speed</span><span><input type="range" aria-label="speed" min={0.25} max={2} step={0.05} value={m.speed} onChange={(e) => m.set({ speed: Number(e.target.value) })} /> ×{m.speed.toFixed(2)}</span></div>
-          <label className="hint check"><input type="checkbox" checked={m.inPlace} onChange={(e) => m.set({ inPlace: e.target.checked })} /> in place (no travel)</label>
+          <label className="hint check"><input type="checkbox" checked={m.lock} onChange={(e) => m.set({ lock: e.target.checked })} /> foot lock (the planted foot stays put; an in-place walk travels)</label>
+          {fig?.path && fig.path.length >= 2
+            ? <label className="hint check"><input type="checkbox" checked={m.alongPath} onChange={(e) => m.set({ alongPath: e.target.checked })} /> along {fig.name}'s path ({fig.path.length} points; a loop repeats to its end)</label>
+            : <label className="hint check"><input type="checkbox" checked={m.inPlace} onChange={(e) => m.set({ inPlace: e.target.checked })} /> in place (no travel)</label>}
+          <div className="kv"><span>blend in</span><span><input type="number" aria-label="blend in frames" min={0} max={24} step={1} value={m.blend} onChange={(e) => m.set({ blend: Math.max(0, Math.min(24, Number(e.target.value) || 0)) })} /> frames from what the figure was doing</span></div>
+          {fig && <div className="verbs"><CommandButton id="stage.tool.path" text label={fig.path?.length ? 'Add to the path (click the floor)' : 'Draw a path (click the floor)'} /><CommandButton id="stage.path.clear" text /></div>}
           <div className="verbs"><CommandButton id="stage.motion.apply" text label={m.applying ? 'Applying…' : fig ? `Apply to ${fig.name} at the playhead` : 'Apply at the playhead (select a figure)'} /></div>
         </div>
       )}

@@ -58,3 +58,31 @@ it.skipIf(!STARTER || !existsSync(files[0]))("the starter set's clips: every seg
     }
   }
 }, 180000)
+
+it.skipIf(!STARTER || !existsSync(files[0]))("the starter set's walks in place, foot-locked: forward travel, the planted foot within 2 cm", async () => {
+  const { footLock, footSlide } = await import('./footlock')
+  const b = readFileSync(files[0]); const ab = new ArrayBuffer(b.length); new Uint8Array(ab).set(b)
+  const g = await new GLTFLoader().parseAsync(ab, '')
+  for (const name of ['Walk_Loop', 'Walk_Formal_Loop', 'Jog_Fwd_Loop']) {
+    const c = g.animations.find((x) => x.name === name)!
+    const r = retarget(g.scene, c, { fps: 24, hip: 0.91 })
+    const locked = footLock(r.frames)
+    const travel = locked[locked.length - 1].offset[2] - locked[0].offset[2]
+    console.log(name, 'slide raw', footSlide(r.frames).toFixed(3), 'locked', footSlide(locked).toFixed(3), 'travel', travel.toFixed(2), 'm in', (r.frames.length / 24).toFixed(2), 's')
+    expect(footSlide(locked), name).toBeLessThan(0.02)
+    expect(travel, name).toBeGreaterThan(0.5)
+  }
+}, 180000)
+
+it.skipIf(!STARTER || !existsSync(files[0]))("the starter set's Walk_Loop along a curved path: the planted foot within 2 cm", async () => {
+  const { footLock, keySlide } = await import('./footlock')
+  const { repeatLoop } = await import('./bake')
+  const { walkAlong } = await import('./walkpath')
+  const b = readFileSync(files[0]); const ab = new ArrayBuffer(b.length); new Uint8Array(ab).set(b)
+  const g = await new GLTFLoader().parseAsync(ab, '')
+  const r = retarget(g.scene, g.animations.find((x) => x.name === 'Walk_Loop')!, { fps: 24, hip: 0.91 })
+  const keys = walkAlong(footLock(repeatLoop(r.frames, 6)), { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] }, 0, [[0, 0], [0, 2], [2, 3.5], [3, 5.5]])
+  const end = keys[keys.length - 1].transform.pos
+  console.log('Walk_Loop on a curve: slide', keySlide(keys).toFixed(3), 'frames', keys.length, 'end', end[0].toFixed(2), end[2].toFixed(2))
+  expect(keySlide(keys)).toBeLessThan(0.02)
+}, 180000)

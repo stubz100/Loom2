@@ -55,7 +55,9 @@ export function sampleObject(o: StageObject, keys: ObjectKey[] | undefined, fram
     const near = w < 0.5 ? pa : pb
     const ja = pa?.joints ?? {}, jb = pb?.joints ?? {}
     const names = Object.keys(ja).filter((n) => n in jb)
-    const joints = names.length && pa?.preset === pb?.preset ? Object.fromEntries(names.map((n) => [n, lerpDeg(ja[n], jb[n], w)])) : (near?.joints ?? {})
+    // CA1: two keys that both carry every joint (a library clip's, a preset keyed on a keyed figure) interpolate across a preset change too
+    const full = names.length >= 12
+    const joints = names.length && (pa?.preset === pb?.preset || full) ? Object.fromEntries(names.map((n) => [n, lerpDeg(ja[n], jb[n], w)])) : (near?.joints ?? {})
     // CA1: the Detailed level's own bones interpolate the same way (a bone only one key has holds that key's turn)
     const xa = pa?.extra ?? {}, xb = pb?.extra ?? {}
     const extra = Object.fromEntries([...new Set([...Object.keys(xa), ...Object.keys(xb)])].map((n) => [n, xa[n] && xb[n] ? lerpDeg(xa[n], xb[n], w) : (w < 0.5 ? xa[n] ?? xb[n] : xb[n] ?? xa[n])]))

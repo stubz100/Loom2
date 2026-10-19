@@ -54,6 +54,7 @@ class StageObject(BaseModel):
     version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one
     body: Body | None = None                       # CA0: the bound version's body, copied when bound and kept in step by the client (None = the preset's dummy)
     detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure (None = Simple)
+    path: list[list[float]] | None = None          # CA1: the figure's floor path, [x, z] points clicked on the floor (a library clip walks it)
 
 
 class StageCamera(BaseModel):

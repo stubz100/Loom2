@@ -58,7 +58,7 @@ export function effectiveJoints(o: StageObject): Record<string, number[]> {
   return out
 }
 
-export type Tool = 'select' | 'move' | 'rotate' | 'scale'
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'path'                        // CA1: path — clicks on the floor add to the selected figure's path
 export type View = 'free' | 'camera'
 export type Kind = StageObject['kind']
 export interface Transform { pos: number[]; rot: number[]; scale: number[] }
@@ -127,6 +127,9 @@ interface StageState {
   setExtra: (id: string, extra: Record<string, number[]>, label?: string) => void
   /** CA1: a library clip's baked keys on a figure — the figure's keys in their frames replaced, the range grown to hold them (one undo step). */
   applyMotion: (id: string, keys: ObjectKey[], label: string) => void
+  /** CA1: a point clicked on the floor added to the figure's path; the path cleared. */
+  addPathPoint: (id: string, p: [number, number]) => void
+  clearPath: (id: string) => void
   removeKeyAt: (frame: number) => void
   setGuideKind: (k: GuideKind) => void
   setClipMethod: (m: ClipMethod) => void
@@ -203,6 +206,22 @@ async function save(get: () => StageState, set: (p: Partial<StageState>) => void
   } finally { if (seq === saveSeq) set({ saving: false }) }
 }
 
+/** A pose edit (joints, a preset, the Detailed level's own bones): on a keyed figure it is a key at the playhead — the figure as sampled
+ *  there, its pose changed — as a transform edit is (ST4); otherwise the figure's pose itself. Before CA1 a pose edit on a keyed figure
+ *  changed only the unkeyed pose, which the keys hide: a preset or a hand after a library clip did nothing. */
+function editPose(get: () => StageState, id: string, fn: (p: StageObject['pose']) => NonNullable<StageObject['pose']>, label: string): void {
+  const cur = get().current
+  if (!cur) return
+  if (keyframesOf(cur).objects[id]?.length) {
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id)
+    if (!o) return
+    const pose = fn(o.pose)
+    get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose }), label)
+    return
+  }
+  get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: fn(x.pose) } : x)) }), label)
+}
+
 function schedule(get: () => StageState, set: (p: Partial<StageState>) => void): void {
   if (saveTimer) window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => { saveTimer = null; void save(get, set) }, 300)
@@ -256,8 +275,10 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!o) return
     get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: { pos: [...o.transform.pos], rot: [...o.transform.rot], scale: [...o.transform.scale] }, pose: o.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) } } : null }), 'key object')
   },
+  addPathPoint: (id, p) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: [...(o.path ?? []), [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]] } : o)) }), 'path point'),
+  clearPath: (id) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, path: null } : o)) }), 'clear path'),
   setDetail: (id, detail) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.kind === 'mannequin' ? { ...o, detail } : o)) }), detail ? 'Detailed level' : 'Simple level'),
-  setExtra: (id, extra, label = 'hand') => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id && o.pose ? { ...o, pose: { ...o.pose, extra: { ...(o.pose.extra ?? {}), ...extra } } } : o)) }), label),
+  setExtra: (id, extra, label = 'hand') => editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints: p?.joints ?? {}, extra: { ...(p?.extra ?? {}), ...extra } }), label),
   applyMotion: (id, keys, label) => {
     if (!keys.length) return
     const first = keys[0].frame, last = keys[keys.length - 1].frame
@@ -432,11 +453,17 @@ export const useStage = create<StageState>()((set, get) => ({
 
   selectJoint: (j) => set({ selectedJoint: j }),
   setJoints: (id, joints) => {
-    const o = get().object(id)
+    const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
-    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? { ...x, pose: { preset: x.pose?.preset ?? 'stand', joints, extra: x.pose?.extra ?? {} } } : x)) }), 'pose')
+    editPose(get, id, (p) => ({ preset: p?.preset ?? 'stand', joints, extra: p?.extra ?? {} }), 'pose')
   },
-  applyPose: (id, preset, joints = {}) => { get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, pose: { preset: preset ?? 'stand', joints, extra: o.pose?.extra ?? {} } } : o)) }), 'pose preset'); set({ selectedJoint: null }) },
+  applyPose: (id, preset, joints = {}) => {
+    // on a keyed figure the preset is keyed as every joint spelled out, so the keys around it interpolate into it (not a snap at halfway)
+    const keyed = !!keyframesOf(get().current ?? { keyframes: {} } as never).objects[id]?.length
+    const name = preset ?? 'stand'
+    const full = keyed ? { ...Object.fromEntries(JOINTS.map((j) => [j, [...(POSES[name]?.j[j] ?? [0, 0, 0])]])), ...joints } : joints
+    editPose(get, id, (p) => ({ preset: name, joints: full, extra: p?.extra ?? {} }), 'pose preset'); set({ selectedJoint: null })
+  },
   mirrorPose: (id) => { const o = get().object(id); if (o) get().setJoints(id, mirrorJoints(effectiveJoints(o))) },
   resetPose: (id) => get().applyPose(id, 'stand', {}),
   loadPoses: async () => { try { set({ userPoses: (await unwrap(http.GET('/stages/poses'))).poses as unknown as Record<string, PoseDef> }) } catch { set({ userPoses: {} }) } },
@@ -509,7 +536,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null }
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
@@ -519,7 +546,7 @@ export const useStage = create<StageState>()((set, get) => ({
     const cur = get().current
     if (cur && keyframesOf(cur).objects[id]?.length) {                   // ST4: a keyed object takes the edit as a key at this frame
       const o = get().sampledDoc()?.objects.find((x) => x.id === id)
-      get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: t, pose: o?.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints } } : null }), 'key object')
+      get().apply((d) => withObjectKey(d, id, { frame: get().frame, ease: 'ease', transform: t, pose: o?.pose ? { preset: o.pose.preset, joints: { ...o.pose.joints }, extra: { ...(o.pose.extra ?? {}) } } : null }), 'key object')
       return
     }
     get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, transform: t } : o)) }), 'transform')
@@ -538,7 +565,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!src) return
     const nid = newId(src.kind === 'mannequin' ? 'fig' : src.kind)
     const copy: StageObject = { ...src, id: nid, name: `${src.name} copy`, transform: { ...src.transform, pos: [src.transform.pos[0] + 0.6, src.transform.pos[1], src.transform.pos[2]] }, locked: false,
-      profile_id: null, version: null, body: null, detail: src.detail ?? null }                        // D93 (C8): one figure per character — the copy is unbound
+      profile_id: null, version: null, body: null, detail: src.detail ?? null, path: null }                        // D93 (C8): one figure per character — the copy is unbound
     get().apply((d) => ({ ...d, objects: [...d.objects, copy] }), 'duplicate')
     set({ selected: nid })
   },

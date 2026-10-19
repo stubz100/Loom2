@@ -30,6 +30,16 @@ describe('anim', () => {
       { frame: 10, ease: 'linear', transform: obj.transform, pose: { preset: 'stand', joints: { r_shoulder: [-90, 0, 0] } } }]
     expect(sampleObject(obj, ok, 5).pose?.joints.r_shoulder).toEqual([-45, 0, 0])
   })
+  it('interpolates across a preset change when both keys spell out every joint (CA1: a clip into a keyed preset), and the extras too', () => {
+    const all = (r: number) => Object.fromEntries(['root', 'spine', 'neck', 'head', 'r_shoulder', 'r_elbow', 'l_shoulder', 'l_elbow', 'r_hip', 'r_knee', 'l_hip', 'l_knee'].map((j) => [j, j === 'r_shoulder' ? [r, 0, 0] : [0, 0, 0]]))
+    const ok: ObjectKey[] = [{ frame: 0, ease: 'linear', transform: obj.transform, pose: { preset: 'stand', joints: all(0), extra: { index_01_r: [0, 0, 0] } } },
+      { frame: 10, ease: 'linear', transform: obj.transform, pose: { preset: 'point', joints: all(-88), extra: { index_01_r: [0, 0, 80] } } }]
+    const mid = sampleObject(obj, ok, 5).pose!
+    expect(mid.joints.r_shoulder).toEqual([-44, 0, 0])
+    expect(mid.extra?.index_01_r).toEqual([0, 0, 40])
+    const partial: ObjectKey[] = [{ ...ok[0], pose: { preset: 'stand', joints: { r_shoulder: [0, 0, 0] } } }, { ...ok[1], pose: { preset: 'point', joints: { r_shoulder: [-88, 0, 0] } } }]
+    expect(sampleObject(obj, partial, 4).pose?.joints.r_shoulder).toEqual([0, 0, 0])   // partial joints under different presets: still the switch at halfway
+  })
   it('samples a document, leaves one without keys alone, and keeps key lists sorted', () => {
     const doc = { id: 's', name: 'S', size: { w: 1920, h: 1080, fps: 24 }, objects: [obj], cameras: [cam], active_camera: 'cam', keyframes: { camera: {}, objects: {} }, range: { start: 0, end: 48 }, passes: [], revision: 0, schema_version: 1, created_at: '', updated_at: '', group_id: null } as unknown as StageDoc
     expect(sampleDoc(doc, 10)).toBe(doc)

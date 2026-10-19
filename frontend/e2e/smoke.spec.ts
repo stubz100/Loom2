@@ -1929,6 +1929,7 @@ test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in
   await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
   await expect(lib.locator('.motion-clip', { hasText: 'Walk_RM' })).toContainText('moves')
   await expect(lib.locator('.motion-preview')).toContainText('25 frames at 24 fps · unreal · 0.96 m')
+  await lib.locator('label', { hasText: /^ ?foot lock/ }).locator('input').uncheck()               // the test rig's hips glide without stepping: the root motion as made
   await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
   type Doc = { id: string; name: string; range: { end: number }; objects: { id: string; transform: { pos: number[] } }[]; keyframes: { objects: Record<string, { frame: number; transform: { pos: number[] }; pose: { joints: Record<string, number[]> } }[]> } }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Motion test')!
@@ -1969,4 +1970,39 @@ test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows i
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
   await expect(page.locator('.shot-tab .pass-side')).toContainText(/\d+ passes · \d+×\d+/, { timeout: 30_000 })   // rendered: '5 passes · 1280×720 · current'
   await page.screenshot({ path: 'node_modules/.e2e/ca1-detailed.png' })
+})
+
+test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked to the selected figure\'s path, and a clip applied along it walks it with the feet locked', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Path test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Path test')
+  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                       // a figure, selected
+  await page.locator('button.cmd-btn[aria-label^="Path (click the floor"]').first().click()
+  const canvas = page.locator('canvas.stage-canvas')
+  const box = (await canvas.boundingBox())!
+  for (const [fx, fy] of [[0.45, 0.8], [0.5, 0.7], [0.6, 0.65]]) await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy)
+  type Doc = { name: string; objects: { path: number[][] | null; transform: { pos: number[] } }[]; keyframes: { objects: Record<string, { frame: number; transform: { pos: number[]; rot: number[] } }[]> } }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Path test')
+  await expect.poll(async () => (await doc())?.objects[0]?.path?.length ?? 0, { timeout: 10_000 }).toBe(3)
+  await openSection(page, 'Motion')
+  const lib = page.locator('.motion-lib')
+  await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()
+  await lib.locator('.motion-clip', { hasText: 'Walk_RM' }).click()
+  await expect(lib.locator('label', { hasText: /^ ?along Figure 1's path/ })).toBeVisible()
+  await lib.locator('button', { hasText: /^Apply to Figure 1 at the playhead/ }).click()
+  await expect.poll(async () => Object.values((await doc())?.keyframes.objects ?? {})[0]?.length ?? 0, { timeout: 10_000 }).toBeGreaterThan(1)
+  const d = (await doc())!
+  const keys = Object.values(d.keyframes.objects)[0]
+  const p0 = d.objects[0].path![0]
+  expect(Math.hypot(keys[0].transform.pos[0] - p0[0], keys[0].transform.pos[2] - p0[1])).toBeLessThan(0.05)   // it starts at the path's start
+  await expect(page.locator('.toast')).toContainText(/along its path, feet locked/)
+  // a pose preset on the keyed figure is a key at the playhead (before CA1 it changed only the unkeyed pose, which the keys hide)
+  type Key = { frame: number; pose: { preset: string; joints: Record<string, number[]> } | null }
+  await page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) .lib-grid button', { hasText: /^point$/ }).click()
+  await expect.poll(async () => { const k = Object.values((await doc())?.keyframes.objects ?? {})[0] as unknown as Key[]; return k?.find((x) => x.frame === 0)?.pose?.preset ?? null }, { timeout: 10_000 }).toBe('point')
+  const k0 = (Object.values((await doc())!.keyframes.objects)[0] as unknown as Key[]).find((x) => x.frame === 0)!
+  expect(Object.keys(k0.pose!.joints)).toHaveLength(12)                                       // spelled out, so it blends with the clip's keys
 })

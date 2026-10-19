@@ -17,6 +17,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [05](05-flow-nodes-as-shot-recipes.md) | **Story Flow: every Shot node a recipe** | accepted as D96 (2026-10-18): Shot = Flow node (option B), one camera, ≈ 30 s guideline, recipe graph in the Flow and in Animate, every important part a step; the author's idea reviewed: each Flow node a ≤ 30 s shot whose recipe (C4 as a plan) combines the elements into a take, ComfyUI-like (stale steps re-run); the nodes along a route make the cut, finished in a FilmCraft-like editor; naming options, the model, how the suites fit, waves RC0–RC4 |
 | [06](06-continuity-across-shots.md) | **Continuity across Shots** | options (2026-10-18): O1 a Scene record Shots link to, O2 Shot templates, O3 linked / independent copies, O4 locking the look when generating, O5 a continuity check, O6 matching in the cut, O7 state over story time; a suggested combination |
 | [07](07-build-order.md) | **The build order** | one list for 02, 03, 05 and 06, UX0 first; the author's rules (one GPU job at a time, everything kept in the project, voice only, small testing documents, CC0 motion for tests) |
+| [08](08-testing-ca1.md) | **Testing CA1** (for the author) | a Mixamo clip from the local folder, a walk along a path into a turn and a point in under 2 min, the Detailed level |
 
 Background reading, in this order:
 

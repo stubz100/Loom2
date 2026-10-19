@@ -5941,3 +5941,70 @@ Detailed male pointing with a fist on the left hand, and a Detailed female wavin
 - Offline 437 under full and open; lint 75; build and audits clean.
 
 **Next:** step 3, root motion along a drawn path, foot lock, and blends between clips.
+
+## 2026-10-19 09:27 — CA1 step 3 · foot lock, a path on the floor, blends; CA1's acceptance with the starter set
+
+**Foot lock** (`stage/motion/footlock.ts`):
+
+- **The planted foot** is the lower one, each foot against its own lowest point. It stays planted until the other is 1 cm lower, so
+  the heel-to-toe roll does not hand the weight over early. When both are 12 cm up (a jog's flight) neither is planted, and the root
+  keeps its last pace.
+- **The root** takes the opposite of the planted ankle's drift each frame, so an in-place loop gains its natural travel from its feet.
+- **On the real starter set** (opt-in test): Walk_Loop's planted-foot slide 0.546 m → 0.000, travelling 1.05 m a cycle; Walk_Formal
+  0.535 → 0.000, 1.02 m; Jog_Fwd 0.917 → 0.000.
+- **The jog travels 4.77 m in 0.96 s**, about 5 m/s. Its planted foot sweeps about 0.9 m in 0.17 s, so that is the clip's own speed.
+- A first rule (stance only within 3 cm of the lowest) lost the push-off frames and walked at 0.6 m/s; replaced.
+- **Caveat:** a clip whose feet should slide (Slide_Loop, a roll) loses its travel under the lock. The library's *foot lock* checkbox
+  turns it off.
+
+**The floor path** (`motion/path.ts`, `motion/walkpath.ts`):
+
+- `StageObject.path` holds the [x, z] points clicked with the new **Path** tool (P) on the selected figure; *Clear the path* clears it.
+- The viewport draws it, smoothed, as a guide that never appears in the passes.
+- **A clip applied *along the path* is steered, not placed.** The planted foot is pinned where it landed; each frame the figure turns
+  toward a point 0.6 m ahead on the path (pure pursuit, at most 4° a frame) and its root is solved from the pinned foot. The feet never
+  slide however the path bends, and the walk ends where the path does.
+- **A loop repeats until its travel covers the path.** The figure faces the path turned by the clip's own way of travel (a backward
+  walk faces away).
+- **First versions:** placing the root on the path by distance slid 0.46 m (unsigned travel: a walk going −Z was pushed forward), then
+  0.12 m on a curve (turning around a planted foot). Steering replaced both. Without the lock, the simple placement by distance remains.
+
+**Blends:** *blend in* (default 6 frames) eases the clip's first frames from what the figure was doing at those frames (01 step 5: "a
+blend from one clip into the next").
+
+**A fix found by the acceptance:**
+
+- **The bug:** a pose edit on a *keyed* figure (a preset, a joint turn, a hand preset) changed only the unkeyed pose, which the keys hide.
+  So after a library clip, *point* did nothing. Transform edits already became keys (ST4); pose edits now do too (`editPose`), with the
+  extras.
+- **Presets on a keyed figure** are keyed with every joint spelled out. Two keys carrying all twelve joints now interpolate across a
+  preset change, so the walk eases into the point rather than snapping at the halfway frame.
+
+**CA1's acceptance** (`scripts/ca1_acceptance.py`, a visible Edge, the real starter set, no engine and no GPU job): a Detailed figure,
+a curved path of 4 points (about 5 m), Walk_Loop applied along it (feet locked, looped to the end), then a quarter turn on the spot
+(keyed) and the *point* preset 12 frames later.
+
+| Measure | Result | Bar |
+| --- | --- | --- |
+| planted foot's largest drift | **0.04 mm** | ≤ 2 cm |
+| farthest from the path | 0.11 m | — |
+| end from the path's end | 0.06 m | — |
+| apply | 61 ms | — |
+
+- The pose sequence of the whole move (walk, turn, point) was rendered with the D101 hands and feet.
+- The frames are under `engine/spikes/out/ca1/`. At frame 170 the figure stands at the end of the path, turned, pointing.
+
+**For the author:** `.docs/proto01_animate/08-testing-ca1.md`, three short checks: a Mixamo clip from the local folder, the walk → turn
+→ point in under 2 minutes of clicks, and the Detailed level. Mixamo never goes into the tests.
+
+**Tests:**
+
+- Vitest 370 + 3 opt-in: `footlock.test.ts` (3), `path.test.ts` (3), `bake.test.ts` (4, including a synthetic walk steered round a
+  curve with the planted foot within 2 cm and never more than 0.35 m off the path), `anim.test.ts` +1.
+- e2e 46/46 under full and open. The new path scenario draws a path with the Path tool, applies a clip along it with the feet locked,
+  and keys *point* on the keyed figure. The library scenario now applies with the lock off (the test rig's hips glide without stepping).
+- Offline 437 under full and open; lint 75; build and audits clean.
+
+**CA1 is built**; the author's three checks are owed. 07 phase 2 (CA0, CA1) is done. **Next, phase 3: the spikes, one at a time** —
+E23a (frame rate and seamless joins) → E23b (Move vs Replace) → E28 (props) → E29 (lip-sync) → E27 (the EffectCraft preview server) →
+E24 (post-processing). E25 is done (D101).

@@ -2,6 +2,7 @@
 // the figure stands and facing its way, one key per frame, then thinned to the keys the linear in-between cannot rebuild within a tolerance.
 import type { ObjectKey } from '../anim'
 import type { MotionFrame } from './retarget'
+import { along, measure, type P2 } from './path'
 
 export interface Placement { pos: number[]; rot: number[]; scale: number[] }
 
@@ -17,6 +18,53 @@ export function bakeKeys(frames: MotionFrame[], base: Placement, start: number):
       pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])) },
     }
   })
+}
+
+/** CA1: the keys laid along a floor path — each frame as far along it as the clip's (foot-locked) travel has carried the figure, measured
+ *  along the clip's own way of travel (its net displacement: a walk forward, a jog backwards, a side-step), facing the path's way turned by
+ *  that way (a backward walk faces away from where it goes); the clip's height kept; frames past the path's end dropped. */
+export function bakeAlongPath(frames: MotionFrame[], base: Placement, start: number, path: P2[]): ObjectKey[] {
+  const m = measure(path)
+  const k = base.scale[1] ?? 1
+  const out: ObjectKey[] = []
+  const nx = frames[frames.length - 1].offset[0] - frames[0].offset[0], nz = frames[frames.length - 1].offset[2] - frames[0].offset[2]
+  const net = Math.hypot(nx, nz)
+  const [ux, uz] = net > 1e-6 ? [nx / net, nz / net] : [0, 1]                    // the clip's way of travel (+Z when it stays put)
+  const turn = (Math.atan2(ux, uz) * 180) / Math.PI
+  let dist = 0
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i]
+    if (i > 0) dist += ((f.offset[0] - frames[i - 1].offset[0]) * ux + (f.offset[2] - frames[i - 1].offset[2]) * uz) * k
+    const a = along(m, Math.max(0, dist))
+    out.push({ frame: start + i, ease: 'linear', transform: { pos: [a.pos[0], base.pos[1] + f.offset[1] * k, a.pos[1]], rot: [base.rot[0] ?? 0, a.yaw - turn, base.rot[2] ?? 0], scale: [...base.scale] },
+      pose: { preset: 'stand', joints: Object.fromEntries(Object.entries(f.joints).map(([j, e]) => [j, e.map((v) => Math.round(v * 100) / 100)])) } })
+    if (dist >= m.length) break
+  }
+  return out
+}
+
+/** CA1 (01 step 5: "a blend from one clip into the next"): the first `n` keys ease from what the figure was doing (`before(frame)`: its
+ *  joints there, or null) into the clip; the placement is the clip's (it already starts where the figure stands). */
+export function blendIn(keys: ObjectKey[], before: (frame: number) => Record<string, number[]> | null, n: number): ObjectKey[] {
+  return keys.map((key, i) => {
+    if (i >= n || !key.pose) return key
+    const prev = before(key.frame)
+    if (!prev) return key
+    const w = (i + 1) / (n + 1)
+    const joints = Object.fromEntries(Object.entries(key.pose.joints).map(([j, e]) => [j, prev[j] ? e.map((v, c) => Math.round(lerpDeg(prev[j][c], v, w) * 100) / 100) : e]))
+    return { ...key, pose: { ...key.pose, joints } }
+  })
+}
+
+/** CA1: a loop repeated `times` over, its travel continuing (an in-place loop's offsets stay where they are). */
+export function repeatLoop(frames: MotionFrame[], times: number): MotionFrame[] {
+  const out = [...frames]
+  const step = frames[frames.length - 1].offset
+  for (let c = 1; c < times; c++) for (let i = 1; i < frames.length; i++) {
+    const f = frames[i]
+    out.push({ ...f, offset: [f.offset[0] + step[0] * c, f.offset[1], f.offset[2] + step[2] * c] })
+  }
+  return out
 }
 
 const angleGap = (a: number, b: number) => { let d = (b - a) % 360; if (d > 180) d -= 360; if (d < -180) d += 360; return Math.abs(d) }

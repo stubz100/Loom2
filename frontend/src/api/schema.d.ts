@@ -7908,6 +7908,8 @@ export interface components {
             name: string;
             /** Parent */
             parent: string | null;
+            /** Path */
+            path: number[][] | null;
             pose: components["schemas"]["Pose"] | null;
             /** Preset */
             preset: string | null;

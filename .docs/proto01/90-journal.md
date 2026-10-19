@@ -6084,3 +6084,21 @@ ground), padded as CN4 pads it.
   Recorded as **Q20**; the D-number follows at the decision gate (07).
 
 **For the author:** `.docs/proto01_animate/09-testing-e23a.md` (≈ 5 min: compare.mp4, the joins, the hold pop).
+
+## 2026-10-19 13:51 — E23a decided → D102: both frame rates kept, F16 + RIFE by default
+
+- **The author's look** (09-testing-e23a.md): "Both are excellent! :-) I cannot see any glitches or discrepancies on any of them. I'd
+  honestly keep both options, as perhaps under special circumstances one would perform better than the other."
+- **D102** (decision log):
+  - The frame rate is a per-shot choice. **F16 + RIFE** is the default: a third less GPU time and one join fewer per 10 s. **F24** is
+    the option.
+  - W1 chaining is the weld.
+  - The batch planner places joins where the figure moves, where it can. The hold settle measured in E23a was not visible to the author.
+  - W3 as a per-frame refine is retired as a seam repair. A6 stays for regions.
+  - Q20 is resolved.
+- **The cost of keeping both is small.** The rate changes three things:
+  - the pose sampling: Stage samples the sequence at 16 fps from fractional frames, as `e23a_joins.py` does;
+  - the batch count;
+  - whether a RIFE conform follows the chain. D27's rife-ncnn-vulkan v4.6 takes ≈ 2.4 s for 10 s. The app has no conform step yet
+    (D27 left it to export, post-MVP), so the planner (07 phase 4) brings it in for F16 shots.
+- **Next:** E23b (Move vs Replace), at F16 with W1.

@@ -6464,3 +6464,19 @@ mask's sense (the model reads 1 − mask: known = 1).
 - **Reading, pending the author's look:** the character-shaped proxy gives Stage the character's outline at no cost per shot.
   - It is made once per Cast version, beside the animation reference and its fitted body.
   - Its skinning by proximity is rough but enough for a shadow.
+
+## 2026-10-19 22:29 — E23d decided → D106: all four shadow sources stay; the characters sit slightly off their shadows
+
+- **The author:** "I'd keep all 4 types, they can produce different effects and they also have different GPU costs. The characters
+  are slightly off the path of their shadows - wan-animate might misplace the character compared to the exact dummy-animation. would
+  it be possible to use the proxy with wan-animate as the animation instead of the clay-dummy?"
+- **D106** (decision log): the dummy's, the proxy's, the card's and the white set's shadows, chosen per layer.
+- **Why they drift.** Wan Animate's Move mode is driven by the pose skeleton alone. It reads no geometry, so the proxy and the dummy
+  give it the same skeleton, and swapping one for the other changes nothing by itself. Within PCK 0.98 the generated character still
+  sits a few pixels from the dummy, and its outline is its own. Stage's shadow starts at the dummy's feet.
+- **Two ways to make them agree**, proposed as spike E23e:
+  - **(1) The shadow follows the character** (CPU): SDPose finds the generated character's feet in each frame, and the figure (with its
+    proxy) moves on the floor to stand there before Stage renders its shadow.
+  - **(2) The character follows the proxy** (GPU): Wan Animate's Replace mode, with the proxy's silhouette as the character mask.
+    E23b's Replace failed because the mannequin-shaped region did not fit the character and the blank stayed around her; a
+    character-shaped region should be filled by the character, exactly where the proxy and its shadow are.

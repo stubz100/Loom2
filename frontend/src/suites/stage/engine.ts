@@ -68,6 +68,8 @@ export class StageEngine {
   // ST3: the pass materials and the helpers that stay out of the passes
   private grid: THREE.GridHelper
   private passClay = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 })
+  private hemi = new THREE.HemisphereLight(0xdde3ff, 0x44403a, 1.1)
+  private key = new THREE.DirectionalLight(0xffffff, 1.6)
   private passDepth = depthMaterial()
   private passNormal = new THREE.MeshNormalMaterial()
   readonly canvas: HTMLCanvasElement
@@ -79,8 +81,14 @@ export class StageEngine {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
     this.scene.background = new THREE.Color(0x1d1e22)
-    this.scene.add(new THREE.HemisphereLight(0xdde3ff, 0x44403a, 1.1))
-    const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 8, 6); this.scene.add(key)
+    this.scene.add(this.hemi)
+    // E23c (D103): the key light — fixed above and to the front until the stage has a `light` object; then it shines from that light
+    // towards the set's middle and casts shadows (the clay pass shows them: the white set's light, contact and shadows)
+    this.key.position.set(4, 8, 6); this.scene.add(this.key, this.key.target)
+    this.key.shadow.mapSize.set(2048, 2048)
+    Object.assign(this.key.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 40 })
+    this.key.shadow.bias = -0.0004; this.key.shadow.normalBias = 0.02
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.grid = new THREE.GridHelper(40, 40, 0x555a66, 0x33363d); this.grid.position.y = 0.001; this.scene.add(this.grid)
     this.selection.visible = false
     this.scene.add(this.selection)
@@ -348,6 +356,7 @@ export class StageEngine {
       e.doc = o
     }
     for (const [id, e] of [...this.entries]) if (!seen.has(id)) { this.scene.remove(e.holder); this.entries.delete(id); if (this.selectedId === id) this.select(null) }
+    this.syncLight(doc)
     this.followAll()
     this.syncPaths(doc)
     // cameras: helpers for the inactive ones, the active one drives the render camera
@@ -363,6 +372,21 @@ export class StageEngine {
     this.applyShot(doc.cameras.find((c) => c.id === doc.active_camera) ?? doc.cameras[0] ?? null)
     if (this.selectedId && this.entries.has(this.selectedId)) this.selection.setFromObject(this.entries.get(this.selectedId)!.holder)
     this.dirty = true
+  }
+  /** E23c: a visible `light` object becomes the key light (a sun from its position towards the middle of the set: the floor at the
+   *  origin, a metre up), stronger against a dimmer sky so its shadows read; without one, the fixed key of before. */
+  private syncLight(doc: StageDoc): void {
+    const l = doc.objects.find((o) => o.kind === 'light' && o.visible)
+    this.key.castShadow = !!l
+    if (l) {
+      this.key.position.set(l.transform.pos[0], l.transform.pos[1], l.transform.pos[2])
+      this.key.target.position.set(0, 1, 0)
+      this.key.intensity = 2.3; this.hemi.intensity = 0.85
+    } else {
+      this.key.position.set(4, 8, 6); this.key.target.position.set(0, 0, 0)
+      this.key.intensity = 1.6; this.hemi.intensity = 1.1
+    }
+    this.key.target.updateMatrixWorld()
   }
   private camMat = new THREE.MeshBasicMaterial({ color: 0x8899bb, wireframe: true })
   private camActiveMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, wireframe: true })
@@ -431,8 +455,13 @@ export class StageEngine {
         this.dirty = true
       })
       body = mesh
+    } else if (o.kind === 'light') {
+      const g = new THREE.Group()
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd060 }))
+      bulb.userData.helper = true; g.add(bulb)
+      body = g
     } else body = prop('block', this.clayMat)
-    body.traverse((c) => { c.userData.stageId = o.id })
+    body.traverse((c) => { c.userData.stageId = o.id; const m = c as THREE.Mesh; if (m.isMesh && !c.userData.helper && o.kind !== 'plane') { m.castShadow = true; m.receiveShadow = true } })
     holder.add(body)
     const entry: Entry = { holder, body, doc: o, figure, pickers }
     if (figure && o.detail) this.attachDetailed(entry, o.detail)
@@ -446,7 +475,7 @@ export class StageEngine {
       if (this.disposed || this.entries.get(id) !== e || !e.figure) return
       e.holder.updateMatrixWorld(true)
       const d = makeDetailed(root, rig, e.figure.joints.root.parent!, e.figure.joints, e.figure.limbs, { hands: e.doc.body?.hands, feet: e.doc.body?.feet })
-      d.object.traverse((c) => { c.userData.stageId = id })
+      d.object.traverse((c) => { c.userData.stageId = id; const m = c as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true } })
       const inside = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === d.object) return true; return false }
       e.figure.root.traverse((c) => { const mesh = c as THREE.Mesh; if (mesh.isMesh && !mesh.userData.joint && !mesh.userData.ik && !inside(mesh)) mesh.visible = false })
       e.detailed = d
@@ -527,7 +556,7 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose', restoreDoc: StageDoc,
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     const r = this.passRenderer(w, h)
     let restore = () => {}
@@ -545,7 +574,8 @@ export class StageEngine {
         keypoints.push(kp)
         const wb = this.wholebody(camera, w, h)
         wholebody.push(wb)
-        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : await toBlob(drawPose(kp, w, h, wb)))
+        blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8)   // E23c: the lit clay (the light object's shadows)
+          : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
       }
       return { blobs, keypoints, wholebody }
@@ -583,6 +613,7 @@ export class StageEngine {
   private passRenderer(w: number, h: number): THREE.WebGLRenderer {
     const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     r.setPixelRatio(1); r.setSize(w, h, false)
+    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap                  // E23c: the light object's shadows in the clay pass
     return r
   }
   /** The render camera of a document camera at an aspect (36 mm sensor, roll), as applyShot builds the viewport's. */
@@ -597,6 +628,7 @@ export class StageEngine {
     const hidden: THREE.Object3D[] = []
     const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
     hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
+    for (const e of this.entries.values()) if (e.doc.kind === 'light') hide(e.body)                  // E23c: a light's marker is a guide
     for (const p of this.paths.values()) hide(p.obj)                                  // CA1: the floor paths are a guide
     for (const hlp of this.camHelpers.values()) hide(hlp)
     for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }

@@ -6334,3 +6334,71 @@ mask's sense (the model reads 1 − mask: known = 1).
   `sheet.jpg`.
 - **Tests:** offline 444 under full and open; the check script and acceptance committed. **Next:** the author's look, then E23c (the
   white set).
+
+## 2026-10-19 20:42 — Spike E23c · the white set (the author's idea): the model draws shadows once the set is lit; Stage now has a light that casts them
+
+- **The feet first** (the author: "their feet is still quite large"). Measured side-on in Stage, heel to big toe against the nose →
+  ankles height:
+  - the default Detailed ♀ 0.18–0.19 and ♂ 0.16, against ≈ 0.17 in human anatomy;
+  - Mara fitted 0.16 (her feet scale with her shorter legs).
+
+  So the dummy's feet are about right. What reads as large is the footwear and the view: Ines' chunky work boots are in her
+  reference, and Mara's Chelsea boots are seen side-on once she turns. The body's `feet` factor (a Cast slider) stays the author's
+  control; E23c tried ×0.85.
+- **Setup** (`engine/spikes/e23c_white.py stage|plate|refs|run|ms|score`, built on e23b_layers.py; outputs `out/e23c/`, ≈ 3.5 GB).
+  - E23b's shot with a **locked-off camera** at E21's (a Move layer's background is its reference's, which does not move), the fitted
+    bodies (D104), F16 with W1, seeds 20261021–22, one GPU job at a time.
+  - The mask dilation in the spike is now a summed-area box: identical to PIL's max filter, 5 ms instead of minutes, so an arm's
+    wall time fell from 27 to 14 min.
+- **The first white-set run had no light.** The white set was Stage's unlit clay lifted to white, with the character pasted in without
+  a shadow. The model drew no shadows (the author: "there are no shadows, did we add lights?"). The run was stopped after its first
+  batch.
+- **Stage gets a light** (the `light` object the schema had reserved):
+  - a visible `light` object makes the key light shine from its position towards the set's middle and cast shadows: shadow maps
+    2048², PCF soft; figures, Detailed mannequins and set blocks cast and receive;
+  - the viewport and the pass renderer render them, and the light's marker is a guide, never in a pass;
+  - the sequence renderer gains a `clay` kind (the lit clay per frame);
+  - without a light object, nothing changes.
+  - A second placement mistake: a light outside the room's left wall (where the plate's window is) was blocked by Stage's wall, which
+    has no window opening. It now stands inside the room by the window (−3.4, 2.8, 0.2).
+- **Arms:**
+  - **M0:** grey ground, drawn contact ellipses (E23b's Move).
+  - **MS:** M0's layers with **Stage's own shadows**, no generation of its own. Each figure's shadow is the lit clay with it divided
+    by the lit clay without it, outside the figure, multiplied onto the plate.
+  - **MW:** **the white set**: the lit clay lifted to white (γ 0.55; the blocks' shadows and the character's own frame-0 shadow on the
+    floor), with the character cut from its reference and placed where the figure starts (its frame-0 position and height). The
+    model's shadows are the layer's luminance divided by the white set's, outside the character, normalised on the far background.
+  - **MWf:** MW with the feet ×0.85, one seed.
+
+**Results:**
+
+| Arm · seed | PCK Mara / Ines | Joins (local) | Ines' hips vs the stool's top | Reference ghost (Mara) | GPU min | Peak |
+| --- | --- | --- | --- | --- | --- | --- |
+| M0 · 21 / 22 | 0.979 / 1.0 · 0.987 / 1.0 | 2.18, 2.77 · 1.48, 1.96 | +1.2 · −1.1 px | 161 · 161 frames | 14.3 · 14.2 | 8.7 · 9.7 GB |
+| MS · 21 / 22 | as M0 (its layers) | 2.22, 2.75 · 1.46, 1.97 | +1.3 · −0.8 px | (M0's, cut) | 0 | — |
+| MW · 21 / 22 | 0.987 / 1.0 · 0.981 / 1.0 | 1.51, 1.76 · 1.91, 2.12 | −2.3 · −6.6 px | **0 · 0** | 14.9 · 16.2 | 9.3 · 9.7 GB |
+| MWf · 21 | 0.981 / 1.0 | 1.38, 2.05 | −2.2 px | 0 | 13.8 | 9.7 GB |
+
+- **The white set, lit: the model draws the shadows.** In MW's layers Mara casts a long shadow to the right across the white floor,
+  in the light's direction, and it follows her (`peek_mw2.jpg`).
+  - Laid on the plate, the model's shadows read softer than in the layer (`peek_mw_merged.jpg`).
+  - The characters are lit from the window side, which may sit them in the room better. That is for the author's eye.
+- **Stage's own shadows (MS)** are the clearest cast shadows: long, to the right, as the window light throws them. They come with no
+  GPU time, but from the dummy's shape, not the character's (no coat, no hair).
+- **Placing the reference where the figure starts removed the reference ghost entirely:** 0 frames against 161 in both seeds.
+- Everything else is equal: PCK, contact (Ines sits on the stool in every arm, her hips within 7 px of its top), time, VRAM.
+  - The joins' local ratio is higher than in E23b in every arm (1.4–2.8): with a locked camera only the figures move, and both joins
+    fall in a hold.
+  - The band step: MW 0.86–0.88, M0 0.81–0.82.
+- **Not conclusive:**
+  - the shadow measure (area and darkness in a box under the ankles) also catches the boots;
+  - the feet (SDPose on Mara side-on: M0 0.04, MW 0.08–0.15, MWf 0.09) follow how much foot the white floor shows more than its size.
+  - `feet.jpg` shows ×1 against ×0.85 for the author.
+- **Tests** (the engine change): offline 444; Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.
+- **For the author:** `.docs/proto01_animate/12-testing-e23c.md`: `compare.mp4` (grey | Stage's shadows | white set, a row per seed),
+  `feet.jpg`.
+- **Reading, pending the author's look:**
+  - the white set works once lit (contact and shadows from the model, and no ghost);
+  - Stage's own shadow pass is a free alternative, or a complement: the model's shadows for soft contact, Stage's for the cast shadow;
+  - placing the reference at the start is worth keeping in every Move layer;
+  - camera moves come next: the floor shadows can be re-projected onto the floor plane.

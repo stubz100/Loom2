@@ -126,6 +126,36 @@ The question (note 3): which Wan Animate mode does the app use? It runs with E23
 
 **For the author:** a contact sheet per arm, the clips, and `compare.mp4` (M | R | R2).
 
+### E23c · The white set: the model makes the contact and the shadows (≈ ½ day of work, ≈ 1¼ h of rig time)
+
+The question (the author, 2026-10-19, D103): when a character is made on its own, does keeping the set's floor and blocks in **white**
+behind it give contact and shadows that blend onto the plate more convincingly than a plain ground with drawn contact shadows?
+
+**The shot.** E23b's, with a **locked-off camera** at E21's (a Move layer's background is the reference's, which does not move).
+Mara and Ines have their fitted bodies (D104).
+
+**Arms** (Move, F16, W1; 2 seeds each, the same seeds):
+
+| Arm | The layer's reference | Shadows | Matte |
+| --- | --- | --- | --- |
+| **M0** | the animation reference on its grey ground (CN4's padding), as E23b | the stand-in: a soft ellipse under the ankles | SAM 3 text inside the Stage mask (D103) |
+| **MW** | **the white set**: Stage's clay render of the empty set from the shot's camera, lifted to white, with the character cut from its animation reference and placed where the figure starts (its frame-0 position and height) | the model's: the layer ÷ the white set outside the character, multiplied onto the plate | as M0 |
+| **MW·f** (1 seed) | as MW, the bodies' feet ×0.85 | as MW | as M0 |
+
+**Measures:**
+
+- pose fidelity (PCK), joins (E23a's local ratio), time and VRAM per arm, as E23b;
+- **the shadows**: their area and darkness under each figure, against Stage's geometry and by eye;
+- **contact**: Ines on the stool (her hips at the stool's top in the frame);
+- **blend**: E21's band step at the layer edge;
+- the reference's **ghost** (a second figure outside the blocking);
+- **feet**: SDPose foot length against the height, MW against MW·f.
+
+**For the author:** `compare.mp4` (M0 | MW, a row per seed) and the feet strip (MW against MW·f).
+
+Camera moves come after: a floor shadow can be re-projected along the camera path (the floor is a plane), and the character's layer
+then needs its own answer.
+
 ### E24 · Post-processing (≈ 1.5 days, ≈ 4–6 h of rig time, partly overnight) — on E23b's best arm
 
 The question: which post-processing, at which stage, makes the performance the final without flicker, while staying faithful and keeping

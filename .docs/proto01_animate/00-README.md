@@ -21,6 +21,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [09](09-testing-e23a.md) | **Looking at E23a** (for the author) | F16 + RIFE or F24 in compare.mp4, the joins while walking and in a still hold (Q20) |
 | [10](10-testing-e23b.md) | **Looking at E23b** (for the author) | Move against Replace in compare.mp4: the light, the black left around Mara, the joins (Q21) |
 | [11](11-testing-ca1b.md) | **Looking at CA1b** (for the author) | the skeletons fitted to the characters: before / after on E23b's Move shot |
+| [12](12-testing-e23c.md) | **Looking at E23c** (for the author) | the white set: grey · Stage's shadows · the model's shadows in compare.mp4, the feet ×0.85 |
 
 Background reading, in this order:
 

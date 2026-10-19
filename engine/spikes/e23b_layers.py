@@ -71,6 +71,8 @@ FPS, N = 16, 161                               # D102: F16, 10 s
 BATCH, CARRY = A.BATCH, A.CARRY
 SEEDS = [int(x) for x in os.environ.get("LOOM2_E23B_SEEDS", "20261021,20261022").split(",")]
 ARMS = os.environ.get("LOOM2_E23B_ARMS", "M,R").split(",")
+WITH_CLAY = False                                             # E23c: also the lit clay sequences
+EXTRA_OBJECTS: list[dict] = []                                # E23c: a light object
 BODIES = os.environ.get("LOOM2_E23B_BODIES")                  # CA1b: the fitted bodies (scripts/ca1b_acceptance.py), by character name
 C0 = {"pos": [0.0, 1.05, 4.3], "target": [0.0, 0.95, 0.0], "focal_mm": 38, "sensor_mm": 36}      # E21's camera: the plate's
 C1 = {"pos": [-0.2, 1.03, 3.8], "target": [-0.3, 0.93, 0.0], "focal_mm": 38, "sensor_mm": 36}    # 0.5 m in, a slight pan left
@@ -211,6 +213,16 @@ STAGE_JS = """(async () => { try {
   }
   const e = await R(seq([]), %W%, %H%, 'depth', An.sampleDoc(doc, 0))
   window.__e23b.set = { depth: await Promise.all(e.blobs.map(b64)) }
+  if (%CLAY%) {                                                  // E23c: the lit clay — the set alone, and each figure alone (its shadow)
+    window.__e23b.set.clay = await Promise.all((await R(seq([]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
+    for (const id of ['fig_m', 'fig_i']) window.__e23b[id].clay = await Promise.all((await R(seq([id]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
+  }
+  // E23c: the empty set's clay pass from the first frame's camera (the white set is made from it)
+  st().setFrame(0)
+  for (const id of ['fig_m', 'fig_i']) st().updateObject(id, { visible: false })
+  await new Promise((r) => setTimeout(r, 800))
+  const P = st().passRenderer
+  if (P) { const pr = await P(An.sampleDoc(st().current, 0).cameras[0], %W%, %H%); window.__e23b.setClay = await b64(pr.blobs.clay) }
   return { mEnd, mTurn: mEnd + 16, iSit: %SIT%, iSat: iEnd, iPoint: iEnd + 26, keys: Object.fromEntries(Object.entries(doc.keyframes.objects).map(([k, v]) => [k, v.length])) }
 } catch (e) { return { error: String(e && e.stack || e) } } })()"""
 
@@ -259,7 +271,7 @@ def stage(a: argparse.Namespace) -> int:
                 {"id": "fig_m", "kind": "mannequin", "name": "Mara", "preset": "adult", "transform": tf([MARA_PATH[0][0], 0, MARA_PATH[0][1]]),
                  "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 1, "detail": "female", "path": MARA_PATH, **body_of("Mara")},
                 {"id": "fig_i", "kind": "mannequin", "name": "Ines", "preset": "adult", "transform": tf(INES_AT),
-                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female", **body_of("Ines")}]
+                 "pose": {"preset": "stand", "joints": {}, "extra": {}}, "colour_id": 2, "detail": "female", **body_of("Ines")}, *EXTRA_OBJECTS]
         st = api("PUT", f"/stages/{st['id']}", {**st, "objects": objs, "cameras": [cam], "size": {**st["size"], "fps": 24}})
         url = f"http://127.0.0.1:{DEV}/?token=e23b&port={ORCH_PORT}&suite=stage"
         edge = subprocess.Popen([EDGE, f"--remote-debugging-port={DBG}", f"--user-data-dir={tmp / 'edge'}", "--no-first-run", "--no-default-browser-check",
@@ -279,8 +291,8 @@ def stage(a: argparse.Namespace) -> int:
         cdp.call("Page.reload")
         cdp.wait_for("document.readyState === 'complete' && !!window.__loom2Stage", timeout=60, settle=1.0)
         cdp.eval(f"window.__loom2Stage.open({json.dumps(st['id'])})")
-        cdp.wait_for("!!document.querySelector('canvas.stage-canvas') && window.__loom2Stage.state().current?.objects.length === 3", timeout=30, settle=10.0)
-        js = (STAGE_JS.replace("%C0%", json.dumps(C0)).replace("%C1%", json.dumps(C1)).replace("%INES%", json.dumps(INES_AT)).replace("%SIT%", str(SIT_AT))
+        cdp.wait_for(f"!!document.querySelector('canvas.stage-canvas') && window.__loom2Stage.state().current?.objects.length === {3 + len(EXTRA_OBJECTS)}", timeout=30, settle=10.0)
+        js = (STAGE_JS.replace("%CLAY%", "true" if WITH_CLAY else "false").replace("%C0%", json.dumps(C0)).replace("%C1%", json.dumps(C1)).replace("%INES%", json.dumps(INES_AT)).replace("%SIT%", str(SIT_AT))
               .replace("%N%", str(N)).replace("%FPS%", str(FPS)).replace("%W%", str(W)).replace("%H%", str(H)))
         r = cdp.eval(js, timeout=1800) or {}
         log(f"in page: {r}")
@@ -304,6 +316,13 @@ def stage(a: argparse.Namespace) -> int:
             (g / fid / "keypoints.json").write_text(json.dumps(kp), encoding="utf-8")
             A.encode(frames_of(g / fid / "pose"), g / f"pose_{fid}.mp4", FPS)
         pull("window.__e23b.set.depth", g / "set" / "depth")
+        if WITH_CLAY:
+            pull("window.__e23b.set.clay", g / "set" / "clay")
+            for fid in FIGS:
+                pull(f"window.__e23b.{fid}.clay", g / fid / "clay")
+        clay = cdp.eval("window.__e23b.setClay || null", timeout=60)
+        if clay:
+            (g / "set_clay.png").write_bytes(base64.b64decode(clay))
         (g / "cams.json").write_text(json.dumps(cdp.eval("window.__e23b.cams", timeout=60)), encoding="utf-8")
         (g / "dist.json").write_text(json.dumps(cdp.eval("window.__e23b.dist", timeout=60)), encoding="utf-8")
         for f in (0, 60, 120, 240):
@@ -467,7 +486,14 @@ def chain(x, ros, ref_name: str, pose_name: str, seed: int, prompt: str, dest: P
 
 
 def dilate(m: np.ndarray, r: int) -> np.ndarray:
-    return np.asarray(Image.fromarray((m > 0).astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(2 * r + 1))) > 0
+    """A square dilation by r px through a summed-area table (a 2r+1 max filter, without PIL's per-pixel cost at large r)."""
+    a = (m > 0).astype(np.int32)
+    if r <= 0:
+        return a > 0
+    c = np.pad(a, ((r + 1, r), (r + 1, r))).cumsum(0).cumsum(1)
+    k = 2 * r + 1
+    box = c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]
+    return box > 0
 
 
 def soft(m: np.ndarray, r: float) -> np.ndarray:

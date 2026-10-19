@@ -6480,3 +6480,86 @@ mask's sense (the model reads 1 − mask: known = 1).
   - **(2) The character follows the proxy** (GPU): Wan Animate's Replace mode, with the proxy's silhouette as the character mask.
     E23b's Replace failed because the mannequin-shaped region did not fit the character and the blank stayed around her; a
     character-shaped region should be filled by the character, exactly where the proxy and its shadow are.
+
+## 2026-10-19 23:15 — Spike E23e · shadows that start at the generated feet: moving the shadow works, Replace inside the proxy leaves a halo
+
+- **Setup** (`engine/spikes/e23e_snap.py feet|stage|replace|score`; outputs `out/e23e/`). E23d's shot: the locked camera, the window
+  light, the fitted bodies and the proxies, M0's characters (seed 20261021).
+- **How far Wan places a character from the dummy.** SDPose found both characters in all 161 frames of their Move layers. Taking each
+  frame's ankles onto the floor:
+  - Mara sits **5.5 cm** from the dummy (median; 90 % of frames within 15.2 cm);
+  - Ines sits **11.6 cm** from it (within 14.3 cm).
+- **(1) The shadow follows the character.** The per-frame floor offset (gaps filled, a 5-frame median) moves each figure in its clay
+  before Stage renders its shadow: the dummy's (MS1) and the proxy's (MP1). The card is cast from the detected feet (MC1).
+  - E23b's blocking gained two options for this: `OFFSETS` (applied to the figures' clay only; the pose, depth and masks stay) and
+    `PROXYMASK`.
+- **(2) The character follows the proxy** (RP). Stage renders the proxies' silhouettes (a new `proxymask` sequence kind: the proxies
+  white on black, everything else hidden). The plate is blanked black inside each silhouette (grown 4 px), and that region is
+  Replace's character mask, far → near. Only the character's SAM 3 matte inside the silhouette (grown 16 px) is pasted back.
+  - The run took 348 + 342 s of generation and 56 + 88 s of mattes, peak 9.7 GB.
+- **The gap** from each character's feet (SDPose's ankles) to the nearest pixel of her shadow (ratio < 0.85), every 4th frame, median
+  / 90 %:
+
+  | Version | Mara (px) | Ines (px) |
+  | --- | --- | --- |
+  | MS0 · the dummy, unmoved | 48.6 / 49.0 | 0.2 / 15.5 |
+  | **MS1 · the dummy, moved** | **26.0 / 26.6** | 5.2 / 13.7 |
+  | MC1 · the card from the feet | 36.8 / 46.1 | 0.2 / 11.2 |
+  | MP0 · the proxy, unmoved | 39.6 / 40.1 | 2.1 / 14.5 |
+  | **MP1 · the proxy, moved** | **25.9 / 26.6** | **0.2 / 11.5** |
+  | RP · Replace in the proxy | 21.9 / 49.0 | 7.5 / 8.6 |
+
+  - **Moving halves Mara's gap.** Ines' shadows already started at her feet.
+  - By eye (`peek_mara_feet.jpg`): the moved shadows start at the boots, while the unmoved ones start beside them. The 26 px left is
+    the shadow's faint first stretch under this low side light, which the 0.85 threshold misses.
+- **Replace inside the proxy** puts the characters on their shadows, but:
+  - PCK falls to 0.738 (Mara) and 0.905 (Ines);
+  - the blank fill is left on 26.6 % of Ines' silhouette (0.4 % of Mara's), worst where the proxy's jacket stretches as she sits and
+    points;
+  - Mara's dark coat and hair still merge with the black.
+- **Reading:**
+  - the shadows of the three Stage-rendered sources (dummy, proxy, card) follow the generated character: an SDPose pass on the layer
+    (≈ 1 s a frame on the GPU), then the figures moved on the floor;
+  - Move stays the way characters are made;
+  - Replace inside the proxy is not taken up (a halo, worse poses).
+  - The proxy's skinning by proximity stretches a jacket in a seated pose. That is acceptable for a shadow, not for a mask.
+- **Tests** (the `proxymask` kind): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.
+- **For the author:** `.docs/proto01_animate/14-testing-e23e.md` (`compare.mp4`: the dummy's shadow unmoved | moved | the card / the
+  proxy's unmoved | moved | Replace in the proxy).
+
+### 23:21 — the author's nudge, and anchor pins
+
+- **The author:** "maybe the mask matching doesn't have to happen automatically - all you need is an offset of the characters to the
+  right position, mara needs to go slightly up and right" (`e23e_snap.py nudge`).
+- **The ankles were not the cause.** Measured in the frame, Mara's detected ankles sit within ≈ 2 px of the dummy's: Wan placed her on
+  the skeleton. But her boots reach lower and further than the dummy's thin feet, and the shadow starts where the *dummy's* soles touch
+  the floor: a little above and to the right of her boots (`peek_dummy_feet.jpg`). The floor offsets of (1) came from the ankles, so
+  they could not see this.
+- **Aligning the soles.** A sole is the lowest row of the mask and the middle of its lowest 4 %: the character's from her matte, the
+  dummy's from its Stage mask.
+  - One constant nudge per character comes out at **Mara +3.0 px across, −12.0 px (up and right, as the author saw)** and Ines −2.5 /
+    +7.0 px.
+  - Per frame, Mara's stays within 6 px of the constant; Ines' sole jumps (68 px) where the stool meets her seated feet, so for a
+    seated figure only the constant is usable.
+  - **By eye** (`peek_nudge.jpg`, `nudge.mp4`): with the constant nudge, Mara's boots meet the start of both the dummy's and the
+    proxy's shadow, where before the shadow began beside them.
+  - The gap measure (ankles to the nearest pixel under 0.85) does not see the sole contact, so this judgement is by eye.
+- **The author's question: anchor pins.** "is there a way to create 2 visible anchor points - one at the feet of the shadow and one at
+  the character's feet, that can be connected during the merging of animation layers? … take into consideration the rotation of the
+  character and the light source movements." Yes, it is the general form of the nudge:
+  - **the contact pin** (Stage, exact): where the figure's soles touch the floor, projected into the frame each frame, whichever way the
+    figure is turned. The planted foot comes from the foot lock (CA1).
+  - **The light does not move it:** a moving light changes the shadow's direction and length, but the shadow always starts at the
+    contact, and Stage renders it per frame with the light where it is.
+  - **the character pin** (the layer): where her soles meet the floor in her matte, or the detector's heel and toe.
+  - **The merge** moves the layer so the character pin sits on the contact pin: one offset for most shots, per frame (smoothed) when
+    the character drifts. In a jump, with no contact, the last offset holds.
+  - In the editor (AE1): two visible pins per character layer, the contact pin fixed and the character pin draggable, and *Align to
+    the stage* to snap them (mouse-first, D32).
+- **Proposal for the decision:**
+  - Stage-rendered shadows (dummy, proxy, card) stay where Stage casts them;
+  - each character layer gets a **contact offset**, auto-proposed from the pins (soles to soles) and adjustable by dragging, constant
+    by default and keyable;
+  - Replace inside the proxy is not taken up.
+- **Tests:** the frontend change (the `proxymask` sequence kind): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build
+  clean.

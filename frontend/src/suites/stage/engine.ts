@@ -573,7 +573,7 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy', restoreDoc: StageDoc,
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     const r = this.passRenderer(w, h)
     let restore = () => {}
@@ -591,6 +591,7 @@ export class StageEngine {
         keypoints.push(kp)
         const wb = this.wholebody(camera, w, h)
         wholebody.push(wb)
+        if (kind === 'proxymask') { blobs.push(await this.proxyMask(r, camera)); onProgress?.(i + 1, frames.length); continue }   // E23e: the proxies' silhouette
         blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
           : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
@@ -652,6 +653,19 @@ export class StageEngine {
     const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
     return () => { this.scene.overrideMaterial = prevOverride; this.scene.background = prevBg; for (const o of hidden) o.visible = true }
   }
+  /** E23e: the shadow proxies' silhouette, white on black (everything else hidden) — the character mask a Replace layer fills. */
+  private proxyMask(r: THREE.WebGLRenderer, camera: THREE.Camera): Promise<Blob> {
+    const hidden: THREE.Object3D[] = []
+    for (const e of this.entries.values()) if (e.holder.visible) { e.holder.visible = false; hidden.push(e.holder) }
+    const keyShadow = r.shadowMap.enabled
+    r.shadowMap.enabled = false
+    this.scene.overrideMaterial = this.whiteMat; this.scene.background = new THREE.Color(0x000000)
+    r.render(this.scene, camera)
+    r.shadowMap.enabled = keyShadow
+    for (const o of hidden) o.visible = true
+    return toBlob(r.domElement)
+  }
+  private whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
   private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number, showProxies = false): Promise<Blob> {
     this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg)
     // E23d: the shadow proxies cast but are never seen. An override material would draw them, so the shadow map is made with them and

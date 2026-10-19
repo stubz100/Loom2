@@ -73,6 +73,8 @@ SEEDS = [int(x) for x in os.environ.get("LOOM2_E23B_SEEDS", "20261021,20261022")
 ARMS = os.environ.get("LOOM2_E23B_ARMS", "M,R").split(",")
 WITH_CLAY = False                                             # E23c: also the lit clay sequences
 EXTRA_OBJECTS: list[dict] = []                                # E23c: a light object
+OFFSETS: dict | None = None                                   # E23e: per figure, per frame, a floor offset [dx, dz] for its clay (the shadow moved)
+PROXYMASK = False                                             # E23e: also the proxies' silhouettes (the Replace masks)
 PREPARE = None                                                # E23d: (api) -> {name: extra figure fields} after the project opens (the proxies' assets)
 BODIES = os.environ.get("LOOM2_E23B_BODIES")                  # CA1b: the fitted bodies (scripts/ca1b_acceptance.py), by character name
 C0 = {"pos": [0.0, 1.05, 4.3], "target": [0.0, 0.95, 0.0], "focal_mm": 38, "sensor_mm": 36}      # E21's camera: the plate's
@@ -205,6 +207,9 @@ STAGE_JS = """(async () => { try {
   const frames = Array.from({ length: %N% }, (_, i) => An.sampleDoc(doc, (i * 24) / %FPS%))
   const only = (d, keep) => ({ ...d, objects: d.objects.map((x) => (x.kind === 'mannequin' && !keep.includes(x.id) ? { ...x, visible: false } : x)) })
   const seq = (keep) => frames.map((d) => ({ cam: d.cameras[0], doc: only(d, keep) }))
+  const OFFS = %OFFSETS%                                         // E23e: the figures moved on the floor in their clay (their shadows)
+  const shift = (d, i) => !OFFS ? d : ({ ...d, objects: d.objects.map((x) => { const o = OFFS[x.id]?.[i]; return o ? { ...x, transform: { ...x.transform, pos: [x.transform.pos[0] + o[0], x.transform.pos[1], x.transform.pos[2] + o[1]] } } : x }) })
+  const seqShift = (keep) => frames.map((d, i) => ({ cam: d.cameras[0], doc: shift(only(d, keep), i) }))
   window.__e23b = { cams: frames.map((d) => d.cameras[0]),
     dist: frames.map((d) => Object.fromEntries(d.objects.filter((x) => x.kind === 'mannequin').map((x) => [x.id, Math.hypot(...x.transform.pos.map((v, k) => v - d.cameras[0].pos[k]))]))) }
   for (const id of ['fig_m', 'fig_i']) {
@@ -216,7 +221,8 @@ STAGE_JS = """(async () => { try {
   window.__e23b.set = { depth: await Promise.all(e.blobs.map(b64)) }
   if (%CLAY%) {                                                  // E23c: the lit clay — the set alone, and each figure alone (its shadow)
     window.__e23b.set.clay = await Promise.all((await R(seq([]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
-    for (const id of ['fig_m', 'fig_i']) window.__e23b[id].clay = await Promise.all((await R(seq([id]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
+    for (const id of ['fig_m', 'fig_i']) window.__e23b[id].clay = await Promise.all((await R(seqShift([id]), %W%, %H%, 'clay', An.sampleDoc(doc, 0))).blobs.map(b64))
+    if (%PROXYMASK%) for (const id of ['fig_m', 'fig_i']) window.__e23b[id].pmask = await Promise.all((await R(seq([id]), %W%, %H%, 'proxymask', An.sampleDoc(doc, 0))).blobs.map(b64))
     // E23d: the proxies seen (when the figures carry one), three frames each, to check their fit
     for (const id of ['fig_m', 'fig_i']) window.__e23b[id].proxy = await Promise.all((await R([0, 80, 160].map((i) => seq([id])[i]), %W%, %H%, 'proxy', An.sampleDoc(doc, 0))).blobs.map(b64))
   }
@@ -296,7 +302,8 @@ def stage(a: argparse.Namespace) -> int:
         cdp.wait_for("document.readyState === 'complete' && !!window.__loom2Stage", timeout=60, settle=1.0)
         cdp.eval(f"window.__loom2Stage.open({json.dumps(st['id'])})")
         cdp.wait_for(f"!!document.querySelector('canvas.stage-canvas') && window.__loom2Stage.state().current?.objects.length === {3 + len(EXTRA_OBJECTS)}", timeout=30, settle=10.0)
-        js = (STAGE_JS.replace("%CLAY%", "true" if WITH_CLAY else "false").replace("%C0%", json.dumps(C0)).replace("%C1%", json.dumps(C1)).replace("%INES%", json.dumps(INES_AT)).replace("%SIT%", str(SIT_AT))
+        js = (STAGE_JS.replace("%OFFSETS%", json.dumps(OFFSETS) if OFFSETS else "null").replace("%PROXYMASK%", "true" if PROXYMASK else "false")
+              .replace("%CLAY%", "true" if WITH_CLAY else "false").replace("%C0%", json.dumps(C0)).replace("%C1%", json.dumps(C1)).replace("%INES%", json.dumps(INES_AT)).replace("%SIT%", str(SIT_AT))
               .replace("%N%", str(N)).replace("%FPS%", str(FPS)).replace("%W%", str(W)).replace("%H%", str(H)))
         r = cdp.eval(js, timeout=1800) or {}
         log(f"in page: {r}")
@@ -324,6 +331,8 @@ def stage(a: argparse.Namespace) -> int:
             pull("window.__e23b.set.clay", g / "set" / "clay")
             for fid in FIGS:
                 pull(f"window.__e23b.{fid}.clay", g / fid / "clay")
+                if PROXYMASK:
+                    pull(f"window.__e23b.{fid}.pmask", g / fid / "pmask")
                 (g / fid / "proxy").mkdir(parents=True, exist_ok=True)
                 for k, b in enumerate(cdp.eval(f"window.__e23b.{fid}.proxy || []", timeout=60)):
                     (g / fid / "proxy" / f"{(0, 80, 160)[k]:04d}.png").write_bytes(base64.b64decode(b))

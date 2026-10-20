@@ -310,6 +310,11 @@ So the author's guess is right: **one engine with a preview mode and a full-rend
 **Bars:** T1 ≥ 12 fps while scrubbing; T2 Full Draft ≤ 150 ms a frame; T3 real-time playback after the cache fills; the final equal to
 T2 Best (≤ 1/255).
 
+**Run 2026-10-20 (journal 2026-10-20 16:19, D113):** on the PS5 rig's final shot (7 layers), the headless session stood in for the preview
+server: T1 25–30 fps, T2 ≈ 60 ms at Best, T3 real time at ½ (full needs the playback cache), the final identical to the preview (0/255).
+While a job runs, EffectCraft costs the generation 14–23 %, so it renders on demand only. T0, the HTTP endpoint and R1 were not built.
+Where the author edits is Q24 (EffectCraft's own window, or inside Animate).
+
 **The document.**
 
 - A shot version owns **one composition**: an `.ecproj` in the project's shot folder, written through `fsio`.

@@ -28,6 +28,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [16](16-props-and-scene.md) | **Props like characters, the scene in 3D first** (D108–D110) | the build: PS1 Props tab · PS2 the prop's 3D model · PS3 props in Animate · PS4 the 3D scene · PS5 the final shot (CA2) |
 | [17](17-testing-props.md) | **Trying the props and the 3D scene** (for the author) | make a prop and its 3D model in Story · Props; build a lit scene in Animate with props, figures, a light and a camera move |
 | [18](18-testing-final-shot.md) | **Looking at the final shot** (for the author) | E23's shot made through loom2's own path: layers, plate, characters, mattes, assembly (D111) |
+| [19](19-testing-e27.md) | **Looking at E27** (for the author) | the final shot as an EffectCraft composition, edited and rendered back; where to finish it (Q24, D113) |
 
 Background reading, in this order:
 

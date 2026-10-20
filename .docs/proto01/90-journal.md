@@ -6937,3 +6937,51 @@ mask's sense (the model reads 1 − mask: known = 1).
   - The route snapshot +3; e2e (the final-shot scenario performs, mattes and assembles under full and open).
   - Totals: offline 467 under full and open; Vitest 387 + 3; e2e 49/49 under full and open; lint 75; build clean; the settings audit
     (`AnimateChain` read through `chain`), model literals and agents check clean.
+
+## 2026-10-20 16:19 — Spike E27 (D112): EffectCraft as the final shot's finishing engine; D113, Q24
+
+- **Set-up.**
+  - EffectCraft v0.12.0 at f36b2b3e (`F:/source/repos/effectcraft`, MIT/Apache) built in release on rustc 1.96: the CLI in 3 min 33 s
+    (384 crates), the desktop app in another 2 min 33 s; 88 and 90 MB binaries.
+  - The spike, `engine/spikes/e27_effectcraft.py` (`comp | bench | busy | app | final`), drives `effectcraft-cli mcp` (JSON-RPC over
+    stdio, a headless session with no egui) and the app's control channel; outputs in `engine/spikes/out/e27/`.
+- **The composition** (PS5's final fin_0f41f551: 832×480, 81 frames at 16 fps):
+  - 7 layers made by EffectCraft's own commands in 0.02 s (`file.import` sequences at 16 fps, `layer.addItem`, `layer.setBlendMode`,
+    `layer.setTrackMatte` luma, `layer.setParent`, `set_property` position);
+  - the plate; the shadows as Stage's ratio (lit clay over the bare set's, 1 on the actors) on Multiply; the stool with its alpha from its
+    Stage depth; Mara and Ines over their mattes (the assembly's alpha: the SAM 3 matte inside the figure's grown mask, softened, the
+    stool's cut baked in), each matte parented to her and both moved by her contact offset;
+  - the stack (Mara, the stool, Ines, far to near) holds on 81 of 81 frames, so one layer order serves;
+  - **R3:** as assembled, against final_assembly's own frames: max 1/255, mean 0.012–0.015 (frames 0, 40, 80);
+  - the hand finishing (Gaussian Blur 3 on the shadows, a rectangular mask feathered 40 px, Mara −4 px) as three commands; saved as
+    `final.ecproj`.
+- **Preview, cold frames** (a fresh session per test, PNG over stdio; CPU / GPU over Vulkan):
+  - scrubbing every 4th frame: ¼ 34.0 / 33.3 ms (29 / 30 fps), ½ 40.1 / 37.0 ms (25 / 27 fps), full 63.5 / 60.1 ms;
+  - playback in order: ¼ 27 / 29–32 fps, ½ 24 / 26–30 fps, full 15.5 / 16.3–19.3 fps;
+  - the PNG kept on the server's side saves only 3–6 ms; the same frames as uncompressed TIFF: full 57 ms (no gain), so about 30 ms a cold
+    frame is fetching the 7 layers' footage;
+  - EffectCraft's own `bench` (footage warm, no layer cache): full 26 ms CPU / 13.7 ms GPU, ½ 12 / 7 ms, GPU identical to CPU (0.000 %);
+    per layer: each character's track matte 3.4–3.6 ms, the shadows' blur 3.9 ms;
+  - **bars:** T1 ≥ 12 fps pass (25–30 fps at ½ and ¼); T2 ≤ 150 ms pass (≈ 60 ms full, at Best); T3 real time: 16 fps needs the playback
+    cache at full (the headless session has none; the app's RAM preview has), real time at ½.
+- **Memory:** the CPU session 1.07 GB; the GPU session 1.69 GB + 0.99 GB VRAM; the app with the shot 1.70 GB + 1.18 GB VRAM.
+- **R2:** `effectcraft-cli render` (Best, PNG): 81 frames in 2.2 s on the CPU (frames in parallel), 4.9 s on the GPU; identical to the
+  session's frames (0/255) and the GPU's to the CPU's (0/255).
+- **The app:** `effectcraft.exe --control 9877 final.ecproj` answers with the project in 1.5 s; its window's first frame ≈ 8 s after
+  launch (the GPU compositor brought up on Vulkan); frames through the bridge 95 ms full / 32 ms ½; a screenshot in
+  `.docs/proto01_animate/img/19-effectcraft-window.jpg`.
+- **Beside a generation (D97):** the app's default image model (FLUX.2 dev, 20 steps, 1024×576) on a private orchestrator, EffectCraft
+  playing the shot nonstop on its CPU renderer meanwhile. Per image, from the engine log: alone 68.0–68.5 s; all 32 threads 83.6 s
+  (+23 %); 8 threads 80.4 (+18 %); 4 threads 79.4 (+17 %); 2 threads 77.6 (+14 %); all threads at below-normal priority 82.4 (+21 %), at
+  idle priority 82.5 (+21 %). Its frames meanwhile: ½ 49–61 ms, full 87–102 ms.
+  - My spike first waited only for each submit's first job (a job per seed), so its wall times spanned leftover images (a false 3.5×);
+    fixed, and the numbers above are the engine's.
+  - Reading: the cost follows the work, not the priority, so it is shared memory bandwidth more than CPU time (FLUX.2's weights stream
+    from RAM, D30).
+- **D113:** EffectCraft passes as the finishing engine. The composition is written through its own commands, the final is R2, and while
+  a job runs it renders only on demand on its CPU renderer (`file.projectSettings {renderer: software}`, ≤ 4 threads), shows cached
+  frames and fills its caches only when the queue is idle.
+- **Q24 for the author:** finish in EffectCraft's own window (*Finish in EffectCraft*, about 2–3 days), or inside Animate (AP1 and an Edit
+  section, 4–5 days for the viewer alone), or the first now and the second later.
+- **Not built in the spike:** the page tier T0, a native HTTP frame endpoint with diff sync (the headless session stood in for it), R1.
+- The look: `.docs/proto01_animate/19-testing-e27.md`.

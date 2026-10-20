@@ -6831,3 +6831,16 @@ mask's sense (the model reads 1 − mask: known = 1).
   and open; Vitest 384 + 3; e2e 48/48 under full and open; lint 75; build clean; settings audit clean.
 - **Next:** the author's look at PS1–PS4; then PS5 (CA2): split a finished scene into layers and make the final shot, the camera-move
   check included.
+
+## 2026-10-20 13:17 — the author: step 5 → D111, the final shot made inside loom2; plan PS5a–f
+
+- **The author:** "Let's continue with step 5".
+- **The finding:** the build order put the composition editor (AE1 on EffectCraft, after spike E27) before the clay pipeline. Neither
+  exists. The product's Wan Animate (CN4) is one batch with no chaining; chaining is in the spikes only (E23a's `continue_motion` and
+  offsets). The queue has no job dependencies, but a finisher can queue the next job (as CA1b's body fit does).
+- **D111:** PS5 makes the final shot inside loom2 now:
+  - a final record with one layer per entity (plate, figures, props, shadows), chained Wan Animate layers;
+  - an assembly job producing a clip and a Story take;
+  - every layer kept as a PNG sequence with alpha, so AE1 takes them later.
+- **Plan:** proto01_animate/16 §PS5 — PS5a the final and its passes, PS5b the plate, PS5c character layers, PS5d mattes, PS5e
+  assembly, PS5f the panel and the rig.

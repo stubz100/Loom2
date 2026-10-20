@@ -39,3 +39,14 @@ Mouse-first (D32): every verb is a button and a right-click entry; drags are acc
 - **Owed:**
   - the camera-move check on a finished scene, rendered into layers, which belongs to PS5 (CA2);
   - the author's look at a scene built this way.
+
+## PS5 · the final shot, in six steps (D111)
+
+| Step | What | Done when |
+| --- | --- | --- |
+| **PS5a · The final and its passes** | *Make the final shot…* in Animate on the active camera and range at the shot rate (F16 by default, D102). Stage renders each layer's passes: per figure its pose, depth and mask; per prop its beauty (R1) and depth; the bare set's depth and lit clay; the lit clay of everything (the shadows). They are uploaded into a **final** record (`finals/<id>/`) listing the layers, each with its method and cost | a two-figure, three-prop scene makes a final whose layers and passes are on disk and listed |
+| **PS5b · The plate** | a Klein Stage shot of the bare set at frame 0, with the World style, is the plate still. Stage projects it from the frame-0 camera onto the set's surfaces and renders it through each frame's camera, so a camera move gives the plate's parallax | a still camera gives the still; a dolly gives the projected sequence, matching the still at frame 0 |
+| **PS5c · Character layers** | per bound figure, its animation reference placed where the figure starts (E23c: no ghost), on the reference's ground; Wan Animate Move in 77-frame batches with 5 frames carried (W1, E23a's offsets), each batch queuing the next; *Re-take this layer* | a 10 s two-figure final runs its layers on the queue; a re-take leaves the other layer alone |
+| **PS5d · Mattes** | per character layer, SAM 3 by text on every frame, kept inside the figure's Stage mask grown 36 px (E23b) | the mattes hold the character and drop the reference ground |
+| **PS5e · Assembly** | a CPU job: the plate × the shadows, then props and characters in Stage's depth order (a prop nearer than a character hides her), each character set on its shadow by the soles' contact offset (D107), RIFE to 24 fps at F16; a clip, and a take on the Story shot when the final is made for one | the final plays as a clip with the props, characters and shadows in place |
+| **PS5f · The panel and the rig** | the final's panel in Animate: its layers with status, preview and *Re-take*, *Run all*, the cost; the rig acceptance on a two-figure, three-prop, one-light shot with a dolly | the author's walk-through |

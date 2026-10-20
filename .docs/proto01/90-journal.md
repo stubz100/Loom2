@@ -6644,3 +6644,46 @@ mask's sense (the model reads 1 − mask: known = 1).
 - **Tests:** `test_stage_sets_d108.py` (4: the room, a moved and turned street, the other sets and schema 2 unchanged, the store); offline
   448 under full and open; Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean; the API contract's only change
   is the schema default.
+
+## 2026-10-20 09:19 — spike E28b · the clean room: E22's four objects removed from the plate, each a prop on its own layer (D108)
+
+- **Spike E28b** (`engine/spikes/e28b_room.py`): E22's plate had the crate and the table the model drew and the two grey blocks of the old
+  room preset baked in. E23c's shot again (the locked camera, the window light, Mara and Ines as E23c's M0 layers with E23e's constant
+  nudge, D107).
+- **masks:** SAM 3 by text on the still ("wooden crate", "small wooden table"); the blocks where Stage's boxes project, kept to SAM 3's
+  "grey concrete block". The removal mask is the objects grown 14 px plus their shadow bands: right of each object (the window is on the
+  left) along the floor, and beside it up the wall. Two narrower bands left the big block's shadow on the right wall and the stool's on
+  the floor. 26 % of the plate.
+- **remove:** the app's own inpaint job on a document with that selection. Three tries, Klein 9B, seed 20261021:
+  - Remove with the pre-fill (D62): only the content-aware smear (ICM keeps its reference);
+  - Remove without it: a new crate, table and white block drawn in;
+  - **Fill (LanPaint):** an empty room, the boards and the plaster continuous, 64 s. Left: a faint mark where the big block's top edge was,
+    two small smudges at the wall's foot.
+  - SAM 3 asked for the objects in the empty room answers "wooden crate" and "grey concrete block" with the whole floor, and "small wooden
+    table" with a sliver of the sill: nothing object-like is left.
+- **fit:** the crate and the table as Stage boxes (crate and table presets, scaled). The lowest rows of each mask are cast through E21's
+  camera onto the floor for the front foot and the width; the top row against an assumed depth gives the height (crate 0.73 × 0.48 m,
+  table 0.68 × 0.52 m). The blocks stand where D108's migration puts them. `fit.jpg` shows the boxes on the objects.
+- **stage:** the bare room (D108's preset), the four props and each prop alone at frame 0 (depth, lit clay; Edge with the engine
+  stopped).
+- **assemble:**
+  - the order: the empty plate, the props' shadows, the props (their own pixels from the old plate), the figures' Stage shadows (E23c's,
+    cast in the old room whose blocks stood where these props stand), then the characters;
+  - occlusion: a character is hidden where a prop is nearer (Stage's depth; the figure's depth grown 15 px over her matte);
+  - two arms for the props' shadows: **S**, Stage's under the window light; **O**, their own (the old plate over the empty one, a
+    normalised blur without the objects' pixels, in each object's zone, moved with the prop).
+- **The crate moved:** the first assembly cut notches into Mara's boots. E23b's floor path (blocked before Stage knew of any crate) walks
+  through the spot where the model drew it. As a P1 prop it was moved 0.7 m left (its still warped from its foot to Stage's, its own
+  shadow with it); Mara is then behind a prop in 0.2 % of her overlap pixels (her hand), Ines in none. Stage seeing every object is
+  what D108 brings.
+- **Measured** (the layered still against the old plate, ΔE, crate in place / moved):
+  - S: 1.8 / 2.8 everywhere, 11.8 / 12.2 in the shadow zones (Stage's shadows are crisper and placed by the boxes);
+  - O: 0.7 / 1.9 everywhere, 3.6 / 4.9 in the zones;
+  - outside the zones: 0.07 with the crate in place.
+- **Time:** SAM 3 ≈ 12 s, Fill 64 s, Stage ≈ 20 s; the assembly ≈ 70 s on the CPU and RIFE 4 s per arm.
+- **Seams:** a thin light seam at some prop edges, where the empty wall shows through the soft matte. An edge clean-up for the
+  composition (CA2).
+- **For the author:** `out/e28b/compare.mp4` (before | S | O), `layers.jpg`, `fit.jpg`; the look in proto01_animate/15-testing-e28.md
+  (with E28's clips).
+- **Next:** camera moves. Each prop's layer is projected onto its own Stage box like the plate onto the room's walls, so the props part
+  from the wall in parallax; the floor shadows are re-projected along the camera path.

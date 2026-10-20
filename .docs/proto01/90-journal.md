@@ -6563,3 +6563,25 @@ mask's sense (the model reads 1 − mask: known = 1).
   - Replace inside the proxy is not taken up.
 - **Tests:** the frontend change (the `proxymask` sequence kind): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build
   clean.
+
+## 2026-10-20 08:05 — Jasper AI's releases, read for the shadows and the "pasted-on" look (the author's question)
+
+- **What Jasper publishes on Hugging Face (`jasperai`):** Latent Bridge Matching (LBM: relighting, depth, normals), FLUX.1-dev
+  ControlNets (depth, normals, upscaler), Flash Diffusion distillations, the MONET dataset, and the *controllable-shadow-generation*
+  benchmark (a dataset).
+- **LBM_relighting** is the one that fits.
+  - **What it does:** an SDXL fine-tune (≈ 3B, bf16) that relights a foreground pasted on a background to that background's light, in
+    one sampling step.
+  - **Licence:** CC BY-NC 4.0 → `full` only (D26: "every licence the author holds", as FLUX dev).
+  - **How it runs:** the LBM Python library (plain PyTorch; ROCm likely, unmeasured) or a community ComfyUI wrapper (kijai). A custom
+    node is a decision (rule 2); a runner of its own like voices/ or the trainer is the alternative.
+  - **Unknowns:** video and temporal consistency (it works per image); whether it casts shadows (the card says it relights the
+    foreground).
+  - **Where it would sit:** E24's layer pass (stage A), on each Move layer before it is stacked. That is the "pasted on, own studio
+    light" look E23b and E23c showed.
+- **Shadows:** Jasper's *Controllable Shadow Generation with Single-Step Diffusion Models from Synthetic Data* (Tasar, Chadebec,
+  Aubin, arXiv 2412.11972) does exactly the shadow job: a shadow map for a 2D object image, controlled by the light's polar and
+  azimuth angles and its size (softness). But only the paper, a demo and the benchmark dataset are public; no code or weights. Not
+  usable today. D106's four shadow sources stay; Stage's proxy shadow is the closest working equivalent.
+- **Not needed:** LBM depth and normals (DA3 and MoGe are already here); FLUX.1-dev ControlNets (the image models are FLUX.2).
+- **Proposed:** LBM_relighting as an arm of E24's stage A, its runtime chosen in E24, with a temporal-flicker check across frames.

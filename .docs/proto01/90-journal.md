@@ -6687,3 +6687,26 @@ mask's sense (the model reads 1 − mask: known = 1).
   (with E28's clips).
 - **Next:** camera moves. Each prop's layer is projected onto its own Stage box like the plate onto the room's walls, so the props part
   from the wall in parallax; the floor shadows are re-projected along the camera path.
+
+## 2026-10-20 09:28 — the author: props are real 3D objects → D109; spike E28c proposed
+
+- **The author:** "are props real 3d objects, or just cutouts? props should be real 3d objects - very similar to characters, but without the
+  human skeleton".
+- **The answer:** not yet. In E28 and E28b a prop in Stage was a clay stand-in (the crate, table and block presets, scaled). Its picture
+  was a flat cut-out (the chest; the room's four objects from the old plate), a clip guided by the stand-in's depth (the door), or drawn in
+  the holder's layer (the mug). So the chest never showed a new side.
+- **D109:** a prop is its Cast prop's 3D model (Pixal3D, P18 / D84, made once), bound, keyed and parented in Stage like a figure without
+  the skeleton. Its picture comes from the model:
+  - **R1:** the textured model rendered by Stage;
+  - **R2:** drawn by a generator on the model's passes with the prop's reference.
+  Cut-outs and stand-ins remain for blocking only. Q22 (`open` has no mesh model) and Q23 (a held cup: the model in the hand or E28's
+  P3) are open.
+- **Found while reading Stage:** a GLB prop never casts or receives shadows. The flags are set on the object's body when it is built, and
+  the model arrives later. To be fixed with E28c.
+- **Spike E28c** (next):
+  - the seven props of E28 and E28b (the crate, the table, the two blocks, the chest, the door, the mug) become models from their
+    references;
+  - in E28b's clean room, the chest slides and turns a quarter, the door opens, the rest stand;
+  - R1 (a textured Stage pass) against R2 (a Klein Stage shot of the first frame, then LTX-2.3 on the models' depth), each laid on the
+    empty plate as the props' layer;
+  - measured: the colour against each reference, the shape (R2 against Stage's masks), the new side shown, time.

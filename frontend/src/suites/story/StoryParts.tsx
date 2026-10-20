@@ -5,7 +5,7 @@
 // version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
 import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
@@ -29,7 +29,7 @@ import { askExpand, makeClipItems, makeFrameItems, profileMenu, rowMenu, runOnIt
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
 import { storyKey } from './storyKeys'
-import { CLASS_LABEL, SECTIONS, sy, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
+import { CLASS_LABEL, SECTIONS, inTab, latestModelJob, modelSource, modelStale, sy, tabOfClass, ttsJobFor, useStory, voiceLabel, type ProfileClass, type Section } from './storyStore'
 import { FlowCanvas } from './flow/FlowCanvas'
 import { SequenceInspector, SequencePanel } from './episode/SequencePanel'
 import { SequenceStage } from './episode/SequenceStage'
@@ -99,18 +99,20 @@ function WorldTab() {
 }
 
 // ------------------------------------------------------------------ Panel · Cast
-function CastTab() {
+/** SY1: the profiles of the tab. D110 (PS1): Cast lists characters and places (its class filter), Props the props alone. */
+function CastTab({ scope }: { scope: 'cast' | 'props' }) {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
-  const filter = useStory((s) => s.castFilter)
+  const stored = useStory((s) => s.castFilter)
+  const filter = scope === 'props' || stored === 'prop' ? 'all' : stored
   const search = useStory((s) => s.castSearch)
   const q = search.trim().toLowerCase()
-  const shown = profiles.filter((p) => (filter === 'all' || p.cls === filter) && (!q || p.name.toLowerCase().includes(q)))
+  const shown = profiles.filter((p) => inTab(p, scope) && (filter === 'all' || p.cls === filter) && (!q || p.name.toLowerCase().includes(q)))
   return (
-    <div className="story-panel cast-panel">
-      <div className="segmented" aria-label="class">
-        {(['all', 'character', 'place', 'prop'] as const).map((c) => <button key={c} className={filter === c ? 'active' : ''} onClick={() => sy().setCastFilter(c)}>{c === 'all' ? 'all' : `${CLASS_LABEL[c]}s`}</button>)}
-      </div>
+    <div className={`story-panel cast-panel${scope === 'props' ? ' props-panel' : ''}`}>
+      {scope === 'cast' && <div className="segmented" aria-label="class">
+        {(['all', 'character', 'place'] as const).map((c) => <button key={c} className={filter === c ? 'active' : ''} onClick={() => sy().setCastFilter(c)}>{c === 'all' ? 'all' : `${CLASS_LABEL[c]}s`}</button>)}
+      </div>}
       <input type="search" value={search} aria-label="search profiles" placeholder="search" onChange={(e) => sy().setCastSearch(e.target.value)} />
       <div className="story-list" role="list">
         {shown.map((p) => {
@@ -124,9 +126,11 @@ function CastTab() {
             </button>
           )
         })}
-        {!shown.length && <div className="empty hint">{profiles.length ? 'No profile matches.' : 'No profiles yet — "Make a character…" on a Catalogue tile, or New character…'}</div>}
+        {!shown.length && <div className="empty hint">{profiles.some((p) => inTab(p, scope)) ? 'No profile matches.'
+          : scope === 'props' ? 'No props yet — New prop…, or "Make a prop…" on a Catalogue tile. A prop is made like a character: its images first, then its 3D model.'
+          : 'No profiles yet — "Make a character…" on a Catalogue tile, or New character…'}</div>}
       </div>
-      <div className="verbs"><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /><CommandButton id="story.cast.newProp" text /></div>
+      <div className="verbs">{scope === 'props' ? <CommandButton id="story.cast.newProp" text /> : <><CommandButton id="story.cast.new" text /><CommandButton id="story.cast.newPlace" text /></>}</div>
     </div>
   )
 }
@@ -216,7 +220,7 @@ export function Panel({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   useEffect(() => { if (project?.open) { void sy().load(); void sy().loadProfiles(); void sy().loadShots(); void sy().loadFlow(); void useLibrary.getState().load(); void useGenerate.getState().loadPresets() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  if (tab === 'cast') return <CastTab />
+  if (tab === 'cast' || tab === 'props') return <CastTab scope={tab} />
   if (tab === 'shots') return <ShotsTab />
   if (tab === 'flow') return <FlowTab />
   if (tab === 'episode') return <SequencePanel />
@@ -274,8 +278,8 @@ export function PrimaryAction() {
       </div>
     )
   }
-  if (tab === 'cast') {
-    const p = profiles.find((x) => x.id === profileId); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
+  if (tab === 'cast' || tab === 'props') {
+    const p = profiles.find((x) => x.id === profileId && inTab(x, tab)); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
     const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is final — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
     const secs = (caps?.seconds ?? 0) * (caps?.presets.full?.cells ?? 0)
     return (
@@ -376,9 +380,9 @@ export function Strip() {
       </div>
     )
   }
-  if (tab === 'cast') {
-    const p = profiles.find((x) => x.id === profileId)
-    if (!p) return <div className="story-strip"><span>Cast</span><span className="spacer" /><span className="hint">pick a profile, or make one from a Catalogue tile</span></div>
+  if (tab === 'cast' || tab === 'props') {
+    const p = profiles.find((x) => x.id === profileId && inTab(x, tab))
+    if (!p) return <div className="story-strip"><span>{tab === 'props' ? 'Props' : 'Cast'}</span><span className="spacer" /><span className="hint">{tab === 'props' ? 'pick a prop, or make one' : 'pick a profile, or make one from a Catalogue tile'}</span></div>
     const v = p.versions.find((x) => x.id === (versionId ?? p.current))
     return (
       <div className="story-strip">
@@ -511,6 +515,37 @@ function Candidate({ a, picked }: { a: Asset; picked: boolean }) {
 /** CA0 (01 step 2, §10): the version's animation reference — what Wan Animate is given for the character: full body, a neutral A-pose,
  *  16:9 with the figure centred and padded (a portrait one loses its head and feet to the node's crop), a plain ground. A prop's is the
  *  object alone in a three-quarter view. Made from the sheet and references; any candidate can be picked (its right-click). */
+const ModelView = lazy(() => import('../stage/ModelView'))
+
+/** D110 (PS2): a prop's 3D model — made from its animation reference (else its hero), stood upright, shown turning; Animate places it. */
+function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
+  const jobs = useSession((s) => s.jobs)
+  const mc = useSession((s) => s.capabilities?.mesh)
+  const job = latestModelJob(jobs, p.id, v.id)
+  const busy = !!job && !['done', 'failed', 'cancelled'].includes(job.status)
+  const source = modelSource(v)
+  const status = busy ? `making the model… ${Math.round((job!.progress ?? 0) * 100)} %${job!.progress_text ? ` · ${job!.progress_text}` : ''}`
+    : job?.status === 'failed' && !v.model_asset_id ? `the last make failed: ${job.error ?? 'see the job'}`
+    : !mc?.model_id ? (mc?.why ?? 'no image → 3D model in this build')
+    : !source ? 'give the prop an image first: its animation reference (above) or a hero'
+    : modelStale(v) ? 'made from an older image — remake it from the current reference'
+    : v.model_asset_id ? 'stood upright · Animate places it in the scene' : 'none yet'
+  return (
+    <section className="prop-model">
+      <h3>3D model <span className="hint">the prop as a real object, made once from {v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} — Animate places it in the scene</span></h3>
+      <div className="prop-model-row" onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.makeModel' }, { cmd: 'story.cast.clearModel' }])}>
+        {v.model_asset_id
+          ? <Suspense fallback={<div className="model-view" />}><ModelView key={v.model_asset_id} assetId={v.model_asset_id} /></Suspense>
+          : <div className="model-view empty"><span className="hint">{busy ? 'making…' : 'no model yet'}</span></div>}
+        <div className="prop-model-side">
+          <span className={`hint${modelStale(v) ? ' warn' : ''}`} data-status>{status}</span>
+          <div className="verbs"><CommandButton id="story.cast.makeModel" text /><CommandButton id="story.cast.clearModel" text /></div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
   const slot = (side: 'front' | 'back', id: string | null | undefined, label: string) => (
     <div className={`anim-ref-slot${id ? '' : ' empty'}`} data-side={side}
@@ -556,7 +591,7 @@ function AnimTestSlot({ clipId }: { clipId: string | null }) {
   )
 }
 
-function CastPage() {
+function CastPage({ scope }: { scope: 'cast' | 'props' }) {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)
@@ -565,8 +600,10 @@ function CastPage() {
   const picked = useStory((s) => s.picked)
   const caps = useSession((s) => s.capabilities?.story)
   markUsed('story.cast.keep'); markUsed('story.cast.reject'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
-  const p = profiles.find((x) => x.id === profileId)
-  if (!p) return <div className="story-empty"><div>Pick a profile on the left, or make one: <b>Make a character…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.new" text /></div></div></div>
+  const p = profiles.find((x) => x.id === profileId && inTab(x, scope))
+  if (!p) return scope === 'props'
+    ? <div className="story-empty"><div>Pick a prop on the left, or make one. A prop is made like a character: its look and reference images first, then its 3D model, which Animate places in the scene. <b>Make a prop…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.newProp" text /></div></div></div>
+    : <div className="story-empty"><div>Pick a profile on the left, or make one: <b>Make a character…</b> on a Catalogue tile puts the image in as the hero.<div className="quick-cards"><CommandButton id="story.cast.new" text /></div></div></div>
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
   if (!v) return null
   const refs = Object.values(refPage?.assets ?? {})
@@ -574,7 +611,7 @@ function CastPage() {
   const cands = Object.values(candPage?.assets ?? {}).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   const open = v.state === 'open'
   return (
-    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey('cast', e.nativeEvent) }}>
+    <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey(scope, e.nativeEvent) }}>
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
@@ -594,6 +631,7 @@ function CastPage() {
         {grid.uncelled > 0 && <span className="hint">{grid.uncelled} reference{grid.uncelled === 1 ? '' : 's'} without a cell (the hero, imports).</span>}
       </section>
       {(p.cls === 'character' || p.cls === 'prop') && <AnimRef p={p} v={v} />}
+      {p.cls === 'prop' && <PropModel p={p} v={v} />}
       <section>
         <h3>Candidates <span className="hint">newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
         {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
@@ -709,7 +747,7 @@ export function Stage() {
   const play = useStory((s) => s.play)
   markUsed('story.world.addStyle'); markUsed('story.world.addBeat'); markUsed('story.world.addVariable'); markUsed('story.world.remove'); markUsed('story.cast.new'); markUsed('story.cast.newPlace'); markUsed('story.cast.newProp')
   if (!project?.open) return <div className="story-empty"><div>Open or create a project to begin.</div></div>
-  if (tab === 'cast') return <CastPage />
+  if (tab === 'cast' || tab === 'props') return <CastPage scope={tab} />
   if (tab === 'shots') return <ShotBoard />
   if (tab === 'flow') return play ? <PlayView /> : <FlowCanvas />
   if (tab === 'episode') return <SequenceStage />
@@ -717,12 +755,12 @@ export function Stage() {
 }
 
 // ------------------------------------------------------------------ Inspector
-function CastInspector() {
+function CastInspector({ scope }: { scope: 'cast' | 'props' }) {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
   const versionId = useStory((s) => s.versionId)
   const picked = useStory((s) => s.picked)
-  const p = profiles.find((x) => x.id === profileId)
+  const p = profiles.find((x) => x.id === profileId && inTab(x, scope))
   if (!p) return <span className="hint">Nothing selected.</span>
   const v = p.versions.find((x) => x.id === (versionId ?? p.current))
   return (
@@ -731,7 +769,8 @@ function CastInspector() {
       <div className="kv">
         <span>name</span><input type="text" value={p.name} aria-label="profile name" onChange={(e) => sy().renameProfile(e.target.value)} />
         <span>class</span>
-        <select value={p.cls} aria-label="profile class" onChange={(e) => void sy().patchProfile({ cls: e.target.value as ProfileClass })}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
+        <select value={p.cls} aria-label="profile class" onChange={(e) => { const cls = e.target.value as ProfileClass   // D110: a prop moves to Props, a character or place to Cast
+          void sy().patchProfile({ cls }).then(() => { if (tabOfClass(cls) !== scope) void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', tabOfClass(cls))) }) }}>{(Object.keys(CLASS_LABEL) as ProfileClass[]).map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</select>
         <span>current</span>
         <select value={p.current} aria-label="current version" onChange={(e) => void sy().patchProfile({ current: e.target.value })}>{p.versions.map((x) => <option key={x.id} value={x.id}>{versionName(x)}</option>)}</select>
         <span>versions</span><span>{p.versions.length}</span>
@@ -1061,7 +1100,7 @@ export function Inspector() {
   const project = useSession((s) => s.project)
   const { active: tab } = useSuiteRail()
   if (!project?.open) return <span className="hint">Nothing selected.</span>
-  if (tab === 'cast') return <CastInspector />
+  if (tab === 'cast' || tab === 'props') return <CastInspector scope={tab} />
   if (tab === 'shots') return <ShotInspector />
   if (tab === 'flow') return <NodeInspector />
   if (tab === 'episode') return <SequenceInspector />

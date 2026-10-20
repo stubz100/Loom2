@@ -269,3 +269,10 @@
 .speaker-row .version-chip.pinned { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 55%, var(--line2)); }
 .speaker-row .version-chip .caret { font-size: 9px; color: var(--fg3); }
 .speaker-row .hint.stage-wins { color: var(--warn); }
+/* D110 (PS2): the prop's 3D model, turning */
+.prop-model-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.model-view { position: relative; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--bg2); overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: grab; }
+.model-view.empty { width: 288px; height: 216px; border-style: dashed; cursor: default; }
+.model-view-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.prop-model-side { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+.prop-model-side .hint.warn { color: var(--accent); }

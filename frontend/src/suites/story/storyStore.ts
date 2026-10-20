@@ -19,6 +19,9 @@ export const SECTIONS: { id: Section; label: string }[] = [
   { id: 'spine', label: 'Spine' }, { id: 'variables', label: 'Variables' },
 ]
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
+/** D110 (PS1): props have their own Story tab beside Cast — the rail tab a profile of a class lives on, and whether a tab shows it. */
+export const tabOfClass = (cls: ProfileClass): 'cast' | 'props' => (cls === 'prop' ? 'props' : 'cast')
+export const inTab = (p: Pick<Profile, 'cls'>, tab: string): boolean => (tab === 'props' ? p.cls === 'prop' : tab === 'cast' ? p.cls !== 'prop' : true)
 
 export interface TrainOpts { model_id: string | null; steps: number; rank: number; resolution: number; name: string; setting: string; stage: boolean }
 const DEFAULT_TRAIN: TrainOpts = { model_id: null, steps: 1000, rank: 16, resolution: 512, name: '', setting: '', stage: true }
@@ -52,6 +55,16 @@ export function latestTrainJob(jobs: Record<string, Job>, profileId: string, ver
   return Object.values(jobs).filter((j) => j.kind === 'train_lora' && (j.recipe as { profile_id?: string }).profile_id === profileId && (j.recipe as { version?: string }).version === versionId)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
 }
+
+/** D110 (PS2): the latest image → mesh job made for a prop version (its origin names the profile and the version). */
+export function latestModelJob(jobs: Record<string, Job>, profileId: string, versionId: string): Job | undefined {
+  return Object.values(jobs).filter((j) => j.kind === 'image_to_mesh' && j.origin?.surface === 'prop_model' && j.origin?.ref === profileId && (j.origin?.payload as { version?: string } | null)?.version === versionId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+}
+/** D110: the image a prop's model is made from (its animation reference, else its hero); the model is stale when made from another. */
+export const modelSource = (v: Pick<ProfileVersion, 'anim_ref_asset_id' | 'hero_asset_id'>): string | null => v.anim_ref_asset_id || v.hero_asset_id || null
+export const modelStale = (v: Pick<ProfileVersion, 'anim_ref_asset_id' | 'hero_asset_id' | 'model_asset_id' | 'model_from'>): boolean =>
+  !!v.model_asset_id && !!v.model_from && v.model_from !== modelSource(v)
 
 export interface StoryState {
   world: World | null; loading: boolean; saving: boolean
@@ -144,6 +157,10 @@ export interface StoryState {
   makeAnimRef: (side: 'front' | 'back') => Promise<void>
   /** CA1b (D104): fit the version's body to its animation reference (a short keypoints job; the profile updates when it lands). */
   fitBody: () => Promise<void>
+  /** D110 (PS2): make the prop version's 3D model from its animation reference (else its hero) — image → mesh, stood upright, minutes. */
+  makeModel: () => Promise<void>
+  /** D110: a mesh already in the Catalogue as the version's model, or null to clear it. */
+  setModel: (assetId: string | null) => Promise<void>
   /** CA0: the author's pick (an image in the Catalogue) or null to clear it; a final version takes it too. */
   setAnimRef: (side: 'front' | 'back', assetId: string | null) => Promise<void>
   newVersion: () => Promise<void>
@@ -487,6 +504,18 @@ export const useStory = create<StoryState>()((set, get) => {
         await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/body/fit', { params: { path: { pid: p.id, vid: v.id } } }))
         useSession.getState().toast(`Measuring ${p.name}'s animation reference — the body's proportions follow in a few seconds (the height and build stay)`, 'info')
       } catch (e) { toast(`Fit the body: ${detail(e)}`) }
+    },
+    makeModel: async () => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try {
+        await unwrap(http.POST('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } } }))
+        useSession.getState().toast(`Making ${p.name}'s 3D model in the background — it is stood upright and shown here when it lands (minutes)`, 'info')
+      } catch (e) { toast(`3D model: ${detail(e)}`) }
+    },
+    setModel: async (assetId) => {
+      const p = get().profile(); const v = get().version(); if (!p || !v) return
+      try { replaceProfile(await unwrap(http.PUT('/story/profiles/{pid}/versions/{vid}/model', { params: { path: { pid: p.id, vid: v.id } }, body: { asset_id: assetId } }))) }
+      catch (e) { toast(`3D model: ${detail(e)}`) }
     },
     setAnimRef: async (side, assetId) => {
       const p = get().profile(); const v = get().version(); if (!p || !v) return

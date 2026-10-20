@@ -2201,6 +2201,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/story/profiles/{pid}/versions/{vid}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Profile Model Pick
+         * @description D110 (PS2): the author's pick — a mesh already in the Catalogue becomes the prop version's model (made from the image it was made
+         *     from, when the Catalogue knows it); None clears it.
+         */
+        put: operations["profile_model_pick_story_profiles__pid__versions__vid__model_put"];
+        /**
+         * Profile Model Make
+         * @description D110 (PS2): make a prop version's 3D model from its animation reference (else its hero) — the image → mesh job (P18), a background
+         *     job of some minutes; the finisher stands it upright and sets it on the version with the image it came from.
+         */
+        post: operations["profile_model_make_story_profiles__pid__versions__vid__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/recipe-templates": {
         parameters: {
             query?: never;
@@ -6659,6 +6685,10 @@ export interface components {
              * @default
              */
             marks: string;
+            /** Model Asset Id */
+            model_asset_id: string | null;
+            /** Model From */
+            model_from: string | null;
             /**
              * Outfit
              * @default
@@ -6794,6 +6824,20 @@ export interface components {
              * @constant
              */
             type: "project.opened";
+        };
+        /** PropModelPick */
+        PropModelPick: {
+            /** Asset Id */
+            asset_id?: string | null;
+        };
+        /** PropModelQueued */
+        PropModelQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Model Id */
+            model_id: string;
+            /** Source Asset Id */
+            source_asset_id: string;
         };
         /** PurgeRequest */
         PurgeRequest: {
@@ -13652,6 +13696,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_model_pick_story_profiles__pid__versions__vid__model_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropModelPick"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_model_make_story_profiles__pid__versions__vid__model_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pid: string;
+                vid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropModelQueued"];
                 };
             };
             /** @description Validation Error */

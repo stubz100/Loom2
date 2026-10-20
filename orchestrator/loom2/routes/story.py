@@ -21,7 +21,7 @@ from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Curated, Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
-from ..story import FOR_SHOT, NODE_TYPES, body_fit_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -453,6 +453,67 @@ async def profile_body_fit(svc: Svc, pid: str, vid: str):
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     return {"job_id": jobs[0].id, "asset_id": v.anim_ref_asset_id}
+
+
+class PropModelQueued(BaseModel):
+    job_id: str
+    source_asset_id: str
+    model_id: str
+
+
+@router.post("/story/profiles/{pid}/versions/{vid}/model", response_model=PropModelQueued)
+async def profile_model_make(svc: Svc, pid: str, vid: str):
+    """D110 (PS2): make a prop version's 3D model from its animation reference (else its hero) — the image → mesh job (P18), a background
+    job of some minutes; the finisher stands it upright and sets it on the version with the image it came from."""
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    p = await asyncio.to_thread(StoryStore(ws).profile, pid)
+    if p is None:
+        raise HTTPException(404, "profile not found")
+    try:
+        v = p.version(vid)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    if p.cls != "prop":
+        raise HTTPException(422, "only a prop has a 3D model (a character has its body, a place its set)")
+    source = model_source(v)
+    if not source:
+        raise HTTPException(422, "give the prop an image first: its animation reference (the prop alone, ¾ view) or a hero")
+    spec = next((s for s in registry.mesh_specs() if registry.offered(s, svc.app.settings.variant)), None)
+    if spec is None:
+        raise HTTPException(422, "no image → 3D model is offered in this build (the open variant: Pixal3D needs DINOv3, full only — Q22)")
+    try:
+        jobs = svc.queue.submit({"kind": "image_to_mesh", "asset_id": source, "model_id": spec.id}, origin=prop_model_origin(p.id, v.id, source))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id, "source_asset_id": source, "model_id": spec.id}
+
+
+class PropModelPick(BaseModel):
+    asset_id: str | None = None                   # a mesh in the Catalogue; None clears the version's model
+
+
+@router.put("/story/profiles/{pid}/versions/{vid}/model", response_model=Profile)
+async def profile_model_pick(svc: Svc, pid: str, vid: str, body: PropModelPick):
+    """D110 (PS2): the author's pick — a mesh already in the Catalogue becomes the prop version's model (made from the image it was made
+    from, when the Catalogue knows it); None clears it."""
+    ws, cat, _ = svc.require_project()
+    source = None
+    if body.asset_id:
+        rec = await asyncio.to_thread(cat.get, body.asset_id)
+        if rec is None or rec.trashed_at is not None or rec.kind != "mesh":
+            raise HTTPException(422, "the model must be a 3D mesh in the Catalogue")
+        source = rec.parents[0] if rec.parents else None
+    try:
+        p = await asyncio.to_thread(StoryStore(ws).set_model, pid, vid, body.asset_id, source)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _changed(svc, p)
+    return p.model_dump()
 
 
 class AnimTestUpload(BaseModel):

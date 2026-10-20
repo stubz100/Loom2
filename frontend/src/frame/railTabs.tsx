@@ -1,5 +1,5 @@
 // Rail tab definitions per suite (07 §2). A leaf module: suites and the frame both import it, it imports neither.
-import { Aperture, Boxes, Brush, Camera, Clapperboard, Cpu, Film, Files, GitBranch, Globe, Images, Lasso, ListTree, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Users, Wand2 } from 'lucide-react'
+import { Aperture, Boxes, Brush, Camera, Clapperboard, Cpu, Film, Files, GitBranch, Globe, Images, Lasso, ListTree, Package, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Users, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
@@ -25,7 +25,7 @@ export const DEFAULT_RAIL: Record<string, RailTab[]> = {
   // P13 / ST1 (D81): the Stage suite loads lazily like Edit; Poses came with ST2, Shot with ST3
   stage: ANIMATE_RAIL,                                                                                     // D95 (AN1): Animate's Clay level, one column
   // 17 (D85): the Story suite loads lazily; World came with SY0, Cast with SY1, Shots with SY2, Flow with SY3; Episode comes with SY4
-  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }, { id: 'shots', label: 'Shots', icon: <Clapperboard size={18} /> },
+  story: [{ id: 'world', label: 'World', icon: <Globe size={18} /> }, { id: 'cast', label: 'Cast', icon: <Users size={18} /> }, { id: 'props', label: 'Props', icon: <Package size={18} /> }, { id: 'shots', label: 'Shots', icon: <Clapperboard size={18} /> },
     { id: 'flow', label: 'Flow', icon: <GitBranch size={18} /> }, { id: 'episode', label: 'Episode', icon: <Film size={18} /> }],   // SY4: the single-lane timeline (P17, D83) lives here now
 }
 
@@ -43,5 +43,6 @@ export const topTabOf = (suite: string): TopTab | undefined => TOP_TABS.find((t)
 /** A rail button and the suite whose tab it opens (the Story tab's rail spans two suites). */
 export interface GroupRailTab extends RailTab { suite: string }
 const story = (id: string) => ({ ...DEFAULT_RAIL.story.find((t) => t.id === id)!, suite: 'story' })
-/** D90 (02 §3, R5): World · Cast · Catalogue · Shots · Flow · Episode — the Catalogue after Cast, as the author asked. */
-export const STORY_RAIL: GroupRailTab[] = [story('world'), story('cast'), { ...DEFAULT_RAIL.catalogue[0], suite: 'catalogue' }, story('shots'), story('flow'), story('episode')]
+/** D90 (02 §3, R5): World · Cast · Props · Catalogue · Shots · Flow · Episode — the Catalogue after Cast, as the author asked; D110 (PS1):
+ *  Props beside Cast, a prop made like a character (images first, then its 3D model). */
+export const STORY_RAIL: GroupRailTab[] = [story('world'), story('cast'), story('props'), { ...DEFAULT_RAIL.catalogue[0], suite: 'catalogue' }, story('shots'), story('flow'), story('episode')]

@@ -172,6 +172,8 @@ class ProfileVersion(BaseModel):
     anim_ref_back_asset_id: str | None = None     # CA0: its optional back view (a shot that starts with the character turned away)
     body_fit_from: str | None = None              # CA1b (D104): the animation reference the body was last fitted to (an asset id); None = by hand
     anim_test_clip_id: str | None = None          # CA0: the last test animation of the reference (a turn on the spot, Wan Animate) — a clip id
+    model_asset_id: str | None = None             # D110 (PS2): a prop version's 3D model (a Catalogue mesh, image → mesh, stood upright)
+    model_from: str | None = None                 # D110: the image it was made from (an asset id); another reference now marks it stale
     derived_from: str | None = None
     created_at: str = Field(default_factory=utc_now)
     locked_at: str | None = None
@@ -256,6 +258,8 @@ def check_profile(p: Profile) -> None:
         raise ValueError(f"current version {p.current} is not one of the versions")
     if p.cls != "character" and any(v.body is not None for v in p.versions):
         raise ValueError("only a character has a body (CA0) — a place or a prop has none")
+    if p.cls != "prop" and any(v.model_asset_id is not None for v in p.versions):
+        raise ValueError("only a prop has a 3D model (D110) — a character has its body, a place its set")
 
 
 # ---- shots (SY2, 17 §3c) ------------------------------------------------------------------------------------------------------------
@@ -586,6 +590,18 @@ BODY_FIT_SURFACE = "body_fit"                    # CA1b (D104): origin.surface o
 
 def body_fit_origin(pid: str, vid: str) -> JobOrigin:
     return JobOrigin(suite="story", surface=BODY_FIT_SURFACE, ref=pid, payload={"version": vid})
+
+
+PROP_MODEL_SURFACE = "prop_model"              # D110 (PS2): origin.surface of an image → mesh job made for a prop version; payload {version, from}
+
+
+def prop_model_origin(pid: str, vid: str, source: str) -> JobOrigin:
+    return JobOrigin(suite="story", surface=PROP_MODEL_SURFACE, ref=pid, payload={"version": vid, "from": source})
+
+
+def model_source(v: ProfileVersion) -> str | None:
+    """D110: the image a prop's model is made from — its animation reference (the prop alone, a three-quarter view), else its hero."""
+    return v.anim_ref_asset_id or v.hero_asset_id
 
 
 ANIM_REF_SURFACE = "anim_ref"                    # CA0: origin.surface of an animation-reference job; payload {version, side, group_id}
@@ -1146,6 +1162,23 @@ class StoryStore(_ShotMixin, _FlowMixin):
         if side == "back" and cur.cls != "character":
             raise ValueError("only a character has a back view")
         setattr(v, field, asset_id)
+        p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
+        self.save_profile(p)
+        return p
+
+    def set_model(self, pid: str, vid: str, asset_id: str | None, source: str | None) -> Profile:
+        """D110 (PS2): a prop version's 3D model and the image it was made from (None clears both). A product of the version like its
+        animation reference: no revision guard, a final version takes it too."""
+        cur = self.profile(pid)
+        if cur is None:
+            raise KeyError(pid)
+        if cur.cls != "prop":
+            raise ValueError("only a prop has a 3D model")
+        versions = [v.model_copy() for v in cur.versions]
+        v = next((x for x in versions if x.id == vid), None)
+        if v is None:
+            raise KeyError(f"no version {vid!r}")
+        v.model_asset_id, v.model_from = asset_id, (source if asset_id else None)
         p = Profile.model_validate({**cur.model_dump(), "versions": [x.model_dump() for x in versions], "revision": cur.revision + 1, "updated_at": utc_now()})
         self.save_profile(p)
         return p

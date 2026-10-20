@@ -10151,6 +10151,28 @@
             "title": "Marks",
             "type": "string"
           },
+          "model_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Asset Id"
+          },
+          "model_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model From"
+          },
           "outfit": {
             "default": "",
             "maxLength": 400,
@@ -10196,6 +10218,8 @@
           "anim_ref_back_asset_id",
           "body_fit_from",
           "anim_test_clip_id",
+          "model_asset_id",
+          "model_from",
           "derived_from",
           "created_at",
           "locked_at"
@@ -10501,6 +10525,46 @@
           "data"
         ],
         "title": "ProjectOpenedEvent",
+        "type": "object"
+      },
+      "PropModelPick": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          }
+        },
+        "title": "PropModelPick",
+        "type": "object"
+      },
+      "PropModelQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "source_asset_id",
+          "model_id"
+        ],
+        "title": "PropModelQueued",
         "type": "object"
       },
       "PurgeRequest": {
@@ -23113,6 +23177,118 @@
           }
         },
         "summary": "Profile Lock",
+        "tags": [
+          "story"
+        ]
+      }
+    },
+    "/story/profiles/{pid}/versions/{vid}/model": {
+      "post": {
+        "description": "D110 (PS2): make a prop version's 3D model from its animation reference (else its hero) — the image → mesh job (P18), a background\njob of some minutes; the finisher stands it upright and sets it on the version with the image it came from.",
+        "operationId": "profile_model_make_story_profiles__pid__versions__vid__model_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropModelQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Model Make",
+        "tags": [
+          "story"
+        ]
+      },
+      "put": {
+        "description": "D110 (PS2): the author's pick — a mesh already in the Catalogue becomes the prop version's model (made from the image it was made\nfrom, when the Catalogue knows it); None clears it.",
+        "operationId": "profile_model_pick_story_profiles__pid__versions__vid__model_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "vid",
+            "required": true,
+            "schema": {
+              "title": "Vid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropModelPick"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profile Model Pick",
         "tags": [
           "story"
         ]

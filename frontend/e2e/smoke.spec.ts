@@ -736,6 +736,46 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await page.screenshot({ path: 'node_modules/.e2e/stage-prop.png' })
 })
 
+test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longer does); "Make the 3D model…" says its cost, the fake engine\'s GLB lands stood upright as the version\'s model, and the page shows it turning', async ({ page }) => {
+  test.setTimeout(120_000)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const name = `Crate ${Date.now().toString(36)}`
+  const prop = await api<{ id: string; current: string }>('POST', '/story/profiles', { name, cls: 'prop', hero_asset_id: img, appearance: 'an old wooden slatted crate' })
+  await openApp(page, { suite: 'story', tab: 'props' })
+  const row = page.locator(`.props-panel .story-row.profile-row[data-id="${prop.id}"]`)
+  await expect(row).toBeVisible()
+  await row.click()
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+  const section = page.locator('.cast-page .prop-model')
+  await expect(section).toBeVisible()
+  await expect(section.locator('.model-view.empty')).toBeVisible()
+  await page.locator('nav.rail button[title^="Cast"]').click()                                             // Cast keeps characters and places
+  await expect(page.locator(`.cast-panel .story-row.profile-row[data-id="${prop.id}"]`)).toHaveCount(0)
+  await page.locator('nav.rail button[title^="Props"]').click()
+  await expect(page.locator('.cast-page h2')).toContainText(name)
+  const make = section.locator('button', { hasText: 'Make the 3D model' })
+  if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // Q22: no image → 3D model under open
+    await expect(make).toBeDisabled()
+    await expect(section.locator('[data-status]')).toContainText('DINOv3')
+    return
+  }
+  await make.click()
+  const dialog = page.locator('.modal.ask')
+  await expect(dialog).toContainText(/upright/)
+  await expect(dialog).toContainText(/min/)                                                                 // the cost, before the job is queued
+  await dialog.locator('button.primary').click()
+  type Ver = { id: string; model_asset_id: string | null; model_from: string | null }
+  const ver = async () => (await api<{ versions: Ver[] }>('GET', `/story/profiles/${prop.id}`)).versions.find((v) => v.id === prop.current)!
+  await expect.poll(async () => (await ver()).model_asset_id, { timeout: 90_000 }).not.toBeNull()
+  const v = await ver()
+  expect(v.model_from).toBe(img)                                                                            // made from the hero (no animation reference yet)
+  const mesh = await api<{ kind: string; params: { upright_deg: number[] | null } }>('GET', `/assets/${v.model_asset_id}`)
+  expect(mesh.kind).toBe('mesh'); expect(mesh.params.upright_deg).toEqual([0, 0, 0])                         // the fake's flat triangle needs no turn
+  await expect(section.locator('.model-view canvas.model-view-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(section.locator('[data-status]')).toContainText('Animate places it')
+  await page.screenshot({ path: 'node_modules/.e2e/prop-model.png' })
+})
+
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {
   await openApp(page, { suite: 'story' })
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)

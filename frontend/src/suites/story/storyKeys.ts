@@ -2,8 +2,9 @@
 // never removes the World row still selected, P plays only on the Flow, Ctrl+Z undoes the Episode lane only on the Episode.
 import { handleKeyFor, type Command } from '../../frame/commands'
 
-export type StoryTab = 'world' | 'cast' | 'shots' | 'flow' | 'episode'
-const PREFIX: Record<StoryTab, string> = { world: 'story.world.', cast: 'story.cast.', shots: 'story.shot.', flow: 'story.flow.', episode: 'story.episode.' }
+export type StoryTab = 'world' | 'cast' | 'props' | 'shots' | 'flow' | 'episode'
+// D110 (PS1): Props is Cast scoped to props — the same version page, so the same commands
+const PREFIX: Record<StoryTab, string> = { world: 'story.world.', cast: 'story.cast.', props: 'story.cast.', shots: 'story.shot.', flow: 'story.flow.', episode: 'story.episode.' }
 
 /** The command belongs to the tab (its id carries the tab's prefix). */
 export const ownedBy = (tab: StoryTab, c: Pick<Command, 'id'>): boolean => c.id.startsWith(PREFIX[tab])

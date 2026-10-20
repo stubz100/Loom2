@@ -6764,3 +6764,30 @@ mask's sense (the model reads 1 − mask: known = 1).
   - the scene is one coherent 3D scene with lights and the camera;
   - only a complete scene is split into layers for the final shot.
 - **Open:** the build order, against the camera moves that were next. A plan to follow in proto01_animate.
+
+## 2026-10-20 12:23 — D110 PS1 + PS2 built: Story's Props tab; a prop version's 3D model, stood upright
+
+- **The plan:** proto01_animate/16-props-and-scene.md (PS1–PS5); the author: "Yes, this is a sound idea, let's start building it".
+- **PS1 · the Props tab.**
+  - The rail is now World · Cast · **Props** · Catalogue · Shots · Flow · Episode (Alt+7; the other Alt keys unchanged).
+  - Props is Cast scoped to props: the same list, version page, strip, inspector and `story.cast.*` commands. Cast keeps characters and
+    places; its class filter lost "props".
+  - A prop opens on Props: *New prop…*, the Catalogue's *Make a prop…*, every `goToStory` to a prop, and a class change in the Inspector.
+- **PS2 · the prop's 3D model.**
+  - **Story:** `ProfileVersion.model_asset_id` and `model_from` (the image it was made from); only a prop has one (`check_profile`);
+    `StoryStore.set_model`.
+  - **Routes:** `POST /story/profiles/{pid}/versions/{vid}/model` makes it from the animation reference, else the hero. It refuses a
+    character, an imageless prop and the `open` variant (Q22); origin `prop_model`. `PUT …/model` picks a Catalogue mesh or clears it.
+  - **Upright** (`loom2/tools/upright.py`, E28c's search as a product step): every image → mesh result is stood upright before it enters
+    the Catalogue. The smallest upright box over ±45° x / z and ±45° y, at 5° then 1° (≈ 1 s), is written as the GLB mesh nodes' rotation;
+    ties go to the smallest turn, so a flat or already-upright mesh is untouched. `params.upright_deg` records it. On E28c's chest it
+    gives −21° / 43° / 2°, as the spike did; a second pass is 0.
+  - **Finisher:** a `prop_model` job sets the model on its version.
+  - **The prop page:** a *3D model* section with the model turning (`stage/ModelView.tsx`, lazy-loaded, the room environment, drag to
+    turn) and its status (making with progress, stale when the reference changed, the `open` variant's reason). *Make the 3D model…*
+    says its cost first; *Clear the 3D model*.
+- **Tests:** `test_props_d110.py` (6: upright on a tilted box and idempotent, flat meshes untouched, only a prop has a model, the store,
+  the routes under full and open, the fake engine's GLB landing on the version); the route snapshot (+2); offline 454 under full and
+  open; Vitest 377 + 3 (`propsTab.test.ts` 6); e2e 48/48 under full and open (a prop: the Props tab, Cast without it, the make, the
+  model turning); lint 75; build clean; settings audit, agents check and model literals clean.
+- **Next:** PS3, props in Animate's library, bound to the prop and its version.

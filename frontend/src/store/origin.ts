@@ -60,7 +60,12 @@ export function goToStory(place: StoryPlace): void {
   void Promise.all([import('../suites/story/storyStore'), import('../frame/suiteRegistry')]).then(async ([m, reg]) => {
     reg.setRailTab('story', place.tab)
     const st = m.useStory.getState()
-    if (place.tab === 'cast') { if (!st.profilesLoaded) await st.loadProfiles(); m.useStory.getState().selectProfile(place.id, place.version) }
+    if (place.tab === 'cast') {
+      if (!st.profilesLoaded) await st.loadProfiles()
+      const p = m.useStory.getState().profiles.find((x) => x.id === place.id)
+      if (p && m.tabOfClass(p.cls) !== 'cast') reg.setRailTab('story', m.tabOfClass(p.cls))   // D110: a prop lives on Props
+      m.useStory.getState().selectProfile(place.id, place.version)
+    }
     else if (place.tab === 'shots') { if (!st.shotsLoaded) await st.loadShots(); m.useStory.getState().selectShot(place.id, place.version) }
     else if (place.tab === 'flow') { if (!st.flowLoaded) await st.loadFlow(); m.useStory.getState().selectNode(place.id) }
     else { m.useStory.getState().setSection('styles'); m.useStory.getState().select({ kind: 'style', id: place.id }) }

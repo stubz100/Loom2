@@ -1,11 +1,11 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, curate, lock, copy, open).
-import { ArrowDown, ArrowLeft, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
+import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestTrainJob, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, sy, tabOfClass, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { Profile, Shot } from '../../api/types'
@@ -34,6 +34,9 @@ const version = () => sy().version()
 const openVersion = () => version()?.state === 'open'
 const animRefable = () => { const c = profile()?.cls; return c === 'character' || c === 'prop' }   // CA0: a place has none
 const picked = () => sy().picked
+const modelJob = () => { const p = profile(); const v = version(); return p && v ? latestModelJob(useSession.getState().jobs, p.id, v.id) : undefined }
+const modelBusy = () => { const j = modelJob(); return !!j && !['done', 'failed', 'cancelled'].includes(j.status) }
+const mins = (s: number | null | undefined) => (s ? `${Math.max(1, Math.round(s / 60))} min` : '?')
 const trainJob = () => { const p = profile(); const v = version(); return p && v ? latestTrainJob(useSession.getState().jobs, p.id, v.id) : undefined }
 const trainCaps = () => useSession.getState().capabilities?.train
 const refsCount = () => Object.keys(sy().refPage?.assets ?? {}).length
@@ -156,7 +159,9 @@ function openGroupPage(gid: string): void {
 
 export async function newProfile(cls: ProfileClass = 'character', hero: string | null = null): Promise<void> {
   const name = await askText({ title: `New ${CLASS_LABEL[cls]}`, text: hero ? 'The image becomes the hero and the cover of a new reference set; @name mentions it in prompts.' : 'An empty profile: give it a hero from the Catalogue ("Make a character…" on a tile) before expanding.', placeholder: `${CLASS_LABEL[cls]} name` })
-  if (name?.trim()) await sy().createProfile(name.trim(), cls, hero)
+  if (!name?.trim()) return
+  const p = await sy().createProfile(name.trim(), cls, hero)
+  if (p) void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', tabOfClass(cls)))   // D110: a prop opens on Props
 }
 
 const cmds: Command[] = [
@@ -224,6 +229,16 @@ const cmds: Command[] = [
     run: () => void sy().setAnimRef('front', null) },
   { id: 'story.cast.clearAnimRefBack', scope: 'story', label: 'Clear the back view', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.anim_ref_back_asset_id,
     run: () => void sy().setAnimRef('back', null) },
+  // D110 (PS2): a prop is made like a character — its images, then its 3D model (image → mesh, stood upright), which Animate places
+  { id: 'story.cast.makeModel', scope: 'story', label: 'Make the 3D model…', icon: Box, hint: 'from the animation reference (else the hero): a textured model, stood upright — a background job of some minutes',
+    placement: ['panel', 'inspector', 'context'],
+    when: () => profile()?.cls === 'prop' && !!version() && !!modelSource(version()!) && !!useSession.getState().capabilities?.mesh?.model_id && !modelBusy(),
+    run: () => { const p = profile(); const v = version(); const mc = useSession.getState().capabilities?.mesh; if (!p || !v || !mc?.model_id) return
+      void askConfirm({ title: `${v.model_asset_id ? 'Remake' : 'Make'} ${p.name}'s 3D model?`, okLabel: 'Queue it',
+        text: `${mc.label} builds a textured model from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} and stands it upright. About ${mins(mc.seconds)} with the model loaded, ${mins(mc.cold_seconds)} from cold, in the background${mc.health === 'missing' ? ' — its weights are missing (Models › Fetch)' : ''}.${v.model_asset_id ? ' The old model stays in the Catalogue.' : ''}` })
+        .then((ok) => { if (ok) void sy().makeModel() }) } },
+  { id: 'story.cast.clearModel', scope: 'story', label: 'Clear the 3D model', icon: X, placement: ['inspector', 'context'], when: () => !!version()?.model_asset_id,
+    run: () => void sy().setModel(null) },
   { id: 'story.cast.testAnimRef', scope: 'story', label: 'Test it: a turn on the spot…', icon: Play, hint: 'the reference performs a turn through the pose-driven model (the cost is asked first)',
     placement: ['panel', 'inspector', 'context'], when: () => profile()?.cls === 'character' && !!version()?.anim_ref_asset_id && !!useSession.getState().capabilities?.stage?.animate,
     run: () => void import('./animTest').then((m) => m.testAnimRef()) },
@@ -366,7 +381,7 @@ const cmds: Command[] = [
         g.useGenerate.getState().useAsSubject(p); r.setRailTab('generate', 'prompt'); useSession.getState().setSuite('generate')
         useSession.getState().toast(`${p.name} is a subject in Image's Tree prompt — its reference set${version()?.lora ? ' and LoRA' : ''} follow`, 'info') }) } },
   { id: 'story.cast.openInStory', scope: 'story', label: 'Open in Story · Cast', icon: Users, placement: ['context'], when: () => !!profile(),
-    run: () => { void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'cast'); useSession.getState().setSuite('story') }) } },
+    run: () => { const p = profile(); void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', p ? tabOfClass(p.cls) : 'cast'); useSession.getState().setSuite('story') }) } },
   { id: 'story.cast.delete', scope: 'story', label: 'Delete profile', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!profile(),
     run: () => { const p = profile(); if (!p) return
       void askConfirm({ title: `Delete ${p.name}?`, okLabel: 'Delete', danger: true, text: 'The profile record goes; its reference sets and images stay in the album (no longer final). @mentions of it stop resolving.' }).then((ok) => { if (ok) void sy().deleteProfile() }) } },

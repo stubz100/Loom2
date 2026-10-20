@@ -45,6 +45,8 @@ registerCommands([
     id: `global.story.${w}`, scope: 'global' as const, label: `Story · ${w[0].toUpperCase()}${w.slice(1)}`, keys: `Alt+${i + 1}`, placement: ['rail'] as ['rail'],
     run: () => void openStory(w),
   })),
+  // D110 (PS1): Props sits beside Cast on the rail; its key comes after the six so theirs stay as they were
+  { id: 'global.story.props', scope: 'global', label: 'Story · Props', keys: 'Alt+7', placement: ['rail'], run: () => void openStory('props') },
   // D71 (P15): quick actions — the empty states' cards, the app menu and the palette
   { id: 'global.project.new', scope: 'global', label: 'New project…', icon: FolderPlus, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('new') },
   { id: 'global.project.open', scope: 'global', label: 'Open a project…', icon: FolderOpen, placement: ['topbar', 'toolbar'], run: () => s().setProjectDialog('open') },

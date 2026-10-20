@@ -30,9 +30,10 @@ from ..origin import JobOrigin
 from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Keypoints, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..body import Body
-from ..story import BODY_FIT_SURFACE, FOR_SHOT, body_fit_origin
+from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
+from ..tools.upright import stand_upright
 from .pipeline import AnyRecipe, Submission
 
 
@@ -492,11 +493,17 @@ class MeshFinisher:
         view = next((p for p in paths if p.suffix.lower() == ".png" and p.is_file()), None)
         if glb is None:
             raise ValueError("the engine finished but produced no mesh (no .glb among its outputs)")
+        upright = None
+        try:                                                                                    # D109: stood upright (the reference camera's tilt off)
+            upright = await asyncio.to_thread(stand_upright, glb)
+            job.log_tail.append(f"stood upright: turned {upright[0]}° / {upright[1]}° / {upright[2]}° about x / y / z")
+        except Exception as e:  # noqa: BLE001  (an unusual GLB is kept as it came)
+            job.log_tail.append(f"not stood upright: {e}")
         compiled = sub.compiled
         licences = {rid: ROSTER_BY_ID[rid].license for rid in recipe_weights(recipe) if rid in ROSTER_BY_ID}
         rec = await asyncio.to_thread(q.catalogue.ingest_file, glb, kind="mesh", move=True, job_id=job.id, batch_id=job.batch_id, suite="generate",
                                       model_id=recipe.model_id, seed=job.seed, prompt_text=None,
-                                      params=compiled.summary | {"recipe": recipe.model_dump(), "licences": licences, "format": "glb"},
+                                      params=compiled.summary | {"recipe": recipe.model_dump(), "licences": licences, "format": "glb", "upright_deg": upright},
                                       timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash, variant=job.variant,
                                       parents=[recipe.asset_id], lineage_kind="image-to-mesh", origin=job.origin)
         if view is not None:
@@ -504,6 +511,21 @@ class MeshFinisher:
         q.hub.broadcast("asset.created", rec.model_dump())
         job.result["asset_ids"] = [rec.id]
         job.log_tail.append(f"mesh {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)" + (" with its view" if view else ", no view for the thumbnail"))
+        if job.origin and job.origin.surface == PROP_MODEL_SURFACE:                            # D110 (PS2): a Cast prop version's own model
+            await asyncio.to_thread(_prop_model_result, q, job, rec.id)
+
+
+def _prop_model_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
+    """D110 (PS2): the model becomes its prop version's, with the reference it was made from (a newer reference marks it stale). Never the
+    job's failure: the mesh stays in the Catalogue and the Stage library either way."""
+    from ..story import StoryStore
+    pid, payload = str(job.origin.ref or ""), job.origin.payload or {}
+    try:
+        p = StoryStore(q.ws).set_model(pid, str(payload.get("version") or ""), asset_id, str(payload.get("from") or "") or None)
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"the model was not set on the prop: {e}")
+        q.hub.broadcast("story.changed", {"kind": "profile", "id": pid, "revision": 0, "error": f"3D model not set: {e}"})
 
 
 class KeypointsFinisher:

@@ -110,12 +110,13 @@ function attach(J: Record<Joint, THREE.Object3D>, a: Body['attachments'][number]
 }
 
 export const SET_PRESETS = ['room', 'street', 'deck', 'empty'] as const
-/** The E10 sets: a floor and a few blocks that read as a room, a street or a deck; `empty` is a floor alone. */
+/** The E10 sets, architecture only (D108: everything standing in a set is a prop): a room's floor and two walls, a street's road and
+ *  façades, a deck with its rails and mast; `empty` is a floor alone. Schema-1 stages get the old blocks as props (stages.py migrate). */
 export function set(kind: string, mat: THREE.Material): THREE.Group {
   const g = new THREE.Group()
   const box = (w: number, h: number, d: number, x: number, y: number, z: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); g.add(m) }
-  if (kind === 'street') { box(9, 0.02, 30, 0, -0.01, -5); box(0.3, 5, 30, -3.6, 2.5, -5); box(0.3, 5, 30, 3.6, 2.5, -5); box(1.0, 2.2, 0.4, -3.2, 1.1, -2) }
-  else if (kind === 'room') { box(9, 0.02, 9, 0, -0.01, 0); box(9, 3.2, 0.2, 0, 1.6, -3.2); box(0.2, 3.2, 9, -4, 1.6, 0); box(1.2, 0.8, 0.8, 1.9, 0.4, -1.8); box(0.45, 0.48, 0.45, 0, 0.24, 0) }
+  if (kind === 'street') { box(9, 0.02, 30, 0, -0.01, -5); box(0.3, 5, 30, -3.6, 2.5, -5); box(0.3, 5, 30, 3.6, 2.5, -5) }
+  else if (kind === 'room') { box(9, 0.02, 9, 0, -0.01, 0); box(9, 3.2, 0.2, 0, 1.6, -3.2); box(0.2, 3.2, 9, -4, 1.6, 0) }
   else if (kind === 'deck') {
     box(12, 0.06, 6, 0, -0.03, 0); box(12, 0.08, 0.08, 0, 1.0, -2.6); box(12, 0.08, 0.08, 0, 1.0, 2.6)
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 7, 16), mat); mast.position.set(2.6, 3.5, -1); g.add(mast)

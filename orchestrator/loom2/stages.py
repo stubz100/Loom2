@@ -5,6 +5,7 @@ stale base). The frontend's engine (suites/stage/) renders from this document an
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,7 +15,12 @@ from .body import Body
 from .fsio import atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
-STAGE_SCHEMA_VERSION = 1
+STAGE_SCHEMA_VERSION = 2                           # 2 (D108): a set is architecture; schema 1's set blocks are read as props
+# D108: the blocks schema 1's set presets carried, now props of their own — (size w h d, foot x y z) in the set's frame (builders.ts)
+SET_BLOCKS_V1: dict[str, list[tuple[tuple[float, float, float], tuple[float, float, float]]]] = {
+    "room": [((1.2, 0.8, 0.8), (1.9, 0.0, -1.8)), ((0.45, 0.48, 0.45), (0.0, 0.0, 0.0))],
+    "street": [((1.0, 2.2, 0.4), (-3.2, 0.0, -2.0))],
+}
 Kind = Literal["mannequin", "set", "prop", "plane", "mesh", "light"]
 
 
@@ -41,7 +47,7 @@ class StageObject(BaseModel):
     id: str
     kind: Kind
     name: str
-    preset: str | None = None                      # mannequin: adult | child; set: room | street | deck | empty; prop: crate | stool | …
+    preset: str | None = None                      # mannequin: adult | child; set (architecture only, D108): room | street | deck | empty; prop: crate | stool | table | pole | block
     asset_id: str | None = None                    # plane: the Catalogue image; mesh: the GLB asset (P18)
     transform: Transform = Field(default_factory=Transform)
     parent: str | None = None
@@ -93,6 +99,36 @@ class Stage(BaseModel):
     updated_at: str = Field(default_factory=utc_now)
 
 
+def migrate(raw: dict[str, Any]) -> dict[str, Any]:
+    """Read a stored document at the current schema. 1 → 2 (D108): each room or street set gives its blocks to the stage as `block` props
+    where they stood (the set's position, yaw and scale applied; Stage's transforms are world ones), so an old shot keeps its look."""
+    if int(raw.get("schema_version", 1)) >= 2:
+        return raw
+    objs = list(raw.get("objects") or [])
+    used = {int(o.get("colour_id", 0)) for o in objs}
+    ids = {o.get("id") for o in objs}
+    for o in list(objs):
+        if o.get("kind") != "set" or o.get("preset") not in SET_BLOCKS_V1:
+            continue
+        tf = o.get("transform") or {}
+        pos, rot, scl = tf.get("pos", [0, 0, 0]), tf.get("rot", [0, 0, 0]), tf.get("scale", [1, 1, 1])
+        yaw = math.radians(float(rot[1]))
+        for n, (size, foot) in enumerate(SET_BLOCKS_V1[o["preset"]], 1):
+            x, y, z = foot[0] * scl[0], foot[1] * scl[1], foot[2] * scl[2]
+            wx, wz = x * math.cos(yaw) + z * math.sin(yaw), -x * math.sin(yaw) + z * math.cos(yaw)
+            colour = next(c for c in range(1, 256) if c not in used)
+            used.add(colour)
+            bid = f"prop_{o['id']}_{n}"
+            while bid in ids:
+                bid += "_"
+            ids.add(bid)
+            objs.append({"id": bid, "kind": "prop", "name": f"{o.get('name') or 'Set'} block {n}", "preset": "block",
+                         "transform": {"pos": [pos[0] + wx, pos[1] + y, pos[2] + wz], "rot": [0.0, float(rot[1]), 0.0],
+                                       "scale": [size[0] * scl[0], size[1] * scl[1], size[2] * scl[2]]},
+                         "locked": bool(o.get("locked", False)), "visible": bool(o.get("visible", True)), "colour_id": colour})
+    return {**raw, "objects": objs, "schema_version": STAGE_SCHEMA_VERSION}
+
+
 def check(st: Stage) -> None:
     """The invariants a saved document keeps: unique ids, parents that exist and never cycle, the active camera present, a 36 mm
     sensor is the default but any positive one is allowed, focal lengths in the lens range."""
@@ -137,10 +173,10 @@ class StageStore:
 
     def get(self, st_id: str) -> Stage | None:
         p = self.path(st_id)
-        return Stage.model_validate(read_json(p)) if p.is_file() else None
+        return Stage.model_validate(migrate(read_json(p))) if p.is_file() else None
 
     def list(self) -> list[Stage]:
-        out = [Stage.model_validate(read_json(p)) for p in self.dir.glob("stg_*.json")]
+        out = [Stage.model_validate(migrate(read_json(p))) for p in self.dir.glob("stg_*.json")]
         return sorted(out, key=lambda t: t.updated_at, reverse=True)
 
     def save(self, st: Stage) -> None:

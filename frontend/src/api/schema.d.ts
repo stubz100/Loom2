@@ -7765,7 +7765,7 @@ export interface components {
             revision: number;
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Size */

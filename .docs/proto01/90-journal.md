@@ -6632,3 +6632,15 @@ mask's sense (the model reads 1 − mask: known = 1).
   - the E23 shot (Mara and Ines, the nudged layers) is layered by Stage's depth.
   - It also prepares the camera moves: the props then part from the wall in parallax.
 - **Tests** (the shadow-map change): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.
+
+## 2026-10-20 08:57 — D108 built: the set presets are architecture; schema-1 stages read with their blocks as props
+
+- **builders.ts:** the room is its floor and two walls; the street its road and façades (the block by the left façade is gone); the deck
+  and the empty set unchanged.
+- **stages.py:** `STAGE_SCHEMA_VERSION` 2. `migrate()` runs on every read (`get` and `list`): a schema-1 room or street set gives its
+  old blocks to the stage as `block` props where they stood. The set's position, yaw (`rot[1]`, as Stage applies it) and scale are
+  applied; the props stay as locked as the set and take free colour ids. The next save writes schema 2, so nothing doubles. The
+  author's own stages keep their look.
+- **Tests:** `test_stage_sets_d108.py` (4: the room, a moved and turned street, the other sets and schema 2 unchanged, the store); offline
+  448 under full and open; Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean; the API contract's only change
+  is the schema default.

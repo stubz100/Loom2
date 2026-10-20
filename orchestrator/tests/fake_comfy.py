@@ -118,6 +118,20 @@ class FakeComfy:
             except Exception:
                 self._clients.discard(ws)
 
+    def _sam_video(self, graph: dict) -> tuple[int, int, int] | None:
+        """D111 (PS5d): a SAM3_Detect graph reading a LoadVideo — the uploaded video's size and frame count, else None."""
+        if not any(n.get("class_type") in ("SAM3_Detect", "RemoveBackground") for n in graph.values()):
+            return None
+        lv = next((n for n in graph.values() if n.get("class_type") == "LoadVideo"), None)
+        data = self.uploaded(lv["inputs"].get("file", "")) if lv else []
+        if not data:
+            return None
+        import io
+        import av
+        with av.open(io.BytesIO(data[-1])) as c:
+            frames = [f for f in c.decode(video=0)]
+        return (frames[0].width, frames[0].height, len(frames)) if frames else None
+
     async def _execute(self, pid: str, graph: dict) -> None:
         await asyncio.sleep(0.05)
         save = next((n for n in graph.values() if n.get("class_type") == "SaveImage"), None)
@@ -134,8 +148,11 @@ class FakeComfy:
         for v in (1, 2):
             await self._send({"type": "progress", "data": {"prompt_id": pid, "value": v, "max": 2, "node": "1"}})
         vid = next((n for n in graph.values() if n.get("class_type") in ("WanImageToVideo", "WanFirstLastFrameToVideo", "LTXVImgToVideo", "WanAnimateToVideo", "WanSoundImageToVideo")), None)
+        sam_video = self._sam_video(graph)
         if vid:                                                  # M6: a video graph decodes `length` frames; SaveImage writes one PNG each
             w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
+        elif sam_video:                                          # D111 (PS5d): SAM 3 over an uploaded video answers one mask per frame
+            w, h, count = sam_video
         else:
             (w, h), count = self._output_size(), 1
         out_dir = self.output_dir / subfolder if subfolder else self.output_dir
@@ -144,8 +161,13 @@ class FakeComfy:
         images = []
         for i in range(count):
             fname = f"{base}_{n0 + i + 1:05d}_.png"
-            col = self.color if not vid else (self.color[0], (i * 29) % 256, self.color[2], 255)      # frames differ, so the proxy encode is real work
-            Image.new("RGBA", (w, h), col).save(out_dir / fname)
+            if sam_video:                                        # a white figure in the middle on black: what a matte looks like
+                im = Image.new("RGB", (w, h), (0, 0, 0))
+                im.paste((255, 255, 255), (w * 2 // 5, h // 5, w * 3 // 5, h * 9 // 10))
+                im.save(out_dir / fname)
+            else:
+                col = self.color if not vid else (self.color[0], (i * 29) % 256, self.color[2], 255)      # frames differ, so the proxy encode is real work
+                Image.new("RGBA", (w, h), col).save(out_dir / fname)
             images.append({"filename": fname, "subfolder": subfolder, "type": "output"})
         outputs: dict = {"99": {"images": images}}
         save3d = next((k for k, n in graph.items() if n.get("class_type") == "Save3DAdvanced"), None)

@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, TTS, ImageToMesh, Inpaint, Keypoints, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -60,7 +60,7 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS))
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS, AssembleFinal))
     needs: list[str] = []
     if isinstance(recipe, TrainLora):
         needs.append("reference set")
@@ -80,6 +80,8 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("passes")
     if isinstance(recipe, (ImageToMesh, Keypoints)):
         needs.append("source")
+    if isinstance(recipe, (MatteSequence, AssembleFinal)):
+        needs.append("final")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
         est = estimate_seconds(recipe, history)
@@ -100,6 +102,13 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         params = {"tier": recipe.tier, "voice_id": recipe.voice_id, "language": recipe.language, "speed": recipe.speed, "lines": len(recipe.items),
                   "words": sum(len(it.text.split()) for it in recipe.items), "vram_gb": TTS_RATES[recipe.tier]["vram_gb"]}
         est = {"seconds": tts_seconds(recipe), "source": "E20 2026-10-14: the tier's real-time factor on this machine, plus the model's load"}
+    elif isinstance(recipe, MatteSequence):                           # D111 (PS5d): SAM 3 over a layer's frames (E23b: ≈ 56 s for 161 frames)
+        spec = registry.get(recipe.model_id)
+        params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id, "text": recipe.text}
+        est = {"seconds": 60.0, "source": "E23b 2026-10-19: SAM 3 on 161 frames at 832×480, 56 s"}
+    elif isinstance(recipe, AssembleFinal):                           # D111 (PS5e): a CPU job — the final's layers composited
+        params = {"final_id": recipe.final_id}
+        est = {"seconds": None, "source": "CPU (the layers' PNG sequences → clip); the Dock shows frames done"}
     elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
         params = {"timeline_id": recipe.timeline_id}
         est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
@@ -198,6 +207,8 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
         return {"clay": img, "pose": img}
     if isinstance(recipe, (ImageToMesh, Keypoints)):
         return {"image": img}
+    if isinstance(recipe, MatteSequence):
+        return {"video": _placeholder_video(object_info)}
     return {}
 
 
@@ -205,7 +216,7 @@ def preview_problems(recipe: AnyRecipe, roster: Roster, object_info: dict | None
     """The contract problems a submission would hit, or None before the engine has answered once (no object_info to check against)."""
     if not object_info:
         return None
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
         return []
     img = _placeholder_image(object_info)
     refs = {(r.asset_id or r.blob or ""): img for r in getattr(recipe, "refs", []) or []}
@@ -282,6 +293,11 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     if isinstance(recipe, Keypoints):                                  # CA1b: the image goes in through /upload/image
         q.progress(job, "uploading image")
         inputs = await prepare_keypoints(job, recipe, q)
+        object_info = await q.object_info_refresh()
+        q.check_cancel(job)
+    if isinstance(recipe, MatteSequence):                              # D111 (PS5d): the layer's frames go in as one video
+        q.progress(job, "uploading frames")
+        inputs = await prepare_matte(job, recipe, q)
         object_info = await q.object_info_refresh()
         q.check_cancel(job)
     if isinstance(recipe, ImageToMesh):                                # P18: the source photo goes in through /upload/image
@@ -458,6 +474,22 @@ async def prepare_stage_shot(job: JobRecord, recipe: StageShot, q: JobQueue) -> 
     return {key: name}
 
 
+async def prepare_matte(job: JobRecord, recipe: MatteSequence, q: JobQueue) -> dict[str, Any]:
+    """D111 (PS5d): the layer's frames as one near-lossless video (the guide encoding), uploaded for LoadVideo."""
+    from ..finals import FinalStore
+    from ..stages import encode_guide
+    store = FinalStore(q.ws)
+    frames = sorted(store.pass_dir(recipe.final_id, recipe.layer_id, "frames").glob("*.png"))
+    if not frames:
+        raise ValueError(f"the layer {recipe.layer_id} has no frames to matte — perform it first")
+    f = store.get(recipe.final_id)
+    out = q.ws.temp_dir / "mattes" / f"{recipe.final_id}-{recipe.layer_id}-{job.id}.mp4"
+    await asyncio.to_thread(encode_guide, frames, out, f.rate if f else 16)
+    name = await q.engine.client.upload_image(out)
+    job.log_tail.append(f"{len(frames)} frames of {recipe.layer_id} uploaded for SAM 3 ({recipe.text!r})")
+    return {"video": name}
+
+
 async def prepare_keypoints(job: JobRecord, recipe: Keypoints, q: JobQueue) -> dict[str, Any]:
     """CA1b: upload the image as PNG (≤ 2048 px: SDPose crops each person box itself)."""
     a = q.catalogue.get(recipe.asset_id)
@@ -525,6 +557,16 @@ async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any
         await asyncio.to_thread(clips.encode_tail, prev, recipe.extend_from.lead, out)
         names["lead"] = await q.engine.client.upload_image(out)
         job.log_tail.append(f"lead-in: the last {recipe.extend_from.lead} frames of {prev.id}")
+    chain = recipe.chain
+    if chain and chain.clip_id:                                        # D111 (PS5c): the previous batch's last frames, as PNGs for LoadImage
+        from ..clips import ClipStore
+        clips = ClipStore(q.ws)
+        prev = clips.get(chain.clip_id)
+        if prev is None:
+            raise ValueError(f"the previous batch ({chain.clip_id}) is gone")
+        n = chain.carry
+        names["carry"] = [await q.engine.client.upload_image(clips.frame_path(prev.id, i)) for i in range(prev.frames - n, prev.frames)]
+        job.log_tail.append(f"carried on: the last {n} frames of {prev.id}, the pose guide from frame {chain.offset}")
     if recipe.audio:                                                   # D88 XL: the line as it is (a WAV master); LoadAudio reads it by name
         a = q.catalogue.get(recipe.audio.asset_id)
         src = q.catalogue.abs_path(a) if a else None

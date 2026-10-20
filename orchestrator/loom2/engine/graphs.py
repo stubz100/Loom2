@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, MatteSequence, AssembleFinal, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -146,7 +146,7 @@ def i2v_params(recipe: I2V) -> dict[str, Any]:
 
 def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_name: str, end_name: str | None = None,
               beat_names: dict[str, str] | None = None, guide_name: str | None = None, lead_name: str | None = None,
-              audio_name: str | None = None) -> Compiled:
+              audio_name: str | None = None, carry_names: list[str] | None = None) -> Compiled:
     """Wan: loaders → ModelSamplingSD3 ×2 → WanImageToVideo / WanFirstLastFrameToVideo → KSamplerAdvanced high → low → VAEDecode
     → SaveImage (one PNG per frame: the clip master; the proxy is encoded by the orchestrator). LTX: the E5 graph — joint
     audio-video latent, LTXVAddGuide for the end frame (frame_idx −1) and every beat — ending in SaveImage the same way. ST4 (D76): with
@@ -170,6 +170,11 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
             raise CompileError(f"{spec.label} performs the Stage's pose sequence — render the pose sequence and pass it as the guide")
         if recipe.end_asset or recipe.beats:
             raise CompileError(f"{spec.label} takes one reference image — no end frame, no beats")
+        chain = recipe.chain
+        if chain and chain.clip_id and len(carry_names or []) != chain.carry:
+            raise CompileError("the previous batch's last frames were not uploaded to the engine (pipeline.prepare_i2v)")
+    elif recipe.chain:
+        raise CompileError(f"{spec.label} does not perform in batches (a pose-driven model does)")
     elif recipe.guide and (spec.graph != "ltx23" or not spec.recipes.guide_lora):
         raise CompileError(f"a pass-sequence guide needs LTX-2.3 with its IC-LoRA; {spec.label} has none")
     if recipe.guide and not guide_name:
@@ -205,7 +210,16 @@ def build_i2v(recipe: I2V, roster: Roster, seed: int, out_prefix: str, start_nam
         g["54"] = {"class_type": "ImageScale", "inputs": {"image": ["53", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
         g["11"] = {"class_type": "WanAnimateToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames,
                                                                 "batch_size": 1, "clip_vision_output": ["8", 0], "reference_image": ref, "pose_video": ["54", 0],
-                                                                "continue_motion_max_frames": 5, "video_frame_offset": 0}}
+                                                                "continue_motion_max_frames": chain.carry if chain else 5,
+                                                                "video_frame_offset": chain.offset if chain else 0}}
+        if carry_names:                                               # D111 (PS5c, E23a W1): the previous batch's last frames continue the motion
+            link: list = ["c0", 0]
+            for i, n in enumerate(carry_names):
+                g[f"c{i}"] = {"class_type": "LoadImage", "inputs": {"image": n}}
+                if i:
+                    g[f"cb{i}"] = {"class_type": "ImageBatch", "inputs": {"image1": link, "image2": [f"c{i}", 0]}}
+                    link = [f"cb{i}", 0]
+            g["11"]["inputs"]["continue_motion"] = link
         g["12"] = {"class_type": "KSampler", "inputs": {"model": ["1s", 0], "seed": seed, "steps": ep["steps"], "cfg": ep["cfg"], "sampler_name": "euler", "scheduler": "simple",
                                                         "positive": ["11", 0], "negative": ["11", 1], "latent_image": ["11", 2], "denoise": 1.0}}
         g["13"] = {"class_type": "TrimVideoLatent", "inputs": {"samples": ["12", 0], "trim_amount": ["11", 3]}}
@@ -1288,7 +1302,28 @@ def build_keypoints(recipe: Keypoints, roster: Roster, image_name: str) -> Compi
     return Compiled(graph=g, output_node="6", summary={"model_id": spec.id, "detector": spec.roles.extra["detector"], "asset_id": recipe.asset_id})
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def build_matte_sequence(recipe: MatteSequence, roster: Roster, video_name: str, out_prefix: str) -> Compiled:
+    """D111 (PS5d): SAM 3 by text on every frame of a character layer (E22's per-frame detection follows a walking figure), the masks
+    saved as images, one per frame."""
+    sid = recipe.model_id
+    g: dict[str, Any] = {"2": {"class_type": "LoadVideo", "inputs": {"file": video_name}},
+                         "3": {"class_type": "GetVideoComponents", "inputs": {"video": ["2", 0]}}}
+    if recipe.mode == "subject":                                      # `open`: BiRefNet's subject matte on every frame
+        _, name = roster.require(sid)
+        g["1"] = {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": name}}
+        g["5"] = {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["1", 0], "image": ["3", 0]}}
+    else:
+        _, ckpt = roster.require(sid)
+        g["1"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}}
+        g["4"] = {"class_type": "CLIPTextEncode", "inputs": {"text": recipe.text.strip() or "person", "clip": ["1", 1]}}
+        g["5"] = {"class_type": "SAM3_Detect", "inputs": {"model": ["1", 0], "image": ["3", 0], "conditioning": ["4", 0], "threshold": recipe.threshold,
+                                                          "refine_iterations": 2, "individual_masks": False}}
+    g["7"] = {"class_type": "MaskToImage", "inputs": {"mask": ["5", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["7", 0], "filename_prefix": out_prefix}}
+    return Compiled(graph=g, output_node="99", summary={"model_id": sid, "mode": recipe.mode, "text": recipe.text, "threshold": recipe.threshold}, serialized_prompt=recipe.text)
+
+
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints | MatteSequence, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -1309,7 +1344,7 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         i = inputs or {}
         if "start" not in i:
             raise CompileError("i2v needs the uploaded start frame (queue._prepare_i2v_inputs)")
-        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"), i.get("guide"), i.get("lead"), i.get("audio"))
+        c = build_i2v(recipe, roster, seed, out_prefix, i["start"], i.get("end"), i.get("beats"), i.get("guide"), i.get("lead"), i.get("audio"), i.get("carry"))
     elif isinstance(recipe, Reangle):
         i = inputs or {}
         if "image" not in i:
@@ -1330,6 +1365,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if "image" not in i:
             raise CompileError("keypoints needs the uploaded image (pipeline.prepare_keypoints)")
         c = build_keypoints(recipe, roster, i["image"])
+    elif isinstance(recipe, MatteSequence):
+        i = inputs or {}
+        if "video" not in i:
+            raise CompileError("matte_sequence needs the uploaded frames (pipeline.prepare_matte)")
+        c = build_matte_sequence(recipe, roster, i["video"], out_prefix)
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -1344,8 +1384,8 @@ def _vram(model_id: str) -> float:
 
 
 def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> float:
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
-        return 0.0                                                    # R3 (D62) / P17: CPU only, the engine is never started
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
+        return 0.0                                                    # R3 (D62) / P17 / D111: CPU only, the engine is never started
     if isinstance(recipe, TrainLora):                                 # LT2: E16's measured peak of the base (the engine is stopped for it)
         spec = registry.get(recipe.model_id)
         return float(spec.recipes.train.vram_gb) if spec and spec.recipes.train else 14.0
@@ -1369,7 +1409,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         return [recipe.model_id]                                      # LT2: the base's transformer (its encoder comes from HF_HOME, its VAE from the hub)
     if isinstance(recipe, TTS):
         return []                                                     # CN2: the TTS models live in HF_HOME, not the roster
-    if isinstance(recipe, (ImageToMesh, Keypoints)):
+    if isinstance(recipe, (ImageToMesh, Keypoints, MatteSequence)):
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
     if isinstance(recipe, I2V):
@@ -1378,8 +1418,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         if recipe.guide and spec is not None and spec.recipes.guide_lora:
             ids = [*ids, spec.recipes.guide_lora]                      # ST4: the IC-LoRA rides only on a guided clip
         return ids
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, Render):
-        return []                                                     # R3 (D62) / P17: no weights at all
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
+        return []                                                     # R3 (D62) / P17 / D111: no weights at all
 
     te_over = getattr(recipe, "te_id", None)
 

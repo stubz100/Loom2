@@ -178,7 +178,8 @@
   "WanSoundImageToVideo",
   "RTDETR_detect",
   "SDPoseKeypointExtractor",
-  "PreviewAny"
+  "PreviewAny",
+  "ImageBatch"
  ],
  "missing_at_capture": [],
  "object_info": {
@@ -9891,6 +9892,47 @@
     "debug",
     "print value",
     "show text"
+   ]
+  },
+  "ImageBatch": {
+   "input": {
+    "required": {
+     "image1": [
+      "IMAGE"
+     ],
+     "image2": [
+      "IMAGE"
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "image1",
+     "image2"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "IMAGE"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "IMAGE"
+   ],
+   "name": "ImageBatch",
+   "display_name": "Batch Images (DEPRECATED)",
+   "description": "",
+   "python_module": "nodes",
+   "category": "image/batch",
+   "output_node": false,
+   "has_intermediate_output": false,
+   "deprecated": true,
+   "search_aliases": [
+    "combine images",
+    "merge images",
+    "stack images"
    ]
   }
  }

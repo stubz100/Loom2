@@ -22,6 +22,9 @@ export function framesAt(start: number, end: number, rate: Rate): number[] {
   return Array.from({ length: n }, (_, i) => Math.round((start + i * step) * 1e4) / 1e4)
 }
 
+/** finals.py plan_batches: a performance's 77-frame batches, carrying 5 (72 new each after the first). */
+export const batchCount = (n: number): number => (n <= 77 ? 1 : 1 + Math.ceil((n - 77) / 72))
+
 const isActor = (o: StageObject) => o.visible && (o.kind === 'mannequin' || o.kind === 'mesh' || o.kind === 'prop' || o.kind === 'plane')
 
 /** The layers of a scene: the plate (the sets), each visible figure, each visible prop (a 3D model, a stand-in or an image plane), the shadows. */
@@ -144,20 +147,33 @@ interface FinalsState {
   finals: Final[]
   making: { done: number; total: number; what: string } | null
   projecting: string | null                                  // PS5b: the final whose plate Stage is projecting
+  awaiting: Record<string, { was: string | null; since: number }>   // PS5e: finals assembling → their assembled_at before (the poll runs till it moves)
   load: () => Promise<void>
   make: (rate?: Rate) => Promise<Final | null>
   remove: (id: string) => Promise<void>
   plate: (id: string) => Promise<void>
   project: (id: string) => Promise<void>
+  /** PS5c: perform a character layer (Wan Animate in chained batches); a seed given is a re-take. */
+  perform: (id: string, layer: string, seed?: number) => Promise<void>
+  /** PS5d: matte a performed character layer again (SAM 3 on its frames; it runs by itself after the last batch). */
+  matte: (id: string, layer: string) => Promise<void>
+  /** PS5e: composite the layers into the shot (a CPU job) — the clip lands on the final. */
+  assemble: (id: string) => Promise<void>
+  /** PS5e: the assembled shot in Animate's player. */
+  play: (id: string) => void
   /** Watch the finals with work under way: reload them, and project a plate whose still has landed (once). */
   tick: () => Promise<void>
 }
 
-const busy = (f: Final) => f.layers.some((l) => l.status === 'queued' || l.status === 'running')
+const busy = (f: Final) => f.layers.some((l) => l.status === 'queued' || l.status === 'running') || assembling(f.id)
+/** PS5e: the final's assembly job is queued or running (the session's jobs, by their origin). */
+export const assembling = (fid: string): boolean => Object.values(useSession.getState().jobs).some((j) => j.kind === 'assemble_final' && j.origin?.ref === fid && (j.status === 'queued' || j.status === 'running'))
+/** PS5e: every layer made — the plate projected, each character performed and matted. */
+export const readyToAssemble = (f: Final): boolean => f.layers.every((l) => (l.kind === 'plate' || l.kind === 'figure' ? l.status === 'done' && l.frames_done === f.frames : true))
 const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
 
 export const useFinals = create<FinalsState>((set, get) => ({
-  finals: [], making: null, projecting: null,
+  finals: [], making: null, projecting: null, awaiting: {},
   plate: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
@@ -166,6 +182,38 @@ export const useFinals = create<FinalsState>((set, get) => ({
       useSession.getState().toast(`${f.name}: the plate is queued (a Klein Stage shot of the bare set) — Stage projects it along the camera path when it lands`, 'info')
       await get().load()
     } catch (e) { useSession.getState().toast(`Make the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  perform: async (id, layer, seed) => {
+    const f = get().finals.find((x) => x.id === id)
+    const l = f?.layers.find((x) => x.id === layer)
+    if (!f || !l) return
+    try {
+      const r = await unwrap(http.POST('/finals/{fid}/layers/{lid}/run', { params: { path: { fid: id, lid: layer } }, body: { seed: seed ?? null } }))
+      useSession.getState().toast(`${l.name}: ${r.batches} batch${r.batches === 1 ? '' : 'es'} of Wan Animate queued${r.placed ? ' — the reference stands where the figure starts' : ' — the figure is not whole at the start: the reference is centred'}`, 'info')
+      await get().load()
+    } catch (e) { useSession.getState().toast(`Perform ${l.name}: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  matte: async (id, layer) => {
+    try { await unwrap(http.POST('/finals/{fid}/layers/{lid}/matte', { params: { path: { fid: id, lid: layer } }, body: { text: 'person' } })); await get().load() }
+    catch (e) { useSession.getState().toast(`Matte: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  assemble: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    try {
+      await unwrap(http.POST('/finals/{fid}/assemble', { params: { path: { fid: id } } }))
+      set({ awaiting: { ...get().awaiting, [id]: { was: f.assembled_at ?? null, since: Date.now() } } })
+      useSession.getState().toast(`${f.name}: assembling the layers into the shot (the CPU; the Dock shows the frames)`, 'info')
+    } catch (e) { useSession.getState().toast(`Assemble: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  play: (id) => {
+    const clip = get().finals.find((x) => x.id === id)?.clip_id
+    if (!clip) return
+    void import('../animate/animateStore').then(async (m) => {
+      useSession.getState().setSuite('animate')
+      const an = m.useAnimate.getState()
+      await an.loadClips(); an.select(clip)
+    })
   },
   project: async (id) => {
     const f = get().finals.find((x) => x.id === id)
@@ -176,8 +224,13 @@ export const useFinals = create<FinalsState>((set, get) => ({
     finally { set({ projecting: null }) }
   },
   tick: async () => {
-    if (!get().finals.some(busy)) return
+    if (!get().finals.some(busy) && !Object.keys(get().awaiting).length) return
     await get().load()
+    const waiting = Object.fromEntries(Object.entries(get().awaiting).filter(([id, a]) => {   // till the result moves; a failed job stops it after 15 s
+      const f = get().finals.find((x) => x.id === id)
+      return !!f && (f.assembled_at ?? null) === a.was && (assembling(id) || Date.now() - a.since < 15_000)
+    }))
+    if (Object.keys(waiting).length !== Object.keys(get().awaiting).length) set({ awaiting: waiting })
     const doc = st().current
     const ready = get().finals.find((f) => f.stage_id === doc?.id && f.layers.some((l) => l.id === 'plate' && l.status === 'running' && l.still_asset_id && !l.frames_done))
     if (ready && !get().projecting) await get().project(ready.id)

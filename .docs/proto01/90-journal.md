@@ -6888,3 +6888,52 @@ mask's sense (the model reads 1 − mask: known = 1).
   and not on a Story shot; the empty set's lead); the route snapshot (+2); e2e (the final-shot scenario now makes and projects the
   plate); offline 461 under full and open; Vitest 386 + 3; e2e 49/49 under full and open; lint 75; build clean; settings audit clean.
 - **Next:** PS5c, the character layers.
+
+## 2026-10-20 15:09 — D111 PS5c–e built: character layers (chained Wan Animate), mattes, the assembly; the rig's first final shot; D112
+
+- **PS5c · character layers.**
+  - **Chaining:** `I2V.chain` (`AnimateChain`: the previous batch's clip, the frames carried, the pose guide's offset) carries E23a's W1
+    into the product. `prepare_i2v` uploads the previous batch's last 5 frames; the Wan Animate graph batches them (`ImageBatch`, the pin's
+    deprecated but working node, merged into the contract fixture and the fixture script's classes) into `continue_motion` with
+    `video_frame_offset`.
+  - **The run:** `POST /finals/{id}/layers/{lid}/run` takes the figure's bound Cast version and its animation reference, placed where
+    the figure starts (`finals.place_reference`, E23c: no ghost; the reference keyed off its plain ground in Lab, the blob at its middle,
+    scaled to the figure's nose-to-ankle height, feet on the figure's). It falls back to CN4's padded reference when the figure is not whole
+    at the start or the ground cannot be keyed. It encodes the pose pass as the guide, plans the batches (`plan_batches`: one batch on the
+    4k + 1 grid, else 77-frame batches at offsets 0, 77, 149, …) and queues the first.
+  - **The chain:** the clip finisher queues each next batch (origin `final_layer`); after the last it stitches the batches (`stitch`:
+    the carried frames dropped) into the layer's frames. A re-take is a run with a new seed. The read routes mark a layer failed when its
+    last job failed.
+- **PS5d · mattes.** A new recipe `matte_sequence`: SAM 3 by text on every frame of the layer (one video for `LoadVideo`), queued by
+  the finisher after the stitch; the masks go into the layer's `matte/`. Under `open` (SAM 3's licence is gated, full only) it is
+  BiRefNet's subject matte (MIT): one character on a plain ground. Also *Matte it again* (`POST …/matte`).
+- **PS5e · assembly.** A new CPU recipe `assemble_final` (`final_assembly.py`), `POST /finals/{id}/assemble`, in this order:
+  - the plate × Stage's shadow ratio (the lit clay of everything over the bare set's, 1 on the actors);
+  - props and characters in Stage's depth order; a nearer prop hides a character (E28b);
+  - each character matted inside her figure's mask grown 36 px and moved by her contact offset (D107: the soles, the shot's median);
+  - RIFE v4.6 to 24 fps at F16 when the local tool is there (D27);
+  - the clip (master, proxy, asset with lineage to the plate's still and the placed references) is the final's `clip_id`, with the
+    assembly's figures, and a Story take when the final was made for a shot.
+- **The panel:** *Perform* / *Re-take* on a character; its batch (*batch 1 of 2*), then *matting*; *Assemble the shot* once every layer
+  is made; *Play ▶* opens the clip in Animate.
+- **Rig** (`engine/spikes/ps5_rig.py`, a fresh project; E23's shot through the product path):
+  - **The cast:** Mara and Ines from E22's heroes and E23b's references, bodies fitted by the app.
+  - **The scene:** Mara walks her path, Ines sits on a stool stand-in under the window light; 5 s, 81 frames at F16.
+  - **Timings:** the split 26 s; the plate 38 s (Klein) and its projection; Mara 2 batches in 336 s, Ines 2 in 306 s (both references
+    placed); mattes 47 s and 30 s (SAM 3); assembly 28 s (81 frames composited in 24 s, RIFE to 121 at 24 fps).
+  - **Contact offsets:** Mara −3 / −16 px, as E23e's hand nudge (+3 / −12); Ines 0 / 0.
+  - **What it shows:** the shot plays as one: the empty room, Mara walking in, Ines standing then sitting, Stage's shadows on the floor,
+    no jump at the batch join (frames 76 / 77).
+  - **The rig's own gaps:** Mara holds a mid-step pose after her walk clip (the rig keyed no turn); the stool is a clay stand-in, so it
+    shows grey (a Cast prop would be its model).
+  - Sheets and `final.mp4` in `engine/spikes/out/ps5/`.
+- **The author asked** whether EffectCraft would make this easier. The answer: not the layers (generation), but every hand correction
+  after the composite. **D112:** the assembly stays the automatic first composite; PS5f is the panel and the rig acceptance only; spike
+  E27 runs next, and EffectCraft takes the finishing after it.
+- **Tests:**
+  - `test_finals_d111` +7: the batch plan and the stitch; the placement; a chained batch's graph; the run's refusals; two chained
+    batches through the fake engine, then the matte, then the assembled clip; the matte by variant.
+  - The fake engine answers a SAM 3 or subject matte over a video with one mask a frame; `e2e_setup` adds SAM 3's weight.
+  - The route snapshot +3; e2e (the final-shot scenario performs, mattes and assembles under full and open).
+  - Totals: offline 467 under full and open; Vitest 387 + 3; e2e 49/49 under full and open; lint 75; build clean; the settings audit
+    (`AnimateChain` read through `chain`), model literals and agents check clean.

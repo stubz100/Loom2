@@ -245,6 +245,14 @@ class Guide(BaseModel):
     strength: float = Field(1.0, ge=0.0, le=1.0)
 
 
+class AnimateChain(BaseModel):
+    """D111 (PS5c, E23a's W1): a pose-driven performance in batches — this batch starts where the previous one ended. The previous batch's
+    last `carry` frames continue the motion (`continue_motion`), and the pose guide is read from `offset` on (`video_frame_offset`)."""
+    clip_id: str | None = None                    # the previous batch (None: the first batch)
+    carry: int = Field(5, ge=1, le=16)
+    offset: int = Field(0, ge=0, le=4000)
+
+
 class I2V(BaseModel):
     """Image-to-video (11 §10; D8 Wan 2.2 I2V-A14B fp8 experts + Lightning, FLF on the same weights; D9 LTX-2.3 distilled
     fp8 with keyframe beats). Sizes and frame counts snap to the model's rule in the compiler (Wan ×16 and 4n+1,
@@ -268,6 +276,7 @@ class I2V(BaseModel):
     guide: Guide | None = None                                # ST4: a Stage pass sequence through the IC-LoRA (LTX only)
     extend_from: ExtendFrom | None = None                     # D88 XE (experimental): continue that clip
     audio: AudioRef | None = None                             # D88 XL (experimental): the line a lip-sync model follows (S2V)
+    chain: AnimateChain | None = None                         # D111 (PS5c): Wan Animate in batches (pose-driven models only)
     seeds: list[int] = Field(default_factory=lambda: [0])
     loras: list[LoraRef] = Field(default_factory=list)
 
@@ -428,8 +437,38 @@ class Keypoints(BaseModel):
     model_id: str = _default("keypoints")
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints
+class MatteSequence(BaseModel):
+    """D111 (PS5d): a character layer's matte — SAM 3 by text on every frame of its performance (E22 / E23b), or under `open` (SAM 3's
+    licence is gated, full only) BiRefNet's subject matte (MIT) — the layer is one character on a plain ground; the masks into the
+    layer's `matte/` (the assembly keeps them inside the figure's Stage mask)."""
+    kind: Literal["matte_sequence"] = "matte_sequence"
+    final_id: str
+    layer_id: str
+    mode: Literal["text", "subject"] = "text"
+    text: str = "person"
+    threshold: float = Field(0.4, ge=0.05, le=0.95)
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+    @property
+    def model_id(self) -> str:
+        """SAM 3 (the spec that runs AI Select by text), or the subject matte."""
+        return registry.segment_model(self.mode)
+
+
+def matte_mode(variant: str) -> Literal["text", "subject"]:
+    """D111 (PS5d): SAM 3 by text where this build offers it (E23b's measured route), else the subject matte (`open`)."""
+    return "text" if registry.offered(registry.get(registry.segment_model("text")), variant) else "subject"
+
+
+class AssembleFinal(BaseModel):
+    """D111 (PS5e): the final's layers composited into the shot — a CPU job (final_assembly.py) that becomes a clip."""
+    kind: Literal["assemble_final"] = "assemble_final"
+    final_id: str
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal], Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal
 
 
 class RecipeEnvelope(BaseModel):
@@ -465,8 +504,8 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
     if isinstance(recipe, StageShot):
         return stage_model_id(recipe, variant)     # ST3: the model the Stage method runs in this build
-    if isinstance(recipe, Render):
-        return "cpu"                               # P17: the draft render never touches the engine
+    if isinstance(recipe, (Render, AssembleFinal)):
+        return "cpu"                               # P17: the draft render never touches the engine; D111: nor the final's assembly
     if isinstance(recipe, TrainLora):
         return "trainer"                           # LT2: the engine is stopped for it; no weights of the engine's stay warm
     if isinstance(recipe, TTS):

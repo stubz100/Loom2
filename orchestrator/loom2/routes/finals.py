@@ -54,6 +54,18 @@ def _blob(ws, sha: str):
     return p
 
 
+def _reconcile(svc, store: FinalStore, f: Final) -> Final:
+    """A layer at work whose last job failed or was cancelled is failed too (the job's error on it) — the queue cannot tell the final."""
+    if svc.queue is None:
+        return f
+    for x in f.layers:
+        if x.status in ("queued", "running") and x.job_ids:
+            j = svc.queue.jobs.get(x.job_ids[-1])
+            if j is not None and j.status in ("failed", "cancelled"):
+                f = store.update_layer(f.id, x.id, status="failed", error=j.error or f"its job was {j.status}")
+    return f
+
+
 @router.post("/finals", response_model=Final)
 async def final_create(svc: Svc, body: FinalCreate):
     """PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk."""
@@ -82,16 +94,19 @@ async def final_create(svc: Svc, body: FinalCreate):
 @router.get("/finals", response_model=FinalList)
 async def finals_list(svc: Svc, stage_id: str | None = None):
     ws, _, _ = svc.require_project()
-    return {"items": [f.model_dump() for f in await asyncio.to_thread(FinalStore(ws).list, stage_id)]}
+    store = FinalStore(ws)
+    finals = await asyncio.to_thread(store.list, stage_id)
+    return {"items": [(await asyncio.to_thread(_reconcile, svc, store, f)).model_dump() for f in finals]}
 
 
 @router.get("/finals/{fid}", response_model=Final)
 async def final_get(svc: Svc, fid: str):
     ws, _, _ = svc.require_project()
-    f = await asyncio.to_thread(FinalStore(ws).get, fid)
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
     if f is None:
         raise HTTPException(404, "final not found")
-    return f.model_dump()
+    return (await asyncio.to_thread(_reconcile, svc, store, f)).model_dump()
 
 
 @router.get("/finals/{fid}/layers/{lid}/{name}/{n}")
@@ -173,6 +188,153 @@ async def final_layer_frames(svc: Svc, fid: str, lid: str, body: FramesBody):
         raise HTTPException(422, str(e))
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return f.model_dump()
+
+
+class RunBody(BaseModel):
+    seed: int | None = None                        # None: the layer's seed (the first run 0; a re-take passes another)
+
+
+class RunQueued(BaseModel):
+    job_id: str
+    batches: int
+    reference_asset_id: str
+    placed: bool                                   # the reference stands where the figure starts (else padded, centred)
+
+
+@router.post("/finals/{fid}/layers/{lid}/run", response_model=RunQueued)
+async def final_layer_run(svc: Svc, fid: str, lid: str, body: RunBody):
+    """PS5c: perform a character layer — its figure's character (the bound Cast version's animation reference) placed where the figure
+    starts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.
+    A run again is a re-take of this layer alone."""
+    from ..catalogue import Catalogue  # noqa: F401  (typing)
+    from ..finals import FINAL_LAYER_SURFACE, CHARACTER_TAIL, character_recipe, place_reference, plan_batches
+    from ..origin import JobOrigin
+    from ..stages import encode_guide
+    from ..story import StoryStore, compose_sheet
+    from ..models import registry
+    ws, cat, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f else None
+    if f is None or layer is None:
+        raise HTTPException(404, "final or layer not found")
+    if layer.kind != "figure":
+        raise HTTPException(422, "only a character layer is performed (the plate is projected, a prop rendered)")
+    if layer.status in ("queued", "running") and layer.batches:
+        raise HTTPException(409, "the layer is being performed — wait for it, or cancel its job")
+    p = await asyncio.to_thread(StoryStore(ws).profile, layer.profile_id) if layer.profile_id else None
+    if p is None:
+        raise HTTPException(422, f"bind {layer.name} to a character first (Animate's Inspector): its animation reference performs the layer")
+    try:
+        v = p.version(layer.version)
+    except KeyError as e:
+        raise HTTPException(422, str(e))
+    if not v.anim_ref_asset_id:
+        raise HTTPException(422, f"{p.name} has no animation reference yet — make it in Story · Cast")
+    spec = next((s for s in registry.animate_specs() if registry.offered(s, svc.app.settings.variant)), None)
+    if spec is None:
+        raise HTTPException(422, "no pose-driven model in this build")
+    ref = cat.get(v.anim_ref_asset_id)
+    if ref is None:
+        raise HTTPException(422, "the animation reference is missing from the Catalogue")
+    w, h = f.size["w"], f.size["h"]
+    folder = store.folder(fid) / lid
+    kp = (await asyncio.to_thread(store.keypoints, fid, lid) or [None])[0]
+    placed_png = folder / "reference.png"
+    try:
+        placed = await asyncio.to_thread(place_reference, cat.abs_path(ref), kp, w, h, placed_png)
+    except ValueError:                                                        # no plain ground to key the character off: CN4's padded reference
+        placed = False
+    if placed:
+        rec = await asyncio.to_thread(cat.ingest_file, placed_png, kind="image", move=False, suite="stage", lineage_kind="stage-pass", parents=[ref.id],
+                                      origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid), params={"final_id": fid, "layer": lid, "pass": "reference"})
+        rec = await asyncio.to_thread(cat.make_thumbs, rec, placed_png)
+        svc.hub.broadcast("asset.created", rec.model_dump())
+        ref_id = rec.id
+    else:
+        ref_id = ref.id                                                       # the figure is not whole at the start: CN4's padded reference
+    pose = sorted(store.pass_dir(fid, lid, "pose").glob("*.png"))
+    guide_mp4 = folder / "pose.mp4"
+    await asyncio.to_thread(encode_guide, pose, guide_mp4, f.rate)
+    g = await asyncio.to_thread(cat.ingest_file, guide_mp4, kind="video", move=False, suite="stage", lineage_kind="stage-pass",
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid), params={"final_id": fid, "layer": lid, "pass": "pose-sequence"},
+                                frames=len(pose), fps=float(f.rate), w=w, h=h)
+    g = await asyncio.to_thread(cat.make_thumbs, g, pose[0])
+    seed = layer.seed if body.seed is None else body.seed
+    layer.reference_asset_id, layer.guide_asset_id, layer.seed = ref_id, g.id, seed
+    plan = plan_batches(f.frames)
+    prompt = f"{p.name}, {compose_sheet(v, name=p.name)}, {CHARACTER_TAIL}"
+    try:
+        jobs = svc.queue.submit(character_recipe(f, layer, spec.id, prompt, plan[0], None),
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "batch": 0, "batches": len(plan), "prompt": prompt}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    f = await asyncio.to_thread(store.update_layer, fid, lid, status="queued", error=None, seed=seed, reference_asset_id=ref_id, guide_asset_id=g.id,
+                                batches=[{"k": 0, "job_id": jobs[0].id, "clip_id": None}], job_ids=[*layer.job_ids, jobs[0].id], frames_done=0)
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return {"job_id": jobs[0].id, "batches": len(plan), "reference_asset_id": ref_id, "placed": placed}
+
+
+class MatteBody(BaseModel):
+    text: str = "person"                           # what SAM 3 looks for in the layer's frames
+
+
+class JobQueued(BaseModel):
+    job_id: str
+
+
+@router.post("/finals/{fid}/layers/{lid}/matte", response_model=JobQueued)
+async def final_layer_matte(svc: Svc, fid: str, lid: str, body: MatteBody):
+    """PS5d: matte a performed character layer again (SAM 3 by text on its frames) — it runs by itself after the layer's last batch."""
+    from ..finals import FINAL_LAYER_SURFACE
+    from ..origin import JobOrigin
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f else None
+    if f is None or layer is None:
+        raise HTTPException(404, "final or layer not found")
+    if layer.kind != "figure" or layer.frames_done != f.frames:
+        raise HTTPException(422, "a performed character layer is matted")
+    try:
+        from ..recipes import matte_mode
+        jobs = svc.queue.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "text": body.text, "mode": matte_mode(svc.app.settings.variant)},
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "matte": True}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    f = await asyncio.to_thread(store.update_layer, fid, lid, status="running", error=None, job_ids=[*layer.job_ids, jobs[0].id])
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return {"job_id": jobs[0].id}
+
+
+@router.post("/finals/{fid}/assemble", response_model=JobQueued)
+async def final_assemble(svc: Svc, fid: str):
+    """PS5e: composite the final's layers into the shot (a CPU job): the plate under Stage's shadows, the props and the characters in
+    depth order, each character on her shadow (D107); a clip, and a take on the Story shot it was made for."""
+    from ..final_assembly import check_ready
+    from ..origin import JobOrigin
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    missing = await asyncio.to_thread(check_ready, store, f)
+    if missing:
+        raise HTTPException(422, "not ready: " + "; ".join(missing))
+    try:
+        jobs = svc.queue.submit({"kind": "assemble_final", "final_id": fid}, origin=JobOrigin(suite="stage", surface="final_assemble", ref=fid))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id}
 
 
 @router.delete("/finals/{fid}", response_model=Deleted)

@@ -2,7 +2,7 @@
 // image plane), the shadows; hidden objects, sets, lights and cameras make no layer of their own.
 import { describe, expect, it } from 'vitest'
 import type { StageDoc, StageObject } from '../../api/types'
-import { framesAt, planFinal } from './finalShot'
+import { batchCount, framesAt, planFinal } from './finalShot'
 
 const obj = (id: string, kind: StageObject['kind'], extra: Partial<StageObject> = {}): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   parent: null, locked: false, visible: true, colour_id: 1, pose: null, billboard: false, profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, ...extra })
@@ -23,5 +23,8 @@ describe('D111 (PS5a) planning the final', () => {
     expect(p.layers[0].name).toBe('Room')
     expect(p.layers[1]).toMatchObject({ object_id: 'fig_m', profile_id: 'prf_m' })
     expect(p.layers[2]).toMatchObject({ object_id: 'chest', profile_id: 'prf_c', version: 'v2' })
+  })
+  it("counts a performance's batches as the server plans them (77 frames, 5 carried)", () => {
+    expect([9, 77, 78, 149, 150, 161].map(batchCount)).toEqual([1, 1, 2, 2, 3, 3])
   })
 })

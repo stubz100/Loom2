@@ -13,6 +13,7 @@ The queue's single completion tail (`JobQueue._complete`) runs after any of them
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -27,10 +28,10 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Keypoints, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, AssembleFinal, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..body import Body
-from ..finals import FINAL_PLATE_SURFACE
+from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -292,6 +293,8 @@ class ClipFinisher:
             await asyncio.to_thread(_stage_result, q, job.origin.ref, cam, "clip", rec.id, _run(job, recipe, q))
         if job.origin and job.origin.surface == "lipsync" and job.origin.ref:   # D88 XL: a take on the shot version
             await asyncio.to_thread(_shot_takes, q, {"shot_id": job.origin.ref, "version": (job.origin.payload or {}).get("version")}, "clip", [rec.id], False, _run(job, recipe, q))
+        if job.origin and job.origin.surface == FINAL_LAYER_SURFACE and job.origin.ref:   # D111 (PS5c): a character layer's batch
+            await _final_layer_batch(q, job, recipe, rec.id)
         if job.origin and job.origin.surface == "anim_test" and job.origin.ref:   # CA0: the reference's test animation → the version's
             await asyncio.to_thread(_anim_test_result, q, job.origin.ref, job.origin.payload or {}, rec.id)
         if job.origin and job.origin.surface == FOR_SHOT:                     # D90 (02 §5): Animate for a shot version → its takes
@@ -417,6 +420,51 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
+
+
+async def _final_layer_batch(q: JobQueue, job: JobRecord, recipe: I2V, clip_id: str) -> None:
+    """D111 (PS5c): a character layer's batch landed — the next batch is queued, carrying this one's last frames (E23a W1); after the last,
+    the batches are stitched into the layer's frames (the carried frames dropped, the final's count kept) and the layer is done. A failure
+    here fails the layer, not the job (the clip stays)."""
+    from ..finals import FinalStore, character_recipe, plan_batches, stitch
+    from ..origin import JobOrigin
+    fid, payload = str(job.origin.ref), job.origin.payload or {}
+    lid, k = str(payload.get("layer") or ""), int(payload.get("batch") or 0)
+    store = FinalStore(q.ws)
+    try:
+        f = store.get(fid)
+        layer = next((x for x in f.layers if x.id == lid), None) if f else None
+        if f is None or layer is None:
+            raise ValueError(f"the final {fid} or its layer {lid} is gone")
+        batches = [dict(b) for b in layer.batches]
+        if k >= len(batches) or batches[k].get("job_id") != job.id:
+            job.log_tail.append(f"the layer {lid} was re-taken meanwhile; this batch is not used")
+            return
+        batches[k]["clip_id"] = clip_id
+        plan = plan_batches(f.frames)
+        if k + 1 < len(plan):
+            nxt = q.submit(character_recipe(f, layer, recipe.model_id, recipe.prompt_text, plan[k + 1], clip_id),
+                           origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={**payload, "batch": k + 1}))[0]
+            batches.append({"k": k + 1, "job_id": nxt.id, "clip_id": None})
+            f = store.update_layer(fid, lid, status="running", batches=batches, job_ids=[*layer.job_ids, nxt.id])
+            job.log_tail.append(f"layer {lid}: batch {k + 1} of {len(plan)} queued ({nxt.id})")
+        else:
+            clips = ClipStore(q.ws)
+            frames = [[clips.frame_path(b["clip_id"], i) for i in range(clips.get(b["clip_id"]).frames)] for b in batches]
+            store.update_layer(fid, lid, batches=batches)
+            f = store.set_frames(fid, lid, stitch(frames, f.frames), status="running")
+            from ..recipes import matte_mode
+            mj = q.submit({"kind": "matte_sequence", "final_id": fid, "layer_id": lid, "mode": matte_mode(q.app.settings.variant)}, origin=JobOrigin(suite="stage", surface=job.origin.surface, ref=fid, payload={"layer": lid, "matte": True}))[0]
+            f = store.update_layer(fid, lid, job_ids=[*next(x for x in f.layers if x.id == lid).job_ids, mj.id])
+            job.log_tail.append(f"layer {lid}: {len(batches)} batch(es) stitched into {f.frames} frames; its matte queued ({mj.id})")
+        q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    except Exception as e:  # noqa: BLE001
+        job.log_tail.append(f"layer {lid}: {e}")
+        try:
+            f = store.update_layer(fid, lid, status="failed", error=str(e))
+            q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _final_plate_result(q: JobQueue, fid: str, asset_id: str) -> None:
@@ -584,7 +632,43 @@ def _body_fit_result(q: JobQueue, job: JobRecord, recipe: Keypoints, people: lis
     q.hub.broadcast("story.changed", {"kind": "profile", "id": p.id, "revision": p.revision})
 
 
+class MatteFinisher:
+    """D111 (PS5d): SAM 3's masks become the character layer's `matte/` (one per frame, at the final's size); the layer is done."""
+    frees_cache = True
+
+    async def finish(self, job: JobRecord, recipe: MatteSequence, files: list[dict], sub: Submission, q: JobQueue) -> None:
+        from ..finals import FinalStore
+        paths = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+        store = FinalStore(q.ws)
+        f = store.get(recipe.final_id)
+        if f is None:
+            raise ValueError(f"the final {recipe.final_id} is gone")
+        if len(paths) != f.frames:
+            raise ValueError(f"SAM 3 returned {len(paths)} masks for {f.frames} frames")
+        w, h = f.size["w"], f.size["h"]
+
+        def write() -> None:
+            d = store.pass_dir(f.id, recipe.layer_id, "matte")
+            if d.exists():
+                for old in d.glob("*.png"):
+                    old.unlink()
+            d.mkdir(parents=True, exist_ok=True)
+            for i, src in enumerate(paths):
+                with Image.open(src) as im:
+                    im = im.convert("L")
+                    if im.size != (w, h):
+                        im = im.resize((w, h), Image.BILINEAR)
+                    im.save(d / f"{i:04d}.png")
+        await asyncio.to_thread(write)
+        f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, status="done", error=None)
+        job.result["final_id"], job.result["layer_id"] = f.id, recipe.layer_id
+        job.log_tail.append(f"matte: {len(paths)} masks for {recipe.layer_id}")
+        q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+
+
 def finisher_for(recipe: AnyRecipe) -> Finisher:
+    if isinstance(recipe, MatteSequence):
+        return MatteFinisher()
     if isinstance(recipe, Keypoints):
         return KeypointsFinisher()
     if isinstance(recipe, ImageToMesh):
@@ -609,6 +693,8 @@ async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
     """The jobs that never start the engine (plan().engine is False): Quick Remove (D62) and the sequence draft render (P17)."""
     if isinstance(recipe, Render):
         return await run_render(job, recipe, q)
+    if isinstance(recipe, AssembleFinal):                              # D111 (PS5e): the final's layers composited into the shot
+        return await run_assemble(job, recipe, q)
     if isinstance(recipe, TrainLora):                                 # LT2: ai-toolkit in its venv, the engine stopped by the queue
         from ..trainer import run_train
         return await run_train(job, recipe, q)
@@ -618,6 +704,58 @@ async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
     if isinstance(recipe, Inpaint):
         return await run_quick_remove(job, recipe, q)
     raise ValueError(f"no CPU path for recipe kind {recipe.kind!r}")
+
+
+async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bool:
+    """D111 (PS5e): the final's layers composited frame by frame (final_assembly.py), the frames a clip (master, proxy, asset with lineage
+    to the layers' sources); conformed to 24 fps by the local RIFE at F16 when it is there (D27); a take on the Story shot it was made for."""
+    from ..final_assembly import assemble_frames, conform_24
+    from ..finals import FinalStore
+    store, clips = FinalStore(q.ws), ClipStore(q.ws)
+    f = await asyncio.to_thread(store.get, recipe.final_id)
+    if f is None:
+        raise ValueError(f"the final {recipe.final_id} is not in the project")
+    tmp = q.ws.temp_dir / f"assemble-{job.id}"
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    def progress(done: int, total: int) -> None:
+        job.progress = done / total
+        job.progress_text = f"compositing {done}/{total}"
+    stats = await asyncio.to_thread(assemble_frames, store, f, tmp / "f16", progress)
+    q.check_cancel(job)
+    paths = sorted((tmp / "f16").glob("*.png"))
+    fps = f.rate
+    conformed = await asyncio.to_thread(conform_24, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
+    if conformed:
+        paths, fps = conformed, 24
+        stats["conform"] = "RIFE v4.6 to 24 fps (D27)"
+    job.log_tail.append(f"assembly: {stats['frames']} frames in {stats['seconds']} s; offsets {stats['offsets_px']}; " + (f"conformed to {len(paths)} at 24 fps" if conformed else f"at {fps} fps"))
+    q.progress(job, "writing the master")
+    parents = [x.still_asset_id for x in f.layers if x.still_asset_id] + [x.reference_asset_id for x in f.layers if x.reference_asset_id]
+    rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="final", preset="draft", prompt=f.name, seed=job.seed, fps=fps,
+                                  start_asset_id=parents[0] if parents else "", beats=[], params={"recipe": recipe.model_dump(), "final_id": f.id, "assembly": stats},
+                                  timings={"assemble_s": stats["seconds"]})
+    q.progress(job, "encoding the proxy")
+    rec = await asyncio.to_thread(clips.encode_proxy, rec)
+    asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
+                                    suite="stage", model_id="final", seed=job.seed, prompt_text=f.name,
+                                    params={"clip_id": rec.id, "final_id": f.id, "recipe": recipe.model_dump(), "assembly": stats},
+                                    timings={"wall_s": q.wall_s()}, parents=parents, lineage_kind="final", frames=rec.frames, w=rec.w, h=rec.h,
+                                    variant=job.variant, origin=job.origin)
+    asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
+    rec.asset_id = asset.id
+    clips.save(rec)
+    shutil.rmtree(tmp, ignore_errors=True)
+    f = await asyncio.to_thread(store.set_result, f.id, rec.id, stats)
+    q.hub.broadcast("asset.created", asset.model_dump())
+    job.result["asset_ids"] = [asset.id]
+    job.result["clip_id"] = rec.id
+    q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
+                                   "origin": job.origin.model_dump() if job.origin else None})
+    q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+    if f.shot_id:                                                                   # the take on the Story shot it was made for
+        await asyncio.to_thread(_shot_takes, q, {"shot_id": f.shot_id}, "clip", [rec.id], False, _run(job, recipe, q))
+    return True
 
 
 async def run_render(job: JobRecord, recipe: Render, q: JobQueue) -> bool:

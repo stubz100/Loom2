@@ -357,6 +357,39 @@
         "title": "AnimTestUpload",
         "type": "object"
       },
+      "AnimateChain": {
+        "description": "D111 (PS5c, E23a's W1): a pose-driven performance in batches — this batch starts where the previous one ended. The previous batch's\nlast `carry` frames continue the motion (`continue_motion`), and the pose guide is read from `offset` on (`video_frame_offset`).",
+        "properties": {
+          "carry": {
+            "default": 5,
+            "maximum": 16,
+            "minimum": 1,
+            "title": "Carry",
+            "type": "integer"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Clip Id"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 4000,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "title": "AnimateChain",
+        "type": "object"
+      },
       "AnimatePanel": {
         "additionalProperties": true,
         "properties": {
@@ -3987,9 +4020,43 @@
       },
       "Final": {
         "properties": {
+          "assembled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembled At"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
           "camera_id": {
             "title": "Camera Id",
             "type": "string"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
           },
           "created_at": {
             "title": "Created At",
@@ -4085,6 +4152,9 @@
           "frames",
           "shot_id",
           "layers",
+          "clip_id",
+          "assembly",
+          "assembled_at",
           "revision",
           "created_at",
           "updated_at"
@@ -4166,6 +4236,14 @@
       },
       "FinalLayer": {
         "properties": {
+          "batches": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Batches",
+            "type": "array"
+          },
           "error": {
             "anyOf": [
               {
@@ -4181,6 +4259,17 @@
             "default": 0,
             "title": "Frames Done",
             "type": "integer"
+          },
+          "guide_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Asset Id"
           },
           "id": {
             "title": "Id",
@@ -4252,6 +4341,22 @@
             ],
             "title": "Profile Id"
           },
+          "reference_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Asset Id"
+          },
+          "seed": {
+            "default": 0,
+            "title": "Seed",
+            "type": "integer"
+          },
           "status": {
             "default": "passes",
             "enum": [
@@ -4301,7 +4406,11 @@
           "error",
           "still_asset_id",
           "frames_done",
-          "job_ids"
+          "job_ids",
+          "seed",
+          "reference_asset_id",
+          "guide_asset_id",
+          "batches"
         ],
         "title": "FinalLayer",
         "type": "object"
@@ -6101,6 +6210,17 @@
             "default": null,
             "title": "Cfg"
           },
+          "chain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnimateChain"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "end_asset": {
             "anyOf": [
               {
@@ -7421,6 +7541,19 @@
           "data"
         ],
         "title": "JobProgressEvent",
+        "type": "object"
+      },
+      "JobQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "JobQueued",
         "type": "object"
       },
       "JobRecord": {
@@ -8766,6 +8899,17 @@
           "default"
         ],
         "title": "Mask",
+        "type": "object"
+      },
+      "MatteBody": {
+        "properties": {
+          "text": {
+            "default": "person",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "MatteBody",
         "type": "object"
       },
       "Mention": {
@@ -12334,6 +12478,51 @@
           "restored"
         ],
         "title": "Restored",
+        "type": "object"
+      },
+      "RunBody": {
+        "properties": {
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "title": "RunBody",
+        "type": "object"
+      },
+      "RunQueued": {
+        "properties": {
+          "batches": {
+            "title": "Batches",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "placed": {
+            "title": "Placed",
+            "type": "boolean"
+          },
+          "reference_asset_id": {
+            "title": "Reference Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "batches",
+          "reference_asset_id",
+          "placed"
+        ],
+        "title": "RunQueued",
         "type": "object"
       },
       "RunStaleBody": {
@@ -19949,6 +20138,49 @@
         ]
       }
     },
+    "/finals/{fid}/assemble": {
+      "post": {
+        "description": "PS5e: composite the final's layers into the shot (a CPU job): the plate under Stage's shadows, the props and the characters in\ndepth order, each character on her shadow (D107); a clip, and a take on the Story shot it was made for.",
+        "operationId": "final_assemble_finals__fid__assemble_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Assemble",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/{lid}/frames": {
       "put": {
         "description": "A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done.",
@@ -20006,6 +20238,130 @@
           }
         },
         "summary": "Final Layer Frames",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/matte": {
+      "post": {
+        "description": "PS5d: matte a performed character layer again (SAM 3 by text on its frames) — it runs by itself after the layer's last batch.",
+        "operationId": "final_layer_matte_finals__fid__layers__lid__matte_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Matte",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/run": {
+      "post": {
+        "description": "PS5c: perform a character layer — its figure's character (the bound Cast version's animation reference) placed where the figure\nstarts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.\nA run again is a re-take of this layer alone.",
+        "operationId": "final_layer_run_finals__fid__layers__lid__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Run",
         "tags": [
           "finals"
         ]

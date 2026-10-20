@@ -26,6 +26,8 @@ CLASSES = [
     "RTDETR_detect", "SDPoseKeypointExtractor", "PreviewAny",
     "CheckpointLoaderSimple", "SAM3_Detect", "CreateBoundingBoxes", "LoadBackgroundRemovalModel", "RemoveBackground", "MaskToImage", "ImageToMask",
     "SolidMask", "FeatherMask", "GrowMask", "InvertMask", "ThresholdMask", "PrimitiveString",
+    # D111 (PS5c): a character layer's carried frames, batched for continue_motion (deprecated in 0.39, as E23a used it)
+    "ImageBatch",
     # LanPaint (custom node, pinned)
     "LanPaint_ImageEncode", "LanPaint_ImageDecode", "LanPaint_SamplerCustomAdvanced", "LanPaint_KSampler",
     # Wan 2.2

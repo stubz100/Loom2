@@ -17,6 +17,9 @@ from .workspace import Workspace
 
 FINAL_SCHEMA_VERSION = 1
 FINAL_PLATE_SURFACE = "final_plate"               # PS5b: origin.surface of the plate's Stage shot; ref = the final's id
+FINAL_LAYER_SURFACE = "final_layer"               # PS5c: origin.surface of a character layer's batch; ref = the final, payload {layer, batch, batches, seed}
+BATCH, CARRY = 77, 5                              # E23a W1: 77-frame batches, the last 5 frames carried into the next (72 new)
+CHARACTER_TAIL = "moving exactly as the pose shows. Plain studio background, static camera."
 PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
 LayerMethod = Literal["projected", "move", "rendered", "drawn", "stage"]
@@ -48,6 +51,10 @@ class FinalLayer(BaseModel):
     still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0)
     frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …
     job_ids: list[str] = Field(default_factory=list)   # the jobs that made (or make) the layer
+    seed: int = 0                                  # PS5c: a character layer's performance seed (a re-take takes another)
+    reference_asset_id: str | None = None          # PS5c: the animation reference placed where the figure starts (E23c: no ghost)
+    guide_asset_id: str | None = None              # PS5c: the pose sequence as one video
+    batches: list[dict[str, Any]] = Field(default_factory=list)   # PS5c: [{k, job_id, clip_id}] in order
 
 
 class Final(BaseModel):
@@ -64,6 +71,9 @@ class Final(BaseModel):
     frames: int                                    # frames per sequence at the rate
     shot_id: str | None = None                     # the Story shot it is made for (its take lands there, PS5e)
     layers: list[FinalLayer] = Field(default_factory=list)
+    clip_id: str | None = None                     # PS5e: the assembled shot
+    assembly: dict[str, Any] | None = None         # PS5e: what the assembly did (offsets, occlusions, time, the conform)
+    assembled_at: str | None = None
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
@@ -81,8 +91,8 @@ def frames_at(start: int, end: int, rate: int) -> list[float]:
 def check(f: Final) -> None:
     if not 2 <= f.frames <= MAX_FRAMES:
         raise ValueError(f"a final has 2 to {MAX_FRAMES} frames (it has {f.frames})")
-    if f.size.get("w", 0) < 64 or f.size.get("h", 0) < 64:
-        raise ValueError("the layers' size is at least 64 × 64")
+    if f.size.get("w", 0) < 128 or f.size.get("h", 0) < 128:
+        raise ValueError("the layers' size is at least 128 × 128 (the video models' smallest)")
     ids = [x.id for x in f.layers]
     if len(set(ids)) != len(ids):
         raise ValueError("layer ids must be unique")
@@ -95,6 +105,114 @@ def check(f: Final) -> None:
         for name in LAYER_PASSES[x.kind]:
             if x.passes.get(name) not in (f.frames,):
                 raise ValueError(f"layer {x.id}: its {name} pass has {x.passes.get(name, 0)} frames, the final {f.frames}")
+
+
+def plan_batches(n: int) -> list[dict[str, int]]:
+    """A performance of n frames in Wan Animate's batches (E23a, W1): one batch of n frames (the model's 4k + 1 grid, at least 9) when it
+    fits, else 77-frame batches, each after the first carrying the previous one's last 5 frames and reading the pose guide from where
+    those 5 began (offsets 0, 77, 149, …: 72 new frames each)."""
+    if n <= BATCH:
+        m = max(9, n)
+        return [{"frames": m + (-(m - 1) % 4), "offset": 0}]
+    count = 1 + -(-(n - BATCH) // (BATCH - CARRY))
+    return [{"frames": BATCH, "offset": 0 if k == 0 else BATCH + (BATCH - CARRY) * (k - 1)} for k in range(count)]
+
+
+def stitch(batches: list[list[Path]], n: int) -> list[Path]:
+    """The batches' frames as one sequence: the first batch whole, every later one without the frames it carried; n frames."""
+    out: list[Path] = []
+    for k, frames in enumerate(batches):
+        out += frames if k == 0 else frames[CARRY:]
+    if len(out) < n:
+        raise ValueError(f"the batches made {len(out)} frames, the final needs {n}")
+    return out[:n]
+
+
+def to_lab(rgb: "np.ndarray") -> "np.ndarray":
+    """sRGB (uint8) to CIE Lab (D65) — the colour distance the key and the assembly measure in."""
+    import numpy as np
+    c = rgb.astype(np.float32) / 255.0
+    c = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+    xyz = c @ np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]], dtype=np.float32).T
+    xyz /= np.array([0.95047, 1.0, 1.08883], dtype=np.float32)
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], axis=-1)
+
+
+def central_blob(m: "np.ndarray") -> "np.ndarray":
+    """The blob of a mask that holds its middle (the set pixel nearest the set pixels' median) — the figure, without specks of the ground
+    the key let through. PIL's flood fill (no scipy here)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    ys, xs = np.nonzero(m)
+    if not len(ys):
+        return m
+    my, mx = np.median(ys), np.median(xs)
+    i = int(np.argmin((ys - my) ** 2 + (xs - mx) ** 2))
+    im = Image.fromarray((m * 255).astype(np.uint8)).copy()                # its own pixels: fromarray may share a read-only buffer
+    ImageDraw.floodfill(im, (int(xs[i]), int(ys[i])), 128, thresh=0)
+    return np.asarray(im) == 128
+
+
+def cutout(ref: Path) -> tuple["np.ndarray", "np.ndarray", tuple[int, int, int]]:
+    """A character off its animation reference's plain ground (CA0 makes it on one): pixels ΔE > 14 from the border's median (Lab), the
+    largest blob, softened (E23c's key). Returns the cropped image, its alpha and the ground colour."""
+    import numpy as np
+    from PIL import Image, ImageFilter
+    a = np.asarray(Image.open(ref).convert("RGB"))
+    lab = to_lab(a)
+    border = np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])
+    m = np.linalg.norm(lab - np.median(border, axis=0), axis=-1) > 14
+    m = central_blob(m)
+    if not m.any():
+        raise ValueError("no figure stands out from the reference's ground")
+    alpha = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float32) / 255.0
+    ys, xs = np.nonzero(alpha > 0.5)
+    ground = tuple(int(v) for v in np.median(np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]), axis=0))
+    return a[ys.min():ys.max() + 1, xs.min():xs.max() + 1], alpha[ys.min():ys.max() + 1, xs.min():xs.max() + 1], ground   # type: ignore[return-value]
+
+
+def place_reference(ref: Path, kp: list[list[float]] | None, w: int, h: int, out: Path) -> bool:
+    """E23c (D105): the animation reference placed where the figure starts — its cut-out scaled to the figure's height in the first frame
+    (nose to ankles is 0.86 of the reference's figure) with its feet on the figure's, on the reference's own ground — so Wan Animate leaves
+    no standing copy of the reference behind (the ghost). False (nothing written) when the figure is not whole in the first frame."""
+    import numpy as np
+    from PIL import Image
+    if not kp or len(kp) < 14:
+        return False
+    k = np.array(kp, dtype=np.float32)
+    needed = [0, 8, 10, 11, 13]                                             # nose, the hips, the ankles (COCO-18)
+    if (k[needed, 2] <= 0).any():
+        return False
+    feet = (k[10, :2] + k[13, :2]) / 2
+    tall = float(np.linalg.norm(k[0, :2] - feet))
+    if tall < 24 or not (0 <= feet[0] < w and 0 <= feet[1] <= h * 1.05):
+        return False
+    img, alpha, ground = cutout(ref)
+    hh = max(8, int(tall / 0.86))
+    ww = max(4, int(img.shape[1] * hh / img.shape[0]))
+    pi = np.asarray(Image.fromarray(img).resize((ww, hh), Image.LANCZOS), dtype=np.float32)
+    pa = np.asarray(Image.fromarray((alpha * 255).astype(np.uint8)).resize((ww, hh), Image.LANCZOS), dtype=np.float32)[..., None] / 255.0
+    canvas = np.full((h, w, 3), ground, dtype=np.float32)
+    cx = float((k[8, 0] + k[11, 0]) / 2)
+    x0, y0 = int(cx - ww / 2), int(feet[1] + 0.045 * tall - hh)
+    sx0, sy0, sx1, sy1 = max(0, -x0), max(0, -y0), min(ww, w - x0), min(hh, h - y0)
+    if sx1 <= sx0 or sy1 <= sy0:
+        return False
+    reg = canvas[y0 + sy0:y0 + sy1, x0 + sx0:x0 + sx1]
+    canvas[y0 + sy0:y0 + sy1, x0 + sx0:x0 + sx1] = reg * (1 - pa[sy0:sy1, sx0:sx1]) + pi[sy0:sy1, sx0:sx1] * pa[sy0:sy1, sx0:sx1]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8)).save(out)
+    return True
+
+
+def character_recipe(f: "Final", layer: "FinalLayer", model_id: str, prompt: str, batch: dict[str, int], clip_id: str | None) -> dict[str, Any]:
+    """One batch of a character layer: Wan Animate Move (Draft) on the layer's pose guide, with its placed reference, at the final's size
+    and rate; a later batch continues the previous one (E23a W1)."""
+    return {"kind": "i2v", "model_id": model_id, "start_asset": layer.reference_asset_id, "prompt_text": prompt, "frames": batch["frames"], "fps": f.rate,
+            "width": f.size["w"], "height": f.size["h"], "preset": "draft", "seeds": [layer.seed],
+            "guide": {"asset_id": layer.guide_asset_id, "kind": "pose", "strength": 1.0},
+            "chain": {"clip_id": clip_id, "carry": CARRY, "offset": batch["offset"]}}
 
 
 class FinalStore:
@@ -161,8 +279,8 @@ class FinalStore:
         self.save(f)
         return f
 
-    def set_frames(self, fid: str, lid: str, files: list[Path]) -> Final:
-        """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done."""
+    def set_frames(self, fid: str, lid: str, files: list[Path], status: str = "done") -> Final:
+        """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done (or runs on: a character's matte)."""
         f = self.get(fid)
         if f is None:
             raise KeyError(fid)
@@ -173,7 +291,22 @@ class FinalStore:
         d.mkdir(parents=True)
         for i, src in enumerate(files):
             shutil.copyfile(src, d / f"{i:04d}.png")
-        return self.update_layer(fid, lid, frames_done=len(files), status="done", error=None)
+        return self.update_layer(fid, lid, frames_done=len(files), status=status, error=None)
+
+    def set_result(self, fid: str, clip_id: str, stats: dict[str, Any]) -> Final:
+        """PS5e: the assembled shot (a clip) and what the assembly did."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        f.clip_id, f.assembly, f.assembled_at = clip_id, stats, utc_now()
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def keypoints(self, fid: str, lid: str) -> list:
+        p = self.folder(fid) / lid / "keypoints.json"
+        return list(read_json(p).get("frames") or []) if p.is_file() else []
 
     def delete(self, fid: str) -> bool:
         d = self.folder(fid)

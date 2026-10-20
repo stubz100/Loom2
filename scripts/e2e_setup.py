@@ -49,6 +49,7 @@ def fake_models(root: Path) -> list[str]:
     specs += registry.lipsync_specs()                                  # D88 XL: Wan2.2 S2V and wav2vec2 (experimental lip-sync)
     specs += [s for s in registry.image_specs() if s.recipes.train]     # LT2: the LoRA bases (the fake trainer never loads them)
     specs += [s for s in registry.load().values() if s.recipes.keypoints]   # CA1b: SDPose + RT-DETR (the fake engine answers with an A-pose person)
+    specs += [registry.get(registry.segment_model("text"))]                   # D111 (PS5d): SAM 3 mattes a character layer (the fake answers a mask a frame)
     for rid in dict.fromkeys(r for s in specs for r in [*s.weights(), *([s.recipes.stage_lora] if s.recipes.stage_lora else []), *([s.recipes.guide_lora] if s.recipes.guide_lora else [])]):
         e = ROSTER_BY_ID[rid]
         p = root / e.folder / e.name

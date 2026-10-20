@@ -792,7 +792,7 @@ test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longe
   }, { timeout: 10_000 }).toBe(`${prop.id} ${v.model_asset_id}`)                                           // saved bound, with the version's model
 })
 
-test('a final shot (D111 PS5a–b): "Make the final shot…" splits a scene into its layers — the plate, a character, a prop, the shadows — and their passes land in a final record at F16; the plate is a Stage shot of the bare set, projected by Stage into its frames', async ({ page }) => {
+test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into its layers — the plate, a character, a prop, the shadows — and their passes land in a final record at F16; the plate is a Stage shot of the bare set, projected by Stage into its frames; the character layer is performed by Wan Animate and matted by SAM 3; the assembly makes the clip', async ({ page }) => {
   test.setTimeout(120_000)
   await openApp(page)
   await openAnimate(page, 'Clay')
@@ -801,8 +801,13 @@ test('a final shot (D111 PS5a–b): "Make the final shot…" splits a scene into
   await dialog.locator('input').fill('Final scene')
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  // a character with an animation reference, bound to the figure (PS5c performs it)
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const who = await api<{ id: string; name: string }>('POST', '/story/profiles', { name: `Fin ${Date.now().toString(36)}`, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
+  await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
   await page.locator('.lib-grid button', { hasText: /^room$/ }).click()
   await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()
+  await page.locator(`.panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
   await page.locator('.lib-grid button', { hasText: /^crate$/ }).click()
   await page.locator('.lib-grid button', { hasText: /^Add light$/ }).click()
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // half a second: 9 frames at F16
@@ -835,6 +840,27 @@ test('a final shot (D111 PS5a–b): "Make the final shot…" splits a scene into
   expect(pf.status).toBe(200)
   await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
   await expect(page.locator('.final-section li[data-kind="plate"] img.still')).toBeVisible()
+  // PS5c: the character layer — its reference (the anim ref; not keyable off a plain ground here, so padded), Wan Animate on the fake engine, one batch of 9
+  await page.locator('.final-section li[data-kind="figure"] button', { hasText: 'Perform' }).click()
+  type Fig = Lay & { batches: { k: number; job_id: string; clip_id: string | null }[]; guide_asset_id: string | null; reference_asset_id: string | null }
+  const figOf = async () => (await api<{ layers: Fig[] }>('GET', `/finals/${fin.id}`)).layers.find((l) => l.id === fin.layers[1].id)!
+  await expect.poll(async () => { const p = await figOf(); return `${p.status} ${p.frames_done}` }, { timeout: 60_000 }).toBe('done 9')
+  const fig = await figOf()
+  expect(fig.batches).toHaveLength(1); expect(fig.batches[0].clip_id).toBeTruthy(); expect(fig.guide_asset_id).toBeTruthy()
+  const perf = (await api<{ items: { id: string; recipe: { kind: string; guide: { kind: string }; chain: { offset: number } | null; frames: number } }[] }>('GET', '/jobs')).items.find((j) => j.id === fig.batches[0].job_id)!
+  expect(perf.recipe.guide.kind).toBe('pose'); expect(perf.recipe.chain?.offset).toBe(0); expect(perf.recipe.frames).toBe(9)
+  await expect(page.locator('.final-section li[data-kind="figure"] button', { hasText: 'Re-take' })).toBeVisible()
+  const matteJob = (await api<{ items: { id: string; kind: string; status: string }[] }>('GET', '/jobs')).items.find((j) => fig.job_ids.includes(j.id) && j.kind === 'matte_sequence')
+  expect(matteJob?.status).toBe('done')                                                                    // PS5d: SAM 3 on the layer's frames, by itself
+  // PS5e: the assembly — the layers composited into a clip on the final
+  await page.locator('.final-section .final-foot button', { hasText: 'Assemble the shot' }).click()
+  type Done = { clip_id: string | null; assembly: { frames: number; conform?: string } | null }
+  await expect.poll(async () => (await api<Done>('GET', `/finals/${fin.id}`)).clip_id, { timeout: 60_000 }).toBeTruthy()
+  const done = await api<Done>('GET', `/finals/${fin.id}`)
+  expect(done.assembly?.frames).toBe(9)
+  const clip = await api<{ frames: number; fps: number }>('GET', `/clips/${done.clip_id}`)
+  expect([`${clip.frames}@${clip.fps}`]).toContain(done.assembly?.conform ? '13@24' : '9@16')                // RIFE when the local tool is there (D27)
+  await expect(page.locator('.final-section [data-play]')).toBeVisible()
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {

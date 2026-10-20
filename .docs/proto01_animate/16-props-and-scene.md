@@ -50,3 +50,10 @@ Mouse-first (D32): every verb is a button and a right-click entry; drags are acc
 | **PS5d · Mattes** | per character layer, SAM 3 by text on every frame, kept inside the figure's Stage mask grown 36 px (E23b) | the mattes hold the character and drop the reference ground |
 | **PS5e · Assembly** | a CPU job: the plate × the shadows, then props and characters in Stage's depth order (a prop nearer than a character hides her), each character set on its shadow by the soles' contact offset (D107), RIFE to 24 fps at F16; a clip, and a take on the Story shot when the final is made for one | the final plays as a clip with the props, characters and shadows in place |
 | **PS5f · The panel and the rig** | the final's panel in Animate: its layers with status, preview and *Re-take*, *Run all*, the cost; the rig acceptance on a two-figure, three-prop, one-light shot with a dolly | the author's walk-through |
+
+## Status of PS5 (2026-10-20)
+
+- **PS5a–e built:** the final and its passes, the projected plate, character layers in chained batches, mattes (SAM 3, or BiRefNet under
+  `open`), the assembly into a clip. The rig's E23 shot ran end to end (journal 2026-10-20 15:09).
+- **D112:** the assembly is the automatic first composite. Hand finishing goes to EffectCraft after spike E27, so PS5f is the panel and
+  the rig acceptance only.

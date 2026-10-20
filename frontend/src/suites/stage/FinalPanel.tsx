@@ -6,43 +6,69 @@ import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
-import { useFinals } from './finalShot'
+import { assembling, batchCount, readyToAssemble, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
 const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
 const POLL_MS = 3000
 
-function statusText(l: FinalLayer, projecting: boolean): string {
+function statusText(l: FinalLayer, projecting: boolean, frames: number): string {
   if (l.kind === 'plate') {
     if (projecting) return 'projecting…'
     if (l.status === 'queued') return 'the still is queued'
     if (l.status === 'running') return l.still_asset_id ? 'projecting next' : 'making the still'
   }
+  if (l.kind === 'figure' && l.status === 'running' && l.frames_done === frames) return 'matting (SAM 3)'   // PS5d
+  if (l.kind === 'figure' && (l.status === 'queued' || l.status === 'running')) {         // PS5c: the batch at work
+    const k = l.batches.filter((b) => b.clip_id).length
+    return `performing · batch ${k + 1} of ${batchCount(frames)}`
+  }
+  if (l.status === 'failed') return `failed${l.error ? `: ${l.error}` : ''}`
   return l.status === 'passes' ? 'passes ready' : l.status === 'done' ? `done · ${l.frames_done} frames` : l.status
 }
 
 function LayerRow({ f, l }: { f: Final; l: FinalLayer }) {
   const projecting = useFinals((s) => s.projecting === f.id)
   const plate = l.kind === 'plate'
+  const working = l.status === 'queued' || l.status === 'running'
+  const retake = () => void useFinals.getState().perform(f.id, l.id, l.seed + 1)
   const menu = plate ? [{ label: l.still_asset_id ? 'Make the plate again' : 'Make the plate', run: () => void useFinals.getState().plate(f.id), disabled: l.status === 'queued' },
-    { label: 'Project the plate again', run: () => void useFinals.getState().project(f.id), disabled: !l.still_asset_id || projecting }] : []
+    { label: 'Project the plate again', run: () => void useFinals.getState().project(f.id), disabled: !l.still_asset_id || projecting }]
+    : l.kind === 'figure' ? [{ label: l.batches.length ? 'Re-take this layer (a new seed)' : 'Perform this layer', run: l.batches.length ? retake : () => void useFinals.getState().perform(f.id, l.id), disabled: working },
+      { label: 'Matte it again', run: () => void useFinals.getState().matte(f.id, l.id), disabled: working || l.frames_done !== f.frames }] : []
   return (
     <li data-kind={l.kind} data-id={l.id} title={`${l.name} — ${KIND_LABEL[l.kind]}, ${METHOD_LABEL[l.method] ?? l.method}; passes: ${Object.entries(l.passes).map(([k, n]) => `${k} ${n}`).join(', ')}`}
       onContextMenu={menu.length ? (e) => { e.preventDefault(); e.stopPropagation(); showMenu(e, menu) } : undefined}>
       <span className="kind">{KIND_LABEL[l.kind]}</span>
       <span className="name">{plate && l.still_asset_id ? <img className="still" src={api.thumbUrl(l.still_asset_id, 256)} alt="" /> : null}{l.name}</span>
-      <span className={`status s-${l.status}`}>{statusText(l, projecting)}</span>
+      <span className={`status s-${l.status}`}>{statusText(l, projecting, f.frames)}</span>
       {plate && (l.status === 'passes' || l.status === 'failed') && <button className="quiet" onClick={() => void useFinals.getState().plate(f.id)} title="A Klein Stage shot of the bare set at the first frame, with the Shot tab's prompt and references (no people, no objects: they are layers)">Make the plate</button>}
+      {l.kind === 'figure' && !working && <button className="quiet" onClick={l.status === 'done' ? retake : () => void useFinals.getState().perform(f.id, l.id)}
+        title={l.status === 'done' ? 'Perform it again with a new seed (the other layers stay)' : "The figure's character (its animation reference, placed where the figure starts) performs its pose sequence through Wan Animate, in 77-frame batches"}>
+        {l.status === 'done' ? 'Re-take' : 'Perform'}</button>}
     </li>
   )
 }
 
 function FinalRow({ f }: { f: Final }) {
+  useFinals((s) => s.finals)                                                   // re-render as the poll reloads (the assembly job's state)
+  const busy = assembling(f.id)
+  const ready = readyToAssemble(f)
   return (
-    <div className="final-row" data-id={f.id} onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ label: 'Delete this final', danger: true, run: () => void useFinals.getState().remove(f.id) }]) }}>
+    <div className="final-row" data-id={f.id} onContextMenu={(e) => { e.preventDefault(); showMenu(e, [
+      { label: 'Assemble the shot', run: () => void useFinals.getState().assemble(f.id), disabled: !ready || busy },
+      { label: 'Play the shot in Animate', run: () => useFinals.getState().play(f.id), disabled: !f.clip_id }, { sep: true },
+      { label: 'Delete this final', danger: true, run: () => void useFinals.getState().remove(f.id) }]) }}>
       <div className="final-head"><b>{f.name}</b><span className="hint">{f.frames} frames at {f.rate} fps · {f.size.w}×{f.size.h} · frames {f.range.start}–{f.range.end}</span></div>
       <ul className="final-layers">{f.layers.map((l) => <LayerRow key={l.id} f={f} l={l} />)}</ul>
+      <div className="final-foot">
+        <button className={ready && !f.clip_id ? 'primary' : 'quiet'} disabled={!ready || busy} onClick={() => void useFinals.getState().assemble(f.id)}
+          title={ready ? 'Composite the layers into the shot: the plate under the shadows, the props and characters in depth order, each character on her shadow' : 'Make every layer first: the plate, and each character performed and matted'}>
+          {busy ? 'Assembling…' : f.clip_id ? 'Assemble again' : 'Assemble the shot'}</button>
+        {f.clip_id && <button className="quiet" data-play onClick={() => useFinals.getState().play(f.id)} title="Play the assembled shot in Animate">Play ▶</button>}
+        {f.assembly && <span className="hint">{f.assembly.frames as number} frames{f.assembly.conform ? ' · 24 fps (RIFE)' : ''} · offsets {Object.entries((f.assembly.offsets_px ?? {}) as Record<string, number[]>).map(([k, v]) => `${k} ${v[0]}/${v[1]}`).join(', ') || '—'}</span>}
+      </div>
     </div>
   )
 }

@@ -773,6 +773,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/assemble": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Assemble
+         * @description PS5e: composite the final's layers into the shot (a CPU job): the plate under Stage's shadows, the props and the characters in
+         *     depth order, each character on her shadow (D107); a clip, and a take on the Story shot it was made for.
+         */
+        post: operations["final_assemble_finals__fid__assemble_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/frames": {
         parameters: {
             query?: never;
@@ -787,6 +808,48 @@ export interface paths {
          */
         put: operations["final_layer_frames_finals__fid__layers__lid__frames_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/matte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Layer Matte
+         * @description PS5d: matte a performed character layer again (SAM 3 by text on its frames) — it runs by itself after the layer's last batch.
+         */
+        post: operations["final_layer_matte_finals__fid__layers__lid__matte_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Layer Run
+         * @description PS5c: perform a character layer — its figure's character (the bound Cast version's animation reference) placed where the figure
+         *     starts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.
+         *     A run again is a re-take of this layer alone.
+         */
+        post: operations["final_layer_run_finals__fid__layers__lid__run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2882,6 +2945,28 @@ export interface components {
              */
             stage?: boolean;
         };
+        /**
+         * AnimateChain
+         * @description D111 (PS5c, E23a's W1): a pose-driven performance in batches — this batch starts where the previous one ended. The previous batch's
+         *     last `carry` frames continue the motion (`continue_motion`), and the pose guide is read from `offset` on (`video_frame_offset`).
+         */
+        AnimateChain: {
+            /**
+             * Carry
+             * @default 5
+             */
+            carry?: number;
+            /**
+             * Clip Id
+             * @default null
+             */
+            clip_id?: string | null;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset?: number;
+        };
         /** AnimatePanel */
         AnimatePanel: {
             /** Name */
@@ -4277,8 +4362,16 @@ export interface components {
         };
         /** Final */
         Final: {
+            /** Assembled At */
+            assembled_at: string | null;
+            /** Assembly */
+            assembly: {
+                [key: string]: unknown;
+            } | null;
             /** Camera Id */
             camera_id: string;
+            /** Clip Id */
+            clip_id: string | null;
             /** Created At */
             created_at: string;
             /** Frames */
@@ -4360,6 +4453,10 @@ export interface components {
         };
         /** FinalLayer */
         FinalLayer: {
+            /** Batches */
+            batches: {
+                [key: string]: unknown;
+            }[];
             /** Error */
             error: string | null;
             /**
@@ -4367,6 +4464,8 @@ export interface components {
              * @default 0
              */
             frames_done: number;
+            /** Guide Asset Id */
+            guide_asset_id: string | null;
             /** Id */
             id: string;
             /** Job Ids */
@@ -4396,6 +4495,13 @@ export interface components {
             };
             /** Profile Id */
             profile_id: string | null;
+            /** Reference Asset Id */
+            reference_asset_id: string | null;
+            /**
+             * Seed
+             * @default 0
+             */
+            seed: number;
             /**
              * Status
              * @default passes
@@ -5173,6 +5279,8 @@ export interface components {
              * @default null
              */
             cfg?: number | null;
+            /** @default null */
+            chain?: components["schemas"]["AnimateChain"] | null;
             /**
              * End Asset
              * @default null
@@ -5737,6 +5845,11 @@ export interface components {
              */
             type: "job.progress";
         };
+        /** JobQueued */
+        JobQueued: {
+            /** Job Id */
+            job_id: string;
+        };
         /** JobRecord */
         JobRecord: {
             /** Batch Id */
@@ -6293,6 +6406,14 @@ export interface components {
              * @default 0
              */
             y: number;
+        };
+        /** MatteBody */
+        MatteBody: {
+            /**
+             * Text
+             * @default person
+             */
+            text?: string;
         };
         /**
          * Mention
@@ -7666,6 +7787,22 @@ export interface components {
         Restored: {
             /** Restored */
             restored: string[];
+        };
+        /** RunBody */
+        RunBody: {
+            /** Seed */
+            seed?: number | null;
+        };
+        /** RunQueued */
+        RunQueued: {
+            /** Batches */
+            batches: number;
+            /** Job Id */
+            job_id: string;
+            /** Placed */
+            placed: boolean;
+            /** Reference Asset Id */
+            reference_asset_id: string;
         };
         /** RunStaleBody */
         RunStaleBody: {
@@ -11237,6 +11374,37 @@ export interface operations {
             };
         };
     };
+    final_assemble_finals__fid__assemble_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_layer_frames_finals__fid__layers__lid__frames_put: {
         parameters: {
             query?: never;
@@ -11260,6 +11428,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_layer_matte_finals__fid__layers__lid__matte_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_layer_run_finals__fid__layers__lid__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunQueued"];
                 };
             };
             /** @description Validation Error */

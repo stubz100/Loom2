@@ -152,6 +152,8 @@ interface StageState {
   clipCaps: () => ClipCaps | null
   /** Frames the next sequence covers: the range on the method's frame grid, capped at its window. */
   guideFrames: () => number
+  /** D111 (PS5a): wait for the pending save, so a render names the stage's saved revision. */
+  flush: () => Promise<void>
   setShotStart: (id: string | null) => void
   guideEntry: () => GuideEntry | null
   guideSize: () => [number, number]                         // the clip model's grid at the project's aspect
@@ -321,6 +323,7 @@ export const useStage = create<StageState>()((set, get) => ({
   setGuideKind: (guideKind) => set({ guideKind: get().clipMethod === 'animate' ? 'pose' : guideKind }),
   setClipMethod: (clipMethod) => set({ clipMethod, guideKind: clipMethod === 'animate' ? 'pose' : get().guideKind }),     // Animate performs the pose pass
   clipCaps: () => { const st = useSession.getState().capabilities?.stage; return ((get().clipMethod === 'animate' ? st?.animate : st?.clip) ?? null) as ClipCaps | null },
+  flush: () => flushSave(get, set),
   guideFrames: () => {
     const cur = get().current, c = get().clipCaps()
     if (!cur) return 0

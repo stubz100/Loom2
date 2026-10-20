@@ -3985,6 +3985,407 @@
         "title": "FilterLayer",
         "type": "object"
       },
+      "Final": {
+        "properties": {
+          "camera_id": {
+            "title": "Camera Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/FinalLayer"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "name": {
+            "default": "Final",
+            "title": "Name",
+            "type": "string"
+          },
+          "range": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Range",
+            "type": "object"
+          },
+          "rate": {
+            "default": 16,
+            "enum": [
+              16,
+              24
+            ],
+            "title": "Rate",
+            "type": "integer"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          },
+          "stage_id": {
+            "title": "Stage Id",
+            "type": "string"
+          },
+          "stage_revision": {
+            "title": "Stage Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "name",
+          "stage_id",
+          "camera_id",
+          "stage_revision",
+          "range",
+          "rate",
+          "size",
+          "frames",
+          "shot_id",
+          "layers",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Final",
+        "type": "object"
+      },
+      "FinalCreate": {
+        "properties": {
+          "camera_id": {
+            "title": "Camera Id",
+            "type": "string"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/FinalLayerIn"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "name": {
+            "default": "Final",
+            "title": "Name",
+            "type": "string"
+          },
+          "range": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Range",
+            "type": "object"
+          },
+          "rate": {
+            "default": 16,
+            "title": "Rate",
+            "type": "integer"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Size",
+            "type": "object"
+          },
+          "stage_id": {
+            "title": "Stage Id",
+            "type": "string"
+          },
+          "stage_revision": {
+            "title": "Stage Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stage_id",
+          "camera_id",
+          "stage_revision",
+          "range",
+          "size",
+          "frames"
+        ],
+        "title": "FinalCreate",
+        "type": "object"
+      },
+      "FinalLayer": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keypoints": {
+            "default": false,
+            "title": "Keypoints",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "plate",
+              "figure",
+              "prop",
+              "shadows"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "method": {
+            "enum": [
+              "projected",
+              "move",
+              "rendered",
+              "drawn",
+              "stage"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "passes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Passes",
+            "type": "object"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "status": {
+            "default": "passes",
+            "enum": [
+              "passes",
+              "queued",
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "object_id",
+          "method",
+          "profile_id",
+          "version",
+          "passes",
+          "keypoints",
+          "status",
+          "error"
+        ],
+        "title": "FinalLayer",
+        "type": "object"
+      },
+      "FinalLayerIn": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keypoints": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keypoints"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "passes": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Passes",
+            "type": "object"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "passes"
+        ],
+        "title": "FinalLayerIn",
+        "type": "object"
+      },
+      "FinalList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Final"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FinalList",
+        "type": "object"
+      },
       "FlattenRequest": {
         "properties": {
           "name": {
@@ -19290,6 +19691,245 @@
         "summary": "Engine Stop",
         "tags": [
           "engine"
+        ]
+      }
+    },
+    "/finals": {
+      "get": {
+        "operationId": "finals_list_finals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "stage_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finals List",
+        "tags": [
+          "finals"
+        ]
+      },
+      "post": {
+        "description": "PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk.",
+        "operationId": "final_create_finals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Create",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}": {
+      "delete": {
+        "operationId": "final_delete_finals__fid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Delete",
+        "tags": [
+          "finals"
+        ]
+      },
+      "get": {
+        "operationId": "final_get_finals__fid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Get",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/{name}/{n}": {
+      "get": {
+        "description": "A layer's pass (or own) frame as PNG — the panel's previews.",
+        "operationId": "final_frame_finals__fid__layers__lid___name___n__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "n",
+            "required": true,
+            "schema": {
+              "title": "N",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Frame",
+        "tags": [
+          "finals"
         ]
       }
     },

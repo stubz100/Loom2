@@ -16,6 +16,7 @@ import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter, LibraryProps, MeshProp } from './FigureBinding'
 import { AmbientControl, LightControls } from './LightControls'
+import { FinalSection } from './FinalPanel'
 import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
@@ -337,6 +338,7 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
       {!stills.length && <span className="hint">None yet — the frames of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
       <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
       {!stillsOnly && <ClipSection clips={clips} />}
+      {!stillsOnly && <FinalSection />}{/* D111 (PS5) */}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
+import { useFinals } from './finalShot'
 import type { HandPreset } from './detailed'
 import { profilesForMentions } from '../story/storyStore'
 import { useMotion } from './motion/motionStore'
@@ -107,6 +108,9 @@ registerCommands([
   { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here (out)', icon: Diamond, keys: 'O', placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
   { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().guideEntry() && !!st().shotStart && !st().rendering && !!st().clipCaps(), run: () => void st().animateShot() },
+  // D111 (PS5): the finished scene split into layers (the passes rendered here; the layers are made from them on the queue)
+  { id: 'stage.final.make', scope: 'stage', label: 'Make the final shot…', icon: Layers, hint: 'the scene through the active camera, split into layers: the plate, each character, each prop, the shadows',
+    placement: ['panel'], when: () => hasStage() && !!st().activeCamera() && !useFinals.getState().making && !st().rendering, run: () => void useFinals.getState().make(16) },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])

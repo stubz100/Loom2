@@ -792,6 +792,38 @@ test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longe
   }, { timeout: 10_000 }).toBe(`${prop.id} ${v.model_asset_id}`)                                           // saved bound, with the version's model
 })
 
+test('a final shot (D111 PS5a): "Make the final shot…" splits a scene into its layers — the plate, a character, a prop, the shadows — and their passes land in a final record at F16', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openApp(page)
+  await openAnimate(page, 'Clay')
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Final scene')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.lib-grid button', { hasText: /^room$/ }).click()
+  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()
+  await page.locator('.lib-grid button', { hasText: /^crate$/ }).click()
+  await page.locator('.lib-grid button', { hasText: /^Add light$/ }).click()
+  await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // half a second: 9 frames at F16
+  await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
+  await expect(dialog).toContainText(/4 layers/)
+  await expect(dialog).toContainText(/9 frames/)
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.final-section .final-row')).toBeVisible({ timeout: 60_000 })
+  type Fin = { id: string; frames: number; rate: number; stage_id: string; layers: { id: string; kind: string; method: string; passes: Record<string, number>; keypoints: boolean; status: string }[] }
+  const stages = await api<{ items: { id: string; name: string }[] }>('GET', '/stages')
+  const stage = stages.items.find((s) => s.name === 'Final scene')!
+  const fin = (await api<{ items: Fin[] }>('GET', `/finals?stage_id=${stage.id}`)).items[0]
+  expect(fin.frames).toBe(9); expect(fin.rate).toBe(16)
+  expect(fin.layers.map((l) => `${l.kind}/${l.method}`)).toEqual(['plate/projected', 'figure/move', 'prop/rendered', 'shadows/stage'])
+  expect(fin.layers.every((l) => Object.values(l.passes).every((n) => n === 9) && l.status === 'passes')).toBe(true)
+  expect(fin.layers[1].keypoints).toBe(true)                                                                // the figure's keypoints, for where it starts
+  const r = await fetch(`http://127.0.0.1:${env().port}/finals/${fin.id}/layers/${fin.layers[1].id}/pose/0`, { headers: { 'X-Loom-Token': env().token } })
+  expect(r.status).toBe(200); expect(r.headers.get('content-type')).toContain('image/png')
+  await expect(page.locator('.final-section .final-layers li')).toHaveCount(4)
+})
+
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {
   await openApp(page, { suite: 'story' })
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Story/)

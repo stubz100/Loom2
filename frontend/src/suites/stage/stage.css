@@ -120,3 +120,13 @@
 .light-controls .range-row input[type=range] { flex: 1; min-width: 80px; }
 .light-controls .looks { display: flex; gap: 4px; flex-wrap: wrap; }
 .stage-insp .range-row { display: flex; gap: 6px; align-items: center; }
+/* D111 (PS5): the final shot */
+.final-section .final-row { border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 8px; margin-top: 6px; }
+.final-section .final-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.final-section .final-layers { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.final-section .final-layers li { display: grid; grid-template-columns: 72px 1fr auto; gap: 6px; font-size: 12px; }
+.final-section .final-layers .kind { color: var(--fg3); }
+.final-section .final-layers .status { color: var(--fg3); }
+.final-section .final-layers .status.s-done { color: var(--keep); }
+.final-section .final-layers .status.s-failed { color: var(--reject); }
+.final-section .final-progress { display: flex; gap: 6px; align-items: center; }

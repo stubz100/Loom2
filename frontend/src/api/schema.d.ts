@@ -734,6 +734,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Finals List */
+        get: operations["finals_list_finals_get"];
+        put?: never;
+        /**
+         * Final Create
+         * @description PS5a: a final from the scene's layers — the record and each layer's passes (Stage's renders at the shot's rate) on disk.
+         */
+        post: operations["final_create_finals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Final Get */
+        get: operations["final_get_finals__fid__get"];
+        put?: never;
+        post?: never;
+        /** Final Delete */
+        delete: operations["final_delete_finals__fid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/{name}/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Final Frame
+         * @description A layer's pass (or own) frame as PNG — the panel's previews.
+         */
+        get: operations["final_frame_finals__fid__layers__lid___name___n__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups": {
         parameters: {
             query?: never;
@@ -4174,6 +4233,157 @@ export interface components {
              * @default true
              */
             visible: boolean;
+        };
+        /** Final */
+        Final: {
+            /** Camera Id */
+            camera_id: string;
+            /** Created At */
+            created_at: string;
+            /** Frames */
+            frames: number;
+            /** Id */
+            id: string;
+            /** Layers */
+            layers: components["schemas"]["FinalLayer"][];
+            /**
+             * Name
+             * @default Final
+             */
+            name: string;
+            /** Range */
+            range: {
+                [key: string]: number;
+            };
+            /**
+             * Rate
+             * @default 16
+             * @enum {integer}
+             */
+            rate: 16 | 24;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Shot Id */
+            shot_id: string | null;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+            /** Stage Id */
+            stage_id: string;
+            /** Stage Revision */
+            stage_revision: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** FinalCreate */
+        FinalCreate: {
+            /** Camera Id */
+            camera_id: string;
+            /** Frames */
+            frames: number;
+            /** Layers */
+            layers?: components["schemas"]["FinalLayerIn"][];
+            /**
+             * Name
+             * @default Final
+             */
+            name?: string;
+            /** Range */
+            range: {
+                [key: string]: number;
+            };
+            /**
+             * Rate
+             * @default 16
+             */
+            rate?: number;
+            /** Shot Id */
+            shot_id?: string | null;
+            /** Size */
+            size: {
+                [key: string]: number;
+            };
+            /** Stage Id */
+            stage_id: string;
+            /** Stage Revision */
+            stage_revision: number;
+        };
+        /** FinalLayer */
+        FinalLayer: {
+            /** Error */
+            error: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Keypoints
+             * @default false
+             */
+            keypoints: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "plate" | "figure" | "prop" | "shadows";
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "projected" | "move" | "rendered" | "drawn" | "stage";
+            /** Name */
+            name: string;
+            /** Object Id */
+            object_id: string | null;
+            /** Passes */
+            passes: {
+                [key: string]: number;
+            };
+            /** Profile Id */
+            profile_id: string | null;
+            /**
+             * Status
+             * @default passes
+             * @enum {string}
+             */
+            status: "passes" | "queued" | "running" | "done" | "failed";
+            /** Version */
+            version: string | null;
+        };
+        /** FinalLayerIn */
+        FinalLayerIn: {
+            /** Id */
+            id: string;
+            /** Keypoints */
+            keypoints?: unknown[] | null;
+            /** Kind */
+            kind: string;
+            /** Method */
+            method?: string | null;
+            /** Name */
+            name: string;
+            /** Object Id */
+            object_id?: string | null;
+            /** Passes */
+            passes: {
+                [key: string]: string[];
+            };
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /** FinalList */
+        FinalList: {
+            /** Items */
+            items: components["schemas"]["Final"][];
         };
         /** FlattenRequest */
         FlattenRequest: {
@@ -10818,6 +11028,166 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EngineState"];
+                };
+            };
+        };
+    };
+    finals_list_finals_get: {
+        parameters: {
+            query?: {
+                stage_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_create_finals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_get_finals__fid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_delete_finals__fid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_frame_finals__fid__layers__lid___name___n__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+                name: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

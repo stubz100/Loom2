@@ -6844,3 +6844,25 @@ mask's sense (the model reads 1 − mask: known = 1).
   - every layer kept as a PNG sequence with alpha, so AE1 takes them later.
 - **Plan:** proto01_animate/16 §PS5 — PS5a the final and its passes, PS5b the plate, PS5c character layers, PS5d mattes, PS5e
   assembly, PS5f the panel and the rig.
+
+## 2026-10-20 13:39 — D111 PS5a built: the final and its passes
+
+- **Server:** `finals.py` + `routes/finals.py`.
+  - A **final** (`finals/<id>/final.json`, schema 1) names its stage, camera, revision, range, rate (F16 by default, D102), size,
+    frames and its layers: one plate, one shadows, a figure or prop layer per Stage object, each with its method (plate *projected*,
+    figure *move*, prop *rendered*, shadows *stage*) and its passes.
+  - The passes are PNG sequences (`finals/<id>/<layer>/<pass>/NNNN.png`) copied from uploaded blobs; one blob may stand for many
+    frames (a still camera). Folders are written first and the record last, so a refused final leaves nothing.
+  - **Routes:** `POST /finals`, `GET /finals?stage_id=`, `GET /finals/{id}`, `GET /finals/{id}/layers/{lid}/{pass}/{n}` (a PNG,
+    also with the media key for `<img>`), `DELETE /finals/{id}`.
+- **Client:** `stage/finalShot.ts`.
+  - `planFinal` is the layers of a scene: the plate, each visible figure, prop, 3D model or image plane, the shadows.
+  - `makeFinal` renders the passes through the active camera at the rate's times (every 1.5th Stage frame at F16): the bare set's depth
+    and lit clay; each figure alone with the set, its pose (and keypoints) and depth; each prop alone, its beauty (R1) and depth;
+    everything lit (the shadows). Each frame is uploaded once by its hash.
+  - Animate's Shot section has a **Final shot** list (`FinalPanel.tsx`) with *Make the final shot…*, which first says the layers,
+    frames and size.
+- **Tests:** `test_finals_d111.py` (2); `finalShot.test.ts` (2); the route snapshot (+5) and the contract's non-JSON list (+1);
+  e2e +1 (a scene with the room, a figure, a crate and a light, split into 4 layers of 9 frames at F16, a pose frame served);
+  offline 458 under full and open; Vitest 386 + 3; e2e 49/49 under full and open; lint 75; build clean.
+- **Next:** PS5b, the plate — a Klein Stage shot of the bare set, projected along the camera path.

@@ -129,6 +129,7 @@
  "POST /groups/{gid}/ungroup",
  "POST /heal",
  "POST /jobs",
+ "POST /jobs/batch",
  "POST /jobs/{job_id}/cancel",
  "POST /jobs/{job_id}/release",
  "POST /jobs/{job_id}/requeue",

@@ -272,6 +272,13 @@ class JobQueue:
         return recipe
 
     # ---- API --------------------------------------------------------------------------------------
+    def check(self, recipe_data: dict) -> None:
+        """D115: what `submit` would refuse (the recipe's shape, its models, its plan), without queueing anything — a batch checks every
+        item first, so a refused item leaves no job behind."""
+        recipe = parse_recipe(recipe_data)
+        self._validate_models(recipe)
+        plan(recipe, self.app.settings.variant)
+
     def submit(self, recipe_data: dict, stage: bool = False, origin: JobOrigin | None = None, batch_id: str | None = None) -> list[JobRecord]:
         """`batch_id`: join an existing batch (17 §3b Expand: one job per coverage cell, one batch) instead of making one per multi-seed submit."""
         recipe = parse_recipe(recipe_data)

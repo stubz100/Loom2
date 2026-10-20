@@ -204,9 +204,18 @@ const cmds: Command[] = [
   { id: 'story.cast.new', scope: 'story', label: 'New character…', icon: UserPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('character') },
   { id: 'story.cast.newPlace', scope: 'story', label: 'New place…', icon: MapPinPlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('place') },
   { id: 'story.cast.newProp', scope: 'story', label: 'New prop…', icon: PackagePlus, placement: ['panel', 'context'], when: () => !!useSession.getState().project?.open, run: () => void newProfile('prop') },
-  { id: 'story.cast.expand', scope: 'story', label: 'Expand…', icon: Sparkles, keys: 'Ctrl+Enter', placement: ['panel', 'inspector', 'context'],
+  // D115: Expand lives in Image — the character as the subject, Full coverage pre-picked in the Poses section, Expand ▶ runs it
+  { id: 'story.cast.expand', scope: 'story', label: 'Expand in Image…', icon: Sparkles, keys: 'Ctrl+Enter', placement: ['panel', 'inspector', 'context'],
     when: () => openVersion() && !!version()?.hero_asset_id && !!useSession.getState().capabilities?.story?.model_id && !sy().expanding,
-    run: () => void askExpand(sy().world ? 'full' : 'full', 1, 'draft') },
+    run: () => { const p = profile(); const v = version(); if (!p || !v) return
+      void Promise.all([import('../generate/generateStore'), import('../../frame/suiteRegistry')]).then(([g, r]) => {
+        const gs = g.useGenerate.getState(); gs.useAsSubject(p)
+        const story = useSession.getState().capabilities?.story
+        if (story?.model_id) gs.set({ model_id: story.model_id })          // the model Expand ran on in Cast: it takes the hero as a reference and renders the same person
+        const plan = ((story?.presets as Record<string, { plan?: { shot: string; angle: string; expression: string }[] }> | undefined)?.full?.plan ?? [])
+        gs.setPoses({ cells: plan.map((c) => ({ shot: c.shot, angle: c.angle, expression: c.expression })), expressions: Array.from(new Set(plan.map((c) => c.expression))) })
+        gs.setRun('expand'); r.setRailTab('generate', 'poses'); useSession.getState().setSuite('generate')
+        useSession.getState().toast(`${p.name} ${v.id}: pick the poses, then Expand ▶ — the images land as its candidates`, 'info') }) } },
   { id: 'story.cast.keep', scope: 'story', label: 'Add to the reference set', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
     run: () => void sy().curate(picked(), 'keep') },
   { id: 'story.cast.reject', scope: 'story', label: 'Reject', icon: X, keys: 'X', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,

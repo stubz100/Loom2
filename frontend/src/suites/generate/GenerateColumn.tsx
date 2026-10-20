@@ -6,6 +6,7 @@
 // letters — and a subject card picks a Cast character or prop by its hero image. D93 (C6): the scene picks a Cast place the same way (its
 // sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
+import { PosesSection } from './Poses'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
@@ -35,7 +36,7 @@ import { useMentions } from './useMentions'
 const ASPECTS: [string, number, number][] = [['16:9', 16, 9], ['1:1', 1, 1], ['3:2', 3, 2], ['2:3', 2, 3], ['9:16', 9, 16], ['21:9', 21, 9]]
 const snap16 = (n: number) => Math.max(64, Math.round(n / 16) * 16)
 /** The column's sections in order; the rail's buttons carry the same ids (GenerateSuite.tsx). */
-const SECTION_IDS = ['presets', 'prompt', 'refs', 'look', 'camera', 'model', 'size'] as const
+const SECTION_IDS = ['presets', 'prompt', 'refs', 'look', 'camera', 'model', 'size', 'poses'] as const   // D115: Poses (Expand)
 
 // ------------------------------------------------------------------ presets as icons
 /** The values a field's text already holds: one for a replace field (lens, f-number…), the comma-separated parts otherwise. */
@@ -605,6 +606,7 @@ export function GenerateColumn({ tab }: { tab: string }) {
       <CameraSection />
       <ModelSection />
       <SizeSection />
+      <PosesSection />{/* D115: the poses Expand runs */}
       <PreviewSection />
     </div>
   )

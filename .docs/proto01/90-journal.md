@@ -7172,3 +7172,33 @@ The author asked for a review of the state of things, then "record all this and 
   switch, the Poses section (shot sizes × angles as tiles, expressions as chips, the presets as quick picks), one job per cell from the
   panel with the pose fields replaced, the results on the linked character's candidates page with the cell recorded (Cast's curation and
   coverage grid unchanged), Cast's *Expand…* jumping into it. Built next; AE2c–d follow it.
+
+## 2026-10-20 22:02 — D115 built: Image's Expand — the poses as icon tiles, one job per cell from the panel, the results as the character's candidates
+
+- **The foot:** a **Generate | Expand** switch under the prompt (`gen.run.generate` / `gen.run.expand`); the primary button reads
+  *Generate N ▶* or *Expand N ▶* (N = the cells × the panel's count); Ctrl+Enter and Queue follow the switch. In Expand with no pose chosen
+  the foot says so instead of running.
+- **The Poses section** (`Poses.tsx`, the rail's Poses tab, at the bottom of the column): a grid of **tiles** — the shot sizes (close-up,
+  portrait, waist-up, full-body) by the angles (front, the three-quarters, the profiles, back), each an icon of the framing and the
+  head's turn (a hollow head for the back) — toggled by a click; the **expressions as chips** (neutral, smile, serious, sad, surprised)
+  that a chosen tile takes and that add to or drop from every chosen tile; the **five presets as quick picks** (their exact cells, from
+  `/capabilities.story.presets[].plan`); *clear*; the line under it says where the images land. The vocabulary and the phrases come from
+  `/capabilities.story.coverage` (T8: what the server composes), never a second copy in the page.
+- **What Expand runs** (`expandCells`, `recipeForCell`): the cells in the coverage's order; for each, the panel's recipe as it stands
+  (the model, the size, the style, the LoRAs, the references, the mentions and the sheet) with the pose content replaced — every subject's
+  `action`, `pose` and `position` dropped, the linked (else the first) subject's `pose` the cell's expression, the tree's `composition`
+  the shot's phrase, `camera.angle` the angle's; in Text mode the cell's sentence appended; a JSON prompt read as a tree first. One
+  `POST /jobs/batch` (new: several recipes as one batch under one id, each with its own origin; a refused item refuses the submit) —
+  with a Cast character linked in the prompt, the origin is the casting run's (`cast`, D93 A1: the version's candidates page, made when
+  it has none) plus the cell, so every image lands as that version's candidate with `coverage_cell` recorded and Cast's keep / reject
+  and coverage grid work unchanged; without one, an ordinary batch in the Catalogue. More than 8 images ask first, with the minutes.
+- **Cast's *Expand in Image…*** jumps there: the character as the Tree's subject (its reference set and LoRA follow), Full coverage's
+  cells pre-picked, the Poses tab open, Expand on. The server's `/story/profiles/{pid}/expand` stays for scripts and rigs.
+- **Tests:** `poses.test` +3 (the cells' order and duplicates; a tree prompt's pose content replaced, the rest kept, the panel untouched;
+  the first subject without a link, Text mode, an id without a phrase); `test_jobs_batch_d115` (+1: four jobs of one batch from two cells
+  with two seeds, staged, their origins and cells; a refused item → 422; an empty list → 422); the cast e2e scenario rewritten — Cast's
+  *Expand…* lands in Image with Full coverage's tiles on, the scenario clears, keeps two expressions and three close-up tiles (six cells),
+  *Expand 6 ▶*, six `cast` jobs in one batch with their cells, six candidates on the page with their poses, then Cast's keep / reject
+  and the training as before. Offline: 479 passed, 1 warning in 140.12s (0:02:20) (full), 479 passed in 137.15s (0:02:17) (open); e2e 49 passed (3.2m) / 49 passed (3.0m); Vitest 392 + 3; build clean; lint 75.
+- **Later:** body poses (standing, sitting, walking, the A-pose) as a second row of tiles; the Cast Expand dialog's preset / seeds /
+  size form is no longer needed.

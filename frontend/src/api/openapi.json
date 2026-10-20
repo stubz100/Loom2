@@ -2559,6 +2559,51 @@
         "title": "ContentAwareCaps",
         "type": "object"
       },
+      "CoverageCaps": {
+        "description": "The coverage vocabulary, and (D115) the phrases a cell puts in the prompt — T8: the page shows what the server composes.",
+        "properties": {
+          "angles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Angles",
+            "type": "array"
+          },
+          "expressions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expressions",
+            "type": "array"
+          },
+          "phrases": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Phrases",
+            "type": "object"
+          },
+          "shots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shots",
+          "angles",
+          "expressions",
+          "phrases"
+        ],
+        "title": "CoverageCaps",
+        "type": "object"
+      },
       "CurateBody": {
         "properties": {
           "asset_ids": {
@@ -8098,6 +8143,53 @@
         "title": "JobSubmit",
         "type": "object"
       },
+      "JobsBatchItem": {
+        "properties": {
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOrigin-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipe": {
+            "additionalProperties": true,
+            "title": "Recipe",
+            "type": "object"
+          }
+        },
+        "required": [
+          "recipe"
+        ],
+        "title": "JobsBatchItem",
+        "type": "object"
+      },
+      "JobsBatchSubmit": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobsBatchItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "stage": {
+            "default": false,
+            "title": "Stage",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "JobsBatchSubmit",
+        "type": "object"
+      },
       "JobsSubmitted": {
         "properties": {
           "jobs": {
@@ -10493,6 +10585,30 @@
           "extra"
         ],
         "title": "Pose",
+        "type": "object"
+      },
+      "PoseCellCaps": {
+        "description": "D115: one coverage cell — a shot size, an angle, an expression (the Poses section's tiles and chips).",
+        "properties": {
+          "angle": {
+            "title": "Angle",
+            "type": "string"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "shot": {
+            "title": "Shot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot",
+          "angle",
+          "expression"
+        ],
+        "title": "PoseCellCaps",
         "type": "object"
       },
       "PoseLibrary": {
@@ -14617,14 +14733,7 @@
         "description": "17 §3b (D85): the model Expand runs on in this build, its health and warm seconds, the presets with their cell counts, the coverage vocabulary.",
         "properties": {
           "coverage": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "title": "Coverage",
-            "type": "object"
+            "$ref": "#/components/schemas/CoverageCaps"
           },
           "health": {
             "title": "Health",
@@ -14772,12 +14881,21 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "plan": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PoseCellCaps"
+            },
+            "title": "Plan",
+            "type": "array"
           }
         },
         "required": [
           "label",
           "hint",
-          "cells"
+          "cells",
+          "plan"
         ],
         "title": "StoryPresetCaps",
         "type": "object"
@@ -22041,6 +22159,48 @@
           }
         },
         "summary": "Jobs Submit",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/batch": {
+      "post": {
+        "description": "D115: the items as one batch under one batch id (Image's Expand ▶: one job per pose cell); every item is checked first, so a\nrefused item refuses the whole submit and leaves no job behind.",
+        "operationId": "jobs_submit_batch_jobs_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobsBatchSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsSubmitted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Jobs Submit Batch",
         "tags": [
           "jobs"
         ]

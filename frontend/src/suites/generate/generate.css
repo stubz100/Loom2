@@ -121,6 +121,19 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; }
 .subject .head .linked-to img, .subject .head .linked-to .glyph { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; color: var(--fg3); }
 .subject .head .linked-to button { margin-left: 2px; min-height: 0; padding: 0 4px; font-size: 11px; }
 .subject > .preset-icons { grid-column: 1 / -1; }
+/* D115: the Poses section (Expand) and the foot's run switch */
+.run-switch { display: inline-flex; margin-bottom: 6px; }
+.pose-presets { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.pose-grid { display: grid; gap: 3px; align-items: center; font-size: 11px; color: var(--fg3); }
+.pose-grid .pose-col { text-align: center; }
+.pose-grid .pose-row { text-transform: capitalize; padding-right: 4px; }
+.pose-grid .pose-tile { position: relative; padding: 2px; border: 1px solid var(--line2); border-radius: 4px; background: transparent; color: var(--fg2); display: grid; place-items: center; cursor: pointer; }
+.pose-grid .pose-tile:hover { border-color: var(--fg3); }
+.pose-grid .pose-tile.on { border-color: var(--accent); color: var(--fg); background: var(--overlay); }
+.pose-grid .pose-tile .badge { position: absolute; right: 1px; bottom: 1px; font-size: 9px; background: var(--accent); color: var(--bg); border-radius: 999px; padding: 0 4px; }
+.pose-chips { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+.pose-chips .chip { border: 1px solid var(--line2); border-radius: 999px; padding: 1px 8px; font-size: 11px; background: transparent; color: var(--fg2); cursor: pointer; }
+.pose-chips .chip.on { border-color: var(--accent); color: var(--fg); background: var(--overlay); }
 /* D93 (A1, A3, A9): a linked subject's slots in the prompt, its casting run, and what its description lacks */
 .subject .head .subject-slots { font-size: 11px; color: var(--fg2); border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
 .subject .head .subject-slots.cut { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }

@@ -1,7 +1,7 @@
 // Generate suite (09; D90 02 §6): one scrolling Panel column (GenerateColumn.tsx — saved panels, prompt, references, look, camera, model,
 // size), the pinned Generate / Queue / Preview foot, results on the Catalogue grid filtered to this suite with interim tiles and live
 // previews. New angle is a sheet on any image (AngleTab.tsx).
-import { ArrowDownFromLine, Boxes, Bookmark, Camera, Hand, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { PersonStanding, ArrowDownFromLine, Boxes, Bookmark, Camera, Hand, HardDriveDownload, Images, Orbit, Palette, PenLine, RotateCcw, RotateCw, SlidersHorizontal, Sparkles, Wand2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo } from 'react'
 import type { Asset } from '../../api/types'
 import { handleKeyFor, markUsed, registerCommands, runCommand } from '../../frame/commands'
@@ -12,7 +12,7 @@ import { askText, useSession } from '../../store/session'
 import { CatalogueStoreCtx } from '../catalogue/catalogueContext'
 import { useGenerateResults } from '../catalogue/catalogueStore'
 import { Inspector as CatInspector, Stage as CatStage, Strip as CatStrip } from '../catalogue/CatalogueSuite'
-import { batchOf, modelPatch, subjectItem, submitBlock, useGenerate, withoutForeignLinks, type Panel as PanelState, type Subject } from './generateStore'
+import { expandCells, batchOf, modelPatch, subjectItem, submitBlock, useGenerate, withoutForeignLinks, type Panel as PanelState, type Subject } from './generateStore'
 import { http, unwrap } from '../../api/client'
 import { castOffer } from './subjectCast'
 import { versionOf } from './sheet'
@@ -71,10 +71,17 @@ function PromptFoot() {
   markUsed('gen.generate'); markUsed('gen.stage'); markUsed('gen.savePreset'); markUsed('gen.fetchMissing')
   const pv = g.preview
   const missing = pv?.missing ?? []
-  const reason = submitBlock(g, !!s.project?.open)                  // D90 (B4): the same reason gates Ctrl+Enter and the palette
+  const cells = expandCells(g.poses, s.capabilities?.story?.coverage?.shots ?? [], s.capabilities?.story?.coverage?.angles ?? [], s.capabilities?.story?.coverage?.expressions ?? []).length
+  const reason = submitBlock(g, !!s.project?.open) ?? (g.run === 'expand' && !cells ? 'pick at least one pose (the Poses section)' : null)   // D90 (B4): the same reason gates Ctrl+Enter and the palette
+  markUsed('gen.run.generate'); markUsed('gen.run.expand')
   return (
     <div>
-      <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title="Generate (Ctrl+Enter)">Generate {g.panel.count} ▶</button>
+      <span className="segmented run-switch" role="group" aria-label="How to run">{/* D115: Generate as always, or Expand over the chosen poses */}
+        <button type="button" className={g.run === 'generate' ? 'active' : ''} aria-pressed={g.run === 'generate'} onClick={() => runCommand('gen.run.generate')} title="Generate: the prompt as written">Generate</button>
+        <button type="button" className={g.run === 'expand' ? 'active' : ''} aria-pressed={g.run === 'expand'} onClick={() => runCommand('gen.run.expand')} title="Expand: one image per pose chosen in the Poses section, the prompt's pose and action replaced">Expand</button>
+      </span>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('gen.generate')} title={g.run === 'expand' ? 'Expand (Ctrl+Enter)' : 'Generate (Ctrl+Enter)'}>
+        {g.run === 'expand' ? `Expand ${cells * g.panel.count} ▶` : `Generate ${g.panel.count} ▶`}</button>
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
         <button disabled={!!reason} onClick={() => runCommand('gen.stage')} title="Queue: add to the queue and run it later — Run now in the Dock (Ctrl+Shift+Enter)">Queue</button>
         <PreviewButton />
@@ -147,8 +154,12 @@ const withResults = (C: React.ComponentType) => function Wrapped() { return <Cat
 const canSubmit = () => !submitBlock(useGenerate.getState(), !!useSession.getState().project?.open)   // D90 (B4): what disables the Foot's buttons
 registerCommands([
   { id: 'gen.generate', scope: 'generate', label: 'Generate', icon: Wand2, keys: 'Ctrl+Enter', placement: ['panel'], when: () => useGenerate.getState().source === 'stage' || canSubmit(),
-    run: () => { if (useGenerate.getState().source === 'stage') runCommand('stage.shot.generate'); else void useGenerate.getState().generate(false) } },   // D95: From a stage → the stage's Render frame
-  { id: 'gen.stage', scope: 'generate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit, run: () => void useGenerate.getState().generate(true) },
+    run: () => { const g = useGenerate.getState(); if (g.source === 'stage') runCommand('stage.shot.generate'); else if (g.run === 'expand') void g.expand(false); else void g.generate(false) } },   // D95: From a stage → the stage's Render frame; D115: Expand over the poses
+  { id: 'gen.stage', scope: 'generate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Boxes, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: canSubmit,
+    run: () => { const g = useGenerate.getState(); void (g.run === 'expand' ? g.expand(true) : g.generate(true)) } },
+  // D115: the two ways to run
+  { id: 'gen.run.generate', scope: 'generate', label: 'Run: Generate', hint: 'the prompt as written', icon: Wand2, placement: ['panel'], run: () => useGenerate.getState().setRun('generate') },
+  { id: 'gen.run.expand', scope: 'generate', label: 'Run: Expand', hint: 'one image per pose chosen in the Poses section, the prompt\'s pose and action replaced', icon: Orbit, placement: ['panel'], run: () => useGenerate.getState().setRun('expand') },
   // P14 (D82): the Angle tab — the five moves are buttons on the pad; the verb has no key (Ctrl+Enter stays Generate's)
   { id: 'gen.angle.generate', scope: 'generate', label: 'New angle', icon: Orbit, placement: ['panel'], when: () => !!useGenerate.getState().angle.asset_id,
     run: () => void useGenerate.getState().generateAngle().then((jobs) => { if (jobs) useGenerate.setState({ angleOpen: false }) }) },   // D90: the sheet closes once queued
@@ -209,7 +220,7 @@ export const GenerateSuite: SuiteDef = {
   // D90 (02 §6.1): one column — the rail's buttons jump to its sections and follow the scroll (GenerateColumn)
   rail: [{ id: 'presets', label: 'Saved panels', icon: <Bookmark size={18} /> }, { id: 'prompt', label: 'Prompt', icon: <Wand2 size={18} /> }, { id: 'refs', label: 'References', icon: <Images size={18} /> },
     { id: 'look', label: 'Look', icon: <Palette size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }, { id: 'model', label: 'Model', icon: <Boxes size={18} /> },
-    { id: 'size', label: 'Size & count', icon: <SlidersHorizontal size={18} /> }],
+    { id: 'size', label: 'Size & count', icon: <SlidersHorizontal size={18} /> }, { id: 'poses', label: 'Poses', icon: <PersonStanding size={18} /> }],   // D115: the poses Expand runs
   Panel, Strip: withResults(StripWithKeys), Stage: withResults(Stage), Inspector: withResults(CatInspector),
   PrimaryAction, panelTitle: 'Image', PanelHead: ImageModeSwitch,   // D95 (IM1): Image's Make mode
 }

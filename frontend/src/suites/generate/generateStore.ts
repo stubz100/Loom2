@@ -10,7 +10,7 @@ import type { DragPayload } from '../../frame/drag'
 import { runCommand, type OnItem } from '../../frame/commands'
 import { refDrop } from '../../frame/dropRules'
 import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
-import { useSession } from '../../store/session'
+import { askConfirm, useSession } from '../../store/session'
 import { profilesForMentions as profilesNow, styleFor } from '../story/storyStore'
 import type { Profile } from '../../api/types'
 import { castOrigin, keptSubject, needsLook, sentIndex } from './subjectCast'
@@ -153,6 +153,37 @@ export function submitBlock(g: Pick<GenerateState, 'preview' | 'previewError'>, 
     : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
 }
 
+// ---- D115: Expand — the poses as the coverage cells ----
+export type RunMode = 'generate' | 'expand'
+export interface PoseCell { shot: string; angle: string; expression: string }
+/** The chosen cells (a tile is a shot size and an angle; each cell one expression) and the expressions a new tile takes. */
+export interface PoseSet { cells: PoseCell[]; expressions: string[] }
+
+/** The cells an Expand runs, in the coverage's order (shot sizes, then angles, then expressions). */
+export function expandCells(poses: PoseSet, shots: string[], angles: string[], expressions: string[]): PoseCell[] {
+  const idx = (xs: string[], x: string) => { const i = xs.indexOf(x); return i < 0 ? xs.length : i }
+  const seen = new Set<string>()
+  return poses.cells.filter((c) => { const k = `${c.shot}|${c.angle}|${c.expression}`; if (seen.has(k)) return false; seen.add(k); return true })
+    .sort((a, b) => idx(shots, a.shot) - idx(shots, b.shot) || idx(angles, a.angle) - idx(angles, b.angle) || idx(expressions, a.expression) - idx(expressions, b.expression))
+}
+
+/** D115: the panel's recipe for one cell, the pose content replaced — every subject's action, pose and position dropped, the linked
+ *  (else the first) subject's pose the cell's expression, the composition the shot's phrase, the camera's angle the angle's; in Text mode
+ *  the cell's sentence is appended to the text; a JSON prompt is read as a tree first. Everything else (the model, size, style, LoRAs,
+ *  references, the sheet) is the panel's. */
+export function recipeForCell(p: Panel, cell: PoseCell, phrases: { shots: Record<string, string>; angles: Record<string, string> }, seeds?: number[]): T2IRecipe {
+  const shot = phrases.shots[cell.shot] ?? cell.shot, angle = phrases.angles[cell.angle] ?? cell.angle
+  const sentence = `${shot}, ${angle}, ${cell.expression} expression`
+  if (p.prompt_mode === 'text') return recipeFromPanel({ ...p, text: [p.text.trim().replace(/[.\s]+$/, ''), sentence].filter(Boolean).join('. ') + '.' }, seeds)
+  let tree = p.tree
+  if (p.prompt_mode === 'json') { try { tree = treeFromJson(JSON.parse(p.json_text || '{}')) } catch { tree = EMPTY_TREE } }
+  const subs = (tree.subjects ?? []).map((s) => ({ ...s, action: '', pose: '', position: '' }))
+  const at = Math.max(0, subs.findIndex((s) => !!s.profile_id))
+  if (subs[at]) subs[at] = { ...subs[at], pose: `${cell.expression} expression` }
+  const next: Tree = { ...tree, subjects: subs, composition: shot, camera: { ...tree.camera, angle } }
+  return recipeFromPanel({ ...p, prompt_mode: 'tree', tree: next }, seeds)
+}
+
 export function recipeFromPanel(p: Panel, seeds?: number[]): T2IRecipe {
   const model_id = panelModel(p)
   const cap = useSession.getState().capabilities?.models[model_id]
@@ -275,6 +306,17 @@ export interface GenerateState {
    *  made when it has none); the description must say the look first (`castAsk` marks the card and its field takes the focus). */
   castLook: (i: number) => Promise<Job[] | null>
   castAsk: number | null
+  /** D115: how the foot runs — Generate as always, or Expand: one job per pose cell with the prompt's pose and action replaced. */
+  run: RunMode
+  poses: PoseSet
+  setRun: (run: RunMode) => void
+  setPoses: (poses: PoseSet) => void
+  /** A tile (a shot size and an angle) on or off; on, it takes the chosen expressions. */
+  toggleTile: (shot: string, angle: string) => void
+  /** An expression on or off for every chosen tile. */
+  toggleExpression: (x: string) => void
+  /** Expand ▶: one job per cell as one batch — on the linked character's candidates page when the prompt links one. */
+  expand: (stage?: boolean) => Promise<Job[] | null>
   setCamera: (patch: Partial<Camera>) => void
   treeToJson: () => void
   jsonToTree: () => boolean
@@ -377,7 +419,7 @@ export function dropRefs(p: DragPayload): void {
 export const useGenerate = create<GenerateState>()(
   persist(
     (set, get) => ({
-      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [], castAsk: null,
+      panel: DEFAULT_PANEL, preview: null, previewError: null, previewing: false, presets: [], lastPreset: null, appliedPreset: null, show: 'batch', lastBatch: null, pinned: [], castAsk: null, run: 'generate', poses: { cells: [], expressions: ['neutral'] },
       angle: DEFAULT_ANGLE, anglePreview: null, anglePreviewError: null, lorasAvailable: [], angleOpen: false, source: 'prompt', presetText: {},
       setPresetText: (section, on) => set({ presetText: { ...get().presetText, [section]: on } }),
 
@@ -525,6 +567,58 @@ export const useGenerate = create<GenerateState>()(
         return get().generate(false, castOrigin(prof.id, v.id, gid), {
           text: ` — they land as ${prof.name}'s candidates (keep ✓ the good ones, make one the hero)`,
           action: { label: `Open ${prof.name} in Cast`, run: () => void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: prof.id, version: v.id })) } })
+      },
+      // ---- D115: Expand ----
+      setRun: (run) => set({ run }),
+      setPoses: (poses) => set({ poses }),
+      toggleTile: (shot, angle) => {
+        const ps = get().poses
+        const on = ps.cells.some((c) => c.shot === shot && c.angle === angle)
+        const ex = ps.expressions.length ? ps.expressions : ['neutral']
+        set({ poses: { ...ps, cells: on ? ps.cells.filter((c) => !(c.shot === shot && c.angle === angle)) : [...ps.cells, ...ex.map((expression) => ({ shot, angle, expression }))] } })
+      },
+      toggleExpression: (x) => {
+        const ps = get().poses
+        const on = ps.expressions.includes(x)
+        const tiles = Array.from(new Set(ps.cells.map((c) => `${c.shot}|${c.angle}`))).map((k) => k.split('|') as [string, string])
+        const cells = on ? ps.cells.filter((c) => c.expression !== x)
+          : [...ps.cells, ...tiles.filter(([shot, angle]) => !ps.cells.some((c) => c.shot === shot && c.angle === angle && c.expression === x)).map(([shot, angle]) => ({ shot, angle, expression: x }))]
+        set({ poses: { cells, expressions: on ? ps.expressions.filter((e) => e !== x) : [...ps.expressions, x] } })
+      },
+      expand: async (stage = false) => {
+        const ss = useSession.getState(), st = ss.capabilities?.story, p = get().panel
+        const cells = expandCells(get().poses, st?.coverage?.shots ?? [], st?.coverage?.angles ?? [], st?.coverage?.expressions ?? [])
+        if (!cells.length) { ss.toast('Pick at least one pose in the Poses section', 'error'); return null }
+        const phrases = (st?.coverage?.phrases ?? { shots: {}, angles: {} }) as { shots: Record<string, string>; angles: Record<string, string> }
+        const sub = p.prompt_mode === 'tree' ? (p.tree.subjects ?? []).find((x) => !!x.profile_id) : undefined   // the linked character: its candidates
+        const prof = sub?.profile_id ? profilesNow().find((x) => x.id === sub.profile_id) : undefined
+        const v = versionOf(prof, sub?.version)
+        let origin = originFor('generate', GENERATE_ORIGIN)
+        if (prof && v) {
+          if (v.state !== 'open') { ss.toast(`${prof.name} ${v.id} is final — make a new version to expand it`, 'error'); return null }
+          const { useStory } = await import('../story/storyStore')
+          const gid = await useStory.getState().ensureCandidates(prof.id, v.id)
+          if (!gid) return null
+          origin = castOrigin(prof.id, v.id, gid)
+        }
+        const n = cells.length * p.count
+        if (n > 8) {
+          const secs = (st?.seconds ?? 0) * n
+          const ok = await askConfirm({ title: `Expand ${prof?.name ?? 'the subject'}?`, okLabel: `Queue ${n} jobs`,
+            text: `${cells.length} pose${cells.length === 1 ? '' : 's'} × ${p.count}: ${n} images${prof && v ? ` as ${prof.name} ${v.id}'s candidates` : ''} — ${secs ? `about ${Math.max(1, Math.round(secs / 60))} min with the model loaded` : 'time unknown'}.` })
+          if (!ok) return null
+        }
+        const items = cells.map((cell) => ({ recipe: recipeForCell(p, cell, phrases) as unknown as Record<string, unknown>, origin: { ...origin, payload: { ...(origin.payload ?? {}), cell } } }))
+        try {
+          const jobs = await unwrap(http.POST('/jobs/batch', { body: { items, stage } }))
+          const batch = jobs.jobs[0] ? batchOf(jobs.jobs[0]) : null
+          set({ lastBatch: batch, show: 'batch' })
+          ss.toast(`${stage ? 'Queued for later' : 'Queued'}: ${jobs.jobs.length} image${jobs.jobs.length === 1 ? '' : 's'} for ${cells.length} pose${cells.length === 1 ? '' : 's'}` +
+            (prof ? ` — they land as ${prof.name}'s candidates in Cast` : ''), 'success')
+          await ss.refreshAll()
+          if (p.seed_mode === 'increment') get().set({ seed: p.seed + p.count })
+          return jobs.jobs
+        } catch (e) { ss.toast(`Expand failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
       },
       setCamera: (patch) => get().setTree({ camera: { ...get().panel.tree.camera, ...patch } }),
       treeToJson: () => {                                                      // D93 (B4): JSON has no links — a linked card's composed words are written in

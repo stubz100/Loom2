@@ -971,22 +971,38 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   expect(profile.versions[0].hero_asset_id).toBe(heroId)
   const gid = profile.versions[0].group_id
   expect((await api<{ group: { cover_id: string | null } }>('GET', `/groups/${gid}`)).group.cover_id).toBe(heroId)   // the hero moved onto the reference page as its cover
-  // Expand ▶ on the panel foot says the cost before anything is queued (the full preset); the scenario cancels and queues the small one through the hook
+  // D115: Expand… jumps into Image with the character as the subject and Full coverage pre-picked in the Poses section; the scenario keeps
+  // three close-up tiles with two expressions (six cells — the training below wants four references of one shot size) and runs Expand ▶
   await page.locator('.panel .foot button.primary', { hasText: /^Expand/ }).click()
-  await expect(dialog).toContainText(/Queue \d+ jobs/)
-  await expect(dialog).toContainText(/min/)
-  await dialog.locator('button', { hasText: /^Cancel$/ }).click()
-  type Hook = { expand: (preset: string, seeds: number, tier: string) => Promise<{ batch_id: string; job_ids: string[]; cells: number; group_id: string } | null> }
-  const r = (await page.evaluate(() => (window as unknown as { __loom2Story: Hook }).__loom2Story.expand('npc', 1, 'draft')))!
-  expect(r.cells).toBeGreaterThanOrEqual(15)
-  expect(r.job_ids).toHaveLength(r.cells)
-  const jobs = await api<{ items: { id: string; batch_id: string | null; origin?: { suite: string; surface: string; payload?: { cell?: { shot: string } } } }[] }>('GET', '/jobs')
-  const mine = jobs.items.filter((j) => r.job_ids.includes(j.id))
-  expect(mine.every((j) => j.batch_id === r.batch_id && j.origin?.suite === 'story' && j.origin.surface === 'expand' && !!j.origin.payload?.cell?.shot)).toBe(true)
+  await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
+  await expect(page.locator('.panel .foot .run-switch button[aria-pressed="true"]')).toHaveText('Expand')
+  await expect.poll(() => page.locator('#gen-sec-poses .pose-tile.on').count()).toBeGreaterThanOrEqual(10)   // Full coverage's tiles
+  await page.locator('#gen-sec-poses .gen-sec-head button', { hasText: 'clear' }).click()
+  for (const x of ['serious', 'sad', 'surprised']) await page.locator(`#gen-sec-poses .pose-chips .chip[data-expression="${x}"]`).click()   // neutral and smile stay
+  await expect(page.locator('#gen-sec-poses .pose-chips .chip.on')).toHaveCount(2)
+  for (const a of ['front', 'three-quarter left', 'three-quarter right']) await page.locator(`#gen-sec-poses .pose-tile[data-shot="close-up"][data-angle="${a}"]`).click()
+  await expect(page.locator('#gen-sec-poses .gen-sec-head')).toContainText('6 cells')
+  await expect(page.locator('#gen-sec-poses [data-lands]')).toContainText(`as ${name}'s candidates`)
+  await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Expand \d+ ▶/)
+  const n = Number((await page.locator('.panel .foot button.primary').textContent())!.match(/Expand (\d+)/)![1])   // six cells × the panel's batch count
+  expect(n % 6).toBe(0)
+  await expect.poll(async () => (await page.locator('.panel .foot .estimate').textContent()) ?? '', { timeout: 20_000, message: 'the foot settles (the preview answers)' }).toMatch(/≈/)
+  await page.locator('.panel .foot button.primary').click()
+  if (n > 8) { await expect(dialog).toContainText(new RegExp(`Queue ${n} jobs`)); await dialog.locator('button.primary').click() }   // more than 8 images ask first
+  type JobLite = { id: string; batch_id: string | null; origin?: { suite: string; surface: string; ref?: string; payload?: { cell?: { shot: string } } } }
+  const castJobs = async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.filter((j) => j.origin?.surface === 'cast' && j.origin.ref === profile.id)
+  await expect.poll(async () => (await castJobs()).length, { timeout: 30_000 }).toBe(n)     // one job per cell × count, queued by the batch route
+  const after = (await api<{ items: ProfileLite[] }>('GET', '/story/profiles')).items.find((p) => p.id === profile.id)!
+  const r = { cells: n, group_id: after.versions[0].candidates_group_id! }
+  const mine = await castJobs()
+  expect(new Set(mine.map((j) => j.batch_id)).size).toBe(1)                            // one batch
+  expect(mine.every((j) => j.origin?.suite === 'generate' && j.origin.payload?.cell?.shot === 'close-up')).toBe(true)
   type Page = { assets: Record<string, { id: string; state: string; suite: string; params: { coverage_cell?: { shot: string; angle: string } } }> }
   await expect.poll(async () => Object.keys((await api<Page>('GET', `/groups/${r.group_id}`)).assets).length, { timeout: 120_000 }).toBe(r.cells)
   const cands = Object.values((await api<Page>('GET', `/groups/${r.group_id}`)).assets)
-  expect(cands.every((a) => a.suite === 'story' && !!a.params.coverage_cell?.shot)).toBe(true)
+  expect(cands.every((a) => !!a.params.coverage_cell?.shot)).toBe(true)                 // each with its pose recorded (Cast's grid reads it)
+  await page.locator('nav.tabs button.tab', { hasText: /^Story/ }).click()               // back to the character's page
+  await expect(page.locator('.cast-page h2')).toContainText(name)
   await expect(page.locator('.cand-card')).toHaveCount(r.cells)                       // the page followed the group.changed events
   // keep one with the mouse (the card's ✓), reject one through the context menu: the grid gains a cell, the card dims
   const first = page.locator('.cand-card').first()
@@ -1039,7 +1055,7 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(4)  // Cast ✓ · Expand ✓ · Train ✓ · Lock ✓
   // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
   await openImage(page, 'Make')
-  await page.locator('nav.rail button[title^="Model"]').click()
+  await page.locator('#gen-sec-model').scrollIntoViewIfNeeded()                      // not the rail: a click on the tab the column already sits on folds the panel
   await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()
   await expect(page.locator('.panel select[aria-label="LoRA slot 1"] option', { hasText: `${name} v1 · Klein 4B · 100 steps` })).toHaveCount(1)   // LT2: the trained LoRA fits the 4B base
   await page.locator('nav.rail button[title^="Prompt"]').click()

@@ -1312,6 +1312,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Jobs Submit Batch
+         * @description D115: the items as one batch under one batch id (Image's Expand ▶: one job per pose cell); every item is checked first, so a
+         *     refused item refuses the whole submit and leaves no job behind.
+         */
+        post: operations["jobs_submit_batch_jobs_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -3947,6 +3968,27 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * CoverageCaps
+         * @description The coverage vocabulary, and (D115) the phrases a cell puts in the prompt — T8: the page shows what the server composes.
+         */
+        CoverageCaps: {
+            /** Angles */
+            angles: string[];
+            /** Expressions */
+            expressions: string[];
+            /**
+             * Phrases
+             * @default {}
+             */
+            phrases: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            /** Shots */
+            shots: string[];
+        };
         /** CurateBody */
         CurateBody: {
             /** Asset Ids */
@@ -6265,6 +6307,24 @@ export interface components {
              */
             stage?: boolean;
         };
+        /** JobsBatchItem */
+        JobsBatchItem: {
+            origin?: components["schemas"]["JobOrigin-Input"] | null;
+            /** Recipe */
+            recipe: {
+                [key: string]: unknown;
+            };
+        };
+        /** JobsBatchSubmit */
+        JobsBatchSubmit: {
+            /** Items */
+            items: components["schemas"]["JobsBatchItem"][];
+            /**
+             * Stage
+             * @default false
+             */
+            stage?: boolean;
+        };
         /** JobsSubmitted */
         JobsSubmitted: {
             /** Jobs */
@@ -7188,6 +7248,18 @@ export interface components {
             };
             /** Preset */
             preset: string | null;
+        };
+        /**
+         * PoseCellCaps
+         * @description D115: one coverage cell — a shot size, an angle, an expression (the Poses section's tiles and chips).
+         */
+        PoseCellCaps: {
+            /** Angle */
+            angle: string;
+            /** Expression */
+            expression: string;
+            /** Shot */
+            shot: string;
         };
         /**
          * PoseLibrary
@@ -8834,10 +8906,7 @@ export interface components {
          * @description 17 §3b (D85): the model Expand runs on in this build, its health and warm seconds, the presets with their cell counts, the coverage vocabulary.
          */
         StoryCaps: {
-            /** Coverage */
-            coverage: {
-                [key: string]: string[];
-            };
+            coverage: components["schemas"]["CoverageCaps"];
             /** Health */
             health: string;
             /** Label */
@@ -8896,6 +8965,11 @@ export interface components {
             hint: string;
             /** Label */
             label: string;
+            /**
+             * Plan
+             * @default []
+             */
+            plan: components["schemas"]["PoseCellCaps"][];
         };
         /**
          * StoryStyle
@@ -12707,6 +12781,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["JobSubmit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsSubmitted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    jobs_submit_batch_jobs_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobsBatchSubmit"];
             };
         };
         responses: {

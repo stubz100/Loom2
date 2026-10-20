@@ -9,11 +9,12 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import Field, BaseModel
 
 from ..queue import JobRecord
 from ..schemas import Cancelled, Deleted, JobList, JobsSubmitted, QueueState, Released
 from ..story import FOR_SHOT, StoryStore, check_for_shot
+from ..fsio import new_id
 from .deps import Svc
 
 router = APIRouter(tags=["jobs"])
@@ -129,3 +130,36 @@ async def queue_unpause(svc: Svc):
     state = q.state()
     await q.flush()                                                          # D64: on disk before the reply
     return state
+
+
+# ---- D115: several recipes as one batch (Image's Expand: one job per pose cell, each with its own origin) --------------------------
+class JobsBatchItem(BaseModel):
+    recipe: dict[str, Any]
+    origin: JobOrigin | None = None
+
+
+class JobsBatchSubmit(BaseModel):
+    items: list[JobsBatchItem] = Field(min_length=1, max_length=200)
+    stage: bool = False
+
+
+@router.post("/jobs/batch", response_model=JobsSubmitted)
+async def jobs_submit_batch(svc: Svc, body: JobsBatchSubmit):
+    """D115: the items as one batch under one batch id (Image's Expand ▶: one job per pose cell); every item is checked first, so a
+    refused item refuses the whole submit and leaves no job behind."""
+    ws, _, q = svc.require_project()
+    batch = new_id("bat")
+    jobs = []
+    try:
+        for it in body.items:
+            q.check(it.recipe)
+            if it.origin and it.origin.surface == FOR_SHOT:
+                await asyncio.to_thread(check_for_shot, StoryStore(ws), it.origin.payload)
+        for it in body.items:
+            jobs += q.submit(it.recipe, stage=body.stage, origin=it.origin, batch_id=batch)
+    except FieldError as e:
+        raise HTTPException(422, e.detail())
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await q.flush()
+    return {"jobs": jobs}

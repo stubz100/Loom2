@@ -284,10 +284,26 @@ class StageCaps(Open):
     animate: StageAnimateCaps | None = None        # CN4 (D87, E19): the pose-driven clip method
 
 
+class PoseCellCaps(Out):
+    """D115: one coverage cell — a shot size, an angle, an expression (the Poses section's tiles and chips)."""
+    shot: str
+    angle: str
+    expression: str
+
+
 class StoryPresetCaps(Out):
     label: str
     hint: str
     cells: int
+    plan: list[PoseCellCaps] = []                 # D115: the cells once each (a quick pick in the Poses section)
+
+
+class CoverageCaps(Out):
+    """The coverage vocabulary, and (D115) the phrases a cell puts in the prompt — T8: the page shows what the server composes."""
+    shots: list[str]
+    angles: list[str]
+    expressions: list[str]
+    phrases: dict[str, dict[str, str]] = {}
 
 
 class StoryCaps(Open):
@@ -299,7 +315,7 @@ class StoryCaps(Open):
     missing: list[str]
     seconds: float | None = None
     presets: dict[str, StoryPresetCaps]
-    coverage: dict[str, list[str]]
+    coverage: CoverageCaps
 
 
 class MeshCaps(Open):

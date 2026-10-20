@@ -157,8 +157,11 @@ def _story(svc: Services, variant: str) -> dict:
     """Story (17 §3b, D85): the model Expand runs on in this build (D78's clay model: it takes the hero as a reference), its health and warm
     seconds — the Cast tab says the cost before the jobs are queued — the presets with their cell counts and the coverage vocabulary."""
     from .story import ANGLES, EXPRESSIONS, PRESETS, SHOTS, expand_spec, preset_cells
-    presets = {k: {"label": v["label"], "hint": v["hint"], "cells": len(preset_cells(k))} for k, v in PRESETS.items()}
-    coverage = {"shots": [s for s, _ in SHOTS], "angles": [a for a, _ in ANGLES], "expressions": EXPRESSIONS}
+    presets = {k: {"label": v["label"], "hint": v["hint"], "cells": len(preset_cells(k)),
+                   "plan": [{"shot": c["shot"], "angle": c["angle"], "expression": c["expression"]} for c in preset_cells(k) if c["take"] == 1]}   # D115: the cells, once each
+               for k, v in PRESETS.items()}
+    coverage = {"shots": [s for s, _ in SHOTS], "angles": [a for a, _ in ANGLES], "expressions": EXPRESSIONS,
+                "phrases": {"shots": dict(SHOTS), "angles": dict(ANGLES)}}                                              # D115: the words a cell puts in the prompt
     spec = expand_spec(variant)
     if spec is None:
         return {"model_id": None, "label": None, "short": None, "health": "unavailable", "missing": [], "seconds": None, "presets": presets, "coverage": coverage}

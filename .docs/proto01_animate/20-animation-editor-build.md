@@ -115,3 +115,5 @@ viewer's feel can be judged then, before AE2's controls are designed.
 - **2026-10-20 (journal 2026-10-20 19:17):** AE2 a–b built — Layers (switches, blend, matte, parent, order, undo / redo) and Properties (transform
   and opacity, keyframes at the playhead with ease / hold / linear) in the column at the Final level; a drag in the viewer moves the
   selected layer; the engine's reads and one-save batches behind them. Next: AE2c masks, AE2d the timeline's bars.
+- **2026-10-20 (journal 2026-10-20 22:02):** an aside from the author's try — D115, Image's Expand (the poses as tiles, one job per cell, the
+  results as the character's candidates; Cast's Expand… jumps there). AE2c–d resume after it.

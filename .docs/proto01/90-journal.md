@@ -6564,7 +6564,7 @@ mask's sense (the model reads 1 − mask: known = 1).
 - **Tests:** the frontend change (the `proxymask` sequence kind): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build
   clean.
 
-## 2026-10-20 08:05 — Jasper AI's releases, read for the shadows and the "pasted-on" look (the author's question)
+## 2026-10-20 06:20 — Jasper AI's releases, read for the shadows and the "pasted-on" look (the author's question)
 
 - **What Jasper publishes on Hugging Face (`jasperai`):** Latent Bridge Matching (LBM: relighting, depth, normals), FLUX.1-dev
   ControlNets (depth, normals, upscaler), Flash Diffusion distillations, the MONET dataset, and the *controllable-shadow-generation*

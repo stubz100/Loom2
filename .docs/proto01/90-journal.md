@@ -7089,3 +7089,21 @@ The author asked for a review of the state of things, then "record all this and 
   dropped, 409 / 404 on a final never assembled). Offline: 477 passed in 139.88s (0:02:19) (full), 477 passed in 138.84s (0:02:18) (open); contract and settings audit clean; frontend
   build and lint unchanged (the types regenerated).
 - **Next:** step 4, `comp_render` — the final render as a CPU queue job through the CLI, landing as the final's clip and a Story take.
+
+## 2026-10-20 18:14 — AE1 step 4 built: `comp_render`, the finished shot as a CPU queue job through the CLI (proto01_animate 20 §2)
+
+- **The recipe** `comp_render {final_id}` (a CPU kind like `assemble_final`: no model, no engine, `warm_group` cpu, 0 VRAM, no weights);
+  `POST /finals/{id}/composition/render` queues it (404 without a composition; the route snapshot +1, the contract exported).
+- **The job** (`finishers.run_comp_render`): `effectcraft-cli render --project <comp.ecproj> --comp Final --out …/f_[####].png --format png
+  --quality best --resolution full --channels rgb` (`effectcraft.render_argv`; the tests' fake under the interpreter) as a subprocess in the
+  orchestrator's job object, `RAYON_NUM_THREADS` from Settings, its output in `logs/comp-render-<job>.log`, progress by the frames on
+  disk, cancel kills it; then the clip pipeline as the assembly's: RIFE to 24 fps at F16 (D27), the master, the proxy, the asset with
+  lineage to the assembly's clip (`model_id` composition), thumbs; the composition records the clip and the revision it rendered
+  (`clip_id`, `rendered_revision`, `render_job_id`); the final's `clip_id` is the finished shot now — **without moving the final's
+  revision** (`FinalStore.set_clip`), so the composition stays fresh; `clip.ready`, `final.updated`, and a take on the Story shot.
+- **Against the real binary:** the rig's composition rendered by the same argv — rc 0, 81 frames in 1.7 s (the CLI's own count 1.47 s; --resolution full accepted).
+- **Tests:** `test_compositions_ae1` +1 (the job on the fake CLI through a Rig: the clip's frames, rate and size, the final's clip
+  without a revision move, the composition's render fields, the asset's lineage; a final without a composition fails with its reason)
+  and the route (queued; 404 bare). Offline: 478 passed in 153.01s (0:02:33) (full), 478 passed in 139.84s (0:02:19) (open); settings audit 259 clean; frontend build and Vitest unchanged.
+- **AE1 is complete but for step 5** (a composition from a single clip), which waits for AE2 — the editor opens on finals first.
+  **Next:** AP1 thin — the Final level in Animate: the composition's frames in the viewer, scrubbed and played from the page's cache.

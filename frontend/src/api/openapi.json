@@ -2271,6 +2271,17 @@
             ],
             "title": "Assembled At"
           },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
           "comp": {
             "default": "Final",
             "title": "Comp",
@@ -2303,6 +2314,28 @@
           "made_at": {
             "title": "Made At",
             "type": "string"
+          },
+          "render_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Job Id"
+          },
+          "rendered_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendered Revision"
           },
           "revision": {
             "default": 0,
@@ -2338,6 +2371,9 @@
           "stale",
           "stack",
           "layers",
+          "clip_id",
+          "rendered_revision",
+          "render_job_id",
           "made_at",
           "edited_at"
         ],
@@ -20666,6 +20702,49 @@
           }
         },
         "summary": "Composition Property",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/render": {
+      "post": {
+        "description": "The finished shot: the composition rendered by `effectcraft-cli render` as a CPU job — a clip that becomes the final's clip and a\ntake on its Story shot.",
+        "operationId": "composition_render_finals__fid__composition_render_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Render",
         "tags": [
           "finals"
         ]

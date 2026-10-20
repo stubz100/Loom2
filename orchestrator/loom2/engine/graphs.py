@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, MatteSequence, AssembleFinal, I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -1384,7 +1384,7 @@ def _vram(model_id: str) -> float:
 
 
 def estimate_vram_gb(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V, variant: str = "full") -> float:
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal, CompRender)):
         return 0.0                                                    # R3 (D62) / P17 / D111: CPU only, the engine is never started
     if isinstance(recipe, TrainLora):                                 # LT2: E16's measured peak of the base (the engine is stopped for it)
         spec = registry.get(recipe.model_id)
@@ -1418,7 +1418,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         if recipe.guide and spec is not None and spec.recipes.guide_lora:
             ids = [*ids, spec.recipes.guide_lora]                      # ST4: the IC-LoRA rides only on a guided clip
         return ids
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal, CompRender)):
         return []                                                     # R3 (D62) / P17 / D111: no weights at all
 
     te_over = getattr(recipe, "te_id", None)

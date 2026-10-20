@@ -13,7 +13,9 @@ The queue's single completion tail (`JobQueue._complete`) runs after any of them
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -28,7 +30,7 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, AssembleFinal, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_SURFACE
@@ -695,6 +697,8 @@ async def run_cpu(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> bool:
         return await run_render(job, recipe, q)
     if isinstance(recipe, AssembleFinal):                              # D111 (PS5e): the final's layers composited into the shot
         return await run_assemble(job, recipe, q)
+    if isinstance(recipe, CompRender):                                # AE1: the composition rendered by effectcraft-cli
+        return await run_comp_render(job, recipe, q)
     if isinstance(recipe, TrainLora):                                 # LT2: ai-toolkit in its venv, the engine stopped by the queue
         from ..trainer import run_train
         return await run_train(job, recipe, q)
@@ -747,6 +751,92 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     clips.save(rec)
     shutil.rmtree(tmp, ignore_errors=True)
     f = await asyncio.to_thread(store.set_result, f.id, rec.id, stats)
+    q.hub.broadcast("asset.created", asset.model_dump())
+    job.result["asset_ids"] = [asset.id]
+    job.result["clip_id"] = rec.id
+    q.hub.broadcast("clip.ready", {"clip_id": rec.id, "asset_id": asset.id, "job_id": job.id, "frames": rec.frames, "fps": rec.fps, "w": rec.w, "h": rec.h,
+                                   "origin": job.origin.model_dump() if job.origin else None})
+    q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+    if f.shot_id:                                                                   # the take on the Story shot it was made for
+        await asyncio.to_thread(_shot_takes, q, {"shot_id": f.shot_id}, "clip", [rec.id], False, _run(job, recipe, q))
+    return True
+
+
+async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bool:
+    """AE1 (proto01_animate 20 §2, D114): the finished shot — the final's composition rendered by the pinned `effectcraft-cli render`
+    (Best, Full, a PNG sequence, on the CPU: a render never takes the GPU beside a job, D97 / D113) into a clip (master, proxy, asset with
+    lineage to the assembly's clip), conformed to 24 fps by the local RIFE at F16 (D27); it becomes the final's clip (the final's record
+    does not move, so the composition stays fresh) and a take on the Story shot the final was made for."""
+    from ..compositions import CompositionStore
+    from ..effectcraft import render_argv
+    from ..final_assembly import conform_24
+    from ..finals import FinalStore
+    from ..fsio import utc_now
+    from ..trainer import _kill
+    from .supervisor import _assign_to_job
+    store, clips, cs = FinalStore(q.ws), ClipStore(q.ws), CompositionStore(q.ws)
+    f = await asyncio.to_thread(store.get, recipe.final_id)
+    if f is None:
+        raise ValueError(f"the final {recipe.final_id} is not in the project")
+    c = await asyncio.to_thread(cs.get, f)
+    if c is None:
+        raise ValueError(f"the final {f.id} has no composition yet (make it first)")
+    tmp = q.ws.temp_dir / f"comp-render-{job.id}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    (tmp / "f16").mkdir(parents=True)
+    argv = render_argv(q.app.settings.effectcraft, cs.ecproj(f.id), c.comp, tmp / "f16" / "f_[####].png")
+    env = {**os.environ, "RAYON_NUM_THREADS": str(q.app.settings.effectcraft.threads), "WGPU_BACKEND": "vulkan"}
+    log_path = q.app.logs_dir / f"comp-render-{job.id}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    with log_path.open("ab") as lf:
+        lf.write(f"==== launch {utc_now()} job {job.id} {' '.join(argv)}\n".encode("utf-8"))
+        lf.flush()
+        proc = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env=env)
+        _assign_to_job(proc)
+    job.log_tail.append(f"effectcraft-cli render pid {proc.pid}")
+    q.progress(job, "rendering the composition")
+    while proc.poll() is None:
+        await asyncio.sleep(0.5)
+        done = len(list((tmp / "f16").glob("*.png")))
+        job.progress = min(1.0, done / max(1, f.frames))
+        job.progress_text = f"rendering {done}/{f.frames}"
+        if job.id in q._cancel_requested:
+            _kill(proc.pid)
+            await asyncio.to_thread(proc.wait)
+            q.check_cancel(job)
+    if proc.returncode != 0:
+        tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
+        raise ValueError(f"effectcraft-cli render failed ({proc.returncode}): {tail}")
+    paths = sorted((tmp / "f16").glob("*.png"))
+    if len(paths) != f.frames:
+        raise ValueError(f"the render wrote {len(paths)} frames, the final has {f.frames}")
+    render_s = round(time.time() - t0, 1)
+    fps = f.rate
+    conformed = await asyncio.to_thread(conform_24, tmp / "f16", tmp / "f24", f.frames) if f.rate == 16 else None
+    if conformed:
+        paths, fps = conformed, 24
+    job.log_tail.append(f"composition rendered: {f.frames} frames in {render_s} s (revision {c.revision})" + (f"; conformed to {len(paths)} at 24 fps" if conformed else ""))
+    q.progress(job, "writing the master")
+    previous = await asyncio.to_thread(clips.get, f.clip_id) if f.clip_id else None
+    parents = [previous.asset_id] if previous and previous.asset_id else []
+    stats = {"frames": f.frames, "render_s": render_s, "composition_revision": c.revision, "effectcraft": c.effectcraft, "conform": "RIFE v4.6 to 24 fps (D27)" if conformed else None}
+    rec = await asyncio.to_thread(clips.create, paths, job_id=job.id, batch_id=job.batch_id, model_id="composition", preset="best", prompt=f.name, seed=job.seed, fps=fps,
+                                  start_asset_id=parents[0] if parents else "", beats=[], params={"recipe": recipe.model_dump(), "final_id": f.id, "render": stats},
+                                  timings={"render_s": render_s})
+    q.progress(job, "encoding the proxy")
+    rec = await asyncio.to_thread(clips.encode_proxy, rec)
+    asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
+                                    suite="stage", model_id="composition", seed=job.seed, prompt_text=f.name,
+                                    params={"clip_id": rec.id, "final_id": f.id, "recipe": recipe.model_dump(), "render": stats},
+                                    timings={"wall_s": q.wall_s()}, parents=parents, lineage_kind="final", frames=rec.frames, w=rec.w, h=rec.h,
+                                    variant=job.variant, origin=job.origin)
+    asset = await asyncio.to_thread(q.catalogue.make_thumbs, asset, clips.frame_path(rec.id, 0))
+    rec.asset_id = asset.id
+    clips.save(rec)
+    shutil.rmtree(tmp, ignore_errors=True)
+    await asyncio.to_thread(cs.set_render, f.id, rec.id, c.revision, job.id)
+    f = await asyncio.to_thread(store.set_clip, f.id, rec.id)
     q.hub.broadcast("asset.created", asset.model_dump())
     job.result["asset_ids"] = [asset.id]
     job.result["clip_id"] = rec.id

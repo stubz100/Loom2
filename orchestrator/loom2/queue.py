@@ -26,7 +26,7 @@ from .engine.pipeline import JobCancelled, finalize, plan
 from .engine.supervisor import EngineSupervisor
 from .events import EventHub
 from .fsio import StateError, atomic_write_json, free_space_gb, new_id, read_json_or, utc_now
-from .recipes import T2I, I2V, AssembleFinal, Inpaint, Render, StageShot, TTS, TrainLora, parse_recipe, stage_spec, warm_group
+from .recipes import T2I, I2V, AssembleFinal, CompRender, Inpaint, Render, StageShot, TTS, TrainLora, parse_recipe, stage_spec, warm_group
 from .documents import DocumentStore
 from .groups import GroupStore
 from .loras import LoraRegistry, check_recipe_loras, publish
@@ -452,8 +452,8 @@ class JobQueue:
             # R9: a missing native extension is refused at submission (HTTP 422), not when the job runs
             what = "Quick Remove" if recipe.mode == "quick_remove" else "the content-aware pre-fill"
             raise ValueError(f"{what} needs the native extension (uv sync --project orchestrator --extra native)")
-        if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
-            return                       # R3 / P17 / D111: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
+        if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal, CompRender)):
+            return                       # R3 / P17 / D111 / AE1: CPU only — no model is loaded, so neither the roster nor the open-variant gate applies
         if isinstance(recipe, TTS):                                          # CN2 (19 §3b): the venv, the voice record, the tier, the language, the lines
             from .voices import validate_tts
             validate_tts(self, recipe)

@@ -158,3 +158,54 @@ def test_composition_routes(tmp_path: Path):
         assert cl.post(f"/finals/{bare.id}/composition", headers=H).status_code == 409
         assert cl.get(f"/finals/{bare.id}/composition/frame?t=0", headers=H).status_code == 404
         assert cl.post(f"/finals/{bare.id}/composition/command", json={"id": "edit.undo"}, headers=H).status_code == 404
+        assert cl.post(f"/finals/{bare.id}/composition/render", headers=H).status_code == 404
+        r = cl.post(f"{url}/render", headers=H)                                          # the finished shot: a queued CPU job
+        assert r.status_code == 200 and r.json()["job_id"]
+
+
+async def test_comp_render_job(tmp_path: Path, object_info: dict, monkeypatch):
+    """The finished shot: `comp_render` runs the (fake) CLI on the composition, the frames a clip (no RIFE here) — the final's clip and the
+    composition's; the final's revision does not move, so the composition stays fresh; a final without a composition fails with its reason."""
+    import test_lifecycle
+    from loom2 import final_assembly
+    from loom2.clips import ClipStore
+    from loom2.compositions import CompositionStore
+    from loom2.effectcraft import EffectCraft
+    from loom2.finals import FinalStore
+    from loom2.origin import JobOrigin
+    from loom2.stages import StageStore
+    rig = test_lifecycle.Rig(tmp_path, object_info)
+    try:
+        rig.app.update_settings({"effectcraft": {"cli": str(FAKE)}})
+        st = StageStore(rig.ws).create("Room")
+        f, _ = _final_assembled(rig.ws, st.id, st.cameras[0].id, tmp_path / "src")
+        ec, cs = EffectCraft(rig.app), CompositionStore(rig.ws)
+        cs.make(f, ec)
+        ec.stop()
+        monkeypatch.setattr(final_assembly, "rife_binary", lambda: None)
+        rig.queue.load()
+        await rig.queue.start()
+        job = rig.queue.submit({"kind": "comp_render", "final_id": f.id}, origin=JobOrigin(suite="stage", surface="comp_render", ref=f.id))[0]
+        j = await rig.wait(job.id, timeout=60)
+        assert j.status == "done", (j.error, j.log_tail[-5:])
+        clips = ClipStore(rig.ws)
+        clip = clips.get(j.result["clip_id"])
+        assert clip.frames == N and clip.fps == 16 and clip.w == S and clip.model_id == "composition"
+        assert Image.open(clips.frame_path(clip.id, 2)).getpixel((0, 0))[0] == 2            # the fake's frames: R = the frame number
+        f2 = FinalStore(rig.ws).get(f.id)
+        assert f2.clip_id == clip.id and f2.revision == f.revision
+        c2 = cs.get(f2)
+        assert c2.clip_id == clip.id and c2.rendered_revision == 0 and c2.render_job_id == job.id and not c2.stale
+        a = rig.catalogue.get(j.result["asset_ids"][0])
+        assert a.kind == "video" and a.lineage_kind == "final"
+        assert any("composition rendered" in line for line in j.log_tail)
+        grey = tmp_path / "src" / "grey.png"
+        bare = FinalStore(rig.ws).create({"name": "Bare", "stage_id": st.id, "camera_id": st.cameras[0].id, "stage_revision": 0, "range": {"start": 0, "end": 3},
+                                          "rate": 16, "size": {"w": S, "h": S}, "frames": N,
+                                          "layers": [{"id": "plate", "kind": "plate", "name": "Room", "method": "projected"},
+                                                     {"id": "shadows", "kind": "shadows", "name": "Shadows", "method": "stage"}]},
+                                         {"plate": {"depth": [grey] * N, "clay": [grey] * N}, "shadows": {"clay": [grey] * N}}, {})
+        jb = await rig.wait(rig.queue.submit({"kind": "comp_render", "final_id": bare.id})[0].id, timeout=30)
+        assert jb.status == "failed" and "no composition" in (jb.error or "")
+    finally:
+        await rig.close()

@@ -25,6 +25,20 @@ from .fsio import utc_now
 PROTOCOL = "2025-06-18"
 
 
+def cli_head(settings) -> list[str]:
+    """The pinned CLI, or the tests' fake under this interpreter."""
+    cli = settings.cli
+    return [sys.executable, cli] if cli.lower().endswith(".py") else [cli]
+
+
+def render_argv(settings, project: Path, comp: str, out_pattern: Path) -> list[str]:
+    """`effectcraft-cli render`: the composition at Best and Full as a PNG sequence (E27's R2, equal to the preview to 0/255)."""
+    if not Path(settings.cli).is_file():
+        raise ValueError(f"EffectCraft is not built: {settings.cli} is missing (scripts/build_effectcraft.py)")
+    return [*cli_head(settings), "render", "--project", str(project), "--comp", comp, "--out", str(out_pattern), "--format", "png", "--quality", "best",
+            "--resolution", "full", "--channels", "rgb"]
+
+
 class EffectCraftError(RuntimeError):
     """The session refused a request (the engine's own message), timed out, or is not available."""
 
@@ -50,9 +64,7 @@ class EffectCraft:
         return self.app.settings.effectcraft
 
     def argv(self) -> list[str]:
-        cli = self.settings.cli
-        head = [sys.executable, cli] if cli.lower().endswith(".py") else [cli]
-        return [*head, "mcp", "--empty"]
+        return [*cli_head(self.settings), "mcp", "--empty"]
 
     def available(self) -> bool:
         return Path(self.settings.cli).is_file()

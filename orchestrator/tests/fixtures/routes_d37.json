@@ -114,6 +114,7 @@
  "POST /finals/{fid}/composition",
  "POST /finals/{fid}/composition/command",
  "POST /finals/{fid}/composition/property",
+ "POST /finals/{fid}/composition/render",
  "POST /finals/{fid}/layers/{lid}/matte",
  "POST /finals/{fid}/layers/{lid}/run",
  "POST /finals/{fid}/plate",

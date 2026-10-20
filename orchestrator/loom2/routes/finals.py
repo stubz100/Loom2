@@ -440,3 +440,21 @@ async def composition_frame(svc: Svc, fid: str, t: float = 0.0, side: int = 0):
     except EffectCraftError as e:
         raise _ec_error(e)
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/finals/{fid}/composition/render", response_model=JobQueued)
+async def composition_render(svc: Svc, fid: str):
+    """The finished shot: the composition rendered by `effectcraft-cli render` as a CPU job — a clip that becomes the final's clip and a
+    take on its Story shot."""
+    from ..origin import JobOrigin
+    cs, f = await _final_for_composition(svc, fid)
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    if await asyncio.to_thread(cs.get, f) is None:
+        raise HTTPException(404, "the final has no composition yet")
+    try:
+        jobs = svc.queue.submit({"kind": "comp_render", "final_id": fid}, origin=JobOrigin(suite="stage", surface="comp_render", ref=fid))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    return {"job_id": jobs[0].id}

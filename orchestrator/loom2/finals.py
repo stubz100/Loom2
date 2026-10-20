@@ -304,6 +304,17 @@ class FinalStore:
         self.save(f)
         return f
 
+    def set_clip(self, fid: str, clip_id: str) -> Final:
+        """AE1: the finished shot (the composition rendered) is the final's clip now; the record's revision stays, so its composition
+        stays fresh (a render changes nothing it was made from)."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        f.clip_id = clip_id
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
     def keypoints(self, fid: str, lid: str) -> list:
         p = self.folder(fid) / lid / "keypoints.json"
         return list(read_json(p).get("frames") or []) if p.is_file() else []

@@ -876,6 +876,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Render
+         * @description The finished shot: the composition rendered by `effectcraft-cli render` as a CPU job — a clip that becomes the final's clip and a
+         *     take on its Story shot.
+         */
+        post: operations["composition_render_finals__fid__composition_render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/frames": {
         parameters: {
             query?: never;
@@ -3734,6 +3755,8 @@ export interface components {
         Composition: {
             /** Assembled At */
             assembled_at: string | null;
+            /** Clip Id */
+            clip_id: string | null;
             /**
              * Comp
              * @default Final
@@ -3754,6 +3777,10 @@ export interface components {
             layers: components["schemas"]["CompositionLayer"][];
             /** Made At */
             made_at: string;
+            /** Render Job Id */
+            render_job_id: string | null;
+            /** Rendered Revision */
+            rendered_revision: number | null;
             /**
              * Revision
              * @default 0
@@ -11750,6 +11777,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompositionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_render_finals__fid__composition_render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobQueued"];
                 };
             };
             /** @description Validation Error */

@@ -467,8 +467,17 @@ class AssembleFinal(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal], Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal
+class CompRender(BaseModel):
+    """AE1 (proto01_animate 20 §2, D114): the finished shot — the final's composition rendered by the pinned `effectcraft-cli render` (Best,
+    Full, a PNG sequence, on the CPU) into a clip: the final's clip, and a take on its Story shot."""
+    kind: Literal["comp_render"] = "comp_render"
+    final_id: str
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender],
+                   Field(discriminator="kind")]
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender
 
 
 class RecipeEnvelope(BaseModel):
@@ -504,7 +513,7 @@ def warm_group(recipe: AnyRecipe, variant: str = "full") -> str:
         return reangle_model_id(recipe, variant)   # P14: the model the move's method runs in this build
     if isinstance(recipe, StageShot):
         return stage_model_id(recipe, variant)     # ST3: the model the Stage method runs in this build
-    if isinstance(recipe, (Render, AssembleFinal)):
+    if isinstance(recipe, (Render, AssembleFinal, CompRender)):
         return "cpu"                               # P17: the draft render never touches the engine; D111: nor the final's assembly
     if isinstance(recipe, TrainLora):
         return "trainer"                           # LT2: the engine is stopped for it; no weights of the engine's stay warm

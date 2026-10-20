@@ -48,6 +48,9 @@ class Composition(BaseModel):
     stale: bool = False                            # computed on read: the final changed since (assembled again, a layer re-made)
     stack: list[str] = Field(default_factory=list) # the actors far to near (the assembly's most common order)
     layers: list[CompositionLayer] = Field(default_factory=list)
+    clip_id: str | None = None                     # the finished shot: the last `comp_render` (the final's clip too)
+    rendered_revision: int | None = None           # the revision that render saw (edits since: the clip is behind)
+    render_job_id: str | None = None
     made_at: str = Field(default_factory=utc_now)
     edited_at: str = Field(default_factory=utc_now)
 
@@ -113,6 +116,16 @@ class CompositionStore:
 
     def save(self, c: Composition) -> None:
         atomic_write_json(self.record(c.final_id), c.model_dump(exclude={"stale"}))
+
+    def set_render(self, fid: str, clip_id: str, revision: int, job_id: str) -> Composition:
+        """The finished shot rendered from the composition at `revision` (the `comp_render` job)."""
+        p = self.record(fid)
+        if not p.is_file():
+            raise KeyError(f"the final {fid} has no composition")
+        c = Composition.model_validate(read_json(p))
+        c.clip_id, c.rendered_revision, c.render_job_id = clip_id, revision, job_id
+        self.save(c)
+        return c
 
     # ---- making ----------------------------------------------------------------------------------
     def make(self, f: Final, ec: EffectCraft) -> Composition:

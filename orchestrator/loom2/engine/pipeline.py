@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -60,7 +60,7 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS, AssembleFinal))
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS, AssembleFinal, CompRender))
     needs: list[str] = []
     if isinstance(recipe, TrainLora):
         needs.append("reference set")
@@ -80,7 +80,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("passes")
     if isinstance(recipe, (ImageToMesh, Keypoints)):
         needs.append("source")
-    if isinstance(recipe, (MatteSequence, AssembleFinal)):
+    if isinstance(recipe, (MatteSequence, AssembleFinal, CompRender)):
         needs.append("final")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
@@ -109,6 +109,9 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     elif isinstance(recipe, AssembleFinal):                           # D111 (PS5e): a CPU job — the final's layers composited
         params = {"final_id": recipe.final_id}
         est = {"seconds": None, "source": "CPU (the layers' PNG sequences → clip); the Dock shows frames done"}
+    elif isinstance(recipe, CompRender):                              # AE1: a CPU job — the composition rendered by effectcraft-cli
+        params = {"final_id": recipe.final_id}
+        est = {"seconds": 5.0, "source": "E27 2026-10-20: effectcraft-cli render, 81 frames at 832×480 in 2.2 s on the CPU"}
     elif isinstance(recipe, Render):                                  # P17: a CPU job — frames from the masters, seconds unknown before the document is read
         params = {"timeline_id": recipe.timeline_id}
         est = {"seconds": None, "source": "CPU (PNG masters → clip); the Dock shows frames done"}
@@ -216,7 +219,7 @@ def preview_problems(recipe: AnyRecipe, roster: Roster, object_info: dict | None
     """The contract problems a submission would hit, or None before the engine has answered once (no object_info to check against)."""
     if not object_info:
         return None
-    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal)):
+    if (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, AssembleFinal, CompRender)):
         return []
     img = _placeholder_image(object_info)
     refs = {(r.asset_id or r.blob or ""): img for r in getattr(recipe, "refs", []) or []}

@@ -6710,3 +6710,39 @@ mask's sense (the model reads 1 − mask: known = 1).
   - R1 (a textured Stage pass) against R2 (a Klein Stage shot of the first frame, then LTX-2.3 on the models' depth), each laid on the
     empty plate as the props' layer;
   - measured: the colour against each reference, the shape (R2 against Stage's masks), the new side shown, time.
+
+## 2026-10-20 10:30 — spike E28c · the props as real 3D models (D109): R1 rendered, R2 drawn on them
+
+- **Spike E28c** (`engine/spikes/e28c_models.py`): E28b's clean room at E21's camera, every prop a Pixal3D model made by the app's
+  `image_to_mesh` job.
+  - **The props:** the crate, the table and the two blocks from their old-plate cut-outs (on light grey; on mid grey a grey block defeats
+    the matte); the chest and the door from E28's references.
+  - **The motion** (121 frames at 24 fps): the chest slides from E28's start to its end and turns 20° → 110°; the door opens about E28's
+    hinge.
+  - **The models:** 217–382 s each (cold 334 s), 17–24 MiB GLBs.
+- **Stage** (the frontend):
+  - a `beauty` sequence kind: every object in its own material, lit, on black.
+  - **PBR fix:** Pixal3D bakes `metallicFactor 1` with a metal texture, so without an environment a model renders near black. The beauty
+    pass lights it with three's RoomEnvironment (PMREM per pass renderer, intensity 0.8; the Lambert clay ignores it).
+  - **Shadow fix:** a GLB model now casts and receives shadows; the flags are set on its meshes when it arrives, since the body's were
+    set before the model loaded.
+- **Upright:** Pixal3D builds a model in its reference camera's frame, so a reference seen from above gives a tilted model. The chest
+  (its reference about 21° from above) tumbled as it turned, and the door came out 0.4 m thick into the wall. The fix searches a tilt
+  (±45° about x and z, never onto a side) and a turn (±45°) for the smallest upright box, coarse 5° then 1°, and bakes it into the GLB
+  node's rotation:
+  - the chest −21°, the stool block −12°, the others 2–9°;
+  - the door is then 0.058 of its height thick.
+  - A product step for D109: a prop's model is stood upright when it is made.
+- **R1** (the models rendered over the empty plate, Stage's shadows), ΔE of the mean colour against each reference:
+  - crate 5.4, chest 8.2, table 11.8;
+  - door 14.1 (too dark), stool block 14.5, big block 21.1 (the grey blocks pale and teal).
+- **R2** (per moving prop, the app's Stage clip path with the others hidden: a Klein shot on the clay pass with the prop's reference and the
+  empty room, then LTX-2.3 on the models' depth; laid where the prop is the nearest):
+  - **chest:** SAM 3 against Stage's mask, IoU 0.925 (min 0.891), ΔE 7.9; shot 49 s, clip 148 s;
+  - **door:** IoU 0.886 (min 0.809; E28's stand-in door 0.79 / 0.61), ΔE 13.2 (lighter green); shot 52 s, clip 166 s;
+  - where the drawn object falls short of the model's outline, the clip's background shows at the edge.
+- **Seen:** the props read as solid objects. The chest's other sides show as it turns, its iron corners and lock carried round. The crate
+  floats a little (a faint contact shadow under this side light). The door casts a long shadow on the wall from Stage's light.
+- **Tests:** Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.
+- **For the author:** `out/e28c/models.jpg`, `compare.mp4` (R1 | R2), `r1.mp4`, `r2.mp4`; the look added to proto01_animate/15 (§3).
+- **Next:** camera moves, on the 3D props. The parallax is now the models' own, with no projection needed.

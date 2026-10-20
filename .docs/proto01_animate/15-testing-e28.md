@@ -1,6 +1,6 @@
-# 15 · Looking at E28 and E28b — props, and the room cleaned up (for the author)
+# 15 · Looking at E28, E28b and E28c — props, the room cleaned up, props as 3D objects (for the author)
 
-About 8 minutes. The files are local, under `engine/spikes/out/e28/` and `engine/spikes/out/e28b/` (not in git).
+About 12 minutes. The files are local, under `engine/spikes/out/e28/`, `e28b/` and `e28c/` (not in git).
 
 ## 1. E28 · three ways to perform a prop (`out/e28/`)
 
@@ -37,6 +37,27 @@ picture: the crate and the table the model drew, and the two grey blocks of the 
 - **Check:** Ines on the stool and Mara walking past the crate: does each stay in front of the props?
 - **Known:** a faint mark on the wall where the big block's top edge was, and a thin light seam at some prop edges.
 
+## 3. E28c · the props as real 3D objects (`out/e28c/`)
+
+Your note: "props should be real 3d objects - very similar to characters, but without the human skeleton" (now D109). In 1 and 2 a
+prop in Stage was a grey stand-in box, and its picture was flat. Now each prop is a **3D model** made from its reference by the app's
+image → 3D job (Pixal3D, 3.6–6.4 min each, made once), stood upright and placed in Stage. The chest slides and turns a quarter, and the
+door opens.
+
+- `models.jpg`: each reference beside its model from four sides.
+- `compare.mp4` (24 fps; full size in `r1.mp4` and `r2.mp4`):
+
+| left · R1 | right · R2 |
+| --- | --- |
+| the models themselves, rendered by Stage (no AI, instant) | the chest and the door drawn by the video model on their 3D shapes (≈ 50 s + 150 s each); the others from the old picture |
+
+- **Check:** do the props now read as solid objects? The chest shows its other sides as it turns.
+- **Check:** R1 or R2 for the chest and the door? R1 is exact and free but looks rendered: the door too dark, the grey blocks pale and
+  teal. R2 looks photographic and follows the 3D shape closely (0.93 of the chest's outline, 0.89 of the door's, against 0.79 for E28's
+  stand-in door), but the door comes out lighter green.
+- **Known:** the models are made in the reference's camera view, so I stand them upright (the chest leaned 21°). The crate floats a
+  little (its contact shadow is faint); the door casts a long shadow on the wall from Stage's light.
+
 ## Notes
 
 | Check | Answer |
@@ -47,3 +68,5 @@ picture: the crate and the table the model drew, and the two grey blocks of the 
 | The same room? | |
 | Stage's or the props' own shadows | |
 | In front of the props | |
+| Solid 3D props? | |
+| R1 or R2 (chest, door) | |

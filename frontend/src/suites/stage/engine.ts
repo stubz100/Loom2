@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { api } from '../../api/client'
 import type { StageCamera, StageDoc, StageObject } from '../../api/types'
 import { applyPose, clay, JOINTS, mannequin, POSES, prop, set as buildSet, setMaterial, vfovFor, type Body, type Joint, type Mannequin } from './builders'
@@ -32,6 +33,7 @@ export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
 interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy }
 
 const deg = THREE.MathUtils.radToDeg, rad = THREE.MathUtils.degToRad
+const BEAUTY_ENV = 0.8                            // D109: the beauty pass's room-environment intensity (E28c: the models read near the plate's brightness)
 
 export class StageEngine {
   readonly renderer: THREE.WebGLRenderer
@@ -435,7 +437,7 @@ export class StageEngine {
         const box = new THREE.Box3().setFromObject(model)
         const c = box.getCenter(new THREE.Vector3())
         model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z))             // centred on its footprint, standing on the floor
-        model.traverse((m) => { m.userData.stageId = id })
+        model.traverse((m) => { m.userData.stageId = id; const mm = m as THREE.Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true } })   // D109: the model arrives after build() set the body's shadow flags
         group.remove(stub)
         group.add(model)
         this.meshesLoaded.add(id)
@@ -573,10 +575,14 @@ export class StageEngine {
   /** ST4 (16 §8): one pass per frame of an animated range — the scene synced to each frame's sampled document and camera (anim.ts),
    *  the depth (the IC-LoRA guide, D76) or the pose sequence, with every frame's COCO-18 keypoints for the rig's scoring. The scene
    *  is left at `restoreDoc` (the frame the viewport shows). */
-  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask', restoreDoc: StageDoc,
+  async renderSequence(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, kind: 'depth' | 'pose' | 'clay' | 'proxy' | 'proxymask' | 'beauty', restoreDoc: StageDoc,
                        onProgress?: (done: number, total: number) => void): Promise<{ blobs: Blob[]; keypoints: Keypoint[][][]; wholebody: (WholeBody | null)[][] }> {
     const r = this.passRenderer(w, h)
     let restore = () => {}
+    // D109: a mesh prop's PBR material (Pixal3D bakes metalness) reflects its surroundings — without an environment it renders near
+    // black. The beauty pass lights them with three's neutral room (PMREM, made per pass renderer; Lambert clay ignores it)
+    let env: THREE.Texture | null = null
+    if (kind === 'beauty') { const pm = new THREE.PMREMGenerator(r); env = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose() }
     try {
       const blobs: Blob[] = []
       const keypoints: Keypoint[][][] = []
@@ -592,6 +598,11 @@ export class StageEngine {
         const wb = this.wholebody(camera, w, h)
         wholebody.push(wb)
         if (kind === 'proxymask') { blobs.push(await this.proxyMask(r, camera)); onProgress?.(i + 1, frames.length); continue }   // E23e: the proxies' silhouette
+        if (kind === 'beauty') {                                                     // D109: every object in its own material (a mesh prop textured), lit, on black
+          this.scene.environment = env; this.scene.environmentIntensity = BEAUTY_ENV
+          try { blobs.push(await this.shotWith(r, camera, null, 0x000000)) } finally { this.scene.environment = null }
+          onProgress?.(i + 1, frames.length); continue
+        }
         blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
           : await toBlob(drawPose(kp, w, h, wb)))
         onProgress?.(i + 1, frames.length)
@@ -599,6 +610,7 @@ export class StageEngine {
       return { blobs, keypoints, wholebody }
     } finally {
       restore()
+      env?.dispose()
       r.dispose(); r.forceContextLoss()
       this.sync(restoreDoc)
       this.dirty = true

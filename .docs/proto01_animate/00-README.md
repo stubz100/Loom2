@@ -30,7 +30,8 @@ character image as an input of wan-animate and create very precise movement and 
 | [18](18-testing-final-shot.md) | **Looking at the final shot** (for the author) | E23's shot made through loom2's own path: layers, plate, characters, mattes, assembly (D111) |
 | [19](19-testing-e27.md) | **Looking at E27** (for the author) | the final shot as an EffectCraft composition, edited and rendered back; where to finish it (Q24, D113) |
 | [20](20-animation-editor-build.md) | **The animation editor's build** (D114) | phase 4 cut into steps: AE1 the composition (pin, client, record, `comp_render`), AP1 thin then full, AE2, AE3; the first slice; what E27 settled |
-| [21](21-testing-final-level.md) | **Trying the Final level** (for the author) | the first slice: a final's composition opened in Animate, scrubbed, played from the cache, rendered to a clip |
+| [21](21-testing-final-level.md) | **Trying the Final level** (for the author) | the first slice: a final's composition opened in Animate, scrubbed, played from the cache, rendered to a clip; AE2's layers, properties, a drag, keys, undo |
+| [22](22-testing-expand.md) | **Trying Expand from Image** (for the author) | D115: a character's coverage expanded with the poses picked as icons; the images as its candidates |
 
 Background reading, in this order:
 

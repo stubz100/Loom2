@@ -20,7 +20,7 @@ E23's shot on a fresh project:
 ## 1. final.mp4 (≈ 3 min)
 
 - **Check:** does it read as one shot: the room, the two characters, their shadows on the floor?
-- **Check:** the join between the two batches is at about 3.2 s. Can you see it?
+- **Check:** the join between the two batches is at about 4.8 s (frame 77 of 81 at 16 fps). Can you see it?
 - **Check:** do the characters stand on the floor, not float?
 - **Known:**
   - Mara stops mid-step at the end: the rig gave her no turn after the walk.

@@ -31,7 +31,21 @@ played, then rendered to a clip. No editing controls yet — those come with AE2
   lands, **Play ▶** plays the finished shot; the row says "rendered at revision n".
 - **Check:** is the rendered clip the same picture as the viewer showed?
 
-## 4. Make it again (optional)
+## 4. Edit it (AE2 a–b, ≈ 3 min)
+
+The rail's **Layers** and **Properties** tabs (the column scrolls there).
+
+- **Layers:** the shot's five layers, top to bottom — Ines, her matte, the stool, Mara, her matte, the shadows, the room. Click
+  **Shadows**' eye (◉) to hide the shadows; the frame redraws without them; click it again. Right-click a row for its menu (hide, solo,
+  lock, up / down, keyframes, undo).
+- **Move Mara:** click her row, then **drag on the frame** in the viewer: a dashed ghost shows the offset; on release she (and her
+  matte) move. Undo with the toolbar's ↶ or Ctrl+Z.
+- **Properties:** with Mara selected, set **Opacity** to 50 (Enter). Press **◆** beside Opacity: a keyframe at the playhead; scrub a
+  second later, set 100, press ◆ again — now she fades in between; the keys are listed with *ease / hold / linear*.
+- **Check:** after each edit, does the frame redraw within a second? Is "one edit, one undo step" how you expect it?
+- **Known:** no masks and no trimming of a layer's in / out yet (AE2c–d, next); the shadows' blur and the colour tools come with AE3.
+
+## 5. Make it again (optional)
 
 - **Make the composition again** writes the composition afresh from the layers (a confirm: the edits are dropped). The viewer reloads
   at revision 0.
@@ -44,3 +58,5 @@ played, then rendered to a clip. No editing controls yet — those come with AE2
 | The sharpening at rest: fine, or distracting? | |
 | The chip understandable? | |
 | The rendered clip matches the viewer? | |
+| Moving a layer by dragging: right? | |
+| One edit, one undo: as expected? | |

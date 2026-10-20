@@ -1,6 +1,6 @@
 // AP1 thin (proto01_animate 20 §2, D114): Animate's Final level — the composition's frames in the viewer, scrubbed by the slider and
 // the transport (commands, D32), played from the page's cache, the chip saying what is shown. The editing controls come with AE2.
-import { useEffect } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandRow } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
@@ -16,8 +16,28 @@ export function FinalViewer() {
   const fetching = useComposition((s) => s.fetching)
   const error = useComposition((s) => s.error)
   const busy = useSession((s) => Object.values(s.jobs).some((j) => j.status === 'running'))
+  const selected = useComposition((s) => s.selected)
+  const selName = useComposition((s) => s.layers.find((l) => l.id === s.selected)?.name)
+  const img = useRef<HTMLImageElement>(null)
+  const [drag, setDrag] = useState<{ x0: number; y0: number; dx: number; dy: number } | null>(null)
   useEffect(() => { const t = window.setInterval(() => void useComposition.getState().tick(), 250); return () => window.clearInterval(t) }, [])
   useEffect(() => () => useComposition.getState().togglePlay(false), [])
+  // AE2: drag the selected layer in the viewer — one `layer.nudge` in comp pixels on release (her matte follows: it is parented to her)
+  const onDown = (e: ReactPointerEvent<HTMLImageElement>) => {
+    if (selected === null || e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 })
+  }
+  const onMove = (e: ReactPointerEvent<HTMLImageElement>) => { if (drag) setDrag({ ...drag, dx: e.clientX - drag.x0, dy: e.clientY - drag.y0 }) }
+  const onUp = (e: ReactPointerEvent<HTMLImageElement>) => {
+    if (!drag) return
+    const el = img.current
+    const scale = el && final ? final.size.w / Math.max(1, el.clientWidth) : 1
+    const dx = Math.round(drag.dx * scale), dy = Math.round(drag.dy * scale)
+    setDrag(null)
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
+    if (dx || dy) void useComposition.getState().nudge(dx, dy)
+  }
   if (!finalId || !final) {
     return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — in the Shot section: make the final shot, assemble it, <b>Make the composition</b>, then <b>Open in Final</b></div></div></div>
   }
@@ -28,7 +48,10 @@ export function FinalViewer() {
   return (
     <div className="anim-stage final-viewer" data-final={final.id}>
       <div className="anim-view final-view">
-        {shown ? <img className="final-frame" src={shown.url} alt="" draggable={false} data-side={shown.side} /> : <div className="anim-overlay">loading the first frame…</div>}
+        {shown ? <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={shown.url} alt="" draggable={false} data-side={shown.side}
+          title={selected !== null ? `Drag to move ${selName ?? 'the selected layer'}` : undefined} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} />
+          : <div className="anim-overlay">loading the first frame…</div>}
+        {drag && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div> : null}
         <span className="final-chip" title="What is on screen: the size shown (½ while scrubbing, full at rest) and how much of the shot is cached for playback">{chipText({ shown, filled, final, fetching }, busy)}</span>
         {error && <div className="anim-overlay err">preview: {error}</div>}
       </div>

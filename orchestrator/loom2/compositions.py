@@ -219,7 +219,33 @@ class CompositionStore:
         result = ec.tool("set_property", args)
         return result, self._edited(f, ec, c)
 
+    def batch(self, f: Final, ec: EffectCraft, steps: list[dict]) -> tuple[Any, Composition]:
+        """Several engine commands as one edit (`command_batch`, stopping at the first refusal), saved once."""
+        c = self._open(f, ec)
+        result = ec.tool("command_batch", {"steps": [{"id": s["id"], "params": s.get("params") or {}} for s in steps], "stop_on_error": True})
+        return result, self._edited(f, ec, c)
+
     def frame(self, f: Final, ec: EffectCraft, t: float, side: int) -> bytes:
         """A frame of the composition as PNG at the longest side `side` (0: full size)."""
         self._open(f, ec)
         return ec.frame(t, side, comp=COMP_NAME)
+
+    # ---- reading (AE2) ---------------------------------------------------------------------------
+    def layers(self, f: Final, ec: EffectCraft) -> list[dict]:
+        """The composition's layers top to bottom as EffectCraft reports them (id, index, name, blend mode, track matte, parent, switches,
+        in / out / start)."""
+        self._open(f, ec)
+        return list(ec.tool("get_comp", {"comp": COMP_NAME}).get("layers") or [])
+
+    def layer(self, f: Final, ec: EffectCraft, ref: str | int) -> dict:
+        """One layer's flat property list (path, type, value, keys) with its header."""
+        self._open(f, ec)
+        return ec.tool("get_layer", {"layer": ref, "comp": COMP_NAME, "flat": True})
+
+    def prop(self, f: Final, ec: EffectCraft, ref: str | int, path: str, t: float | None = None) -> dict:
+        """One property: its value (at `t`), whether it is animated, its keyframes (time, value, interpolation)."""
+        self._open(f, ec)
+        args: dict[str, Any] = {"layer": ref, "path": path, "comp": COMP_NAME}
+        if t is not None:
+            args["time"] = t
+        return ec.tool("get_property", args)

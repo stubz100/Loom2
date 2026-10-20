@@ -26,6 +26,12 @@ def png(w: int, h: int, rgb: tuple[int, int, int]) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
+SWITCHES = {"video": True, "audio": True, "solo": False, "locked": False, "shy": False, "collapse": False, "quality": "Best", "effects": True,
+            "frame_blend": "Off", "motion_blur": False, "adjustment": False, "three_d": False, "guide": False, "sampling": "Bilinear"}
+SWITCH_NAMES = {"lock": "locked", "fx": "effects", "frameBlend": "frame_blend", "motionBlur": "motion_blur", "threeD": "three_d"}   # the command's names → the report's
+FLAT = (("anchor", "vec3"), ("position", "vec3"), ("scale", "vec3"), ("rotation", "scalar"), ("opacity", "scalar"))
+
+
 class Fake:
     def __init__(self) -> None:
         self.p: dict = {"schema": 2, "items": {}, "comps": {}, "active": None, "path": None, "dirty": False, "revision": 0, "time": 0.0,
@@ -91,9 +97,79 @@ class Fake:
             c = self.comp(p.get("comp"))
             item = self.p["items"][str(p["item"])]
             i = self.nid()
-            c["layers"].insert(0, {"id": i, "name": item["name"], "item": item["id"], "blendMode": "Normal", "trackMatte": None, "parent": None,
-                                   "position": [c["width"] / 2, c["height"] / 2], "opacity": 100.0, "video": True, "masks": [], "effects": [], "keys": {}})
+            c["layers"].insert(0, {"id": i, "name": item["name"], "item": item["id"], "type": "AV", "label": "Lavender", "blendMode": "Normal", "trackMatte": None,
+                                   "parent": None, "in": 0.0, "out": c["duration"], "start": 0.0, "stretch": 100.0,
+                                   "anchor": [c["width"] / 2, c["height"] / 2, 0.0], "position": [c["width"] / 2, c["height"] / 2, 0.0], "scale": [100.0, 100.0, 100.0],
+                                   "rotation": 0.0, "opacity": 100.0, "switches": dict(SWITCHES), "masks": [], "effects": [], "keys": {}})
             return {"layer": i}
+        if cid == "layer.arrange":                                      # what dragging Timeline rows does
+            self.edit()
+            c = self.comp(p.get("comp"))
+            moving = self.layers_of(p)
+            rest = [l for l in c["layers"] if l not in moving]
+            to, above = p.get("to"), p.get("above")
+            if above is not None:
+                k = next(i for i, l in enumerate(rest) if str(l["id"]) == str(above) or l["name"] == above)
+            elif to == "front":
+                k = 0
+            elif to == "back":
+                k = len(rest)
+            elif to in ("forward", "backward"):
+                idx = [c["layers"].index(l) for l in moving]
+                k = max(0, min(len(rest), (min(idx) - 1) if to == "forward" else (max(idx) + 2 - len(moving))))
+            else:
+                k = int(p.get("index", 1)) - 1
+            c["layers"] = rest[:k] + moving + rest[k:]
+            return {}
+        if cid == "layer.nudge":
+            self.edit()
+            for l in self.layers_of(p):
+                l["position"] = [l["position"][0] + float(p.get("x", 0)), l["position"][1] + float(p.get("y", 0)), l["position"][2]]
+            return {}
+        if cid == "layer.setTransform":
+            self.edit()
+            for l in self.layers_of(p):
+                l[p["prop"]] = p["value"]
+            return {}
+        if cid == "time.set":
+            c = self.comp(p.get("comp"))
+            self.p["time"] = float(p["time"]) if "time" in p else float(p.get("frame", 0)) / c["frameRate"]
+            return {"time": self.p["time"]}
+        if cid == "prop.toggleKey":                                     # a key at the current time added, or the one there removed
+            self.edit()
+            l = self.layer(self.comp(p.get("comp")), p["layer"])
+            path = p.get("path") or p.get("prop")
+            key = str(path).split("/")[-1]
+            t = float(p.get("time", self.p["time"]))
+            keys = l["keys"].setdefault(key, [])
+            had = [k for k in keys if abs(k["time"] - t) < 1e-6]
+            if had:
+                keys[:] = [k for k in keys if k not in had]
+            else:
+                keys.append({"time": t, "value": l.get(key), "in": "linear", "out": "linear"})
+                keys.sort(key=lambda k: k["time"])
+            return {"added": not had}
+        if cid == "keys.select":
+            self.sel = [{"layer": k["layer"], "prop": str(k["prop"]).split("/")[-1], "time": float(k["time"])} for k in p.get("keys", [])]
+            return {"selected": len(self.sel)}
+        if cid in ("keys.easyEase", "keys.toggleHold", "keys.interpolation", "keys.delete"):
+            self.edit()
+            c = self.comp(p.get("comp"))
+            for s_ in getattr(self, "sel", []):
+                l = self.layer(c, s_["layer"])
+                keys = l["keys"].get(s_["prop"], [])
+                for k in [k for k in keys if abs(k["time"] - s_["time"]) < 1e-6]:
+                    if cid == "keys.delete":
+                        keys.remove(k)
+                    elif cid == "keys.easyEase":
+                        k["in"] = k["out"] = "bezier"
+                    elif cid == "keys.toggleHold":
+                        k["out"] = "linear" if k["out"] == "hold" else "hold"
+                    else:
+                        k["in"] = k["out"] = p.get("interpolation", "linear")
+            if cid == "keys.delete":
+                self.sel = []
+            return {}
         if cid == "layer.rename":
             self.edit()
             self.layer(self.comp(p.get("comp")), p["layer"])["name"] = p["name"]
@@ -110,7 +186,7 @@ class Fake:
             m = self.layer(c, p["matte"]) if p.get("matte") is not None else None
             l["trackMatte"] = {"layer": m["id"], "kind": {"luma": "Luma Matte", "alpha": "Alpha Matte"}.get(str(p.get("kind", "alpha")).lower(), "Alpha Matte")} if m else None
             if m:
-                m["video"] = False
+                m["switches"]["video"] = False
             return {}
         if cid == "layer.setParent":
             self.edit()
@@ -121,8 +197,9 @@ class Fake:
             return {}
         if cid == "layer.setSwitch":
             self.edit()
+            name = SWITCH_NAMES.get(p["switch"], p["switch"])
             for l in self.layers_of(p):
-                l[p["switch"]] = p["value"]
+                l["switches"][name] = p["value"] if "value" in p else not l["switches"].get(name)
             return {}
         if cid == "layer.addMask":
             self.edit()
@@ -200,13 +277,33 @@ class Fake:
             l = self.layer(self.comp(a.get("comp")), a["layer"])
             key = a["path"].split("/")[-1]
             if "time" in a:
-                l["keys"].setdefault(key, []).append({"time": a["time"], "value": a["value"]})
+                keys = l["keys"].setdefault(key, [])
+                keys[:] = [k for k in keys if abs(k["time"] - float(a["time"])) >= 1e-6]   # a key there is replaced
+                keys.append({"time": float(a["time"]), "value": a["value"], "in": "linear", "out": "linear"})
+                keys.sort(key=lambda k: k["time"])
             l[key] = a["value"]
             return text({"path": a["path"], "value": a["value"], "animated": bool(l["keys"].get(key))})
         if name == "get_property":
             l = self.layer(self.comp(a.get("comp")), a["layer"])
             key = a["path"].split("/")[-1]
-            return text({"path": a["path"], "value": l.get(key), "keys": l["keys"].get(key, [])})
+            keys = l["keys"].get(key, [])
+            return text({"layer": l["id"], "path": a["path"], "uid": key, "type": dict(FLAT).get(key, "scalar"), "value": l.get(key), "animated": bool(keys), "keys": keys, "expression": None})
+        if name == "get_layer":
+            l = self.layer(self.comp(a.get("comp")), a["layer"])
+            props = [{"path": f"transform/{k}", "type": t, "value": l.get(k), **({"keys": len(l["keys"][k])} if l["keys"].get(k) else {})} for k, t in FLAT]
+            head = {k: v for k, v in l.items() if k not in ("masks", "effects", "keys", "anchor", "position", "scale", "rotation", "opacity")}
+            return text({**head, "time": self.p["time"], "properties": props})
+        if name == "command_batch":
+            results, failed = [], 0
+            for i, step in enumerate(a.get("steps") or []):
+                try:
+                    results.append({"ok": True, "result": self.command(step["id"], step.get("params") or {})})
+                except (KeyError, ValueError, TypeError) as e:
+                    results.append({"ok": False, "error": str(e)})
+                    failed += 1
+                    if a.get("stop_on_error", True):
+                        break
+            return text({"completed": len(results) - failed, "failed": failed, "results": results})
         if name == "get_comp":
             c = self.comp(a.get("comp"))
             return text({**{k: v for k, v in c.items() if k != "layers"}, "layers": [{**l, "index": i + 1} for i, l in enumerate(c["layers"])]})
@@ -269,7 +366,13 @@ def serve(argv: list[str]) -> int:
             result = {}
         elif method == "tools/call":
             try:
-                result = {"content": f.tool(params["name"], params.get("arguments") or {}), "isError": False}
+                content = f.tool(params["name"], params.get("arguments") or {})
+                failed = 0
+                try:                                                    # as the real server: a batch with a failed step is an error reply
+                    failed = int(json.loads(next(c["text"] for c in content if c.get("type") == "text")).get("failed", 0))
+                except (StopIteration, ValueError, TypeError, AttributeError):
+                    failed = 0
+                result = {"content": content, "isError": failed > 0}
             except (KeyError, ValueError, TypeError) as e:
                 result = {"content": [{"type": "text", "text": str(e)}], "isError": True}
         else:

@@ -2380,6 +2380,22 @@
         "title": "Composition",
         "type": "object"
       },
+      "CompositionBatch": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionCommand"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "CompositionBatch",
+        "type": "object"
+      },
       "CompositionCommand": {
         "properties": {
           "id": {
@@ -2445,6 +2461,23 @@
           "offset_px"
         ],
         "title": "CompositionLayer",
+        "type": "object"
+      },
+      "CompositionLayers": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CompositionLayers",
         "type": "object"
       },
       "CompositionProperty": {
@@ -20540,6 +20573,59 @@
         ]
       }
     },
+    "/finals/{fid}/composition/batch": {
+      "post": {
+        "description": "Several engine commands as one edit (one save, one revision; the first refusal stops it, 422 with the engine's message).",
+        "operationId": "composition_batch_finals__fid__composition_batch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompositionBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Batch",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/composition/command": {
       "post": {
         "description": "One engine command on the composition, saved; the engine's refusal comes back as 422 with its message.",
@@ -20649,6 +20735,182 @@
           }
         },
         "summary": "Composition Frame",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/layers": {
+      "get": {
+        "description": "The composition's layers, top to bottom, as the engine reports them.",
+        "operationId": "composition_layers_finals__fid__composition_layers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionLayers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Layers",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/layers/{lid}": {
+      "get": {
+        "description": "One layer (its id or name): the header and the flat property list (path, type, value, keys).",
+        "operationId": "composition_layer_finals__fid__composition_layers__lid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Composition Layer Finals  Fid  Composition Layers  Lid  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Layer",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/layers/{lid}/property": {
+      "get": {
+        "description": "One property of a layer: its value at `t`, whether it is animated, its keyframes.",
+        "operationId": "composition_property_get_finals__fid__composition_layers__lid__property_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "T"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Composition Property Get Finals  Fid  Composition Layers  Lid  Property Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Property Get",
         "tags": [
           "finals"
         ]

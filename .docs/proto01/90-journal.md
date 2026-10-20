@@ -7130,3 +7130,33 @@ The author asked for a review of the state of things, then "record all this and 
   revision 0"): **e2e 49/49 under full and open**; Vitest 389 + 3; build clean; lint 75.
 - **The first slice of phase 4 is complete** (AE1 steps 1–4 + AP1 thin): doc 18's shot can be made, assembled, composed, scrubbed at the
   Final level and rendered to a clip from the app. Owed: the author's look (a testing document, 21), then AE2.
+
+## 2026-10-20 19:17 — AE2 steps a–b built: Layers and Properties in Animate's column at the Final level (proto01_animate 20 §2)
+
+- **The engine's reads and one-save batches** (backend): `CompositionStore.layers` (`get_comp`: the layers top to bottom with id, index,
+  name, blend mode, track matte, parent, switches, in / out / start), `layer` (`get_layer` flat: the transform's paths, types, values,
+  key counts), `prop` (`get_property`: the value, animated, the keys with their interpolation, the uid), `batch` (`command_batch`,
+  stopping at the first refusal — the steps before it stay the engine's own undo steps); routes `GET …/composition/layers`,
+  `GET …/layers/{lid}`, `GET …/layers/{lid}/property?path`, `POST …/composition/batch`. The fake grew the same: switches as the engine
+  names them, `layer.arrange`, `layer.nudge`, `layer.setTransform`, `time.set`, `prop.toggleKey`, `keys.select` / `easyEase` /
+  `toggleHold` / `interpolation` / `delete`, `get_layer`, `command_batch` (an error reply when a step failed, as the real server).
+- **Layers** (`FinalEditor.tsx`): the composition's layers top to bottom; a row is selected by a click; its visible / solo / lock switches
+  (`layer.setSwitch`), blend mode (`layer.setBlendMode`), track matte and its kind (`layer.setTrackMatte`), parent (`layer.setParent`);
+  the order by the toolbar's up / down and the row's menu (`layer.arrange` forward / backward / front / back); undo and redo (`edit.undo`,
+  `edit.redo`, Ctrl+Z / Ctrl+Shift+Z at the Final level). Every verb is a registry command on the selected layer (`anim.final.*`, D32),
+  in the section's toolbar and the row's right-click menu; the row's own widgets call the same store actions.
+- **Properties:** the selected layer's anchor, position, scale, rotation and opacity (x / y fields, committed on Enter or blur, one
+  engine round trip each: `set_property`); a **keyframe at the playhead** per property (`time.set` + `prop.toggleKey` as one batch; the
+  toolbar's *Keyframe: position / opacity*), each key listed with its time (a click goes there), its ease / hold / linear
+  (`keys.select` + `keys.easyEase` / `toggleHold` / `interpolation`) and a delete (`keys.delete`).
+- **The viewer:** with a layer selected, a **drag on the frame moves it** — one `layer.nudge` in comp pixels on release (the drag scaled
+  by the frame's display size; a dashed ghost with the offset while dragging); her matte follows, being parented to her. After every
+  edit the composition's revision moves, the frame cache drops and the frame is asked again (½, then full at rest), the lists and the
+  properties reload.
+- The rail gains **Layers** and **Properties** tabs; at the other levels the sections say where the editor lives.
+- **Tests:** `test_compositions_ae1` (the reads, a batch of two edits, a refused batch saving nothing, a key at 0.5 s and its ease, four
+  undos each a step, made again); the command audit (every context command in the row's menu); the e2e final-shot scenario extended at
+  the Final level — five rows, the shadows hidden (revision 1), the figure's row selected and its properties shown, opacity 50 by
+  the field (revision 2), a keyframe at the playhead (revision 3, one key listed), two undos (the key gone, the opacity 100 again),
+  then the render. Offline: 478 passed in 141.21s (0:02:21) (full), 478 passed in 133.83s (0:02:13) (open); e2e 49 passed (3.1m) / 49 passed (3.0m); Vitest 389 + 3; build clean; lint 75.
+- **Not yet (AE2c–d):** masks (the pen, feather, mode) and the timeline's layer bars (trim, slip, move) under the transport.

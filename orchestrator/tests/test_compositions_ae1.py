@@ -115,9 +115,43 @@ def test_composition_routes(tmp_path: Path):
         layers = comp["layers"]                                                          # top first
         assert [l["name"] for l in layers] == ["Mara", "Mara · matte", "Box", "Shadows", "Room"]
         assert layers[3]["blendMode"] == "Multiply" and layers[0]["trackMatte"] == {"layer": layers[1]["id"], "kind": "Luma Matte"}
-        assert layers[1]["parent"] == layers[0]["id"] and not layers[1]["video"]
+        assert layers[1]["parent"] == layers[0]["id"] and not layers[1]["switches"]["video"]
         dx, dy = stats["offsets_px"]["fig"]
         assert layers[0]["position"] == [S / 2 + dx, S / 2 + dy] == layers[1]["position"]
+        # AE2: the editor reads the structure and one layer's properties; several commands as one edit
+        r = cl.get(f"{url}/layers", headers=H)
+        assert r.status_code == 200 and [l["name"] for l in r.json()["items"]] == ["Mara", "Mara · matte", "Box", "Shadows", "Room"]
+        assert r.json()["items"][0]["switches"]["video"] is True and r.json()["items"][0]["index"] == 1
+        r = cl.get(f"{url}/layers/Mara", headers=H)
+        assert r.status_code == 200 and r.json()["name"] == "Mara" and [p["path"] for p in r.json()["properties"]][:2] == ["transform/anchor", "transform/position"]
+        r = cl.get(f"{url}/layers/{layers[0]['id']}/property?path=transform/opacity", headers=H)
+        assert r.status_code == 200 and r.json()["value"] == 100.0 and r.json()["animated"] is False
+        r = cl.post(f"{url}/batch", json={"steps": [{"id": "layer.setSwitch", "params": {"layers": ["Shadows"], "switch": "video", "value": False}},
+                                                    {"id": "layer.arrange", "params": {"layers": ["Box"], "to": "front"}}]}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["failed"] == 0 and r.json()["composition"]["revision"] == 1
+        items = cl.get(f"{url}/layers", headers=H).json()["items"]
+        assert [l["name"] for l in items][:2] == ["Box", "Mara"] and next(l for l in items if l["name"] == "Shadows")["switches"]["video"] is False
+        r = cl.post(f"{url}/batch", json={"steps": [{"id": "layer.fly"}, {"id": "layer.arrange", "params": {"layers": ["Box"], "to": "back"}}]}, headers=H)
+        assert r.status_code == 422 and "unknown command" in r.text                   # stops at the first refusal, nothing saved
+        assert cl.get(url, headers=H).json()["revision"] == 1
+        r = cl.post(f"{url}/property", json={"layer": "Mara", "path": "transform/opacity", "value": 40, "time": 0.5}, headers=H)   # a key at 0.5 s
+        assert r.status_code == 200 and r.json()["composition"]["revision"] == 2
+        kp = cl.get(f"{url}/layers/Mara/property?path=transform/opacity", headers=H).json()
+        assert kp["animated"] is True and kp["keys"][0]["time"] == 0.5
+        r = cl.post(f"{url}/batch", json={"steps": [{"id": "keys.select", "params": {"keys": [{"layer": "Mara", "prop": "transform/opacity", "time": 0.5}]}}, {"id": "keys.easyEase"}]}, headers=H)
+        assert r.status_code == 200 and cl.get(f"{url}/layers/Mara/property?path=transform/opacity", headers=H).json()["keys"][0]["in"] == "bezier"
+        cl.post(f"{url}/command", json={"id": "edit.undo"}, headers=H)                 # the ease undone; the key stays
+        assert cl.get(f"{url}/layers/Mara/property?path=transform/opacity", headers=H).json()["keys"][0]["in"] == "linear"
+        cl.post(f"{url}/command", json={"id": "edit.undo"}, headers=H)                 # the key undone
+        assert cl.get(f"{url}/layers/Mara/property?path=transform/opacity", headers=H).json()["animated"] is False
+        cl.post(f"{url}/command", json={"id": "edit.undo"}, headers=H)                 # the batch's steps are undo steps of their own: the arrange
+        items = cl.get(f"{url}/layers", headers=H).json()["items"]
+        assert [l["name"] for l in items][:2] == ["Mara", "Mara · matte"] and next(l for l in items if l["name"] == "Shadows")["switches"]["video"] is False
+        cl.post(f"{url}/command", json={"id": "edit.undo"}, headers=H)                 # then the switch
+        assert next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Shadows")["switches"]["video"] is True
+        assert cl.get(url, headers=H).json()["revision"] == 7                          # every save counted: a batch is one, each undo one
+        assert cl.post(url, headers=H).json()["revision"] == 0                         # made again: fresh for what follows
+        layers = next(iter(json.loads((d / "comp.ecproj").read_text(encoding="utf-8"))["comps"].values()))["layers"]   # as saved
         assert svc.effectcraft.project == str(d / "comp.ecproj")                        # the session holds the written file
         assert cl.get(url, headers=H).json()["revision"] == 0
         # edits: a property, then a command; each saved, the revision counting

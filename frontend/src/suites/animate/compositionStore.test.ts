@@ -14,6 +14,7 @@ function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   calls.push(url.replace(/^https?:\/\/[^/]+/, ''))
   if (url.endsWith('/finals/fin_1')) return Promise.resolve(new Response(JSON.stringify(FINAL), { status: 200, headers: { 'content-type': 'application/json' } }))
   if (url.endsWith('/finals/fin_1/composition')) return Promise.resolve(new Response(JSON.stringify(comp), { status: 200, headers: { 'content-type': 'application/json' } }))
+  if (url.endsWith('/finals/fin_1/composition/layers')) return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } }))
   if (url.includes('/composition/frame')) return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))   // bytes, not jsdom's Blob (no stream())
   return Promise.resolve(new Response('{"detail":"nope"}', { status: 404 }))
 }

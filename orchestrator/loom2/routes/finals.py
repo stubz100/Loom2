@@ -458,3 +458,65 @@ async def composition_render(svc: Svc, fid: str):
         raise HTTPException(422, str(e))
     await svc.queue.flush()
     return {"job_id": jobs[0].id}
+
+
+# ---- AE2 (proto01_animate 20 §2): the editor reads the composition's structure; several commands as one edit -----------------------
+class CompositionBatch(BaseModel):
+    steps: list[CompositionCommand]
+
+
+class CompositionLayers(BaseModel):
+    items: list[dict[str, Any]]
+
+
+def _lid(lid: str) -> str | int:
+    return int(lid) if lid.isdigit() else lid
+
+
+@router.post("/finals/{fid}/composition/batch", response_model=CompositionResult)
+async def composition_batch(svc: Svc, fid: str, body: CompositionBatch):
+    """Several engine commands as one edit (one save, one revision; the first refusal stops it, 422 with the engine's message)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        result, c = await asyncio.to_thread(cs.batch, f, svc.effectcraft, [s.model_dump() for s in body.steps])
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return {"result": result, "composition": c.model_dump()}
+
+
+@router.get("/finals/{fid}/composition/layers", response_model=CompositionLayers)
+async def composition_layers(svc: Svc, fid: str):
+    """The composition's layers, top to bottom, as the engine reports them."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        return {"items": await asyncio.to_thread(cs.layers, f, svc.effectcraft)}
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+
+
+@router.get("/finals/{fid}/composition/layers/{lid}", response_model=dict[str, Any])
+async def composition_layer(svc: Svc, fid: str, lid: str):
+    """One layer (its id or name): the header and the flat property list (path, type, value, keys)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        return await asyncio.to_thread(cs.layer, f, svc.effectcraft, _lid(lid))
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+
+
+@router.get("/finals/{fid}/composition/layers/{lid}/property", response_model=dict[str, Any])
+async def composition_property_get(svc: Svc, fid: str, lid: str, path: str, t: float | None = None):
+    """One property of a layer: its value at `t`, whether it is animated, its keyframes."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        return await asyncio.to_thread(cs.prop, f, svc.effectcraft, _lid(lid), path, t)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)

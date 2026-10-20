@@ -15,6 +15,14 @@ export const REST_MS = 300                 // the playhead still this long: the 
 const FULL_KEEP = 12                       // full frames kept (≈ 1.2 MB each at 832×480); every ½ frame of the shot is kept (≈ 150 KB)
 
 export interface Shown { url: string; frame: number; side: Side; revision: number }
+/** AE2: a layer as the engine reports it (top to bottom). */
+export interface CompLayer { id: number; index: number; name: string; type?: string; blendMode: string; trackMatte: { layer: number; kind: string } | null; parent: number | null; in: number; out: number; start: number; switches: Record<string, unknown> }
+/** AE2: a property of the selected layer (its flat path) and its keyframes. */
+export interface FlatProp { path: string; type: string; value: unknown; keys?: number }
+export interface PropKey { time: number; value: unknown; in?: string; out?: string }
+export const EDITABLE = ['transform/anchor', 'transform/position', 'transform/scale', 'transform/rotation', 'transform/opacity'] as const
+export type Arrange = 'front' | 'forward' | 'backward' | 'back'
+const detail = (e: unknown): string => (e as { detail?: string }).detail ?? (e as Error).message ?? String(e)
 
 interface CompState {
   level: Level
@@ -41,6 +49,34 @@ interface CompState {
   settle: () => void
   /** The idle fill: the next ½ frame not cached, while nothing plays, nothing is in flight and no job runs. */
   tick: () => Promise<void>
+  // ---- AE2: the editor ----
+  layers: CompLayer[]
+  selected: number | null
+  props: FlatProp[]
+  keysOf: Record<string, PropKey[]>
+  uidOf: Record<string, number | string>
+  busy: boolean
+  loadLayers: () => Promise<void>
+  select: (id: number | null) => void
+  loadProps: () => Promise<void>
+  /** One engine command on the composition, saved; then the viewer and the lists follow the new revision. */
+  command: (id: string, params: Record<string, unknown>, what: string) => Promise<boolean>
+  /** Several commands as one edit (one revision). */
+  batch: (steps: { id: string; params?: Record<string, unknown> }[], what: string) => Promise<boolean>
+  /** A property of the selected layer set, or keyed at `time`. */
+  setProp: (path: string, value: unknown, time?: number) => Promise<boolean>
+  nudge: (dx: number, dy: number) => Promise<boolean>
+  undo: () => Promise<boolean>
+  redo: () => Promise<boolean>
+  layerSwitch: (id: number, name: string, value: boolean) => Promise<boolean>
+  setBlend: (id: number, mode: string) => Promise<boolean>
+  setMatte: (id: number, matte: number | null, kind: string) => Promise<boolean>
+  setParent: (id: number, parent: number | null) => Promise<boolean>
+  arrange: (id: number, to: Arrange) => Promise<boolean>
+  /** A keyframe on the selected layer's property at the playhead — added, or the one there removed. */
+  keyToggle: (path: string) => Promise<boolean>
+  keyEase: (path: string, time: number, how: 'ease' | 'hold' | 'linear') => Promise<boolean>
+  keyDelete: (path: string, time: number) => Promise<boolean>
 }
 
 const cache = new Map<string, string>()
@@ -136,8 +172,77 @@ export const useComposition = create<CompState>((set, get) => {
     if (restTimer !== null) window.clearTimeout(restTimer)
     restTimer = window.setTimeout(() => { restTimer = null; get().settle() }, REST_MS)
   }
+  /** After an edit: the composition again (its revision moved: the cache dropped, the frame asked again), the lists, the properties. */
+  const edited = async (): Promise<void> => {
+    await get().reload()
+    await get().loadProps()
+  }
+  const run = async <T,>(what: string, call: () => Promise<T>): Promise<boolean> => {
+    if (!get().finalId) return false
+    set({ busy: true })
+    try { await call(); await edited(); return true } catch (e) { useSession.getState().toast(`${what}: ${detail(e)}`, 'error'); return false } finally { set({ busy: false }) }
+  }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false,
+    loadLayers: async () => {
+      const fid = get().finalId
+      if (!fid || !get().comp) { set({ layers: [] }); return }
+      try {
+        const r = await unwrap(http.GET('/finals/{fid}/composition/layers', { params: { path: { fid } } }))
+        const layers = r.items as unknown as CompLayer[]
+        set({ layers })
+        if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], keysOf: {}, uidOf: {} })
+      } catch (e) { set({ error: detail(e) }) }
+    },
+    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {} }); if (id !== null) void get().loadProps() },
+    loadProps: async () => {
+      const fid = get().finalId, sel = get().selected
+      if (!fid || sel === null) return
+      try {
+        const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) } } })) as { properties?: FlatProp[] }
+        const props = (r.properties ?? []).filter((p) => (EDITABLE as readonly string[]).includes(p.path))
+        const keysOf: Record<string, PropKey[]> = {}
+        const uidOf: Record<string, number | string> = {}
+        await Promise.all(props.map(async (p) => {
+          const k = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}/property', { params: { path: { fid, lid: String(sel) }, query: { path: p.path } } })) as { keys?: PropKey[]; uid?: number | string }
+          keysOf[p.path] = k.keys ?? []
+          if (k.uid !== undefined) uidOf[p.path] = k.uid
+        }))
+        if (get().selected === sel) set({ props, keysOf, uidOf })
+      } catch (e) { set({ error: detail(e) }) }
+    },
+    command: (id, params, what) => run(what, () => unwrap(http.POST('/finals/{fid}/composition/command', { params: { path: { fid: get().finalId! } }, body: { id, params } }))),
+    batch: (steps, what) => run(what, () => unwrap(http.POST('/finals/{fid}/composition/batch', { params: { path: { fid: get().finalId! } }, body: { steps: steps.map((s) => ({ id: s.id, params: s.params ?? {} })) } }))),
+    setProp: (path, value, time) => {
+      const sel = get().selected
+      if (sel === null) return Promise.resolve(false)
+      return run('Set the property', () => unwrap(http.POST('/finals/{fid}/composition/property', { params: { path: { fid: get().finalId! } }, body: { layer: sel, path, value, time: time ?? null } })))
+    },
+    nudge: (dx, dy) => { const sel = get().selected; return sel === null ? Promise.resolve(false) : get().command('layer.nudge', { x: dx, y: dy, layers: [sel] }, 'Move the layer') },
+    undo: () => get().command('edit.undo', {}, 'Undo'),
+    redo: () => get().command('edit.redo', {}, 'Redo'),
+    layerSwitch: (id, name, value) => get().command('layer.setSwitch', { layers: [id], switch: name, value }, 'Switch the layer'),
+    setBlend: (id, mode) => get().command('layer.setBlendMode', { layers: [id], mode }, 'Blend mode'),
+    setMatte: (id, matte, kind) => get().command('layer.setTrackMatte', { layer: id, matte, kind }, 'Track matte'),
+    setParent: (id, parent) => get().command('layer.setParent', { layers: [id], parent }, 'Parent'),
+    arrange: (id, to) => get().command('layer.arrange', { layers: [id], to }, 'Arrange the layers'),
+    keyToggle: (path) => {
+      const sel = get().selected, f = get().final
+      if (sel === null || !f) return Promise.resolve(false)
+      return get().batch([{ id: 'time.set', params: { time: get().frame / f.rate } }, { id: 'prop.toggleKey', params: { layer: sel, path } }], 'Keyframe')
+    },
+    keyEase: (path, time, how) => {
+      const sel = get().selected
+      if (sel === null) return Promise.resolve(false)
+      const step = how === 'ease' ? { id: 'keys.easyEase' } : how === 'hold' ? { id: 'keys.toggleHold' } : { id: 'keys.interpolation', params: { interpolation: 'linear' } }
+      return get().batch([{ id: 'keys.select', params: { keys: [{ layer: sel, prop: get().uidOf[path] ?? path, time }] } }, step], 'Keyframe')
+    },
+    keyDelete: (path, time) => {
+      const sel = get().selected
+      if (sel === null) return Promise.resolve(false)
+      return get().batch([{ id: 'keys.select', params: { keys: [{ layer: sel, prop: get().uidOf[path] ?? path, time }] } }, { id: 'keys.delete' }], 'Delete the keyframe')
+    },
     setLevel: (level) => { if (level !== 'final') get().togglePlay(false); set({ level }) },
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }
@@ -154,6 +259,7 @@ export const useComposition = create<CompState>((set, get) => {
         if (comp?.revision !== get().comp?.revision || get().final?.id !== final.id) { clearCache(); wanted = null; set({ shown: null, filled: 0 }) }
         set({ final, comp, error: null, frame: Math.min(get().frame, Math.max(0, final.frames - 1)) })
         if (comp) { request(get().frame, 'half'); armRest() }
+        void get().loadLayers()
       } catch (e) { set({ error: (e as Error).message }) }
     },
     setFrame: (n) => {

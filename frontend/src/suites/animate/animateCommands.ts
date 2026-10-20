@@ -6,12 +6,15 @@ import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
+import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon, Undo2 as UndoIcon } from 'lucide-react'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
 const hasStart = () => !!an().panel.start
 const atFinal = () => cp().level === 'final' && !!cp().comp
+const selLayer = () => (atFinal() ? cp().layers.find((l) => l.id === cp().selected) ?? null : null)
+const hasSel = () => !!selLayer()
 
 registerCommands([
   // render
@@ -31,6 +34,16 @@ registerCommands([
   { id: 'anim.final.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, placement: ['toolbar'], when: atFinal, run: () => cp().step(1) },
   { id: 'anim.final.home', scope: 'animate', label: 'First frame', icon: ChevronFirst, placement: ['toolbar'], when: atFinal, run: () => cp().home() },
   { id: 'anim.final.end', scope: 'animate', label: 'Last frame', icon: ChevronLast, placement: ['toolbar'], when: atFinal, run: () => cp().end() },
+  // AE2: the editor — each one engine command on the composition (Layers' toolbar, the row's menu; the keys as accelerators)
+  { id: 'anim.final.undo', scope: 'animate', label: 'Undo', icon: UndoIcon, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().undo() },
+  { id: 'anim.final.redo', scope: 'animate', label: 'Redo', icon: RedoIcon, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().redo() },
+  { id: 'anim.final.layer.up', scope: 'animate', label: 'Layer up', hint: 'above the next layer', icon: ArrowUpIcon, placement: ['toolbar', 'context'], when: () => (selLayer()?.index ?? 1) > 1, run: () => void cp().arrange(cp().selected!, 'forward') },
+  { id: 'anim.final.layer.down', scope: 'animate', label: 'Layer down', hint: 'below the next layer', icon: ArrowDownIcon, placement: ['toolbar', 'context'], when: () => !!selLayer() && selLayer()!.index < cp().layers.length, run: () => void cp().arrange(cp().selected!, 'backward') },
+  { id: 'anim.final.layer.hide', scope: 'animate', label: 'Hide / show the layer', icon: HideIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().layerSwitch(cp().selected!, 'video', !selLayer()!.switches.video) },
+  { id: 'anim.final.layer.solo', scope: 'animate', label: 'Solo the layer', icon: SoloIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().layerSwitch(cp().selected!, 'solo', !selLayer()!.switches.solo) },
+  { id: 'anim.final.layer.lock', scope: 'animate', label: 'Lock / unlock the layer', icon: LockIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().layerSwitch(cp().selected!, 'lock', !selLayer()!.switches.locked) },
+  { id: 'anim.final.key.position', scope: 'animate', label: 'Keyframe: position at the playhead', icon: KeyIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().keyToggle('transform/position') },
+  { id: 'anim.final.key.opacity', scope: 'animate', label: 'Keyframe: opacity at the playhead', icon: KeyIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().keyToggle('transform/opacity') },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
   { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },

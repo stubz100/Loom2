@@ -816,6 +816,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Batch
+         * @description Several engine commands as one edit (one save, one revision; the first refusal stops it, 422 with the engine's message).
+         */
+        post: operations["composition_batch_finals__fid__composition_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/composition/command": {
         parameters: {
             query?: never;
@@ -848,6 +868,66 @@ export interface paths {
          * @description A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin).
          */
         get: operations["composition_frame_finals__fid__composition_frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/layers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Composition Layers
+         * @description The composition's layers, top to bottom, as the engine reports them.
+         */
+        get: operations["composition_layers_finals__fid__composition_layers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/layers/{lid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Composition Layer
+         * @description One layer (its id or name): the header and the flat property list (path, type, value, keys).
+         */
+        get: operations["composition_layer_finals__fid__composition_layers__lid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/layers/{lid}/property": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Composition Property Get
+         * @description One property of a layer: its value at `t`, whether it is animated, its keyframes.
+         */
+        get: operations["composition_property_get_finals__fid__composition_layers__lid__property_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3799,6 +3879,11 @@ export interface components {
              */
             stale: boolean;
         };
+        /** CompositionBatch */
+        CompositionBatch: {
+            /** Steps */
+            steps: components["schemas"]["CompositionCommand"][];
+        };
         /** CompositionCommand */
         CompositionCommand: {
             /** Id */
@@ -3825,6 +3910,13 @@ export interface components {
             name: string;
             /** Offset Px */
             offset_px: number[];
+        };
+        /** CompositionLayers */
+        CompositionLayers: {
+            /** Items */
+            items: {
+                [key: string]: unknown;
+            }[];
         };
         /** CompositionProperty */
         CompositionProperty: {
@@ -11686,6 +11778,41 @@ export interface operations {
             };
         };
     };
+    composition_batch_finals__fid__composition_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompositionBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     composition_command_finals__fid__composition_command_post: {
         parameters: {
             query?: never;
@@ -11742,6 +11869,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_layers_finals__fid__composition_layers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionLayers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_layer_finals__fid__composition_layers__lid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_property_get_finals__fid__composition_layers__lid__property_get: {
+        parameters: {
+            query: {
+                path: string;
+                t?: number | null;
+            };
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

@@ -874,11 +874,32 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await page.locator('.final-viewer .final-scrub').fill('4')
   await expect(page.locator('.final-viewer .counter')).toHaveText(/^frame 4 \//)
   await expect.poll(async () => page.locator('.final-viewer img.final-frame').getAttribute('data-side'), { timeout: 10_000 }).toBe('full')   // at rest: the full frame
+  // AE2: the editor — Layers and Properties in the column; each edit one engine command, the viewer following the new revision
+  await expect(page.locator('#anim-sec-layers .comp-layer-list li')).toHaveCount(5)                       // the character, her matte, the prop, the shadows, the plate
+  const row = (name: RegExp) => page.locator('#anim-sec-layers .comp-layer-list li').filter({ has: page.locator('.name', { hasText: name }) })   // by the name, not the selects' options
+  await row(/^Shadows$/).locator('button.sw[title^="Video"]').click()
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 1/)
+  const figName = fin.layers[1].name                                                                        // the figure's layer carries the Stage figure's name (her matte is "… · matte")
+  await row(new RegExp(`^${figName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)).click()
+  await expect(page.locator('#anim-sec-properties .comp-props h5')).toHaveText(figName)
+  const opacity = page.locator('#anim-sec-properties .prop-row[data-path="transform/opacity"] input')
+  await expect(opacity).toHaveValue('100')
+  await opacity.fill('50')
+  await opacity.press('Enter')
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 2/)
+  await page.locator('#anim-sec-properties .prop-row[data-path="transform/opacity"] button.key').click()   // a keyframe at the playhead (frame 4)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 3/)
+  await expect(page.locator('#anim-sec-properties .prop-row[data-path="transform/opacity"] ul.keys li')).toHaveCount(1)
+  await page.locator('#anim-sec-layers .verbs button[title^="Undo"]').click()
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 4/)
+  await expect(page.locator('#anim-sec-properties .prop-row[data-path="transform/opacity"] ul.keys li')).toHaveCount(0)
+  await page.locator('#anim-sec-layers .verbs button[title^="Undo"]').click()
+  await expect(opacity).toHaveValue('100')
   await page.locator('.final-section [data-render]').click()
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)
   expect(finished.clip_id).toBe((await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id)                // the finished shot is the final's clip
-  await expect(page.locator('.final-section [data-comp-rev]')).toHaveText(/rendered at revision 0/)
+  await expect(page.locator('.final-section [data-comp-rev]')).toHaveText(/rendered at revision \d+/)   // the revision the render saw (the edits above moved it)
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {

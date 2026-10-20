@@ -17,7 +17,7 @@ const prof = (id: string, name: string, cls: Profile['cls'], versions: ProfileVe
 const MARA = prof('prf_m', 'Mara', 'character', [ver({ group_id: 'grp_m', hero_asset_id: 'ast_hm' }), ver({ id: 'v2', label: 'winter', group_id: 'grp_m2', hero_asset_id: 'ast_hm2' })])
 const INES = prof('prf_i', 'Ines', 'character', [ver({ group_id: 'grp_i', hero_asset_id: 'ast_hi' })])
 const HARBOUR = prof('prf_h', 'Harbour', 'place', [ver({ group_id: 'grp_h' })])
-const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, body: null, detail: null, path: null, shadow_proxy: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
+const fig = (id: string, x: number, extra: Partial<StageObject> = {}): StageObject => ({ id, kind: 'mannequin', name: id, preset: 'adult', asset_id: null, body: null, detail: null, path: null, shadow_proxy: null, light: null, transform: { pos: [x, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
   parent: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: {}, extra: {} }, billboard: false, profile_id: null, version: null, ...extra })
 const DOC = { schema_version: 1, id: 'stg_1', name: 'Quay', size: { w: 1920, h: 1080, fps: 24 }, objects: [fig('fig_r', 1.2), fig('fig_l', -1.2)],
   cameras: [{ id: 'cam_1', name: 'Camera 1', pos: [0, 1.5, 5], target: [0, 1, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }], active_camera: 'cam_1',

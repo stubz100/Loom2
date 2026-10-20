@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, Sun, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
@@ -45,6 +45,9 @@ registerCommands([
   ...Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => addCmd('mannequin', p, `Add figure · ${m.label}`, User)),
   ...SET_PRESETS.map((p) => addCmd('set', p, `Add set · ${p}`, Box)),
   ...PROP_PRESETS.map((p) => addCmd('prop', p, `Add prop · ${p}`, Box)),
+  // D110 (PS4): a light of the scene — a sun from the upper front-left, aimed at the viewport's centre; its strength, colour, softness
+  // and aim in the Inspector
+  { id: 'stage.add.light', scope: 'stage', label: 'Add light', icon: Sun, placement: ['panel', 'context'], when: hasStage, run: () => { st().addLight(viewport.centre?.() ?? [0, 0, 0]) } },
   { id: 'stage.object.delete', scope: 'stage', label: 'Delete', icon: Trash2, keys: 'Delete', placement: ['inspector', 'context'], when: () => hasSel() && !sel()!.locked, run: () => st().removeObject(st().selected!) },
   // D95 (AN1, UX0 #18): renaming was a double-click only (D32: every action has a mouse placement)
   { id: 'stage.object.rename', scope: 'stage', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: hasSel,
@@ -111,7 +114,8 @@ registerCommands([
 export const addMenu = (): MenuItem => ({ label: 'Add', icon: Plus, items: [
   ...Object.keys(MANNEQUIN_PRESETS).map((p) => ({ cmd: `stage.add.mannequin.${p}` })), sep,
   ...SET_PRESETS.map((p) => ({ cmd: `stage.add.set.${p}` })), sep,
-  ...PROP_PRESETS.map((p) => ({ cmd: `stage.add.prop.${p}` })),
+  ...PROP_PRESETS.map((p) => ({ cmd: `stage.add.prop.${p}` })), sep,
+  { cmd: 'stage.add.light' },
 ] })
 
 /** D93 (C8): "Bind to a character ▸" — the right-click submenu of a figure (the viewport, the Outliner row): the Cast's characters (the one

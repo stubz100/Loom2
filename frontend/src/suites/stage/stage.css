@@ -115,3 +115,8 @@
 .figure-lines li.warn { color: var(--warn); }
 .lib-grid .prop-card.no-model { opacity: 0.6; }                              /* D110 (PS3): a Cast prop without its 3D model yet opens in Story */
 .lib-grid .prop-card .glyph svg { width: 40px; height: 40px; }
+/* D110 (PS4): a light in the Inspector */
+.light-controls .range-row { display: flex; gap: 6px; align-items: center; }
+.light-controls .range-row input[type=range] { flex: 1; min-width: 80px; }
+.light-controls .looks { display: flex; gap: 4px; flex-wrap: wrap; }
+.stage-insp .range-row { display: flex; gap: 6px; align-items: center; }

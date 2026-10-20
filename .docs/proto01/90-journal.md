@@ -6808,3 +6808,26 @@ mask's sense (the model reads 1 − mask: known = 1).
   stage saves it bound with its version's model); lint 75; build clean; the API contract unchanged.
 - **Next:** PS4, the 3D scene: textured, lit models in the viewport; lights with intensity, colour, softness and aim; the ambient level;
   camera moves previewed in 3D.
+
+## 2026-10-20 12:54 — D110 PS4 built: the 3D scene — textured, lit models in the viewport; lights with their own settings; the ambient level
+
+- **Viewport:** the room environment (PMREM in the viewport's GL context, intensity 0.8) lights the models' PBR materials, so the
+  scene shows as itself while blocking. The clay, depth, normal and mask passes render without it; the beauty pass with its own
+  (`shotWith` takes the environment per pass renderer).
+- **Lights** (`stages.LightSpec` on a light object: intensity, colour, softness, shadows, target):
+  - one sun per visible light object, aimed at its target; the first three that cast shadows do; softness is the shadow map's blur
+    radius (1 + 7 × softness);
+  - a dashed aim line, a guide hidden from the passes, shown in the free view;
+  - a light without settings shines as E23c's key (2.3, white, hard, a metre above the origin), so E23–E28's stages render as before;
+  - without lights, the fixed key of before.
+- **Ambient:** `Stage.ambient` (None = 0.85 under lights, 1.1 without) is the hemisphere's strength, with a slider and *default* in
+  the stage's Inspector.
+- **UI:** *Add light* (library *Lights*, the Add menu) puts a sun 2.5 m left, 3 m up and 2 m in front of the viewport's centre, aimed at
+  it. The light's Inspector (`LightControls.tsx`) has three looks (Window soft and warm, Sun hard and white, Lamp warm and dimmer), the
+  intensity, colour, softness, shadows, and the aim as a point or *aim at an object* (a figure's chest, an object's top).
+- **Look** (a visible Edge on E28c's project, `engine/spikes/out/ps4/`): the six models textured, with soft window-light shadows in
+  the camera view; the light's aim line in the free view.
+- **Tests:** `lights.test.tsx` (4); `test_props_d110` +1 (the light spec and the ambient level through a PUT); offline 456 under full
+  and open; Vitest 384 + 3; e2e 48/48 under full and open; lint 75; build clean; settings audit clean.
+- **Next:** the author's look at PS1–PS4; then PS5 (CA2): split a finished scene into layers and make the final shot, the camera-move
+  check included.

@@ -77,6 +77,8 @@ export type Kind = StageObject['kind']
 export interface Transform { pos: number[]; rot: number[]; scale: number[] }
 
 const newId = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`
+/** D110 (PS4): a new light — E23c's strength, white, a slightly soft shadow, aimed a metre above the origin. */
+export const NEW_LIGHT = { intensity: 2.3, colour: '#ffffff', softness: 0.3, shadows: true, target: [0, 1, 0] }
 const NAMES: Record<string, string> = { mannequin: 'Figure', set: 'Set', prop: 'Prop', plane: 'Image', mesh: 'Mesh', light: 'Light' }
 
 interface StageState {
@@ -175,6 +177,10 @@ interface StageState {
   setGuides: (on: boolean) => void
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
   updateObject: (id: string, patch: Partial<StageObject>) => void
+  /** D110 (PS4): the sky light's strength (null = the default: 0.85 under lights, 1.1 without). */
+  setAmbient: (v: number | null) => void
+  /** D110 (PS4): a light above and in front of a point (the viewport's centre), aimed at it — a sun from the upper front-left. */
+  addLight: (at?: number[]) => string | null
   setTransform: (id: string, t: Transform) => void
   removeObject: (id: string) => void
   duplicateObject: (id: string) => void
@@ -554,12 +560,20 @@ export const useStage = create<StageState>()((set, get) => ({
     const name = `${NAMES[kind] ?? kind} ${n}`
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
-      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null }
+      locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null,
+      light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
   },
   updateObject: (id, patch) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) }), 'edit'),
+  setAmbient: (v) => get().apply((d) => ({ ...d, ambient: v }), 'ambient'),
+  addLight: (at) => {
+    const c = at ?? [0, 0, 0]
+    const id = get().addObject('light', null, [c[0] - 2.5, 3, c[2] + 2])
+    if (id) get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, light: { ...NEW_LIGHT, target: [c[0], 1, c[2]] } } : o)) }), 'aim light')
+    return id
+  },
   setTransform: (id, t) => {
     const cur = get().current
     if (cur && keyframesOf(cur).objects[id]?.length) {                   // ST4: a keyed object takes the edit as a key at this frame

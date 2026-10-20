@@ -75,6 +75,11 @@ export class StageEngine {
   private key = new THREE.DirectionalLight(0xffffff, 1.6)
   private passDepth = depthMaterial()
   private passNormal = new THREE.MeshNormalMaterial()
+  // D110 (PS4): the scene's lights — one sun per visible light object (the first three with shadows cast them), each with its aim line;
+  // and the viewport's room environment, so a model's PBR material reads as itself (Pixal3D bakes metalness: black without one)
+  private lights = new Map<string, { light: THREE.DirectionalLight; aim: THREE.Line }>()
+  private aimMat = new THREE.LineDashedMaterial({ color: 0xffd060, dashSize: 0.15, gapSize: 0.1 })
+  private viewEnv: THREE.Texture
   readonly canvas: HTMLCanvasElement
   private hooks: EngineHooks
 
@@ -85,6 +90,10 @@ export class StageEngine {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
     this.scene.background = new THREE.Color(0x1d1e22)
     this.scene.add(this.hemi)
+    const pm = new THREE.PMREMGenerator(this.renderer)
+    this.viewEnv = pm.fromScene(new RoomEnvironment(), 0.04).texture
+    pm.dispose()
+    this.scene.environment = this.viewEnv; this.scene.environmentIntensity = BEAUTY_ENV
     // E23c (D103): the key light — fixed above and to the front until the stage has a `light` object; then it shines from that light
     // towards the set's middle and casts shadows (the clay pass shows them: the white set's light, contact and shadows)
     this.key.position.set(4, 8, 6); this.scene.add(this.key, this.key.target)
@@ -129,11 +138,13 @@ export class StageEngine {
     this.stop()
     this.gizmo.dispose(); this.orbit.dispose()
     this.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry?.dispose(); const mat = m.material as THREE.Material | THREE.Material[]; (Array.isArray(mat) ? mat : [mat]).forEach((x) => x?.dispose()) } })
+    for (const l of this.lights.values()) { l.light.shadow.map?.dispose(); l.aim.geometry.dispose() }
+    this.viewEnv.dispose()
     this.renderer.dispose()
   }
 
   // ---- views and cameras ----------------------------------------------------------------------------------------------------------
-  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; this.dirty = true }
+  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; for (const l of this.lights.values()) l.aim.visible = view === 'free'; this.dirty = true }
   setAspect(aspect: number): void { this.aspect = aspect; this.dirty = true }
   /** The rectangle (canvas px) the render camera's frame occupies — the framing guides draw over it. */
   frameRect(): { x: number; y: number; w: number; h: number } {
@@ -377,20 +388,40 @@ export class StageEngine {
     if (this.selectedId && this.entries.has(this.selectedId)) this.selection.setFromObject(this.entries.get(this.selectedId)!.holder)
     this.dirty = true
   }
-  /** E23c: a visible `light` object becomes the key light (a sun from its position towards the middle of the set: the floor at the
-   *  origin, a metre up), stronger against a dimmer sky so its shadows read; without one, the fixed key of before. */
+  /** E23c, D110 (PS4): each visible `light` object is a sun from its position towards its aim, with its strength, colour and shadow (the
+   *  first three that cast one; its softness the shadow map's blur radius); a light without settings shines as E23c's key (2.3, white,
+   *  hard, a metre above the origin). The sky (hemisphere) is the stage's ambient level — 0.85 under lights, 1.1 without. With no light,
+   *  the fixed key of before, without shadows. */
   private syncLight(doc: StageDoc): void {
-    const l = doc.objects.find((o) => o.kind === 'light' && o.visible)
-    this.key.castShadow = !!l
-    if (l) {
-      this.key.position.set(l.transform.pos[0], l.transform.pos[1], l.transform.pos[2])
-      this.key.target.position.set(0, 1, 0)
-      this.key.intensity = 2.3; this.hemi.intensity = 0.85
-    } else {
-      this.key.position.set(4, 8, 6); this.key.target.position.set(0, 0, 0)
-      this.key.intensity = 1.6; this.hemi.intensity = 1.1
+    const on = doc.objects.filter((o) => o.kind === 'light' && o.visible)
+    for (const [id, l] of [...this.lights]) if (!on.some((o) => o.id === id)) { this.scene.remove(l.light, l.light.target, l.aim); l.light.shadow.map?.dispose(); l.aim.geometry.dispose(); this.lights.delete(id) }
+    let shadows = 0
+    for (const o of on) {
+      let l = this.lights.get(o.id)
+      if (!l) {
+        const light = new THREE.DirectionalLight(0xffffff, 2.3)
+        light.shadow.mapSize.set(2048, 2048)
+        Object.assign(light.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 40 })
+        light.shadow.bias = -0.0004; light.shadow.normalBias = 0.02
+        const aim = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), this.aimMat)
+        aim.userData.helper = true
+        l = { light, aim }
+        this.lights.set(o.id, l)
+        this.scene.add(light, light.target, aim)
+      }
+      const s = o.light ?? { intensity: 2.3, colour: '#ffffff', softness: 0, shadows: true, target: [0, 1, 0] }
+      const p = o.transform.pos, t = s.target
+      l.light.position.set(p[0], p[1], p[2]); l.light.target.position.set(t[0], t[1], t[2]); l.light.target.updateMatrixWorld()
+      l.light.intensity = s.intensity; l.light.color.set(s.colour)
+      l.light.castShadow = s.shadows && shadows < 3
+      if (l.light.castShadow) shadows++
+      l.light.shadow.radius = 1 + s.softness * 7
+      l.aim.geometry.setFromPoints([new THREE.Vector3(p[0], p[1], p[2]), new THREE.Vector3(t[0], t[1], t[2])]); l.aim.computeLineDistances()
+      l.aim.visible = this.view === 'free'
     }
-    this.key.target.updateMatrixWorld()
+    this.key.visible = !on.length; this.key.castShadow = false
+    this.key.position.set(4, 8, 6); this.key.target.position.set(0, 0, 0); this.key.intensity = 1.6; this.key.target.updateMatrixWorld()
+    this.hemi.intensity = doc.ambient ?? (on.length ? 0.85 : 1.1)
   }
   private camMat = new THREE.MeshBasicMaterial({ color: 0x8899bb, wireframe: true })
   private camActiveMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, wireframe: true })
@@ -599,8 +630,7 @@ export class StageEngine {
         wholebody.push(wb)
         if (kind === 'proxymask') { blobs.push(await this.proxyMask(r, camera)); onProgress?.(i + 1, frames.length); continue }   // E23e: the proxies' silhouette
         if (kind === 'beauty') {                                                     // D109: every object in its own material (a mesh prop textured), lit, on black
-          this.scene.environment = env; this.scene.environmentIntensity = BEAUTY_ENV
-          try { blobs.push(await this.shotWith(r, camera, null, 0x000000)) } finally { this.scene.environment = null }
+          blobs.push(await this.shotWith(r, camera, null, 0x000000, false, env))
           onProgress?.(i + 1, frames.length); continue
         }
         blobs.push(kind === 'depth' ? await this.shotWith(r, camera, this.depthFor(cam), 0x000000) : kind === 'clay' || kind === 'proxy' ? await this.shotWith(r, camera, this.passClay, 0xb8b8b8, kind === 'proxy')   // E23c: the lit clay (the light object's shadows)
@@ -660,6 +690,7 @@ export class StageEngine {
     hide(this.grid); hide(this.selection); hide(this.gizmo.getHelper())
     for (const e of this.entries.values()) if (e.doc.kind === 'light') hide(e.body)                  // E23c: a light's marker is a guide
     for (const p of this.paths.values()) hide(p.obj)                                  // CA1: the floor paths are a guide
+    for (const l of this.lights.values()) hide(l.aim)                                 // D110: a light's aim line is a guide
     for (const hlp of this.camHelpers.values()) hide(hlp)
     for (const e of this.entries.values()) { e.pickers?.forEach(hide); if (e.doc.visible && e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(camera.position) }
     const prevBg = this.scene.background, prevOverride = this.scene.overrideMaterial
@@ -678,8 +709,11 @@ export class StageEngine {
     return toBlob(r.domElement)
   }
   private whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-  private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number, showProxies = false): Promise<Blob> {
+  private shotWith(r: THREE.WebGLRenderer, camera: THREE.Camera, material: THREE.Material | null, bg: number, showProxies = false, env: THREE.Texture | null = null): Promise<Blob> {
     this.scene.overrideMaterial = material; this.scene.background = new THREE.Color(bg)
+    // D110: the viewport's environment lives in the viewport's GL context; a pass renderer gets its own (the beauty pass) or none
+    const viewEnv = this.scene.environment
+    this.scene.environment = env
     // E23d: the shadow proxies cast but are never seen. An override material would draw them, so the shadow map is made with them and
     // the picture without them (the map kept); `showProxies` draws them (the fit check)
     const proxies = showProxies ? [] : [...this.entries.values()].flatMap((e) => e.proxy?.meshes ?? []).filter((m) => m.visible)
@@ -691,6 +725,7 @@ export class StageEngine {
       for (const m of proxies) m.visible = true
       r.shadowMap.autoUpdate = true
     } else r.render(this.scene, camera)
+    this.scene.environment = viewEnv
     return toBlob(r.domElement)
   }
   private depthFor(cam: StageCamera): THREE.ShaderMaterial {

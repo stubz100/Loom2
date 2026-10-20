@@ -25,3 +25,17 @@ entities to layers and start creating the final shot."*
 | **PS5 · Make the final shot** (CA2) | Only a complete scene is split into **layers**: each character by Wan Animate on its pose, each prop rendered or drawn on its model (R1 / R2), the set as the plate; then the composition (D106 shadows, D107 contact offsets) | — (the CA2 wave) |
 
 Mouse-first (D32): every verb is a button and a right-click entry; drags are accelerators.
+
+## Status (2026-10-20)
+
+- **PS1–PS3 built** (d27e7ef, c647f22): the Props tab; *Make the 3D model…*, stood upright, turning on the prop's page; props placed from
+  Animate's library and bound to the prop.
+- **PS4 built:**
+  - **Look:** the viewport shows the models textured and lit (a room environment).
+  - **Lights:** each light is a scene object with a look (Window, Sun, Lamp), intensity, colour, shadow softness, shadows on or off, and
+    an aim (a point, or an object from a list), drawn as a dashed line. *Add light* is in the library and the Add menu.
+  - **Ambient:** the stage's level is in its Inspector.
+  - **Camera:** keys and playback were already in the timeline (*Key camera*).
+- **Owed:**
+  - the camera-move check on a finished scene, rendered into layers, which belongs to PS5 (CA2);
+  - the author's look at a scene built this way.

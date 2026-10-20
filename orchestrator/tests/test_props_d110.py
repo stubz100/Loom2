@@ -168,3 +168,19 @@ def test_a_mesh_binds_to_a_prop_and_a_set_does_not():
     check(Stage(id="s", objects=[StageObject(id="m", kind="mesh", name="Chest", asset_id="ast_m", profile_id="prf_c", version="v2")]))
     with pytest.raises(ValueError, match="bound"):
         check(Stage(id="s", objects=[StageObject(id="r", kind="set", name="Room", preset="room", profile_id="prf_c")]))
+
+
+def test_lights_and_the_ambient_level(tmp_path: Path):
+    """PS4: a light object carries its settings (None shines as E23c's key); the stage its ambient level, kept through a PUT."""
+    from loom2.stages import LightSpec, Stage, StageObject, StageStore, check
+    lamp = StageObject(id="l", kind="light", name="Window", light=LightSpec(intensity=4.0, colour="#ffd8a0", softness=0.6, target=[1.0, 0.5, -2.0]))
+    check(Stage(id="s", objects=[lamp, StageObject(id="k", kind="light", name="Key")]))
+    with pytest.raises(ValueError):
+        check(Stage(id="s", objects=[StageObject(id="b", kind="prop", name="Box", light=LightSpec())]))
+    with pytest.raises(ValueError):
+        LightSpec(colour="orange")
+    ws = Workspace.create(tmp_path / "p", name="P")
+    st = StageStore(ws)
+    s = st.create("Room")
+    s2 = st.put(s.id, {**s.model_dump(), "objects": [lamp.model_dump()], "ambient": 0.4})
+    assert s2.ambient == 0.4 and s2.objects[0].light.colour == "#ffd8a0" and st.get(s.id).objects[0].light.softness == 0.6

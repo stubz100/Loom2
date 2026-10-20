@@ -42,6 +42,18 @@ class Pose(BaseModel):
     extra: dict[str, list[float]] = Field(default_factory=dict)          # CA1: the Detailed level's own bones (fingers, wrists, feet …) → [x, y, z] degrees on their rest
 
 
+class LightSpec(BaseModel):
+    """D110 (PS4): a light of the 3D scene — a sun from the object's position towards `target`, its strength, colour, the softness of its
+    shadow's edge and whether it casts one (the first three that do). A light object without one shines as E23c's key did (2.3, white,
+    hard shadows, aimed a metre above the origin), so earlier stages keep their look."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    intensity: float = Field(2.3, ge=0.0, le=20.0)
+    colour: str = Field("#ffffff", pattern=r"^#[0-9A-Fa-f]{6}$")
+    softness: float = Field(0.3, ge=0.0, le=1.0)     # 0 = a hard edge; 1 = the softest the shadow map gives
+    shadows: bool = True
+    target: list[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
+
+
 class StageObject(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     id: str
@@ -62,6 +74,7 @@ class StageObject(BaseModel):
     detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure (None = Simple)
     shadow_proxy: str | None = None                # E23d (D105): a mesh asset shaped like the character, bound to the figure, that casts its shadow
     path: list[list[float]] | None = None          # CA1: the figure's floor path, [x, z] points clicked on the floor (a library clip walks it)
+    light: LightSpec | None = None                 # D110 (PS4): a light object's settings (None = E23c's key)
 
 
 class StageCamera(BaseModel):
@@ -93,6 +106,7 @@ class Stage(BaseModel):
     keyframes: dict[str, Any] = Field(default_factory=lambda: {"camera": {}, "objects": {}})  # ST4
     range: StageRange = Field(default_factory=StageRange)
     passes: list[dict[str, Any]] = Field(default_factory=list)                                 # ST3: {camera_id, revision, size, assets, keypoints, legend, rendered_at}
+    ambient: float | None = Field(None, ge=0.0, le=5.0)                                        # D110 (PS4): the sky light's strength; None = 0.85 with lights, 1.1 without
     group_id: str | None = None                                                                # ST3: the album page the passes and shots are placed on (server-set)
     revision: int = 0
     created_at: str = Field(default_factory=utc_now)
@@ -148,6 +162,8 @@ def check(st: Stage) -> None:
             p = by[p].parent
         if len(o.transform.pos) != 3 or len(o.transform.rot) != 3 or len(o.transform.scale) != 3:
             raise ValueError(f"object {o.id}: a transform has three components each")
+        if o.light is not None and (o.kind != "light" or len(o.light.target) != 3):
+            raise ValueError(f"object {o.id}: light settings belong to a light, aimed at an [x, y, z] point")   # D110 (PS4)
         if o.profile_id is not None and o.kind not in ("mannequin", "mesh"):
             raise ValueError(f"object {o.id}: only a figure (to a character) or a 3D model (to a prop) is bound")   # D93 (C8), D110 (PS3)
     cids = [c.id for c in st.cameras]
@@ -197,7 +213,7 @@ class StageStore:
         base = data.get("revision")
         if base is not None and int(base) != cur.revision:
             raise StaleStage(f"the stage is at revision {cur.revision}, the change is based on {base} — reload it first")
-        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "range", "passes")
+        keep = ("name", "size", "objects", "cameras", "active_camera", "keyframes", "range", "passes", "ambient")
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         st = Stage.model_validate(merged)

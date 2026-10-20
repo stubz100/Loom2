@@ -7464,6 +7464,52 @@
         "title": "LibraryRemoved",
         "type": "object"
       },
+      "LightSpec": {
+        "description": "D110 (PS4): a light of the 3D scene — a sun from the object's position towards `target`, its strength, colour, the softness of its\nshadow's edge and whether it casts one (the first three that do). A light object without one shines as E23c's key did (2.3, white,\nhard shadows, aimed a metre above the origin), so earlier stages keep their look.",
+        "properties": {
+          "colour": {
+            "default": "#ffffff",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "title": "Colour",
+            "type": "string"
+          },
+          "intensity": {
+            "default": 2.3,
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Intensity",
+            "type": "number"
+          },
+          "shadows": {
+            "default": true,
+            "title": "Shadows",
+            "type": "boolean"
+          },
+          "softness": {
+            "default": 0.3,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Softness",
+            "type": "number"
+          },
+          "target": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Target",
+            "type": "array"
+          }
+        },
+        "required": [
+          "intensity",
+          "colour",
+          "softness",
+          "shadows",
+          "target"
+        ],
+        "title": "LightSpec",
+        "type": "object"
+      },
       "LineVoiceBody": {
         "properties": {
           "speed": {
@@ -12794,6 +12840,19 @@
             ],
             "title": "Active Camera"
           },
+          "ambient": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambient"
+          },
           "cameras": {
             "items": {
               "$ref": "#/components/schemas/StageCamera"
@@ -12881,6 +12940,7 @@
           "keyframes",
           "range",
           "passes",
+          "ambient",
           "group_id",
           "revision",
           "created_at",
@@ -13366,6 +13426,16 @@
             "title": "Kind",
             "type": "string"
           },
+          "light": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LightSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "locked": {
             "default": false,
             "title": "Locked",
@@ -13484,7 +13554,8 @@
           "body",
           "detail",
           "shadow_proxy",
-          "path"
+          "path",
+          "light"
         ],
         "title": "StageObject",
         "type": "object"

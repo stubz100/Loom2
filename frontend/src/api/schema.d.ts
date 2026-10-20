@@ -5668,6 +5668,36 @@ export interface components {
             index: number;
             library: components["schemas"]["Library"];
         };
+        /**
+         * LightSpec
+         * @description D110 (PS4): a light of the 3D scene — a sun from the object's position towards `target`, its strength, colour, the softness of its
+         *     shadow's edge and whether it casts one (the first three that do). A light object without one shines as E23c's key did (2.3, white,
+         *     hard shadows, aimed a metre above the origin), so earlier stages keep their look.
+         */
+        LightSpec: {
+            /**
+             * Colour
+             * @default #ffffff
+             */
+            colour: string;
+            /**
+             * Intensity
+             * @default 2.3
+             */
+            intensity: number;
+            /**
+             * Shadows
+             * @default true
+             */
+            shadows: boolean;
+            /**
+             * Softness
+             * @default 0.3
+             */
+            softness: number;
+            /** Target */
+            target: number[];
+        };
         /** LineVoiceBody */
         LineVoiceBody: {
             /**
@@ -7778,6 +7808,8 @@ export interface components {
         Stage: {
             /** Active Camera */
             active_camera: string | null;
+            /** Ambient */
+            ambient: number | null;
             /** Cameras */
             cameras: components["schemas"]["StageCamera"][];
             /** Created At */
@@ -7993,6 +8025,7 @@ export interface components {
              * @enum {string}
              */
             kind: "mannequin" | "set" | "prop" | "plane" | "mesh" | "light";
+            light: components["schemas"]["LightSpec"] | null;
             /**
              * Locked
              * @default false

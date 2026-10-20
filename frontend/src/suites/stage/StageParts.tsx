@@ -15,6 +15,7 @@ import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter, LibraryProps, MeshProp } from './FigureBinding'
+import { AmbientControl, LightControls } from './LightControls'
 import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
@@ -89,6 +90,8 @@ export function LibraryAdd() {
           <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
             <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
           </button>))}</div>
+        <h4>Lights</h4>{/* D110 (PS4): a sun aimed at the viewport's centre; its look, strength, colour, softness and aim in the Inspector */}
+        <div className="lib-grid"><CommandButton id="stage.add.light" text /></div>
         <h4>Image planes</h4>
         <div className="lib-grid"><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
         <p className="hint">From the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre.</p>
@@ -591,6 +594,7 @@ export function StageSelection() {
         <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
         {o.kind === 'mannequin' && <FigureCharacter o={o} />}
         {o.kind === 'mesh' && <MeshProp o={o} />}
+        {o.kind === 'light' && <LightControls o={o} />}
         {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select>{Object.keys(o.pose?.joints ?? {}).length ? <span className="hint"> edited</span> : null}</span></div>}
         {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
         <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
@@ -603,6 +607,7 @@ export function StageSelection() {
       <h4>{current.name} <span className="hint">{saving ? '· saving…' : `· revision ${current.revision}`}</span></h4>
       <div className="kv"><span>frame</span><span>{current.size.w}×{current.size.h} @ {current.size.fps} fps (the project format)</span></div>
       <div className="kv"><span>contents</span><span>{current.objects.length} objects · {current.cameras.length} cameras</span></div>
+      <AmbientControl />{/* D110 (PS4): the sky under the lights */}
       <div className="verbs"><CommandRow ids={['stage.rename', 'stage.delete']} /></div>
       {cam && <>{/* the active camera's placement (its lens and verbs are in the Camera section) */}
         <h4>{cam.name}</h4>

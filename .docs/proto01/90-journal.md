@@ -7160,3 +7160,15 @@ The author asked for a review of the state of things, then "record all this and 
   the field (revision 2), a keyframe at the playhead (revision 3, one key listed), two undos (the key gone, the opacity 100 again),
   then the render. Offline: 478 passed in 141.21s (0:02:21) (full), 478 passed in 133.83s (0:02:13) (open); e2e 49 passed (3.1m) / 49 passed (3.0m); Vitest 389 + 3; build clean; lint 75.
 - **Not yet (AE2c–d):** masks (the pen, feather, mode) and the timeline's layer bars (trim, slip, move) under the transport.
+
+## 2026-10-20 20:37 — D115 recorded: expanding a character's coverage from the Image suite (Generate, or Expand with poses as icons)
+
+- The author asked how to modify the expansion's image settings after picking a hero in Cast. The answer found: not at all from the
+  UI — Cast's *Expand…* always sent Full coverage, one seed, draft (`askExpand('full', 1, 'draft')`, with a `sy().world ? 'full' : 'full'`
+  leftover), though `ExpandBody` carries the preset (five), the seeds per cell (1–4), the size tier and the style, and `/capabilities.story`
+  lists the presets with their cell counts.
+- The author's direction: keep how Image makes a picture; add an Expand way to run with the poses chosen as icons; Expand bypasses the
+  prompt's pose and action and takes the pose from the chosen tiles. Recorded as D115 before the work: the foot's Generate | Expand
+  switch, the Poses section (shot sizes × angles as tiles, expressions as chips, the presets as quick picks), one job per cell from the
+  panel with the pose fields replaced, the results on the linked character's candidates page with the cell recorded (Cast's curation and
+  coverage grid unchanged), Cast's *Expand…* jumping into it. Built next; AE2c–d follow it.

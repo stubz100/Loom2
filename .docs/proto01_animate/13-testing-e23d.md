@@ -34,6 +34,8 @@ jacket. Close enough for a shadow?
 
 | Check | Answer |
 | --- | --- |
-| The mesh's shadows look like the characters'? | |
-| The one to keep | |
-| The meshes close enough? | |
+| The mesh's shadows look like the characters'? | Kept: "they can produce different effects" (2026-10-19) |
+| The one to keep | All four: "I'd keep all 4 types, they can produce different effects and they also have different GPU costs" → D106 |
+| The meshes close enough? | Accepted; the characters sat slightly off their shadows → E23e |
+
+Ticked off by the author, 2026-10-20.

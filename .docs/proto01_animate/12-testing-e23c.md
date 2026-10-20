@@ -33,7 +33,9 @@ so please judge by eye: do the smaller feet help?
 
 | Check | Answer |
 | --- | --- |
-| Best shadows: middle (Stage) or right (white set)? | |
-| Does the white set sit in the room better? | |
-| Ines on the stool | |
-| Feet ×0.85 better? | |
+| Best shadows: middle (Stage) or right (white set)? | Both, 2026-10-19: "the stage shadows are very accurate, but they are not the real character's shadows … the white set shadows are the real shadows of the character … I'd keep both for now" → D105 |
+| Does the white set sit in the room better? | Kept as one of the sources (D105, D106) |
+| Ines on the stool | Not raised; she sits on it in every arm (hips within 7 px of the top) |
+| Feet ×0.85 better? | Not raised; the large look was the boots and the side view (journal 2026-10-19 20:42) |
+
+Ticked off by the author, 2026-10-20 ("let's tick off the look checks for E23c-e").

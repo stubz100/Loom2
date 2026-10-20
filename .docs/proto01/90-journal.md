@@ -6585,3 +6585,16 @@ mask's sense (the model reads 1 − mask: known = 1).
   usable today. D106's four shadow sources stay; Stage's proxy shadow is the closest working equivalent.
 - **Not needed:** LBM depth and normals (DA3 and MoGe are already here); FLUX.1-dev ControlNets (the image models are FLUX.2).
 - **Proposed:** LBM_relighting as an arm of E24's stage A, its runtime chosen in E24, with a temporal-flicker check across frames.
+
+## 2026-10-20 06:25 — the look checks of E23c–E23e ticked off → D107; next E28 (props), then camera moves
+
+- **The author:** "the nudge helped, let's tick off the look checks for E23c-e, and move on to props, then camera moves".
+- **The look documents** 12 (E23c), 13 (E23d) and 14 (E23e) carry the author's answers: both shadow sources (D105), all four
+  (D106), the nudge.
+- **D107:** a character layer sits on its shadow by a contact offset between two anchor pins:
+  - the contact pin is where the figure's soles meet the floor (Stage, exact, whatever its turn and the light);
+  - the character pin is where the generated character's soles meet the floor in her layer;
+  - the offset is one per shot by default, per frame when she drifts;
+  - the pins are visible in the composition, the character pin draggable, with *Align to the stage*.
+- **Next:** E28 (props as layers: P1 rigid by keys, P2 depth-guided, P3 drawn in the character's layer), then camera moves (the
+  plate's 2.5D projection, the floor shadows re-projected).

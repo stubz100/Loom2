@@ -56,6 +56,8 @@ right and 12 px up**, as you saw.
 
 | Check | Answer |
 | --- | --- |
-| Do the moved shadows start at the feet? | |
-| Replace inside the mesh usable? | |
-| The nudged version right? | |
+| Do the moved shadows start at the feet? | Superseded by the nudge |
+| Replace inside the mesh usable? | Not taken up |
+| The nudged version right? | Yes: "the nudge helped" (2026-10-20) → D107 |
+
+Ticked off by the author, 2026-10-20.

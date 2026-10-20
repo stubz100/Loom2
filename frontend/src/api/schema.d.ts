@@ -3986,6 +3986,29 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * EffectCraftSettings
+         * @description AE1 (proto01_animate 20 §2, D114): the animation editor's engine — the pinned `effectcraft-cli` (engine/effectcraft.pin.json, built by
+         *     scripts/build_effectcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/effectcraft.py).
+         *     A `.py` runs under the orchestrator's interpreter (the tests' fake).
+         */
+        EffectCraftSettings: {
+            /**
+             * Cli
+             * @default <repo>\engine\tools\effectcraft\effectcraft-cli.exe
+             */
+            cli: string;
+            /**
+             * Threads
+             * @default 8
+             */
+            threads: number;
+            /**
+             * Timeout S
+             * @default 120
+             */
+            timeout_s: number;
+        };
         /** EnginePin */
         EnginePin: {
             /** Pin */
@@ -8025,6 +8048,7 @@ export interface components {
              * @default 8765
              */
             api_port: number;
+            effectcraft: components["schemas"]["EffectCraftSettings"];
             engine: components["schemas"]["EngineSettings"];
             /**
              * H3 Licence Confirmed

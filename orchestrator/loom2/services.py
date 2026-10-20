@@ -17,6 +17,7 @@ from .groups import GroupStore
 from .queue import JobQueue
 from .roster import Roster
 from .tools.fetch import FetchJob
+from .effectcraft import EffectCraft
 from .workspace import Workspace
 
 
@@ -26,6 +27,7 @@ class Services:
         self.hub = EventHub()
         self.roster = Roster(self.app.models_root, [Path(p) for p in self.app.settings.mounted_model_trees], self.app.settings.variant)
         self.engine = EngineSupervisor(self.app, on_state=lambda s: self.hub.broadcast("engine.state", s))
+        self.effectcraft = EffectCraft(self.app)                            # AE1 (D114): the animation editor's engine, started on first use
         self.ws: Workspace | None = None
         self.catalogue: Catalogue | None = None
         self.queue: JobQueue | None = None

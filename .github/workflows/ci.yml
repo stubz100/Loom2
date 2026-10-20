@@ -56,6 +56,8 @@ jobs:
         run: orchestrator/.venv/Scripts/python.exe scripts/build_pcalgo.py --check
       - name: smart-select WebAssembly (D59) — the committed module matches its PhotoCraft pin and checksum
         run: orchestrator/.venv/Scripts/python.exe scripts/build_pcwasm.py --check
+      - name: EffectCraft pin (AE1, D114) — the pin is well formed and matches the built CLI when it is present
+        run: orchestrator/.venv/Scripts/python.exe scripts/build_effectcraft.py --check
       - name: versions (D36) — every location matches VERSION
         run: orchestrator/.venv/Scripts/python.exe scripts/bump_version.py --check
       - uses: actions/setup-node@v4

@@ -3075,6 +3075,33 @@
         "title": "DraftVoice",
         "type": "object"
       },
+      "EffectCraftSettings": {
+        "description": "AE1 (proto01_animate 20 §2, D114): the animation editor's engine — the pinned `effectcraft-cli` (engine/effectcraft.pin.json, built by\nscripts/build_effectcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/effectcraft.py).\nA `.py` runs under the orchestrator's interpreter (the tests' fake).",
+        "properties": {
+          "cli": {
+            "default": "<repo>\\engine\\tools\\effectcraft\\effectcraft-cli.exe",
+            "title": "Cli",
+            "type": "string"
+          },
+          "threads": {
+            "default": 8,
+            "title": "Threads",
+            "type": "integer"
+          },
+          "timeout_s": {
+            "default": 120.0,
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cli",
+          "threads",
+          "timeout_s"
+        ],
+        "title": "EffectCraftSettings",
+        "type": "object"
+      },
       "EnginePin": {
         "additionalProperties": true,
         "properties": {
@@ -12976,6 +13003,9 @@
             "title": "Api Port",
             "type": "integer"
           },
+          "effectcraft": {
+            "$ref": "#/components/schemas/EffectCraftSettings"
+          },
           "engine": {
             "$ref": "#/components/schemas/EngineSettings"
           },
@@ -13067,7 +13097,8 @@
           "reopen_last_project",
           "h3_licence_confirmed",
           "samples",
-          "motion"
+          "motion",
+          "effectcraft"
         ],
         "title": "Settings",
         "type": "object"

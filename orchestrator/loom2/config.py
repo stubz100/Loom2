@@ -64,6 +64,16 @@ class VoicesSettings(BaseModel):
     cloning_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"     # Apache-2.0; the GPU with the engine stopped (E20: 3–5 s a line at a 2.6 GB peak)
 
 
+class EffectCraftSettings(BaseModel):
+    """AE1 (proto01_animate 20 §2, D114): the animation editor's engine — the pinned `effectcraft-cli` (engine/effectcraft.pin.json, built by
+    scripts/build_effectcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/effectcraft.py).
+    A `.py` runs under the orchestrator's interpreter (the tests' fake)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    cli: str = str(REPO_ROOT / "engine" / "tools" / "effectcraft" / "effectcraft-cli.exe")
+    threads: int = 8            # RAYON_NUM_THREADS: E27 — 8 threads beside a FLUX.2 job cost it 18 % (all 32: 23 %) and drew frames faster (50 / 87 ms at ½ / full)
+    timeout_s: float = 120.0    # a request past this kills the session (a frame is ≈ 60 ms; the final render is a CLI job, never sent through it)
+
+
 class MotionSettings(BaseModel):
     """CA1 (proto01_animate 02 §5): the motion library's folders. The starter set (CC0, ships with loom2) defaults to <models_root>/motion;
     the local folder holds the author's own downloads (e.g. Mixamo FBX) — never bundled, never in CI or tests."""
@@ -144,6 +154,7 @@ class Settings(BaseModel):
     h3_licence_confirmed: bool = False      # D17: the author confirms the MiniMax H3 community-licence application is filed
     samples: SampleSettings = Field(default_factory=SampleSettings)     # D90: the scenes of the style samples and the preset swatches
     motion: MotionSettings = Field(default_factory=MotionSettings)      # CA1: the motion library's starter set and local folder
+    effectcraft: EffectCraftSettings = Field(default_factory=EffectCraftSettings)   # AE1 (D114): the animation editor's engine
 
 
 class AppRecord(BaseModel):

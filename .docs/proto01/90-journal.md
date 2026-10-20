@@ -7034,3 +7034,27 @@ The author asked for a review of the state of things, then "record all this and 
   cache, rendered to a clip.
 - **Not decided here:** CI builds the pinned CLI (≈ 4 min on rustc 1.96) or fetches a release; the full AP1's sidecar waits for AE2's
   measurements.
+
+## 2026-10-20 17:37 — AE1 steps 1–2 built: the EffectCraft pin and build, the session client and its fake (proto01_animate 20 §2)
+
+- **The pin and the build.** `engine/effectcraft.pin.json` (storytold/effectcraft at f36b2b3e, v0.12.0, the CLI's sha256 and size);
+  `scripts/build_effectcraft.py` builds `effectcraft-cli` from the clean checkout beside the repository at the pin into
+  `engine/tools/effectcraft/` (git-ignored, as RIFE) and records the hash; `--check` (CI) wants the pin well formed and, when the binary
+  is there, matching — the binary is never in git, so CI sees the pin only. Incremental rebuild 1 s; the first build is E27's 3 min 33 s.
+- **Settings › effectcraft** (D60 audit clean, 257 fields): the CLI's path (a `.py` runs under the orchestrator's interpreter — the
+  tests' fake), `threads` 8 (E27: beside a FLUX.2 job 8 threads cost 18 % against 23 % for all 32, and drew frames faster), `timeout_s`
+  120 (a request past it ends the session).
+- **The client** `loom2/effectcraft.py`: one `effectcraft-cli mcp --empty` session per orchestrator (`svc.effectcraft`, started on first
+  use, ended with the app), JSON-RPC over stdio with a reader thread, one request at a time under a lock, `command` / `tool` /
+  `frame` (PNG at `max_side`) / `open` / `save_copy`; a death restarts it on the next request and opens the project it held again; a
+  timeout kills it and says so; the engine's refusals come back as `EffectCraftError` with its message; stderr in `logs/effectcraft-*.log`;
+  the process in the orchestrator's job object.
+- **The fake** `tests/fake_effectcraft.py` (standard library): the MCP subset the client uses over a small JSON project (items, comps,
+  layers with blend, matte, parent, position, masks, effects; a revision; undo), flat-colour frames that tell the frame number and the
+  revision apart, `save`/`open`, and a `render` CLI writing a PNG a frame — for the offline suite and the e2e, as `fake_comfy.py`.
+- **Against the real binary:** start 0.2 s, a plate layer imported, a frame 7 ms at ½ and 8 ms at full (one layer), the copy saved, a
+  refusal carried ("unknown command `layer.fly`").
+- **Tests:** `test_effectcraft_ae1` +7 (argv and availability, the round trip against the fake, refusals, a restart after death with the
+  project reopened, a timeout, the pin check, the fake's render CLI). Offline: 474 passed in 135.72s (0:02:15) (full), 474 passed in 132.54s (0:02:12) (open); the contract
+  exported (+ the settings schema); frontend build, lint and Vitest unchanged.
+- **Next:** step 3, the composition record written from a final through the session, and its routes.

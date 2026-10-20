@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/storytold/effectcraft",
+  "commit": "f36b2b3e6bd121dc52b00503cdf8d60f42ac242a",
+  "version": "0.12.0",
+  "binary": "effectcraft-cli.exe",
+  "sha256": "39805b2aeab82b55f400405f956f8be9dccb1269033feadf5cc509092d11bbb4",
+  "bytes": 88215552
+}

@@ -98,3 +98,8 @@ viewer's feel can be judged then, before AE2's controls are designed.
 - **Two composites, one rule set:** `final_assembly` makes the automatic composite and is the reference; the composition writer reads
   its result. A rule changed in one place changes both.
 - **No native dialogs, mouse first, files are truth** as everywhere (CLAUDE.md).
+
+## 5 · Status
+
+- **2026-10-20 (journal 2026-10-20 17:37):** AE1 steps 1–2 built — the pin and `scripts/build_effectcraft.py`, Settings › effectcraft, the client
+  `loom2/effectcraft.py` with the fake `tests/fake_effectcraft.py`; 7 tests; the real binary answers a one-layer frame in 7–8 ms.

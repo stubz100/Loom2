@@ -4177,9 +4177,21 @@
             ],
             "title": "Error"
           },
+          "frames_done": {
+            "default": 0,
+            "title": "Frames Done",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
           },
           "keypoints": {
             "default": false,
@@ -4252,6 +4264,17 @@
             "title": "Status",
             "type": "string"
           },
+          "still_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Still Asset Id"
+          },
           "version": {
             "anyOf": [
               {
@@ -4275,7 +4298,10 @@
           "passes",
           "keypoints",
           "status",
-          "error"
+          "error",
+          "still_asset_id",
+          "frames_done",
+          "job_ids"
         ],
         "title": "FinalLayer",
         "type": "object"
@@ -4923,6 +4949,22 @@
           "problems"
         ],
         "title": "FlowProblems",
+        "type": "object"
+      },
+      "FramesBody": {
+        "properties": {
+          "frames": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frames",
+            "type": "array"
+          }
+        },
+        "required": [
+          "frames"
+        ],
+        "title": "FramesBody",
         "type": "object"
       },
       "Freed": {
@@ -9918,6 +9960,48 @@
           "reasons"
         ],
         "title": "PlanStep",
+        "type": "object"
+      },
+      "PlateBody": {
+        "properties": {
+          "prompt_text": {
+            "default": "",
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "seed": {
+            "default": 0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "title": "PlateBody",
+        "type": "object"
+      },
+      "PlateQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "pass_asset_id": {
+            "title": "Pass Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "pass_asset_id"
+        ],
+        "title": "PlateQueued",
         "type": "object"
       },
       "Pose": {
@@ -19865,6 +19949,68 @@
         ]
       }
     },
+    "/finals/{fid}/layers/{lid}/frames": {
+      "put": {
+        "description": "A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done.",
+        "operationId": "final_layer_frames_finals__fid__layers__lid__frames_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FramesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Final"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Frames",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/{lid}/{name}/{n}": {
       "get": {
         "description": "A layer's pass (or own) frame as PNG — the panel's previews.",
@@ -19928,6 +20074,59 @@
           }
         },
         "summary": "Final Frame",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/plate": {
+      "post": {
+        "description": "PS5b: the plate's still — the bare set's lit clay at frame 0 (from the final's plate pass) as a Stage shot's image 1 (Klein, the clay\nmethod), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path.",
+        "operationId": "final_plate_finals__fid__plate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlateQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Plate",
         "tags": [
           "finals"
         ]

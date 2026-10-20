@@ -16,6 +16,8 @@ from .fsio import atomic_write_json, new_id, read_json, utc_now
 from .workspace import Workspace
 
 FINAL_SCHEMA_VERSION = 1
+FINAL_PLATE_SURFACE = "final_plate"               # PS5b: origin.surface of the plate's Stage shot; ref = the final's id
+PLATE_LEAD = "The room is empty: there are no people and no objects in it, only the bare walls and floor."   # E28: a plate without the lead grew people
 LayerKind = Literal["plate", "figure", "prop", "shadows"]
 LayerMethod = Literal["projected", "move", "rendered", "drawn", "stage"]
 LayerStatus = Literal["passes", "queued", "running", "done", "failed"]
@@ -43,6 +45,9 @@ class FinalLayer(BaseModel):
     keypoints: bool = False                        # a figure's per-frame COCO-18 keypoints are in keypoints.json (PS5c: where it starts; D107: its soles)
     status: LayerStatus = "passes"
     error: str | None = None
+    still_asset_id: str | None = None              # PS5b: the plate's still (a Klein Stage shot of the bare set at frame 0)
+    frames_done: int = 0                           # the layer's own sequence on disk (`frames/`): the projected plate, a character's performance …
+    job_ids: list[str] = Field(default_factory=list)   # the jobs that made (or make) the layer
 
 
 class Final(BaseModel):
@@ -140,6 +145,35 @@ class FinalStore:
             shutil.rmtree(self.folder(f.id), ignore_errors=True)
             raise
         return f
+
+    def update_layer(self, fid: str, lid: str, **patch: Any) -> Final:
+        """One layer's fields changed (its status, still, jobs, frames done); the record's revision moves."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        for k, v in patch.items():
+            setattr(layer, k, v)
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def set_frames(self, fid: str, lid: str, files: list[Path]) -> Final:
+        """A layer's own sequence (`frames/`), one file per frame at the final's count; the layer is done."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        if len(files) != f.frames:
+            raise ValueError(f"the layer's frames are {len(files)}, the final has {f.frames}")
+        d = self.pass_dir(fid, lid, "frames")
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+        for i, src in enumerate(files):
+            shutil.copyfile(src, d / f"{i:04d}.png")
+        return self.update_layer(fid, lid, frames_done=len(files), status="done", error=None)
 
     def delete(self, fid: str) -> bool:
         d = self.folder(fid)

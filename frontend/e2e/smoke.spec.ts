@@ -792,7 +792,7 @@ test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longe
   }, { timeout: 10_000 }).toBe(`${prop.id} ${v.model_asset_id}`)                                           // saved bound, with the version's model
 })
 
-test('a final shot (D111 PS5a): "Make the final shot…" splits a scene into its layers — the plate, a character, a prop, the shadows — and their passes land in a final record at F16', async ({ page }) => {
+test('a final shot (D111 PS5a–b): "Make the final shot…" splits a scene into its layers — the plate, a character, a prop, the shadows — and their passes land in a final record at F16; the plate is a Stage shot of the bare set, projected by Stage into its frames', async ({ page }) => {
   test.setTimeout(120_000)
   await openApp(page)
   await openAnimate(page, 'Clay')
@@ -822,6 +822,19 @@ test('a final shot (D111 PS5a): "Make the final shot…" splits a scene into its
   const r = await fetch(`http://127.0.0.1:${env().port}/finals/${fin.id}/layers/${fin.layers[1].id}/pose/0`, { headers: { 'X-Loom-Token': env().token } })
   expect(r.status).toBe(200); expect(r.headers.get('content-type')).toContain('image/png')
   await expect(page.locator('.final-section .final-layers li')).toHaveCount(4)
+  // PS5b: the plate — a Stage shot of the bare set on the fake engine, then Stage projects it along the camera path into the layer's frames
+  await page.locator('.final-section li[data-kind="plate"] button', { hasText: 'Make the plate' }).click()
+  type Lay = { id: string; status: string; still_asset_id: string | null; frames_done: number; job_ids: string[] }
+  const plateOf = async () => (await api<{ layers: Lay[] }>('GET', `/finals/${fin.id}`)).layers.find((l) => l.id === 'plate')!
+  await expect.poll(async () => { const p = await plateOf(); return `${p.status} ${p.frames_done}` }, { timeout: 60_000 }).toBe('done 9')
+  const plate = await plateOf()
+  expect(plate.still_asset_id).toBeTruthy(); expect(plate.job_ids).toHaveLength(1)
+  const job = (await api<{ items: { id: string; recipe: { kind: string; prompt_text: string } }[] }>('GET', '/jobs')).items.find((j) => j.id === plate.job_ids[0])!
+  expect(job.recipe.kind).toBe('stage_shot'); expect(job.recipe.prompt_text).toMatch(/^The room is empty/)
+  const pf = await fetch(`http://127.0.0.1:${env().port}/finals/${fin.id}/layers/plate/frames/8`, { headers: { 'X-Loom-Token': env().token } })
+  expect(pf.status).toBe(200)
+  await expect(page.locator('.final-section li[data-kind="plate"] .status')).toHaveText(/done · 9 frames/)
+  await expect(page.locator('.final-section li[data-kind="plate"] img.still')).toBeVisible()
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {

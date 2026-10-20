@@ -110,6 +110,71 @@ async def final_frame(svc: Svc, fid: str, lid: str, name: str, n: int):
     return FileResponse(p, media_type="image/png")
 
 
+class PlateBody(BaseModel):
+    prompt_text: str = ""                          # what the place is; the lead (no people, no objects) goes first
+    refs: list[dict[str, Any]] = Field(default_factory=list)   # the reference deck (a place's images, the World style's sample)
+    seed: int = 0
+
+
+class PlateQueued(BaseModel):
+    job_id: str
+    pass_asset_id: str
+
+
+@router.post("/finals/{fid}/plate", response_model=PlateQueued)
+async def final_plate(svc: Svc, fid: str, body: PlateBody):
+    """PS5b: the plate's still — the bare set's lit clay at frame 0 (from the final's plate pass) as a Stage shot's image 1 (Klein, the clay
+    method), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path."""
+    from ..finals import FINAL_PLATE_SURFACE, PLATE_LEAD
+    from ..origin import JobOrigin
+    ws, cat, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    src = store.pass_dir(fid, "plate", "clay") / "0000.png"
+    if not src.is_file():
+        raise HTTPException(422, "the plate's clay pass is missing")
+    rec = await asyncio.to_thread(cat.ingest_file, src, kind="image", move=False, suite="stage", lineage_kind="stage-pass",
+                                  origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid), params={"final_id": fid, "pass": "clay", "stage_id": f.stage_id})
+    rec = await asyncio.to_thread(cat.make_thumbs, rec, src)
+    svc.hub.broadcast("asset.created", rec.model_dump())
+    fmt = ws.load().format
+    h = 720
+    w = max(64, round(h * fmt.width / fmt.height / 16) * 16)
+    recipe = {"kind": "stage_shot", "stage_id": f.stage_id, "camera_id": f.camera_id, "passes": {"clay": rec.id}, "method": "clay", "empty": True,
+              "prompt_text": f"{PLATE_LEAD} {body.prompt_text.strip()}".strip(), "refs": body.refs, "seeds": [body.seed], "width": w, "height": h}
+    try:
+        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_PLATE_SURFACE, ref=fid))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    f = await asyncio.to_thread(store.update_layer, fid, "plate", status="queued", error=None, job_ids=[*next(x for x in f.layers if x.id == "plate").job_ids, jobs[0].id])
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return {"job_id": jobs[0].id, "pass_asset_id": rec.id}
+
+
+class FramesBody(BaseModel):
+    frames: list[str]                              # the layer's own frames' blob ids (sha256), one per frame of the final
+
+
+@router.put("/finals/{fid}/layers/{lid}/frames", response_model=Final)
+async def final_layer_frames(svc: Svc, fid: str, lid: str, body: FramesBody):
+    """A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done."""
+    ws, _, _ = svc.require_project()
+    files = [_blob(ws, sha) for sha in body.frames]
+    try:
+        f = await asyncio.to_thread(FinalStore(ws).set_frames, fid, lid, files)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return f.model_dump()
+
+
 @router.delete("/finals/{fid}", response_model=Deleted)
 async def final_delete(svc: Svc, fid: str):
     ws, _, _ = svc.require_project()

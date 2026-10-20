@@ -979,6 +979,10 @@ STAGE_CLAY_LEAD = ("Image 1 is a grey clay blocking of this exact shot: the grey
                    "set and props. Render it as a finished cinematic still: keep image 1's camera, framing, composition, and every figure's pose, "
                    "position and size exactly; replace every mannequin with its person and the clay with the real scene, nothing stays grey.")
 STAGE_POSE_LEAD = "apply pose from image 1 with reference from image 2."
+# D111 (PS5b): a plate — the clay lead names mannequins and people, and the rig's first plate came back with two men in the empty room
+STAGE_SET_LEAD = ("Image 1 is a grey clay blocking of an empty set: the grey surfaces stand for the place described below. Render it as a finished "
+                  "cinematic still of the empty place: keep image 1's camera, framing and composition exactly, and replace the clay with the real "
+                  "surfaces. There are no people, no figures and no objects in it; nothing stays grey.")
 STAGE_NEG = "blurry, low quality, deformed, extra limbs, text, watermark"
 STAGE_HINTS = {"clay": "keeps the blocking (E10: 10/10 on the sheet); limbs may drift (PCK 0.60)",
                "refcontrol": "exact limbs (PCK 0.86) from the pose pass; needs one reference image, ≈ 6× slower"}
@@ -1026,7 +1030,7 @@ def stage_prompt(recipe: StageShot, variant: str = "full") -> str:
     if recipe.method == "refcontrol":
         text = STAGE_POSE_LEAD
     else:
-        text = STAGE_CLAY_LEAD
+        text = STAGE_SET_LEAD if recipe.empty else STAGE_CLAY_LEAD
     notes = [(i + 2, r.note.strip().rstrip(".")) for i, r in enumerate(stage_refs(recipe, spec) if spec else []) if r.note and r.note.strip() and (i + 2) not in bound]
     if recipe.method == "refcontrol":
         notes = []                                                              # E10's exact-pose sentence names image 2 itself

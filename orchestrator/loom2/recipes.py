@@ -335,6 +335,7 @@ class StageShot(BaseModel):
     width: int = 1280                             # the project tier (D18: Draft by default)
     height: int = 720
     te_id: str | None = None                      # Klein's encoder override (D31)
+    empty: bool = False                           # D111 (PS5b): the bare set, a plate — the lead speaks of the empty space, no mannequins or people
 
     @property
     def model_id(self) -> str:

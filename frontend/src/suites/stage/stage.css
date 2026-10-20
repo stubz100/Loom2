@@ -130,3 +130,7 @@
 .final-section .final-layers .status.s-done { color: var(--keep); }
 .final-section .final-layers .status.s-failed { color: var(--reject); }
 .final-section .final-progress { display: flex; gap: 6px; align-items: center; }
+.final-section .final-layers li { align-items: center; }
+.final-section .final-layers li .name { display: flex; gap: 6px; align-items: center; }
+.final-section .final-layers img.still { width: 40px; height: 23px; object-fit: cover; border-radius: 3px; }
+.final-section .final-layers li > button { grid-column: 2 / -1; justify-self: start; }

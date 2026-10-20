@@ -646,6 +646,46 @@ export class StageEngine {
       this.dirty = true
     }
   }
+  /** D111 (PS5b): the plate projected along the camera path — the still (a Stage shot of the bare set at the first frame) cast from that
+   *  frame's camera onto the set's surfaces and a far backdrop (so a part of the picture no surface of the set holds stays on the plate),
+   *  rendered through each frame's camera: a camera move gives the plate's parallax, a still camera the still. The frames' documents
+   *  show the set alone (the caller hides the actors). */
+  async renderProjected(frames: { cam: StageCamera; doc: StageDoc }[], w: number, h: number, plate: TexImageSource, proj: StageCamera, projAspect: number,
+                        restoreDoc: StageDoc, onProgress?: (done: number, total: number) => void): Promise<Blob[]> {
+    const r = this.passRenderer(w, h)
+    const tex = new THREE.Texture(plate as HTMLImageElement)
+    tex.colorSpace = THREE.NoColorSpace; tex.needsUpdate = true                    // the plate's own sRGB values, written as they are
+    const pc = this.shotCamera(proj, projAspect)
+    const projVP = new THREE.Matrix4().multiplyMatrices(pc.projectionMatrix, pc.matrixWorldInverse)
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { plate: { value: tex }, projVP: { value: projVP } }, side: THREE.DoubleSide,
+      vertexShader: 'varying vec4 vWorld; void main() { vWorld = modelMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * viewMatrix * vWorld; }',
+      fragmentShader: 'uniform sampler2D plate; uniform mat4 projVP; varying vec4 vWorld; void main() { vec4 c = projVP * vWorld; if (c.w <= 0.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; } vec2 uv = clamp(c.xy / c.w * 0.5 + 0.5, 0.0, 1.0); gl_FragColor = texture2D(plate, uv); }',
+    })
+    const backdrop = new THREE.Mesh(new THREE.SphereGeometry(80, 48, 24), mat)
+    backdrop.position.set(proj.pos[0], proj.pos[1], proj.pos[2])
+    this.scene.add(backdrop)
+    let restore = () => {}
+    try {
+      const blobs: Blob[] = []
+      for (let i = 0; i < frames.length; i++) {
+        const { cam, doc } = frames[i]
+        this.sync(doc)
+        const camera = this.shotCamera(cam, w / h)
+        restore(); restore = this.hideHelpers(camera)
+        this.scene.updateMatrixWorld(true)
+        blobs.push(await this.shotWith(r, camera, mat, 0x000000))
+        onProgress?.(i + 1, frames.length)
+      }
+      return blobs
+    } finally {
+      restore()
+      this.scene.remove(backdrop); backdrop.geometry.dispose(); mat.dispose(); tex.dispose()
+      r.dispose(); r.forceContextLoss()
+      this.sync(restoreDoc)
+      this.dirty = true
+    }
+  }
   /** P18: a lit three-quarter view of a model with the camera fitted to its bounding sphere (the E14 renderer's framing) — the thumbnail the
    *  engine's RenderMesh cannot make (its camera sits inside some props). */
   async thumbnailOf(model: THREE.Object3D, size = 512): Promise<Blob> {

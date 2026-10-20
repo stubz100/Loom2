@@ -17,6 +17,7 @@ export function ensureHeadless(): boolean {
   useStage.setState({
     passRenderer: (cam, w, h) => { const doc = useStage.getState().current; if (doc) e.sync(doc); return e.renderPasses(cam, w, h) },
     sequenceRenderer: (fr, w, h, kind, restore, on) => e.renderSequence(fr, w, h, kind, restore, on),
+    plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => e.renderProjected(fr, w, h, plate, proj, aspect, restore, on),
   })
   return true
 }

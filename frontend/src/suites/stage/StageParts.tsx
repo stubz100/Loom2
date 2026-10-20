@@ -500,13 +500,14 @@ function Viewport() {
     })
     engineRef.current = engine
     viewport.centre = () => engine.centre(); viewport.freePose = () => engine.freePose(); viewport.frame = (ids) => engine.frame(ids)
-    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on) })   // ST3 / ST4
+    useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
+      plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on) })   // ST3 / ST4, D111
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
     if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
-    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null }) }
+    return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
   }, [])
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)

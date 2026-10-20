@@ -6866,3 +6866,25 @@ mask's sense (the model reads 1 − mask: known = 1).
   e2e +1 (a scene with the room, a figure, a crate and a light, split into 4 layers of 9 frames at F16, a pose frame served);
   offline 458 under full and open; Vitest 386 + 3; e2e 49/49 under full and open; lint 75; build clean.
 - **Next:** PS5b, the plate — a Klein Stage shot of the bare set, projected along the camera path.
+
+## 2026-10-20 14:00 — D111 PS5b built: the plate — a Klein Stage shot of the bare set, projected along the camera path
+
+- **Server:** `POST /finals/{id}/plate` ingests the plate's frame-0 lit clay as a stage-pass asset and queues a Stage shot (Klein,
+  clay method) with the Shot tab's prompt and references, origin `final_plate`. The finisher sets the still on the plate layer (status
+  *running*: it waits for projection) and records no Story take. `PUT /finals/{id}/layers/{lid}/frames` stores a layer's own sequence
+  (the layer is done). `FinalLayer` gains `still_asset_id`, `frames_done` and `job_ids`.
+- **An empty set's lead:** the rig's first plate came back with two men in the empty room, despite *the room is empty* at the head of
+  the prompt. The clay method's lead names "the grey mannequins … the people described below". A Stage shot now takes `empty`, and an
+  empty set gets `STAGE_SET_LEAD` (the empty place, no people, figures or objects). The second plate was an empty room.
+- **Projection** (`engine.renderProjected`, `plateProjector` beside the sequence renderer): the still is cast from the first frame's
+  camera onto the set's surfaces and a far backdrop sphere (a part of the picture no surface holds stays on the plate), then rendered
+  through each frame's camera with a projective-texture shader, actors hidden. The panel watches a final while a layer works and
+  projects the plate when its still lands. The plate row has *Make the plate*, its still's thumbnail, and a right-click *Make the plate
+  again* / *Project the plate again*.
+- **Rig** (E28c's scene, a 0.9 m dolly-in over 48 frames, F16: 33 frames): the final split in 20 s; the plate still in 37 s (Klein 9B,
+  warm); the projection in 2 s. The dolly reads as parallax on the floor and the window wall; the right wall Klein drew (the Stage room
+  has none) rides on the backdrop. Frames in `engine/spikes/out/ps5b/`.
+- **Tests:** `test_finals_d111` +3 (the plate route and the frames route; the plate still landing on its final through the fake engine
+  and not on a Story shot; the empty set's lead); the route snapshot (+2); e2e (the final-shot scenario now makes and projects the
+  plate); offline 461 under full and open; Vitest 386 + 3; e2e 49/49 under full and open; lint 75; build clean; settings audit clean.
+- **Next:** PS5c, the character layers.

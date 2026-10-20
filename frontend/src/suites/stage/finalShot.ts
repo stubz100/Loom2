@@ -91,6 +91,48 @@ export async function makeFinal(opts: MakeOptions): Promise<Final> {
       passes: layers[l.id].passes, keypoints: (layers[l.id].keypoints ?? null) as never })) } }))
 }
 
+// ---- PS5b: the plate --------------------------------------------------------------------------------------------------------------
+/** Queue the plate's still: the bare set's lit clay at the first frame through a Klein Stage shot, with the Shot tab's prompt and references. */
+export async function makePlate(f: Final): Promise<void> {
+  const shot = st().shot
+  await unwrap(http.POST('/finals/{fid}/plate', { params: { path: { fid: f.id } }, body: { prompt_text: shot.prompt_text, refs: shot.refs.map((r) => ({ asset_id: r.asset_id, note: r.note ?? null })) as never, seed: 0 } }))
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('the plate still did not load'))
+    img.src = url
+  })
+}
+
+/** Project the plate's still along the final's camera path (Stage: the still cast from the first frame's camera onto the set) and store the
+ *  frames as the plate layer's own. The stage must be the final's, open. */
+export async function projectPlate(f: Final, onProgress?: (done: number, total: number) => void): Promise<Final> {
+  const plate = f.layers.find((l) => l.id === 'plate')
+  const doc = st().current
+  if (!plate?.still_asset_id) throw new Error('the plate has no still yet')
+  if (!doc || doc.id !== f.stage_id) throw new Error('open the final\'s stage to project its plate')
+  if (!st().plateProjector) (await import('./headless')).ensureHeadless()
+  const project = st().plateProjector
+  if (!project) throw new Error('the stage is not ready to render')
+  const img = await loadImage(api.assetUrl(plate.still_asset_id))
+  const times = framesAt(f.range.start, f.range.end, f.rate as Rate)
+  const camOf = (d: StageDoc) => d.cameras.find((c) => c.id === f.camera_id) ?? d.cameras[0]
+  const frames = times.map((t) => { const d = sampleDoc(doc, t); return { cam: camOf(d), doc: only(d, []) } })
+  const blobs = await project(frames, f.size.w, f.size.h, img, frames[0].cam, img.naturalWidth / img.naturalHeight, sampleDoc(doc, st().frame), onProgress)
+  const shas: string[] = []
+  const uploaded = new Set<string>()
+  for (const blob of blobs) {
+    const sha = await sha256Hex(await blob.arrayBuffer())
+    if (!uploaded.has(sha)) { await api.putBlob(sha, blob); uploaded.add(sha) }
+    shas.push(sha)
+  }
+  return unwrap(http.PUT('/finals/{fid}/layers/{lid}/frames', { params: { path: { fid: f.id, lid: 'plate' } }, body: { frames: shas } }))
+}
+
 /** The layers' size: the pose-driven model's (Draft first, D18), else the clip size. */
 export function finalSize(): [number, number] {
   const a = useSession.getState().capabilities?.stage?.animate
@@ -101,13 +143,45 @@ export function finalSize(): [number, number] {
 interface FinalsState {
   finals: Final[]
   making: { done: number; total: number; what: string } | null
+  projecting: string | null                                  // PS5b: the final whose plate Stage is projecting
   load: () => Promise<void>
   make: (rate?: Rate) => Promise<Final | null>
   remove: (id: string) => Promise<void>
+  plate: (id: string) => Promise<void>
+  project: (id: string) => Promise<void>
+  /** Watch the finals with work under way: reload them, and project a plate whose still has landed (once). */
+  tick: () => Promise<void>
 }
 
+const busy = (f: Final) => f.layers.some((l) => l.status === 'queued' || l.status === 'running')
+const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
+
 export const useFinals = create<FinalsState>((set, get) => ({
-  finals: [], making: null,
+  finals: [], making: null, projecting: null,
+  plate: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    try {
+      await makePlate(f)
+      useSession.getState().toast(`${f.name}: the plate is queued (a Klein Stage shot of the bare set) — Stage projects it along the camera path when it lands`, 'info')
+      await get().load()
+    } catch (e) { useSession.getState().toast(`Make the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  project: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f || get().projecting) return
+    set({ projecting: id })
+    try { const next = await projectPlate(f); set({ finals: replace(get().finals, next) }) }
+    catch (e) { useSession.getState().toast(`Project the plate: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+    finally { set({ projecting: null }) }
+  },
+  tick: async () => {
+    if (!get().finals.some(busy)) return
+    await get().load()
+    const doc = st().current
+    const ready = get().finals.find((f) => f.stage_id === doc?.id && f.layers.some((l) => l.id === 'plate' && l.status === 'running' && l.still_asset_id && !l.frames_done))
+    if (ready && !get().projecting) await get().project(ready.id)
+  },
   load: async () => {
     const doc = st().current
     if (!doc) { set({ finals: [] }); return }

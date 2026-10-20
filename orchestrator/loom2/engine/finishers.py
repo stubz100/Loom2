@@ -30,6 +30,7 @@ from ..origin import JobOrigin
 from ..recipes import I2I, I2V, TTS, ImageToMesh, Inpaint, Keypoints, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..body import Body
+from ..finals import FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
 from ..timelines import TimelineStore, at, duration, starts
 from ..tools import facesim
@@ -96,7 +97,10 @@ class AssetFinisher:
             assets[i] = await asyncio.to_thread(q.catalogue.make_thumbs, rec)
             q.hub.broadcast("asset.updated", assets[i].model_dump())
         job.result["asset_ids"] = [a.id for a in assets]
-        if isinstance(recipe, StageShot) and assets:                                            # 17 §3c: the frame of every shot pointing at this camera
+        plate = job.origin is not None and job.origin.surface == FINAL_PLATE_SURFACE
+        if plate and assets:                                                                    # D111 (PS5b): the final's plate still
+            await asyncio.to_thread(_final_plate_result, q, str(job.origin.ref or ""), assets[0].id)
+        if isinstance(recipe, StageShot) and assets and not plate:                              # 17 §3c: the frame of every shot pointing at this camera
             mine = job.origin.payload.get("shot_id") if job.origin and job.origin.surface == FOR_SHOT and job.origin.payload else None
             await asyncio.to_thread(_stage_result, q, recipe.stage_id, recipe.camera_id, "image", assets[0].id, _run(job, recipe, q), mine)
         if assets and job.origin and job.origin.surface == "lora_check":                        # 18 §3h (LT3): FaceSim against the hero, the record grows
@@ -413,6 +417,16 @@ def _shot_takes(q: JobQueue, payload: dict, kind: str, ids: list[str], use: bool
         q.hub.broadcast("story.changed", {"kind": "shot", "id": s.id, "revision": s.revision})
     except Exception as e:                                                                      # never the job's failure
         q.hub.broadcast("story.changed", {"kind": "shot", "id": t[0] if t else None, "revision": 0, "error": str(e)})
+
+
+def _final_plate_result(q: JobQueue, fid: str, asset_id: str) -> None:
+    """D111 (PS5b): the plate's still on its final — the layer waits for Stage to project it (status running). Never the job's failure."""
+    from ..finals import FinalStore
+    try:
+        f = FinalStore(q.ws).update_layer(fid, "plate", still_asset_id=asset_id, status="running")
+        q.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    except Exception as e:  # noqa: BLE001
+        q.hub.broadcast("final.updated", {"id": fid, "revision": 0, "error": f"plate not set: {e}"})
 
 
 def _anim_ref_result(q: JobQueue, pid: str | None, payload: dict, asset_id: str) -> tuple[str, str] | None:

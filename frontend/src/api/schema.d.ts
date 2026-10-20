@@ -773,6 +773,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/layers/{lid}/frames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Final Layer Frames
+         * @description A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done.
+         */
+        put: operations["final_layer_frames_finals__fid__layers__lid__frames_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/{name}/{n}": {
         parameters: {
             query?: never;
@@ -787,6 +807,27 @@ export interface paths {
         get: operations["final_frame_finals__fid__layers__lid___name___n__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/plate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Plate
+         * @description PS5b: the plate's still — the bare set's lit clay at frame 0 (from the final's plate pass) as a Stage shot's image 1 (Klein, the clay
+         *     method), the lead first so the model draws no people or objects (they are layers). Stage then projects it along the camera path.
+         */
+        post: operations["final_plate_finals__fid__plate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4321,8 +4362,15 @@ export interface components {
         FinalLayer: {
             /** Error */
             error: string | null;
+            /**
+             * Frames Done
+             * @default 0
+             */
+            frames_done: number;
             /** Id */
             id: string;
+            /** Job Ids */
+            job_ids: string[];
             /**
              * Keypoints
              * @default false
@@ -4354,6 +4402,8 @@ export interface components {
              * @enum {string}
              */
             status: "passes" | "queued" | "running" | "done" | "failed";
+            /** Still Asset Id */
+            still_asset_id: string | null;
             /** Version */
             version: string | null;
         };
@@ -4609,6 +4659,11 @@ export interface components {
         FlowProblems: {
             /** Problems */
             problems: components["schemas"]["FlowProblem"][];
+        };
+        /** FramesBody */
+        FramesBody: {
+            /** Frames */
+            frames: string[];
         };
         /** Freed */
         Freed: {
@@ -6665,6 +6720,30 @@ export interface components {
             reasons: string[];
             /** Seconds */
             seconds: number | null;
+        };
+        /** PlateBody */
+        PlateBody: {
+            /**
+             * Prompt Text
+             * @default
+             */
+            prompt_text?: string;
+            /** Refs */
+            refs?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Seed
+             * @default 0
+             */
+            seed?: number;
+        };
+        /** PlateQueued */
+        PlateQueued: {
+            /** Job Id */
+            job_id: string;
+            /** Pass Asset Id */
+            pass_asset_id: string;
         };
         /** Pose */
         Pose: {
@@ -11158,6 +11237,42 @@ export interface operations {
             };
         };
     };
+    final_layer_frames_finals__fid__layers__lid__frames_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FramesBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Final"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_frame_finals__fid__layers__lid___name___n__get: {
         parameters: {
             query?: never;
@@ -11179,6 +11294,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_plate_finals__fid__plate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlateQueued"];
                 };
             };
             /** @description Validation Error */

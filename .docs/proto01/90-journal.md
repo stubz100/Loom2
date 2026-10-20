@@ -6746,3 +6746,21 @@ mask's sense (the model reads 1 − mask: known = 1).
 - **Tests:** Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.
 - **For the author:** `out/e28c/models.jpg`, `compare.mp4` (R1 | R2), `r1.mp4`, `r2.mp4`; the look added to proto01_animate/15 (§3).
 - **Next:** camera moves, on the 3D props. The parallax is now the models' own, with no projection needed.
+
+## 2026-10-20 11:58 — the author: props made beforehand like characters, the scene finished in 3D before layers → D110
+
+- **The author asked** how the props are made, and set the workflow: "a separate menu besides the character generation, where we can
+  pre-generate props (same way as a character - image(s) first, then 3d model, which we can then place on the scene)"; "the scene should
+  work as a coherent 3d scene, with lighting and camera control - and when the whole scene is complete in the Animate editor, then should
+  we start separating different entities to layers and start creating the final shot".
+- **How it works today** (the answer):
+  - E28b / E28c's room props were cut from E22's plate (their pixels inside SAM 3 masks), a rescue of a picture with objects baked in.
+  - The chest and the door were Cast props (`cls = prop`: look, references, versions, an animation reference of the prop alone).
+  - The 3D model is a separate Catalogue action (P18 "Make a 3D prop…"); its GLB lands in Stage's Meshes list, unlinked to the Cast prop.
+  - Stage binds only figures to Cast entries (`stages.check`: `profile_id` on a mannequin only).
+- **D110** records the direction:
+  - props get their own Cast section, images first, then the model;
+  - Animate places them bound to the prop and its version;
+  - the scene is one coherent 3D scene with lights and the camera;
+  - only a complete scene is split into layers for the final shot.
+- **Open:** the build order, against the camera moves that were next. A plan to follow in proto01_animate.

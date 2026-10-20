@@ -313,7 +313,7 @@ T2 Best (≤ 1/255).
 **Run 2026-10-20 (journal 2026-10-20 16:19, D113):** on the PS5 rig's final shot (7 layers), the headless session stood in for the preview
 server: T1 25–30 fps, T2 ≈ 60 ms at Best, T3 real time at ½ (full needs the playback cache), the final identical to the preview (0/255).
 While a job runs, EffectCraft costs the generation 14–23 %, so it renders on demand only. T0, the HTTP endpoint and R1 were not built.
-Where the author edits is Q24 (EffectCraft's own window, or inside Animate).
+Where the author edits was Q24: **inside Animate (D114, 2026-10-20)** — phase 4 starts with AE1 and a thin AP1 (07's status; the steps in doc 20).
 
 **The document.**
 

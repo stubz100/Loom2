@@ -6985,3 +6985,52 @@ mask's sense (the model reads 1 − mask: known = 1).
   section, 4–5 days for the viewer alone), or the first now and the second later.
 - **Not built in the spike:** the page tier T0, a native HTTP frame endpoint with diff sync (the headless session stood in for it), R1.
 - The look: `.docs/proto01_animate/19-testing-e27.md`.
+
+## 2026-10-20 17:12 — Review: where the animate build stands, planned against delivered; D114 (the editor inside Animate now), Q24 resolved
+
+The author asked for a review of the state of things, then "record all this and start looking into this".
+
+- **The shape of it.** Since the plan's revision on 2026-10-17 23:15: 66 commits, 72 journal entries, 20 decisions (D94–D113), 35 spike
+  scripts, ≈ 23,000 lines added to product code and ≈ 2,400 to tests; offline 467 on both variants, Vitest 387, e2e 49/49, lint clean.
+- **Against 07's phases:** 0–2 done and accepted; phase 3's spikes done except E29 (lip-sync) and E24 (post-processing); the gate
+  decided for rate and joins, mode, shadows, props and the preview route; **phase 4 (the editor) not started; phase 5 largely built
+  early** as D110's PS1–PS4 and D111's PS5a–e (CA2–CA6 under other names; CA3's depth-guided plate, CA5's W3 repair, CA7, AE5 open);
+  phases 6–7 untouched. The 02 and 07 documents did not say so; 07 now carries a status table, the CA → PS mapping and the order from
+  here.
+- **What holds:** spikes before decisions (every change a D-number, a rig number, a look document); the pipeline runs end to end on the
+  product path (the PS5 rig: a Stage scene to a clip through the app's routes, queue and finishers, e2e under both variants); the fakes
+  keep the 2-minute offline suite covering GPU code.
+- **What worries:**
+  - the author has not looked at four of the last five things built (docs 15, 17, 18, 19 are owed; 18 judges the layers the editor is
+    built on; Q22 and Q23 fall out of 15);
+  - the cost per shot: ≈ 13 min of GPU for the 5 s two-character shot (two Wan Animate batches per character at 5–6 min each); a 30 s
+    shot with two characters ≈ 80 min before any post stage;
+  - the `open` variant drifting to second class (Q22, BiRefNet mattes, clay stand-ins) without a decision saying so;
+  - EffectCraft is alpha (v0.12.0, 384 crates, a 6-minute build; its MCP surface differed from the survey): the pin and a `--check` build
+    script contain it, and its `.ecproj` is the editor's foundation;
+  - two assemblies will exist (PS5e's automatic composite, the editor's composition): the contact-offset, depth-order and matte rules
+    must have one reference;
+  - loose ends: the Wan chain's deprecated `ImageBatch`; Wan Animate's non-determinism at a fixed seed; Q15 and Q18 untouched; the
+    spike outputs' size.
+- **D114 (the author: "I'd rather build out the effectcraft engine in animate - same way as image/edit, and how we planned it"):**
+  phase 4 starts now — AE1 the composition, AP1 the preview server, AE2 viewer and timeline, AE3 effects and colour; the first slice AE1 +
+  a thin AP1 so the rig's final shot can be scrubbed in Animate before any editing control exists; E29 and E24 move to just before AE4;
+  UX9 after AE3. Q24 resolved as (b).
+- **Next:** EffectCraft's host crate, remote protocol and frame path read for AP1's shape; then AE1.
+
+## 2026-10-20 17:17 — Phase 4 looked into: the editor's build cut into steps (proto01_animate 20)
+
+- **Read at the pin (f36b2b3e):** `crates/automation` (the headless session's tools: every command, `render_frame`, save, undo),
+  `engine/src/remote.rs` (`FrameServer`: the diff-synced replica with raw RGBA frames, GPU multi-pass and layer prefetch — the web
+  build's worker protocol, no native transport), `doc_path.rs` and `commands/file.rs` (#652: footage by a relative path is found next
+  to the project file), `file_more.rs` (`file.saveCopy`), the project's `renderer` setting, `docs/agents.md` (releases ship the CLI).
+- **The shape (doc 20):** the orchestrator drives one `effectcraft-cli mcp` session (E27's client as product code, a fake for the
+  tests); one composition per final at `finals/<id>/comp.ecproj` + `comp.json` with relative footage and no `..`, written from the
+  final by the assembly's own result so `final_assembly` stays the one rule set; `comp_render` a CPU queue job through the CLI; AP1
+  thin first — the page keeps the frames it got (T3 from its cache, an idle fill at ½, the chip), the session on `software` with ≤ 4
+  threads while a job runs (D113); AP1 full later as a sidecar over `FrameServer`. AE2 adds the Final level's sections (Layers,
+  Properties, Masks, the timeline's bars); AE3 the curated effects; then UX9.
+- **The first slice (≈ 1 week):** AE1 steps 1–4 and AP1 thin — doc 18's shot opened at Animate's Final level, scrubbed, played from the
+  cache, rendered to a clip.
+- **Not decided here:** CI builds the pinned CLI (≈ 4 min on rustc 1.96) or fetches a release; the full AP1's sidecar waits for AE2's
+  measurements.

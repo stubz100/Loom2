@@ -44,3 +44,58 @@ the author reviews UX0's results. Phase 3's spikes are the only long GPU work be
 | RC0–RC4 | 05 §6 |
 | O1–O7 | 06 §3, §4 |
 | C1–C7 (Catalogue ideas) | 04 |
+
+## Status at 2026-10-20 17:12 (D114) — what the order above became
+
+The table above is the plan of 2026-10-18. Three days of building changed its shape: phase 5 was largely built early under D110 and D111
+(the author's direction on props and the 3D scene, doc 16), phase 4 had not started, and two spikes were never run. This section is the
+truth from here; the table above stays as written.
+
+### Delivered against the plan
+
+| Phase | Planned | Delivered | Still open |
+| --- | --- | --- | --- |
+| 0–2 | UX0 · IM1 · AN1 · RC0 · CA0 · CA1 | all built and rig-checked (D99, D101, D104); UX0 and CA0 accepted by the author | — |
+| 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113) | **E29 lip-sync and E24 post-processing not run** — moved before AE4 |
+| gate | a D-number per group | rate and joins D102 · mode D103 · shadows D105–D107 · props D108–D110 · the preview route D113 | lip-sync and the post stages: undecided until E29 / E24 |
+| 4 · the editor | AE1 · AP1 · AE2 · AE3 | nothing | **the whole phase — starts now (D114)** |
+| 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · CA7 / AE4 (wait E24) · AE5 |
+| 6 · review | UX9 | — | after AE3 |
+| 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it |
+
+### The mapping: 02's CA waves → 16's PS steps
+
+| 02 wave | Where it was built | Not covered |
+| --- | --- | --- |
+| CA2 · layers and light | PS1–PS4 (D110): Cast props with 3D models, bound in Animate; LightSpec lights and the ambient; the viewport environment; PS5a (D111): the scene split into layers with Stage's passes | a prop parented to a hand (Q23) |
+| CA3 · the plate | PS5b: the Klein still of the bare set, projected by Stage along the camera path | the depth-guided plate video for large camera moves |
+| CA4 · the batch planner | PS5c: `plan_batches` (77 frames, 5 carried, the 4k + 1 grid) | the plan shown with its cost; staging |
+| CA5 · layer jobs | PS5c: chained Wan Animate runs per character, a re-take with a new seed | re-take a batch and the ones after it; the W3 healing patch at a seam |
+| CA6 · assembly | PS5d mattes + PS5e `assemble_final` (depth order, contact offsets, RIFE) — the automatic first composite (D112) | — (hand finishing is the editor's) |
+| CA7 · the final | — | waits E24; becomes AE4 |
+| CA8 · UI | the final's panel in Animate (PS5f slim) | the rest is the editor (AE2) |
+
+### The order from here
+
+| # | Phase | Waves | GPU | Days |
+| --- | --- | --- | --- | --- |
+| 4 | **The animation editor** (D114) | **AE1** the composition (the pin and its build script; the `.ecproj` record written from a final and from a single clip; `comp_render` through the CLI) → **AP1** the preview server (thin first: start, frames over loopback, the D97 rule; then the tiers, caches and the chip) → **AE2** viewer and timeline → **AE3** effects and colour | AP1, AE3 rig checks | 16–21 |
+| — | **The author's looks** | docs 15, 17, 18, 19 — before AE2's viewer is designed (Q22, Q23) | no | ½ h |
+| 6 | **Review** | **UX9** | headed checks | 1–2 |
+| 3b | **The two spikes left** | **E29** lip-sync → **E24** post-processing, then their D-number | yes, serial | ≈ 2.5 |
+| 5b | **The pipeline's rest** | **AE4** AI passes on layers (CA7) · **AE5** the output as a take · CA3's depth-guided plate · CA5's W3 repair | yes | 8–11 |
+| 7 | **Story pass** | RC1–RC4 · O1–O7 · C1–C3, C5–C7 as the author picks | rig checks | 15–20 + RC4 |
+
+**The first slice of phase 4** is AE1 plus a thin AP1: the rig's final shot opened in Animate and scrubbed there, before any editing control
+exists, so the viewer's feel can be judged early. The steps are in [20](20-animation-editor-build.md).
+
+### What the review of 2026-10-20 noted (journal 2026-10-20 17:12)
+
+- The cost per shot is real: the 5 s two-character shot took ≈ 13 min of GPU (two Wan Animate batches per character at 5–6 min each); a
+  30 s shot with two characters is ≈ 80 min before any post stage.
+- The `open` variant is drifting to second class (no image → 3D for props, Q22; BiRefNet for mattes; clay stand-ins): within D26, but
+  each step widens the gap without a decision saying so.
+- EffectCraft is alpha (v0.12.0): the pin and the build script contain it; its `.ecproj` format is the editor's foundation.
+- Two assemblies will exist (PS5e's automatic composite and the editor's composition): one must be the reference the other derives from.
+- Loose ends: the Wan chain's deprecated `ImageBatch` node; Wan Animate's non-determinism at a fixed seed; Q15 and Q18 untouched since
+  the first week; `engine/spikes/out` large and holding losers.

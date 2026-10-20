@@ -861,6 +861,24 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const clip = await api<{ frames: number; fps: number }>('GET', `/clips/${done.clip_id}`)
   expect([`${clip.frames}@${clip.fps}`]).toContain(done.assembly?.conform ? '13@24' : '9@16')                // RIFE when the local tool is there (D27)
   await expect(page.locator('.final-section [data-play]')).toBeVisible()
+  // AE1 / AP1 thin (D114): the composition (an EffectCraft project beside the final — the fake session), scrubbed at the Final level, rendered
+  await page.locator('.final-section [data-compose]').click()
+  await expect(page.locator('.final-section [data-comp-rev]')).toHaveText(/composition · revision 0/)
+  type Comp = { revision: number; stack: string[]; clip_id: string | null; layers: { id: string }[] }
+  const comp = await api<Comp>('GET', `/finals/${fin.id}/composition`)
+  expect(comp.layers.map((l) => l.id)).toEqual(['plate', 'shadows', ...comp.stack])
+  await page.locator('.final-section [data-open-final]').click()
+  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText(/Final/)
+  await expect(page.locator('.final-viewer img.final-frame')).toBeVisible()
+  await expect(page.locator('.final-viewer .final-chip')).toHaveText(/cached \d+ %/)
+  await page.locator('.final-viewer .final-scrub').fill('4')
+  await expect(page.locator('.final-viewer .counter')).toHaveText(/^frame 4 \//)
+  await expect.poll(async () => page.locator('.final-viewer img.final-frame').getAttribute('data-side'), { timeout: 10_000 }).toBe('full')   // at rest: the full frame
+  await page.locator('.final-section [data-render]').click()
+  await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
+  const finished = await api<Done>('GET', `/finals/${fin.id}`)
+  expect(finished.clip_id).toBe((await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id)                // the finished shot is the final's clip
+  await expect(page.locator('.final-section [data-comp-rev]')).toHaveText(/rendered at revision 0/)
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {

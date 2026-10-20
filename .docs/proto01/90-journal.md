@@ -7107,3 +7107,26 @@ The author asked for a review of the state of things, then "record all this and 
   and the route (queued; 404 bare). Offline: 478 passed in 153.01s (0:02:33) (full), 478 passed in 139.84s (0:02:19) (open); settings audit 259 clean; frontend build and Vitest unchanged.
 - **AE1 is complete but for step 5** (a composition from a single clip), which waits for AE2 — the editor opens on finals first.
   **Next:** AP1 thin — the Final level in Animate: the composition's frames in the viewer, scrubbed and played from the page's cache.
+
+## 2026-10-20 18:33 — AP1 thin built: Animate's Final level — the composition scrubbed and played from the page's cache (proto01_animate 20 §2)
+
+- **The level.** `AnimateLevels` grows **Final** (Clay · Performance · Final; `stage.level.final` / `anim.level.final`, `3`; `anim.level.performance`
+  back, `2`); at the Final level Animate's viewer is `FinalViewer` — the one column (Shot … Selection) stays, so the final's panel is at hand.
+- **The viewer** (`compositionStore.ts`, `FinalViewer.tsx`): the composition's frames from `GET …/composition/frame?t&side` as blobs kept by
+  (revision, frame, size): **½ while scrubbing** (the slider, the transport's commands `anim.final.*`), **the full frame once the playhead
+  rests 300 ms** (T2), a full frame already there shown over a half one; **playback** from the cache at the shot's rate — a frame not
+  there yet makes the clock wait for it, so a first pass runs as fast as the frames come and the next is real time (T3); an **idle fill**
+  every 250 ms walks the shot at ½ from the playhead while nothing plays and nothing is in flight — **paused while any job runs** (D97 /
+  D113: on demand only then); the full frames kept to the last 12, the ½ frames of the whole shot; a new revision (an edit, a remake)
+  drops the cache. **The chip** says what is shown — "½ · cached 62 %", "full · cached 100 %", "· a job runs: on demand" — always
+  matching the frame (T8); the transport shows the revision, stale, and the revision rendered.
+- **The final's panel** gains *Make the composition* (again: a confirm, the edits dropped), *Open in Final* and *Render the finished shot*
+  (the poll follows the render job till the clip lands; the clip is the final's; "composition · revision n · rendered at revision m").
+  Buttons and the right-click menu, as the row's other verbs (D32).
+- **Tests:** `compositionStore.test` +2 (½ on open and scrub, full at rest, nothing fetched twice, the chip; the idle fill stopped by a
+  running job, the shot filled, a new revision dropping the cache); the command audit clean; the e2e final-shot scenario extended — the
+  composition made (its layers the plate, the shadows, then the stack), opened at the Final level (the levels' switch on Final, a frame
+  shown, the chip, the slider to frame 4, the full frame at rest), rendered (the composition's clip is the final's, "rendered at
+  revision 0"): **e2e 49/49 under full and open**; Vitest 389 + 3; build clean; lint 75.
+- **The first slice of phase 4 is complete** (AE1 steps 1–4 + AP1 thin): doc 18's shot can be made, assembled, composed, scrubbed at the
+  Final level and rendered to a clip from the app. Owed: the author's look (a testing document, 21), then AE2.

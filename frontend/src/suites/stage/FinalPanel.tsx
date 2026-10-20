@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, readyToAssemble, useFinals } from './finalShot'
+import { assembling, batchCount, readyToAssemble, rendering, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
@@ -55,10 +55,15 @@ function FinalRow({ f }: { f: Final }) {
   useFinals((s) => s.finals)                                                   // re-render as the poll reloads (the assembly job's state)
   const busy = assembling(f.id)
   const ready = readyToAssemble(f)
+  const comp = useFinals((s) => s.compositions[f.id]) ?? null                   // AE1: the composition, once made
+  const rendersNow = rendering(f.id)
   return (
     <div className="final-row" data-id={f.id} onContextMenu={(e) => { e.preventDefault(); showMenu(e, [
       { label: 'Assemble the shot', run: () => void useFinals.getState().assemble(f.id), disabled: !ready || busy },
       { label: 'Play the shot in Animate', run: () => useFinals.getState().play(f.id), disabled: !f.clip_id }, { sep: true },
+      { label: comp ? 'Make the composition again' : 'Make the composition', run: () => void useFinals.getState().compose(f.id), disabled: !f.assembled_at || busy },
+      { label: 'Open in Final', run: () => useFinals.getState().openFinal(f.id), disabled: !comp },
+      { label: comp?.clip_id ? 'Render the finished shot again' : 'Render the finished shot', run: () => void useFinals.getState().render(f.id), disabled: !comp || rendersNow }, { sep: true },
       { label: 'Delete this final', danger: true, run: () => void useFinals.getState().remove(f.id) }]) }}>
       <div className="final-head"><b>{f.name}</b><span className="hint">{f.frames} frames at {f.rate} fps · {f.size.w}×{f.size.h} · frames {f.range.start}–{f.range.end}</span></div>
       <ul className="final-layers">{f.layers.map((l) => <LayerRow key={l.id} f={f} l={l} />)}</ul>
@@ -67,6 +72,14 @@ function FinalRow({ f }: { f: Final }) {
           title={ready ? 'Composite the layers into the shot: the plate under the shadows, the props and characters in depth order, each character on her shadow' : 'Make every layer first: the plate, and each character performed and matted'}>
           {busy ? 'Assembling…' : f.clip_id ? 'Assemble again' : 'Assemble the shot'}</button>
         {f.clip_id && <button className="quiet" data-play onClick={() => useFinals.getState().play(f.id)} title="Play the assembled shot in Animate">Play ▶</button>}
+        {f.assembled_at && <button className={comp ? 'quiet' : 'primary'} data-compose disabled={busy} onClick={() => void useFinals.getState().compose(f.id)}
+          title={comp ? 'Write the composition afresh from the layers and the assembly (the edits are dropped)' : 'An EffectCraft composition beside the final: the plate, the shadows, each prop, each character over her matte at her contact offset — the shot to finish by hand'}>
+          {comp ? 'Make the composition again' : 'Make the composition'}</button>}
+        {comp && <button className="quiet" data-open-final onClick={() => useFinals.getState().openFinal(f.id)} title="Scrub and play the composition at Animate's Final level">Open in Final</button>}
+        {comp && <button className={comp.clip_id ? 'quiet' : 'primary'} data-render disabled={rendersNow} onClick={() => void useFinals.getState().render(f.id)}
+          title="effectcraft-cli renders the composition at Best and Full on the CPU (RIFE to 24 fps at F16); the clip becomes the final's and a take on its shot">
+          {rendersNow ? 'Rendering…' : comp.clip_id ? 'Render again' : 'Render the finished shot'}</button>}
+        {comp && <span className="hint" data-comp-rev>composition · revision {comp.revision}{comp.stale ? ' · stale: the final changed' : ''}{comp.clip_id ? ` · rendered at revision ${comp.rendered_revision}` : ''}</span>}
         {f.assembly && <span className="hint">{f.assembly.frames as number} frames{f.assembly.conform ? ' · 24 fps (RIFE)' : ''} · offsets {Object.entries((f.assembly.offsets_px ?? {}) as Record<string, number[]>).map(([k, v]) => `${k} ${v[0]}/${v[1]}`).join(', ') || '—'}</span>}
       </div>
     </div>

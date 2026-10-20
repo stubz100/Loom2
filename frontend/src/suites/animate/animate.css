@@ -41,6 +41,11 @@
 .anim-player .onion.end { opacity: .18; mix-blend-mode: screen; }
 .anim-overlay { position: absolute; left: 12px; bottom: 12px; background: var(--overlay); color: var(--fg2); padding: 4px 10px; border-radius: 6px; font-size: 12px; }
 .anim-overlay.err { color: var(--reject-fg); }
+/* AE1 / AP1 (D114): the Final level — the composition's frames, the chip, its own transport with a slider */
+.final-viewer .final-view { position: relative; display: grid; place-items: center; }
+.final-viewer img.final-frame { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
+.final-viewer .final-chip { position: absolute; right: 12px; top: 12px; background: var(--overlay); color: var(--fg2); padding: 2px 8px; border-radius: 999px; font-size: 12px; font-family: var(--mono); pointer-events: none; }
+.final-viewer .final-transport .final-scrub { flex: 1; min-width: 120px; }
 .anim-empty { color: var(--fg3); text-align: center; }
 .anim-empty h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
 

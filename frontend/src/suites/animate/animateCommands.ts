@@ -5,10 +5,13 @@ import { registerCommands, sep, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
+import { useComposition } from './compositionStore'
 
 const an = () => useAnimate.getState()
+const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
 const hasStart = () => !!an().panel.start
+const atFinal = () => cp().level === 'final' && !!cp().comp
 
 registerCommands([
   // render
@@ -20,6 +23,14 @@ registerCommands([
   // transport — D90 (02 §8.2): the one key set of Animate, the Stage timeline and the Episode lane; `,` `.` and Shift+, / Shift+. stay as alternates
   // D99 (UX0 #19): the viewer levels by number — 1 goes to Clay (the stage) from here; the strip's switch is their mouse home
   { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => useSession.getState().setSuite('stage') },
+  // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
+  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => cp().setLevel('performance') },
+  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => cp().setLevel('final') },
+  { id: 'anim.final.play', scope: 'animate', label: 'Play / pause the composition', icon: Play, placement: ['toolbar'], when: atFinal, run: () => cp().togglePlay() },
+  { id: 'anim.final.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, placement: ['toolbar'], when: atFinal, run: () => cp().step(-1) },
+  { id: 'anim.final.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, placement: ['toolbar'], when: atFinal, run: () => cp().step(1) },
+  { id: 'anim.final.home', scope: 'animate', label: 'First frame', icon: ChevronFirst, placement: ['toolbar'], when: atFinal, run: () => cp().home() },
+  { id: 'anim.final.end', scope: 'animate', label: 'Last frame', icon: ChevronLast, placement: ['toolbar'], when: atFinal, run: () => cp().end() },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
   { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },

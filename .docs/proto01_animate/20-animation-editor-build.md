@@ -108,4 +108,7 @@ viewer's feel can be judged then, before AE2's controls are designed.
   on the rig's final the composition matches the assembly to 1/255 through product code and is made in 0.06 s.
 - **2026-10-20 (journal 2026-10-20 18:14):** AE1 step 4 built — `comp_render`, the finished shot as a CPU queue job through `effectcraft-cli render`
   (the final's clip and a Story take; the composition records the rendered revision). Step 5 (a composition from a single clip) waits
-  for AE2. Next: AP1 thin.
+  for AE2.
+- **2026-10-20 (journal 2026-10-20 18:33):** AP1 thin built — the Final level in Animate (`FinalViewer`, `compositionStore`): ½ while scrubbing, full at
+  rest, playback and an idle fill from the page's cache (paused while a job runs), the chip; the panel's *Make the composition*, *Open in
+  Final*, *Render the finished shot*. **The first slice is complete.** Next: the author's look (doc 21), then AE2.

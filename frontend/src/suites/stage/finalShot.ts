@@ -5,7 +5,8 @@
 // The later steps make each layer's own frames and the assembly from these.
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
-import type { Final, StageDoc, StageObject } from '../../api/types'
+import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
+import { useComposition } from '../animate/compositionStore'
 import { askConfirm, useSession } from '../../store/session'
 import { sampleDoc } from './anim'
 import { st, type SequenceRenderer } from './stageStore'
@@ -147,8 +148,15 @@ interface FinalsState {
   finals: Final[]
   making: { done: number; total: number; what: string } | null
   projecting: string | null                                  // PS5b: the final whose plate Stage is projecting
-  awaiting: Record<string, { was: string | null; since: number }>   // PS5e: finals assembling → their assembled_at before (the poll runs till it moves)
+  awaiting: Record<string, { was: string | null; since: number; field: 'assembled_at' | 'clip_id' }>   // PS5e / AE1: a job's result awaited: the field's value before (the poll runs till it moves)
+  compositions: Record<string, Composition | null>                     // AE1: per assembled final, its composition (null: none yet)
   load: () => Promise<void>
+  /** AE1: write the composition from the layers and the assembly (again: the edits dropped, after a confirm). */
+  compose: (id: string) => Promise<void>
+  /** AP1: the composition at Animate's Final level. */
+  openFinal: (id: string) => void
+  /** AE1: render the composition into the finished shot (effectcraft-cli on the CPU) — the final's clip. */
+  render: (id: string) => Promise<void>
   make: (rate?: Rate) => Promise<Final | null>
   remove: (id: string) => Promise<void>
   plate: (id: string) => Promise<void>
@@ -165,7 +173,9 @@ interface FinalsState {
   tick: () => Promise<void>
 }
 
-const busy = (f: Final) => f.layers.some((l) => l.status === 'queued' || l.status === 'running') || assembling(f.id)
+const busy = (f: Final) => f.layers.some((l) => l.status === 'queued' || l.status === 'running') || assembling(f.id) || rendering(f.id)
+/** AE1: the final's render job (comp_render) is queued or running. */
+export const rendering = (fid: string): boolean => Object.values(useSession.getState().jobs).some((j) => j.kind === 'comp_render' && j.origin?.ref === fid && (j.status === 'queued' || j.status === 'running'))
 /** PS5e: the final's assembly job is queued or running (the session's jobs, by their origin). */
 export const assembling = (fid: string): boolean => Object.values(useSession.getState().jobs).some((j) => j.kind === 'assemble_final' && j.origin?.ref === fid && (j.status === 'queued' || j.status === 'running'))
 /** PS5e: every layer made — the plate projected, each character performed and matted. */
@@ -173,7 +183,33 @@ export const readyToAssemble = (f: Final): boolean => f.layers.every((l) => (l.k
 const replace = (list: Final[], f: Final) => list.map((x) => (x.id === f.id ? f : x))
 
 export const useFinals = create<FinalsState>((set, get) => ({
-  finals: [], making: null, projecting: null, awaiting: {},
+  finals: [], making: null, projecting: null, awaiting: {}, compositions: {},
+  compose: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    const have = get().compositions[id]
+    if (have) {
+      const ok = await askConfirm({ title: 'Make the composition again?', okLabel: 'Make it again',
+        text: `${f.name}: the composition is written afresh from the layers and the assembly — its ${have.revision} edit${have.revision === 1 ? '' : 's'} ${have.revision === 1 ? 'is' : 'are'} dropped.` })
+      if (!ok) return
+    }
+    try {
+      const c = await unwrap(http.POST('/finals/{fid}/composition', { params: { path: { fid: id } } }))
+      set({ compositions: { ...get().compositions, [id]: c } })
+      useSession.getState().toast(`${f.name}: the composition is ready (${c.layers.length} layers) — Open in Final to scrub it`, 'success')
+      if (useComposition.getState().finalId === id) void useComposition.getState().reload()
+    } catch (e) { useSession.getState().toast(`Make the composition: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
+  openFinal: (id) => { void useComposition.getState().open(id); useSession.getState().setSuite('animate') },
+  render: async (id) => {
+    const f = get().finals.find((x) => x.id === id)
+    if (!f) return
+    try {
+      await unwrap(http.POST('/finals/{fid}/composition/render', { params: { path: { fid: id } } }))
+      set({ awaiting: { ...get().awaiting, [id]: { was: f.clip_id ?? null, since: Date.now(), field: 'clip_id' } } })
+      useSession.getState().toast(`${f.name}: rendering the finished shot (effectcraft-cli on the CPU; the Dock shows the frames) — it becomes the final's clip`, 'info')
+    } catch (e) { useSession.getState().toast(`Render the finished shot: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
+  },
   plate: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
@@ -202,7 +238,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
     if (!f) return
     try {
       await unwrap(http.POST('/finals/{fid}/assemble', { params: { path: { fid: id } } }))
-      set({ awaiting: { ...get().awaiting, [id]: { was: f.assembled_at ?? null, since: Date.now() } } })
+      set({ awaiting: { ...get().awaiting, [id]: { was: f.assembled_at ?? null, since: Date.now(), field: 'assembled_at' } } })
       useSession.getState().toast(`${f.name}: assembling the layers into the shot (the CPU; the Dock shows the frames)`, 'info')
     } catch (e) { useSession.getState().toast(`Assemble: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
@@ -228,7 +264,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
     await get().load()
     const waiting = Object.fromEntries(Object.entries(get().awaiting).filter(([id, a]) => {   // till the result moves; a failed job stops it after 15 s
       const f = get().finals.find((x) => x.id === id)
-      return !!f && (f.assembled_at ?? null) === a.was && (assembling(id) || Date.now() - a.since < 15_000)
+      return !!f && (f[a.field] ?? null) === a.was && (assembling(id) || rendering(id) || Date.now() - a.since < 15_000)
     }))
     if (Object.keys(waiting).length !== Object.keys(get().awaiting).length) set({ awaiting: waiting })
     const doc = st().current
@@ -238,7 +274,13 @@ export const useFinals = create<FinalsState>((set, get) => ({
   load: async () => {
     const doc = st().current
     if (!doc) { set({ finals: [] }); return }
-    try { set({ finals: (await unwrap(http.GET('/finals', { params: { query: { stage_id: doc.id } } }))).items }) } catch { /* the panel shows none */ }
+    try {
+      const finals = (await unwrap(http.GET('/finals', { params: { query: { stage_id: doc.id } } }))).items
+      const pairs = await Promise.all(finals.filter((f) => f.assembled_at).map(async (f): Promise<[string, Composition | null]> => {
+        try { return [f.id, await unwrap(http.GET('/finals/{fid}/composition', { params: { path: { fid: f.id } } }))] } catch { return [f.id, null] }   // 404: none yet
+      }))
+      set({ finals, compositions: Object.fromEntries(pairs) })
+    } catch { /* the panel shows none */ }
   },
   make: async (rate = 16) => {
     const s = useSession.getState()

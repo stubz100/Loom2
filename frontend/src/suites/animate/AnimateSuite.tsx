@@ -23,6 +23,8 @@ import { useColumnSync } from '../../frame/columnSync'
 import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
 import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
+import { FinalViewer } from './FinalViewer'
+import { useComposition } from './compositionStore'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
@@ -527,11 +529,13 @@ function Stage() {
   const onion = useAnimate((s) => s.onion)
   const running = useSession((s) => Object.values(s.jobs).some((j) => j.kind === 'i2v' && j.status === 'running'))
   const startSet = useAnimate((s) => !!s.panel.start)
+  const level = useComposition((s) => s.level)
   useEffect(() => { if (project?.open) void an().loadClips() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // deep link ?clip=<id> (the headed check and the verification loop)
   useEffect(() => { const q = new URLSearchParams(location.search).get('clip'); if (q && clips.some((c) => c.id === q) && an().current !== q) an().select(q) }, [clips])
   usePlayback()
   if (!project?.open) return <div className="placeholder"><div><h2>Animate</h2>open or create a project to begin</div></div>
+  if (level === 'final') return <FinalViewer />                            // AE1 / AP1 (D114): the composition's frames, its own transport
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>

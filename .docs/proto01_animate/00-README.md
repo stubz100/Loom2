@@ -26,6 +26,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [14](14-testing-e23e.md) | **Looking at E23e** (for the author) | shadows that start at the feet: the shadow moved, Replace in the proxy, the character nudged (anchor pins) |
 | [15](15-testing-e28.md) | **Looking at E28, E28b and E28c** (for the author) | props: the chest slid, the door opened, the mug in her hand (P1 / P2 / P3); the room cleaned up (D108); props as 3D models, rendered or drawn on (D109) |
 | [16](16-props-and-scene.md) | **Props like characters, the scene in 3D first** (D108–D110) | the build: PS1 Props tab · PS2 the prop's 3D model · PS3 props in Animate · PS4 the 3D scene · PS5 the final shot (CA2) |
+| [17](17-testing-props.md) | **Trying the props and the 3D scene** (for the author) | make a prop and its 3D model in Story · Props; build a lit scene in Animate with props, figures, a light and a camera move |
 
 Background reading, in this order:
 

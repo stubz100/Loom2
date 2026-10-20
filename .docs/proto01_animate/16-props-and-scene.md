@@ -29,7 +29,7 @@ Mouse-first (D32): every verb is a button and a right-click entry; drags are acc
 ## Status (2026-10-20)
 
 - **PS1–PS3 built** (d27e7ef, c647f22): the Props tab; *Make the 3D model…*, stood upright, turning on the prop's page; props placed from
-  Animate's library and bound to the prop.
+  Animate's library (a click or the right-click menu; a drag is not built yet) and bound to the prop.
 - **PS4 built:**
   - **Look:** the viewport shows the models textured and lit (a room environment).
   - **Lights:** each light is a scene object with a look (Window, Sun, Lamp), intensity, colour, shadow softness, shadows on or off, and

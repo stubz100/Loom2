@@ -89,7 +89,7 @@ export class StageEngine {
     this.key.shadow.mapSize.set(2048, 2048)
     Object.assign(this.key.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 40 })
     this.key.shadow.bias = -0.0004; this.key.shadow.normalBias = 0.02
-    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.grid = new THREE.GridHelper(40, 40, 0x555a66, 0x33363d); this.grid.position.y = 0.001; this.scene.add(this.grid)
     this.selection.visible = false
     this.scene.add(this.selection)
@@ -631,7 +631,7 @@ export class StageEngine {
   private passRenderer(w: number, h: number): THREE.WebGLRenderer {
     const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     r.setPixelRatio(1); r.setSize(w, h, false)
-    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap                  // E23c: the light object's shadows in the clay pass
+    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap                      // E23c: the light object's shadows in the clay pass
     return r
   }
   /** The render camera of a document camera at an aspect (36 mm sensor, roll), as applyShot builds the viewport's. */

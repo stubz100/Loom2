@@ -6598,3 +6598,37 @@ mask's sense (the model reads 1 − mask: known = 1).
   - the pins are visible in the composition, the character pin draggable, with *Align to the stage*.
 - **Next:** E28 (props as layers: P1 rigid by keys, P2 depth-guided, P3 drawn in the character's layer), then camera moves (the
   plate's 2.5D projection, the floor shadows re-projected).
+
+## 2026-10-20 08:45 — spike E28 · props as layers measured; the author: every object a prop → D108, E28b the clean room
+
+- **Spike E28** (`engine/spikes/e28_props.py`; 01 §10, 02 §3): three props in E22's room with E23c's camera and window light. Each is a
+  Cast prop with an animation reference made by the app's own route (the chest 66 s cold, the door 9.1 s, the mug 9.3 s, Mara holding
+  the mug as an outfit version 14.1 s).
+  - **P1 · the chest** (a rigid prop slid by keys): its reference cut out and put where Stage's stand-in block stands in each frame (the
+    block's mask gives the foot and the height), on the block's own Stage shadow (the lit clay over the set's). No generation; it slides
+    and scales right, but it never shows a new side.
+  - **P2 · the door** (a prop that turns): the app's Stage clip path. A Stage shot of the first frame (Klein 9B on the clay pass, the
+    door's reference and the room plate as images 2 and 3) in 48.9 s, then LTX-2.3 guided by the door's depth sequence (IC-LoRA, D76),
+    121 frames in 146.6 s. The door opens about its hinge: SAM 3 "door" against Stage's door mask, IoU 0.79 median (min 0.61, while it
+    turns edge-on); ΔE 11.0 against the reference (the green darkens in the room's light). The first shot added two men in the doorway;
+    "The room is empty, there are no people in it" at the head of the prompt fixed it.
+  - **P3 · the mug in Mara's hand** (Wan Animate draws it in her layer; her reference made holding it): the first run left a second Mara
+    standing where the reference had her (the ghost). With the reference placed where she starts (E23c's lesson) it is gone. The mug is
+    in 39 of 41 sampled frames, 0.134 of her height from SDPose's right wrist (median; 90 % within 0.135), ΔE 6.5 against the mug's
+    reference (3.2 with the colour-key matte, which lost the handle). 3 chained batches in 192 + 112 + 112 s, peak 9.5 GB, SAM 56.5 s;
+    8.2 min.
+  - **P1 vs P3, the mug at her hand:** the P1 cut-out at the detected wrist stays put but never turns with the hand; P3 turns with it.
+  - **Cut-outs:** a colour key cannot cut a white mug from light grey, so the references are matted by BiRefNet (the core
+    `LoadBackgroundRemovalModel` and `RemoveBackground` nodes; step `mattes`).
+  - **Ops:** the queue reopened paused after an unclean shutdown (the auto body-fit job left behind), so the spike unpauses on open, drains
+    before closing and fails a wait on a paused queue. The engine is stopped before Edge renders (D97: WebGL is a GPU workload).
+- **Stage:** the key light's shadow map is `PCFShadowMap` (three.js deprecates `PCFSoftShadowMap`).
+- **The author, on the clips:** "We need to clean up the room, all objects should be props and not part of the background" → **D108**.
+  A set is architecture (the room: floor and two walls); everything in it is a prop on its own layer; old stages get their sets' blocks
+  as props when read.
+- **Next, E28b · the clean room:**
+  - the crate, the table and the two grey blocks are removed from E22's plate by the app's Remove (Klein ICM, pre-filled);
+  - each object becomes a prop: a Stage box fitted to it on the floor, its look from the old plate projected onto it, its Stage shadow;
+  - the E23 shot (Mara and Ines, the nudged layers) is layered by Stage's depth.
+  - It also prepares the camera moves: the props then part from the wall in parallax.
+- **Tests** (the shadow-map change): Vitest 371 + 3 opt-in; e2e 47/47 under full and open; lint 75; build clean.

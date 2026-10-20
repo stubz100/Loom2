@@ -21,6 +21,19 @@ function castBody(profileId: string | null | undefined, version: string | null |
   if (!p) return undefined
   return p.versions.find((x) => x.id === (version ?? p.current))?.body ?? null
 }
+/** D110 (PS3): the 3D model of the Cast prop version a mesh is bound to (pinned, else the current); undefined while the profile is not
+ *  loaded or the version has no model (the mesh keeps what it shows). */
+export function castModel(profileId: string | null | undefined, version: string | null | undefined): string | undefined {
+  if (!profileId) return undefined
+  const p = useStory.getState().profiles.find((x) => x.id === profileId)
+  return p?.versions.find((x) => x.id === (version ?? p.current))?.model_asset_id ?? undefined
+}
+/** D110: a bound mesh shows its prop version's model — remade, or another version picked, it follows. */
+function withModel(o: StageObject): StageObject {
+  if (o.kind !== 'mesh' || !o.profile_id) return o
+  const m = castModel(o.profile_id, o.version)
+  return m && m !== o.asset_id ? { ...o, asset_id: m } : o
+}
 /** A figure with its Cast body: a body sets the height, so a figure taking one stands at scale 1 (the Child preset's 0.7 would shrink it). */
 function withBody(o: StageObject, body: StageObject['body'] | undefined): StageObject {
   if (body === undefined || JSON.stringify(o.body ?? null) === JSON.stringify(body)) return o
@@ -174,6 +187,10 @@ interface StageState {
   activeCamera: () => StageCamera | undefined
   /** D93 (C8): bind a figure to a Cast character (at a version — a costume; null = the current one), or unbind it (`null`). */
   bindFigure: (id: string, profileId: string | null, version?: string | null) => void
+  /** D110 (PS3): a Cast prop's 3D model placed in the scene, bound to the prop (its version's model follows); null when it has no model yet. */
+  placeProp: (profileId: string, pos?: number[]) => string | null
+  /** D110: a mesh bound to a Cast prop and a pinned version (null = the current one), or unbound (it keeps the model it shows). */
+  bindProp: (id: string, profileId: string | null, version?: string | null) => void
   /** D93 (C8): the figure mentions the Render tab sends — the visible bound figures at the active camera, left to right. */
   figureMentions: () => { profile_id: string; figure: string; version?: string }[]
   /** D93 (C8, UI4's Make frame ▸ in Stage): bind the speakers to the figures in screen order when the counts match — the number bound, or
@@ -181,6 +198,7 @@ interface StageState {
   /** D93 (C8): bind the speakers to the figures left to right; D93 follow-up: a newly bound figure wears the node's pin (`version`). */
   prebindSpeakers: (speakers: { id: string; version?: string | null }[]) => number | null
   /** CA0: bound figures take their Cast version's body (on open, and whenever the profiles change). */
+  /** CA0: the bound figures take their Cast bodies; D110: the bound meshes their props' models. */
   syncBodies: () => void
 }
 
@@ -602,6 +620,20 @@ export const useStage = create<StageState>()((set, get) => ({
       : profileId && x.profile_id === profileId ? { ...x, profile_id: null, version: null, body: null } : x)) }), profileId ? 'bind figure' : 'unbind figure')   // one figure per character: it moves
     void get().refreshShotPreview()
   },
+  placeProp: (profileId, pos) => {
+    const p = useStory.getState().profiles.find((x) => x.id === profileId)
+    const model = castModel(profileId, null)
+    if (!p || p.cls !== 'prop' || !model) return null
+    const id = get().addObject('mesh', null, pos, model)
+    if (!id) return null
+    get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, name: p.name, profile_id: profileId, version: null } : o)) }), 'place prop')
+    return id
+  },
+  bindProp: (id, profileId, version = null) => {
+    const o = get().current?.objects.find((x) => x.id === id)
+    if (!o || o.kind !== 'mesh') return
+    get().apply((d) => ({ ...d, objects: d.objects.map((x) => (x.id === id ? withModel({ ...x, profile_id: profileId, version: profileId ? version : null }) : x)) }), profileId ? 'bind prop' : 'unbind prop')
+  },
   figureMentions: () => { const d = get().sampledDoc(); return d ? figureMentions(d.objects, d.cameras.find((c) => c.id === d.active_camera) ?? d.cameras[0]) : [] },
   prebindSpeakers: (speakers) => {
     const d = get().current
@@ -615,10 +647,10 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   syncBodies: () => {
     const d = get().current
-    if (!d || !d.objects.some((o) => o.kind === 'mannequin' && o.profile_id)) return
-    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : o))
+    if (!d || !d.objects.some((o) => (o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id)) return
+    const next = d.objects.map((o) => (o.kind === 'mannequin' && o.profile_id ? withBody(o, castBody(o.profile_id, o.version)) : withModel(o)))
     if (next.every((o, i) => o === d.objects[i])) return
-    get().apply((doc) => ({ ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) }), 'body from Cast')
+    get().apply((doc) => ({ ...doc, objects: doc.objects.map((o) => next.find((x) => x.id === o.id) ?? o) }), 'from Cast')
   },
 }))
 

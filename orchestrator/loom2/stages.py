@@ -56,8 +56,8 @@ class StageObject(BaseModel):
     colour_id: int = 0                             # the object-ID mask colour (ST3)
     pose: Pose | None = None                       # figures
     billboard: bool = True                         # planes face the camera
-    profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame
-    version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one
+    profile_id: str | None = None                  # D93 (C8): a figure bound to a Cast character — its references and sheet go into the frame; D110 (PS3): a mesh bound to a Cast prop (its model follows the version)
+    version: str | None = None                     # D93 (C8): the character's version (a costume) the figure wears; None = the current one (a prop's version for a mesh)
     body: Body | None = None                       # CA0: the bound version's body, copied when bound and kept in step by the client (None = the preset's dummy)
     detail: Literal["male", "female"] | None = None   # CA1: the Detailed level — the starter set's skinned mannequin follows the figure (None = Simple)
     shadow_proxy: str | None = None                # E23d (D105): a mesh asset shaped like the character, bound to the figure, that casts its shadow
@@ -148,8 +148,8 @@ def check(st: Stage) -> None:
             p = by[p].parent
         if len(o.transform.pos) != 3 or len(o.transform.rot) != 3 or len(o.transform.scale) != 3:
             raise ValueError(f"object {o.id}: a transform has three components each")
-        if o.profile_id is not None and o.kind != "mannequin":
-            raise ValueError(f"object {o.id}: only a figure is bound to a character")   # D93 (C8)
+        if o.profile_id is not None and o.kind not in ("mannequin", "mesh"):
+            raise ValueError(f"object {o.id}: only a figure (to a character) or a 3D model (to a prop) is bound")   # D93 (C8), D110 (PS3)
     cids = [c.id for c in st.cameras]
     if len(set(cids)) != len(cids):
         raise ValueError("camera ids must be unique")

@@ -774,6 +774,22 @@ test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longe
   await expect(section.locator('.model-view canvas.model-view-canvas')).toBeVisible({ timeout: 15_000 })
   await expect(section.locator('[data-status]')).toContainText('Animate places it')
   await page.screenshot({ path: 'node_modules/.e2e/prop-model.png' })
+  // PS3: Animate's library lists the prop; a click places its model bound to the prop; the viewport loads it; the Outliner names the prop
+  await openAnimate(page, 'Clay')
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  await dialog.locator('input').fill('Props scene')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator(`.lib-grid .prop-card[data-id="${prop.id}"]`).click()
+  await expect(page.locator('.panel .stage-insp h4')).toContainText(name)
+  await expect(page.locator('.stage-insp [aria-label="the mesh\'s prop"] button[aria-pressed="true"]')).toHaveAttribute('aria-label', name)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[] } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
+  await expect(page.locator('.outl-row .bound-tag', { hasText: name })).toBeVisible()
+  await expect.poll(async () => {
+    const stages = await api<{ items: { name: string; objects: { kind: string; asset_id: string | null; profile_id: string | null }[] }[] }>('GET', '/stages')
+    const s = stages.items.find((x) => x.name === 'Props scene')
+    return s?.objects.filter((o) => o.kind === 'mesh').map((o) => `${o.profile_id} ${o.asset_id}`).join(',')
+  }, { timeout: 10_000 }).toBe(`${prop.id} ${v.model_asset_id}`)                                           // saved bound, with the version's model
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {

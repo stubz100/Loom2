@@ -14,7 +14,7 @@ import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { shotRefDrop } from '../../frame/dropRules'
 import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
-import { BoundTag, FigureCharacter } from './FigureBinding'
+import { BoundTag, FigureCharacter, LibraryProps, MeshProp } from './FigureBinding'
 import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
@@ -79,7 +79,9 @@ export function LibraryAdd() {
         <div className="lib-grid">{Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => <CommandButton key={p} id={`stage.add.mannequin.${p}`} text label={m.label} />)}</div>
         <h4>Sets</h4>
         <div className="lib-grid">{SET_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.set.${p}`} text label={p} />)}</div>
-        <h4>Props</h4>
+        <h4>Props</h4>{/* D110 (PS3): Story · Props, each its 3D model bound to the prop */}
+        <LibraryProps centre={() => viewport.centre?.() ?? [0, 0, 0]} />
+        <h4>Stand-ins <span className="hint">grey shapes for blocking (D109)</span></h4>
         <div className="lib-grid">{PROP_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.prop.${p}`} text label={p} />)}</div>
         <h4>Meshes{meshes.length ? ` · ${meshes.length}` : ''}</h4>
         {!meshes.length && <span className="hint">None yet — a Catalogue image's "Make a 3D prop…" (Pixal3D) lands here (P18).</span>}
@@ -126,7 +128,7 @@ export function OutlinerTab() {
           <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
           <span className="kind">{o.kind}</span>
           <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename(o.id, o.name) }}>{o.name}</span>
-          {o.kind === 'mannequin' && o.profile_id && <BoundTag o={o} />}
+          {(o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id && <BoundTag o={o} />}
           <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
           <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
         </div>
@@ -588,6 +590,7 @@ export function StageSelection() {
         <Vec label="rotation" v={t.rot} onChange={(rot) => st().setTransform(o.id, { ...t, rot })} step={1} />
         <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
         {o.kind === 'mannequin' && <FigureCharacter o={o} />}
+        {o.kind === 'mesh' && <MeshProp o={o} />}
         {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select>{Object.keys(o.pose?.joints ?? {}).length ? <span className="hint"> edited</span> : null}</span></div>}
         {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
         <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>

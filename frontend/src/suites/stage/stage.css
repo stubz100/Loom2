@@ -113,3 +113,5 @@
 
 /* journal 2026-10-17 18:03: a figure the method has no reference room for */
 .figure-lines li.warn { color: var(--warn); }
+.lib-grid .prop-card.no-model { opacity: 0.6; }                              /* D110 (PS3): a Cast prop without its 3D model yet opens in Story */
+.lib-grid .prop-card .glyph svg { width: 40px; height: 40px; }

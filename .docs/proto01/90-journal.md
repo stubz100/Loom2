@@ -6791,3 +6791,20 @@ mask's sense (the model reads 1 − mask: known = 1).
   open; Vitest 377 + 3 (`propsTab.test.ts` 6); e2e 48/48 under full and open (a prop: the Props tab, Cast without it, the make, the
   model turning); lint 75; build clean; settings audit, agents check and model literals clean.
 - **Next:** PS3, props in Animate's library, bound to the prop and its version.
+
+## 2026-10-20 12:38 — D110 PS3 built: Story's props in Animate, placed as their 3D models and bound to the prop
+
+- **Library:** Animate's Scene library lists the Story props under *Props*, each by its model's view (else its hero). A click places the
+  model at the viewport's centre, named after the prop and bound to it. A prop without a model is dimmed and opens in Story · Props
+  instead. The right-click menu has *Place in the scene* and *Open in Story · Props*. The clay shapes are now *Stand-ins* (blocking only,
+  D109).
+- **Binding:** a Stage mesh carries `profile_id` / `version` like a figure (`stages.check` now allows a mesh as well as a figure).
+  The store's `placeProp` / `bindProp` and `castModel` keep the model in step: a pinned version brings its model, and a remade model
+  follows through the profiles' subscription (`syncBodies` now covers bodies and models). Unbinding keeps the mesh it shows.
+- **Inspector and Outliner:** the Inspector shows a mesh's prop as tiles (the props with a model, and *no prop*) with a version picker
+  and *Open in Story · Props*. The Outliner tags a bound mesh with its prop.
+- **Tests:** `propBinding.test.tsx` (3); `test_props_d110` +1 (a mesh binds, a set does not); offline 455 under full and open;
+  Vitest 380 + 3; e2e 48/48 under full and open (the prop scenario now places the prop from Animate's library, the GLB loads, the
+  stage saves it bound with its version's model); lint 75; build clean; the API contract unchanged.
+- **Next:** PS4, the 3D scene: textured, lit models in the viewport; lights with intensity, colour, softness and aim; the ambient level;
+  camera moves previewed in 3D.

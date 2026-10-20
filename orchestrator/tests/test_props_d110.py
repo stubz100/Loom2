@@ -160,3 +160,11 @@ async def test_the_model_lands_on_its_prop_version(tmp_path: Path, object_info: 
         assert any("stood upright" in line for line in j.log_tail)
     finally:
         await rig.close()
+
+
+def test_a_mesh_binds_to_a_prop_and_a_set_does_not():
+    """PS3: a Stage mesh carries its Cast prop (and a pinned version) as a figure carries its character; nothing else is bound."""
+    from loom2.stages import Stage, StageObject, check
+    check(Stage(id="s", objects=[StageObject(id="m", kind="mesh", name="Chest", asset_id="ast_m", profile_id="prf_c", version="v2")]))
+    with pytest.raises(ValueError, match="bound"):
+        check(Stage(id="s", objects=[StageObject(id="r", kind="set", name="Room", preset="room", profile_id="prf_c")]))

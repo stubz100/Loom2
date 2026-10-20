@@ -7058,3 +7058,34 @@ The author asked for a review of the state of things, then "record all this and 
   project reopened, a timeout, the pin check, the fake's render CLI). Offline: 474 passed in 135.72s (0:02:15) (full), 474 passed in 132.54s (0:02:12) (open); the contract
   exported (+ the settings schema); frontend build, lint and Vitest unchanged.
 - **Next:** step 3, the composition record written from a final through the session, and its routes.
+
+## 2026-10-20 18:03 — AE1 step 3 built: the composition record, written from the final through the session, and its routes (proto01_animate 20 §2)
+
+- **The assembly writes the composition's footage** from its own per-frame rules (`assemble_frames(..., comp_dir)`, run by the
+  `assemble_final` job into `finals/<id>/comp/`): `shadow/` (Stage's ratio as grey, to multiply), `<prop>/` (its beauty with its depth
+  alpha), `<figure>_matte/` (her alpha with a nearer prop's cut, in her own unmoved frame — the contact offset is the layer's position);
+  and it records the **stack** (the actors far to near, the most common order over the frames) in `Final.assembly`. One rule set: the
+  automatic composite and the editable composition agree by construction.
+- **`loom2/compositions.py`:** one composition per final — `finals/<id>/comp.ecproj` beside `comp.json` (`schema_version`, the pinned
+  EffectCraft version, the final's revision it was made at, the stack, the lineage: each final layer → EffectCraft's layer id, a
+  character's matte layer, her offset). `make` builds it through the session's commands: `comp.new`, each sequence imported at the
+  rate, the plate, the shadows on Multiply, each prop, each character over her matte (luma track matte, parented to her, both at her
+  offset), the actors in the stack's order; saved through a temp copy whose footage paths are made relative (forward slashes, no `..`:
+  the composition sits at the final's root) and an atomic replace — the only place the JSON is touched. An edit is one engine command
+  (`command`) or a property set (`set_property`), each saved the same way; the revision counts them; `frame` renders through the
+  session. `stale`: the final's revision moved since (assembled again, a layer re-made); *make again* writes it afresh, edits dropped.
+- **Routes:** `POST /finals/{id}/composition` (make or make again; 409 before the assembly, 503 when EffectCraft is not built),
+  `GET …/composition`, `POST …/composition/command {id, params}`, `POST …/composition/property {layer, path, value, time?}` (the
+  engine's refusal as 422 with its message), `GET …/composition/frame?t&side` (PNG, the media key, no caching) — the route snapshot
+  +5, the contract exported, the frame route in NOT_JSON; the e2e set-up points `effectcraft.cli` at the fake.
+- **Against the real binary, on the PS5 rig's final** (a scratch script): the assembly run again with the footage in 23.5 s (the stack
+  Mara · stool · Ines on 81/81 frames, offsets as before); the composition made in **0.06 s**; its footage paths relative
+  (`plate/frames/0000.png`, `comp/fig_m_matte/0000.png`, …) and **found again by EffectCraft after a reopen**; its frames against the
+  assembly's: max 1/255, mean 0.012–0.015 (frames 0, 40, 80) — E27's R3 through product code; ½-size frames 41 ms median; an opacity
+  edit saved as revision 1, `edit.undo` as revision 2 with the value back.
+- **Tests:** `test_compositions_ae1` +3 (the assembly's composition footage and stack; `relativise`; the routes end to end on the fake:
+  503 unbuilt, make, the file's relative paths and layer structure, the session holding the written file, a property and a command
+  edit each saved, a refusal, a frame with and without the media key, stale after another assembly and made again with the edits
+  dropped, 409 / 404 on a final never assembled). Offline: 477 passed in 139.88s (0:02:19) (full), 477 passed in 138.84s (0:02:18) (open); contract and settings audit clean; frontend
+  build and lint unchanged (the types regenerated).
+- **Next:** step 4, `comp_render` — the final render as a CPU queue job through the CLI, landing as the final's clip and a Story take.

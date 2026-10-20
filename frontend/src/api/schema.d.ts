@@ -794,6 +794,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Composition Get */
+        get: operations["composition_get_finals__fid__composition_get"];
+        put?: never;
+        /**
+         * Composition Make
+         * @description The final's composition written from its layers and the assembly's result through the EffectCraft session — made, or made again
+         *     from the layers (the edits dropped).
+         */
+        post: operations["composition_make_finals__fid__composition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Command
+         * @description One engine command on the composition, saved; the engine's refusal comes back as 422 with its message.
+         */
+        post: operations["composition_command_finals__fid__composition_command_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Composition Frame
+         * @description A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin).
+         */
+        get: operations["composition_frame_finals__fid__composition_frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/property": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Property
+         * @description A layer's property set (or keyed at `time`), saved.
+         */
+        post: operations["composition_property_finals__fid__composition_property_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/frames": {
         parameters: {
             query?: never;
@@ -3647,6 +3729,92 @@ export interface components {
             w: number;
         } & {
             [key: string]: unknown;
+        };
+        /** Composition */
+        Composition: {
+            /** Assembled At */
+            assembled_at: string | null;
+            /**
+             * Comp
+             * @default Final
+             */
+            comp: string;
+            /** Edited At */
+            edited_at: string;
+            /** Effectcraft */
+            effectcraft: string;
+            /** Final Id */
+            final_id: string;
+            /**
+             * Final Revision
+             * @default 0
+             */
+            final_revision: number;
+            /** Layers */
+            layers: components["schemas"]["CompositionLayer"][];
+            /** Made At */
+            made_at: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Stack */
+            stack: string[];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+        };
+        /** CompositionCommand */
+        CompositionCommand: {
+            /** Id */
+            id: string;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * CompositionLayer
+         * @description The lineage: a final layer and what it became in the composition.
+         */
+        CompositionLayer: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Layer */
+            layer: number;
+            /** Matte */
+            matte: number | null;
+            /** Name */
+            name: string;
+            /** Offset Px */
+            offset_px: number[];
+        };
+        /** CompositionProperty */
+        CompositionProperty: {
+            /** Layer */
+            layer: string | number;
+            /** Path */
+            path: string;
+            /** Time */
+            time?: number | null;
+            /** Value */
+            value: unknown;
+        };
+        /** CompositionResult */
+        CompositionResult: {
+            composition: components["schemas"]["Composition"];
+            /** Result */
+            result: unknown;
         };
         /**
          * ContentAwareCaps
@@ -11416,6 +11584,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_get_finals__fid__composition_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_make_finals__fid__composition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_command_finals__fid__composition_command_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompositionCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_frame_finals__fid__composition_frame_get: {
+        parameters: {
+            query?: {
+                t?: number;
+                side?: number;
+            };
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_property_finals__fid__composition_property_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompositionProperty"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionResult"];
                 };
             };
             /** @description Validation Error */

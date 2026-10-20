@@ -103,3 +103,6 @@ viewer's feel can be judged then, before AE2's controls are designed.
 
 - **2026-10-20 (journal 2026-10-20 17:37):** AE1 steps 1–2 built — the pin and `scripts/build_effectcraft.py`, Settings › effectcraft, the client
   `loom2/effectcraft.py` with the fake `tests/fake_effectcraft.py`; 7 tests; the real binary answers a one-layer frame in 7–8 ms.
+- **2026-10-20 (journal 2026-10-20 18:03):** AE1 step 3 built — the assembly writes the composition's footage and the stack; `loom2/compositions.py`
+  (`comp.ecproj` + `comp.json` per final, relative footage, make / command / property / frame, stale, make again) and its five routes;
+  on the rig's final the composition matches the assembly to 1/255 through product code and is made in 0.06 s.

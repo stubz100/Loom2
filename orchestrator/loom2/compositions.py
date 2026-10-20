@@ -1,0 +1,212 @@
+"""AE1 (proto01_animate 20 §2, D114): the final shot's composition — one per final, an EffectCraft project (`finals/<id>/comp.ecproj`)
+beside its record (`comp.json`), written from the final's layers and the assembly's own result (PS5e: the stack order, the contact offsets,
+the composition footage the assembly wrote under `comp/`) through the EffectCraft session's commands — never the JSON, except to make the
+footage paths relative, so the project directory moves as one (EffectCraft finds relative footage next to the project file; no `..`: the
+composition sits at the final's root and its footage below it). An edit is an engine command; each is saved through a copy and an atomic
+replace (house rule 4), and the revision counts them. *Make again* writes it from the layers afresh, dropping the edits.
+"""
+from __future__ import annotations
+
+import json
+import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .config import REPO_ROOT
+from .effectcraft import EffectCraft
+from .finals import Final, FinalStore
+from .fsio import atomic_write_json, atomic_write_text, read_json, utc_now
+from .workspace import Workspace
+
+COMPOSITION_SCHEMA_VERSION = 1
+COMP_NAME = "Final"
+
+
+class CompositionLayer(BaseModel):
+    """The lineage: a final layer and what it became in the composition."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str                                        # the final's layer
+    kind: str
+    name: str
+    layer: int                                     # EffectCraft's layer id
+    matte: int | None = None                       # a character's matte layer (a luma track matte parented to her)
+    offset_px: list[float] = Field(default_factory=lambda: [0.0, 0.0])   # D107: her contact offset, the layer's position from the centre
+
+
+class Composition(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = COMPOSITION_SCHEMA_VERSION
+    final_id: str
+    comp: str = COMP_NAME                          # the composition's name in the project
+    revision: int = 0                              # edits since it was made
+    effectcraft: str                               # the pinned EffectCraft version that wrote it
+    assembled_at: str | None = None                # the assembly it was made from
+    final_revision: int = 0                        # the final's revision it was made at (any change to the final since makes it stale)
+    stale: bool = False                            # computed on read: the final changed since (assembled again, a layer re-made)
+    stack: list[str] = Field(default_factory=list) # the actors far to near (the assembly's most common order)
+    layers: list[CompositionLayer] = Field(default_factory=list)
+    made_at: str = Field(default_factory=utc_now)
+    edited_at: str = Field(default_factory=utc_now)
+
+
+@lru_cache(maxsize=1)
+def pinned_version() -> str:
+    p = REPO_ROOT / "engine" / "effectcraft.pin.json"
+    try:
+        return str(json.loads(p.read_text(encoding="utf-8")).get("version", "?"))
+    except (OSError, ValueError):
+        return "?"
+
+
+def relativise(text: str, root: Path) -> str:
+    """The project's footage paths under `root` made relative to it (forward slashes), the rest left as they are."""
+    base = os.path.normcase(str(root.resolve())) + os.sep
+
+    def rel(s: str) -> str:
+        if isinstance(s, str) and os.path.normcase(s).startswith(base):
+            return s[len(base):].replace("\\", "/")
+        return s
+
+    def walk(v: Any, depth: int) -> Any:
+        if isinstance(v, dict):
+            out = {}
+            for k, x in v.items():
+                if k == "path" and depth > 0:
+                    out[k] = rel(x)
+                elif k == "sequence" and isinstance(x, list):
+                    out[k] = [rel(s) for s in x]
+                else:
+                    out[k] = walk(x, depth + 1)
+            return out
+        if isinstance(v, list):
+            return [walk(x, depth + 1) for x in v]
+        return v
+    return json.dumps(walk(json.loads(text), 0), indent=1)
+
+
+class CompositionStore:
+    def __init__(self, ws: Workspace) -> None:
+        self.finals = FinalStore(ws)
+
+    def folder(self, fid: str) -> Path:
+        return self.finals.folder(fid)
+
+    def record(self, fid: str) -> Path:
+        return self.folder(fid) / "comp.json"
+
+    def ecproj(self, fid: str) -> Path:
+        return self.folder(fid) / "comp.ecproj"
+
+    def footage(self, fid: str) -> Path:
+        return self.folder(fid) / "comp"
+
+    def get(self, f: Final) -> Composition | None:
+        p = self.record(f.id)
+        if not p.is_file() or not self.ecproj(f.id).is_file():
+            return None
+        c = Composition.model_validate(read_json(p))
+        c.stale = c.final_revision != f.revision
+        return c
+
+    def save(self, c: Composition) -> None:
+        atomic_write_json(self.record(c.final_id), c.model_dump(exclude={"stale"}))
+
+    # ---- making ----------------------------------------------------------------------------------
+    def make(self, f: Final, ec: EffectCraft) -> Composition:
+        """The composition from the final's layers through the session: the plate; Stage's shadows as a Multiply layer; each prop with its
+        alpha; each character over her matte (luma, parented to her), both moved by her contact offset; the actors in the assembly's order."""
+        if not f.assembly or f.assembly.get("stack") is None or not (self.footage(f.id) / "shadow").is_dir():
+            raise ValueError("assemble the shot first: the composition is written from the assembly's result")
+        w, h, rate = f.size["w"], f.size["h"], f.rate
+        root = self.folder(f.id)
+        by_id = {x.id: x for x in f.layers}
+        offsets = {k: (float(v[0]), float(v[1])) for k, v in (f.assembly.get("offsets_px") or {}).items()}
+        ec.tool("open_project", {"new": True})                        # a fresh project in the session
+        ec.command("comp.new", {"name": COMP_NAME, "width": w, "height": h, "frameRate": rate, "duration": f.frames / rate})
+
+        def imported(first: Path) -> int:
+            r = ec.command("file.import", {"paths": [str(first)], "sequence": True, "frameRate": rate})
+            if r.get("errors"):
+                raise ValueError(f"import {first.name}: {'; '.join(map(str, r['errors']))}")
+            return int(r["items"][0])
+
+        def added(item: int, name: str) -> int:
+            lid = int(ec.command("layer.addItem", {"item": item, "time": 0})["layer"])
+            ec.command("layer.rename", {"layer": lid, "name": name})
+            return lid
+        layers: list[CompositionLayer] = []
+        plate = by_id["plate"]
+        layers.append(CompositionLayer(id="plate", kind="plate", name=plate.name, layer=added(imported(root / "plate" / "frames" / "0000.png"), plate.name)))
+        shadows = by_id["shadows"]
+        sid = added(imported(self.footage(f.id) / "shadow" / "0000.png"), shadows.name)
+        ec.command("layer.setBlendMode", {"layers": [sid], "mode": "Multiply"})
+        layers.append(CompositionLayer(id="shadows", kind="shadows", name=shadows.name, layer=sid))
+        for lid in f.assembly["stack"]:                                   # far to near: each new layer goes on top
+            x = by_id[lid]
+            if x.kind == "prop":
+                layers.append(CompositionLayer(id=x.id, kind="prop", name=x.name, layer=added(imported(self.footage(f.id) / x.id / "0000.png"), x.name)))
+                continue
+            dx, dy = offsets.get(x.id, (0.0, 0.0))
+            matte = added(imported(self.footage(f.id) / f"{x.id}_matte" / "0000.png"), f"{x.name} · matte")
+            fig = added(imported(root / x.id / "frames" / "0000.png"), x.name)
+            ec.command("layer.setTrackMatte", {"layer": fig, "matte": matte, "kind": "luma"})
+            for l in (fig, matte):
+                ec.tool("set_property", {"layer": l, "path": "transform/position", "value": [w / 2 + dx, h / 2 + dy]})
+            ec.command("layer.setParent", {"layers": [matte], "parent": fig})   # drag her and her matte follows
+            layers.append(CompositionLayer(id=x.id, kind="figure", name=x.name, layer=fig, matte=matte, offset_px=[dx, dy]))
+        c = Composition(final_id=f.id, effectcraft=pinned_version(), assembled_at=f.assembled_at, final_revision=f.revision, stack=list(f.assembly["stack"]),
+                        layers=layers)
+        self._write(f, ec, c, save_as=True)
+        self.save(c)
+        return c
+
+    def _write(self, f: Final, ec: EffectCraft, c: Composition, save_as: bool = False) -> None:
+        """The session's project to `comp.ecproj`: a copy to a temp name, its footage paths made relative, then the atomic replace; the
+        session then holds the written file."""
+        root, final = self.folder(f.id), self.ecproj(f.id)
+        tmp = root / "comp.ecproj.tmp"
+        if save_as:
+            ec.tool("save_project", {"path": str(tmp)})
+        else:
+            ec.save_copy(tmp)
+        text = relativise(tmp.read_text(encoding="utf-8"), root)
+        atomic_write_text(final, text)
+        tmp.unlink(missing_ok=True)
+        if save_as:
+            ec.project = None                                             # the session saved the temp name: hold the real file instead
+            ec.open(final)
+
+    # ---- editing ---------------------------------------------------------------------------------
+    def _open(self, f: Final, ec: EffectCraft) -> Composition:
+        c = self.get(f)
+        if c is None:
+            raise KeyError(f"the final {f.id} has no composition yet")
+        ec.open(self.ecproj(f.id))
+        return c
+
+    def _edited(self, f: Final, ec: EffectCraft, c: Composition) -> Composition:
+        self._write(f, ec, c)
+        c.revision += 1
+        c.edited_at = utc_now()
+        self.save(c)
+        return c
+
+    def command(self, f: Final, ec: EffectCraft, cid: str, params: dict | None) -> tuple[Any, Composition]:
+        """One engine command on the composition (a blend mode, a mask, a parent, undo …), saved."""
+        c = self._open(f, ec)
+        result = ec.command(cid, params or {})
+        return result, self._edited(f, ec, c)
+
+    def set_property(self, f: Final, ec: EffectCraft, args: dict) -> tuple[Any, Composition]:
+        """A property set (or keyed, with `time`) on a layer, saved."""
+        c = self._open(f, ec)
+        result = ec.tool("set_property", args)
+        return result, self._edited(f, ec, c)
+
+    def frame(self, f: Final, ec: EffectCraft, t: float, side: int) -> bytes:
+        """A frame of the composition as PNG at the longest side `side` (0: full size)."""
+        self._open(f, ec)
+        return ec.frame(t, side, comp=COMP_NAME)

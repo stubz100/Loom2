@@ -18,7 +18,7 @@ from loom2.api import MEDIA_PATH, create_app
 from loom2.config import AppState
 
 MEDIA = {"/thumbs/{asset_id}/{size}", "/assets/{asset_id}/file", "/clips/{clip_id}/proxy.mp4", "/clips/{clip_id}/frames/{name}",
-         "/documents/{doc_id}/thumbnail", "/blobs/{sha}", "/preset-icons/{key}/file"}
+         "/documents/{doc_id}/thumbnail", "/blobs/{sha}", "/preset-icons/{key}/file", "/finals/{fid}/composition/frame"}   # AE1: the composition's frames (an <img>)
 
 
 def _app(tmp_path: Path):

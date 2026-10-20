@@ -91,6 +91,7 @@ def main() -> int:
     settings["trainer"] = {**settings["trainer"], "python": sys.executable, "run": str(tests / "fake_trainer.py"), "cwd": str(tests),
                            "vae": str(next(models.glob("vae/*.safetensors"), models / "vae" / "none.safetensors"))}   # a local stand-in: no hub access
     settings["voices"] = {**settings["voices"], "python": sys.executable, "run": str(tests / "fake_tts.py")}   # CN2: the fake runner stands in for voices/tts.py
+    settings["effectcraft"] = {**settings["effectcraft"], "cli": str(tests / "fake_effectcraft.py")}         # AE1: the fake session stands in for effectcraft-cli
     settings["hf_home"] = str(state / "hf")
     motion = models / "motion" / "test"                                                      # CA1: the library's test rig stands in for the starter set
     motion.mkdir(parents=True, exist_ok=True)

@@ -721,7 +721,7 @@ async def run_assemble(job: JobRecord, recipe: AssembleFinal, q: JobQueue) -> bo
     def progress(done: int, total: int) -> None:
         job.progress = done / total
         job.progress_text = f"compositing {done}/{total}"
-    stats = await asyncio.to_thread(assemble_frames, store, f, tmp / "f16", progress)
+    stats = await asyncio.to_thread(assemble_frames, store, f, tmp / "f16", progress, store.folder(f.id) / "comp")   # AE1: + the composition's footage
     q.check_cancel(job)
     paths = sorted((tmp / "f16").glob("*.png"))
     fps = f.rate

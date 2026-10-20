@@ -5,9 +5,11 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
+from ..compositions import Composition, CompositionStore
+from ..effectcraft import EffectCraftError
 from ..finals import LAYER_PASSES, Final, FinalLayer, FinalStore
 from ..schemas import Deleted
 from ..stages import StageStore
@@ -344,3 +346,97 @@ async def final_delete(svc: Svc, fid: str):
         raise HTTPException(404, "final not found")
     svc.hub.broadcast("final.updated", {"id": fid, "revision": -1})
     return {"deleted": fid}
+
+
+# ---- AE1 (proto01_animate 20 §2, D114): the composition — the editable shot, an EffectCraft project beside the final ----------------
+class CompositionCommand(BaseModel):
+    id: str                                        # an EffectCraft engine command (layer.setBlendMode, layer.addMask, edit.undo …)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompositionProperty(BaseModel):
+    layer: str | int                               # EffectCraft's layer id or name
+    path: str                                      # transform/position, transform/opacity, effects/#1/blurriness …
+    value: Any
+    time: float | None = None                      # with a time: a keyframe there
+
+
+class CompositionResult(BaseModel):
+    result: Any
+    composition: Composition
+
+
+def _ec_error(e: EffectCraftError) -> HTTPException:
+    return HTTPException(503 if "not built" in str(e) else 422, str(e))
+
+
+async def _final_for_composition(svc, fid: str) -> tuple[CompositionStore, Final]:
+    ws, _, _ = svc.require_project()
+    f = await asyncio.to_thread(FinalStore(ws).get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    return CompositionStore(ws), f
+
+
+@router.post("/finals/{fid}/composition", response_model=Composition)
+async def composition_make(svc: Svc, fid: str):
+    """The final's composition written from its layers and the assembly's result through the EffectCraft session — made, or made again
+    from the layers (the edits dropped)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        return (await asyncio.to_thread(cs.make, f, svc.effectcraft)).model_dump()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+
+
+@router.get("/finals/{fid}/composition", response_model=Composition)
+async def composition_get(svc: Svc, fid: str):
+    cs, f = await _final_for_composition(svc, fid)
+    c = await asyncio.to_thread(cs.get, f)
+    if c is None:
+        raise HTTPException(404, "the final has no composition yet")
+    return c.model_dump()
+
+
+@router.post("/finals/{fid}/composition/command", response_model=CompositionResult)
+async def composition_command(svc: Svc, fid: str, body: CompositionCommand):
+    """One engine command on the composition, saved; the engine's refusal comes back as 422 with its message."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        result, c = await asyncio.to_thread(cs.command, f, svc.effectcraft, body.id, body.params)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return {"result": result, "composition": c.model_dump()}
+
+
+@router.post("/finals/{fid}/composition/property", response_model=CompositionResult)
+async def composition_property(svc: Svc, fid: str, body: CompositionProperty):
+    """A layer's property set (or keyed at `time`), saved."""
+    cs, f = await _final_for_composition(svc, fid)
+    args: dict[str, Any] = {"layer": body.layer, "path": body.path, "value": body.value}
+    if body.time is not None:
+        args["time"] = body.time
+    try:
+        result, c = await asyncio.to_thread(cs.set_property, f, svc.effectcraft, args)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return {"result": result, "composition": c.model_dump()}
+
+
+@router.get("/finals/{fid}/composition/frame")
+async def composition_frame(svc: Svc, fid: str, t: float = 0.0, side: int = 0):
+    """A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        png = await asyncio.to_thread(cs.frame, f, svc.effectcraft, t, max(0, side))
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})

@@ -13,6 +13,7 @@ conformed to 24 fps when the local RIFE is there (D27: native master, RIFE for v
 """
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -112,8 +113,12 @@ def check_ready(store: FinalStore, f: Final) -> list[str]:
     return out
 
 
-def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None) -> dict[str, Any]:
-    """Composite the final's layers into `out_dir/NNNN.png`; returns what it did (offsets, occlusions, time)."""
+def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, comp_dir: Path | None = None) -> dict[str, Any]:
+    """Composite the final's layers into `out_dir/NNNN.png`; returns what it did (offsets, occlusions, the stack order, time).
+
+    With `comp_dir` (AE1, proto01_animate 20 §2) it also writes the **composition's footage** from the same per-frame rules, so the editable
+    composition and this composite agree by construction: `shadow/` (Stage's ratio as grey, to multiply), `<prop>/` (its beauty with its depth
+    alpha), `<figure>_matte/` (her alpha with a nearer prop's cut, in her own frame — her contact offset is the layer's position there)."""
     t0 = time.time()
     missing = check_ready(store, f)
     if missing:
@@ -126,6 +131,10 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None) -
     shadows = pd("shadows", "clay")
     props = [x for x in f.layers if x.kind == "prop"]
     figs = [x for x in f.layers if x.kind == "figure"]
+    if comp_dir:
+        for name in ["shadow", *(x.id for x in props), *(f"{x.id}_matte" for x in figs)]:
+            shutil.rmtree(comp_dir / name, ignore_errors=True)
+            (comp_dir / name).mkdir(parents=True)
     # the characters' contact offsets (D107), one per layer over the shot
     offsets: dict[str, tuple[float, float]] = {}
     for x in figs:
@@ -135,6 +144,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None) -
         mm = [gray(mt[i]) * dilate(sm[k], GROW) for k, i in enumerate(range(0, n, step))]
         offsets[x.id] = contact_offset(sm, mm, h)
     hidden = {x.id: 0 for x in figs}
+    orders: list[tuple[str, ...]] = []
     for i in range(n):
         bd = gray(bare_d[i])
         layers: list[dict[str, Any]] = []
@@ -155,11 +165,13 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None) -
             grown = max_filter(np.where(sm, dep, 0.0), 15)
             fill = float(np.median(dep[sm])) if sm.any() else 0.0
             layers.append({"id": x.id, "kind": "figure", "img": shift(rgb(pd(x.id, "frames")[i]), dx, dy), "alpha": np.clip(shift(al, dx, dy), 0, 1),
-                           "depth": shift(np.where(grown > 0, grown, fill), dx, dy), "order": fill})
+                           "alpha0": al, "offset": (dx, dy), "depth": shift(np.where(grown > 0, grown, fill), dx, dy), "order": fill})
         ratio = np.clip(gray(shadows[i]) / np.maximum(8 / 255, gray(bare_c[i])), 0.0, 1.0)
         ratio[dilate(actors, 2)] = 1.0
         out = rgb(plate[i]) * ratio[..., None]
-        for lay in sorted(layers, key=lambda x: x["order"]):              # far to near (the depth pass is brighter nearer)
+        stack = sorted(layers, key=lambda x: x["order"])                     # far to near (the depth pass is brighter nearer)
+        orders.append(tuple(lay["id"] for lay in stack))
+        for lay in stack:
             al = lay["alpha"]
             if lay["kind"] == "figure":
                 for p in (q for q in layers if q["kind"] == "prop"):      # a nearer prop hides her
@@ -167,12 +179,24 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None) -
                     if nearer.any():
                         hidden[lay["id"]] += int((nearer & (al > 0.5)).sum())
                         al = np.minimum(al, np.where(nearer, 1 - p["alpha"], 1.0))
+                        if comp_dir:                                      # the same cut in her own (unmoved) frame
+                            dx, dy = lay["offset"]
+                            lay["alpha0"] = np.minimum(lay["alpha0"], 1 - np.clip(shift(np.where(nearer, p["alpha"], 0.0), -dx, -dy), 0, 1))
             out = out * (1 - al[..., None]) + lay["img"] * al[..., None]
         Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8)).save(out_dir / f"{i:06d}.png")
+        if comp_dir:
+            Image.fromarray((ratio * 255 + 0.5).astype(np.uint8)).convert("RGB").save(comp_dir / "shadow" / f"{i:04d}.png")
+            for lay in layers:
+                if lay["kind"] == "prop":
+                    rgba = np.dstack([lay["img"], lay["alpha"] * 255])
+                    Image.fromarray(np.clip(rgba + 0.5, 0, 255).astype(np.uint8), "RGBA").save(comp_dir / lay["id"] / f"{i:04d}.png")
+                else:
+                    Image.fromarray((np.clip(lay["alpha0"], 0, 1) * 255 + 0.5).astype(np.uint8)).save(comp_dir / f"{lay['id']}_matte" / f"{i:04d}.png")
         if progress:
             progress(i + 1, n)
-    return {"frames": n, "offsets_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in offsets.items()}, "hidden_px": hidden, "seconds": round(time.time() - t0, 1)}
-
+    stack_order = max(set(orders), key=orders.count) if orders else ()
+    return {"frames": n, "offsets_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in offsets.items()}, "hidden_px": hidden,
+            "stack": list(stack_order), "stack_frames": orders.count(stack_order), "seconds": round(time.time() - t0, 1)}
 
 def rife_binary() -> Path | None:
     """The local rife-ncnn-vulkan (E9, D27) under engine/tools, when it was installed; None otherwise (the clip stays at its rate)."""

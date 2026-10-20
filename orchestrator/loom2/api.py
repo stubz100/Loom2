@@ -34,7 +34,7 @@ log = logging.getLogger("loom2.api")
 # D67: routes anyone may call, and the media routes the read-only key (`?k=`) opens — pixels only, never settings, jobs or prompts
 OPEN_PATHS = {"/health"}
 DEV_DOCS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
-MEDIA_PATH = re.compile(r"^/(thumbs/[^/]+/[^/]+|assets/[^/]+/file|clips/[^/]+/(proxy\.mp4|frames/[^/]+)|documents/[^/]+/thumbnail|blobs/[^/]+|preset-icons/[^/]+/file|finals/[^/]+/layers/[^/]+/[^/]+/\d+)$")   # D90: + the preset swatches
+MEDIA_PATH = re.compile(r"^/(thumbs/[^/]+/[^/]+|assets/[^/]+/file|clips/[^/]+/(proxy\.mp4|frames/[^/]+)|documents/[^/]+/thumbnail|blobs/[^/]+|preset-icons/[^/]+/file|finals/[^/]+/layers/[^/]+/[^/]+/\d+|finals/[^/]+/composition/frame)$")   # D90: + the preset swatches; AE1: + the composition's frames
 DEV_ORIGINS = ["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
 ERROR_STATUS = {StaleStack: 409,       # C1: the editor merges the newer server layers and saves again
                 StaleGroup: 409,       # D34: the page reloads the group and redoes the drag

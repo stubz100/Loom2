@@ -2258,6 +2258,215 @@
         "title": "CompareReply",
         "type": "object"
       },
+      "Composition": {
+        "properties": {
+          "assembled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembled At"
+          },
+          "comp": {
+            "default": "Final",
+            "title": "Comp",
+            "type": "string"
+          },
+          "edited_at": {
+            "title": "Edited At",
+            "type": "string"
+          },
+          "effectcraft": {
+            "title": "Effectcraft",
+            "type": "string"
+          },
+          "final_id": {
+            "title": "Final Id",
+            "type": "string"
+          },
+          "final_revision": {
+            "default": 0,
+            "title": "Final Revision",
+            "type": "integer"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionLayer"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stack": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stack",
+            "type": "array"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema_version",
+          "final_id",
+          "comp",
+          "revision",
+          "effectcraft",
+          "assembled_at",
+          "final_revision",
+          "stale",
+          "stack",
+          "layers",
+          "made_at",
+          "edited_at"
+        ],
+        "title": "Composition",
+        "type": "object"
+      },
+      "CompositionCommand": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CompositionCommand",
+        "type": "object"
+      },
+      "CompositionLayer": {
+        "description": "The lineage: a final layer and what it became in the composition.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "integer"
+          },
+          "matte": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matte"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "offset_px": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Offset Px",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "layer",
+          "matte",
+          "offset_px"
+        ],
+        "title": "CompositionLayer",
+        "type": "object"
+      },
+      "CompositionProperty": {
+        "properties": {
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Layer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "layer",
+          "path",
+          "value"
+        ],
+        "title": "CompositionProperty",
+        "type": "object"
+      },
+      "CompositionResult": {
+        "properties": {
+          "composition": {
+            "$ref": "#/components/schemas/Composition"
+          },
+          "result": {
+            "title": "Result"
+          }
+        },
+        "required": [
+          "result",
+          "composition"
+        ],
+        "title": "CompositionResult",
+        "type": "object"
+      },
       "ContentAwareCaps": {
         "additionalProperties": true,
         "description": "D62: whether the native extension (PhotoCraft's content-aware fill + PatchMatch) is installed, and the modes it enables.",
@@ -20207,6 +20416,256 @@
           }
         },
         "summary": "Final Assemble",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition": {
+      "get": {
+        "operationId": "composition_get_finals__fid__composition_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Get",
+        "tags": [
+          "finals"
+        ]
+      },
+      "post": {
+        "description": "The final's composition written from its layers and the assembly's result through the EffectCraft session — made, or made again\nfrom the layers (the edits dropped).",
+        "operationId": "composition_make_finals__fid__composition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Make",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/command": {
+      "post": {
+        "description": "One engine command on the composition, saved; the engine's refusal comes back as 422 with its message.",
+        "operationId": "composition_command_finals__fid__composition_command_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompositionCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Command",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/frame": {
+      "get": {
+        "description": "A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin).",
+        "operationId": "composition_frame_finals__fid__composition_frame_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "t",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "title": "T",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "side",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Side",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Frame",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/property": {
+      "post": {
+        "description": "A layer's property set (or keyed at `time`), saved.",
+        "operationId": "composition_property_finals__fid__composition_property_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompositionProperty"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Property",
         "tags": [
           "finals"
         ]

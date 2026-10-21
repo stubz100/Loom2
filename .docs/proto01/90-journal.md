@@ -7377,3 +7377,40 @@ The author asked for a review of the state of things, then "record all this and 
   layer (E18's graph from her padded reference + E20's en1 line fitted to 77 frames), L2 an S2V talking head of her face (512², the same
   line) as the Animate graph's `face_video` while the body follows Stage's pose pass; sync r, PCK@0.1 every 8th frame against Stage's
   keypoints (SDPose), FaceSim at three frames, time; the engine standalone on 8188, stopped after. Runs next, alone on the GPU (D97).
+
+## 2026-10-21 18:57 — E29 ran: lip-sync in the clay route — S2V as the layer loses the pose and the look; an S2V talking head driving Wan Animate's face keeps the pose and moves the mouth, faintly at a full shot's size (Q25, doc 23)
+
+- `engine/spikes/e29_lipsync.py` on the PS5 rig's final (Mara's padded reference, Stage's pose pass and keypoints, her performed layer as
+  L0; E20's en1 line, 4.6 s, fitted to 77 frames; the pinned engine standalone, 18:24–18:55):
+  - **L0** the performed layer: PCK 0.972 (180 points, every 8th frame), FaceSim 0.23–0.29 against the reference (her face ≈ 20 px tall).
+  - **L1** S2V as the layer (E18's graph, 832×480, 20 steps, 925 s): S2V reframed her as a talking head to camera — the walk gone, **PCK 0.00**;
+    sync r 0.19 (bar 0.5); FaceSim 0.06–0.12. Out.
+  - **L2** the S2V talking head of her face (512², 554 s): **sync r 0.60 (over the bar — the first lip-sync in loom2 that passes)**; as Wan
+    Animate's `face_video` with Stage's pose pass (306 s): **PCK 0.972 (the pose kept exactly)**, sync r 0.33 at the layer (the mouth
+    moves with the line but her face is a few pixels), FaceSim 0.07–0.18 (the head's look leaks in). Bars: pose ✓, sync ✗, identity ✗.
+  - L3 (a post model) not run: a new custom node is a decision.
+- **Reading:** the route exists (L2) and the limit is the face's size in a full shot, not the mechanism — a close shot is the test that
+  matters (E29b, owed, half a day once a close shot is on the rig). **Q25** opened for the author (doc 23): (a) L2 as the experimental
+  route on close shots, (b) L3 after a licence read, (c) none for now.
+- Gotchas: `objectMatte`-style background jobs are not involved here; the Animate node takes `face_video` as an IMAGE batch (scaled to
+  512 inside), a LoadVideo → GetVideoComponents feeds it; S2V's first frame carries a colour drift (visible on the sheet's L1 f0).
+
+## 2026-10-21 20:02 — E24, the first slice: Wan 2.2's low-noise expert over the clip (A2 / C1 at 0.10 and 0.20) is out — softer, more shimmer, the face drifts, 15 min a shot (doc 24)
+
+- `engine/spikes/e24_post.py` on the PS5 rig's final: stage A on Mara's performed layer (`fig_m/frames`, her matte), stage C on the final
+  assembled afresh by `final_assembly.assemble_frames` (CPU; the shadow pass kept for the shadow measure). The graph: the I2V low-noise
+  expert with WanImageToVideo's conditioning from the clip's first frame, the clip VAE-encoded (LoadVideo → GetVideoComponents →
+  VAEEncode) as the latent, KSampler on the 20-step schedule at the strength, CFG 3.5, shift 8. Measures in numpy only (no cv2 / skimage
+  in the venv): flicker = the mean |Δ| between consecutive luma frames in the still background (outside the matte grown 24 px) and inside
+  the figure; SSIM (σ 1.5 window) to the input outside the face box every 8th frame; detail = the Laplacian's variance inside the figure;
+  FaceSim of the face on Mara's matte (at 2×, the composite holds Ines too) against her reference; the shadow regions' luminance ratio.
+- **Numbers** (the baseline first): A0 flicker 0.18 / 16.0, detail 2179, FaceSim min 0.20 · **A2a** (0.10, 913 s) 0.33 / 15.7, 2029,
+  0.19, SSIM 0.986 · **A2b** (0.20, 949 s) 0.30 / 15.6, 1997, 0.14, SSIM 0.980 · C0 flicker 0.81 / 14.7, detail 1622, FaceSim min 0.22,
+  shadows 1.00 · **C1a** (0.10, 965 s) 1.36 / 14.7, 1419, 0.12, shadows 0.99, SSIM 0.941 · **C1b** (0.20, 952 s) 1.37 / 14.7, 1301,
+  0.14, 0.99, SSIM 0.928. The sheet shows what the numbers say: a slightly softer copy of the input.
+- **Reading:** against 02 §3's bar the pass fails on every count but the shadows; the best post in this family is none. Next arms, one at
+  a time: **C3** (LTX-2.3 + IC-LoRA on the shot's Stage depth over the flattened clip at a low strength), **A3** (a Klein 9B face-crop
+  refine with the references), **A5** (keyframes refined and propagated). The decision for the post stages waits for them.
+- Gotchas: the spike's engine guard must only bite when a GPU arm is asked (the CPU baselines ran while E29 held 8188); the largest face
+  in the composite is Ines' — FaceSim must pick the face on Mara's matte; the low expert over 81 frames takes ≈ 15 min however low the
+  strength (the VAE and two CFG passes per step dominate).

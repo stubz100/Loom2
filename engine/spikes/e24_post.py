@@ -61,7 +61,92 @@ NEG = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，
 PROMPT_A = "a woman in a grey wool coat with a black bob and round glasses walks and turns on a plain grey ground, natural motion, sharp, detailed, steady camera, soft light"
 PROMPT_C = "two women in a plain room, one in a grey wool coat with a black bob and round glasses walking and turning, one in a yellow jacket with long curly red hair sitting on a stool, a wooden stool, soft shadows on the floor, natural motion, sharp, detailed, steady camera"
 BARS = {"ssim": 0.90, "facesim": 0.45}
-ARMS = {"a2a": ("a", 0.10), "a2b": ("a", 0.20), "c1a": ("c", 0.10), "c1b": ("c", 0.20)}
+# the second slice (C3, 02 §3): LTX-2.3 with its IC-LoRA on the shot's own Stage depth over the flattened clip, the last part of the
+# schedule only (a sigma split at the fraction) — the scene's structure pinned by the guide while the model re-draws the surfaces
+LTX, LTX_TE1, LTX_TE2, LTX_VAE, LTX_AVAE, IC = "ltx23-distilled-fp8", "gemma3-12b-fp8", "ltx23-text-projection", "ltx23-video-vae", "ltx23-audio-vae", "ltx23-ic-lora-union"
+GUIDE_STRENGTH = 0.8
+ARMS = {"a2a": ("a", 0.10), "a2b": ("a", 0.20), "c1a": ("c", 0.10), "c1b": ("c", 0.20), "c3a": ("c3", 0.35), "c3b": ("c3", 0.55)}
+
+
+def ltx_v2v_graph(ros: Roster, video_name: str, depth_name: str, prompt: str, denoise: float, seed: int, prefix: str, frames: int) -> tuple[dict, str]:
+    """loom2's LTX-2.3 guide graph (engine/graphs.py, ST4) turned video-to-video: the clip VAE-encoded as the latent, the IC-LoRA's depth
+    guide added to it, the distilled 8-step schedule split at `denoise` (SplitSigmasDenoise: the low part runs), the AV latent as the
+    model wants it, the guides cropped off the result."""
+    _, unet = ros.require(LTX)
+    _, ic = ros.require(IC)
+    _, te1 = ros.require(LTX_TE1)
+    _, te2 = ros.require(LTX_TE2)
+    _, vae = ros.require(LTX_VAE)
+    _, avae = ros.require(LTX_AVAE)
+    g: dict = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}},
+        "50": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": ic, "strength_model": 1.0}},
+        "51": {"class_type": "GetICLoRAParameters", "inputs": {"iclora_model": ["50", 0]}},
+        "2": {"class_type": "DualCLIPLoader", "inputs": {"clip_name1": te1, "clip_name2": te2, "type": "ltxv"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
+        "99": {"class_type": "VAELoader", "inputs": {"vae_name": avae}},
+        "5": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry, low quality, flicker, text, watermark, distorted faces", "clip": ["2", 0]}},
+        "7": {"class_type": "LTXVConditioning", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "frame_rate": float(FPS)}},
+        "30": {"class_type": "LoadVideo", "inputs": {"file": video_name}},
+        "31": {"class_type": "GetVideoComponents", "inputs": {"video": ["30", 0]}},
+        "32": {"class_type": "VAEEncode", "inputs": {"pixels": ["31", 0], "vae": ["3", 0]}},
+        "52": {"class_type": "LoadVideo", "inputs": {"file": depth_name}},
+        "53": {"class_type": "GetVideoComponents", "inputs": {"video": ["52", 0]}},
+        "54": {"class_type": "LTXVAddGuide", "inputs": {"positive": ["7", 0], "negative": ["7", 1], "vae": ["3", 0], "latent": ["32", 0], "image": ["53", 0],
+                                                        "frame_idx": 0, "strength": GUIDE_STRENGTH, "iclora_parameters": ["51", 0]}},
+        "12": {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": FPS, "batch_size": 1, "audio_vae": ["99", 0]}},
+        "13": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": ["54", 2], "audio_latent": ["12", 0]}},
+        "14": {"class_type": "BasicGuider", "inputs": {"model": ["50", 0], "conditioning": ["54", 0]}},
+        "15": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "16": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "17": {"class_type": "LTXVScheduler", "inputs": {"steps": 8, "max_shift": 2.05, "base_shift": 0.95, "stretch": True, "terminal": 0.1, "latent": ["13", 0]}},
+        "18": {"class_type": "SplitSigmasDenoise", "inputs": {"sigmas": ["17", 0], "denoise": denoise}},
+        "19": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["15", 0], "guider": ["14", 0], "sampler": ["16", 0], "sigmas": ["18", 1], "latent_image": ["13", 0]}},
+        "60": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["19", 0]}},
+        "61": {"class_type": "LTXVCropGuides", "inputs": {"positive": ["54", 0], "negative": ["54", 1], "latent": ["60", 0]}},
+        "62": {"class_type": "VAEDecode", "inputs": {"samples": ["61", 2], "vae": ["3", 0]}},
+        "63": {"class_type": "SaveImage", "inputs": {"images": ["62", 0], "filename_prefix": prefix}},
+    }
+    return g, "63"
+
+
+PAD = 16   # the IC-LoRA wants the latent's spatial size even: 480 → 512 rows (26×16 at LTX's 32-px cells) by edge padding, cropped back after
+
+
+def pad_rows(a: np.ndarray) -> np.ndarray:
+    return np.concatenate([np.repeat(a[:1], PAD, axis=0), a, np.repeat(a[-1:], PAD, axis=0)], axis=0)
+
+
+def depth_video(out: Path, n: int) -> Path:
+    """The shot's Stage depth as the layers' passes composed: 8-bit inverse depth (nearer brighter; every pass carries the set), the
+    nearest surface per pixel is the max over the plate, the figures and the props; padded like the clip."""
+    dirs = [FIN / "plate" / "depth"] + [FIN / x / "depth" for x in ("fig_m", "fig_i", "stool") if (FIN / x / "depth").is_dir()]
+    frames: list[np.ndarray] = []
+    for i in range(n):
+        acc = None
+        for d in dirs:
+            p = d / f"{i:04d}.png"
+            if not p.is_file():
+                continue
+            a = np.asarray(Image.open(p).convert("L"))
+            acc = a if acc is None else np.maximum(acc, a)
+        frames.append(pad_rows(np.repeat(acc[..., None], 3, axis=2)))
+    mp4 = out / "depth_c.mp4"
+    A.encode(frames, mp4, FPS)
+    return mp4
+
+
+def padded_video(frames: list[Path], mp4: Path) -> Path:
+    A.encode([pad_rows(np.asarray(Image.open(p).convert("RGB"))) for p in frames], mp4, FPS)
+    return mp4
+
+
+def unpad(frames: list[Path]) -> None:
+    for p in frames:
+        im = Image.open(p)
+        if im.height == H + 2 * PAD:
+            im.crop((0, PAD, im.width, PAD + H)).save(p)
 
 
 def log(msg: str) -> None:
@@ -267,26 +352,37 @@ def main() -> int:
             ros = Roster(E18.MODELS, [], "full").scan()
             names: dict[str, tuple[str, str]] = {}
             for stage, src in (("a", layer), ("c", comp_frames)):
-                if src and any(ARMS[x][0] == stage for x in gpu):
+                if src and any(ARMS[x][0].startswith(stage) for x in gpu):
                     mp4 = OUT / f"in_{stage}.mp4"
                     A.encode(src[:n], mp4, FPS)
                     names[stage] = (e.upload(mp4), e.upload(src[0]))
+            depth_name = e.upload(depth_video(OUT, n)) if any(ARMS[x][0] == "c3" for x in gpu) and comp_frames else None
+            padded_name = e.upload(padded_video(comp_frames[:n], OUT / "in_c3.mp4")) if depth_name else None
             for arm in gpu:
                 stage, dn = ARMS[arm]
-                if stage not in names:
+                if stage[0] not in names:
                     continue
-                vid, first = names[stage]
-                g, node = v2v_graph(ros, vid, first, PROMPT_A if stage == "a" else PROMPT_C, dn, a.seed, f"e24/{arm}", n)
+                vid, first = names[stage[0]]
+                if stage == "c3":
+                    g, node = ltx_v2v_graph(ros, padded_name or vid, depth_name or "", PROMPT_C, dn, a.seed, f"e24/{arm}", n)
+                else:
+                    g, node = v2v_graph(ros, vid, first, PROMPT_A if stage == "a" else PROMPT_C, dn, a.seed, f"e24/{arm}", n)
                 try:
                     h, wall, exec_s = e.run(g, timeout=3600)
+                    if node not in (h.get("outputs") or {}):                        # the engine ran but a node refused: its message is in the status
+                        msgs = {m[0]: m[1] for m in h.get("status", {}).get("messages", [])}
+                        err = msgs.get("execution_error") or {}
+                        raise RuntimeError(f"{err.get('node_type', '?')}: {str(err.get('exception_message', 'no output'))[:300]}")
                 except Exception as ex:  # noqa: BLE001
                     log(f"  FAILED {arm}: {type(ex).__name__}: {str(ex)[:400]}")
                     with RESULTS.open("a", encoding="utf-8") as f:
                         f.write(json.dumps({"arm": arm, "error": f"{type(ex).__name__}: {str(ex)[:400]}", "stamp": time.strftime("%Y-%m-%d %H:%M")}) + "\n")
                     continue
                 frames = E18.download_frames(e, h, node, OUT / arm)
+                if stage == "c3":
+                    unpad(frames)
                 src = layer if stage == "a" else comp_frames
-                measure(arm, frames, src[:n], mattes if stage == "a" else comp_mattes, fs, hero, shadow if stage == "c" else None, exec_s)
+                measure(arm, frames, src[:n], mattes if stage == "a" else comp_mattes, fs, hero, shadow if stage != "a" else None, exec_s)
                 A.encode(frames, OUT / f"{arm}.mp4", FPS)
                 if len(frames) > 40:
                     sheet_cells.append((arm, frames[40]))

@@ -33,7 +33,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [21](21-testing-final-level.md) | **Trying the Final level** (for the author) | a final's composition opened in Animate, scrubbed, played from the cache, edited (the layer's editor under its row: properties, masks drawn on the frame, effects; the lanes), rendered to a clip; revised after the first look (UX9 U1–U3) and the second (D116: help behind a ?, from-the-layer / tracked / object masks, the Performance tree and the foot's strip, U4–U7) |
 | [22](22-testing-expand.md) | **Trying Expand from Image** (for the author) | D115: a character's coverage expanded with the poses picked as icons; the images as its candidates |
 | [23](23-testing-e29.md) | **Looking at E29** (for the author) | lip-sync in the clay route: S2V as the layer loses the pose; an S2V talking head driving Wan Animate's face keeps it (Q25) |
-| [24](24-testing-e24.md) | **Looking at E24** (for the author) | post-processing, the first slice: Wan 2.2's low-noise expert over the layer and the shot softens, shimmers and drifts the face for 15 min a shot — out; C3, A3, A5 next |
+| [24](24-testing-e24.md) | **Looking at E24** (for the author) | post-processing: Wan 2.2's low-noise expert over the layer and the shot (15 min, softer, shimmer, the face drifts) and LTX-2.3 locked to the shot's depth (2 min, the structure held, the surfaces repainted smooth) are both out; the proposal: no pass by default, A6 as a tool later, A3 on a close shot |
 
 Background reading, in this order:
 

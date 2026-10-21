@@ -82,7 +82,7 @@ truth from here; the table above stays as written.
 | 4 | **The animation editor** (D114) | **AE1** the composition (the pin and its build script; the `.ecproj` record written from a final and from a single clip; `comp_render` through the CLI) → **AP1** the preview server (thin first: start, frames over loopback, the D97 rule; then the tiers, caches and the chip) → **AE2** viewer and timeline → **AE3** effects and colour | AP1, AE3 rig checks | 16–21 |
 | — | **The author's looks** | docs 15, 17, 18, 19 — before AE2's viewer is designed (Q22, Q23) | no | ½ h |
 | 6 | **Review** | **UX9** | headed checks | 1–2 |
-| 3b | **The two spikes left** | **E29** lip-sync (ran 2026-10-21: L1 out, L2 keeps the pose — Q25 for the author, doc 23) → **E24** post-processing (the first slice ran the same day: the low-expert pass is out, doc 24; C3 / A3 / A5 next), then their D-number | yes, serial | ≈ 2.5 |
+| 3b | **The two spikes left** | **E29** lip-sync (ran 2026-10-21: L1 out, L2 keeps the pose — Q25 for the author, doc 23) → **E24** post-processing (two slices ran the same day: the low-expert pass and the depth-locked LTX pass are both out, doc 24; the proposal: no pass by default, A3 on a close shot with E29b), then their D-number | yes, serial | ≈ 2.5 |
 | 5b | **The pipeline's rest** | **AE4** AI passes on layers (CA7) · **AE5** the output as a take · CA3's depth-guided plate · CA5's W3 repair | yes | 8–11 |
 | 7 | **Story pass** | RC1–RC4 · O1–O7 · C1–C3, C5–C7 as the author picks | rig checks | 15–20 + RC4 |
 

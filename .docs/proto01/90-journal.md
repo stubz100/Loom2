@@ -7414,3 +7414,22 @@ The author asked for a review of the state of things, then "record all this and 
 - Gotchas: the spike's engine guard must only bite when a GPU arm is asked (the CPU baselines ran while E29 held 8188); the largest face
   in the composite is Ines' — FaceSim must pick the face on Mara's matte; the low expert over 81 frames takes ≈ 15 min however low the
   strength (the VAE and two CFG passes per step dominate).
+
+## 2026-10-21 20:12 — E24, the second slice: LTX-2.3 locked to the shot's depth (C3 at 0.35 / 0.55) is out too — fast and structure-true, but the surfaces repainted smooth and the faces changed; the proposal for the post stages: no pass by default
+
+- `e24_post.py --arms c3a,c3b`: loom2's LTX guide graph turned video-to-video — the flattened clip VAE-encoded as the latent, the IC-LoRA's
+  depth guide (the shot's depth = the max over the plate's, the figures' and the stool's inverse-depth passes, every pass carrying the set)
+  at strength 0.8, the distilled 8-step schedule split by `SplitSigmasDenoise` at the fraction, the AV latent, the guides cropped off.
+  The IC-LoRA wants the latent's spatial size even: 832×480 is 26×15 cells, so the clip and the guide are padded 16 rows top and bottom
+  (edge rows) to 512 and cropped back after.
+- **Numbers** (C0: flicker 0.81, detail 1622, FaceSim min 0.22, shadows 1.00): **C3a** (0.35, 118 s) flicker 0.98, detail 740, FaceSim min
+  0.09, shadows 1.01, SSIM 0.837 · **C3b** (0.55, 54 s) 0.93, 537, 0.02, 1.02, SSIM 0.785. The structure holds (the depth pins it) and
+  it is 8× faster than the Wan pass, but it repaints the coat, the wall and the faces smooth — a different, softer film.
+- **Reading of both slices:** a whole-clip re-draw by a video model (Wan's expert, LTX locked to depth) costs more than it gives on a Move
+  layer at 832×480. The levers are upstream (the generation's preset and size, close shots). The arms left — A3 (a Klein face-crop
+  refine with references: per frame, flicker the risk, nothing to gain on a 20-px face), A5 (needs optical flow; no cv2 in the venv), A6
+  (a healing patch: a repair tool, not a pass) — go with the close-shot material E29b needs. **The proposal for the post stages'
+  decision (02 §4's gate): no pass by default — the final is the assembly + RIFE (B1, D102); A6 as a tool on demand later; A3 measured on
+  a close shot with E29b.** Doc 24 asks the author.
+- Gotcha: the spike engine client's `run` returns the history even when a node failed (the error sits in `status.messages`,
+  `execution_error`); check the output node is in `outputs` before downloading.

@@ -7257,3 +7257,46 @@ The author asked for a review of the state of things, then "record all this and 
 - **Phase 4's build is complete** (AE1 · AP1 thin · AE2 · AE3). Next by 07: **UX9**, the review after the build — the author's looks at
   15, 17, 18, 19 and 21 first, then a register. The full AP1 (the sidecar over EffectCraft's frame server, the disk cache, the resolution
   and Fast Previews menus) waits for the measurements of the editor in use.
+
+## 2026-10-21 13:58 — UX9 begins: the author's first look at the Final level (doc 21) — U1–U3 fixed: the editor under the layer's row, the chip a number, masks drawn on the frame and a points tool
+
+- **The author's notes on doc 21** (the version before AE3), in their words: (a) "I like the layer mechanics, but it's not very clear
+  which layer is being manipulated. Can this work in a way that properties/masks/effects appear directly under the selected layer — and
+  above the layer below"; (b) "I don't think we need the text for the redrawing — the percentage should be sufficient on its own — the
+  additional text causes a lot of flickering"; (c) "the masks are good, but currently they don't show on the screen, or on the layer — I've
+  got a bit lost when I drew one around Mara, as once I clicked off the rectangle, it disappeared … Not sure how masks work in here —
+  perhaps some insight can be found about this in effectsCraft … we only have rectangular and circular (elliptical) masks here — perhaps a
+  few more complex masking tools would be welcome."
+- **The register (UX9, 07's phase 6) opens with them:**
+  - **U1 — which layer is edited.** The Properties, Masks and Effects sections and their rail tabs are gone; a click on a layer's row opens
+    *its* editor under the row, above the next layer (`LayerEditor` in `FinalEditor.tsx`: a segmented Properties · Masks · Effects,
+    `editorTab` in the store; `Effects.tsx` exports the body). The row's menu gains the points tool, trim in / out and Before. A second click
+    folds it. `ANIM_SECTIONS` and the Animate rail lose the three ids.
+  - **U2 — the chip.** `chipText` is the number alone ("62 %"), fixed width; the size shown (`data-side`) and a running job (`data-busy`,
+    an accent border) are styling; the words moved to the tooltip; "before" while comparing. The other flicker was the picture itself: at
+    ½ the image drew at its 416 px and at rest grew to 832 px. Now the image fills the view with `object-fit: contain`, so ½ and full show
+    at one size and place; the pointer maths (a drag, a mask, a point) go through the picture's rectangle inside the element
+    (`pictureRect`: contain-fit, centred; comp pixels per css pixel).
+  - **U3 — masks on the frame, more tools, how they work.** The tree read of a mask carries its path
+    (`{"t":"Path","v":{"closed","vertices","in_tangents","out_tangents"}}`, the layer's pixels); `MaskInfo` keeps it and `maskPathD`
+    makes the SVG outline (cubic segments from the tangents, moved by position − anchor into the composition). `MaskOverlay` draws the
+    selected layer's masks over the frame — an SVG with the composition as its viewBox, centred-contained like the image so the two
+    coincide — the selected mask brighter (`selectedMask`; the newest selected after a load; a click on an outline or a list row selects),
+    its vertices as handles dragged to reshape (one `mask.setVertex` each). The **points tool** (`anim.final.mask.poly`, a Pentagon):
+    clicks on the frame lay a shape's points (the store holds them, cleared with the tool), the first point again or a double-click
+    closes it (one `mask.new {vertices, closed}`), Esc drops it; while any tool is on the overlay passes clicks through to the frame.
+    *How masks work* under the list: Add / Subtract / Intersect in order, inverted, feather, expand, opacity, and that a character's
+    cut-out is her track matte, not a mask. EffectCraft's further tools are read and noted for the author, not built: Roto Brush and Refine
+    Edge (`roto.stroke / propagate / freeze`, classical or MobileSAM), Object Matte by a click or box (`objectMatte.apply`), mask tracking
+    (`track.mask`, faces too) and `mask.interpolate` — doc 21 asks which to reach for.
+- **Found on the way:** the first point's handle in the shape being drawn swallowed the closing click (the e2e caught it: three points
+  laid, the fourth click never reached the frame) — the drawing group and, while a tool is on, every outline are `pointer-events: none`.
+- **Fake:** masks carry vertices (a rectangle's four corners; `layer.mask.shape` rewrites them), `mask.new`, `mask.setVertex`, the tree's
+  path value in the engine's shape. **Tests:** `test_compositions_ae1` reads the rectangle's path, makes a points mask, moves a vertex,
+  removes it; the e2e final-shot scenario works through the editor under the selected row (Properties · Masks · Effects), sees the
+  rectangle's outline and four handles over the frame, draws a points mask by three clicks and the closing click, removes it (revisions
+  1…11); Vitest's chip test reads the number alone. Offline: 479 passed in 141.39s (0:02:21) (full), 479 passed in 145.77s (0:02:25) (open); e2e 49 passed (3.2m) / 49 passed (3.0m); Vitest 392 + 3; build clean; lint 75; agents_check clean.
+- **Docs:** 21 revised for the new shape (the editor under the row, the chip, the outlines and the points tool, two new checks, a section
+  on the first look and what it changed); the README row; 20 §5 and 07's status row (phase 6 begun).
+- **Next:** the author's second look at 21; the looks still owed at 15, 17, 18, 19; then the rest of the UX9 register. E29 lip-sync and
+  E24 post before AE4, as 07 orders.

@@ -122,3 +122,7 @@ viewer's feel can be judged then, before AE2's controls are designed.
   Next: AE3 effects and colour.
 - **2026-10-21 (journal 2026-10-21 10:32):** AE3 built — 21 curated effects as tiles with their dials (the engine's definitions behind them),
   on / off, reset, remove, and the viewer's Before toggle. **Phase 4's build is complete.** Next: UX9 after the author's looks.
+- **2026-10-21 (journal 2026-10-21 13:58):** UX9 begun with the author's first look at doc 21 — U1 the selected layer's editor (Properties · Masks ·
+  Effects) under its row instead of three sections; U2 the chip a number alone and the picture at one size at ½ and full; U3 the masks
+  drawn over the frame with draggable points, a points tool (`mask.new`), *How masks work*; EffectCraft's roto brush, object matte and
+  tracking noted for the author. Next: the looks at 15, 17, 18, 19, then the rest of the register.

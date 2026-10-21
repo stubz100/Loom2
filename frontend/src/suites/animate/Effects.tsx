@@ -103,22 +103,18 @@ function EffectRow({ e, def, dials }: { e: EffectInfo; def: EffectDef | undefine
   )
 }
 
-export function EffectsSection() {
-  const level = useComposition((s) => s.level)
+/** The Effects part of the selected layer's editor (under its row in Layers, UX9 U1). */
+export function EffectsBody() {
   const comp = useComposition((s) => s.comp)
   const finalId = useComposition((s) => s.finalId)
   const selected = useComposition((s) => s.selected)
-  const layer = useComposition((s) => s.layers.find((l) => l.id === s.selected))
   const effects = useComposition((s) => s.effects)
   const catalog = useComposition((s) => s.catalog)
   const busy = useComposition((s) => s.busy)
   useEffect(() => { if (finalId && comp && !Object.keys(catalog).length) void cp().loadCatalog(CURATED_NAMES) }, [finalId, comp?.final_id]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (level !== 'final' || !comp) return <span className="hint">Effects and colour on the selected layer, at the Final level.</span>
-  if (selected === null || !layer) return <span className="hint">Select a layer in Layers, then click an effect to add it.</span>
   const groups = (Object.keys(GROUPS) as Group[]).map((g) => ({ g, items: CURATED.filter((c) => c.group === g) }))
   return (
-    <div className="comp-effects" data-layer={selected}>
-      <h5>{layer.name}</h5>
+    <div className="comp-effects" data-layer={selected ?? undefined}>
       {groups.map(({ g, items }) => (
         <div key={g} className="fx-group"><span className="fx-group-name">{GROUPS[g]}</span>
           <div className="fx-tiles">{items.map((c) => { const known = !!catalog[c.name]; const Icon = c.icon

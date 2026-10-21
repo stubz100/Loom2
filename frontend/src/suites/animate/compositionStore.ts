@@ -22,9 +22,12 @@ export interface FlatProp { path: string; type: string; value: unknown; keys?: n
 export interface PropKey { time: number; value: unknown; in?: string; out?: string }
 export const EDITABLE = ['transform/anchor', 'transform/position', 'transform/scale', 'transform/rotation', 'transform/opacity'] as const
 export type Arrange = 'front' | 'forward' | 'backward' | 'back'
-/** AE2c: a mask of the selected layer, as the engine's property tree reports it. */
-export interface MaskInfo { uid: number; name: string; path: string; feather: number; opacity: number; expansion: number; mode: string; inverted: boolean }
-export type MaskTool = 'off' | 'rect' | 'ellipse'
+/** AE2c: a mask of the selected layer, as the engine's property tree reports it — its outline (vertices and tangents, in the layer's
+ *  pixels) drawn on the frame, its vertices dragged there (UX9 U3). */
+export interface MaskInfo { uid: number; name: string; path: string; feather: number; opacity: number; expansion: number; mode: string; inverted: boolean
+  vertices: [number, number][]; inTangents: [number, number][]; outTangents: [number, number][]; closed: boolean }
+export type MaskTool = 'off' | 'rect' | 'ellipse' | 'poly'
+export type EditorTab = 'props' | 'masks' | 'effects'
 export const MASK_MODES = ['Add', 'Subtract', 'Intersect', 'Lighten', 'Darken', 'Difference', 'None']
 interface TreeNode { path?: string; name?: string; uid?: number; type?: string; value?: unknown; mask?: { inverted?: boolean; mode?: string }; children?: TreeNode[] }
 /** The masks of a layer's property tree (`masks/mask`, `masks/mask#2` …): uid, name, feather (one number: the x), opacity, expansion, mode, inverted. */
@@ -33,9 +36,26 @@ export function masksOf(tree: TreeNode | undefined): MaskInfo[] {
   return (group?.children ?? []).filter((m) => m.uid !== undefined).map((m) => {
     const leaf = (k: string) => m.children?.find((c) => (c.path ?? '').endsWith(`/${k}`))?.value
     const feather = leaf('feather')
+    const pv = ((leaf('path') as { v?: Record<string, unknown> } | undefined)?.v ?? {}) as { closed?: boolean; vertices?: number[][]; in_tangents?: number[][]; out_tangents?: number[][] }
+    const pts = (xs?: number[][]): [number, number][] => (xs ?? []).map((p) => [Number(p[0] ?? 0), Number(p[1] ?? 0)])
     return { uid: m.uid!, name: m.name ?? 'Mask', path: m.path ?? '', feather: Array.isArray(feather) ? Number(feather[0]) : Number(feather ?? 0),
-      opacity: Number(leaf('opacity') ?? 100), expansion: Number(leaf('expansion') ?? 0), mode: m.mask?.mode ?? 'Add', inverted: !!m.mask?.inverted }
+      opacity: Number(leaf('opacity') ?? 100), expansion: Number(leaf('expansion') ?? 0), mode: m.mask?.mode ?? 'Add', inverted: !!m.mask?.inverted,
+      vertices: pts(pv.vertices), inTangents: pts(pv.in_tangents), outTangents: pts(pv.out_tangents), closed: pv.closed !== false }
   })
+}
+/** A mask's outline as an SVG path (the layer's pixels, moved by `dx, dy` into the composition's): cubic segments from the tangents. */
+export function maskPathD(m: Pick<MaskInfo, 'vertices' | 'inTangents' | 'outTangents' | 'closed'>, dx = 0, dy = 0): string {
+  const v = m.vertices
+  if (!v.length) return ''
+  const f = (n: number) => Math.round(n * 100) / 100
+  let d = `M ${f(v[0][0] + dx)} ${f(v[0][1] + dy)}`
+  const n = v.length
+  for (let i = 0; i < (m.closed ? n : n - 1); i++) {
+    const j = (i + 1) % n
+    const o = m.outTangents[i] ?? [0, 0], t = m.inTangents[j] ?? [0, 0]
+    d += ` C ${f(v[i][0] + o[0] + dx)} ${f(v[i][1] + o[1] + dy)} ${f(v[j][0] + t[0] + dx)} ${f(v[j][1] + t[1] + dy)} ${f(v[j][0] + dx)} ${f(v[j][1] + dy)}`
+  }
+  return m.closed ? `${d} Z` : d
 }
 /** AE2d: seconds snapped to the composition's frames. */
 export const snapTime = (sec: number, rate: number): number => Math.round(sec * rate) / rate
@@ -106,10 +126,20 @@ interface CompState {
   // ---- AE2c: masks ----
   masks: MaskInfo[]
   maskTool: MaskTool
+  selectedMask: number | null                       // the mask's uid: its outline brighter on the frame, its vertices draggable
+  poly: [number, number][]                          // the points tool's points so far, in comp pixels (cleared with the tool)
+  setPoly: (points: [number, number][]) => void
+  editorTab: EditorTab                              // UX9 U1: the editor sits under the selected layer's row — which part of it is open
+  setEditorTab: (tab: EditorTab) => void
+  selectMask: (uid: number | null) => void
   setMaskTool: (tool: MaskTool) => void
   loadMasks: () => Promise<void>
   /** A rectangle or ellipse mask on the selected layer, `rect` in comp pixels [x, y, w, h]. */
   addMask: (rect: [number, number, number, number], shape: 'rect' | 'ellipse') => Promise<boolean>
+  /** A mask from points clicked on the frame (`mask.new`), in the layer's pixels. */
+  addPolyMask: (points: [number, number][]) => Promise<boolean>
+  /** One vertex of a mask moved (`mask.setVertex`), in the layer's pixels. */
+  moveVertex: (uid: number, index: number, point: [number, number]) => Promise<boolean>
   setMaskField: (uid: number, field: 'feather' | 'opacity' | 'expansion', value: number) => Promise<boolean>
   setMaskMode: (uid: number, mode: string) => Promise<boolean>
   invertMask: (uid: number, value: boolean) => Promise<boolean>
@@ -172,11 +202,11 @@ async function fetchFrame(final: Final, revision: number, frame: number, side: S
   return url
 }
 
-/** The chip's text: what is on screen and how much of the shot is ready. */
-export function chipText(s: Pick<CompState, 'shown' | 'filled' | 'final' | 'fetching'>, busy = queueBusy()): string {
+/** The chip's text: how much of the shot is cached, as a number alone (UX9 U2: the words flickered). The size shown and a running job
+ *  are the chip's attributes, styled, not words. */
+export function chipText(s: Pick<CompState, 'filled' | 'final'>): string {
   const n = s.final?.frames ?? 0
-  const pct = n ? Math.round((100 * s.filled) / n) : 0
-  return `${s.shown ? (s.shown.side === 'full' ? 'full' : '½') : '…'} · cached ${pct} %${busy ? ' · a job runs: on demand' : ''}${s.fetching ? ' · fetching' : ''}`
+  return `${n ? Math.round((100 * s.filled) / n) : 0} %`
 }
 
 export const useComposition = create<CompState>((set, get) => {
@@ -238,7 +268,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], editorTab: 'props', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -249,7 +279,7 @@ export const useComposition = create<CompState>((set, get) => {
         if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], keysOf: {}, uidOf: {} })
       } catch (e) { set({ error: detail(e) }) }
     },
-    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {} }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
+    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {}, selectedMask: null, maskTool: 'off', poly: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
     loadProps: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
@@ -300,13 +330,25 @@ export const useComposition = create<CompState>((set, get) => {
       return get().batch([{ id: 'keys.select', params: { keys: [{ layer: sel, prop: get().uidOf[path] ?? path, time }] } }, { id: 'keys.delete' }], 'Delete the keyframe')
     },
     // ---- AE2c: masks ----
-    setMaskTool: (maskTool) => set({ maskTool }),
+    setMaskTool: (maskTool) => set({ maskTool, poly: [] }),
+    setPoly: (poly) => set({ poly }),
+    setEditorTab: (editorTab) => set({ editorTab }),
+    selectMask: (selectedMask) => set({ selectedMask }),
+    addPolyMask: (points) => {
+      const sel = get().selected
+      if (sel === null || points.length < 3) return Promise.resolve(false)
+      return get().command('mask.new', { layer: sel, vertices: points.map(([x, y]) => [Math.round(x), Math.round(y)]), closed: true }, 'Mask')
+    },
+    moveVertex: (uid, index, point) => get().command('mask.setVertex', { layer: get().selected, mask: uid, index, point: [Math.round(point[0]), Math.round(point[1])] }, 'Mask vertex'),
     loadMasks: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) }, query: { tree: true } } })) as { properties?: TreeNode }
-        if (get().selected === sel) set({ masks: masksOf(r.properties), effects: effectsOf(r.properties) })   // one tree read: the masks and the effects
+        if (get().selected === sel) {
+          const masks = masksOf(r.properties)
+          set({ masks, effects: effectsOf(r.properties), selectedMask: masks.some((m) => m.uid === get().selectedMask) ? get().selectedMask : masks.length ? masks[masks.length - 1].uid : null })   // one tree read: the masks and the effects; the newest mask selected
+        }
       } catch (e) { set({ error: detail(e) }) }
     },
     // ---- AE3: effects ----

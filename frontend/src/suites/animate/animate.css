@@ -43,8 +43,19 @@
 .anim-overlay.err { color: var(--reject-fg); }
 /* AE1 / AP1 (D114): the Final level — the composition's frames, the chip, its own transport with a slider */
 .final-viewer .final-view { position: relative; display: grid; place-items: center; }
-.final-viewer img.final-frame { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
-.final-viewer .final-chip { position: absolute; right: 12px; top: 12px; background: var(--overlay); color: var(--fg2); padding: 2px 8px; border-radius: 999px; font-size: 12px; font-family: var(--mono); pointer-events: none; }
+.final-viewer img.final-frame { width: 100%; height: 100%; object-fit: contain; display: block; }   /* UX9 U2: the picture fills the view at ½ and at full alike — no size jump when the frame sharpens */
+.final-viewer .final-chip { position: absolute; right: 12px; top: 12px; min-width: 44px; text-align: right; background: var(--overlay); color: var(--fg2); padding: 2px 8px; border-radius: 999px; font-size: 12px; font-family: var(--mono); pointer-events: auto; }
+.final-viewer .final-chip[data-side="full"] { color: var(--fg); }
+.final-viewer .final-chip[data-busy] { border: 1px solid var(--accent); }
+.final-viewer .frame-box { position: absolute; inset: 0; line-height: 0; }   /* the image and the mask overlay fill the view; both centre the picture (object-fit contain / viewBox meet), so they coincide */
+.final-viewer .mask-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.final-viewer .mask-overlay .mask path { fill: rgba(120, 150, 255, .08); stroke: var(--accent); stroke-width: 1px; stroke-dasharray: 4 3; opacity: .6; pointer-events: auto; cursor: pointer; }
+.final-viewer .mask-overlay .mask.selected path { opacity: 1; stroke-width: 1.5px; stroke-dasharray: none; fill: rgba(120, 150, 255, .14); }
+.final-viewer .mask-overlay .mask.inverted path { fill: none; }
+.final-viewer .mask-overlay .mask.drawing path { fill: none; stroke: var(--fg); stroke-dasharray: 2 2; opacity: 1; }
+.final-viewer .mask-overlay .vertex { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: auto; cursor: move; }
+.final-viewer .mask-overlay .vertex.first { stroke: var(--fg); cursor: pointer; }
+.final-viewer .mask-overlay .mask.drawing path, .final-viewer .mask-overlay .mask.drawing .vertex, .final-viewer .final-view.masking .mask-overlay .mask path, .final-viewer .final-view.masking .mask-overlay .vertex { pointer-events: none; }   /* while a tool is on, clicks reach the frame (the first point's circle closes the shape through the frame's click) */
 .final-viewer .final-transport .final-scrub { flex: 1; min-width: 120px; }
 .final-viewer img.final-frame.movable { cursor: move; }
 .final-viewer .drag-ghost { position: absolute; inset: 0; border: 1px dashed var(--accent); pointer-events: none; display: grid; place-items: end start; }
@@ -53,6 +64,12 @@
 .comp-layers .verbs, .comp-props .verbs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .comp-layer-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .comp-layer-list li { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 4px; border-radius: 4px; border: 1px solid transparent; cursor: pointer; }
+.comp-layer-list li .layer-editor { flex-basis: 100%; margin: 4px 0 2px; padding: 6px 6px 4px; border-top: 1px solid var(--line); cursor: default; }   /* UX9 U1: the editor under its row */
+.comp-layer-list li .layer-editor > .segmented { margin-bottom: 6px; }
+.comp-masks .mask-help { margin-top: 6px; font-size: 11px; color: var(--fg3); }
+.comp-masks .mask-help summary { cursor: pointer; }
+.comp-mask-list li.selected { background: var(--overlay); border-radius: 4px; }
+.comp-mask-list li { cursor: pointer; }
 .comp-layer-list li:hover { background: var(--line); }
 .comp-layer-list li.selected { border-color: var(--accent); background: var(--overlay); }
 .comp-layer-list li .name { flex: 1; min-width: 80px; font-weight: 600; }

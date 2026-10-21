@@ -50,7 +50,7 @@ describe('AP1 thin: the composition viewer', () => {
     await settled()
     expect(frames().length).toBe(n)
     expect(useComposition.getState().shown?.side).toBe('full')
-    expect(chipText(useComposition.getState(), false)).toBe('full · cached 25 %')   // frames 0 and 3 at ½ of 8
+    expect(chipText(useComposition.getState())).toBe('25 %')                        // frames 0 and 3 at ½ of 8: the number alone (UX9 U2)
   })
 
   it('fills the shot at ½ while idle, not while a job runs, and drops the cache on a new revision', async () => {
@@ -60,7 +60,6 @@ describe('AP1 thin: the composition viewer', () => {
     useSession.setState({ jobs: { j: { id: 'j', status: 'running' } } } as never)
     await useComposition.getState().tick()
     expect(frames().length).toBe(1)                                             // D97 / D113: on demand only
-    expect(chipText(useComposition.getState())).toContain('a job runs')
     useSession.setState({ jobs: {} } as never)
     for (let i = 0; i < 7; i++) await useComposition.getState().tick()
     expect(frames().length).toBe(8)                                             // every frame at ½

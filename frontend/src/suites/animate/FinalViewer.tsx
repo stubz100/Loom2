@@ -1,16 +1,18 @@
-// AP1 thin / AE2 (proto01_animate 20 §2, D114): Animate's Final level — the composition's frames in the viewer, scrubbed by the slider and
-// the transport (commands, D32), played from the page's cache, the chip saying what is shown. A drag on the frame moves the selected layer
-// (one `layer.nudge`), or draws a mask with the rectangle / ellipse tool (AE2c, one `layer.addMask`). The lanes under the transport are
-// the layers' bars (AE2d): dragged to move, their ends to trim, Alt-drag to slip — one `layer.timing` / `layer.slip` on release; the
-// selected layer's keys sit on its bar; a click on a lane selects the layer.
+// AP1 thin / AE2 / AE3 (proto01_animate 20 §2, D114): Animate's Final level — the composition's frames in the viewer, scrubbed by the
+// slider and the transport (commands, D32), played from the page's cache, the chip saying how much is cached (a number alone, UX9 U2).
+// A drag on the frame moves the selected layer (one `layer.nudge`), or draws a mask with the rectangle / ellipse tool (one `layer.addMask`),
+// or, with the points tool, clicks lay a shape's points (one `mask.new`). The selected layer's masks are drawn over the frame (UX9 U3), the
+// selected one brighter, its points draggable (one `mask.setVertex` each). The lanes under the transport are the layers' bars (AE2d). The
+// Before toggle shows the frame with every effect off (AE3).
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandRow } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
-import { chipText, snapTime, useComposition, type CompLayer } from './compositionStore'
+import { chipText, maskPathD, snapTime, useComposition, type CompLayer } from './compositionStore'
 
 interface Drag { x0: number; y0: number; dx: number; dy: number; box: DOMRect; vbox: DOMRect }                 // the frame's and the view's boxes at the press
 interface LaneDrag { id: number; mode: 'move' | 'in' | 'out' | 'slip'; x0: number; dx: number; l: CompLayer; width: number }   // the track's width at the press
+interface VertexDrag { uid: number; index: number; x0: number; y0: number; dx: number; dy: number }
 
 export function FinalViewer() {
   const finalId = useComposition((s) => s.finalId)
@@ -28,11 +30,21 @@ export function FinalViewer() {
   const before = useComposition((s) => s.before)
   const img = useRef<HTMLImageElement>(null)
   const view = useRef<HTMLDivElement>(null)
+  const poly = useComposition((s) => s.poly)                               // the points tool's points so far, in comp pixels (the store clears them with the tool)
   const [drag, setDrag] = useState<Drag | null>(null)
   useEffect(() => { const t = window.setInterval(() => void useComposition.getState().tick(), 250); return () => window.clearInterval(t) }, [])
   useEffect(() => () => useComposition.getState().togglePlay(false), [])
+  useEffect(() => {                                                       // Esc drops the points tool's shape
+    if (maskTool !== 'poly') return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') useComposition.getState().setMaskTool('off') }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [maskTool])
+  // the image element fills the view and the picture is centred in it (object-fit contain): where the picture is, in client pixels
+  const picture = (box: DOMRect) => pictureRect(box, final?.size.w ?? 1, final?.size.h ?? 1)
+  const scaleOf = () => { const el = img.current; return el && final ? picture(el.getBoundingClientRect()).scale : 1 }
   // AE2: a drag on the frame — the selected layer moved (one `layer.nudge` in comp pixels on release; her matte follows, parented to her),
-  // or, with a mask tool on, a rectangle or ellipse mask drawn (AE2c)
+  // or, with a mask tool on, a rectangle or ellipse mask drawn (AE2c); with the points tool, a click lays a point (UX9 U3)
   const onDown = (e: ReactPointerEvent<HTMLImageElement>) => {
     if (selected === null || e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -42,13 +54,20 @@ export function FinalViewer() {
   const onMove = (e: ReactPointerEvent<HTMLImageElement>) => { if (drag) setDrag({ ...drag, dx: e.clientX - drag.x0, dy: e.clientY - drag.y0 }) }
   const onUp = (e: ReactPointerEvent<HTMLImageElement>) => {
     if (!drag) return
-    const el = img.current
-    const scale = el && final ? final.size.w / Math.max(1, el.clientWidth) : 1
+    const pic = picture(drag.box), scale = pic.scale
     setDrag(null)
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
     const cp = useComposition.getState()
+    if (maskTool === 'poly') {
+      if (Math.abs(drag.dx) > 3 || Math.abs(drag.dy) > 3) return                     // a drag is not a point
+      const x = (drag.x0 - pic.left) * scale, y = (drag.y0 - pic.top) * scale
+      const first = poly[0]
+      if (first && poly.length >= 3 && Math.hypot(first[0] - x, first[1] - y) * (1 / scale) < 10) { void cp.addPolyMask(poly.map(toLayer)); cp.setMaskTool('off'); return }
+      cp.setPoly([...poly, [x, y]])
+      return
+    }
     if (maskTool !== 'off') {
-      const x = Math.min(drag.x0, drag.x0 + drag.dx) - drag.box.left, y = Math.min(drag.y0, drag.y0 + drag.dy) - drag.box.top
+      const x = Math.min(drag.x0, drag.x0 + drag.dx) - pic.left, y = Math.min(drag.y0, drag.y0 + drag.dy) - pic.top
       const w = Math.abs(drag.dx), h = Math.abs(drag.dy)
       if (w >= 4 && h >= 4) { void cp.addMask([Math.round(x * scale), Math.round(y * scale), Math.round(w * scale), Math.round(h * scale)], maskTool); cp.setMaskTool('off') }
       return
@@ -56,6 +75,10 @@ export function FinalViewer() {
     const dx = Math.round(drag.dx * scale), dy = Math.round(drag.dy * scale)
     if (dx || dy) void cp.nudge(dx, dy)
   }
+  const onDouble = () => { if (maskTool === 'poly' && poly.length >= 3) { void useComposition.getState().addPolyMask(poly.map(toLayer)); useComposition.getState().setMaskTool('off') } }
+  // the selected layer's own pixels sit at (position − anchor) in the composition: masks are in the layer's pixels
+  const off = layerOffset()
+  const toLayer = ([x, y]: [number, number]): [number, number] => [x - off[0], y - off[1]]
   if (!finalId || !final) {
     return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — in the Shot section: make the final shot, assemble it, <b>Make the composition</b>, then <b>Open in Final</b></div></div></div>
   }
@@ -63,17 +86,22 @@ export function FinalViewer() {
     return <div className="anim-stage final-viewer" data-final={final.id}><div className="anim-view"><div className="anim-empty"><h2>{final.name}</h2>no composition yet — assemble the shot, then <b>Make the composition</b> in the Shot section</div></div></div>
   }
   const n = final.frames
-  const ghost = drag && maskTool !== 'off'
+  const ghost = drag && (maskTool === 'rect' || maskTool === 'ellipse')
     ? { left: Math.min(drag.x0, drag.x0 + drag.dx) - drag.vbox.left, top: Math.min(drag.y0, drag.y0 + drag.dy) - drag.vbox.top, width: Math.abs(drag.dx), height: Math.abs(drag.dy) } : null
+  const side = shown?.side ?? 'half'
   return (
     <div className="anim-stage final-viewer" data-final={final.id}>
       <div ref={view} className={`anim-view final-view${maskTool !== 'off' ? ' masking' : ''}`}>
-        {shown ? <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}
-          title={selected !== null ? (maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
-          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} />
-          : <div className="anim-overlay">loading the first frame…</div>}
-        {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div> : null}
-        <span className="final-chip" title="What is on screen: the size shown (½ while scrubbing, full at rest) and how much of the shot is cached for playback">{before ? 'before · ' : ''}{chipText({ shown, filled, final, fetching }, busy)}</span>
+        {shown ? <div className="frame-box">
+          <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}
+            title={selected !== null ? (maskTool === 'poly' ? 'Click the points of the shape; click the first again to close' : maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
+            onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} onDoubleClick={onDouble} />
+          {selected !== null && <MaskOverlay w={final.size.w} h={final.size.h} offset={off} poly={poly} scaleOf={scaleOf} />}
+        </div> : <div className="anim-overlay">loading the first frame…</div>}
+        {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && maskTool === 'off' && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div> : null}
+        <span className="final-chip" data-side={side} data-busy={busy ? 'true' : undefined} data-fetching={fetching ? 'true' : undefined}
+          title={`${Math.round((100 * filled) / Math.max(1, n))} % of the shot cached for playback · shown at ${side === 'full' ? 'full size' : 'half size'}${busy ? ' · a job runs: frames on demand only' : ''}${before ? ' · before: every effect off' : ''}`}>
+          {before ? 'before' : chipText({ filled, final })}</span>
         {error && <div className="anim-overlay err">preview: {error}</div>}
       </div>
       <div className="transport final-transport">
@@ -85,6 +113,68 @@ export function FinalViewer() {
       </div>
       <Lanes rate={final.rate} duration={n / final.rate} />
     </div>
+  )
+}
+
+/** Where the picture sits inside the image element (contain-fit, centred); `scale` is comp pixels per css pixel. */
+function pictureRect(box: DOMRect, w: number, h: number) {
+  const k = Math.min(box.width / Math.max(1, w), box.height / Math.max(1, h))
+  const pw = w * k, ph = h * k
+  return { left: box.left + (box.width - pw) / 2, top: box.top + (box.height - ph) / 2, width: pw, height: ph, scale: k > 0 ? 1 / k : 1 }
+}
+
+/** The selected layer's pixels sit at (position − anchor) in the composition (the contact offset, D107). */
+function layerOffset(): [number, number] {
+  const props = useComposition.getState().props
+  const pos = props.find((p) => p.path === 'transform/position')?.value as number[] | undefined
+  const anc = props.find((p) => p.path === 'transform/anchor')?.value as number[] | undefined
+  return [Number(pos?.[0] ?? 0) - Number(anc?.[0] ?? 0), Number(pos?.[1] ?? 0) - Number(anc?.[1] ?? 0)]
+}
+
+/** UX9 U3: the selected layer's masks drawn over the frame — the selected one brighter, its points draggable; the points tool's shape. */
+function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; offset: [number, number]; poly: [number, number][]; scaleOf: () => number }) {
+  const masks = useComposition((s) => s.masks)
+  const selectedMask = useComposition((s) => s.selectedMask)
+  const busy = useComposition((s) => s.busy)
+  const [vd, setVd] = useState<VertexDrag | null>(null)
+  const k = scaleOf()
+  const r = 4 * k                                                         // a handle 4 css px wide, in comp pixels
+  const start = (e: ReactPointerEvent<SVGCircleElement>, uid: number, index: number) => {
+    if (e.button !== 0 || busy) return
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    useComposition.getState().selectMask(uid)
+    setVd({ uid, index, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 })
+  }
+  const move = (e: ReactPointerEvent<SVGCircleElement>) => { if (vd) setVd({ ...vd, dx: e.clientX - vd.x0, dy: e.clientY - vd.y0 }) }
+  const end = (e: ReactPointerEvent<SVGCircleElement>) => {
+    if (!vd) return
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
+    const m = masks.find((x) => x.uid === vd.uid)
+    const v = m?.vertices[vd.index]
+    setVd(null)
+    if (!m || !v || (Math.abs(vd.dx) < 2 && Math.abs(vd.dy) < 2)) return
+    void useComposition.getState().moveVertex(vd.uid, vd.index, [v[0] + vd.dx * k, v[1] + vd.dy * k])
+  }
+  return (
+    <svg className="mask-overlay" viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" aria-label="masks">
+      {masks.map((m) => {
+        const sel = m.uid === selectedMask
+        const verts = vd && vd.uid === m.uid ? m.vertices.map((p, i) => (i === vd.index ? [p[0] + vd.dx * k, p[1] + vd.dy * k] as [number, number] : p)) : m.vertices
+        const d = maskPathD({ ...m, vertices: verts }, offset[0], offset[1])
+        return (
+          <g key={m.uid} className={`mask${sel ? ' selected' : ''}${m.inverted ? ' inverted' : ''}`} data-mask={m.uid}>
+            <path d={d} vectorEffect="non-scaling-stroke" onClick={() => useComposition.getState().selectMask(m.uid)} />
+            {sel && verts.map((p, i) => <circle key={i} cx={p[0] + offset[0]} cy={p[1] + offset[1]} r={r} className="vertex" data-index={i}
+              onPointerDown={(e) => start(e, m.uid, i)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setVd(null)} />)}
+          </g>
+        )
+      })}
+      {poly.length > 0 && <g className="mask drawing">
+        <path d={`M ${poly.map((p) => `${p[0]} ${p[1]}`).join(' L ')}`} vectorEffect="non-scaling-stroke" />
+        {poly.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === 0 ? r * 1.5 : r} className={i === 0 ? 'vertex first' : 'vertex'} />)}
+      </g>}
+    </svg>
   )
 }
 

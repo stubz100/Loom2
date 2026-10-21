@@ -161,6 +161,14 @@ def test_composition_routes(tmp_path: Path):
         masks = next(g for g in tree["children"] if g["path"] == "masks")["children"]
         assert [m["name"] for m in masks] == ["Mask 1"] and masks[0]["uid"] == mid and masks[0]["mask"] == {"inverted": True, "mode": "Subtract"}
         assert next(c for c in masks[0]["children"] if c["path"].endswith("/feather"))["value"] == [12.0, 12.0]
+        path = next(c for c in masks[0]["children"] if c["path"].endswith("/path"))["value"]
+        assert path["t"] == "Path" and path["v"]["vertices"] == [[10, 20], [70, 20], [70, 60], [10, 60]] and path["v"]["closed"] is True   # the outline the viewer draws (UX9 U3)
+        r = cl.post(f"{url}/command", json={"id": "mask.new", "params": {"layer": "Mara", "vertices": [[5, 5], [60, 10], [30, 70]], "closed": True}}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["mask"]
+        cl.post(f"{url}/command", json={"id": "mask.setVertex", "params": {"layer": "Mara", "mask": r.json()["result"]["mask"], "index": 1, "point": [64, 12]}}, headers=H)
+        poly = next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "masks")["children"][1]
+        assert poly["name"] == "Mask 2" and next(c for c in poly["children"] if c["path"].endswith("/path"))["value"]["v"]["vertices"] == [[5, 5], [64, 12], [30, 70]]
+        cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": poly["uid"]}}, headers=H)
         assert cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": mid}}, headers=H).json()["result"] == {"removed": 1}
         assert next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "masks")["children"] == []
         cl.post(f"{url}/command", json={"id": "layer.timing", "params": {"layers": ["Box"], "in": 0.0625, "out": 0.125}}, headers=H)

@@ -244,9 +244,27 @@ class Fake:
             self.edit()
             l = self.layer(self.comp(p.get("comp")), p["layer"])
             i = self.nid()
-            l["masks"].append({"id": i, "name": f"Mask {len(l['masks']) + 1}", "shape": p.get("shape", "rect"), "rect": p.get("rect") or [0, 0, 10, 10],
+            x, y, w, h = p.get("rect") or [0, 0, 10, 10]
+            l["masks"].append({"id": i, "name": f"Mask {len(l['masks']) + 1}", "shape": p.get("shape", "rect"), "rect": [x, y, w, h],
+                               "vertices": [[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
                                "feather": [0.0, 0.0], "opacity": 100.0, "expansion": 0.0, "mode": p.get("mode", "Add"), "inverted": False})
             return {"mask": i}
+        if cid == "mask.new":                                           # UX9 U3: a shape from points
+            self.edit()
+            l = self.layer(self.comp(p.get("comp")), p["layer"])
+            i = self.nid()
+            verts = [[float(v[0]), float(v[1])] for v in p["vertices"]]
+            l["masks"].append({"id": i, "name": f"Mask {len(l['masks']) + 1}", "shape": "poly", "rect": None, "vertices": verts, "closed": p.get("closed", True),
+                               "feather": [0.0, 0.0], "opacity": 100.0, "expansion": 0.0, "mode": p.get("mode", "Add"), "inverted": False})
+            return {"mask": i}
+        if cid == "mask.setVertex":
+            self.edit()
+            l = self.layer(self.comp(p.get("comp")), p["layer"])
+            m = next((m for m in l["masks"] if str(m["id"]) == str(p["mask"]) or m["name"] == p["mask"]), None)
+            if m is None:
+                raise ValueError(f"no mask {p['mask']}")
+            m["vertices"][int(p["index"])] = [float(p["point"][0]), float(p["point"][1])]
+            return None
         if cid in ("layer.mask.set", "layer.mask.invert", "layer.mask.mode", "layer.mask.remove", "layer.mask.shape"):
             self.edit()
             l = self.layer(self.comp(p.get("comp")), p["layer"])
@@ -264,7 +282,8 @@ class Fake:
             elif cid == "layer.mask.mode":
                 m["mode"] = p["mode"]
             elif cid == "layer.mask.shape":
-                m["rect"], m["shape"] = p["rect"], p.get("shape", m["shape"])
+                x, y, w, h = p["rect"]
+                m["rect"], m["shape"], m["vertices"] = p["rect"], p.get("shape", m["shape"]), [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
             else:
                 l["masks"].remove(m)
                 return {"removed": 1}
@@ -404,7 +423,8 @@ class Fake:
             masks = [{"name": m["name"], "path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}", "uid": m["id"], "match": "mask", "enabled": True,
                       "mask": {"inverted": m["inverted"], "mode": m["mode"]},
                       "children": [{"path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}/{k}", "name": f"Mask {k.title()}", "match": k, "uid": m["id"] * 10 + j,
-                                    "type": "vec2" if k == "feather" else "path" if k == "path" else "scalar", "value": m["rect"] if k == "path" else m[k]}
+                                    "type": "vec2" if k == "feather" else "path" if k == "path" else "scalar",
+                                    "value": {"t": "Path", "v": {"closed": m.get("closed", True), "vertices": m["vertices"], "in_tangents": [[0.0, 0.0]] * len(m["vertices"]), "out_tangents": [[0.0, 0.0]] * len(m["vertices"])}} if k == "path" else m[k]}
                                    for j, k in enumerate(("path", "feather", "opacity", "expansion"))]} for i, m in enumerate(l["masks"])]
             tree = {"name": l["name"], "path": "", "uid": l["id"], "match": "layer", "enabled": True, "children": [
                 {"name": "Transform", "path": "transform", "uid": l["id"] * 100, "match": "transform", "enabled": True, "children": [{**p, "uid": l["id"] * 100 + k} for k, p in enumerate(props, 1)]},

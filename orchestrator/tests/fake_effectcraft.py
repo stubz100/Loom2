@@ -30,6 +30,45 @@ SWITCHES = {"video": True, "audio": True, "solo": False, "locked": False, "shy":
             "frame_blend": "Off", "motion_blur": False, "adjustment": False, "three_d": False, "guide": False, "sampling": "Bilinear"}
 SWITCH_NAMES = {"lock": "locked", "fx": "effects", "frameBlend": "frame_blend", "motionBlur": "motion_blur", "threeD": "three_d"}   # the command's names → the report's
 FLAT = (("anchor", "vec3"), ("position", "vec3"), ("scale", "vec3"), ("rotation", "scalar"), ("opacity", "scalar"))
+# AE3: a slice of the engine's effect registry — the curated effects with their dials (id, type, default, min, max, options)
+_DIM = [{"label": "Horizontal and Vertical", "value": 0}, {"label": "Horizontal", "value": 1}, {"label": "Vertical", "value": 2}]
+FX_REGISTRY: dict[str, tuple[str, str, list]] = {
+    "Gaussian Blur": ("ec.blur.gaussian", "Blur & Sharpen", [("blurriness", "scalar", 0.0, 0.0, 3000.0, None), ("dimensions", "enum", 0, None, None, _DIM), ("repeatEdge", "bool", False, None, None, None)]),
+    "Fast Box Blur": ("ec.blur.fastbox", "Blur & Sharpen", [("radius", "scalar", 0.0, 0.0, 3000.0, None), ("iterations", "scalar", 3.0, 1.0, 50.0, None)]),
+    "Directional Blur": ("ec.blur.directional", "Blur & Sharpen", [("direction", "scalar", 0.0, None, None, None), ("length", "scalar", 0.0, 0.0, 1000.0, None)]),
+    "Sharpen": ("ec.blur.sharpen", "Blur & Sharpen", [("amount", "scalar", 0.0, 0.0, 500.0, None)]),
+    "Lumetri Color": ("ec.color.lumetri", "Color Correction", [("basicCorrection/tone/exposure", "scalar", 0.0, -5.0, 5.0, None), ("basicCorrection/tone/contrast", "scalar", 0.0, -100.0, 100.0, None),
+                                                               ("basicCorrection/whiteBalance/temperature", "scalar", 0.0, -100.0, 100.0, None), ("basicCorrection/saturation", "scalar", 100.0, 0.0, 200.0, None)]),
+    "Curves": ("ec.color.curves", "Color Correction", [("rgb", "string", "0,0 1,1", None, None, None)]),
+    "Levels": ("ec.color.levels", "Color Correction", [("inBlack", "scalar", 0.0, -1.0, 2.0, None), ("inWhite", "scalar", 1.0, -1.0, 2.0, None), ("gamma", "scalar", 1.0, 0.1, 10.0, None),
+                                                       ("outBlack", "scalar", 0.0, -1.0, 2.0, None), ("outWhite", "scalar", 1.0, -1.0, 2.0, None)]),
+    "Hue/Saturation": ("ec.color.huesaturation", "Color Correction", [("hue", "scalar", 0.0, None, None, None), ("saturation", "scalar", 0.0, -100.0, 100.0, None), ("lightness", "scalar", 0.0, -100.0, 100.0, None)]),
+    "Tint": ("ec.color.tint", "Color Correction", [("black", "color", [0.0, 0.0, 0.0, 1.0], None, None, None), ("white", "color", [1.0, 1.0, 1.0, 1.0], None, None, None), ("amount", "scalar", 100.0, 0.0, 100.0, None)]),
+    "Color Balance": ("ec.color.colorbalance", "Color Correction", [(k, "scalar", 0.0, -100.0, 100.0, None) for k in ("shadowRed", "shadowGreen", "shadowBlue", "midRed", "midGreen", "midBlue", "hiRed", "hiGreen", "hiBlue")]),
+    "Add Grain": ("ec.noise.addgrain", "Noise & Grain", [("tweaking/intensity", "scalar", 1.0, 0.0, 4.0, None), ("tweaking/size", "scalar", 1.0, 0.1, 10.0, None), ("tweaking/softness", "scalar", 0.0, 0.0, 10.0, None)]),
+    "Match Grain": ("ec.noise.matchgrain", "Noise & Grain", [("noiseSourceLayer", "layer", None, None, None, None), ("compensateForExistingNoise", "scalar", 0.0, 0.0, 100.0, None), ("tweaking/intensity", "scalar", 1.0, 0.0, 4.0, None)]),
+    "Remove Grain": ("ec.noise.removegrain", "Noise & Grain", [("noiseReductionSettings/noiseReduction", "scalar", 1.0, 0.0, 4.0, None), ("noiseReductionSettings/passes", "scalar", 2.0, 1.0, 10.0, None)]),
+    "Simple Choker": ("ec.matte.simplechoker", "Matte", [("chokeMatte", "scalar", 0.0, -100.0, 100.0, None)]),
+    "Matte Choker": ("ec.matte.mattechoker", "Matte", [("choke1", "scalar", 75.0, -127.0, 127.0, None), ("geometricSoftness1", "scalar", 4.0, 0.0, 1000.0, None), ("grayLevelSoftness1", "scalar", 10.0, 0.0, 100.0, None)]),
+    "Refine Soft Matte": ("ec.matte.refinesoft", "Matte", [("radius", "scalar", 10.0, 1.0, 200.0, None), ("feather", "scalar", 10.0, 0.0, 100.0, None), ("contrast", "scalar", 0.0, 0.0, 100.0, None),
+                                                          ("shiftEdge", "scalar", 0.0, -100.0, 100.0, None), ("smooth", "scalar", 0.0, 0.0, 100.0, None)]),
+    "Drop Shadow": ("ec.perspective.dropshadow", "Perspective", [("color", "color", [0.0, 0.0, 0.0, 1.0], None, None, None), ("opacity", "scalar", 50.0, 0.0, 100.0, None), ("direction", "scalar", 135.0, None, None, None),
+                                                                 ("distance", "scalar", 5.0, 0.0, 32000.0, None), ("softness", "scalar", 0.0, 0.0, 1000.0, None)]),
+    "Glow": ("ec.stylize.glow", "Stylize", [("threshold", "scalar", 60.0, 0.0, 100.0, None), ("radius", "scalar", 10.0, 0.0, 1000.0, None), ("intensity", "scalar", 1.0, 0.0, 255.0, None)]),
+    "CC Vignette": ("ec.stylize.ccvignette", "Stylize", [("amount", "scalar", 50.0, -100.0, 100.0, None), ("angleOfView", "scalar", 60.0, 0.0, 179.0, None), ("pinHighlights", "scalar", 0.0, 0.0, 100.0, None)]),
+    "Exposure": ("ec.color.exposure", "Color Correction", [("master/exposure", "scalar", 0.0, -20.0, 20.0, None), ("master/offset", "scalar", 0.0, -2.0, 2.0, None), ("master/gamma", "scalar", 1.0, 0.01, 9.99, None)]),
+    "Black & White": ("ec.color.blackwhite", "Color Correction", [(k, "scalar", v, -200.0, 300.0, None) for k, v in (("reds", 40.0), ("yellows", 60.0), ("greens", 40.0), ("cyans", 60.0), ("blues", 20.0), ("magentas", 80.0))]
+                      + [("tint", "bool", False, None, None, None), ("tintColor", "color", [0.88, 0.76, 0.6, 1.0], None, None, None)]),
+}
+
+
+def fx_def(name: str) -> dict | None:
+    for n, (fid, cat, params) in FX_REGISTRY.items():
+        if n.lower() == name.lower() or fid == name:
+            return {"id": fid, "name": n, "category": cat, "gpu": True, "float": True,
+                    "params": [{"id": pid, "name": pid.split("/")[-1].title(), "type": t, "default": d, **({"min": lo, "max": hi} if lo is not None else {}), **({"options": o} if o else {})}
+                               for pid, t, d, lo, hi, o in params]}
+    return None
 
 
 class Fake:
@@ -245,12 +284,36 @@ class Fake:
             d = float(p["delta"]) if "delta" in p else float(p.get("frames", 0)) / self.comp(p.get("comp"))["frameRate"]
             return {"slipped": [{"layer": l["id"], "delta": d} for l in self.layers_of(p)]}
         if cid == "effect.apply":
+            d = fx_def(p["effect"])
+            if d is None:
+                raise ValueError(f"unknown effect `{p['effect']}`")
             self.edit()
-            paths = []
+            paths, uids = [], []
             for l in self.layers_of(p):
-                l["effects"].append({"name": p["effect"], "params": {}})
+                same = sum(1 for e in l["effects"] if e["id"] == d["id"])
+                uid = self.nid()
+                l["effects"].append({"uid": uid, "id": d["id"], "name": d["name"] if same == 0 else f"{d['name']} {same + 1}", "enabled": True,
+                                     "params": {q["id"]: q["default"] for q in d["params"]}})
                 paths.append(f"effects/#{len(l['effects'])}")
-            return {"paths": paths}
+                uids.append(uid)
+            return {"effect": d["id"], "effects": uids, "paths": paths}
+        if cid in ("effect.toggle", "effect.remove", "effect.reset"):
+            self.edit()
+            l = self.layer(self.comp(p.get("comp")), p["layer"])
+            ref = p["effect"]
+            e = next((e for e in l["effects"] if str(e["uid"]) == str(ref) or e["name"] == ref), None)
+            if e is None and isinstance(ref, int) and 1 <= ref <= len(l["effects"]):
+                e = l["effects"][ref - 1]
+            if e is None:
+                raise ValueError(f"no effect {ref}")
+            if cid == "effect.toggle":
+                e["enabled"] = bool(p["value"]) if "value" in p else not e["enabled"]
+                return e["enabled"]
+            if cid == "effect.reset":
+                e["params"] = {q["id"]: q["default"] for q in fx_def(e["id"])["params"]}
+                return {}
+            l["effects"].remove(e)
+            return len(l["effects"])
         if cid == "file.projectSettings":
             self.edit()
             if "renderer" in p:
@@ -302,6 +365,15 @@ class Fake:
         text = lambda v: [{"type": "text", "text": json.dumps(v)}]   # noqa: E731
         if name == "command_run":
             return text(self.command(a["id"], a.get("params") or {}))
+        if name == "set_property" and str(a["path"]).startswith("effects/#"):          # AE3: an effect's parameter
+            self.edit()
+            l = self.layer(self.comp(a.get("comp")), a["layer"])
+            n, pid = a["path"].split("/", 2)[1:]
+            e = l["effects"][int(n.lstrip("#")) - 1]
+            if pid not in e["params"]:
+                raise ValueError(f"no property `{a['path']}`")
+            e["params"][pid] = a["value"]
+            return text({"path": a["path"], "value": a["value"], "animated": False})
         if name == "set_property":
             self.edit()
             l = self.layer(self.comp(a.get("comp")), a["layer"])
@@ -321,9 +393,14 @@ class Fake:
         if name == "get_layer":
             l = self.layer(self.comp(a.get("comp")), a["layer"])
             props = [{"path": f"transform/{k}", "type": t, "value": l.get(k), **({"keys": len(l["keys"][k])} if l["keys"].get(k) else {})} for k, t in FLAT]
+            fx_flat = [{"path": f"effects/#{n}/{q['id']}", "type": q["type"], "value": e["params"].get(q["id"], q["default"])}
+                       for n, e in enumerate(l["effects"], 1) for q in fx_def(e["id"])["params"]]
             head = {k: v for k, v in l.items() if k not in ("masks", "effects", "keys", "anchor", "position", "scale", "rotation", "opacity")}
             if a.get("flat"):
-                return text({**head, "time": self.p["time"], "properties": props})
+                return text({**head, "time": self.p["time"], "properties": props + fx_flat})
+            effects = [{"effect": e["id"], "enabled": e["enabled"], "match": e["id"], "name": e["name"], "path": f"effects/#{n}", "uid": e["uid"],
+                        "children": [{"match": q["id"].split("/")[-1], "name": q["name"], "path": f"effects/#{n}/{q['id']}", "type": q["type"], "uid": e["uid"] * 100 + j, "value": e["params"].get(q["id"], q["default"])}
+                                     for j, q in enumerate(fx_def(e["id"])["params"], 1)]} for n, e in enumerate(l["effects"], 1)]
             masks = [{"name": m["name"], "path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}", "uid": m["id"], "match": "mask", "enabled": True,
                       "mask": {"inverted": m["inverted"], "mode": m["mode"]},
                       "children": [{"path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}/{k}", "name": f"Mask {k.title()}", "match": k, "uid": m["id"] * 10 + j,
@@ -331,8 +408,13 @@ class Fake:
                                    for j, k in enumerate(("path", "feather", "opacity", "expansion"))]} for i, m in enumerate(l["masks"])]
             tree = {"name": l["name"], "path": "", "uid": l["id"], "match": "layer", "enabled": True, "children": [
                 {"name": "Transform", "path": "transform", "uid": l["id"] * 100, "match": "transform", "enabled": True, "children": [{**p, "uid": l["id"] * 100 + k} for k, p in enumerate(props, 1)]},
-                {"name": "Masks", "path": "masks", "uid": l["id"] * 100 + 50, "match": "masks", "enabled": True, "children": masks}]}
+                {"name": "Masks", "path": "masks", "uid": l["id"] * 100 + 50, "match": "masks", "enabled": True, "children": masks},
+                {"name": "Effects", "path": "effects", "uid": l["id"] * 100 + 60, "match": "effects", "enabled": True, "children": effects}]}
             return text({**head, "time": self.p["time"], "properties": tree})
+        if name == "list_effects":
+            items = [fx_def(n) for n in FX_REGISTRY]
+            q = str(a.get("filter", "")).lower()
+            return text([e for e in items if not q or q in e["name"].lower() or q in e["id"] or q in e["category"].lower()])
         if name == "command_batch":
             results, failed = [], 0
             for i, step in enumerate(a.get("steps") or []):
@@ -363,6 +445,8 @@ class Fake:
             return text({})
         if name == "add_effect":
             r = self.command("effect.apply", {"effect": a["effect"], "layers": [a["layer"]], "comp": a.get("comp")})
+            for pid, v in (a.get("values") or {}).items():
+                self.tool("set_property", {"layer": a["layer"], "path": f"{r['paths'][0]}/{pid}", "value": v, "comp": a.get("comp")})
             return text({"layer": a["layer"], "path": r["paths"][0], "params": a.get("values", {})})
         if name == "render_frame":
             c = self.comp(a.get("comp"))

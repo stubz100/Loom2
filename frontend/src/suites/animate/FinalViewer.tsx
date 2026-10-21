@@ -25,6 +25,7 @@ export function FinalViewer() {
   const selected = useComposition((s) => s.selected)
   const selName = useComposition((s) => s.layers.find((l) => l.id === s.selected)?.name)
   const maskTool = useComposition((s) => s.maskTool)
+  const before = useComposition((s) => s.before)
   const img = useRef<HTMLImageElement>(null)
   const view = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -67,16 +68,16 @@ export function FinalViewer() {
   return (
     <div className="anim-stage final-viewer" data-final={final.id}>
       <div ref={view} className={`anim-view final-view${maskTool !== 'off' ? ' masking' : ''}`}>
-        {shown ? <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={shown.url} alt="" draggable={false} data-side={shown.side}
+        {shown ? <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}
           title={selected !== null ? (maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} />
           : <div className="anim-overlay">loading the first frame…</div>}
         {ghost ? <div className={`mask-ghost ${maskTool}`} style={ghost} /> : drag && (drag.dx || drag.dy) ? <div className="drag-ghost" style={{ transform: `translate(${drag.dx}px, ${drag.dy}px)` }}><span>{selName}: {Math.round(drag.dx)}, {Math.round(drag.dy)} px</span></div> : null}
-        <span className="final-chip" title="What is on screen: the size shown (½ while scrubbing, full at rest) and how much of the shot is cached for playback">{chipText({ shown, filled, final, fetching }, busy)}</span>
+        <span className="final-chip" title="What is on screen: the size shown (½ while scrubbing, full at rest) and how much of the shot is cached for playback">{before ? 'before · ' : ''}{chipText({ shown, filled, final, fetching }, busy)}</span>
         {error && <div className="anim-overlay err">preview: {error}</div>}
       </div>
       <div className="transport final-transport">
-        <CommandRow ids={['anim.final.home', 'anim.final.stepBack', 'anim.final.play', 'anim.final.stepForward', 'anim.final.end']} />
+        <CommandRow ids={['anim.final.home', 'anim.final.stepBack', 'anim.final.play', 'anim.final.stepForward', 'anim.final.end', 'gap', 'anim.final.before']} active={before ? 'anim.final.before' : undefined} />
         <span className="counter">frame {frame} / {n - 1} · {fmtTime(frame, final.rate)}</span>
         <input className="final-scrub" type="range" min={0} max={n - 1} step={1} value={frame} aria-label="frame"
           onChange={(e) => useComposition.getState().setFrame(Number(e.target.value))} />

@@ -49,7 +49,10 @@ The rail's **Layers** and **Properties** tabs (the column scrolls there).
   time. Drag the bar itself to move it; Alt-drag slides the footage under it. Undo as before.
 - **Check:** does trimming by the bar's ends read as expected? Are the lanes enough, or do you want the full timeline (keys per
   property, zoom) here?
-- **Known:** the shadows' blur and the colour tools come with AE3.
+- **Effects:** with Mara selected, the **Effects** tab: click **Lumetri Color**; set exposure to 0.5 and temperature to −20 — she warms and
+  brightens against the room. Press **Before** under the viewer to see the frame without effects, again for after. Then **Gaussian
+  Blur** on the Shadows layer (blurriness 6) softens the shadows. Each effect has on / off, reset and ×.
+- **Check:** are the dials the right few for each effect? Anything you reach for in Resolve that is missing?
 
 ## 5. Make it again (optional)
 

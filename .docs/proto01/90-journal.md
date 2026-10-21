@@ -7232,3 +7232,28 @@ The author asked for a review of the state of things, then "record all this and 
   lint 75.
 - **AE2 is complete** (a–d). Next by 07: **AE3 effects and colour** (the curated effects as icon presets, Curves / Levels / Lumetri basic
   with a before / after), then UX9. Doc 21 grows the masks and the lanes for the author's try.
+
+## 2026-10-21 10:32 — AE3 built: effects and colour at the Final level (proto01_animate 20 §2)
+
+- **The curated set, 21 of the engine's 307:** colour — Lumetri Color, Curves, Levels, Hue/Saturation, Tint, Color Balance; soften and
+  match — Gaussian Blur, Fast Box Blur, Directional Blur, Sharpen, Add Grain, Match Grain, Remove Grain; edges and mattes — Simple Choker,
+  Matte Choker, Refine Soft Matte, Drop Shadow; mood — Glow, CC Vignette, Exposure, Black & White. Each a tile in the **Effects** section
+  (the rail's Effects tab); a click adds it to the selected layer (`effect.apply`).
+- **The dials:** each curated effect shows a few of its parameters (Lumetri's exposure, contrast, highlights, shadows, whites, blacks,
+  temperature, tint, saturation; Levels' in / out black and white and gamma; Match Grain's source layer; …), the field by the engine's
+  type — a number with its range, a choice, a switch, a colour, a point, a layer, a text (Curves' points) — the value the engine's
+  (`get_layer` flat: `effects/#n/<param>`), set by `set_property`; the rest of the parameters keep the engine's defaults, the row says
+  how many. On / off (`effect.toggle`), reset (`effect.reset`), remove (`effect.remove`). The definitions — names, parameters, ranges,
+  options — come from the engine through `GET …/composition/effects?names=` (`list_effects`), never a copy in the page (T8); a curated
+  name the engine lacks shows disabled.
+- **Before / after:** the transport's *Before* toggle shows the frame with every effect off — `GET …/frame?before=true`: one
+  `layer.setSwitch fx` on every layer, the frame, `edit.undo`; nothing saved, the revision unmoved; the chip says "before".
+- Fake: a slice of the registry (the 21 with their dials, types, ranges, options), `effect.apply` with uids, `effect.toggle` / `reset` /
+  `remove`, effect parameters in the flat list and the tree, `list_effects`.
+- **Tests:** `test_compositions_ae1` (the definitions by name, an effect applied, its dial read and set, an unknown parameter 422, the
+  tree's effect enabled, a Before frame with the revision unmoved and the switch undone, toggled off, removed); the e2e final-shot
+  scenario adds Gaussian Blur from the tile, sets blurriness 4, toggles Before (the frame marked, nothing saved) and removes it. Offline:
+  479 passed in 144.16s (0:02:24) (full), 479 passed in 135.41s (0:02:15) (open); e2e 49 passed (3.2m) / 49 passed (3.0m); Vitest 392 + 3; build clean; lint 75.
+- **Phase 4's build is complete** (AE1 · AP1 thin · AE2 · AE3). Next by 07: **UX9**, the review after the build — the author's looks at
+  15, 17, 18, 19 and 21 first, then a register. The full AP1 (the sidecar over EffectCraft's frame server, the disk cache, the resolution
+  and Fast Previews menus) waits for the measurements of the editor in use.

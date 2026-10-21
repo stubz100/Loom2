@@ -910,6 +910,21 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const trimmed = (await api<{ items: CompLayer[] }>('GET', `/finals/${fin.id}/composition/layers`)).items.find((l) => l.name === figName)!
   expect(trimmed.out).toBeCloseTo(5 / 16, 5)
   await expect(page.locator('.final-viewer .final-lanes .lane')).toHaveCount(5)
+  // AE3: an effect from the curated tiles on the selected layer, a dial set, Before toggled (nothing saved), the effect removed
+  await page.locator('#anim-sec-effects .fx-tile[data-effect="Gaussian Blur"]').click()
+  await expect(page.locator('#anim-sec-effects .comp-effect-list li')).toHaveCount(1)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 8/)
+  const blur = page.locator('#anim-sec-effects .comp-effect-list li .dial[data-param="effects/#1/blurriness"] input')
+  await blur.fill('4')
+  await blur.press('Enter')
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 9/)
+  await page.locator('.final-transport button[title^="Before"]').click()
+  await expect(page.locator('.final-viewer img.final-frame')).toHaveAttribute('data-before', 'true')
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 9/)                  // nothing saved
+  await page.locator('.final-transport button[title^="Before"]').click()
+  await expect(page.locator('.final-viewer img.final-frame')).not.toHaveAttribute('data-before', 'true')
+  await page.locator('#anim-sec-effects .comp-effect-list li button[title^="Remove"]').click()
+  await expect(page.locator('#anim-sec-effects .comp-effect-list li')).toHaveCount(0)
   await page.locator('.final-section [data-render]').click()
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)

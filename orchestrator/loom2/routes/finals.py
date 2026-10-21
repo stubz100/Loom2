@@ -430,11 +430,12 @@ async def composition_property(svc: Svc, fid: str, body: CompositionProperty):
 
 
 @router.get("/finals/{fid}/composition/frame")
-async def composition_frame(svc: Svc, fid: str, t: float = 0.0, side: int = 0):
-    """A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin)."""
+async def composition_frame(svc: Svc, fid: str, t: float = 0.0, side: int = 0, before: bool = False):
+    """A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin);
+    `before` (AE3): the same frame with every effect off, nothing saved."""
     cs, f = await _final_for_composition(svc, fid)
     try:
-        png = await asyncio.to_thread(cs.frame, f, svc.effectcraft, t, max(0, side))
+        png = await asyncio.to_thread(cs.frame, f, svc.effectcraft, t, max(0, side), before)
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     except EffectCraftError as e:
@@ -517,6 +518,19 @@ async def composition_property_get(svc: Svc, fid: str, lid: str, path: str, t: f
     cs, f = await _final_for_composition(svc, fid)
     try:
         return await asyncio.to_thread(cs.prop, f, svc.effectcraft, _lid(lid), path, t)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+
+
+@router.get("/finals/{fid}/composition/effects", response_model=CompositionLayers)
+async def composition_effects(svc: Svc, fid: str, names: str = ""):
+    """AE3: the engine's definitions of the effects named (comma-separated): id, category, GPU, the parameters with their types, defaults,
+    ranges and options — the Effects section's tiles and dials come from here (T8)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        return {"items": await asyncio.to_thread(cs.effect_defs, f, svc.effectcraft, names.split(","))}
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     except EffectCraftError as e:

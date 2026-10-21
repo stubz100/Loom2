@@ -28,7 +28,7 @@ function LayerRow({ l }: { l: CompLayer }) {
     { label: 'To the front', run: () => { void cp().arrange(l.id, 'front') }, disabled: l.index === 1 },
     { label: 'To the back', run: () => { void cp().arrange(l.id, 'back') }, disabled: l.index === layers.length }, sep,
     { cmd: 'anim.final.key.position' }, { cmd: 'anim.final.key.opacity' }, sep,
-    { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, sep,
+    { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, { cmd: 'anim.final.before' }, sep,
     { cmd: 'anim.final.undo' }, { cmd: 'anim.final.redo' },
   ]
   return (
@@ -83,7 +83,7 @@ const shown = (v: number) => String(Math.round(v * 100) / 100)
 
 /** A number typed, committed on Enter or blur (the engine round-trip per edit, not per keystroke); the parent keys it by the value, so a
  *  value that moved (an edit, an undo, another frame) remounts it fresh. */
-function NumField({ value, step = 1, onCommit, label }: { value: number; step?: number; onCommit: (v: number) => void; label: string }) {
+export function NumField({ value, step = 1, onCommit, label }: { value: number; step?: number; onCommit: (v: number) => void; label: string }) {
   const [draft, setDraft] = useState(shown(value))
   const commit = () => { const v = Number(draft); if (Number.isFinite(v) && v !== value) onCommit(v); else setDraft(shown(value)) }
   return <input type="number" step={step} value={draft} aria-label={label} onChange={(e) => setDraft(e.target.value)} onBlur={commit}

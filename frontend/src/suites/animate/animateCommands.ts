@@ -7,7 +7,7 @@ import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
-  Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon } from 'lucide-react'
+  Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon } from 'lucide-react'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
@@ -50,6 +50,8 @@ registerCommands([
   { id: 'anim.final.mask.ellipse', scope: 'animate', label: 'Mask: ellipse', hint: 'drag on the frame', icon: EllipseIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'ellipse' ? 'off' : 'ellipse') },
   { id: 'anim.final.trimIn', scope: 'animate', label: 'Trim in to the playhead', icon: TrimInIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { in: cp().frame / (cp().final?.rate ?? 16) }) },
   { id: 'anim.final.trimOut', scope: 'animate', label: 'Trim out to the playhead', icon: TrimOutIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { out: (cp().frame + 1) / (cp().final?.rate ?? 16) }) },
+  // AE3: before / after — the frame with every effect off (nothing saved)
+  { id: 'anim.final.before', scope: 'animate', label: 'Before', hint: 'the frame with every effect off; again for after', icon: BeforeIcon, placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().compareBefore(!cp().before) },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
   { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },

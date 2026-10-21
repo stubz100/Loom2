@@ -39,6 +39,15 @@ export function masksOf(tree: TreeNode | undefined): MaskInfo[] {
 }
 /** AE2d: seconds snapped to the composition's frames. */
 export const snapTime = (sec: number, rate: number): number => Math.round(sec * rate) / rate
+/** AE3: an effect on the selected layer, as the engine's property tree reports it. */
+export interface EffectInfo { uid: number; name: string; id: string; path: string; enabled: boolean }
+export interface EffectParam { id: string; name: string; type: string; default?: unknown; min?: number; max?: number; decimals?: number; options?: { label: string; value: number }[] }
+/** AE3: the engine's definition of an effect (`list_effects`). */
+export interface EffectDef { id: string; name: string; category?: string; gpu?: boolean; params: EffectParam[] }
+export function effectsOf(tree: TreeNode | undefined): EffectInfo[] {
+  const group = tree?.children?.find((g) => g.path === 'effects')
+  return (group?.children ?? []).filter((e) => e.uid !== undefined).map((e) => ({ uid: e.uid!, name: e.name ?? 'Effect', id: (e as { effect?: string }).effect ?? '', path: e.path ?? '', enabled: (e as { enabled?: boolean }).enabled !== false }))
+}
 const detail = (e: unknown): string => (e as { detail?: string }).detail ?? (e as Error).message ?? String(e)
 
 interface CompState {
@@ -110,6 +119,18 @@ interface CompState {
   setTiming: (id: number, patch: { in?: number; out?: number; delta?: number }) => Promise<boolean>
   /** The layer's footage slid under its in / out (`layer.slip`). */
   slip: (id: number, delta: number) => Promise<boolean>
+  // ---- AE3: effects ----
+  effects: EffectInfo[]
+  fxValues: Record<string, unknown>                 // the selected layer's effect parameters by path (`effects/#1/blurriness`)
+  catalog: Record<string, EffectDef>                 // the engine's definitions of the curated effects, by name
+  before: string | null                              // the Before frame (every effect off) while comparing
+  loadCatalog: (names: string[]) => Promise<void>
+  addEffect: (name: string) => Promise<boolean>
+  toggleEffect: (uid: number, value: boolean) => Promise<boolean>
+  resetEffect: (uid: number) => Promise<boolean>
+  removeEffect: (uid: number) => Promise<boolean>
+  /** The frame with every effect off (nothing saved), shown while on. */
+  compareBefore: (on: boolean) => Promise<void>
 }
 
 const cache = new Map<string, string>()
@@ -217,7 +238,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off',
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -228,13 +249,15 @@ export const useComposition = create<CompState>((set, get) => {
         if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], keysOf: {}, uidOf: {} })
       } catch (e) { set({ error: detail(e) }) }
     },
-    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
+    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [], effects: [], fxValues: {} }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
     loadProps: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) } } })) as { properties?: FlatProp[] }
         const props = (r.properties ?? []).filter((p) => (EDITABLE as readonly string[]).includes(p.path))
+        const fxValues = Object.fromEntries((r.properties ?? []).filter((p) => p.path.startsWith('effects/')).map((p) => [p.path, p.value]))   // AE3: the effects' dials
+        if (get().selected === sel) set({ fxValues })
         const keysOf: Record<string, PropKey[]> = {}
         const uidOf: Record<string, number | string> = {}
         await Promise.all(props.map(async (p) => {
@@ -283,8 +306,37 @@ export const useComposition = create<CompState>((set, get) => {
       if (!fid || sel === null) return
       try {
         const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) }, query: { tree: true } } })) as { properties?: TreeNode }
-        if (get().selected === sel) set({ masks: masksOf(r.properties) })
+        if (get().selected === sel) set({ masks: masksOf(r.properties), effects: effectsOf(r.properties) })   // one tree read: the masks and the effects
       } catch (e) { set({ error: detail(e) }) }
+    },
+    // ---- AE3: effects ----
+    loadCatalog: async (names) => {
+      const fid = get().finalId
+      if (!fid || !names.length) return
+      try {
+        const r = await unwrap(http.GET('/finals/{fid}/composition/effects', { params: { path: { fid }, query: { names: names.join(',') } } }))
+        const defs = r.items as unknown as EffectDef[]
+        set({ catalog: Object.fromEntries(defs.map((d) => [d.name, d])) })
+      } catch (e) { set({ error: detail(e) }) }
+    },
+    addEffect: (name) => { const sel = get().selected; return sel === null ? Promise.resolve(false) : get().command('effect.apply', { effect: name, layers: [sel] }, name) },
+    toggleEffect: (uid, value) => get().command('effect.toggle', { layer: get().selected, effect: uid, value }, 'Effect'),
+    resetEffect: (uid) => get().command('effect.reset', { layer: get().selected, effect: uid }, 'Reset the effect'),
+    removeEffect: (uid) => get().command('effect.remove', { layer: get().selected, effect: uid }, 'Remove the effect'),
+    compareBefore: async (on) => {
+      const old = get().before
+      if (old) { URL.revokeObjectURL(old); set({ before: null }) }
+      if (!on) return
+      const { final, comp, frame, shown } = get()
+      const b = getBackend()
+      if (!final || !comp || !b) return
+      const px = shown?.side === 'full' ? 0 : Math.round(Math.max(final.size.w, final.size.h) / 2)
+      try {
+        const res = await fetch(`${baseUrl()}/finals/${final.id}/composition/frame?t=${frame / final.rate}&side=${px}&before=true`, { headers: { 'X-Loom-Token': b.token } })
+        if (!res.ok) throw new Error(`before: ${res.status}`)
+        const url = URL.createObjectURL(await res.blob())
+        if (get().frame === frame && get().comp?.revision === comp.revision) set({ before: url }); else URL.revokeObjectURL(url)
+      } catch (e) { set({ error: (e as Error).message }) }
     },
     addMask: (rect, shape) => {
       const sel = get().selected
@@ -311,7 +363,11 @@ export const useComposition = create<CompState>((set, get) => {
         const final = await unwrap(http.GET('/finals/{fid}', { params: { path: { fid: id } } }))
         let comp: Composition | null = null
         try { comp = await unwrap(http.GET('/finals/{fid}/composition', { params: { path: { fid: id } } })) } catch { comp = null }
-        if (comp?.revision !== get().comp?.revision || get().final?.id !== final.id) { clearCache(); wanted = null; set({ shown: null, filled: 0 }) }
+        if (comp?.revision !== get().comp?.revision || get().final?.id !== final.id) {
+          clearCache(); wanted = null
+          if (get().before) URL.revokeObjectURL(get().before!)
+          set({ shown: null, filled: 0, before: null })
+        }
         set({ final, comp, error: null, frame: Math.min(get().frame, Math.max(0, final.frames - 1)) })
         if (comp) { request(get().frame, 'half'); armRest() }
         void get().loadLayers()
@@ -320,6 +376,7 @@ export const useComposition = create<CompState>((set, get) => {
     setFrame: (n) => {
       const f = get().final
       const frame = Math.max(0, Math.min(f ? f.frames - 1 : 0, Math.round(n)))
+      if (get().before) { URL.revokeObjectURL(get().before!); set({ before: null }) }   // the Before frame was this frame's
       set({ frame })
       request(frame, 'half')
       if (!get().playing) armRest()

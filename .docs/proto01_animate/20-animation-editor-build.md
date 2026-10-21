@@ -120,3 +120,5 @@ viewer's feel can be judged then, before AE2's controls are designed.
 - **2026-10-21 (journal 2026-10-21 10:06):** AE2 c–d built — masks drawn on the frame (rectangle / ellipse; mode, inverted, feather, opacity,
   expansion, remove) and the layers' lanes under the transport (move, trim, slip by drag; the keys; the playhead). **AE2 is complete.**
   Next: AE3 effects and colour.
+- **2026-10-21 (journal 2026-10-21 10:32):** AE3 built — 21 curated effects as tiles with their dials (the engine's definitions behind them),
+  on / off, reset, remove, and the viewer's Before toggle. **Phase 4's build is complete.** Next: UX9 after the author's looks.

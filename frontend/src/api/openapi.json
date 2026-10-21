@@ -20797,9 +20797,62 @@
         ]
       }
     },
+    "/finals/{fid}/composition/effects": {
+      "get": {
+        "description": "AE3: the engine's definitions of the effects named (comma-separated): id, category, GPU, the parameters with their types, defaults,\nranges and options — the Effects section's tiles and dials come from here (T8).",
+        "operationId": "composition_effects_finals__fid__composition_effects_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "names",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Names",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionLayers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Effects",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/composition/frame": {
       "get": {
-        "description": "A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin).",
+        "description": "A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin);\n`before` (AE3): the same frame with every effect off, nothing saved.",
         "operationId": "composition_frame_finals__fid__composition_frame_get",
         "parameters": [
           {
@@ -20829,6 +20882,16 @@
               "default": 0,
               "title": "Side",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Before",
+              "type": "boolean"
             }
           }
         ],

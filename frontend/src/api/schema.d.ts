@@ -856,6 +856,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Composition Effects
+         * @description AE3: the engine's definitions of the effects named (comma-separated): id, category, GPU, the parameters with their types, defaults,
+         *     ranges and options — the Effects section's tiles and dials come from here (T8).
+         */
+        get: operations["composition_effects_finals__fid__composition_effects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/composition/frame": {
         parameters: {
             query?: never;
@@ -865,7 +886,8 @@ export interface paths {
         };
         /**
          * Composition Frame
-         * @description A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin).
+         * @description A frame of the composition at `t` seconds as PNG, its longest side `side` (0: full size) — the viewer's preview (AP1 thin);
+         *     `before` (AE3): the same frame with every effect off, nothing saved.
          */
         get: operations["composition_frame_finals__fid__composition_frame_get"];
         put?: never;
@@ -11923,11 +11945,45 @@ export interface operations {
             };
         };
     };
+    composition_effects_finals__fid__composition_effects_get: {
+        parameters: {
+            query?: {
+                names?: string;
+            };
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionLayers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     composition_frame_finals__fid__composition_frame_get: {
         parameters: {
             query?: {
                 t?: number;
                 side?: number;
+                before?: boolean;
             };
             header?: never;
             path: {

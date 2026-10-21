@@ -13,7 +13,7 @@ const ANIMATE_RAIL: RailTab[] = [{ id: 'shot', label: 'Shot', icon: <Clapperboar
   { id: 'motion', label: 'Motion', icon: <PersonStanding size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> },
   { id: 'performance', label: 'Performance', icon: <Aperture size={18} /> }, { id: 'clips', label: 'Clips', icon: <Film size={18} /> },
   { id: 'layers', label: 'Layers', icon: <ListTree size={18} /> }, { id: 'properties', label: 'Properties', icon: <SlidersHorizontal size={18} /> },   // AE2: the Final level's editor
-  { id: 'masks', label: 'Masks', icon: <Lasso size={18} /> },
+  { id: 'masks', label: 'Masks', icon: <Lasso size={18} /> }, { id: 'effects', label: 'Effects', icon: <Sparkles size={18} /> },   // AE3
   { id: 'selection', label: 'Selection', icon: <ListTree size={18} /> }]
 
 export const DEFAULT_RAIL: Record<string, RailTab[]> = {

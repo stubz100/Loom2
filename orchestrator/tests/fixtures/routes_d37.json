@@ -34,6 +34,7 @@
  "GET /finals",
  "GET /finals/{fid}",
  "GET /finals/{fid}/composition",
+ "GET /finals/{fid}/composition/effects",
  "GET /finals/{fid}/composition/frame",
  "GET /finals/{fid}/composition/layers",
  "GET /finals/{fid}/composition/layers/{lid}",

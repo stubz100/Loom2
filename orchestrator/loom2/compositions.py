@@ -225,10 +225,30 @@ class CompositionStore:
         result = ec.tool("command_batch", {"steps": [{"id": s["id"], "params": s.get("params") or {}} for s in steps], "stop_on_error": True})
         return result, self._edited(f, ec, c)
 
-    def frame(self, f: Final, ec: EffectCraft, t: float, side: int) -> bytes:
-        """A frame of the composition as PNG at the longest side `side` (0: full size)."""
+    def frame(self, f: Final, ec: EffectCraft, t: float, side: int, before: bool = False) -> bytes:
+        """A frame of the composition as PNG at the longest side `side` (0: full size). `before` (AE3): every layer's effects off for this
+        frame only — one switch, the frame, the switch undone; nothing saved, the revision unmoved."""
         self._open(f, ec)
-        return ec.frame(t, side, comp=COMP_NAME)
+        if not before:
+            return ec.frame(t, side, comp=COMP_NAME)
+        ids = [int(l["id"]) for l in (ec.tool("get_comp", {"comp": COMP_NAME}).get("layers") or [])]
+        if not ids:
+            return ec.frame(t, side, comp=COMP_NAME)
+        ec.command("layer.setSwitch", {"layers": ids, "switch": "fx", "value": False, "comp": COMP_NAME})
+        try:
+            return ec.frame(t, side, comp=COMP_NAME)
+        finally:
+            ec.command("edit.undo", {})
+
+    def effect_defs(self, f: Final, ec: EffectCraft, names: list[str]) -> list[dict]:
+        """AE3: the engine's definitions of these effects (by their names): id, category, GPU, the parameters with their types, defaults,
+        ranges and options — what the Effects section shows is what the engine runs (T8)."""
+        self._open(f, ec)
+        wanted = {n.strip().lower() for n in names if n.strip()}
+        items = ec.tool("list_effects", {})
+        out = [e for e in (items if isinstance(items, list) else []) if str(e.get("name", "")).lower() in wanted or str(e.get("id", "")).lower() in wanted]
+        order = {n.strip().lower(): i for i, n in enumerate(names)}
+        return sorted(out, key=lambda e: order.get(str(e.get("name", "")).lower(), order.get(str(e.get("id", "")).lower(), 999)))
 
     # ---- reading (AE2) ---------------------------------------------------------------------------
     def layers(self, f: Final, ec: EffectCraft) -> list[dict]:

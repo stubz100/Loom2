@@ -170,6 +170,28 @@ def test_composition_routes(tmp_path: Path):
         box = next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Box")
         assert (box["in"], box["out"]) == (0.125, 0.1875)
         assert cl.post(f"{url}/command", json={"id": "layer.slip", "params": {"layers": ["Box"], "delta": 0.0625}}, headers=H).json()["result"]["slipped"][0]["delta"] == 0.0625
+        # AE3: the curated effects' definitions from the engine, one applied, its dial set, before / after without a save, removed
+        r = cl.get(f"{url}/effects?names=Gaussian Blur,Levels,Nope", headers=H)
+        assert r.status_code == 200 and [e["name"] for e in r.json()["items"]] == ["Gaussian Blur", "Levels"]
+        blur = r.json()["items"][0]
+        assert blur["id"] == "ec.blur.gaussian" and {q["id"]: q["type"] for q in blur["params"]}["blurriness"] == "scalar" and blur["params"][1]["options"][1]["label"] == "Horizontal"
+        rev = cl.get(url, headers=H).json()["revision"]
+        r = cl.post(f"{url}/command", json={"id": "effect.apply", "params": {"effect": "Gaussian Blur", "layers": ["Mara"]}}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["paths"] == ["effects/#1"] and r.json()["composition"]["revision"] == rev + 1
+        assert next(p for p in cl.get(f"{url}/layers/Mara", headers=H).json()["properties"] if p["path"] == "effects/#1/blurriness")["value"] == 0.0
+        assert cl.post(f"{url}/property", json={"layer": "Mara", "path": "effects/#1/blurriness", "value": 6}, headers=H).status_code == 200
+        assert next(p for p in cl.get(f"{url}/layers/Mara", headers=H).json()["properties"] if p["path"] == "effects/#1/blurriness")["value"] == 6
+        fx = next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "effects")["children"]
+        assert len(fx) == 1 and fx[0]["name"] == "Gaussian Blur" and fx[0]["enabled"] is True and fx[0]["effect"] == "ec.blur.gaussian"
+        assert cl.post(f"{url}/property", json={"layer": "Mara", "path": "effects/#1/nothing", "value": 1}, headers=H).status_code == 422
+        rev = cl.get(url, headers=H).json()["revision"]
+        r = cl.get(f"{url}/frame?t=0&side=32&before=true", headers=H)
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png" and cl.get(url, headers=H).json()["revision"] == rev   # nothing saved
+        assert next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Mara")["switches"]["effects"] is True   # the switch undone
+        cl.post(f"{url}/command", json={"id": "effect.toggle", "params": {"layer": "Mara", "effect": fx[0]["uid"], "value": False}}, headers=H)
+        assert next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "effects")["children"][0]["enabled"] is False
+        cl.post(f"{url}/command", json={"id": "effect.remove", "params": {"layer": "Mara", "effect": fx[0]["uid"]}}, headers=H)
+        assert next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "effects")["children"] == []
         assert cl.post(url, headers=H).json()["revision"] == 0                         # made again: fresh for what follows
         layers = next(iter(json.loads((d / "comp.ecproj").read_text(encoding="utf-8"))["comps"].values()))["layers"]   # as saved
         assert svc.effectcraft.project == str(d / "comp.ecproj")                        # the session holds the written file

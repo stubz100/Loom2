@@ -25,6 +25,7 @@ import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
 import { FinalViewer } from './FinalViewer'
 import { LayersSection, MasksSection, PropertiesSection } from './FinalEditor'
+import { EffectsSection } from './Effects'
 import { useComposition } from './compositionStore'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
@@ -254,7 +255,7 @@ function useAnimateLoad(): void {
 // D95 (AN1, proto01_animate 03 §4.2, UX0 #9): Animate's one column, the same at both viewer levels — Shot · Scene · Motion · Camera ·
 // Performance · Clips · Selection (Plate, Edit, Finish and Output join with CA3, AE1 and AE5). The rail jumps to a section and follows the
 // scroll. Stage's parts (StageParts.tsx) and Animate's own fill the sections; the right Inspector is gone (Selection).
-export const ANIM_SECTIONS = ['shot', 'scene', 'motion', 'camera', 'performance', 'clips', 'layers', 'properties', 'masks', 'selection'] as const   // AE2: Layers, Properties, Masks at the Final level
+export const ANIM_SECTIONS = ['shot', 'scene', 'motion', 'camera', 'performance', 'clips', 'layers', 'properties', 'masks', 'effects', 'selection'] as const   // AE2–3: Layers, Properties, Masks, Effects at the Final level
 
 function Sec({ id, title, tools, children }: { id: string; title: string; tools?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -312,6 +313,7 @@ function AnimateColumnBody({ tab }: { tab: string }) {
       <Sec id="layers" title="Layers"><LayersSection /></Sec>{/* AE2 (D114): the composition's layers at the Final level */}
       <Sec id="properties" title="Properties"><PropertiesSection /></Sec>
       <Sec id="masks" title="Masks"><MasksSection /></Sec>{/* AE2c: the selected layer's masks */}
+      <Sec id="effects" title="Effects"><EffectsSection /></Sec>{/* AE3: effects and colour on the selected layer */}
       <Sec id="selection" title="Selection">{level === 'stage' ? <StageSelection /> : <ClipSelection />}</Sec>
     </div>
   )

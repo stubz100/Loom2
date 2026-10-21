@@ -5,6 +5,7 @@
 // version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates with keep / reject);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
+import { Help } from '../../frame/Help'
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
@@ -93,7 +94,7 @@ function WorldTab() {
       </div>
       <h4>Add</h4>
       <div className="verbs"><CommandButton id="story.world.addStyle" text /><CommandButton id="story.world.addEntry" text /><CommandButton id="story.world.addBeat" text /><CommandButton id="story.world.addVariable" text /></div>
-      <span className="hint">The styles reach Generate's Style picker and the library its preset tiles; a beat becomes a Flow node by hand; the variables drive the Flow's conditions.</span>
+      <Help text={"The styles reach Generate's Style picker and the library its preset tiles; a beat becomes a Flow node by hand; the variables drive the Flow's conditions."} />
     </div>
   )
 }
@@ -210,7 +211,7 @@ function FlowTab() {
       <h4>Variables<span className="n"> · {world?.variables.length ?? 0}</span></h4>
       <div className="vars">
         {(world?.variables ?? []).map((v) => <div key={v.name} className="kv"><span>{v.name}</span><span>{play ? String(play.vars[v.name]) : `${v.type} · ${String(v.default)}`}</span></div>)}
-        {!world?.variables.length && <span className="hint">none — declare them in World</span>}
+        {!world?.variables.length && <span className="hint">none <Help text={"Declare them in World."} /></span>}
       </div>
     </div>
   )
@@ -344,7 +345,7 @@ export function Strip() {
   for (const id of ['story.shot.makeFrame', 'story.shot.makeFrameStage', 'story.shot.makeClip', 'story.shot.makeClipStage']) markUsed(id)   // in the Make ▸ menus
   markUsed('story.cast.lock'); markUsed('story.cast.newVersion'); markUsed('story.shot.finalize'); markUsed('story.shot.newVersion'); markUsed('story.shot.openStage'); markUsed('story.shot.openAnimate')
   if (tab === 'episode') {
-    return <div className="story-strip"><span>Episode</span><span className="spacer" /><span className="hint">the hand-built render list: shots from the Shots bin, clips from the Clips bin; every join a cut or a dissolve</span></div>
+    return <div className="story-strip"><span>Episode</span><span className="spacer" /><Help text={"The hand-built render list: shots from the Shots bin, clips from the Clips bin; every join a cut or a dissolve."} /></div>
   }
   if (tab === 'flow') {
     return (
@@ -360,7 +361,7 @@ export function Strip() {
   }
   if (tab === 'shots') {
     const s = shots.find((x) => x.id === shotId)
-    if (!s) return <div className="story-strip"><span>Shots</span><span className="spacer" /><span className="hint">pick a shot, or make one from a Stage camera or an Animate clip</span></div>
+    if (!s) return <div className="story-strip"><span>Shots</span><span className="spacer" /><span className="hint">no shot picked</span><Help text={"Pick a shot, or make one from a Stage camera or an Animate clip."} /></div>
     const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
     const stale = v ? sy().shotStale(v) : false
     const stageName = v?.stage_id ? (stagesLite.find((x) => x.id === v.stage_id)?.name ?? v.stage_id) : null
@@ -382,7 +383,7 @@ export function Strip() {
   }
   if (tab === 'cast' || tab === 'props') {
     const p = profiles.find((x) => x.id === profileId && inTab(x, tab))
-    if (!p) return <div className="story-strip"><span>{tab === 'props' ? 'Props' : 'Cast'}</span><span className="spacer" /><span className="hint">{tab === 'props' ? 'pick a prop, or make one' : 'pick a profile, or make one from a Catalogue tile'}</span></div>
+    if (!p) return <div className="story-strip"><span>{tab === 'props' ? 'Props' : 'Cast'}</span><span className="spacer" /><span className="hint">{tab === 'props' ? 'no prop picked' : 'no profile picked'}</span><Help text={tab === 'props' ? 'Pick a prop, or make one.' : 'Pick a profile, or make one from a Catalogue tile.'} /></div>
     const v = p.versions.find((x) => x.id === (versionId ?? p.current))
     return (
       <div className="story-strip">
@@ -449,7 +450,7 @@ function WorldEditor() {
   return (
     <div ref={host} className="world-editor" tabIndex={0} onKeyDown={(e) => { storyKey('world', e.nativeEvent) }}>
       <section id="story-sec-logline">
-        <h3>Logline<span className="hint">one sentence</span></h3>
+        <h3>Logline<Help text={"One sentence."} /></h3>
         <textarea rows={2} value={world.logline} aria-label="logline" placeholder="Who wants what, and what stands in the way." onChange={(e) => sy().edit({ logline: e.target.value })} />
       </section>
       <section id="story-sec-synopsis">
@@ -457,20 +458,20 @@ function WorldEditor() {
         <textarea rows={8} value={world.synopsis} aria-label="synopsis" placeholder="The story in a page." onChange={(e) => sy().edit({ synopsis: e.target.value })} />
       </section>
       <section id="story-sec-styles">
-        <h3>Styles<span className="hint">one per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects</span></h3>
+        <h3>Styles<Help text={"One per generation; click a style to edit it, drop a Catalogue image on it to make its sample; ★ marks the default Generate preselects."} /></h3>
         <StyleGrid />
         <div className="adder"><CommandButton id="story.world.addStyle" text /></div>
       </section>
       <section id="story-sec-library">
-        <h3>Library<span className="hint">every preset of Generate's prompt fields — words and a picture; click one to edit it in the Inspector, + Add puts new words in a field</span></h3>
+        <h3>Library<Help text={"Every preset of Generate's prompt fields — words and a picture; click one to edit it in the Inspector, + Add puts new words in a field."} /></h3>
         <LibraryGrid />
       </section>
       <section id="story-sec-panels">
-        <h3>Saved panels<span className="hint">Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete</span></h3>
+        <h3>Saved panels<Help text={"Generate's whole-panel templates, each shown by its latest result; click one for Apply, Rename and Delete."} /></h3>
         <PanelGrid />
       </section>
       <section id="story-sec-spine">
-        <h3>Spine<span className="hint">the beats in order; a Flow node is made from a beat by hand</span></h3>
+        <h3>Spine<Help text={"The beats in order; a Flow node is made from a beat by hand."} /></h3>
         <div className="rows">
           {world.spine.map((b, i) => <BeatRow key={b.id} b={b} i={i} active={selected?.kind === 'beat' && selected.id === b.id} />)}
           {!world.spine.length && <div className="empty">No beats yet.</div>}
@@ -478,7 +479,7 @@ function WorldEditor() {
         <div className="adder"><CommandButton id="story.world.addBeat" text /></div>
       </section>
       <section id="story-sec-variables">
-        <h3>Variables<span className="hint">bool or enum flags the Flow's conditions read</span></h3>
+        <h3>Variables<Help text={"Bool or enum flags the Flow's conditions read."} /></h3>
         <div className="rows">
           {world.variables.map((v) => <VarRow key={v.name} v={v} active={selected?.kind === 'variable' && selected.id === v.name} />)}
           {!world.variables.length && <div className="empty">No variables yet.</div>}
@@ -532,7 +533,7 @@ function PropModel({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
     : v.model_asset_id ? 'stood upright · Animate places it in the scene' : 'none yet'
   return (
     <section className="prop-model">
-      <h3>3D model <span className="hint">the prop as a real object, made once from {v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} — Animate places it in the scene</span></h3>
+      <h3>3D model <Help text={`The prop as a real object, made once from ${v.anim_ref_asset_id ? 'the animation reference' : 'the hero'} — Animate places it in the scene.`} /></h3>
       <div className="prop-model-row" onContextMenu={(e) => showMenu(e, [{ cmd: 'story.cast.makeModel' }, { cmd: 'story.cast.clearModel' }])}>
         {v.model_asset_id
           ? <Suspense fallback={<div className="model-view" />}><ModelView key={v.model_asset_id} assetId={v.model_asset_id} /></Suspense>
@@ -557,7 +558,7 @@ function AnimRef({ p, v }: { p: Profile; v: Profile['versions'][number] }) {
   markUsed('story.cast.useAsAnimRef'); markUsed('story.cast.useAsAnimRefBack'); markUsed('story.cast.clearAnimRef'); markUsed('story.cast.clearAnimRefBack')
   return (
     <section className="anim-ref">
-      <h3>Animation reference <span className="hint">{p.cls === 'prop' ? 'the prop alone, a three-quarter view, 16:9' : 'full body, A-pose, 16:9, plain ground — what Wan Animate is given'}</span></h3>
+      <h3>Animation reference <Help text={p.cls === 'prop' ? 'The prop alone, a three-quarter view, 16:9.' : 'Full body, A-pose, 16:9, plain ground — what Wan Animate is given.'} /></h3>
       <div className="anim-ref-row">
         {slot('front', v.anim_ref_asset_id, p.cls === 'prop' ? 'reference' : 'front')}
         {p.cls === 'character' && slot('back', v.anim_ref_back_asset_id, 'back (optional)')}
@@ -621,7 +622,7 @@ function CastPage({ scope }: { scope: 'cast' | 'props' }) {
         </div>
       </div>
       <section>
-        <h3>Coverage <span className="hint">kept references per shot size × angle; thin cells are tinted (advisory)</span></h3>
+        <h3>Coverage <Help text={"Kept references per shot size × angle; thin cells are tinted (advisory)."} /></h3>
         <table className="cov-grid" aria-label="coverage">
           <thead><tr><th /> {grid.angles.map((a) => <th key={a}>{a}</th>)}</tr></thead>
           <tbody>
@@ -633,7 +634,7 @@ function CastPage({ scope }: { scope: 'cast' | 'props' }) {
       {(p.cls === 'character' || p.cls === 'prop') && <AnimRef p={p} v={v} />}
       {p.cls === 'prop' && <PropModel p={p} v={v} />}
       <section>
-        <h3>Candidates <span className="hint">newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several</span></h3>
+        <h3>Candidates <Help text={"Newest first · ✓ adds to the reference set, ✕ rejects · click to select, Ctrl-click for several."} /></h3>
         {!cands.length && <div className="empty">{open ? <>No candidates yet — <button className="link" onClick={() => void askExpand('full', 1, 'draft')} disabled={!v.hero_asset_id}>Expand ▶</button> makes one image per coverage cell.</> : 'This version is final.'}</div>}
         <div className="story-cands" role="list">
           {cands.map((a) => <Candidate key={a.id} a={a} picked={picked.includes(a.id)} />)}
@@ -673,7 +674,7 @@ function ShotBoard() {
   return (
     <div className="cast-page shot-board" tabIndex={0} onKeyDown={(e) => { storyKey('shots', e.nativeEvent) }}>
       <section>
-        <h3>Versions <span className="hint">each owns one clip; the Flow pins one, the Episode takes the final one</span></h3>
+        <h3>Versions <Help text={"Each owns one clip; the Flow pins one, the Episode takes the final one."} /></h3>
         <div className="version-cards">
           {s.versions.map((x) => {
             const c = x.clip_id ? clipsById[x.clip_id] : undefined
@@ -692,13 +693,13 @@ function ShotBoard() {
         <div className="shot-player">
           {clip ? <video controls src={api.fileUrl(`/clips/${clip.id}/proxy.mp4`)} aria-label="the version's clip" />
             : v.frame_asset_id ? <img src={api.thumbUrl(v.frame_asset_id, 1024)} alt="" aria-label="the version's frame" />
-            : <span className="hint">No frame or clip yet — Make frame ▸ / Make clip ▸ below (Generate, Animate or the stage camera), or use a take.</span>}
+            : <span className="hint">No frame or clip yet. <Help text={"Make frame ▸ / Make clip ▸ below (Generate, Animate or the stage camera), or use a take."} /></span>}
         </div>
         <div className="counts">{why ? <span className="hint">{why}</span> : v.state === 'final' ? <span>final · the clip the Flow and the Episode bind</span> : <span>ready to mark final</span>}</div>
-        <div className="make-row"><MakeMenus /><span className="hint">{v.state === 'open' ? 'Generate or Animate open for this version; what they make comes back here as takes' : 'final — make a new version for more takes'}</span></div>
+        <div className="make-row"><MakeMenus /><Help text={v.state === 'open' ? 'Generate or Animate open for this version; what they make comes back here as takes.' : 'Final: make a new version for more takes.'} /></div>
       </section>
       <section>
-        <h3>Takes <span className="hint">everything tried for this version · ✓ use makes one the frame or the clip</span></h3>
+        <h3>Takes <Help text={"Everything tried for this version · ✓ use makes one the frame or the clip."} /></h3>
         {!v.takes.length && <div className="empty">No takes yet.</div>}
         <div className="story-cands" role="list">
           {[...v.takes].reverse().map((t) => <Take key={`${t.kind}:${t.id}`} kind={t.kind} id={t.id} current={(t.kind === 'image' ? v.frame_asset_id : v.clip_id) === t.id} clipsById={clipsById} />)}
@@ -943,7 +944,7 @@ function BoardField({ n }: { n: FlowNode }) {
   const g = findNode(tree, n.board_group_id)
   return (
     <>
-      <h4>Board <span className="hint">references, mood, places — a group of the album</span></h4>
+      <h4>Board <Help text={"References, mood, places — a group of the album."} /></h4>
       <div className="kv board-field">
         <span>group</span>
         <select value={n.board_group_id ?? ''} aria-label="board" onChange={(e) => void sy().patchNode(n.id, { board_group_id: e.target.value || null })}>
@@ -973,7 +974,7 @@ function PlaceField({ n }: { n: FlowNode }) {
         {places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
       {cur && <><span /><span className="place-hero">{hero ? <img className="place-thumb" src={api.thumbUrl(hero, 256)} alt="" /> : null}<span className="hint">{cur.name} · {cur.current}</span></span></>}
-      {!places.length && <><span /><span className="hint">no places in the Cast yet — New profile… (place)</span></>}
+      {!places.length && <><span /><span className="hint">no places in the Cast yet <Help text={"New profile…, with the class place."} /></span></>}
     </div>
   )
 }
@@ -1002,7 +1003,7 @@ function SpeakerVersions({ n }: { n: FlowNode }) {
   }
   return (
     <>
-      <h4>Speakers <span className="hint">the version each one wears here</span></h4>
+      <h4>Speakers <Help text={"The version each one wears here."} /></h4>
       <div className="speaker-versions" data-testid="speaker-versions">
         {speakers.map((p) => {
           const pinned = n.speaker_versions?.[p.id] ?? null
@@ -1049,7 +1050,7 @@ function NodeInspector() {
   if (!n) return (
     <div className="story-insp">
       {problems && <><h4>Validation</h4><ul className="flow-problems">{problems.map((p, i) => <li key={i} className={p.code}><button className="link" onClick={() => sy().selectNode(p.node_id)}>{p.message}</button></li>)}{!problems.length && <li className="ok">No problems.</li>}</ul></>}
-      <span className="hint">Select a node on the canvas or in the outline.</span>
+      <span className="hint">Nothing selected. <Help text={"Select a node on the canvas or in the outline."} /></span>
     </div>
   )
   const sh = n.shot_id ? shots.find((s) => s.id === n.shot_id) : undefined
@@ -1073,7 +1074,7 @@ function NodeInspector() {
         </div></>}
       </div>
       {n.type === 'dialogue' && <><h4>Lines</h4><LinesEditor n={n} /></>}
-      {n.type === 'choice' && <><h4>Options <span className="hint">each is an out-port</span></h4><OptionsEditor n={n} /></>}
+      {n.type === 'choice' && <><h4>Options <Help text={"Each is an out-port."} /></h4><OptionsEditor n={n} /></>}
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
       {visual && <PlaceField n={n} />}
       {visual && <SpeakerVersions n={n} />}

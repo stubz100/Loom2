@@ -1,4 +1,5 @@
 import { FolderOpen } from 'lucide-react'
+import { Help } from './Help'
 import { useState } from 'react'
 import { ApiError } from '../api/client'
 import { isTauri, pickFolder } from '../shell/tauri'
@@ -28,12 +29,11 @@ export function ProjectDialog({ mode }: { mode: 'new' | 'open' }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="head">{mode === 'new' ? 'New project' : 'Open project'}<span className="spacer" /><button className="quiet" onClick={() => s.setProjectDialog(null)}>Close</button></div>
         <div className="body form">
-          <label>Folder</label>
+          <label>Folder <Help text={mode === 'new' ? 'An empty (or new) folder on the work disk. Weights never live here.' : 'A folder containing project.json.'} /></label>
           <div style={{ display: 'flex', gap: 6 }}>
             <input type="text" value={path} onChange={(e) => setPath(e.target.value)} placeholder="F:/loom2-projects/my-film" autoFocus style={{ flex: 1 }} />
             {isTauri() && <button onClick={() => void browse()} title="Browse (OS folder picker)"><FolderOpen size={16} /></button>}
           </div>
-          <span className="hint">{mode === 'new' ? 'An empty (or new) folder on the work disk. Weights never live here.' : 'A folder containing project.json.'}</span>
           {mode === 'new' && <><label>Name</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} /></>}
           {mode === 'new' && <><label>Format</label><span className="hint" style={{ gridColumn: 2, marginTop: 0 }}>16:9 · 1920×1080 @ 24 fps · default tier Draft (D18)</span></>}
           {err && <div style={{ gridColumn: '1 / -1', color: 'var(--error)' }}>{err}</div>}

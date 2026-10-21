@@ -298,7 +298,7 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
         <Help text="The shot's steps, top to bottom: the frame (a Stage shot of the scene from the passes), the clip (the pass sequence animated), the final shot (the scene split into layers, performed, assembled and finished). Each step folds by its title; its verb sits on the title line and in the foot." /></div>
       <Step id="frame" title="Frame" state={stills.length ? `${stills.length} rendered` : entry ? 'passes ready' : 'no passes'}
         verb={<CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} />}>
-        <div className="kv top"><span>method</span>
+        <div className="kv tall"><span>method</span>
           <div className="method-list">
             {caps && Object.entries(caps.methods).map(([id, m]) => (
               <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id })} title={m.hint ?? m.label}>
@@ -308,7 +308,7 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
             ))}
             {!caps && <span className="hint">No Stage method in this build.</span>}
           </div></div>
-        <div className="kv top"><span>image 1 <Help text={`The ${image1} pass of this camera is the shot's first image: the method reads the scene from it.`} /></span>
+        <div className="kv tall"><span>image 1 <Help text={`The ${image1} pass of this camera is the shot's first image: the method reads the scene from it.`} /></span>
           <div className="pass-row">
             <div className="ref-slot source locked" title={passId ? `the ${image1} pass, rendered at revision ${entry?.revision}` : 'render the passes first'}>
               {passId ? <img src={api.thumbUrl(passId, 256)} alt="" /> : <span className="empty">{image1}</span>}
@@ -320,7 +320,7 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
               {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
             </div>
           </div></div>
-        <div className="kv top"><span>references{method ? <span className="hint"> · {method.max_refs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
+        <div className="kv tall"><span>references{method ? <span className="hint"> · {method.max_refs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
           <div>
             <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
               {sh.refs.map((r, i) => (
@@ -344,13 +344,13 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
             {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
           </div></div>
         {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
-        <div className="kv top"><span>prompt</span><textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
+        <div className="kv tall"><span>prompt</span><textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
         <div className="kv"><span>size</span><span className="segmented"><button className={sh.tier === 'draft' ? 'active' : ''} onClick={() => st().setShot({ tier: 'draft' })}>Draft</button><button className={sh.tier === 'full' ? 'active' : ''} onClick={() => st().setShot({ tier: 'full' })}>Full</button><span className="hint"> {w}×{h}</span></span></div>
         <div className="kv"><span>count</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
-        {pv?.params?.prompt ? <div className="kv top"><span>reads <Help text="The prompt as the method sends it: its own sentence about image 1, then yours." /></span><p className="hint prompt-preview">{String(pv.params.prompt)}</p></div> : null}
+        {pv?.params?.prompt ? <div className="kv tall"><span>reads <Help text="The prompt as the method sends it: its own sentence about image 1, then yours." /></span><p className="hint prompt-preview">{String(pv.params.prompt)}</p></div> : null}
         {err && <p className="disabled-why">{err}</p>}
         {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
-        <div className="kv top"><span>results{stills.length ? <span className="hint"> · {stills.length}</span> : null}</span>
+        <div className="kv tall"><span>results{stills.length ? <span className="hint"> · {stills.length}</span> : null}</span>
           <div>
             {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Catalogue (lineage: the pass and the references). Click one: the clip starts from it." /></span>}
             <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>

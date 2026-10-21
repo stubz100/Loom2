@@ -4,6 +4,7 @@
 // PhotoCraft's spline) and Colour balance (a tone range, three gradient slider rows). Every gesture is one undo step: `start` takes
 // the before-state, `commit` records it.
 import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { Help } from '../../frame/Help'
 import { canvasBlend, useEditor, type Node } from './editorStore'
 import { cachedLut, type CurvePoints } from './curves'
 import { ValueField } from './widgets'
@@ -238,8 +239,8 @@ export function CurvesEditor({ id, params, set, start, commit }: EditorProps) {
         {sel !== null && pts[sel] ? <>
           <ValueField label="input" value={pts[sel][0]} min={0} max={255} onStart={start} onChange={(v) => write(moveTo(pts, sel, v, pts[sel][1]))} onCommit={() => commit('curves input')} />
           <ValueField label="output" value={pts[sel][1]} min={0} max={255} onStart={start} onChange={(v) => write(moveTo(pts, sel, pts[sel][0], v))} onCommit={() => commit('curves output')} />
-        </> : <span className="hint full">Click to add a point · drag it off the graph, Ctrl-click or right-click to remove it · arrows nudge (Shift ×10)</span>}
-        {!spline && <span className="hint full">An older curve with straight lines between its points; editing it turns it into a smooth curve like Photoshop's.</span>}
+        </> : <Help className="full" text={"Click to add a point · drag it off the graph, Ctrl-click or right-click to remove it · arrows nudge (Shift ×10)."} />}
+        {!spline && <Help className="full" text={"An older curve with straight lines between its points; editing it turns it into a smooth curve like Photoshop's."} />}
       </div>
     </div>
   )

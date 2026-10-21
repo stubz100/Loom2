@@ -680,7 +680,7 @@ test("a pose-driven shot (19 / CN4, D87): the Render tab's Animate method takes 
   await page.locator('.shot-tab button[aria-label="clip method animate"]').click()
   await expect(page.locator('.shot-tab button[aria-label="clip method animate"]')).toHaveClass(/active/)
   await expect(page.locator('.shot-tab .segmented button', { hasText: /^Depth$/ })).toBeDisabled()
-  await expect(page.locator('.shot-tab .clip-section .hint').last()).toContainText('77 frames (E19)')
+  await expect(page.locator('.shot-tab .clip-section .hint').last()).toContainText('for 77 frames')                 // the E19 note sits in its ? (D116)
   type Doc = { id: string; name: string; passes: { guides?: Record<string, { asset_id: string; frames: number; size: { w: number; h: number } }> }[] }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === name)!
   await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
@@ -928,9 +928,12 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(editor.locator('.comp-mask-list li')).toHaveCount(2)
   await expect(editor.locator('.comp-mask-list li').nth(1)).toHaveAttribute('data-animated', 'true')                 // keyed on every frame: it follows
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 9/)
+  const settled = () => expect(page.locator('.final-viewer')).not.toHaveAttribute('data-editing', 'true')          // the edit's reloads done: the next command is not dropped
+  await settled()
   await editor.locator('.comp-mask-list li').nth(0).locator('button[title^="Follow the motion"]').click()            // the rectangle tracked from the playhead
   await expect(editor.locator('.comp-mask-list li').nth(0)).toHaveAttribute('data-animated', 'true')
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 10/)
+  await settled()
   await editor.locator('.verbs button[title^="Mask: object"]').click()
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5)
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 11/)

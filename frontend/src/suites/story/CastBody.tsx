@@ -3,6 +3,7 @@
 // character's build. None = the default 1.75 m adult. The silhouette is drawn from the numbers the dummy is built with (stage/body.ts),
 // the default adult behind it for scale. Saved like the rest of the sheet (setSheet); read-only on a final version.
 import { Plus, X } from 'lucide-react'
+import { Help } from '../../frame/Help'
 import type { Profile, ProfileVersion } from '../../api/types'
 import { BUILD_WIDTH, DEFAULT_BODY, bodyDims, type Body } from '../stage/body'
 import { CommandButton } from '../../frame/CommandButton'
@@ -26,7 +27,7 @@ export function CastBody({ p, v }: { p: Profile; v: ProfileVersion }) {
     <>
       <label>body</label>
       <div className="cast-body empty">
-        <span className="hint">The default dummy (a 1.75 m adult). A body shapes {p.name}'s figure on the stage — height, build, proportions, a tail or horns.</span>
+        <span className="hint">The default dummy (a 1.75 m adult). <Help text={`A body shapes ${p.name}'s figure on the stage: height, build, proportions, a tail or horns.`} /></span>
         {open && <button type="button" className="quiet" onClick={() => setSheet({ body: DEFAULT_BODY as never })} title="Give this version a body of its own (starts as the default adult)"><Plus size={12} /> body</button>}
         {open && v.anim_ref_asset_id && <CommandButton id="story.cast.fitBody" text size={12} />}
       </div>

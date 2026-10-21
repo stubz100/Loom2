@@ -1,6 +1,7 @@
 // Places (D34, proto01_design/01 §6a): Unprocessed, Library, the Album's group tree and Trash. Places are where you go;
 // conditions live in the strip's filter chips. Every row takes dropped tiles; group rows take cards too.
 import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, FolderPlus, Inbox, Library, Pencil, Trash2, Ungroup, X } from 'lucide-react'
+import { Help } from '../../frame/Help'
 import { useEffect, type ReactNode } from 'react'
 import { askText, useSession } from '../../store/session'
 import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
@@ -96,7 +97,7 @@ export function Places() {
         onMenu={(e) => showMenu(e, [{ label: 'Open', icon: Library, run: () => openPlace(c, 'library') }, { label: 'Open in other pane', icon: Columns2, run: () => openInOtherPane('library') }])} />
       <AlbumHead active={q.group_id === ALBUM_ID} onOpen={() => openPlace(c, { group: ALBUM_ID })} onNew={newGroup} />
       {tree && <TreeRows nodes={tree.children} depth={0} />}
-      {tree && !tree.children.length && <p className="hint">No groups yet. Make one with <FolderPlus size={12} style={{ verticalAlign: '-2px' }} />, then drag photos onto it.</p>}
+      {tree && !tree.children.length && <p className="hint">No groups yet. <Help text={"Make one with the new-group button, then drag photos onto it."} /></p>}
       <div className="spacer" />
       <Row icon={<Trash2 size={16} />} label="Trash" count={c.counts.trash ?? ''} active={q.folder === 'trash'}
         drop={{ accept: onlyAssets, run: (p) => { const ids = assetIds(p); void c.trash(ids) } }} onOpen={() => openPlace(c, 'trash')}

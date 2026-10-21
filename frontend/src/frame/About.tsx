@@ -2,6 +2,7 @@
 // shell was built from, the pinned engine and custom nodes, schema versions — plus the state / logs / models folders and a
 // "Copy diagnostics" button that puts all of it (and the engine and queue state) on the clipboard for a bug report.
 import { useEffect, useState } from 'react'
+import { Help } from './Help'
 import { http, unwrap } from '../api/client'
 import type { VersionInfo } from '../api/types'
 import { isTauri, revealPath } from '../shell/tauri'
@@ -39,8 +40,7 @@ export function About() {
       <label>App state</label><span className="mono row">{info.paths.state} {reveal(info.paths.state)}</span>
       <label>Logs</label><span className="mono row">{info.paths.logs} {reveal(info.paths.logs)}</span>
       <label>Models root</label><span className="mono row">{info.paths.models_root} {reveal(info.paths.models_root)}</span>
-      <label>Diagnostics</label><span><button onClick={() => void copy()}>Copy diagnostics</button></span>
-      <span className="hint">versions, engine and queue state as JSON — paste it into a bug report or the journal</span>
+      <label>Diagnostics <Help text={"Versions, engine and queue state as JSON — paste it into a bug report or the journal."} /></label><span><button onClick={() => void copy()}>Copy diagnostics</button></span>
     </>
   )
 }

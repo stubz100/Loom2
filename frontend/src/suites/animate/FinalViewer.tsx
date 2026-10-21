@@ -26,6 +26,7 @@ export function FinalViewer() {
   const busy = useSession((s) => Object.values(s.jobs).some((j) => j.status === 'running'))
   const selected = useComposition((s) => s.selected)
   const selName = useComposition((s) => s.layers.find((l) => l.id === s.selected)?.name)
+  const editing = useComposition((s) => s.busy)                           // an edit in flight (the engine round-trip and the reloads)
   const maskTool = useComposition((s) => s.maskTool)
   const before = useComposition((s) => s.before)
   const img = useRef<HTMLImageElement>(null)
@@ -95,7 +96,7 @@ export function FinalViewer() {
     ? { left: Math.min(drag.x0, drag.x0 + drag.dx) - drag.vbox.left, top: Math.min(drag.y0, drag.y0 + drag.dy) - drag.vbox.top, width: Math.abs(drag.dx), height: Math.abs(drag.dy) } : null
   const side = shown?.side ?? 'half'
   return (
-    <div className="anim-stage final-viewer" data-final={final.id}>
+    <div className="anim-stage final-viewer" data-final={final.id} data-editing={editing ? 'true' : undefined}>
       <div ref={view} className={`anim-view final-view${maskTool !== 'off' ? ' masking' : ''}`}>
         {shown ? <div className="frame-box">
           <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}

@@ -2,6 +2,7 @@
 // caveat in plain sight, the verb as a command (D32). The talking clip lands as a take on the version (never its clip until picked).
 // D90 (B6): a line longer than the window (its audio's duration against `seconds_max`) is listed but cannot be picked.
 import { useEffect } from 'react'
+import { Help } from '../../frame/Help'
 import type { ShotVersion } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
@@ -21,8 +22,7 @@ export function LipsyncBlock({ v, ownerNode }: { v: ShotVersion; ownerNode: stri
   const preset = caps.presets?.[opts.preset] as { label?: string; seconds?: number | null } | undefined
   return (
     <div className="lipsync" aria-label="lip-sync">
-      <h4>Lip-sync <span className="badge experimental" title={caps.caveat}>experimental</span></h4>
-      <p className="hint">{caps.caveat}</p>
+      <h4>Lip-sync <span className="badge experimental" title={caps.caveat}>experimental</span><Help text={caps.caveat} /></h4>
       {!caps.available ? <span className="hint">{caps.why}</span> : (
         <div className="kv">
           <span>line</span>

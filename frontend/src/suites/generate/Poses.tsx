@@ -2,6 +2,7 @@
 // that apply to the chosen tiles, the presets as quick picks; what Expand ▶ runs, one image per cell, the prompt's pose and action
 // replaced by the cell's. With a Cast character linked in the prompt the images land as its candidates (D93 A1), each with its cell.
 import { Fragment } from 'react'
+import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { useStory } from '../story/storyStore'
 import { expandCells, useGenerate, type PoseCell } from './generateStore'
@@ -48,7 +49,7 @@ export function PosesSection() {
     <section id="gen-sec-poses" className="gen-sec poses-sec" data-run={run}>
       <h4 className="gen-sec-head"><span>Poses{run === 'expand' ? ` · ${cells.length} cell${cells.length === 1 ? '' : 's'}` : ''}</span><span className="spacer" />
         {run === 'expand' && <button type="button" className="quiet" disabled={!poses.cells.length} title="No poses" onClick={() => g().setPoses({ ...poses, cells: [] })}>clear</button>}</h4>
-      {run !== 'expand' ? <span className="hint">Expand (the switch under the prompt) runs one image per pose chosen here, with the prompt's pose and action replaced by the pose's.</span> : <>
+      {run !== 'expand' ? <span className="hint">Expand is off. <Help text={"Expand (the switch under the prompt) runs one image per pose chosen here, with the prompt's pose and action replaced by the pose's."} /></span> : <>
         <div className="pose-presets" aria-label="coverage presets">
           {Object.entries(presets).map(([k, v]) => <button key={k} type="button" className="quiet" data-preset={k} title={`${v.hint} — ${v.cells} cells`}
             onClick={() => g().setPoses({ cells: (v.plan ?? []).map((c) => ({ shot: c.shot, angle: c.angle, expression: c.expression })), expressions: unique((v.plan ?? []).map((c) => c.expression)) })}>{v.label}</button>)}
@@ -71,9 +72,9 @@ export function PosesSection() {
           {exprs.map((x) => { const on = poses.expressions.includes(x); return <button key={x} type="button" className={`chip${on ? ' on' : ''}`} aria-pressed={on} data-expression={x}
             title={on ? `Drop ${x} from the chosen poses` : `Add ${x} to the chosen poses`} onClick={() => g().toggleExpression(x)}>{x}</button> })}
         </div>
-        <span className="hint" data-lands>{!cells.length ? 'Pick at least one pose: a tile is a shot size and an angle; the chips add expressions to the chosen tiles.'
+        <span className="hint" data-lands>{!cells.length ? 'No pose picked.'
           : name ? `${cells.length * count} image${cells.length * count === 1 ? '' : 's'} land as ${name}'s candidates in Cast, each with its pose recorded.`
-            : 'No Cast character is linked in the prompt: the images land in the Catalogue as a batch (link one in the Prompt section to grow its reference set).'}</span>
+            : 'No Cast character is linked in the prompt: the images land in the Catalogue as a batch (link one in the Prompt section to grow its reference set).'}</span>{!cells.length && <Help text={"A tile is a shot size and an angle; the chips add expressions to the chosen tiles."} />}
       </>}
     </section>
   )

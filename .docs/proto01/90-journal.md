@@ -7351,3 +7351,29 @@ The author asked for a review of the state of things, then "record all this and 
 - **Docs:** 21 revised again (the ? rule, the tools, the tree and the strip, new checks); 20 §5; 07's status row; README; CLAUDE.md rule 11.
 - **Next:** the author's look at 21 (and whether the Performance panel itself should move to the foot); the looks at 15, 17, 18, 19; the ?
   sweep over Story, Image and Edit; then the rest of the UX9 register.
+
+## 2026-10-21 18:24 — doc 19 answered by the author; the ? sweep over Story, Image, Edit, Catalogue and the frame (UX9 U4 complete); D116's e2e run; E29's script
+
+- **The author's answers to 19** (2026-10-21): "no connection to effectcraft — all features should be built into loom2" (the engine stays
+  headless behind the Final level; no window, no link, no mention in the UI); the shadows "we discussed earlier in detail" (D105–D107 stand);
+  Q24 → (b), as D114 took it. Doc 19 is done; the looks still owed are 15, 17 and 18. "Let's carry on with our development plan" → 07's
+  order: UX9's remaining sweep, then E29 and E24, then AE4 / AE5.
+- **The ? sweep, the rest of the app (rule 11):** 79 descriptive hint blocks in 12 files moved behind the ? — Story (the World's styles,
+  library, saved panels, spine, variables; Cast's 3D model, animation reference, coverage, candidates, versions, takes; the Flow's board,
+  speakers, options; the strips' "pick a …" lines as a status plus a ?; the lip-sync caveat), Image (the Poses section's two lines, the
+  LoRA slots' note), Edit (every tool's instruction line in the tool options — smart select, heal, brush keys, marquee and lasso modifiers,
+  wand tolerance, transform, crop, eyedropper, hand, zoom, smoothing, the brush panel, refine, SAM, quick remove, the AI panel's note, the
+  adjustment preview, the curves), the Catalogue's places, and the frame's Settings (every description under a field now sits in its label's
+  ?; the pen-pressure remark on the App heading), About, Keyboard, the project dialog. Status lines stayed (counts, "None yet.", the LoRA
+  count, the estimate). `.help.full` for a full-row ? in Edit's tool options.
+- **D116's e2e, run once port 1420 was free** (the author's Vite was gone): two scenarios (the clip, the pose-driven shot) failed on the
+  Performance tree — the empty reference slot caught the click meant for a result thumbnail. A geometry probe through the harness
+  (every direct child's placement) showed the Frame step's rows all in one grid cell: the rows' class `top` matched frame.css's
+  `.top { grid-area: top }` (the app's top bar), so every tall row was placed in a named area and stacked. The class is `tall` now; a
+  first guess (fixed heights for the slots) was reverted. The open variant also lost the Object Matte click once: the frame's click landed
+  while the previous edit's reloads were still in flight — the viewer carries `data-editing` while an edit runs and the scenario waits for
+  it to clear before the next tool. e2e 49/49 full (48 passed in 3.5m, the pose-driven scenario rerun after its assertion moved to the ?) and 49/49 open (48 passed in 3.4m + the rerun); offline unchanged (482 full / 482 open, no orchestrator change); Vitest 392 + 3; build clean; lint 75.
+- **E29's script** (`engine/spikes/e29_lipsync.py`): L0 the PS5 rig's performed Mara layer (the PCK and FaceSim to hold), L1 S2V as the
+  layer (E18's graph from her padded reference + E20's en1 line fitted to 77 frames), L2 an S2V talking head of her face (512², the same
+  line) as the Animate graph's `face_video` while the body follows Stage's pose pass; sync r, PCK@0.1 every 8th frame against Stage's
+  keypoints (SDPose), FaceSim at three frames, time; the engine standalone on 8188, stopped after. Runs next, alone on the GPU (D97).

@@ -2,6 +2,7 @@
 // the command without a key, ↺ restores its own. A remap that collides is refused with the other command's name; Arrows, Esc, Space and
 // Tab are fixed. Overrides live on this machine (keyStore.ts) and every tooltip, menu, help row and palette entry follows them.
 import { RotateCcw, X } from 'lucide-react'
+import { Help } from './Help'
 import { useEffect, useMemo, useState } from 'react'
 import { askConfirm } from '../store/session'
 import { commandsFor, defaultKeysOf, keyLabel, type Scope } from './commands'
@@ -43,7 +44,7 @@ export function KeyboardSettings() {
   const changed = Object.keys(overrides).length
   return (
     <div className="keys-settings">
-      <span className="hint">Key changes apply at once and stay on this machine — Save and Cancel do not touch them. Every command keeps its button or menu entry.</span>
+      <span className="hint">Changes apply at once. <Help text={"Key changes stay on this machine — Save and Cancel do not touch them. Every command keeps its button or menu entry."} /></span>
       <div className="keys-top">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search commands or keys" aria-label="Search commands or keys" />
         <button className="quiet" disabled={!changed} onClick={() => void askConfirm({ title: 'Reset all keys', text: `${changed} changed key${changed === 1 ? '' : 's'} go back to the defaults.`, okLabel: 'Reset all' }).then((ok) => { if (ok) { resetAllKeys(); setNote(null) } })}>

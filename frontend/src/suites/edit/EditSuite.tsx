@@ -1,6 +1,7 @@
 // Edit suite (10): toolbox and tool options in the Panel, zoom/overlay strip, PixiJS stage, inspector with
 // Layers / Properties / History / Info; Save (the document and a Catalogue version, D95) · Export as the pinned primary actions.
 import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
+import { Help } from '../../frame/Help'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
@@ -81,7 +82,7 @@ function QuickOptions() {
     <div className="tool-opts">
       <ValueField label="size" value={size} min={1} max={5000} unit="px" title="brush diameter — [ and ] change it" onChange={(v) => ed().setView({ quickSize: Math.max(1, Math.round(v)) })} />
       <label /><label className="chk" title="look at every visible layer instead of the active one"><input type="checkbox" checked={all} onChange={(e) => ed().setView({ quickSampleAll: e.target.checked })} /> sample all layers</label>
-      <span className="hint full">paint over what you want: the selection grows to its edges (computed when you let go); every stroke adds, Alt subtracts. Runs on the CPU in a Worker — no GPU.</span>
+      <Help className="full" text={"Paint over what you want: the selection grows to its edges (computed when you let go); every stroke adds, Alt subtracts. Runs on the CPU in a Worker, no GPU."} />
     </div>
   )
 }
@@ -94,7 +95,7 @@ function HealOptions() {
     <div className="tool-opts">
       <ValueField label="size" value={size} min={1} max={1000} unit="px" title="brush diameter — [ and ] change it" onChange={(v) => ed().setView({ healSize: Math.max(1, Math.round(v)) })} />
       <label /><label className="chk" title="heal what you see (all visible layers); off: only the active layer"><input type="checkbox" checked={all} onChange={(e) => ed().setView({ healSampleAll: e.target.checked })} /> sample all layers</label>
-      <span className="hint full">{ok ? 'paint over a blemish: on release it is rebuilt from its surroundings (PatchMatch, then a Poisson blend) onto a "Spot healing" layer above — non-destructive, one undo step per stroke. CPU, no GPU.' : 'needs the native extension: uv sync --project orchestrator --extra native, then restart the orchestrator'}</span>
+      {ok ? <Help className="full" text={"Paint over a blemish: on release it is rebuilt from its surroundings (PatchMatch, then a Poisson blend) onto a \"Spot healing\" layer above — non-destructive, one undo step per stroke. CPU, no GPU."} /> : <span className="hint full">needs the native extension: uv sync --project orchestrator --extra native, then restart the orchestrator</span>}
     </div>
   )
 }
@@ -157,29 +158,29 @@ function ToolOptions() {
           <BrushControls />
           {tool === 'brush' && <><label>colour</label><Swatches /></>}
           <label /><CommandRow ids={['edit.brush.smaller', 'edit.brush.larger', 'edit.brush.softer', 'edit.brush.harder']} />
-          <span className="hint full">[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected</span>
+          <Help className="full" text={"[ ] size · Shift+[ ] hardness · 0–9 opacity · X swap · D defaults · pressure controls appear once a pen is detected."} />
         </div>
       )}
       {tool === 'marquee' && <div className="tool-opts"><label>shape</label><div className="segmented">{(['rect', 'ellipse'] as const).map((m) => <button key={m} className={marqueeShape === m ? 'active' : ''} onClick={() => ed().setView({ marqueeShape: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
         <label>style</label><div className="segmented">{(['normal', 'ratio', 'size'] as const).map((m) => <button key={m} className={sv.marqueeStyle === m ? 'active' : ''} title={{ normal: 'drag any rectangle', ratio: 'fixed ratio W : H', size: 'fixed size W × H px, hanging from the pointer' }[m]} onClick={() => ed().setView({ marqueeStyle: m })}>{m === 'ratio' ? 'fixed ratio' : m === 'size' ? 'fixed size' : m}</button>)}</div>
         {sv.marqueeStyle !== 'normal' && <><ValueField label={sv.marqueeStyle === 'ratio' ? 'ratio W' : 'width'} value={sv.marqueeW} min={1} max={sv.marqueeStyle === 'ratio' ? 100 : 16384} step={1} unit={sv.marqueeStyle === 'ratio' ? undefined : 'px'} onChange={(v) => ed().setView({ marqueeW: v })} /><ValueField label={sv.marqueeStyle === 'ratio' ? 'ratio H' : 'height'} value={sv.marqueeH} min={1} max={sv.marqueeStyle === 'ratio' ? 100 : 16384} step={1} unit={sv.marqueeStyle === 'ratio' ? undefined : 'px'} onChange={(v) => ed().setView({ marqueeH: v })} /></>}
-        <span className="hint full">Shift adds, Alt subtracts, Shift+Alt intersects while dragging</span></div>}
+        <Help className="full" text={"Shift adds, Alt subtracts, Shift+Alt intersects while dragging."} /></div>}
       {tool === 'lasso' && <div className="tool-opts"><label>kind</label><div className="segmented">{(['freehand', 'polygon', 'magnetic'] as const).map((m) => <button key={m} className={sv.lassoKind === m ? 'active' : ''} onClick={() => ed().setView({ lassoKind: m })}>{m}</button>)}</div><label>mode</label>{modeSeg}{featherField}
         {sv.lassoKind === 'magnetic' && <MagneticOptions />}
         {sv.lassoOpen && <><label>{sv.lassoKind === 'magnetic' ? 'border' : 'polygon'}</label><span><CommandButton id="edit.sel.polyClose" text /> {sv.lassoKind === 'magnetic' && <CommandButton id="edit.sel.magBack" text />} <CommandButton id="edit.sel.polyCancel" text /></span></>}
-        <span className="hint full">{sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : sv.lassoKind === 'magnetic' ? 'click on an edge, then move along it — the border snaps to the edge and drops points as it goes; click to place a point, Alt-click a straight segment (Alt-drag: freehand), Backspace removes a point; click the first point, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects</span></div>}
+        <Help className="full" text={`${sv.lassoKind === 'polygon' ? 'click to add corners; click the first corner, double-click or ✓ to close' : sv.lassoKind === 'magnetic' ? 'click on an edge, then move along it — the border snaps to the edge and drops points as it goes; click to place a point, Alt-click a straight segment (Alt-drag: freehand), Backspace removes a point; click the first point, double-click or ✓ to close' : 'drag a freehand outline'}; Shift adds, Alt subtracts, Shift+Alt intersects`} /></div>}
       {tool === 'quick' && <QuickOptions />}
       {tool === 'heal' && <HealOptions />}
       {tool === 'wand' && <div className="tool-opts"><label>mode</label>{modeSeg}<Slider label="tolerance" value={tolerance} min={0} max={255} step={1} onChange={(v) => ed().setView({ tolerance: v })} />
         <label /><label className="chk" title="look at every visible layer instead of the active one"><input type="checkbox" checked={sv.wandMerged} onChange={(e) => ed().setView({ wandMerged: e.target.checked })} /> sample all layers</label>
         <label /><span><label className="chk"><input type="checkbox" checked={sv.wandContiguous} onChange={(e) => ed().setView({ wandContiguous: e.target.checked })} /> contiguous</label> <label className="chk"><input type="checkbox" checked={sv.wandAA} onChange={(e) => ed().setView({ wandAA: e.target.checked })} /> anti-alias</label></span>
-        <span className="hint full">tolerance per channel including alpha; transparent pixels match each other whatever their hidden colour</span></div>}
+        <Help className="full" text={"Tolerance per channel including alpha; transparent pixels match each other whatever their hidden colour."} /></div>}
       {tool === 'fill' && <div className="tool-opts"><label>mode</label><div className="segmented">{(['solid', 'linear', 'radial'] as const).map((m) => <button key={m} className={fillMode === m ? 'active' : ''} onClick={() => ed().setView({ fillMode: m })}>{m}</button>)}</div><label>colour</label><Swatches /><Slider label="opacity" value={b.opacity} min={0} max={1} step={0.01} scale={100} unit="%" onChange={(v) => set({ opacity: v })} /><span className="hint full">{fillMode === 'solid' ? 'click fills the selection, or the whole layer (mask: white) when nothing is selected' : `drag from the foreground colour to the background colour (${fillMode}); limited to the selection when there is one; on a mask: white → black`}</span></div>}
       {tool === 'move' && (
         <div className="tool-opts">
           <label>nudge</label><div className="nudge"><button onClick={() => nudge(0, -1)}>▲</button><button onClick={() => nudge(-1, 0)}>◀</button><button onClick={() => nudge(1, 0)}>▶</button><button onClick={() => nudge(0, 1)}>▼</button></div>
           <label>transform</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{transforming ? <CommandRow ids={['edit.transform.apply', 'edit.transform.cancel']} /> : <CommandButton id="edit.transform" text />}<CommandRow ids={['edit.layer.flipH', 'edit.layer.flipV', 'edit.layer.rot270', 'edit.layer.rot90']} /></div>
-          <span className="hint full">{transforming ? 'drag inside to move, a corner or edge to scale (in proportion — Shift frees it, Alt from the reference point), outside to rotate (Shift snaps 15°); Ctrl-drag a corner to distort, an edge to skew, Ctrl+Alt+Shift a corner for perspective (or pick the mode in the strip); Alt-click places the reference point; Enter / double-click applies, Esc cancels' : 'drag the active raster layer on the canvas; Ctrl+T enters free transform'}</span>
+          <Help className="full" text={transforming ? 'drag inside to move, a corner or edge to scale (in proportion — Shift frees it, Alt from the reference point), outside to rotate (Shift snaps 15°); Ctrl-drag a corner to distort, an edge to skew, Ctrl+Alt+Shift a corner for perspective (or pick the mode in the strip); Alt-click places the reference point; Enter / double-click applies, Esc cancels' : 'drag the active raster layer on the canvas; Ctrl+T enters free transform'} />
         </div>
       )}
       {tool === 'crop' && (
@@ -188,12 +189,12 @@ function ToolOptions() {
           <ValueField label="height" value={cv.h} min={1} max={16384} step={1} unit="px" onChange={(v) => setCv({ ...cv, h: v })} />
           <label>anchor</label><div className="anchor">{[0, 0.5, 1].map((ay) => [0, 0.5, 1].map((ax) => <button key={`${ax}-${ay}`} className={cv.ax === ax && cv.ay === ay ? 'active' : ''} onClick={() => setCv({ ...cv, ax, ay })}>•</button>))}</div>
           <label /><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button disabled={!doc || transforming || (cv.w === doc.w && cv.h === doc.h)} onClick={() => ed().resizeCanvas(cv.w, cv.h, cv.ax, cv.ay)}>Resize canvas</button><CommandButton id="edit.crop.apply" text /><CommandButton id="edit.crop.cancel" text /></div>
-          <span className="hint full">drag on the canvas to draw the crop rectangle (any selection crops too); Enter or a double-click inside applies it, Esc cancels — or set the canvas size above. Layers keep their pixels; a smaller canvas only hides what lies outside</span>
+          <Help className="full" text={"Drag on the canvas to draw the crop rectangle (any selection crops too); Enter or a double-click inside applies it, Esc cancels — or set the canvas size above. Layers keep their pixels; a smaller canvas only hides what lies outside."} />
         </div>
       )}
-      {tool === 'eyedropper' && <p className="hint">Click the canvas to pick the composited colour into the foreground swatch.</p>}
-      {tool === 'hand' && <p className="hint">Drag to pan. Space + drag pans with any tool; middle mouse too.</p>}
-      {tool === 'zoom' && <p className="hint">Click zooms in, Alt-click out; Ctrl+wheel zooms anywhere; Ctrl+0 fit, Ctrl+1 1:1.</p>}
+      {tool === 'eyedropper' && <p className="hint">Eyedropper <Help text={"Click the canvas to pick the composited colour into the foreground swatch."} /></p>}
+      {tool === 'hand' && <p className="hint">Hand <Help text={"Drag to pan. Space + drag pans with any tool; middle mouse too."} /></p>}
+      {tool === 'zoom' && <p className="hint">Zoom <Help text={"Click zooms in, Alt-click out; Ctrl+wheel zooms anywhere; Ctrl+0 fit, Ctrl+1 1:1."} /></p>}
       {tool === 'ai' && <SelectControls compact />}
     </div>
   )
@@ -214,7 +215,7 @@ function BrushControls() {
       <ValueField label="spacing" value={b.spacing} min={0.02} max={1} scale={100} unit="%" onChange={(v) => set({ spacing: v })} />
       <ValueField label="smoothing" value={b.smoothing} min={0} max={1} scale={100} unit="%" onChange={(v) => set({ smoothing: v })} />
       <label /><span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}><CommandButton id="edit.brush.line" text active={line} /> <CommandButton id="edit.brush.pick" text active={pickOnce} /></span>
-      <span className="hint full">smoothing pulls the brush on a string (it catches up when you pause); Shift-click draws a straight line from the last stroke; Alt-click picks a colour</span>
+      <Help className="full" text={"Smoothing pulls the brush on a string (it catches up when you pause); Shift-click draws a straight line from the last stroke; Alt-click picks a colour."} />
     </>
   )
 }
@@ -242,7 +243,7 @@ function BrushesTab() {
         <BrushControls />
         <label>colour</label><Swatches />
       </div>
-      <p className="hint">Type a diameter or any value directly in the number fields. Pressure → size / opacity / flow and the pen curve appear once a pen is detected.</p>
+      <p className="hint"><Help text={"Type a diameter or any value directly in the number fields. Pressure → size / opacity / flow and the pen curve appear once a pen is detected."} /></p>
     </div>
   )
 }
@@ -261,7 +262,7 @@ function SelectionTab() {
       {/* D90 (01 §11.3): the clipboard's panel home (also the canvas menu); Ctrl+V still arrives as the browser's paste event (D46) */}
       <label>clipboard</label><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{['edit.copy', 'edit.cut', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.layer.viaCopy', 'edit.layer.viaCut'].map((id) => <CommandButton key={id} id={id} text />)}</div>
       <RefineEdgeControls />
-      <span className="hint full">expand / contract grow round by the amount; border makes a band that wide around the edge; smooth removes specks and jaggies; feather softens with Photoshop's radius. Every change, and every selection tool, is one undo step.</span>
+      <Help className="full" text={"Expand / contract grow round by the amount; border makes a band that wide around the edge; smooth removes specks and jaggies; feather softens with Photoshop's radius. Every change, and every selection tool, is one undo step."} />
     </div>
   )
 }
@@ -337,7 +338,7 @@ function SelectControls({ compact = false }: { compact?: boolean }) {
       <label /><label className="chk" title="soft, image-aware edges after the mask joins the selection — the Selection panel's Refine edge settings"><input type="checkbox" checked={p.selRefine} onChange={(e) => setP({ selRefine: e.target.checked })} /> refine edge</label>
       <label /><div style={{ display: 'flex', gap: 6 }}><AiRunButton id="edit.ai.select" reason={reason} className="primary" title="AI Select">Select ▶</AiRunButton>{!compact && <AiRunButton id="edit.ai.stage" reason={reason} title="add to the queue and run it later — Run now in the Dock">Queue</AiRunButton>}</div>
       {reason && <span className="hint full">{reason}</span>}
-      <span className="hint full">{sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'}</span>
+      <Help className="full" text={sam ? 'A tool on the canvas: click adds an include point, Alt-click an exclude point, drag draws a box · the mask joins the selection as chosen (SAM 3 ≈ 3 s warm)' : 'BiRefNet matte of the main subject (≈ 2 s warm) · for a background swap: Select, then invert the selection (Selection panel) and Inpaint'} />
     </div>
   )
 }
@@ -408,7 +409,7 @@ function AiTab() {
             <option value="fill" title="Klein + LanPaint (the default)">Fill</option><option value="fill_match" title="Klein ICM: continues the surrounding texture">Fill-Match · continues texture</option>{heroId && <option value="fill_hero" title={`${capModels?.[heroId]?.label.split(' · ')[0] ?? heroId} + LanPaint: slow, best detail`}>Fill Hero · slow, best detail</option>}<option value="remove" title="paints what is behind, from a background-only prompt">Remove</option>{contentAware && <option value="quick_remove" title="content-aware fill on the CPU: seconds, no GPU">Quick remove · CPU</option>}
           </select>
           {mode === 'remove' && contentAware && <><label /><label className="chk" title="the hole is content-aware filled (PhotoCraft, CPU) and the model starts from that instead of a grey hole — try it where Remove leaves an object's ghost"><input type="checkbox" checked={p.prefill} onChange={(e) => setP({ prefill: e.target.checked })} /> pre-fill the hole (content-aware)</label></>}
-          {mode === 'quick_remove' && <span className="hint full">PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones</span>}
+          {mode === 'quick_remove' && <Help className="full" text={"PhotoCraft's content-aware fill on the CPU — no model, no GPU, a few seconds; best on small or textured areas, it smears large ones."} />}
           {mode !== 'quick_remove' && <><label>prompt</label><textarea value={p.prompt} rows={3} placeholder={p.mode === 'remove' ? 'what is behind: "wet cobblestones and a brick wall"' : 'what to paint there'} onChange={(e) => setP({ prompt: e.target.value })} />
 </>}
           {advanced('inpaint', <>
@@ -419,7 +420,7 @@ function AiTab() {
           <Slider label="feather" value={p.feather} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ feather: v })} />
           <Slider label="expand" value={p.expand} min={0} max={64} step={1} unit="px" onChange={(v) => setP({ expand: v })} />
           <label>blend</label><div className="segmented"><button className={p.blend === 'feather' ? 'active' : ''} title="the result fades in over the feather" onClick={() => setP({ blend: 'feather' })}>feather</button><button className={p.blend === 'seamless' ? 'active' : ''} title="Poisson-blend the result into the plate: it keeps its texture but takes the plate's colour and light at the seam — best for removals and continuing a texture; it also pulls an intended colour change towards the old colour near the edge" onClick={() => setP({ blend: 'seamless' })}>seamless</button></div>
-          <span className="hint full">results land with a layer mask: paint it (click the mask thumbnail) to adjust the seam</span>
+          <Help className="full" text={"Results land with a layer mask: paint it (click the mask thumbnail) to adjust the seam."} />
           </>)}
         </>}
         {p.op === 'outpaint' && <>
@@ -468,7 +469,7 @@ function AiTab() {
       </div>}
       {reason && <p className="hint" style={{ marginTop: 6 }}>{reason}</p>}
       {engineSize && <p className="hint" style={{ marginTop: 6 }}>engine image ≈ {engineSize.w}×{engineSize.h} ({engineSize.scale > 1.01 ? `upscaled ×${engineSize.scale.toFixed(2)}` : engineSize.scale < 0.99 ? `downscaled ×${engineSize.scale.toFixed(2)} to stay within 1 MP` : '1:1'})</p>}
-      {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}>Runs on the saved document; results come back as layers in an "AI" group with the recipe attached.{preview?.estimate?.seconds != null ? ` ≈ ${fmtSeconds(preview.estimate.seconds)} per ${p.op === 'upscale' ? 'run' : 'candidate'} — ${preview.estimate.source}.` : ''}</p>}
+      {p.op !== 'select' && <p className="hint" style={{ marginTop: 8 }}><Help text={"Runs on the saved document; results come back as layers in an \"AI\" group with the recipe attached."} />{preview?.estimate?.seconds != null ? ` ≈ ${fmtSeconds(preview.estimate.seconds)} per ${p.op === 'upscale' ? 'run' : 'candidate'} — ${preview.estimate.source}.` : ''}</p>}
       {p.op !== 'select' && preview && preview.missing.length > 0 && <p className="hint warn" style={{ marginTop: 6 }}>weights not fetched: {preview.missing.map((m) => m.model_id).join(', ')} — fetch them in Models</p>}
       {p.op !== 'select' && preview?.problems && preview.problems.length > 0 && <p className="hint warn" style={{ marginTop: 6 }} title={preview.problems.join('\n')}>the engine would refuse this recipe: {preview.problems[0]}{preview.problems.length > 1 ? ` (+${preview.problems.length - 1} more)` : ''}</p>}
     </div>
@@ -960,7 +961,7 @@ function PropertiesTab() {
             <label>clip</label><label className="chk"><input type="checkbox" checked={n.clip} onChange={(e) => ed().updateNode(n.id, { clip: e.target.checked }, 'clip')} /> clip to the layer below</label>
             <label /><button type="button" className="quiet" style={{ justifySelf: 'start' }} disabled={!defaults} onClick={() => { if (defaults) { start(); setParams(JSON.parse(JSON.stringify(defaults))); commit(`${n.type} reset`) } }}>Reset to defaults</button>
           </div>
-          <p className="hint">Previewed on the canvas with the compositor's own formulas; rendered exactly in the orchestrator on Save / Export.{editor && n.type !== 'color_balance' ? ' The histogram shows the visible pixel layers below this one.' : ''}</p>
+          <p className="hint"><Help text={`Previewed on the canvas with the compositor's own formulas; rendered exactly in the orchestrator on Save / Export.${editor && n.type !== 'color_balance' ? ' The histogram shows the visible pixel layers below this one.' : ''}`} /></p>
         </Section>
       )}
       {n.mask && (

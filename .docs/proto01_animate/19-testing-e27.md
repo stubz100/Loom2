@@ -53,6 +53,8 @@ Where should the hand finishing happen?
 
 | Check | Answer |
 | --- | --- |
-| Finish in EffectCraft's window? | |
-| The shadows, softened? | |
-| Q24: (a), (b), or (a) then (b)? | |
+| Finish in EffectCraft's window? | **No connection to EffectCraft — all features should be built into loom2** (the author, 2026-10-21): the engine stays headless behind Animate's Final level (D114, D116); no window, no link, no mention of it in the UI. |
+| The shadows, softened? | Discussed earlier in detail (D105–D107: both shadow sources kept, the contact offset); nothing new here. |
+| Q24: (a), (b), or (a) then (b)? | **(b)** — the editor inside Animate on EffectCraft's engine, as D114 took it. |
+
+Answered 2026-10-21; doc 19 is done. The author's looks still owed: 15, 17, 18.

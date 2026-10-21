@@ -2,6 +2,7 @@
 // trained LoRAs first (LT2), the roster's free LoRAs, the files under the loras folder — with a strength per slot; the ones that do not
 // fit stay visible but disabled with the sentence. The recipe carries loras[], the preview names the files, the manifest records them.
 import { useEffect } from 'react'
+import { Help } from '../../frame/Help'
 import { useGenerate } from './generateStore'
 
 const SLOTS = [0, 1, 2, 3]
@@ -53,9 +54,8 @@ export function LoraSlots() {
           )
         })}
         <span className="hint">
-          {opts.length === 0
-            ? 'no LoRA on disk for this model — train one in Story · Cast (the LT wave) or put a .safetensors under the loras folder'
-            : `${fitting.length} available${others.length ? `, ${others.length} for other models` : ''}; a file LoRA declares no family — the job log names keys the engine cannot load`}
+          {opts.length === 0 ? 'no LoRA on disk for this model' : `${fitting.length} available${others.length ? `, ${others.length} for other models` : ''}`}
+          <Help text={opts.length === 0 ? 'Train one in Story · Cast (the LT wave) or put a .safetensors under the loras folder.' : 'A file LoRA declares no family: the job log names keys the engine cannot load.'} />
         </span>
       </div>
     </div>

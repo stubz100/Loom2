@@ -147,8 +147,8 @@
 .step > summary .state { margin-left: auto; font-size: 11px; }
 .step > summary .verb { display: inline-flex; }
 .step > .step-body { display: grid; gap: 6px; padding: 4px 0 2px; }
-.shot-tab .kv.top { align-items: start; }
-.shot-tab .kv.top > span:first-child { padding-top: 4px; }
+.shot-tab .kv.tall { align-items: start; }   /* not `top`: frame.css's .top is a grid area and would stack these rows in one cell */
+.shot-tab .kv.tall > span:first-child { padding-top: 4px; }
 .shot-tab .kv .method-list, .shot-tab .kv .pass-row, .shot-tab .kv .shot-results { margin: 0; }
 .shot-tab .kv .shot-prompt { min-height: 48px; }
 .rig-strip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }

@@ -269,3 +269,4 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .help:hover { color: var(--fg); }
 h4 .help, .hint .help, label .help { margin-left: 3px; }
 .verbs .help { align-self: center; margin-left: auto; }
+.help.full { grid-column: 1 / -1; justify-self: start; }

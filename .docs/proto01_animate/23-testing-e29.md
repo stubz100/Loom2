@@ -36,9 +36,37 @@ Which way for lip-sync in the clay route?
 - **(b)** L3: approve a lip-sync post model after its licence is read — one more spike, one more node.
 - **(c)** No lip-sync in the clay route for now: the voice plays over the shot; the mouth is left to the post stage later.
 
+## 4. E29b — the head as its own layer (D117, ≈ 4 min)
+
+Your two ideas, run the same evening (journal 2026-10-21 22:14): the head cropped from the layer by Stage's keypoints (a tracked, smoothed box),
+worked on at 512×512, pasted back with a feathered edge. Everything under `engine\spikes\out\e29b\`; every measure is on the head crop
+now, so the mouth counts at its real size.
+
+| File | What it is | The numbers |
+| --- | --- | --- |
+| `h0.mp4` | the layer's own head crop, upscaled (no speech) — the baseline | identity 0.25–0.30 (a blurry, smeared face: the Move layer's head is ≈ 100 px) |
+| `calm_head.mp4` | the S2V talking head with a quieter prompt (the driving face for the c arms) | **sync r 0.66** (E29's head 0.60); a little calmer (articulation 14.3 vs 14.6); 510 s |
+| `l2c.mp4` | E29's L2 with the calmer head (the full layer) — `l2c_head.mp4` its crop | sync r 0.47 on the crop (E29's 0.33 was measured on the tiny full frame); the face mushy, identity 0.04–0.17 |
+| **`l2h.mp4`** | **the head as a layer**: Wan Animate on the head crop of the pose pass with your reference's head and E29's face video, pasted back — `l2h_head.mp4` the head alone | **identity 0.42–0.61 (from 0.25–0.30)** — a sharp, recognisable face where the layer had a smear; sync r 0.31, the mouth more exaggerated (articulation 33.9 vs 26.9 at rest); the body untouched (PCK 0.972), the seam faint (1.3); 329 s |
+| `l2hc.mp4` | the same with the calmer head | identity 0.47–0.60; sync r 0.32; articulation 33.4; 316 s |
+| `l3a.mp4` | **L3 · LatentSync 1.5** (ByteDance; code Apache-2.0, the weights OpenRAIL++ — `full` variant only) on the head-crop clip at 25 fps, pasted back — `l3a_head.mp4` the head alone | **sync r 0.33** by the mouth-energy proxy (Animate's 0.32 — on a moving head the proxy counts the head's own motion and cannot separate the two; the static S2V heads score 0.60–0.66 for that reason); identity 0.48–0.56 (kept); seam 1.5; **104 s**; to the eye the most natural mouth of the heads — open on the vowels without Animate's bared teeth: look at `l3a_head.mp4` beside `l2hc_head.mp4` |
+
+- **Look at `l2h.mp4` beside `h0.mp4` and E29's `l2.mp4`**: the head-as-a-layer run gives Mara a face — sharp, with her glasses — on top
+  of the lip movement. That is worth more than the lip-sync itself: a **head pass** at 512² for every character layer.
+- **Look at `l3a.mp4`** (if it ran): a lip-sync model repaints only the mouth of the crop — does it read better than Animate's mouth, and
+  does the face stay hers?
+- `sheet.jpg`: three frames of each head (h0, l2c, l2h, l2hc, l3a).
+
+The mouth's exaggeration: the driving head is the lever (the native Animate node has no face strength; the field's wrappers add one), and
+a quieter S2V prompt only did a little. A lip-sync model on the head layer's output (l2h → L3) is the next thing to try if L3 reads well.
+
+**Q25 again:** (a) the head layer for every character (the face pass), with L2's face video for lines — and L3 on top if it reads
+better; (b) the head layer, lines by L3 only; (c) something else you saw in the clips.
+
 ## Notes
 
 | Check | Answer |
 | --- | --- |
 | Is the mouth readable in `l2.mp4` at all? | |
-| Q25: (a), (b) or (c)? | |
+| Q25: (a), (b) or (c)? | answered 2026-10-21 → D117, E29b |
+| E29b: the head layer as a face pass — yes? L3's mouth better than Animate's? | |

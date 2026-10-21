@@ -7433,3 +7433,46 @@ The author asked for a review of the state of things, then "record all this and 
   a close shot with E29b.** Doc 24 asks the author.
 - Gotcha: the spike engine client's `run` returns the history even when a node failed (the error sits in `status.messages`,
   `execution_error`); check the output node is in `outputs` before downloading.
+
+## 2026-10-21 21:37 — Q25 answered → D117: L2 refined for small heads, L3 tested beside it (spike E29b); docs 15, 17, 18 closed for now
+
+- **The author** (on docs 23 / 24): L2's mouth "is very exaggerated, it doesn't work well with the animation this small — with some refining
+  it might become acceptable"; ideas: upscale the video, or "taking the head only from the animation as a separate layer"; "I'd try to work
+  with L2 … not sure if a thorough internet search on the topic would not give us a few new ideas … I'd also test L3"; 15, 17, 18 closed
+  until everything is ready; 21's questions later. The post stages' proposal (doc 24) is still unanswered.
+- **The search** (2026-10-21): the author's head-layer idea *is* the field's practice — every lip-sync tool detects the face, crops a padded
+  box, lip-syncs the crop at its own size and pastes it back with a feathered edge (MuseTalk regenerates a 256² patch over the mouth,
+  LatentSync a 512² face crop; a soft patch on a sharp face and a seam are the known failure modes, face restoration the known remedy;
+  LatentSync wants 25 fps). Wan 2.2 Animate's native node has no face strength (ComfyUI issue #10401 asks for it; kijai's wrapper has
+  `face_strength`), so the exaggeration comes from the driving head and a calmer one is the lever. **Licences read:** LatentSync
+  (ByteDance) Apache-2.0; MuseTalk (Tencent Music Entertainment) MIT, its parts MIT (sd-vae-ft-mse, whisper, face-parsing), Apache-2.0
+  (DWPose), BSD-3 (face-alignment), s3fd unnamed — our own SCRFD detector can stand in; InfiniteTalk (MeiGen) Apache-2.0 for code and
+  weights, on the Wan 2.1 I2V 14B 480P base (fp8 offered), video-to-video dubbing with "head movements, body posture and facial
+  expressions" aligned — the heaviest, kept as the third candidate. Wav2Lip is non-commercial: out.
+- **D117** recorded: spike E29b with (1) the head layer (tracked from Stage's keypoints, cropped, upscaled, lip-synced, pasted back),
+  (2) L2 refined — Wan Animate on the head crop with the S2V face video, and a calmer driving head, (3) L3 on the crop: LatentSync and
+  MuseTalk standalone in a spike venv (the engine venv has ROCm torch but no diffusers; no custom node until there is a winner),
+  InfiniteTalk if they fall short. Bars: sync r ≥ 0.5 on the head crop, the pose kept, FaceSim ≥ the baseline's, the author's eye.
+- Sources: sync.so on MuseTalk and LatentSync, the MuseTalk paper and repo (TMElyralab/MuseTalk), the LatentSync repo (bytedance/LatentSync)
+  and its ComfyUI wrappers, MeiGen-AI/InfiniteTalk, ComfyUI issue #10401.
+
+## 2026-10-21 22:14 — E29b ran: the head as its own layer gives the character a face (identity 0.25–0.30 → 0.42–0.61 at 512²) — a face pass beyond lip-sync; the calmer S2V head syncs best (0.66); **L3a**, LatentSync 1.5 on the head layer's output (its detector found no face in the layer's own smeared crop), runs in 104 s: sync r 0.33 by the proxy (which cannot separate the mouth from the head's motion on a moving head — the static S2V heads score 0.60–0.66 for that reason), identity 0.48–0.56 kept, seam 1.5; to the eye its mouth is the most natural of the heads, open on the vowels without Animate's bared teeth.
+
+- `engine/spikes/e29b_headlayer.py` on the PS5 rig's Mara layer: the head box per frame from Stage's COCO-18 keypoints (the nose, eyes and
+  ears' centre; a square of 2.6 × the nose–neck distance, smoothed over 9 frames; 83–108 px here), cropped and resized to 512², pasted
+  back with a rounded feathered mask (12 % soft). Arms: **h0** the baseline crop (identity 0.25–0.30, the Move layer's ≈ 100-px head
+  smeared); **calm_head** S2V on the reference's face with a quiet prompt — sync r 0.66 (E29's 0.60), articulation 14.3 vs 14.6, 510 s;
+  **l2c** E29's L2 with the calm face on the full layer — sync r 0.47 on the crop (E29's 0.33 was the tiny full frame), the face mushy
+  (identity 0.04–0.17), 270 s; **l2h** Wan Animate on the head crop of the pose pass with the reference's head and E29's face video,
+  pasted back — identity 0.42–0.61, a sharp face with her glasses, sync r 0.31, articulation 33.9 (the mouth more exaggerated than at
+  rest, 26.9), PCK 0.972 (the body untouched), seam 1.3, 329 s; **l2hc** the same with the calm face — identity 0.47–0.60, sync 0.32,
+  316 s. **L3a**, LatentSync 1.5 on the head layer's output (its detector found no face in the layer's own smeared crop), runs in 104 s: sync r 0.33 by the proxy (which cannot separate the mouth from the head's motion on a moving head — the static S2V heads score 0.60–0.66 for that reason), identity 0.48–0.56 kept, seam 1.5; to the eye its mouth is the most natural of the heads, open on the vowels without Animate's bared teeth.
+- **Reading:** the author's head-layer idea pays beyond lip-sync — rendered at 512² the head keeps her look, where the full-frame Move
+  layer smears it: a **face pass** per character layer is the direction (the head crop tracked from Stage's keypoints, performed with the
+  pose crop, pasted back). Lip-sync on it: Animate's face video moves the mouth with the line but exaggerates it; a lip-sync model on
+  the head layer's output is the complement to measure next (l2h → L3). Doc 23 §4 asks the author which.
+- **LatentSync standalone** (D117): `engine/spikes/.venv_lip` (uv, Python 3.11 — decord has no 3.12 wheel; torch 2.13.0+rocm10.0.0 from
+  the AMD index), `engine/spikes/third_party/LatentSync` (git-ignored) with its requirements minus torch, gradio, lpips, scenedetect,
+  DeepCache and the GPU ONNX (`onnxruntime` CPU for insightface, `providers` patched to CPU in `face_detector.py`), the 1.5 weights
+  (`latentsync_unet.pt` 5.1 GB, whisper tiny, the auxiliary models; the syncnet left out; 7.7 GB on disk — the eval models in auxiliary
+  are dead weight to delete with the loser), ffmpeg from imageio-ffmpeg on the venv's path under the name the code calls.

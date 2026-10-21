@@ -50,3 +50,6 @@ frontend/wasm/pcwasm/target/
 
 # Mixamo clips the author downloads (Adobe terms: never redistributed — proto01_animate 01 step 5)
 mixamo/
+# E29b (D117): the lip-sync spike's standalone models and their venv
+engine/spikes/third_party/
+engine/spikes/.venv_lip/

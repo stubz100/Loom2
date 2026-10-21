@@ -1,5 +1,7 @@
 # 22 · Trying Expand from Image (for the author)
 
+**Done — the author ran a whole Expand cycle on 2026-10-21 and marked it complete (journal 2026-10-21 09:46).**
+
 About 3 minutes. D115: a character's coverage is expanded from the Image suite — Generate as always, or Expand with the poses picked as
 icons. The old *Expand…* in Cast always ran one fixed plan; now it jumps here.
 

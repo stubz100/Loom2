@@ -7202,3 +7202,12 @@ The author asked for a review of the state of things, then "record all this and 
   and the training as before. Offline: 479 passed, 1 warning in 140.12s (0:02:20) (full), 479 passed in 137.15s (0:02:17) (open); e2e 49 passed (3.2m) / 49 passed (3.0m); Vitest 392 + 3; build clean; lint 75.
 - **Later:** body poses (standing, sitting, walking, the A-pose) as a second row of tiles; the Cast Expand dialog's preset / seeds /
   size form is no longer needed.
+
+## 2026-10-21 09:46 — The author's try of Expand (doc 22) complete; next on the list: AE2c masks and AE2d the timeline's bars
+
+- The author: "I just completed a whole expand cycle, so we can mark test 22 complete. Let's move on to the next point on our delivery
+  list." No notes beyond that; doc 22 marked done. The toast question stays open until it is seen or not.
+- The next point by 07's order from here (D114): the rest of AE2 — **AE2c masks** (a rectangle or ellipse drawn on the viewer for the
+  selected layer; feather, opacity, expansion; invert, mode, remove) and **AE2d the timeline's layer bars** under the transport (a lane per
+  layer: the bar from in to out, dragged to move, its ends to trim, Alt-drag to slip; the keys on the bar; a click selects the layer) —
+  then AE3 effects and colour. The author's looks at 15, 17, 18, 19 and 21 are still owed.

@@ -205,15 +205,45 @@ class Fake:
             self.edit()
             l = self.layer(self.comp(p.get("comp")), p["layer"])
             i = self.nid()
-            l["masks"].append({"id": i, "shape": p.get("shape", "rect"), "rect": p.get("rect"), "feather": 0.0, "opacity": 100.0, "expansion": 0.0})
+            l["masks"].append({"id": i, "name": f"Mask {len(l['masks']) + 1}", "shape": p.get("shape", "rect"), "rect": p.get("rect") or [0, 0, 10, 10],
+                               "feather": [0.0, 0.0], "opacity": 100.0, "expansion": 0.0, "mode": p.get("mode", "Add"), "inverted": False})
             return {"mask": i}
-        if cid == "layer.mask.set":
+        if cid in ("layer.mask.set", "layer.mask.invert", "layer.mask.mode", "layer.mask.remove", "layer.mask.shape"):
             self.edit()
             l = self.layer(self.comp(p.get("comp")), p["layer"])
             if not l["masks"]:
                 raise ValueError("the layer has no mask")
-            l["masks"][-1][p["field"]] = p["value"]
-            return {}
+            m = next((m for m in l["masks"] if str(m["id"]) == str(p.get("mask"))), l["masks"][-1])
+            if cid == "layer.mask.set":
+                f_ = p["field"]
+                if f_ not in ("feather", "opacity", "expansion"):
+                    raise ValueError("field: feather|opacity|expansion")
+                v = p["value"]
+                m[f_] = [float(v), float(v)] if f_ == "feather" and not isinstance(v, list) else v
+            elif cid == "layer.mask.invert":
+                m["inverted"] = bool(p["value"]) if "value" in p else not m["inverted"]
+            elif cid == "layer.mask.mode":
+                m["mode"] = p["mode"]
+            elif cid == "layer.mask.shape":
+                m["rect"], m["shape"] = p["rect"], p.get("shape", m["shape"])
+            else:
+                l["masks"].remove(m)
+                return {"removed": 1}
+            return {"masks": 1}
+        if cid == "layer.timing":                                      # AE2d: in / out trimmed, or the layer moved by delta
+            self.edit()
+            for l in self.layers_of(p):
+                if "delta" in p:
+                    d = float(p["delta"])
+                    l["in"], l["out"], l["start"] = l["in"] + d, l["out"] + d, l["start"] + d
+                for k in ("in", "out", "start"):
+                    if k in p:
+                        l[k] = float(p[k])
+            return None
+        if cid == "layer.slip":
+            self.edit()
+            d = float(p["delta"]) if "delta" in p else float(p.get("frames", 0)) / self.comp(p.get("comp"))["frameRate"]
+            return {"slipped": [{"layer": l["id"], "delta": d} for l in self.layers_of(p)]}
         if cid == "effect.apply":
             self.edit()
             paths = []
@@ -292,7 +322,17 @@ class Fake:
             l = self.layer(self.comp(a.get("comp")), a["layer"])
             props = [{"path": f"transform/{k}", "type": t, "value": l.get(k), **({"keys": len(l["keys"][k])} if l["keys"].get(k) else {})} for k, t in FLAT]
             head = {k: v for k, v in l.items() if k not in ("masks", "effects", "keys", "anchor", "position", "scale", "rotation", "opacity")}
-            return text({**head, "time": self.p["time"], "properties": props})
+            if a.get("flat"):
+                return text({**head, "time": self.p["time"], "properties": props})
+            masks = [{"name": m["name"], "path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}", "uid": m["id"], "match": "mask", "enabled": True,
+                      "mask": {"inverted": m["inverted"], "mode": m["mode"]},
+                      "children": [{"path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}/{k}", "name": f"Mask {k.title()}", "match": k, "uid": m["id"] * 10 + j,
+                                    "type": "vec2" if k == "feather" else "path" if k == "path" else "scalar", "value": m["rect"] if k == "path" else m[k]}
+                                   for j, k in enumerate(("path", "feather", "opacity", "expansion"))]} for i, m in enumerate(l["masks"])]
+            tree = {"name": l["name"], "path": "", "uid": l["id"], "match": "layer", "enabled": True, "children": [
+                {"name": "Transform", "path": "transform", "uid": l["id"] * 100, "match": "transform", "enabled": True, "children": [{**p, "uid": l["id"] * 100 + k} for k, p in enumerate(props, 1)]},
+                {"name": "Masks", "path": "masks", "uid": l["id"] * 100 + 50, "match": "masks", "enabled": True, "children": masks}]}
+            return text({**head, "time": self.p["time"], "properties": tree})
         if name == "command_batch":
             results, failed = [], 0
             for i, step in enumerate(a.get("steps") or []):

@@ -895,6 +895,21 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('#anim-sec-properties .prop-row[data-path="transform/opacity"] ul.keys li')).toHaveCount(0)
   await page.locator('#anim-sec-layers .verbs button[title^="Undo"]').click()
   await expect(opacity).toHaveValue('100')
+  // AE2c: a rectangle mask drawn on the frame with the tool; AE2d: the layer's out trimmed to the playhead, the lanes under the transport
+  await page.locator('#anim-sec-masks .verbs button[title^="Mask: rectangle"]').click()
+  const box = (await page.locator('.final-viewer img.final-frame').boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.7, { steps: 6 })
+  await page.mouse.up()
+  await expect(page.locator('#anim-sec-masks .comp-mask-list li')).toHaveCount(1)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 6/)
+  await page.locator('#anim-sec-layers .verbs button[title^="Trim out to the playhead"]').click()   // at frame 4: out = 5 / 16 s
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 7/)
+  type CompLayer = { id: number; name: string; out: number }
+  const trimmed = (await api<{ items: CompLayer[] }>('GET', `/finals/${fin.id}/composition/layers`)).items.find((l) => l.name === figName)!
+  expect(trimmed.out).toBeCloseTo(5 / 16, 5)
+  await expect(page.locator('.final-viewer .final-lanes .lane')).toHaveCount(5)
   await page.locator('.final-section [data-render]').click()
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)

@@ -237,10 +237,11 @@ class CompositionStore:
         self._open(f, ec)
         return list(ec.tool("get_comp", {"comp": COMP_NAME}).get("layers") or [])
 
-    def layer(self, f: Final, ec: EffectCraft, ref: str | int) -> dict:
-        """One layer's flat property list (path, type, value, keys) with its header."""
+    def layer(self, f: Final, ec: EffectCraft, ref: str | int, flat: bool = True) -> dict:
+        """One layer's properties with its header: flat (path, type, value, keys), or the tree (groups with their uids — the masks and
+        their mode / inverted, AE2c)."""
         self._open(f, ec)
-        return ec.tool("get_layer", {"layer": ref, "comp": COMP_NAME, "flat": True})
+        return ec.tool("get_layer", {"layer": ref, "comp": COMP_NAME, "flat": True} if flat else {"layer": ref, "comp": COMP_NAME, "depth": 3})
 
     def prop(self, f: Final, ec: EffectCraft, ref: str | int, path: str, t: float | None = None) -> dict:
         """One property: its value (at `t`), whether it is animated, its keyframes (time, value, interpolation)."""

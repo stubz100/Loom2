@@ -7,7 +7,7 @@ import { CommandRow } from '../../frame/CommandButton'
 import { sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { fmtTime } from './animateStore'
-import { useComposition, type CompLayer, type FlatProp, type PropKey } from './compositionStore'
+import { MASK_MODES, useComposition, type CompLayer, type FlatProp, type MaskInfo, type PropKey } from './compositionStore'
 
 const BLEND_MODES = ['Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Darken', 'Lighten', 'Soft Light', 'Hard Light', 'Difference']
 const MATTE_KINDS: [string, string][] = [['luma', 'luma'], ['lumaInverted', 'luma inverted'], ['alpha', 'alpha'], ['alphaInverted', 'alpha inverted']]
@@ -28,6 +28,7 @@ function LayerRow({ l }: { l: CompLayer }) {
     { label: 'To the front', run: () => { void cp().arrange(l.id, 'front') }, disabled: l.index === 1 },
     { label: 'To the back', run: () => { void cp().arrange(l.id, 'back') }, disabled: l.index === layers.length }, sep,
     { cmd: 'anim.final.key.position' }, { cmd: 'anim.final.key.opacity' }, sep,
+    { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, sep,
     { cmd: 'anim.final.undo' }, { cmd: 'anim.final.redo' },
   ]
   return (
@@ -71,7 +72,7 @@ export function LayersSection() {
   if (level !== 'final' || !comp) return <span className="hint">The composition's layers, at the Final level — in the Shot section, a final shot's <b>Open in Final</b>.</span>
   return (
     <div className="comp-layers">
-      <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock']} /></div>
+      <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock', 'gap', 'anim.final.trimIn', 'anim.final.trimOut']} /></div>
       <ul className="comp-layer-list">{layers.map((l) => <LayerRow key={l.id} l={l} />)}</ul>
       <span className="hint">Top to bottom as composited. A row's right-click menu orders it; drag the selected layer in the viewer to move it.</span>
     </div>
@@ -117,6 +118,45 @@ function PropRow({ p, keys }: { p: FlatProp; keys: PropKey[] }) {
           <button type="button" className="quiet" title="Linear" disabled={busy} onClick={() => void cp().keyEase(p.path, k.time, 'linear')}>linear</button>
           <button type="button" className="quiet danger" title="Delete this keyframe" disabled={busy} onClick={() => void cp().keyDelete(p.path, k.time)}>×</button>
         </li>))}</ul>}
+    </div>
+  )
+}
+
+/** AE2c: one mask of the selected layer — feather, opacity, expansion, mode, inverted, remove (each one engine command). */
+function MaskRow({ m }: { m: MaskInfo }) {
+  const busy = useComposition((s) => s.busy)
+  return (
+    <li className="comp-mask" data-mask={m.uid}>
+      <span className="name">{m.name}</span>
+      <select value={MASK_MODES.includes(m.mode) ? m.mode : 'Add'} title="Mask mode" disabled={busy} onChange={(e) => void cp().setMaskMode(m.uid, e.target.value)}>
+        {MASK_MODES.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <label className="inv"><input type="checkbox" checked={m.inverted} disabled={busy} onChange={(e) => void cp().invertMask(m.uid, e.target.checked)} /> inverted</label>
+      <span className="fields">
+        <label>feather <NumField key={`f:${m.feather}`} value={m.feather} step={1} onCommit={(v) => void cp().setMaskField(m.uid, 'feather', Math.max(0, v))} label={`${m.name} feather`} /></label>
+        <label>opacity <NumField key={`o:${m.opacity}`} value={m.opacity} step={1} onCommit={(v) => void cp().setMaskField(m.uid, 'opacity', Math.max(0, Math.min(100, v)))} label={`${m.name} opacity`} /></label>
+        <label>expand <NumField key={`e:${m.expansion}`} value={m.expansion} step={1} onCommit={(v) => void cp().setMaskField(m.uid, 'expansion', v)} label={`${m.name} expansion`} /></label>
+      </span>
+      <button type="button" className="quiet danger" title="Remove this mask" disabled={busy} onClick={() => void cp().removeMask(m.uid)}>×</button>
+    </li>
+  )
+}
+
+export function MasksSection() {
+  const level = useComposition((s) => s.level)
+  const comp = useComposition((s) => s.comp)
+  const selected = useComposition((s) => s.selected)
+  const layer = useComposition((s) => s.layers.find((l) => l.id === s.selected))
+  const masks = useComposition((s) => s.masks)
+  const tool = useComposition((s) => s.maskTool)
+  if (level !== 'final' || !comp) return <span className="hint">The selected layer's masks, at the Final level.</span>
+  if (selected === null || !layer) return <span className="hint">Select a layer in Layers, then draw a mask on the frame with the rectangle or ellipse tool.</span>
+  return (
+    <div className="comp-masks" data-layer={selected}>
+      <h5>{layer.name}</h5>
+      <div className="verbs"><CommandRow ids={['anim.final.mask.rect', 'anim.final.mask.ellipse']} active={tool === 'off' ? undefined : `anim.final.mask.${tool}`} /></div>
+      {tool !== 'off' && <span className="hint">Drag on the frame to draw the {tool === 'rect' ? 'rectangle' : 'ellipse'}; the tool turns off once the mask is made.</span>}
+      {masks.length ? <ul className="comp-mask-list">{masks.map((m) => <MaskRow key={m.uid} m={m} />)}</ul> : <span className="hint">No mask on this layer.</span>}
     </div>
   )
 }

@@ -20903,7 +20903,7 @@
     },
     "/finals/{fid}/composition/layers/{lid}": {
       "get": {
-        "description": "One layer (its id or name): the header and the flat property list (path, type, value, keys).",
+        "description": "One layer (its id or name): the header and the flat property list (path, type, value, keys) — or, with `tree`, the property tree\n(groups with their uids: the masks with their mode and inverted, AE2c).",
         "operationId": "composition_layer_finals__fid__composition_layers__lid__get",
         "parameters": [
           {
@@ -20922,6 +20922,16 @@
             "schema": {
               "title": "Lid",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tree",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Tree",
+              "type": "boolean"
             }
           }
         ],

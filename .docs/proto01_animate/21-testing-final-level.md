@@ -43,7 +43,13 @@ The rail's **Layers** and **Properties** tabs (the column scrolls there).
 - **Properties:** with Mara selected, set **Opacity** to 50 (Enter). Press **◆** beside Opacity: a keyframe at the playhead; scrub a
   second later, set 100, press ◆ again — now she fades in between; the keys are listed with *ease / hold / linear*.
 - **Check:** after each edit, does the frame redraw within a second? Is "one edit, one undo step" how you expect it?
-- **Known:** no masks and no trimming of a layer's in / out yet (AE2c–d, next); the shadows' blur and the colour tools come with AE3.
+- **Masks:** with Mara selected, the **Masks** tab: the rectangle tool, then drag a box on the frame around her — the mask appears in the
+  list; set its feather to 30, tick *inverted*, change the mode. Remove it with ×.
+- **The lanes** under the transport: each layer a bar. Drag the end of the stool's bar inwards: it disappears from the frame after that
+  time. Drag the bar itself to move it; Alt-drag slides the footage under it. Undo as before.
+- **Check:** does trimming by the bar's ends read as expected? Are the lanes enough, or do you want the full timeline (keys per
+  property, zoom) here?
+- **Known:** the shadows' blur and the colour tools come with AE3.
 
 ## 5. Make it again (optional)
 

@@ -7211,3 +7211,24 @@ The author asked for a review of the state of things, then "record all this and 
   selected layer; feather, opacity, expansion; invert, mode, remove) and **AE2d the timeline's layer bars** under the transport (a lane per
   layer: the bar from in to out, dragged to move, its ends to trim, Alt-drag to slip; the keys on the bar; a click selects the layer) —
   then AE3 effects and colour. The author's looks at 15, 17, 18, 19 and 21 are still owed.
+
+## 2026-10-21 10:06 — AE2 c–d built: masks on the frame, the layers' lanes under the transport (proto01_animate 20 §2) — AE2 complete
+
+- **Masks (AE2c).** The Masks section (the rail's Masks tab) for the selected layer: the **rectangle** and **ellipse** tools
+  (`anim.final.mask.rect` / `.ellipse`, in the section's toolbar and the row's menu) — a drag on the frame draws the shape (a dashed
+  ghost), one `layer.addMask {shape, rect}` in comp pixels on release, and the tool turns off; each mask listed with its **mode**
+  (`layer.mask.mode`), **inverted** (`layer.mask.invert`), **feather / opacity / expansion** (`layer.mask.set`, committed on Enter or
+  blur) and a remove (`layer.mask.remove`). The masks are read from the engine's property **tree** (`GET …/layers/{lid}?tree=true`:
+  `masks/mask`, `masks/mask#2` …, each with its uid, mode and inverted — the flat list has no uids).
+- **The lanes (AE2d).** Under the transport, one lane per layer, top to bottom as composited: a bar from in to out over the shot; drag the
+  bar to **move** it (`layer.timing {delta}`), its ends to **trim** (`layer.timing {in}` / `{out}`, within the shot and never
+  shorter than a frame), **Alt-drag to slip** (`layer.slip {delta}`) — the drag previews, one command on release, snapped to the frame;
+  the selected layer's keys as diamonds on its bar; the playhead; a click selects the layer. The toolbar's *Trim in / out to the playhead*
+  do the same by command.
+- Fake: masks with uid, name, mode, inverted and the four fields, the tree form of `get_layer`, `layer.timing`, `layer.slip`.
+- **Tests:** `test_compositions_ae1` (a mask added, feather / invert / mode as one batch, the tree read, removed; in / out set, moved by
+  delta, slipped); the e2e final-shot scenario — a rectangle mask drawn by the mouse (one mask listed, revision 6), the figure's out
+  trimmed to the playhead (5/16 s, revision 7), five lanes. Offline: 479 passed in 143.59s (0:02:23) (full), 479 passed in 138.26s (0:02:18) (open); e2e 49 passed (3.2m) / 49 passed (2.9m); Vitest 392 + 3; build clean;
+  lint 75.
+- **AE2 is complete** (a–d). Next by 07: **AE3 effects and colour** (the curated effects as icon presets, Curves / Levels / Lumetri basic
+  with a before / after), then UX9. Doc 21 grows the masks and the lanes for the author's try.

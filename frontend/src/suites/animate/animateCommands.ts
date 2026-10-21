@@ -6,7 +6,8 @@ import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
-import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon, Undo2 as UndoIcon } from 'lucide-react'
+import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
+  Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon } from 'lucide-react'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
@@ -44,6 +45,11 @@ registerCommands([
   { id: 'anim.final.layer.lock', scope: 'animate', label: 'Lock / unlock the layer', icon: LockIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().layerSwitch(cp().selected!, 'lock', !selLayer()!.switches.locked) },
   { id: 'anim.final.key.position', scope: 'animate', label: 'Keyframe: position at the playhead', icon: KeyIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().keyToggle('transform/position') },
   { id: 'anim.final.key.opacity', scope: 'animate', label: 'Keyframe: opacity at the playhead', icon: KeyIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().keyToggle('transform/opacity') },
+  // AE2c: masks drawn on the frame; AE2d: the layer's in / out at the playhead (the lanes under the transport drag too)
+  { id: 'anim.final.mask.rect', scope: 'animate', label: 'Mask: rectangle', hint: 'drag on the frame', icon: RectIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'rect' ? 'off' : 'rect') },
+  { id: 'anim.final.mask.ellipse', scope: 'animate', label: 'Mask: ellipse', hint: 'drag on the frame', icon: EllipseIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'ellipse' ? 'off' : 'ellipse') },
+  { id: 'anim.final.trimIn', scope: 'animate', label: 'Trim in to the playhead', icon: TrimInIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { in: cp().frame / (cp().final?.rate ?? 16) }) },
+  { id: 'anim.final.trimOut', scope: 'animate', label: 'Trim out to the playhead', icon: TrimOutIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { out: (cp().frame + 1) / (cp().final?.rate ?? 16) }) },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
   { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },

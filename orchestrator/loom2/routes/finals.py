@@ -499,11 +499,12 @@ async def composition_layers(svc: Svc, fid: str):
 
 
 @router.get("/finals/{fid}/composition/layers/{lid}", response_model=dict[str, Any])
-async def composition_layer(svc: Svc, fid: str, lid: str):
-    """One layer (its id or name): the header and the flat property list (path, type, value, keys)."""
+async def composition_layer(svc: Svc, fid: str, lid: str, tree: bool = False):
+    """One layer (its id or name): the header and the flat property list (path, type, value, keys) — or, with `tree`, the property tree
+    (groups with their uids: the masks with their mode and inverted, AE2c)."""
     cs, f = await _final_for_composition(svc, fid)
     try:
-        return await asyncio.to_thread(cs.layer, f, svc.effectcraft, _lid(lid))
+        return await asyncio.to_thread(cs.layer, f, svc.effectcraft, _lid(lid), not tree)
     except KeyError as e:
         raise HTTPException(404, str(e.args[0]))
     except EffectCraftError as e:

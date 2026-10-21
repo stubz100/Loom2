@@ -22,6 +22,23 @@ export interface FlatProp { path: string; type: string; value: unknown; keys?: n
 export interface PropKey { time: number; value: unknown; in?: string; out?: string }
 export const EDITABLE = ['transform/anchor', 'transform/position', 'transform/scale', 'transform/rotation', 'transform/opacity'] as const
 export type Arrange = 'front' | 'forward' | 'backward' | 'back'
+/** AE2c: a mask of the selected layer, as the engine's property tree reports it. */
+export interface MaskInfo { uid: number; name: string; path: string; feather: number; opacity: number; expansion: number; mode: string; inverted: boolean }
+export type MaskTool = 'off' | 'rect' | 'ellipse'
+export const MASK_MODES = ['Add', 'Subtract', 'Intersect', 'Lighten', 'Darken', 'Difference', 'None']
+interface TreeNode { path?: string; name?: string; uid?: number; type?: string; value?: unknown; mask?: { inverted?: boolean; mode?: string }; children?: TreeNode[] }
+/** The masks of a layer's property tree (`masks/mask`, `masks/mask#2` …): uid, name, feather (one number: the x), opacity, expansion, mode, inverted. */
+export function masksOf(tree: TreeNode | undefined): MaskInfo[] {
+  const group = tree?.children?.find((g) => g.path === 'masks')
+  return (group?.children ?? []).filter((m) => m.uid !== undefined).map((m) => {
+    const leaf = (k: string) => m.children?.find((c) => (c.path ?? '').endsWith(`/${k}`))?.value
+    const feather = leaf('feather')
+    return { uid: m.uid!, name: m.name ?? 'Mask', path: m.path ?? '', feather: Array.isArray(feather) ? Number(feather[0]) : Number(feather ?? 0),
+      opacity: Number(leaf('opacity') ?? 100), expansion: Number(leaf('expansion') ?? 0), mode: m.mask?.mode ?? 'Add', inverted: !!m.mask?.inverted }
+  })
+}
+/** AE2d: seconds snapped to the composition's frames. */
+export const snapTime = (sec: number, rate: number): number => Math.round(sec * rate) / rate
 const detail = (e: unknown): string => (e as { detail?: string }).detail ?? (e as Error).message ?? String(e)
 
 interface CompState {
@@ -77,6 +94,22 @@ interface CompState {
   keyToggle: (path: string) => Promise<boolean>
   keyEase: (path: string, time: number, how: 'ease' | 'hold' | 'linear') => Promise<boolean>
   keyDelete: (path: string, time: number) => Promise<boolean>
+  // ---- AE2c: masks ----
+  masks: MaskInfo[]
+  maskTool: MaskTool
+  setMaskTool: (tool: MaskTool) => void
+  loadMasks: () => Promise<void>
+  /** A rectangle or ellipse mask on the selected layer, `rect` in comp pixels [x, y, w, h]. */
+  addMask: (rect: [number, number, number, number], shape: 'rect' | 'ellipse') => Promise<boolean>
+  setMaskField: (uid: number, field: 'feather' | 'opacity' | 'expansion', value: number) => Promise<boolean>
+  setMaskMode: (uid: number, mode: string) => Promise<boolean>
+  invertMask: (uid: number, value: boolean) => Promise<boolean>
+  removeMask: (uid: number) => Promise<boolean>
+  // ---- AE2d: timing ----
+  /** A layer's in / out trimmed, or moved by `delta` seconds (`layer.timing`). */
+  setTiming: (id: number, patch: { in?: number; out?: number; delta?: number }) => Promise<boolean>
+  /** The layer's footage slid under its in / out (`layer.slip`). */
+  slip: (id: number, delta: number) => Promise<boolean>
 }
 
 const cache = new Map<string, string>()
@@ -175,7 +208,7 @@ export const useComposition = create<CompState>((set, get) => {
   /** After an edit: the composition again (its revision moved: the cache dropped, the frame asked again), the lists, the properties. */
   const edited = async (): Promise<void> => {
     await get().reload()
-    await get().loadProps()
+    await Promise.all([get().loadProps(), get().loadMasks()])
   }
   const run = async <T,>(what: string, call: () => Promise<T>): Promise<boolean> => {
     if (!get().finalId) return false
@@ -184,7 +217,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off',
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -195,7 +228,7 @@ export const useComposition = create<CompState>((set, get) => {
         if (get().selected !== null && !layers.some((l) => l.id === get().selected)) set({ selected: null, props: [], keysOf: {}, uidOf: {} })
       } catch (e) { set({ error: detail(e) }) }
     },
-    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {} }); if (id !== null) void get().loadProps() },
+    select: (id) => { set({ selected: id, props: [], keysOf: {}, uidOf: {}, masks: [] }); if (id !== null) { void get().loadProps(); void get().loadMasks() } },
     loadProps: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return
@@ -243,6 +276,28 @@ export const useComposition = create<CompState>((set, get) => {
       if (sel === null) return Promise.resolve(false)
       return get().batch([{ id: 'keys.select', params: { keys: [{ layer: sel, prop: get().uidOf[path] ?? path, time }] } }, { id: 'keys.delete' }], 'Delete the keyframe')
     },
+    // ---- AE2c: masks ----
+    setMaskTool: (maskTool) => set({ maskTool }),
+    loadMasks: async () => {
+      const fid = get().finalId, sel = get().selected
+      if (!fid || sel === null) return
+      try {
+        const r = await unwrap(http.GET('/finals/{fid}/composition/layers/{lid}', { params: { path: { fid, lid: String(sel) }, query: { tree: true } } })) as { properties?: TreeNode }
+        if (get().selected === sel) set({ masks: masksOf(r.properties) })
+      } catch (e) { set({ error: detail(e) }) }
+    },
+    addMask: (rect, shape) => {
+      const sel = get().selected
+      if (sel === null) return Promise.resolve(false)
+      return get().command('layer.addMask', { layer: sel, shape, rect }, 'Mask')
+    },
+    setMaskField: (uid, field, value) => get().command('layer.mask.set', { layer: get().selected, mask: uid, field, value }, 'Mask'),
+    setMaskMode: (uid, mode) => get().command('layer.mask.mode', { layer: get().selected, mask: uid, mode }, 'Mask mode'),
+    invertMask: (uid, value) => get().command('layer.mask.invert', { layer: get().selected, mask: uid, value }, 'Mask'),
+    removeMask: (uid) => get().command('layer.mask.remove', { layer: get().selected, mask: uid }, 'Remove the mask'),
+    // ---- AE2d: timing ----
+    setTiming: (id, patch) => get().command('layer.timing', { layers: [id], ...patch }, 'Timing'),
+    slip: (id, delta) => get().command('layer.slip', { layers: [id], delta }, 'Slip'),
     setLevel: (level) => { if (level !== 'final') get().togglePlay(false); set({ level }) },
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }

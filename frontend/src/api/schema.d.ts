@@ -905,7 +905,8 @@ export interface paths {
         };
         /**
          * Composition Layer
-         * @description One layer (its id or name): the header and the flat property list (path, type, value, keys).
+         * @description One layer (its id or name): the header and the flat property list (path, type, value, keys) — or, with `tree`, the property tree
+         *     (groups with their uids: the masks with their mode and inverted, AE2c).
          */
         get: operations["composition_layer_finals__fid__composition_layers__lid__get"];
         put?: never;
@@ -11989,7 +11990,9 @@ export interface operations {
     };
     composition_layer_finals__fid__composition_layers__lid__get: {
         parameters: {
-            query?: never;
+            query?: {
+                tree?: boolean;
+            };
             header?: never;
             path: {
                 fid: string;

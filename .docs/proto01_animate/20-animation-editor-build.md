@@ -117,3 +117,6 @@ viewer's feel can be judged then, before AE2's controls are designed.
   selected layer; the engine's reads and one-save batches behind them. Next: AE2c masks, AE2d the timeline's bars.
 - **2026-10-20 (journal 2026-10-20 22:02):** an aside from the author's try — D115, Image's Expand (the poses as tiles, one job per cell, the
   results as the character's candidates; Cast's Expand… jumps there). AE2c–d resume after it.
+- **2026-10-21 (journal 2026-10-21 10:06):** AE2 c–d built — masks drawn on the frame (rectangle / ellipse; mode, inverted, feather, opacity,
+  expansion, remove) and the layers' lanes under the transport (move, trim, slip by drag; the keys; the playhead). **AE2 is complete.**
+  Next: AE3 effects and colour.

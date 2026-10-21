@@ -68,6 +68,32 @@
 .comp-props .prop-row ul.keys { grid-column: 2 / -1; list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; }
 .comp-props .prop-row ul.keys li { display: flex; gap: 4px; align-items: center; font-size: 11px; }
 .comp-props .prop-row ul.keys li.here { color: var(--accent); }
+/* AE2c: the mask tool's ghost on the frame, the Masks section */
+.final-viewer .final-view.masking img.final-frame { cursor: crosshair; }
+.final-viewer .mask-ghost { position: absolute; border: 1px dashed var(--accent); background: rgba(120, 150, 255, .12); pointer-events: none; }
+.final-viewer .mask-ghost.ellipse { border-radius: 50%; }
+.comp-masks h5 { margin: 0 0 6px; }
+.comp-mask-list { list-style: none; margin: 0; padding: 0; }
+.comp-mask-list li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--line); }
+.comp-mask-list li .name { font-weight: 600; min-width: 56px; }
+.comp-mask-list li select { font-size: 11px; }
+.comp-mask-list li .fields { display: flex; gap: 6px; flex-wrap: wrap; }
+.comp-mask-list li .fields label { display: inline-flex; gap: 3px; align-items: center; color: var(--fg3); }
+.comp-mask-list li .fields input[type=number] { width: 56px; }
+/* AE2d: the lanes under the transport */
+.final-viewer .final-lanes { display: grid; gap: 2px; padding: 4px 8px 6px; font-size: 11px; border-top: 1px solid var(--line); user-select: none; }
+.final-viewer .lane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; height: 18px; cursor: pointer; color: var(--fg3); }
+.final-viewer .lane .lane-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-viewer .lane.selected { color: var(--fg); }
+.final-viewer .lane-track { position: relative; height: 14px; background: var(--line); border-radius: 3px; }
+.final-viewer .lane .bar { position: absolute; top: 1px; bottom: 1px; background: var(--fg3); border-radius: 3px; opacity: .75; cursor: grab; }
+.final-viewer .lane.selected .bar { background: var(--accent); opacity: 1; }
+.final-viewer .lane .bar.dragging { opacity: .6; }
+.final-viewer .lane .bar .h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; background: rgba(0, 0, 0, .25); }
+.final-viewer .lane .bar .h-in { left: 0; border-radius: 3px 0 0 3px; }
+.final-viewer .lane .bar .h-out { right: 0; border-radius: 0 3px 3px 0; }
+.final-viewer .lane .bar .key { position: absolute; top: 50%; width: 6px; height: 6px; transform: translate(-50%, -50%) rotate(45deg); background: var(--bg); border: 1px solid var(--fg); pointer-events: none; }
+.final-viewer .lane .playhead { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--fg); pointer-events: none; }
 .anim-empty { color: var(--fg3); text-align: center; }
 .anim-empty h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
 

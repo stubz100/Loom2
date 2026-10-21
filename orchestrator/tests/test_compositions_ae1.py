@@ -150,6 +150,26 @@ def test_composition_routes(tmp_path: Path):
         cl.post(f"{url}/command", json={"id": "edit.undo"}, headers=H)                 # then the switch
         assert next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Shadows")["switches"]["video"] is True
         assert cl.get(url, headers=H).json()["revision"] == 7                          # every save counted: a batch is one, each undo one
+        # AE2c–d: masks (the tree read carries each mask's uid, mode and inverted) and timing
+        r = cl.post(f"{url}/command", json={"id": "layer.addMask", "params": {"layer": "Mara", "shape": "ellipse", "rect": [10, 20, 60, 40]}}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["mask"]
+        mid = r.json()["result"]["mask"]
+        cl.post(f"{url}/batch", json={"steps": [{"id": "layer.mask.set", "params": {"layer": "Mara", "mask": mid, "field": "feather", "value": 12}},
+                                               {"id": "layer.mask.invert", "params": {"layer": "Mara", "mask": mid, "value": True}},
+                                               {"id": "layer.mask.mode", "params": {"layer": "Mara", "mask": mid, "mode": "Subtract"}}]}, headers=H)
+        tree = cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]
+        masks = next(g for g in tree["children"] if g["path"] == "masks")["children"]
+        assert [m["name"] for m in masks] == ["Mask 1"] and masks[0]["uid"] == mid and masks[0]["mask"] == {"inverted": True, "mode": "Subtract"}
+        assert next(c for c in masks[0]["children"] if c["path"].endswith("/feather"))["value"] == [12.0, 12.0]
+        assert cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": mid}}, headers=H).json()["result"] == {"removed": 1}
+        assert next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "masks")["children"] == []
+        cl.post(f"{url}/command", json={"id": "layer.timing", "params": {"layers": ["Box"], "in": 0.0625, "out": 0.125}}, headers=H)
+        box = next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Box")
+        assert (box["in"], box["out"]) == (0.0625, 0.125)
+        cl.post(f"{url}/command", json={"id": "layer.timing", "params": {"layers": ["Box"], "delta": 0.0625}}, headers=H)
+        box = next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Box")
+        assert (box["in"], box["out"]) == (0.125, 0.1875)
+        assert cl.post(f"{url}/command", json={"id": "layer.slip", "params": {"layers": ["Box"], "delta": 0.0625}}, headers=H).json()["result"]["slipped"][0]["delta"] == 0.0625
         assert cl.post(url, headers=H).json()["revision"] == 0                         # made again: fresh for what follows
         layers = next(iter(json.loads((d / "comp.ecproj").read_text(encoding="utf-8"))["comps"].values()))["layers"]   # as saved
         assert svc.effectcraft.project == str(d / "comp.ecproj")                        # the session holds the written file

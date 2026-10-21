@@ -64,7 +64,8 @@ describe('D110 (PS4) the lights of the scene', () => {
     const id = st().addLight()!
     st().updateObject(id, { light: null })
     const el = render(<LightControls o={obj(id)} />)
-    expect(el.textContent).toContain('as the first key light')
+    expect(el.textContent).toContain('As the key light')                                              // D116: the why sits behind the ?
+    expect(el.querySelector('[data-help]')?.getAttribute('title')).toContain('as the first key light did')
     expect((el.querySelector('input[aria-label="light intensity"]') as HTMLInputElement).value).toBe('2.3')
     type(el.querySelector('input[aria-label="shadow softness"]') as HTMLInputElement, '0.4')
     expect(obj(id).light).toMatchObject({ intensity: 2.3, softness: 0.4, shadows: true, target: [0, 1, 0] })

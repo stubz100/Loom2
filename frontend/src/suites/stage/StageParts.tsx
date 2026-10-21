@@ -4,6 +4,7 @@
 // a figure is bound to a Cast character (the Inspector's tiles, "Bind to a character ▸"); the Outliner shows who; the Render tab's deck shows
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 import { AnimateLevels } from '../../frame/AnimateLevels'
+import { Help } from '../../frame/Help'
 import { Camera, Eye, EyeOff, Lock, LockOpen } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
@@ -17,6 +18,7 @@ import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter, LibraryProps, MeshProp } from './FigureBinding'
 import { AmbientControl, LightControls } from './LightControls'
 import { FinalSection } from './FinalPanel'
+import { assembling, readyToAssemble, rendering as compRendering, useFinals } from './finalShot'
 import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
@@ -83,10 +85,10 @@ export function LibraryAdd() {
         <div className="lib-grid">{SET_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.set.${p}`} text label={p} />)}</div>
         <h4>Props</h4>{/* D110 (PS3): Story · Props, each its 3D model bound to the prop */}
         <LibraryProps centre={() => viewport.centre?.() ?? [0, 0, 0]} />
-        <h4>Stand-ins <span className="hint">grey shapes for blocking (D109)</span></h4>
+        <h4>Stand-ins <Help text="Grey shapes for blocking (D109)." /></h4>
         <div className="lib-grid">{PROP_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.prop.${p}`} text label={p} />)}</div>
         <h4>Meshes{meshes.length ? ` · ${meshes.length}` : ''}</h4>
-        {!meshes.length && <span className="hint">None yet — a Catalogue image's "Make a 3D prop…" (Pixal3D) lands here (P18).</span>}
+        {!meshes.length && <span className="hint">None yet. <Help text={`A Catalogue image's "Make a 3D prop…" (Pixal3D) lands here.`} /></span>}
         <div className="lib-grid">{meshes.slice(0, 24).map((m) => (
           <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
             <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
@@ -95,7 +97,7 @@ export function LibraryAdd() {
         <div className="lib-grid"><CommandButton id="stage.add.light" text /></div>
         <h4>Image planes</h4>
         <div className="lib-grid"><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
-        <p className="hint">From the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre.</p>
+        <p className="hint">From the Bin <Help text="Drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre." /></p>
       </>
     </div>
   )
@@ -125,7 +127,7 @@ export function OutlinerTab() {
   return (
     <div className="stage-panel">
       <div className="head"><b>Outliner</b><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'}</span></div>
-      {!current.objects.length && <span className="hint">Nothing on the stage — add from the Library.</span>}
+      {!current.objects.length && <span className="hint">Nothing on the stage. <Help text="Add from the Library above." /></span>}
       {current.objects.map((o) => (
         <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} onClick={() => st().select(o.id)} onDoubleClick={() => st().frameView([o.id])}
           onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
@@ -219,7 +221,7 @@ export function PosesTab() {
   const userPoses = useStage((s) => s.userPoses)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
-  if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">Select a figure — then click a joint for the rotate gizmo, or drag a hand / foot handle.</span></div></>
+  if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">No figure selected. <Help text="Select a figure, then click a joint for the rotate gizmo, or drag a hand / foot handle." /></span></div></>
   const joints = effectiveJoints(o)
   const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
   const setJoint = (nv: number[]) => { if (joint) st().setJoints(o.id, { ...joints, [joint]: nv }) }
@@ -232,7 +234,7 @@ export function PosesTab() {
       <h4>Presets</h4>
       <div className="lib-grid">{POSE_NAMES.map((p) => <button key={p} className={o.pose?.preset === p && !Object.keys(o.pose?.joints ?? {}).length ? 'active' : ''} onClick={() => st().applyPose(o.id, p)}>{p}</button>)}</div>
       <h4>Saved in this project</h4>
-      {!Object.keys(userPoses).length && <span className="hint">None yet — pose the figure and Save pose….</span>}
+      {!Object.keys(userPoses).length && <span className="hint">None yet. <Help text="Pose the figure and Save pose…." /></span>}
       <div className="lib-grid">{Object.entries(userPoses).map(([name, def]) => (
         <span key={name} className="pose-card"><button onClick={() => st().applyPose(o.id, def.preset ?? 'stand', def.joints)}>{name}</button>
           <button className="quiet" title="Delete this pose" onClick={() => void askConfirm({ title: `Delete the pose "${name}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deletePose(name) })}>×</button></span>
@@ -241,7 +243,7 @@ export function PosesTab() {
       <h4>Joint</h4>
       <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
       {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
-      <p className="hint">Orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools.</p>
+      <p className="hint">Gizmos <Help text="Orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools." /></p>
     </div>
     </>
   )
@@ -251,6 +253,18 @@ export function PosesTab() {
 // locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
 // Generate when stale (or by the button), the results land below with lineage to the passes.
 /** `stillsOnly` (D95, Image's From a stage): the stills without the clip fold, which belongs to Animate. */
+/** D116: one step of the shot as a tree node — folded by its summary; the step's state and verb on the summary line (the verb's click
+ *  does not fold it). */
+function Step({ id, title, state, verb, children }: { id: string; title: string; state?: React.ReactNode; verb?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <details className="step" data-step={id} open>
+      <summary><span className="tw" aria-hidden="true">▸</span><b>{title}</b>{state != null && <span className="state hint">{state}</span>}
+        {verb != null && <span className="verb" onClick={(e) => e.preventDefault()}>{verb}</span>}</summary>
+      <div className="step-body">{children}</div>
+    </details>
+  )
+}
+
 export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
   const current = useStage((s) => s.current)
   const cam = useStage((s) => s.activeCamera())
@@ -279,66 +293,72 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
   const image1 = method?.image1 ?? 'clay'
   const passId = entry?.assets[image1]
   return (
-    <div className="stage-panel shot-tab">
-      <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" /></div>
-      <h4>Method</h4>
-      <div className="method-list">
-        {caps && Object.entries(caps.methods).map(([id, m]) => (
-          <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id })} title={m.hint ?? m.label}>
-            <b>{id === 'clay' ? 'Clay reference' : id === 'refcontrol' ? 'Exact pose' : m.label}</b>
-            <span>{m.short} · {m.seconds != null ? `≈ ${Math.round(m.seconds)} s` : 'unmeasured'}{m.health === 'missing' ? ' · weights missing' : ''}</span>
-            <small>{m.hint}</small>
-          </button>
-        ))}
-        {!caps && <span className="hint">No Stage method in this build.</span>}
-      </div>
-      <h4>Image 1 · the {image1} pass</h4>
-      <div className="pass-row">
-        <div className="ref-slot source locked" title={passId ? `the ${image1} pass, rendered at revision ${entry?.revision}` : 'render the passes first'}>
-          {passId ? <img src={api.thumbUrl(passId, 256)} alt="" /> : <span className="empty">{image1}</span>}
-          <span className="n">1</span>
-        </div>
-        <div className="pass-side">
-          {entry ? <span className="hint">{Object.keys(entry.assets).length} passes · {entry.size.w}×{entry.size.h}{stale ? ` · from revision ${entry.revision}, the scene moved on — re-rendered on Generate` : ' · current'}</span>
-            : <span className="hint">No passes yet for this camera — Generate renders them, or:</span>}
-          <div className="verbs"><CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} /></div>
-          {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
-        </div>
-      </div>
-      <h4>References{method ? ` · up to ${method.max_refs}` : ''}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</h4>
-      <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
-        {sh.refs.map((r, i) => (
-          <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2}`}>
-            <img src={api.thumbUrl(r.asset_id, 256)} alt="" /><span className="n">{i + 2}</span>
-            <button className="quiet x" title="Remove" onClick={() => st().removeShotRef(r.asset_id)}>✕</button>
-          </div>
-        ))}
-        {figSlots.map((x) => (
-          <div key={x.image} className="ref-slot figure-slot" title={`image ${x.image}: ${x.name}'s reference — bound to figure ${x.figure} (the Cast's set, not the deck's)`}>
-            {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">fig {x.figure} · {x.name}</span>
-          </div>
-        ))}
-        {room - figSlots.length > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
-      </div>
-      {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
-        {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}
-        {/* journal 2026-10-17 18:03: exact pose (one reference slot) drew both figures as figure 1's character; clay carried each one's images */}
-        {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this method has room for {method?.max_refs ?? 1} reference image{(method?.max_refs ?? 1) === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method with more room (Clay reference)</li>}</ul>}
-      {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right.</p>}
-      {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
-      {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
-      <h4>Prompt</h4>
-      <textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} />
-      <div className="kv"><span>size</span><span className="segmented"><button className={sh.tier === 'draft' ? 'active' : ''} onClick={() => st().setShot({ tier: 'draft' })}>Draft</button><button className={sh.tier === 'full' ? 'active' : ''} onClick={() => st().setShot({ tier: 'full' })}>Full</button><span className="hint"> {w}×{h}</span></span></div>
-      <div className="kv"><span>count</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
-      {pv?.params?.prompt ? <p className="hint prompt-preview">{String(pv.params.prompt)}</p> : null}
-      {err && <p className="disabled-why">{err}</p>}
-      {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
-      <h4>Results{stills.length ? ` · ${stills.length}` : ''}</h4>
-      {!stills.length && <span className="hint">None yet — the frames of this stage land here and in the Catalogue (lineage: the pass and the references).</span>}
-      <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
-      {!stillsOnly && <ClipSection clips={clips} />}
-      {!stillsOnly && <FinalSection />}{/* D111 (PS5) */}
+    <div className="stage-panel shot-tab tree">
+      <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" />
+        <Help text="The shot's steps, top to bottom: the frame (a Stage shot of the scene from the passes), the clip (the pass sequence animated), the final shot (the scene split into layers, performed, assembled and finished). Each step folds by its title; its verb sits on the title line and in the foot." /></div>
+      <Step id="frame" title="Frame" state={stills.length ? `${stills.length} rendered` : entry ? 'passes ready' : 'no passes'}
+        verb={<CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} />}>
+        <div className="kv top"><span>method</span>
+          <div className="method-list">
+            {caps && Object.entries(caps.methods).map(([id, m]) => (
+              <button key={id} className={`method${sh.method === id ? ' active' : ''}`} onClick={() => st().setShot({ method: id })} title={m.hint ?? m.label}>
+                <b>{id === 'clay' ? 'Clay reference' : id === 'refcontrol' ? 'Exact pose' : m.label}</b>
+                <span>{m.short} · {m.seconds != null ? `≈ ${Math.round(m.seconds)} s` : 'unmeasured'}{m.health === 'missing' ? ' · weights missing' : ''}</span>
+              </button>
+            ))}
+            {!caps && <span className="hint">No Stage method in this build.</span>}
+          </div></div>
+        <div className="kv top"><span>image 1 <Help text={`The ${image1} pass of this camera is the shot's first image: the method reads the scene from it.`} /></span>
+          <div className="pass-row">
+            <div className="ref-slot source locked" title={passId ? `the ${image1} pass, rendered at revision ${entry?.revision}` : 'render the passes first'}>
+              {passId ? <img src={api.thumbUrl(passId, 256)} alt="" /> : <span className="empty">{image1}</span>}
+              <span className="n">1</span>
+            </div>
+            <div className="pass-side">
+              {entry ? <span className="hint">{Object.keys(entry.assets).length} passes · {entry.size.w}×{entry.size.h}{stale ? ` · from revision ${entry.revision}, the scene moved on — re-rendered on Generate` : ' · current'}</span>
+                : <span className="hint">No passes yet. <Help text="Render frame renders them first; Render passes renders them alone." /></span>}
+              {entry && stale && <label className="hint check"><input type="checkbox" checked={sh.use_as_is} onChange={(e) => st().setShot({ use_as_is: e.target.checked })} /> use as is</label>}
+            </div>
+          </div></div>
+        <div className="kv top"><span>references{method ? <span className="hint"> · {method.max_refs}</span> : null}{sh.refs.length > 0 && <CommandButton id="stage.shot.clearRefs" size={13} />}</span>
+          <div>
+            <div ref={dropRef} className={`ref-slots shot-refs${over ? ' over' : ''}`}>
+              {sh.refs.map((r, i) => (
+                <div key={r.asset_id} className="ref-slot" title={`reference image ${i + 2}`}>
+                  <img src={api.thumbUrl(r.asset_id, 256)} alt="" /><span className="n">{i + 2}</span>
+                  <button className="quiet x" title="Remove" onClick={() => st().removeShotRef(r.asset_id)}>✕</button>
+                </div>
+              ))}
+              {figSlots.map((x) => (
+                <div key={x.image} className="ref-slot figure-slot" title={`image ${x.image}: ${x.name}'s reference — bound to figure ${x.figure} (the Cast's set, not the deck's)`}>
+                  {x.asset_id ? <img src={api.thumbUrl(x.asset_id, 256)} alt="" /> : null}<span className="n">{x.image}</span><span className="fig-badge">fig {x.figure} · {x.name}</span>
+                </div>
+              ))}
+              {room - figSlots.length > 0 && <div className="ref-slot" title="drop a Catalogue tile here"><span className="empty">{sh.refs.length + figSlots.length + 2}</span></div>}
+            </div>
+            {figLines.length > 0 && <ul className="figure-lines" aria-label="the figures and their reference images">{figLines.map((t) => <li key={t}>{t}</li>)}
+              {pv?.params?.bind_refs === false && <li className="muted">this method reads the figures' images by their notes — not bound in its prompt</li>}
+              {/* journal 2026-10-17 18:03: exact pose (one reference slot) drew both figures as figure 1's character; clay carried each one's images */}
+              {figs.length > 1 && figs.some((f) => !f.refs?.length) && <li className="warn">this method has room for {method?.max_refs ?? 1} reference image{(method?.max_refs ?? 1) === 1 ? '' : 's'}: {figs.filter((f) => !f.refs?.length).map((f) => `figure ${f.figure}`).join(', ')} only get{figs.filter((f) => !f.refs?.length).length === 1 ? 's' : ''} words — for several characters use a method with more room (Clay reference)</li>}</ul>}
+            {!figLines.length && current.objects.some((o) => o.kind === 'mannequin') && <p className="hint">Figures not bound <Help text="Bind a figure to a Cast character (Inspector › character, or right-click ▸ Bind to a character): its reference images and sheet go into the frame, figure by figure, left to right." /></p>}
+            {sh.method === 'refcontrol' && !sh.refs.length && <p className="disabled-why">Exact pose needs one reference image (image 2): drop a Catalogue tile on the deck.</p>}
+          </div></div>
+        {sh.refs.map((r, i) => <div key={r.asset_id} className="kv"><span>image {i + 2}</span><input value={r.note ?? ''} placeholder="shows … (one phrase)" onChange={(e) => st().setShot({ refs: sh.refs.map((x) => (x.asset_id === r.asset_id ? { ...x, note: e.target.value } : x)) })} /></div>)}
+        <div className="kv top"><span>prompt</span><textarea className="shot-prompt" rows={3} value={sh.prompt_text} placeholder="what the scene is — after the method's own sentence about image 1" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
+        <div className="kv"><span>size</span><span className="segmented"><button className={sh.tier === 'draft' ? 'active' : ''} onClick={() => st().setShot({ tier: 'draft' })}>Draft</button><button className={sh.tier === 'full' ? 'active' : ''} onClick={() => st().setShot({ tier: 'full' })}>Full</button><span className="hint"> {w}×{h}</span></span></div>
+        <div className="kv"><span>count</span><span className="angle-count"><button onClick={() => st().setShot({ count: Math.max(1, sh.count - 1) })} disabled={sh.count <= 1}>−</button><span>{sh.count}</span><button onClick={() => st().setShot({ count: Math.min(4, sh.count + 1) })} disabled={sh.count >= 4}>+</button></span></div>
+        {pv?.params?.prompt ? <div className="kv top"><span>reads <Help text="The prompt as the method sends it: its own sentence about image 1, then yours." /></span><p className="hint prompt-preview">{String(pv.params.prompt)}</p></div> : null}
+        {err && <p className="disabled-why">{err}</p>}
+        {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
+        <div className="kv top"><span>results{stills.length ? <span className="hint"> · {stills.length}</span> : null}</span>
+          <div>
+            {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Catalogue (lineage: the pass and the references). Click one: the clip starts from it." /></span>}
+            <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
+          </div></div>
+      </Step>
+      {!stillsOnly && <Step id="clip" title="Clip" state={`frames ${current.range.start}–${current.range.end}${clips.length ? ` · ${clips.length} rendered` : ''}`}
+        verb={<CommandButton id="stage.clip.animate" text label="Render clip ▶" />}><ClipSection clips={clips} /></Step>}
+      {!stillsOnly && <FinalSection />}{/* D111 (PS5): its own step */}
     </div>
   )
 }
@@ -361,7 +381,6 @@ function ClipSection({ clips }: { clips: Asset[] }) {
   markUsed('stage.clip.guide'); markUsed('stage.clip.animate')
   return (
     <div className="clip-section">
-      <h4>Clip · frames {current.range.start}–{current.range.end}</h4>
       <div className="kv"><span>method</span><span className="segmented">
         <button className={method === 'guided' ? 'active' : ''} aria-label="clip method guided" disabled={!caps?.clip} onClick={() => st().setClipMethod('guided')} title={caps?.clip ? `${caps.clip.label}: the IC-LoRA follows the depth or pose sequence from the picked frame (ST4)` : 'not in this build (LTX-2.3 with its IC-LoRA is full-variant)'}>IC-LoRA</button>
         <button className={method === 'animate' ? 'active' : ''} aria-label="clip method animate" disabled={!caps?.animate} onClick={() => st().setClipMethod('animate')} title={caps?.animate ? `${caps.animate.label}: the picked character performs the pose sequence — one figure, up to ${caps.animate.frames_max ?? 77} frames (E19)` : 'not in this build'}>Wan Animate</button>
@@ -371,9 +390,9 @@ function ClipSection({ clips }: { clips: Asset[] }) {
       <div className="guide-state">
         {rendering && rendered ? `rendering ${rendered.done} / ${rendered.total || n}…` : g ? `${kind} sequence · ${g.frames} frames · ${g.size.w}×${g.size.h} · ${g.fps} fps${stale ? ' · from an earlier range or revision — render again' : ' · current'}` : `no ${kind} sequence yet · ${n} frames at ${gw}×${gh} (8n + 1 for the clip model)`}
       </div>
-      <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /><CommandButton id="stage.clip.animate" text label="Render clip ▶" /></div>
+      <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /></div>
       {!shotStart && <p className="disabled-why">Click one of the results above to start the clip from it.</p>}
-      {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames (E19) · one figure in the camera · the picked result is the character' : '121 frames (E11)'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}</p>}
+      {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames' : '121 frames'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}<Help text={method === 'animate' ? 'Wan Animate (E19): one figure in the camera; the picked result is the character.' : 'LTX-2.3 with its IC-LoRA (E11): the depth or pose sequence from the picked frame.'} /></p>}
       {clips.length > 0 && <><h4>Clips · {clips.length}</h4>
         <div className="clip-results">{clips.slice(0, 9).map((a) => <span key={a.id} className="clip-thumb"><img className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.frames ?? '?'} frames · ${a.model_id ?? ''}`} /><span className="n">{a.frames ?? '?'} f</span></span>)}</div></>}
     </div>
@@ -384,6 +403,35 @@ function ClipSection({ clips }: { clips: Asset[] }) {
 export function useStageLoad(): void {
   const project = useSession((s) => s.project)
   useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/** D116: the shot's steps as one strip in the foot — the passes, the guide sequence, the clip, the final shot and (for the stage's newest final)
+ *  its assembly, composition, Final level and render; the author's "rig", at hand whatever the column shows. */
+function RigStrip() {
+  const current = useStage((s) => s.current)
+  const passesBusy = useStage((s) => s.rendering)
+  const finals = useFinals((s) => s.finals)
+  const comps = useFinals((s) => s.compositions)
+  if (!current) return null
+  const f = finals.filter((x) => x.stage_id === current.id).at(-1) ?? null
+  const comp = f ? comps[f.id] ?? null : null
+  const busy = f ? assembling(f.id) : false
+  const renders = f ? compRendering(f.id) : false
+  return (
+    <div className="rig-strip" aria-label="the shot's steps" data-rig-strip>
+      <CommandButton id="stage.shot.passes" text label={passesBusy ? 'Passes…' : 'Passes'} />
+      <CommandButton id="stage.clip.guide" text label="Sequence" />
+      <CommandButton id="stage.clip.animate" text label="Clip ▶" />
+      <CommandButton id="stage.final.make" text label="Final…" />
+      {f && <>
+        <button className="quiet" disabled={!readyToAssemble(f) || busy} onClick={() => void useFinals.getState().assemble(f.id)} title={`${f.name}: composite the layers into the shot`}>{busy ? 'Assembling…' : 'Assemble'}</button>
+        {f.assembled_at && <button className="quiet" disabled={busy} onClick={() => void useFinals.getState().compose(f.id)} title={comp ? `${f.name}: the composition written afresh (the edits are dropped)` : `${f.name}: an EffectCraft composition to finish by hand`}>{comp ? 'Composition ↻' : 'Composition'}</button>}
+        {comp && <button className="quiet" onClick={() => useFinals.getState().openFinal(f.id)} title={`${f.name} at Animate's Final level`}>Open in Final</button>}
+        {comp && <button className="quiet" disabled={renders} onClick={() => void useFinals.getState().render(f.id)} title={`${f.name}: the finished shot rendered on the CPU`}>{renders ? 'Rendering…' : comp.clip_id ? 'Render ↻' : 'Render'}</button>}
+      </>}
+      <Help text="The shot's steps in order: the passes of the scene, the frame (Render frame below), the guide sequence, the clip, the final shot split into layers, its assembly, the composition to finish by hand at the Final level, the finished render. The Performance section has each step in full." />
+    </div>
+  )
 }
 
 /** The foot while Animate's Performance card is From the stage (D95 AN1): New stage, else Render frame ×n with its estimate. */
@@ -400,6 +448,7 @@ export function StageFoot() {
   const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
   return (
     <div>
+      <RigStrip />{/* D116: the shot's steps at hand, above the primary */}
       <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the frame (Ctrl+Enter)">Render frame{count > 1 ? ` ×${count}` : ''} ▶</button>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
     </div>
@@ -617,7 +666,7 @@ export function StageSelection() {
         <Vec label="position" v={cam.pos} onChange={(pos) => st().updateCamera(cam.id, { pos })} />
         <Vec label="target" v={cam.target} onChange={(target) => st().updateCamera(cam.id, { target })} />
       </>}
-      <p className="hint">Select an object in the viewport or the Scene's Outliner to edit it. Add from the Scene section or the viewport's right-click menu.</p>
+      <p className="hint">Nothing selected. <Help text="Select an object in the viewport or the Scene's Outliner to edit it; add from the Scene section or the viewport's right-click menu." /></p>
     </div>
   )
 }

@@ -909,8 +909,8 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('.final-viewer svg.mask-overlay g.mask.selected path')).toHaveCount(1)       // drawn on the frame, selected
   await expect(page.locator('.final-viewer svg.mask-overlay g.mask.selected circle.vertex')).toHaveCount(4)
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 6/)
-  // a shape from points: three clicks, the first point again closes it
-  await editor.locator('.verbs button[title^="Mask: points"]').click()
+  // a shape from points (the pen): three clicks, the first point again closes it
+  await editor.locator('.verbs button[title^="Mask: pen"]').click()
   for (const [fx, fy] of [[0.7, 0.2], [0.9, 0.3], [0.8, 0.6]]) await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy)
   await expect(page.locator('.final-viewer svg.mask-overlay g.mask.drawing circle')).toHaveCount(3)
   await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.2)
@@ -919,8 +919,33 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await editor.locator('.comp-mask-list li').nth(1).locator('button[title^="Remove"]').click()
   await expect(editor.locator('.comp-mask-list li')).toHaveCount(1)
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 8/)
-  await page.locator('#anim-sec-layers .verbs button[title^="Trim out to the playhead"]').click()   // at frame 4: out = 5 / 16 s
+  // D116: the masks filled instead of outlined; a mask from the layer's content (her matte), keyed over the shot; followed by the tracker; an Object Matte by a click
+  await editor.locator('.verbs button[title^="Mask fill"]').click()
+  await expect(page.locator('.final-viewer svg.mask-overlay')).toHaveAttribute('data-view', 'fill')
+  await editor.locator('.verbs button[title^="Mask fill"]').click()
+  await expect(page.locator('.final-viewer svg.mask-overlay')).toHaveAttribute('data-view', 'lines')
+  await editor.locator('.verbs button[title^="Mask: from the layer"]').click()
+  await expect(editor.locator('.comp-mask-list li')).toHaveCount(2)
+  await expect(editor.locator('.comp-mask-list li').nth(1)).toHaveAttribute('data-animated', 'true')                 // keyed on every frame: it follows
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 9/)
+  await editor.locator('.comp-mask-list li').nth(0).locator('button[title^="Follow the motion"]').click()            // the rectangle tracked from the playhead
+  await expect(editor.locator('.comp-mask-list li').nth(0)).toHaveAttribute('data-animated', 'true')
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 10/)
+  await editor.locator('.verbs button[title^="Mask: object"]').click()
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 11/)
+  await editor.locator('.segmented button', { hasText: 'Effects' }).click()
+  await expect(editor.locator('.comp-effect-list li')).toHaveCount(1)                                                 // the Object Matte is an effect on the layer
+  await expect(editor.locator('.comp-effect-list li').first()).toContainText('Object Matte')
+  await editor.locator('.comp-effect-list li button[title^="Remove"]').click()
+  await expect(editor.locator('.comp-effect-list li')).toHaveCount(0)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 12/)
+  await editor.locator('.segmented button', { hasText: 'Masks' }).click()
+  await editor.locator('.comp-mask-list li').nth(1).locator('button[title^="Remove"]').click()
+  await expect(editor.locator('.comp-mask-list li')).toHaveCount(1)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 13/)
+  await page.locator('#anim-sec-layers .verbs button[title^="Trim out to the playhead"]').click()   // at frame 4: out = 5 / 16 s
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 14/)
   type CompLayer = { id: number; name: string; out: number }
   const trimmed = (await api<{ items: CompLayer[] }>('GET', `/finals/${fin.id}/composition/layers`)).items.find((l) => l.name === figName)!
   expect(trimmed.out).toBeCloseTo(5 / 16, 5)
@@ -929,14 +954,14 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await editor.locator('.segmented button', { hasText: 'Effects' }).click()
   await editor.locator('.fx-tile[data-effect="Gaussian Blur"]').click()
   await expect(editor.locator('.comp-effect-list li')).toHaveCount(1)
-  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 10/)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 15/)
   const blur = editor.locator('.comp-effect-list li .dial[data-param="effects/#1/blurriness"] input')
   await blur.fill('4')
   await blur.press('Enter')
-  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 11/)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 16/)
   await page.locator('.final-transport button[title^="Before"]').click()
   await expect(page.locator('.final-viewer img.final-frame')).toHaveAttribute('data-before', 'true')
-  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 11/)                 // nothing saved
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 16/)                 // nothing saved
   await page.locator('.final-transport button[title^="Before"]').click()
   await expect(page.locator('.final-viewer img.final-frame')).not.toHaveAttribute('data-before', 'true')
   await editor.locator('.comp-effect-list li button[title^="Remove"]').click()

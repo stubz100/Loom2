@@ -61,6 +61,8 @@ pull request, and builds both installers on pushes to `main` and on tags.
    the attribution trailer. Commit only what belongs to the change.
 10. **One job on the GPU at a time (D97).** The author's hardware rule: never run two GPU workloads side by side (generations, renders,
     training, spikes, rig checks, headed WebGPU checks). They take turns through the queue; exceptions are a decision.
+11. **Help hides behind a ? (D116).** Explanatory text is never a block on the screen: it goes in a small question mark's hover
+    (`frontend/src/frame/Help.tsx`) or a control's tooltip. Status lines stay short — a count, a state, an empty state in a few words.
 
 ## Layout
 

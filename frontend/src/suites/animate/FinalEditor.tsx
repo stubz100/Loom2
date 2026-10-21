@@ -1,13 +1,14 @@
 // AE2 (proto01_animate 20 §2, D114): the editor's Layers section at the Final level — the composition's layers top to bottom (visible, solo,
 // lock, blend mode, track matte, parent, the order) and, **under the selected layer's row** (UX9 U1: so it is plain which layer is being
 // changed), its editor with three parts: Properties (transform and opacity, a keyframe at the playhead, each key's ease / hold), Masks
-// (drawn on the frame: rectangle, ellipse, a shape from points; mode, inverted, feather, opacity, expansion) and Effects (Effects.tsx).
-// Every action is one engine command on the composition (a mouse home here, the toolbar's commands and the row's right-click menu too,
-// D32); the viewer follows the new revision.
+// (drawn on the frame: rectangle, ellipse, the pen, from the layer's content, EffectCraft's object matte; mode, inverted, feather, opacity,
+// expansion; tracked) and Effects (Effects.tsx). Every action is one engine command on the composition (a mouse home here, the toolbar's
+// commands and the row's right-click menu too, D32); the viewer follows the new revision. Help hides behind ? (D116).
 import { useState } from 'react'
-import { CommandRow } from '../../frame/CommandButton'
+import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { sep, type MenuItem } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
+import { Help } from '../../frame/Help'
 import { fmtTime } from './animateStore'
 import { EffectsBody } from './Effects'
 import { MASK_MODES, useComposition, type CompLayer, type EditorTab, type FlatProp, type MaskInfo, type PropKey } from './compositionStore'
@@ -16,6 +17,14 @@ const BLEND_MODES = ['Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Darken',
 const MATTE_KINDS: [string, string][] = [['luma', 'luma'], ['lumaInverted', 'luma inverted'], ['alpha', 'alpha'], ['alphaInverted', 'alpha inverted']]
 const LABELS: Record<string, string> = { 'transform/anchor': 'Anchor', 'transform/position': 'Position', 'transform/scale': 'Scale', 'transform/rotation': 'Rotation', 'transform/opacity': 'Opacity' }
 const TABS: [EditorTab, string, string][] = [['props', 'Properties', 'transform, opacity, keyframes'], ['masks', 'Masks', 'shapes that keep or cut parts of the layer'], ['effects', 'Effects', 'colour, blur, grain, mattes, mood']]
+const MASK_TOOLS_HELP = 'Rectangle and ellipse: drag on the frame. Pen: click the points of a shape, the first again (or a double-click) closes it, Esc drops it. '
+  + "From the layer: what is visible on the layer at the playhead — a character's silhouette, a prop, the shadows — traced into a mask that follows across the shot. "
+  + "Object: click a thing on the frame; EffectCraft's Object Matte cuts the layer to it and follows it (an effect, under Effects). "
+  + 'Follow the motion: EffectCraft tracks what is inside the selected mask from the playhead to the end. Fill: the masks as filled areas instead of outlines.'
+const MASKS_HELP = 'A mask is a shape on the layer. Add keeps what is inside and hides the rest; Subtract cuts the inside away; Intersect keeps only what this mask '
+  + 'and the ones above it share — the masks apply in order. Inverted swaps inside and outside. Feather softens the edge over that many pixels, expand grows or '
+  + 'shrinks it, opacity is how much the mask counts. The outlines show on the frame while the layer is selected: drag a point to reshape, click an outline to select. '
+  + "A character's own cut-out is not a mask but her track matte (the Layers row), made by SAM 3 when the layer was performed."
 const cp = () => useComposition.getState()
 
 /** The engine's matte kind ("Luma Matte", "Alpha Inverted Matte") as the command's word. */
@@ -73,22 +82,21 @@ function PropertiesBody() {
   const keysOf = useComposition((s) => s.keysOf)
   return (
     <div className="comp-props">
-      <div className="verbs"><CommandRow ids={['anim.final.key.position', 'anim.final.key.opacity']} /></div>
+      <div className="verbs"><CommandRow ids={['anim.final.key.position', 'anim.final.key.opacity']} /><Help text="Drag the layer on the frame to move it. ◆ keys a property at the playhead; each key can be eased, held or linear." /></div>
       {props.map((p) => <PropRow key={p.path} p={p} keys={keysOf[p.path] ?? []} />)}
       {!props.length && <span className="hint">reading…</span>}
-      <span className="hint">Drag the layer on the frame to move it; ◆ keys a property at the playhead.</span>
     </div>
   )
 }
 
 // ------------------------------------------------------------------ Masks
-/** AE2c: one mask of the selected layer — feather, opacity, expansion, mode, inverted, remove (each one engine command). */
+/** AE2c: one mask of the selected layer — feather, opacity, expansion, mode, inverted, follow (D116), remove (each one engine command). */
 function MaskRow({ m }: { m: MaskInfo }) {
   const busy = useComposition((s) => s.busy)
   const selected = useComposition((s) => s.selectedMask === m.uid)
   return (
-    <li className={`comp-mask${selected ? ' selected' : ''}`} data-mask={m.uid} onClick={() => cp().selectMask(m.uid)}>
-      <span className="name" title="Selected: its outline is brighter on the frame; drag its points there">{m.name} <span className="hint">· {m.vertices.length} points</span></span>
+    <li className={`comp-mask${selected ? ' selected' : ''}`} data-mask={m.uid} data-animated={m.animated ? 'true' : undefined} onClick={() => cp().selectMask(m.uid)}>
+      <span className="name" title="Selected: its outline is brighter on the frame; drag its points there">{m.name} <span className="hint">· {m.vertices.length} points</span>{m.animated && <span className="keyed" title="The shape is keyed over the shot: it follows">· follows</span>}</span>
       <select value={MASK_MODES.includes(m.mode) ? m.mode : 'Add'} title="Mode: Add keeps what is inside, Subtract cuts it, Intersect keeps only what every mask shares" disabled={busy} onClick={(e) => e.stopPropagation()} onChange={(e) => void cp().setMaskMode(m.uid, e.target.value)}>
         {MASK_MODES.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
@@ -98,6 +106,8 @@ function MaskRow({ m }: { m: MaskInfo }) {
         <label title="How much the mask counts, 0–100">opacity <NumField key={`o:${m.opacity}`} value={m.opacity} step={1} onCommit={(v) => void cp().setMaskField(m.uid, 'opacity', Math.max(0, Math.min(100, v)))} label={`${m.name} opacity`} /></label>
         <label title="The edge grown (or shrunk, negative) by this many pixels">expand <NumField key={`e:${m.expansion}`} value={m.expansion} step={1} onCommit={(v) => void cp().setMaskField(m.uid, 'expansion', v)} label={`${m.name} expansion`} /></label>
       </span>
+      <button type="button" className="quiet" title="Follow the motion: EffectCraft tracks what is inside this mask from the playhead to the end and keys its shape on every frame" disabled={busy}
+        onClick={(e) => { e.stopPropagation(); cp().selectMask(m.uid); void cp().trackMask() }}>follow</button>
       <button type="button" className="quiet danger" title="Remove this mask" disabled={busy} onClick={(e) => { e.stopPropagation(); void cp().removeMask(m.uid) }}>×</button>
     </li>
   )
@@ -106,18 +116,18 @@ function MaskRow({ m }: { m: MaskInfo }) {
 function MasksBody() {
   const masks = useComposition((s) => s.masks)
   const tool = useComposition((s) => s.maskTool)
+  const view = useComposition((s) => s.maskView)
   return (
     <div className="comp-masks">
-      <div className="verbs"><CommandRow ids={['anim.final.mask.rect', 'anim.final.mask.ellipse', 'anim.final.mask.poly']} active={tool === 'off' ? undefined : `anim.final.mask.${tool}`} /></div>
-      {tool !== 'off' && <span className="hint" data-mask-hint>{tool === 'poly' ? 'Click points on the frame; click the first point again (or double-click) to close the shape; Esc cancels.' : `Drag on the frame to draw the ${tool === 'rect' ? 'rectangle' : 'ellipse'}; the tool turns off once the mask is made.`}</span>}
-      {masks.length ? <ul className="comp-mask-list">{masks.map((m) => <MaskRow key={m.uid} m={m} />)}</ul> : <span className="hint">No mask on this layer.</span>}
-      <details className="mask-help"><summary>How masks work</summary>
-        <p>A mask is a shape on the layer. <b>Add</b> keeps what is inside it and hides the rest; <b>Subtract</b> cuts the inside away; <b>Intersect</b> keeps
-          only what this mask and the ones above it share — the masks apply in order. <b>Inverted</b> swaps inside and outside. <b>Feather</b> softens the
-          edge over that many pixels, <b>expand</b> grows or shrinks it, <b>opacity</b> is how much the mask counts. The outlines show on the frame while
-          the layer is selected; drag a point to reshape. A character's own cut-out is not a mask but her <i>track matte</i> (the Layers row), made by
-          SAM 3 when the layer was performed.</p>
-      </details>
+      <div className="verbs">
+        <CommandRow ids={['anim.final.mask.rect', 'anim.final.mask.ellipse', 'anim.final.mask.poly', 'anim.final.mask.layer', 'anim.final.mask.object', 'gap', 'anim.final.mask.track']} active={tool === 'off' ? undefined : `anim.final.mask.${tool}`} />
+        <CommandButton id="anim.final.mask.view" active={view === 'fill'} />
+        <Help text={MASK_TOOLS_HELP} />
+      </div>
+      {masks.length ? <>
+        <div className="list-head"><span>{masks.length} mask{masks.length === 1 ? '' : 's'}, applied in order</span><Help text={MASKS_HELP} /></div>
+        <ul className="comp-mask-list">{masks.map((m) => <MaskRow key={m.uid} m={m} />)}</ul>
+      </> : <span className="hint">No mask on this layer. <Help text={MASKS_HELP} /></span>}
     </div>
   )
 }
@@ -149,7 +159,9 @@ function LayerRow({ l }: { l: CompLayer }) {
     { label: 'To the front', run: () => { void cp().arrange(l.id, 'front') }, disabled: l.index === 1 },
     { label: 'To the back', run: () => { void cp().arrange(l.id, 'back') }, disabled: l.index === layers.length }, sep,
     { cmd: 'anim.final.key.position' }, { cmd: 'anim.final.key.opacity' }, sep,
-    { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.mask.poly' }, { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, { cmd: 'anim.final.before' }, sep,
+    { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.mask.poly' }, { cmd: 'anim.final.mask.layer' }, { cmd: 'anim.final.mask.object' },
+    { cmd: 'anim.final.mask.track' }, { cmd: 'anim.final.mask.view' }, sep,
+    { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, { cmd: 'anim.final.before' }, sep,
     { cmd: 'anim.final.undo' }, { cmd: 'anim.final.redo' },
   ]
   return (
@@ -185,12 +197,12 @@ export function LayersSection() {
   const level = useComposition((s) => s.level)
   const comp = useComposition((s) => s.comp)
   const layers = useComposition((s) => s.layers)
-  if (level !== 'final' || !comp) return <span className="hint">The composition's layers, at the Final level — in the Shot section, a final shot's <b>Open in Final</b>.</span>
+  if (level !== 'final' || !comp) return <span className="hint">Not at the Final level. <Help text="In the Shot section, a final shot's Open in Final opens its composition here: the layers, each one's properties, masks and effects." /></span>
   return (
     <div className="comp-layers">
-      <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock', 'gap', 'anim.final.trimIn', 'anim.final.trimOut']} /></div>
+      <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock', 'gap', 'anim.final.trimIn', 'anim.final.trimOut']} />
+        <Help text="Top to bottom as composited. Click a row to open its editor under it (Properties · Masks · Effects); click again to fold it. A row's right-click menu orders it." /></div>
       <ul className="comp-layer-list">{layers.map((l) => <LayerRow key={l.id} l={l} />)}</ul>
-      <span className="hint">Top to bottom as composited. Click a row to open its editor under it; a row's right-click menu orders it.</span>
     </div>
   )
 }

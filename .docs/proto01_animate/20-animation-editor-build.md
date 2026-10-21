@@ -126,3 +126,6 @@ viewer's feel can be judged then, before AE2's controls are designed.
   Effects) under its row instead of three sections; U2 the chip a number alone and the picture at one size at ½ and full; U3 the masks
   drawn over the frame with draggable points, a points tool (`mask.new`), *How masks work*; EffectCraft's roto brush, object matte and
   tracking noted for the author. Next: the looks at 15, 17, 18, 19, then the rest of the register.
+- **2026-10-21 (journal 2026-10-21 16:42):** D116 — help behind a ? (house rule 11; Animate and Stage swept), the masks grown (pen icon, marching
+  outlines, Lines | Fill, from the layer's content keyed over the shot, EffectCraft's mask tracking and Object Matte), the Performance panel
+  a tree of the shot's steps with their verbs in the foot above Render frame. Next: the author's look; the ? sweep over the other suites.

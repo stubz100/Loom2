@@ -25,8 +25,9 @@ export type Arrange = 'front' | 'forward' | 'backward' | 'back'
 /** AE2c: a mask of the selected layer, as the engine's property tree reports it — its outline (vertices and tangents, in the layer's
  *  pixels) drawn on the frame, its vertices dragged there (UX9 U3). */
 export interface MaskInfo { uid: number; name: string; path: string; feather: number; opacity: number; expansion: number; mode: string; inverted: boolean
-  vertices: [number, number][]; inTangents: [number, number][]; outTangents: [number, number][]; closed: boolean }
-export type MaskTool = 'off' | 'rect' | 'ellipse' | 'poly'
+  vertices: [number, number][]; inTangents: [number, number][]; outTangents: [number, number][]; closed: boolean; animated: boolean }
+export type MaskTool = 'off' | 'rect' | 'ellipse' | 'poly' | 'object'
+export type MaskView = 'lines' | 'fill'
 export type EditorTab = 'props' | 'masks' | 'effects'
 export const MASK_MODES = ['Add', 'Subtract', 'Intersect', 'Lighten', 'Darken', 'Difference', 'None']
 interface TreeNode { path?: string; name?: string; uid?: number; type?: string; value?: unknown; mask?: { inverted?: boolean; mode?: string }; children?: TreeNode[] }
@@ -36,11 +37,13 @@ export function masksOf(tree: TreeNode | undefined): MaskInfo[] {
   return (group?.children ?? []).filter((m) => m.uid !== undefined).map((m) => {
     const leaf = (k: string) => m.children?.find((c) => (c.path ?? '').endsWith(`/${k}`))?.value
     const feather = leaf('feather')
-    const pv = ((leaf('path') as { v?: Record<string, unknown> } | undefined)?.v ?? {}) as { closed?: boolean; vertices?: number[][]; in_tangents?: number[][]; out_tangents?: number[][] }
+    const pathChild = m.children?.find((c) => (c.path ?? '').endsWith('/path')) as (TreeNode & { animated?: boolean; keys?: number }) | undefined
+    const pv = ((pathChild?.value as { v?: Record<string, unknown> } | undefined)?.v ?? {}) as { closed?: boolean; vertices?: number[][]; in_tangents?: number[][]; out_tangents?: number[][] }
     const pts = (xs?: number[][]): [number, number][] => (xs ?? []).map((p) => [Number(p[0] ?? 0), Number(p[1] ?? 0)])
     return { uid: m.uid!, name: m.name ?? 'Mask', path: m.path ?? '', feather: Array.isArray(feather) ? Number(feather[0]) : Number(feather ?? 0),
       opacity: Number(leaf('opacity') ?? 100), expansion: Number(leaf('expansion') ?? 0), mode: m.mask?.mode ?? 'Add', inverted: !!m.mask?.inverted,
-      vertices: pts(pv.vertices), inTangents: pts(pv.in_tangents), outTangents: pts(pv.out_tangents), closed: pv.closed !== false }
+      vertices: pts(pv.vertices), inTangents: pts(pv.in_tangents), outTangents: pts(pv.out_tangents), closed: pv.closed !== false,
+      animated: !!(pathChild?.animated || pathChild?.keys) }                                  // D116: keyed — from the layer, or tracked
   })
 }
 /** A mask's outline as an SVG path (the layer's pixels, moved by `dx, dy` into the composition's): cubic segments from the tangents. */
@@ -140,6 +143,15 @@ interface CompState {
   addPolyMask: (points: [number, number][]) => Promise<boolean>
   /** One vertex of a mask moved (`mask.setVertex`), in the layer's pixels. */
   moveVertex: (uid: number, index: number, point: [number, number]) => Promise<boolean>
+  // ---- D116: more masks ----
+  maskView: MaskView                                // the overlay: outlines, or the masks filled
+  setMaskView: (view: MaskView) => void
+  /** The selected layer's visible content at the playhead traced into a mask (the server reads the layer's footage); `follow` keys it on every frame. */
+  maskFromLayer: (follow: boolean) => Promise<boolean>
+  /** EffectCraft tracks what is inside the selected mask from the playhead to the end of the shot (`track.mask`, classical, one undo step). */
+  trackMask: () => Promise<boolean>
+  /** EffectCraft's Object Matte on the selected layer from a click (layer pixels): applied at the playhead, propagated over the whole shot. */
+  objectMatte: (point: [number, number]) => Promise<boolean>
   setMaskField: (uid: number, field: 'feather' | 'opacity' | 'expansion', value: number) => Promise<boolean>
   setMaskMode: (uid: number, mode: string) => Promise<boolean>
   invertMask: (uid: number, value: boolean) => Promise<boolean>
@@ -268,7 +280,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], editorTab: 'props', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -340,6 +352,39 @@ export const useComposition = create<CompState>((set, get) => {
       return get().command('mask.new', { layer: sel, vertices: points.map(([x, y]) => [Math.round(x), Math.round(y)]), closed: true }, 'Mask')
     },
     moveVertex: (uid, index, point) => get().command('mask.setVertex', { layer: get().selected, mask: uid, index, point: [Math.round(point[0]), Math.round(point[1])] }, 'Mask vertex'),
+    // ---- D116: more masks ----
+    setMaskView: (maskView) => set({ maskView }),
+    maskFromLayer: async (follow) => {
+      const s = get()
+      if (s.selected === null || !s.finalId || !s.final || s.busy) return false
+      set({ busy: true })
+      try {
+        const r = await http.POST('/finals/{fid}/composition/layers/{lid}/mask_from_content', { params: { path: { fid: s.finalId, lid: String(s.selected) } }, body: { t: s.frame / s.final.rate, follow, tolerance: 1.5, max_points: 160 } })
+        if (r.error) { useSession.getState().toast(`Mask from the layer: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        const res = (r.data as { result?: { points?: number; frames?: number } }).result
+        useSession.getState().toast(`Mask from the layer: ${res?.points ?? 0} points${follow ? `, following over ${res?.frames ?? 1} frames` : ''}`, 'success')
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    trackMask: async () => {
+      const s = get()
+      if (s.selected === null || s.selectedMask === null || !s.final) return false
+      const t = s.frame / s.final.rate
+      const ok = await get().batch([{ id: 'time.set', params: { time: t } }, { id: 'track.mask', params: { layer: s.selected, mask: s.selectedMask, method: 'positionScaleRotation', direction: 'forward', wait: true } }], 'Follow the motion')
+      if (ok) useSession.getState().toast('The mask follows the motion from the playhead to the end', 'success')
+      return ok
+    },
+    objectMatte: async (point) => {
+      const s = get()
+      if (s.selected === null || !s.final) return false
+      const frame = s.frame
+      const ok = await get().batch([
+        { id: 'objectMatte.apply', params: { layer: s.selected, point: [Math.round(point[0]), Math.round(point[1])], frame, before: frame, after: Math.max(0, s.final.frames - 1 - frame) } },
+        { id: 'objectMatte.propagate', params: { layer: s.selected, wait: true } }], 'Object matte')
+      if (ok) { useSession.getState().toast('Object Matte on the layer: an effect, listed under Effects; it follows the thing across the shot', 'success'); set({ maskTool: 'off' }) }
+      return ok
+    },
     loadMasks: async () => {
       const fid = get().finalId, sel = get().selected
       if (!fid || sel === null) return

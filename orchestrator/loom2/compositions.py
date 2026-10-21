@@ -13,12 +13,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import REPO_ROOT
 from .effectcraft import EffectCraft
 from .finals import Final, FinalStore
 from .fsio import atomic_write_json, atomic_write_text, read_json, utc_now
+from .tools.outline import outline, resample
 from .workspace import Workspace
 
 COMPOSITION_SCHEMA_VERSION = 1
@@ -270,3 +272,60 @@ class CompositionStore:
         if t is not None:
             args["time"] = t
         return ec.tool("get_property", args)
+
+    # ---- D116: a mask from the layer's visible content -----------------------------------------------
+    def content_footage(self, f: Final, c: Composition, ref: str | int) -> tuple[CompositionLayer, Path]:
+        """The composition layer `ref` names (the engine's id or the name) and the footage that carries its visible content: a character's
+        matte (hers or her matte layer's), a prop's RGBA, the shadows' strength. The plate fills the frame: nothing to trace."""
+        for l in c.layers:
+            if str(l.layer) == str(ref) or l.name == ref or (l.matte is not None and str(l.matte) == str(ref)) or f"{l.name} · matte" == ref:
+                if l.kind == "figure":
+                    return l, self.footage(f.id) / f"{l.id}_matte"
+                if l.kind == "prop":
+                    return l, self.footage(f.id) / l.id
+                if l.kind == "shadows":
+                    return l, self.footage(f.id) / "shadow"
+                raise ValueError("the plate fills the frame: nothing to trace into a mask")
+        raise KeyError(f"no composition layer {ref!r}")
+
+    def mask_from_content(self, f: Final, ec: EffectCraft, ref: str | int, t: float, follow: bool = True, tolerance: float = 1.5,
+                          max_points: int = 160) -> tuple[dict, Composition]:
+        """A new mask on the layer traced from what is visible on it at the frame under `t` (`tools/outline.py`: the largest region's
+        boundary, simplified); with `follow`, its path keyed on every frame of the shot with the same vertex count, so it follows the
+        character (or the prop, or the shadow). One save. Returns {mask, points, frames}."""
+        c = self._open(f, ec)
+        layer, folder = self.content_footage(f, c, ref)
+        n, rate = max(1, int(f.frames)), float(f.rate or 16)
+        i0 = max(0, min(n - 1, int(round(t * rate))))
+
+        def frame(i: int) -> Image.Image:
+            path = folder / f"{i:04d}.png"
+            if not path.is_file():
+                raise KeyError(f"no footage frame {i} for {layer.name} ({path.name}): assemble the final first")
+            with Image.open(path) as im:
+                return im.copy()
+
+        first = outline(frame(i0), tolerance=tolerance, max_points=max_points)
+        if len(first) < 3:
+            raise ValueError(f"nothing visible on {layer.name} at frame {i0}: no outline to trace")
+        fixed = max(16, len(first)) if follow and n > 1 else None
+        verts = resample(first, fixed) if fixed else first
+        target = ref if isinstance(ref, int) or str(ref).isdigit() else layer.layer
+        r = ec.command("mask.new", {"layer": target, "vertices": [[round(x, 2), round(y, 2)] for x, y in verts], "closed": True})
+        uid = r.get("mask") if isinstance(r, dict) else None
+        frames = 1
+        if fixed:
+            tree = ec.tool("get_layer", {"layer": target, "comp": COMP_NAME, "depth": 3})
+            masks = next((g for g in tree["properties"]["children"] if g["path"] == "masks"), {"children": []})["children"]
+            m = next((m for m in masks if m.get("uid") == uid), masks[-1] if masks else None)
+            if m is not None:
+                path = next(ch["path"] for ch in m["children"] if str(ch["path"]).endswith("/path"))
+                for i in range(n):
+                    pts = verts if i == i0 else outline(frame(i), tolerance=tolerance, max_points=max_points, fixed=fixed)
+                    if len(pts) < 3:
+                        continue                                           # nothing visible there: no key, the last shape holds
+                    value = {"t": "Path", "v": {"closed": True, "vertices": [[round(x, 2), round(y, 2)] for x, y in pts],
+                                                "in_tangents": [[0.0, 0.0]] * len(pts), "out_tangents": [[0.0, 0.0]] * len(pts)}}
+                    ec.tool("set_property", {"layer": target, "comp": COMP_NAME, "path": path, "value": value, "time": i / rate})
+                    frames += int(i != i0)
+        return {"mask": uid, "points": len(verts), "frames": frames}, self._edited(f, ec, c)

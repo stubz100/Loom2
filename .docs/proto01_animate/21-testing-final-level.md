@@ -1,8 +1,9 @@
 # 21 · Trying the Final level (for the author)
 
-About 10 minutes. The animation editor (D114, doc 20): a final shot's composition opened inside Animate, scrubbed and played, edited
-(layers, properties, masks, the lanes, effects) and rendered to a clip. Revised 2026-10-21 after the author's first look (the three notes
-at the end, fixed as UX9 U1–U3).
+About 15 minutes. The animation editor (D114, doc 20): a final shot's composition opened inside Animate, scrubbed and played, edited
+(layers, properties, masks, the lanes, effects) and rendered to a clip. Revised 2026-10-21 twice: after the author's first look (U1–U3) and
+after the second (D116: help behind a ?, more mask tools, the Performance panel as a tree — U4–U7). Wherever a small **?** sits beside an
+item, hover it for the words; nothing explanatory is written on the screen any more (house rule 11).
 
 ## Set-up
 
@@ -47,15 +48,23 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   scrub a second later, set 100, press ◆ again — now she fades in between; the keys are listed with *ease / hold / linear*.
 - **Check:** after each edit, does the frame redraw within a second? Is "one edit, one undo step" how you expect it?
 - **Masks** (the second part): the **rectangle** tool, then drag a box on the frame around her. The mask appears in the list **and on
-  the frame** — a dashed outline with four points, which stays while her row is selected (it is the selected mask: brighter; click
+  the frame** — a marching outline with four points, which stays while her row is selected (it is the selected mask: brighter; click
   another mask's outline to select it). Drag a point to reshape it. Set its feather to 30, tick *inverted*, change the mode; the outline
-  stays, the picture changes. Then the **points** tool: click five or six points around Mara's head on the frame and click the first
-  point again (or double-click) to close the shape — a mask that follows her outline instead of a box; Esc drops a half-drawn shape.
-  Remove with ×. **How masks work** under the list explains Add / Subtract / Intersect, inverted, feather, expand and opacity, and that
-  her cut-out itself is not a mask but her *track matte* (the row's matte select), made when she was performed.
-- **Check:** is the outline on the frame enough to know where the mask is? Are rectangle, ellipse and points enough for the finishing
-  you expect here? (EffectCraft also has a roto brush, an object matte by a click and mask tracking — later tools if the shapes fall
-  short; say which you would reach for.)
+  stays, the picture changes. **Mask fill** (the bucket) shows the masks as filled areas instead of outlines, like Quick mask in Edit;
+  press it again for outlines. Then the **pen**: click five or six points around Mara's head and click the first point again (or
+  double-click) to close the shape; Esc drops a half-drawn one. Remove with ×.
+- **From the layer** (the scan icon): with Mara's row selected, one click — her silhouette at the playhead becomes a mask, traced from her
+  matte, and it is keyed on every frame of the shot (the row says *follows*): scrub, and the outline moves with her. The same on the stool
+  (its alpha) or on the Shadows layer; the Room refuses (the plate fills the frame). Set its mode to *Subtract* on an *inverted* copy to
+  cut everything but her — or, simpler, use it on the Room layer inverted.
+- **Follow the motion** (the route icon, or *follow* on the mask's row): draw a rectangle around the stool, press follow — EffectCraft
+  tracks what is inside it from the playhead to the end and keys the shape on every frame (less than a second on the CPU).
+- **Object** (the click icon): with Mara's row selected, click on her coat. EffectCraft's Object Matte cuts the layer to the thing you
+  clicked and follows it across the shot (a second or two); it is an *effect* on the layer — switch to Effects to see it, turn it off or
+  remove it. (Only the classical engine is installed; EffectCraft's downloadable MobileSAM would sharpen it — say if you want it.)
+- **Check:** are the marching outline and the fill enough to know where a mask is? Does *from the layer* give you Mara's silhouette as you
+  pictured it, and does it hold up as she moves? Is the Object Matte useful beside the track matte she already has? Anything from
+  EffectCraft's roto brush (strokes to paint a matte) you would want too?
 - **The lanes** under the transport: each layer a bar. Drag the end of the stool's bar inwards: it disappears from the frame after that
   time. Drag the bar itself to move it; Alt-drag slides the footage under it. Undo as before.
 - **Check:** does trimming by the bar's ends read as expected? Are the lanes enough, or do you want the full timeline (keys per
@@ -63,6 +72,17 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
 - **Effects** (the third part): click **Lumetri Color**; set exposure to 0.5 and temperature to −20 — she warms and brightens against
   the room. Press **Before** under the viewer to see the frame without effects, again for after. Then select the Shadows row and add
   **Gaussian Blur** (blurriness 6) to soften the shadows. Each effect has on / off, reset and ×.
+
+## 4b. The Performance panel and the foot (D116, ≈ 2 min)
+
+Back at the **Clay** level, the rail's **Performance** tab: the panel is now a tree of the shot's steps — **Frame** (method, image 1,
+references, prompt, size, count, results, each a labelled row), **Clip**, **Final shot** (the finals, each layer in columns: kind · name ·
+status · action). Each step folds by its title; the step's state and its verb sit on the title line. In the **foot**, above *Render frame ▶*,
+one strip holds the shot's verbs in order — Passes · Sequence · Clip ▶ · Final… and, for the stage's newest final, Assemble · Composition ·
+Open in Final · Render — so they are at hand whatever the column shows.
+
+- **Check:** does the tree read as the pipeline? Is the strip what you meant by "above the render frame button", or should the whole panel
+  move into the foot? Which, if any, of the strip's verbs should be the primary there?
 - **Check:** are the dials the right few for each effect? Anything you reach for in Resolve that is missing?
 
 ## 5. Make it again (optional)
@@ -81,7 +101,11 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
 | Moving a layer by dragging: right? | |
 | One edit, one undo: as expected? | |
 | The editor under the row: plain which layer is edited? | |
-| The mask outlines on the frame: enough? The points tool? | |
+| The mask outlines on the frame: enough? The pen? | |
+| From the layer: Mara's silhouette as pictured; holds as she moves? | |
+| Follow the motion, the Object Matte: useful? | |
+| The ? everywhere instead of text: right? | |
+| The Performance tree and the foot's strip: right place for the verbs? | |
 
 ## The first look (2026-10-21) and what it changed
 
@@ -94,3 +118,13 @@ The author's notes on the version of this document before AE3, recorded as UX9's
 - **U3** — a drawn mask vanished from the frame once the tool was off, and only a rectangle and an ellipse were offered. Now the selected
   layer's masks are drawn over the frame with draggable points, a points tool draws any shape, and *How masks work* explains them.
   Further tools EffectCraft offers (roto brush, object matte, tracking) wait for the author's word.
+
+The author's second look (the same day) → **D116**, built as U4–U7:
+
+- **U4** — "all descriptions should only appear when hovered over a small question mark next to the item": a house rule (CLAUDE.md 11)
+  and a ? component; the Animate and Stage suites swept, the others follow.
+- **U5** — the pen's icon; the outlines march; Lines | Fill; *From the layer* (the visible content traced, keyed over the shot);
+  EffectCraft's mask tracking (*Follow the motion*) and Object Matte (a click). The roto brush stays unbuilt until asked.
+- **U6** — the Performance panel as a tree of the shot's steps, rows aligned.
+- **U7** — the shot's verbs as a strip in the foot above *Render frame ▶* — the builder's reading of "place it above the render frame
+  button"; whether the whole panel should move is the author's call (§4b).

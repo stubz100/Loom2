@@ -939,6 +939,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/layers/{lid}/mask_from_content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Mask From Content
+         * @description D116: a new mask on the layer traced from what is visible on it — a character's matte, a prop's alpha, the shadows — at the frame
+         *     under `t`; with `follow` (the default) the path is keyed on every frame of the shot so the mask follows. The result says the mask's
+         *     uid, its points and the frames keyed. 422 when the layer has nothing to trace (the plate; an empty frame).
+         */
+        post: operations["composition_mask_from_content_finals__fid__composition_layers__lid__mask_from_content_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/composition/layers/{lid}/property": {
         parameters: {
             query?: never;
@@ -6800,6 +6822,32 @@ export interface components {
              */
             y: number;
         };
+        /**
+         * MaskFromContent
+         * @description D116: a mask traced from the layer's visible content at `t`; with `follow`, keyed on every frame of the shot.
+         */
+        MaskFromContent: {
+            /**
+             * Follow
+             * @default true
+             */
+            follow?: boolean;
+            /**
+             * Max Points
+             * @default 160
+             */
+            max_points?: number;
+            /**
+             * T
+             * @default 0
+             */
+            t?: number;
+            /**
+             * Tolerance
+             * @default 1.5
+             */
+            tolerance?: number;
+        };
         /** MatteBody */
         MatteBody: {
             /**
@@ -12067,6 +12115,42 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_mask_from_content_finals__fid__composition_layers__lid__mask_from_content_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaskFromContent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionResult"];
                 };
             };
             /** @description Validation Error */

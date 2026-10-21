@@ -264,3 +264,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .models-sheet-grid .strip { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
 .models-sheet-table { flex: 1; overflow: auto; }
 .models-sheet-engine { padding: 16px; overflow: auto; height: 100%; }
+/* D116 (house rule 11): explanatory text behind a small ?, shown on hover */
+.help { display: inline-flex; align-items: center; vertical-align: -2px; margin-left: 4px; color: var(--fg3); cursor: help; }
+.help:hover { color: var(--fg); }
+h4 .help, .hint .help, label .help { margin-left: 3px; }
+.verbs .help { align-self: center; margin-left: auto; }

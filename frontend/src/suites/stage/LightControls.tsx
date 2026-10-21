@@ -2,6 +2,7 @@
 // aims (a point, or an object picked from the list: a figure's chest, another object's top); with three looks to start from. The stage's
 // ambient level (the sky) sits with the stage's own fields.
 import type { StageObject } from '../../api/types'
+import { Help } from '../../frame/Help'
 import { st, useStage } from './stageStore'
 
 type Light = NonNullable<StageObject['light']>
@@ -37,7 +38,7 @@ export function LightControls({ o }: { o: StageObject }) {
         onChange={(e) => { const t = [...s.target]; t[i] = Number(e.target.value) || 0; set({ target: t }) }} />)}</span></div>
       {targets.length > 0 && <div className="kv"><span>aim at</span><select value="" aria-label="aim the light at an object" onChange={(e) => { const t = targets.find((x) => x.id === e.target.value); if (t) set({ target: aimPoint(t) }) }}>
         <option value="">an object…</option>{targets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}
-      {!o.light && <p className="hint">Shining as the first key light did (hard shadows); any change gives it settings of its own.</p>}
+      {!o.light && <p className="hint">As the key light <Help text="Shining as the first key light did (hard shadows); any change gives it settings of its own." /></p>}
     </div>
   )
 }

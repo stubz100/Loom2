@@ -7300,3 +7300,54 @@ The author asked for a review of the state of things, then "record all this and 
   on the first look and what it changed); the README row; 20 §5 and 07's status row (phase 6 begun).
 - **Next:** the author's second look at 21; the looks still owed at 15, 17, 18, 19; then the rest of the UX9 register. E29 lip-sync and
   E24 post before AE4, as 07 orders.
+
+## 2026-10-21 16:42 — D116 built: help behind a ?, the Final level's masks grown (from the layer, pen, fill, tracked, object matte), the Performance panel a tree with the shot's verbs in the foot — UX9 U4–U7
+
+- **The author's second note (2026-10-21, after U1–U3):** the *How masks work* block must go — "let's introduce a rule from now on: all descriptions
+  should only appear when hovered over a small question mark next to the item — the screen is clogged enough without having blocks of text
+  added to it!"; the points mask "a good addition (although not a good icon)"; wanted: "a 'from layer' mask, that automatically selects the
+  visible content — like on Mara's layer, it would be Mara's silhouette", a moving mask boundary, "a button to swap between mask boundary lines
+  and fill (like in image/edit)", and EffectCraft's tools "perhaps we should add those also"; "the rig under performance menu is a bit
+  disorganized — a tree structure, or just align the items more coherently"; "the Rig panel in animate is a crucial part of the whole concept
+  with a lot of important buttons on it, I wonder if we should place it above the render frame button in the bottom box…?" → **D116**
+  (recorded first), **house rule 11** in CLAUDE.md.
+- **Probes on the pinned EffectCraft (CPU, a copy of the PS5 rig's composition):** a mask path keyed on all 81 frames by `set_property … time`
+  in 0.04 s, a frame with the keyed mask 52 ms, keys may differ in vertex count; `track.mask` (classical, positionScaleRotation, forward)
+  tracks 64 frames in 0.7 s and keys the path on each; `objectMatte.apply` is instant, `objectMatte.propagate {wait}` segments 31 frames in
+  1.9 s (the default span ±30 — `before` / `after` cover the shot), the frame changes, `freeze` 0.1 s; the effect is `ec.matte.objectmatte`;
+  `roto.models` offers the classical engine built in and MobileSAM (Apache-2.0, 5M parameters) as a download, `face.models` MediaPipe.
+  Roto Brush (strokes to paint) is not built — a later tool if the author asks.
+- **U4 — help behind a ?** `frontend/src/frame/Help.tsx`: a small CircleHelp whose `title` carries the text (its accessible label too). The
+  Animate and Stage suites' descriptive hint blocks moved behind it (21 in 7 files: the Final editor's, the Library's, the Poses', the
+  Outliner's, the Shot panel's, the figure and prop bindings', the light's, the final section's); status lines stayed short ("No mask on this
+  layer.", "None yet.", counts). The other suites follow in UX9.
+- **U5 — the masks.** The pen tool's icon is PenTool and its label *Mask: pen*. The outlines march (`stroke-dashoffset` animated) so they read
+  on any picture; *Mask fill* (`anim.final.mask.view`) shows the masks as filled areas instead — an inverted mask fills the frame but its shape
+  (even-odd). **From the layer** (`anim.final.mask.layer` → `POST …/composition/layers/{lid}/mask_from_content {t, follow, tolerance,
+  max_points}`): the server reads the layer's footage frame — a character's matte (`comp/<id>_matte/`, hers or her matte layer's), a prop's
+  RGBA, the shadows' strength; the plate refuses (422) — and `loom2/tools/outline.py` traces it: a morphological open, the largest region
+  (Pillow's flood fill in C; a `fromarray` image is read-only and a fill on it is lost — `.copy()` first), the boundary pixel by pixel (Moore
+  tracing), Douglas–Peucker to the tolerance and at most `max_points`, then, to follow, each frame resampled to the same count by arc length
+  from the topmost point and keyed on the path (`set_property … time`) — one `mask.new`, N keys, one save. **Follow the motion**
+  (`anim.final.mask.track`, a row button too): `time.set` at the playhead then `track.mask {wait}` as one batch. **Object**
+  (`anim.final.mask.object`): a click on the frame → `objectMatte.apply {point, frame, before: frame, after: the rest}` +
+  `objectMatte.propagate {wait}` as one batch; the Object Matte is an effect on the layer, listed under Effects (not curated: a ? says its
+  parameters stay the engine's). The mask row says *follows* when its path is keyed (`animated` from the tree). The mask tools and *how masks
+  work* are two ?s. The fake: masks carry vertices and `path_keys` (`set_property` / `get_property` on `masks/mask#n/path`, keyed with a time),
+  `track.mask` slides the shape a pixel a frame, `objectMatte.apply / propagate / status / freeze` with an `Object Matte` registry entry.
+- **U6 — the Performance panel as a tree.** `ShotTab` is three `<details>` steps — **Frame** (method, image 1, references, prompt, size,
+  count, results as aligned `kv` rows), **Clip** (ClipSection, its verb *Render clip ▶* on the title line), **Final shot** (FinalSection as
+  a step: the finals, each layer in columns kind · name · status · action, the verbs on one line and the state under them) — each folded by
+  its title, its state and verb on the title line (a verb's click does not fold it: `preventDefault` on the summary's default). The h4s went.
+- **U7 — the shot's verbs in the foot.** `RigStrip` above *Render frame ▶*: Passes · Sequence · Clip ▶ · Final… and, for the stage's newest
+  final, Assemble · Composition · Open in Final · Render, with their states; a ? explains the order. The panel itself stays in the column (it
+  needs the room) — the builder's reading of "place it above the render frame button"; the author decides whether the whole panel moves.
+- **Tests:** `test_outline_d116` (a disc traced within tolerance, the largest region wins and specks go, RGBA by alpha, a fixed count);
+  `test_compositions_ae1` grows: a mask from Mara's content (the fixture's rectangle matte: the polygon around it, N keys, the property
+  animated), the plate 422, `track.mask` through the batch route (keys replaced from the playhead, a pixel a frame), an Object Matte applied
+  and propagated (the effect in the tree), removed; `test_routes_d37` snapshot + the OpenAPI export + `api:types`; the e2e final-shot scenario
+  continues with Mask fill on and off, a mask from the layer (*follows*), the rectangle followed, an Object Matte by a click (an effect, removed),
+  the later revisions shifted (1…16); the lights Vitest reads the help's title. Offline: 482 passed in 147.27s (0:02:27) (full), 482 passed in 143.36s (0:02:23) (open); Vitest 392 + 3; the e2e suites are owed: a Vite dev server the author started at 14:06 holds port 1420 (left alone — never a blanket kill), so the smoke runs when the port is free; build clean; lint 75; agents_check clean.
+- **Docs:** 21 revised again (the ? rule, the tools, the tree and the strip, new checks); 20 §5; 07's status row; README; CLAUDE.md rule 11.
+- **Next:** the author's look at 21 (and whether the Performance panel itself should move to the foot); the looks at 15, 17, 18, 19; the ?
+  sweep over Story, Image and Edit; then the rest of the UX9 register.

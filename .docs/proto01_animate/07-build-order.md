@@ -60,7 +60,7 @@ truth from here; the table above stays as written.
 | gate | a D-number per group | rate and joins D102 · mode D103 · shadows D105–D107 · props D108–D110 · the preview route D113 | lip-sync and the post stages: undecided until E29 / E24 |
 | 4 · the editor | AE1 · AP1 · AE2 · AE3 | nothing | **the whole phase — starts now (D114)** |
 | 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · CA7 / AE4 (wait E24) · AE5 |
-| 6 · review | UX9 | begun 2026-10-21 with the author's look at 21: U1–U3 fixed (journal 2026-10-21 13:58) | the looks at 15, 17, 18, 19; the rest of the register |
+| 6 · review | UX9 | begun 2026-10-21 with the author's look at 21: U1–U3 (journal 2026-10-21 13:58), U4–U7 (D116, journal 2026-10-21 16:42) | the looks at 15, 17, 18, 19; the ? sweep over Story, Image, Edit; the rest of the register |
 | 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it |
 
 ### The mapping: 02's CA waves → 16's PS steps

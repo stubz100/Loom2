@@ -1,6 +1,7 @@
 // D93 (C8): a Stage figure bound to a Cast character — the Inspector's character (the Cast's characters as hero tiles, "no character", a
 // pinned version beside) and the Outliner's tag (who the figure is). The right-click "Bind to a character ▸" is stageCommands.ts bindItems.
 import { useEffect } from 'react'
+import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Profile, StageObject } from '../../api/types'
 import { CommandRow } from '../../frame/CommandButton'
@@ -36,7 +37,7 @@ export function FigureCharacter({ o }: { o: StageObject }) {
     { id: NONE, label: 'no character', hint: 'a grey figure the prompt describes', icon: fieldGlyph('free') }]
   return (
     <>
-      <div className="kv"><span>character</span><span className="hint">{p ? `${p.name} — its references and sheet, figure by figure, left to right` : chars.length ? 'pick who this figure is' : 'no characters in the Cast yet'}</span></div>
+      <div className="kv"><span>character</span><span className="hint">{p ? p.name : chars.length ? 'pick who this figure is' : 'no characters in the Cast yet'}{p && <Help text="Its reference images and sheet go into the frame, figure by figure, left to right." />}</span></div>
       <PresetIcons label="the figure's character" size={40} items={items} selected={o.profile_id ?? NONE} onPick={(id) => st().bindFigure(o.id, id === NONE ? null : id)}
         onContext={(id, e) => { if (id === NONE) return; useStory.getState().selectProfile(id); showMenu(e, [{ cmd: 'story.cast.openInStory' }]) }} />
       {p && p.versions.length > 1 && <div className="kv"><span>version</span><select value={o.version ?? ''} aria-label="the character's version" onChange={(e) => st().bindFigure(o.id, p.id, e.target.value || null)}>
@@ -66,7 +67,7 @@ export function LibraryProps({ centre }: { centre: () => number[] }) {
   const loaded = useStory((x) => x.profilesLoaded)
   useEffect(() => { if (!loaded) profilesForMentions() }, [loaded])
   const props = profiles.filter((p) => p.cls === 'prop')
-  if (!props.length) return <span className="hint">None yet — make one in Story · Props: its images first, then its 3D model.</span>
+  if (!props.length) return <span className="hint">None yet. <Help text="Make one in Story · Props: its images first, then its 3D model." /></span>
   return (
     <div className="lib-grid">{props.map((p) => {
       const model = p.versions.find((v) => v.id === p.current)?.model_asset_id

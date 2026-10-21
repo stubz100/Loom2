@@ -7,7 +7,8 @@ import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
-  Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, Pentagon as PolyIcon } from 'lucide-react'
+  Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
+  Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon } from 'lucide-react'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
@@ -48,7 +49,12 @@ registerCommands([
   // AE2c: masks drawn on the frame; AE2d: the layer's in / out at the playhead (the lanes under the transport drag too)
   { id: 'anim.final.mask.rect', scope: 'animate', label: 'Mask: rectangle', hint: 'drag on the frame', icon: RectIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'rect' ? 'off' : 'rect') },
   { id: 'anim.final.mask.ellipse', scope: 'animate', label: 'Mask: ellipse', hint: 'drag on the frame', icon: EllipseIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'ellipse' ? 'off' : 'ellipse') },
-  { id: 'anim.final.mask.poly', scope: 'animate', label: 'Mask: points', hint: 'click the points of a shape on the frame; the first point again closes it', icon: PolyIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'poly' ? 'off' : 'poly') },
+  { id: 'anim.final.mask.poly', scope: 'animate', label: 'Mask: pen', hint: 'click the points of a shape on the frame; the first point again (or a double-click) closes it, Esc drops it', icon: PenIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'poly' ? 'off' : 'poly') },
+  // D116: the layer's visible content traced into a mask (a character's silhouette from her matte, a prop's alpha, the shadows), keyed on every frame
+  { id: 'anim.final.mask.layer', scope: 'animate', label: 'Mask: from the layer', hint: "the layer's visible content at the playhead, traced into a mask that follows it across the shot", icon: FromLayerIcon, placement: ['toolbar', 'context'], when: () => hasSel() && !cp().busy, run: () => void cp().maskFromLayer(true) },
+  { id: 'anim.final.mask.object', scope: 'animate', label: 'Mask: object', hint: "click a thing on the frame: EffectCraft's Object Matte cuts the layer to it and follows it across the shot (an effect on the layer)", icon: ObjectIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'object' ? 'off' : 'object') },
+  { id: 'anim.final.mask.track', scope: 'animate', label: 'Mask: follow the motion', hint: "EffectCraft tracks what is inside the selected mask from the playhead to the end and keys its shape on every frame", icon: TrackIcon, placement: ['toolbar', 'context'], when: () => hasSel() && cp().selectedMask !== null && !cp().busy, run: () => void cp().trackMask() },
+  { id: 'anim.final.mask.view', scope: 'animate', label: 'Mask fill', hint: 'show the masks filled instead of as outlines (like Quick mask in Edit)', icon: FillIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskView(cp().maskView === 'fill' ? 'lines' : 'fill') },
   { id: 'anim.final.trimIn', scope: 'animate', label: 'Trim in to the playhead', icon: TrimInIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { in: cp().frame / (cp().final?.rate ?? 16) }) },
   { id: 'anim.final.trimOut', scope: 'animate', label: 'Trim out to the playhead', icon: TrimOutIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { out: (cp().frame + 1) / (cp().final?.rate ?? 16) }) },
   // AE3: before / after — the frame with every effect off (nothing saved)

@@ -9298,6 +9298,37 @@
         "title": "Mask",
         "type": "object"
       },
+      "MaskFromContent": {
+        "description": "D116: a mask traced from the layer's visible content at `t`; with `follow`, keyed on every frame of the shot.",
+        "properties": {
+          "follow": {
+            "default": true,
+            "title": "Follow",
+            "type": "boolean"
+          },
+          "max_points": {
+            "default": 160,
+            "maximum": 1000.0,
+            "minimum": 8.0,
+            "title": "Max Points",
+            "type": "integer"
+          },
+          "t": {
+            "default": 0.0,
+            "title": "T",
+            "type": "number"
+          },
+          "tolerance": {
+            "default": 1.5,
+            "maximum": 64.0,
+            "minimum": 0.1,
+            "title": "Tolerance",
+            "type": "number"
+          }
+        },
+        "title": "MaskFromContent",
+        "type": "object"
+      },
       "MatteBody": {
         "properties": {
           "text": {
@@ -21023,6 +21054,68 @@
           }
         },
         "summary": "Composition Layer",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/layers/{lid}/mask_from_content": {
+      "post": {
+        "description": "D116: a new mask on the layer traced from what is visible on it — a character's matte, a prop's alpha, the shadows — at the frame\nunder `t`; with `follow` (the default) the path is keyed on every frame of the shot so the mask follows. The result says the mask's\nuid, its points and the frames keyed. 422 when the layer has nothing to trace (the plate; an empty frame).",
+        "operationId": "composition_mask_from_content_finals__fid__composition_layers__lid__mask_from_content_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaskFromContent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Mask From Content",
         "tags": [
           "finals"
         ]

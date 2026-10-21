@@ -124,7 +124,7 @@
 .final-section .final-row { border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 8px; margin-top: 6px; }
 .final-section .final-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .final-section .final-layers { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
-.final-section .final-layers li { display: grid; grid-template-columns: 72px 1fr auto; gap: 6px; font-size: 12px; }
+.final-section .final-layers li { display: grid; grid-template-columns: 72px 1fr auto auto; gap: 6px; font-size: 12px; }   /* D116: kind · name · status · action, in columns */
 .final-section .final-layers .kind { color: var(--fg3); }
 .final-section .final-layers .status { color: var(--fg3); }
 .final-section .final-layers .status.s-done { color: var(--keep); }
@@ -133,5 +133,23 @@
 .final-section .final-layers li { align-items: center; }
 .final-section .final-layers li .name { display: flex; gap: 6px; align-items: center; }
 .final-section .final-layers img.still { width: 40px; height: 23px; object-fit: cover; border-radius: 3px; }
-.final-section .final-layers li > button { grid-column: 2 / -1; justify-self: start; }
-.final-section .final-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.final-section .final-layers li > button { justify-self: end; }
+.final-section .final-foot { display: grid; gap: 4px; margin-top: 6px; }
+.final-section .final-foot .verbs { margin: 0; }
+.final-section .final-foot > .hint { font-size: 11px; }
+/* D116: the Performance panel as a tree of the shot's steps; the kv rows aligned; the strip of verbs in the foot */
+.shot-tab.tree { gap: 2px; }
+.shot-tab .step, .final-section.step { border-left: 2px solid var(--line2); padding-left: 8px; margin: 4px 0 2px; }
+.step > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: 12px; color: var(--fg); min-height: 24px; }
+.step > summary::-webkit-details-marker { display: none; }
+.step > summary .tw { display: inline-block; color: var(--fg3); transition: transform .12s; font-size: 11px; }
+.step[open] > summary .tw { transform: rotate(90deg); }
+.step > summary .state { margin-left: auto; font-size: 11px; }
+.step > summary .verb { display: inline-flex; }
+.step > .step-body { display: grid; gap: 6px; padding: 4px 0 2px; }
+.shot-tab .kv.top { align-items: start; }
+.shot-tab .kv.top > span:first-child { padding-top: 4px; }
+.shot-tab .kv .method-list, .shot-tab .kv .pass-row, .shot-tab .kv .shot-results { margin: 0; }
+.shot-tab .kv .shot-prompt { min-height: 48px; }
+.rig-strip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }
+.rig-strip button { font-size: 11px; padding: 2px 7px; min-height: 22px; }

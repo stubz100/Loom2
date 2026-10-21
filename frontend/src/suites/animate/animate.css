@@ -50,7 +50,12 @@
 .final-viewer .frame-box { position: absolute; inset: 0; line-height: 0; }   /* the image and the mask overlay fill the view; both centre the picture (object-fit contain / viewBox meet), so they coincide */
 .final-viewer .mask-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .final-viewer .mask-overlay .mask path { fill: rgba(120, 150, 255, .08); stroke: var(--accent); stroke-width: 1px; stroke-dasharray: 4 3; opacity: .6; pointer-events: auto; cursor: pointer; }
-.final-viewer .mask-overlay .mask.selected path { opacity: 1; stroke-width: 1.5px; stroke-dasharray: none; fill: rgba(120, 150, 255, .14); }
+.final-viewer .mask-overlay .mask path { animation: ants .8s linear infinite; }   /* D116: the boundary moves, so it reads against any picture */
+@keyframes ants { to { stroke-dashoffset: -14; } }
+.final-viewer .mask-overlay .mask.selected path { opacity: 1; stroke-width: 1.5px; stroke: var(--fg); fill: rgba(120, 150, 255, .14); }
+.final-viewer .mask-overlay.fill .mask path { fill: rgba(255, 70, 70, .42); stroke-width: 1px; animation: none; stroke-dasharray: none; }   /* Fill: the masked area, like Edit's Quick mask */
+.final-viewer .mask-overlay.fill .mask.selected path { fill: rgba(255, 70, 70, .55); stroke: var(--fg); }
+.final-viewer .mask-overlay.fill .mask.inverted path { fill: rgba(255, 70, 70, .42); }
 .final-viewer .mask-overlay .mask.inverted path { fill: none; }
 .final-viewer .mask-overlay .mask.drawing path { fill: none; stroke: var(--fg); stroke-dasharray: 2 2; opacity: 1; }
 .final-viewer .mask-overlay .vertex { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: auto; cursor: move; }
@@ -220,3 +225,5 @@
 .clip-list .clip-filter input[type=search] { width: 100%; }
 .anim-exp { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
 .anim-exp > summary { cursor: pointer; color: var(--fg2); display: flex; align-items: center; gap: 6px; }
+.comp-masks .list-head { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--fg3); margin: 4px 0 2px; }
+.comp-mask .keyed { color: var(--accent); font-size: 10px; }

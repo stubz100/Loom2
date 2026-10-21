@@ -58,6 +58,11 @@ export function FinalViewer() {
     setDrag(null)
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
     const cp = useComposition.getState()
+    if (maskTool === 'object') {                                                      // D116: a click names the thing to matte (layer pixels)
+      if (Math.abs(drag.dx) > 3 || Math.abs(drag.dy) > 3) return
+      void cp.objectMatte(toLayer([(drag.x0 - pic.left) * scale, (drag.y0 - pic.top) * scale]))
+      return
+    }
     if (maskTool === 'poly') {
       if (Math.abs(drag.dx) > 3 || Math.abs(drag.dy) > 3) return                     // a drag is not a point
       const x = (drag.x0 - pic.left) * scale, y = (drag.y0 - pic.top) * scale
@@ -94,7 +99,7 @@ export function FinalViewer() {
       <div ref={view} className={`anim-view final-view${maskTool !== 'off' ? ' masking' : ''}`}>
         {shown ? <div className="frame-box">
           <img ref={img} className={`final-frame ${selected !== null ? 'movable' : ''}`} src={before ?? shown.url} alt="" draggable={false} data-side={shown.side} data-before={before ? 'true' : undefined}
-            title={selected !== null ? (maskTool === 'poly' ? 'Click the points of the shape; click the first again to close' : maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
+            title={selected !== null ? (maskTool === 'poly' ? 'Click the points of the shape; click the first again to close' : maskTool === 'object' ? `Click the thing on ${selName ?? 'the layer'} to matte` : maskTool !== 'off' ? `Drag to draw the ${maskTool === 'rect' ? 'rectangle' : 'ellipse'} mask on ${selName ?? 'the layer'}` : `Drag to move ${selName ?? 'the selected layer'}`) : undefined}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)} onDoubleClick={onDouble} />
           {selected !== null && <MaskOverlay w={final.size.w} h={final.size.h} offset={off} poly={poly} scaleOf={scaleOf} />}
         </div> : <div className="anim-overlay">loading the first frame…</div>}
@@ -135,6 +140,7 @@ function layerOffset(): [number, number] {
 function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; offset: [number, number]; poly: [number, number][]; scaleOf: () => number }) {
   const masks = useComposition((s) => s.masks)
   const selectedMask = useComposition((s) => s.selectedMask)
+  const view = useComposition((s) => s.maskView)
   const busy = useComposition((s) => s.busy)
   const [vd, setVd] = useState<VertexDrag | null>(null)
   const k = scaleOf()
@@ -157,14 +163,15 @@ function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; of
     void useComposition.getState().moveVertex(vd.uid, vd.index, [v[0] + vd.dx * k, v[1] + vd.dy * k])
   }
   return (
-    <svg className="mask-overlay" viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" aria-label="masks">
+    <svg className={`mask-overlay ${view}`} viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" aria-label="masks" data-view={view}>
       {masks.map((m) => {
         const sel = m.uid === selectedMask
         const verts = vd && vd.uid === m.uid ? m.vertices.map((p, i) => (i === vd.index ? [p[0] + vd.dx * k, p[1] + vd.dy * k] as [number, number] : p)) : m.vertices
         const d = maskPathD({ ...m, vertices: verts }, offset[0], offset[1])
+        const fillD = view === 'fill' && m.inverted ? `M 0 0 H ${w} V ${h} H 0 Z ${d}` : d                   // Fill: an inverted mask covers the frame but the shape
         return (
           <g key={m.uid} className={`mask${sel ? ' selected' : ''}${m.inverted ? ' inverted' : ''}`} data-mask={m.uid}>
-            <path d={d} vectorEffect="non-scaling-stroke" onClick={() => useComposition.getState().selectMask(m.uid)} />
+            <path d={fillD} fillRule="evenodd" vectorEffect="non-scaling-stroke" onClick={() => useComposition.getState().selectMask(m.uid)} />
             {sel && verts.map((p, i) => <circle key={i} cx={p[0] + offset[0]} cy={p[1] + offset[1]} r={r} className="vertex" data-index={i}
               onPointerDown={(e) => start(e, m.uid, i)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setVd(null)} />)}
           </g>

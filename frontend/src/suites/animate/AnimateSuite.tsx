@@ -2,6 +2,7 @@
 // Stage (Mediabunny player · filmstrip · compare, transport, timeline with in/out, S/E, beats and harvested pins, live
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
 import { AnimateLevels } from '../../frame/AnimateLevels'
+import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
@@ -279,7 +280,7 @@ function RouteSwitch() {
 /** The selected clip in Selection: what it is and its verbs, the frames harvested from it, its lineage (UX0 #17: three folds). */
 function ClipSelection() {
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
-  if (!clip) return <span className="hint">No clip selected — clips appear in the Clips section as they finish.</span>
+  if (!clip) return <span className="hint">No clip selected. <Help text="Clips appear in the Clips section as they finish." /></span>
   return (
     <div className="clip-selection">
       <details open><summary>Clip</summary><ClipTab clip={clip} /></details>
@@ -618,7 +619,7 @@ function FramesTab({ clip }: { clip: Clip }) {
       </div>
       <h4 className="sect">harvested ({pins.length})</h4>
       <div className="insp-thumbs">{[...pins].sort((x, y) => x.frame - y.frame).map((p) => <img key={p.asset_id} src={api.thumbUrl(p.asset_id, 256)} alt="" className={p.frame === frame ? 'cur' : ''} title={`frame ${p.frame} — click to go there`} onClick={() => an().setFrame(p.frame)} />)}</div>
-      {!pins.length && <span className="hint">Extract frame (F) or Extract range (Shift+F) — frames land in the Catalogue with frame-extract lineage and open in Edit.</span>}
+      {!pins.length && <span className="hint">No frames extracted. <Help text="Extract frame (F) or Extract range (Shift+F): the frames land in the Catalogue with frame-extract lineage and open in Edit." /></span>}
     </div>
   )
 }

@@ -171,6 +171,32 @@ def test_composition_routes(tmp_path: Path):
         cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": poly["uid"]}}, headers=H)
         assert cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": mid}}, headers=H).json()["result"] == {"removed": 1}
         assert next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "masks")["children"] == []
+        # D116: a mask from the layer's content (the fixture's matte is a rectangle), keyed on every frame of the shot; tracked; an Object Matte by a click
+        r = cl.post(f"{url}/layers/Mara/mask_from_content", json={"t": 0.0, "follow": True}, headers=H)
+        assert r.status_code == 200, r.text
+        res = r.json()["result"]
+        assert res["mask"] and res["points"] >= 16 and res["frames"] == N
+        masks = next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "masks")["children"]
+        pc = next(c for c in masks[0]["children"] if c["path"].endswith("/path"))
+        xs = [v[0] for v in pc["value"]["v"]["vertices"]]
+        ys = [v[1] for v in pc["value"]["v"]["vertices"]]
+        assert 50 <= min(xs) <= 56 and 72 <= max(xs) <= 78 and 24 <= min(ys) <= 30 and 110 <= max(ys) <= 116   # around the matte's rectangle (53, 27)–(75, 113)
+        assert pc.get("keys") == N
+        kp = cl.get(f"{url}/layers/Mara/property?path={pc['path']}", headers=H).json()
+        assert kp["animated"] is True and len(kp["keys"]) == N and kp["keys"][1]["time"] == 1 / 16
+        assert cl.post(f"{url}/layers/Room/mask_from_content", json={"t": 0.0}, headers=H).status_code == 422          # the plate fills the frame
+        r = cl.post(f"{url}/batch", json={"steps": [{"id": "time.set", "params": {"time": 1 / 16}},
+                                                    {"id": "track.mask", "params": {"layer": "Mara", "mask": res["mask"], "method": "positionScaleRotation", "direction": "forward", "wait": True}}]}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["failed"] == 0
+        kp = cl.get(f"{url}/layers/Mara/property?path={pc['path']}", headers=H).json()
+        assert len(kp["keys"]) == N and kp["keys"][-1]["value"]["v"]["vertices"][0][0] == kp["keys"][1]["value"]["v"]["vertices"][0][0] + 1   # the fake tracker: a pixel a frame
+        r = cl.post(f"{url}/batch", json={"steps": [{"id": "objectMatte.apply", "params": {"layer": "Mara", "point": [64, 70], "frame": 0, "before": 0, "after": N - 1}},
+                                                    {"id": "objectMatte.propagate", "params": {"layer": "Mara", "wait": True}}]}, headers=H)
+        assert r.status_code == 200 and r.json()["result"]["failed"] == 0
+        fx = next(g for g in cl.get(f"{url}/layers/Mara?tree=true", headers=H).json()["properties"]["children"] if g["path"] == "effects")["children"]
+        assert [e["effect"] for e in fx] == ["ec.matte.objectmatte"]
+        cl.post(f"{url}/command", json={"id": "effect.remove", "params": {"layer": "Mara", "effect": fx[0]["uid"]}}, headers=H)
+        cl.post(f"{url}/command", json={"id": "layer.mask.remove", "params": {"layer": "Mara", "mask": res["mask"]}}, headers=H)
         cl.post(f"{url}/command", json={"id": "layer.timing", "params": {"layers": ["Box"], "in": 0.0625, "out": 0.125}}, headers=H)
         box = next(l for l in cl.get(f"{url}/layers", headers=H).json()["items"] if l["name"] == "Box")
         assert (box["in"], box["out"]) == (0.0625, 0.125)

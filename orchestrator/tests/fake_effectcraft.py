@@ -59,6 +59,7 @@ FX_REGISTRY: dict[str, tuple[str, str, list]] = {
     "Exposure": ("ec.color.exposure", "Color Correction", [("master/exposure", "scalar", 0.0, -20.0, 20.0, None), ("master/offset", "scalar", 0.0, -2.0, 2.0, None), ("master/gamma", "scalar", 1.0, 0.01, 9.99, None)]),
     "Black & White": ("ec.color.blackwhite", "Color Correction", [(k, "scalar", v, -200.0, 300.0, None) for k, v in (("reds", 40.0), ("yellows", 60.0), ("greens", 40.0), ("cyans", 60.0), ("blues", 20.0), ("magentas", 80.0))]
                       + [("tint", "bool", False, None, None, None), ("tintColor", "color", [0.88, 0.76, 0.6, 1.0], None, None, None)]),
+    "Object Matte": ("ec.matte.objectmatte", "Matte", [("reach", "scalar", 30.0, 0.0, 300.0, None)]),   # D116: what objectMatte.apply adds
 }
 
 
@@ -103,6 +104,18 @@ class Fake:
             if str(l["id"]) == str(ref) or l["name"] == ref:
                 return l
         raise KeyError(f"no layer {ref}")
+
+    @staticmethod
+    def mask_of(l: dict, ref) -> dict:
+        m = next((m for m in l["masks"] if str(m["id"]) == str(ref) or m["name"] == ref), None)
+        if m is None:
+            raise ValueError(f"no mask {ref}")
+        return m
+
+    @staticmethod
+    def path_value(m: dict, verts=None) -> dict:
+        v = verts if verts is not None else m["vertices"]
+        return {"t": "Path", "v": {"closed": m.get("closed", True), "vertices": v, "in_tangents": [[0.0, 0.0]] * len(v), "out_tangents": [[0.0, 0.0]] * len(v)}}
 
     def layers_of(self, p: dict) -> list[dict]:
         c = self.comp(p.get("comp"))
@@ -257,6 +270,43 @@ class Fake:
             l["masks"].append({"id": i, "name": f"Mask {len(l['masks']) + 1}", "shape": "poly", "rect": None, "vertices": verts, "closed": p.get("closed", True),
                                "feather": [0.0, 0.0], "opacity": 100.0, "expansion": 0.0, "mode": p.get("mode", "Add"), "inverted": False})
             return {"mask": i}
+        if cid == "track.mask":                                         # D116: the fake tracker slides the mask one pixel right per frame
+            self.edit()
+            c = self.comp(p.get("comp"))
+            l = self.layer(c, p["layer"])
+            m = self.mask_of(l, p["mask"])
+            rate = c["frameRate"]
+            n = int(round(c["duration"] * rate))
+            i0 = int(round(self.p["time"] * rate))
+            keys = m.setdefault("path_keys", [])
+            keys[:] = [k for k in keys if k["time"] < i0 / rate - 1e-6]
+            for i in range(i0, n):
+                keys.append({"time": i / rate, "value": self.path_value(m, [[x + (i - i0), y] for x, y in m["vertices"]]), "in": "linear", "out": "linear"})
+            return {"mask": m["id"], "method": p.get("method", "positionScaleRotation"), "frames": max(0, n - 1 - i0), "start": i0 / rate, "end": (n - 1) / rate,
+                    "running": False, "progress": None, "faceModel": None}
+        if cid == "objectMatte.apply":                                  # D116: an Object Matte effect on the layer from a click
+            self.edit()
+            l = self.layer(self.comp(p.get("comp")), p["layer"])
+            d = fx_def("Object Matte")
+            uid = self.nid()
+            l["effects"].append({"uid": uid, "id": d["id"], "name": "Object Matte", "enabled": True, "params": {q["id"]: q["default"] for q in d["params"]},
+                                 "object": {"point": p["point"], "frame": int(p.get("frame", 0)), "computed": [], "frozen": False}})
+            return {"effect": uid, "layer": l["id"], "frame": int(p.get("frame", 0)), "span": [-int(p.get("before", 30)), int(p.get("after", 30))], "track": True, "updated": False}
+        if cid in ("objectMatte.propagate", "objectMatte.status", "objectMatte.freeze"):
+            c = self.comp(p.get("comp"))
+            l = self.layer(c, p["layer"])
+            e = next((e for e in reversed(l["effects"]) if "object" in e), None)
+            if e is None:
+                raise ValueError("no Object Matte on the layer")
+            n = int(round(c["duration"] * c["frameRate"]))
+            if cid == "objectMatte.propagate":
+                self.edit()
+                e["object"]["computed"] = list(range(n))
+            if cid == "objectMatte.freeze":
+                self.edit()
+                e["object"]["frozen"] = True
+            o = e["object"]
+            return {"effect": e["uid"], "layer": l["id"], "frames": n, "computed": o["computed"], "frozen": o["frozen"], "running": False, "progress": None, "pending": not o["computed"]}
         if cid == "mask.setVertex":
             self.edit()
             l = self.layer(self.comp(p.get("comp")), p["layer"])
@@ -393,6 +443,24 @@ class Fake:
                 raise ValueError(f"no property `{a['path']}`")
             e["params"][pid] = a["value"]
             return text({"path": a["path"], "value": a["value"], "animated": False})
+        if name in ("set_property", "get_property") and str(a["path"]).startswith("masks/"):   # D116: a mask's path, keyed with a time
+            l = self.layer(self.comp(a.get("comp")), a["layer"])
+            seg, field = a["path"].split("/")[1:3]
+            m = l["masks"][int(seg.split("#")[1]) - 1 if "#" in seg else 0]
+            if field != "path":
+                raise ValueError(f"no property `{a['path']}`")
+            keys = m.setdefault("path_keys", [])
+            if name == "get_property":
+                return text({"layer": l["id"], "path": a["path"], "uid": m["id"] * 10, "type": "path", "value": self.path_value(m), "animated": bool(keys), "keys": keys, "expression": None})
+            self.edit()
+            v = a["value"]["v"]
+            if "time" in a:
+                keys[:] = [k for k in keys if abs(k["time"] - float(a["time"])) >= 1e-6]
+                keys.append({"time": float(a["time"]), "value": a["value"], "in": "linear", "out": "linear"})
+                keys.sort(key=lambda k: k["time"])
+            if "time" not in a or not [k for k in keys if k["time"] < float(a["time"]) - 1e-6]:
+                m["vertices"], m["closed"] = [[float(q[0]), float(q[1])] for q in v["vertices"]], v.get("closed", True)   # the shape shown: the first key's
+            return text({"path": a["path"], "value": a["value"], "animated": bool(keys)})
         if name == "set_property":
             self.edit()
             l = self.layer(self.comp(a.get("comp")), a["layer"])
@@ -424,7 +492,7 @@ class Fake:
                       "mask": {"inverted": m["inverted"], "mode": m["mode"]},
                       "children": [{"path": f"masks/mask{'' if i == 0 else f'#{i + 1}'}/{k}", "name": f"Mask {k.title()}", "match": k, "uid": m["id"] * 10 + j,
                                     "type": "vec2" if k == "feather" else "path" if k == "path" else "scalar",
-                                    "value": {"t": "Path", "v": {"closed": m.get("closed", True), "vertices": m["vertices"], "in_tangents": [[0.0, 0.0]] * len(m["vertices"]), "out_tangents": [[0.0, 0.0]] * len(m["vertices"])}} if k == "path" else m[k]}
+                                    "value": self.path_value(m) if k == "path" else m[k], **({"animated": True, "keys": len(m["path_keys"])} if k == "path" and m.get("path_keys") else {})}
                                    for j, k in enumerate(("path", "feather", "opacity", "expansion"))]} for i, m in enumerate(l["masks"])]
             tree = {"name": l["name"], "path": "", "uid": l["id"], "match": "layer", "enabled": True, "children": [
                 {"name": "Transform", "path": "transform", "uid": l["id"] * 100, "match": "transform", "enabled": True, "children": [{**p, "uid": l["id"] * 100 + k} for k, p in enumerate(props, 1)]},

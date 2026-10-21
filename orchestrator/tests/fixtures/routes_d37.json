@@ -118,6 +118,7 @@
  "POST /finals/{fid}/composition",
  "POST /finals/{fid}/composition/batch",
  "POST /finals/{fid}/composition/command",
+ "POST /finals/{fid}/composition/layers/{lid}/mask_from_content",
  "POST /finals/{fid}/composition/property",
  "POST /finals/{fid}/composition/render",
  "POST /finals/{fid}/layers/{lid}/matte",

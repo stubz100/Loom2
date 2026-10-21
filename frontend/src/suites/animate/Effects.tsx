@@ -3,6 +3,7 @@
 // number with its range, choice, switch, colour, point, a layer; the rest keep the engine's defaults), enabled / reset / remove. The
 // definitions — names, parameters, ranges, options — come from the engine (`GET …/composition/effects`), never a copy here (T8).
 import { Aperture, BarChart3, Box, Circle, Contrast, Droplet, Eraser, Feather, Grip, Layers, Maximize2, Minimize2, Moon, MoveHorizontal, Palette, Scale, Spline, Sun, SunDim, SunMedium, Triangle, type LucideIcon } from 'lucide-react'
+import { Help } from '../../frame/Help'
 import { useEffect, useState } from 'react'
 import { NumField } from './FinalEditor'
 import { useComposition, type EffectDef, type EffectInfo, type EffectParam } from './compositionStore'
@@ -96,7 +97,7 @@ function EffectRow({ e, def, dials }: { e: EffectInfo; def: EffectDef | undefine
       </div>
       <div className="dials">
         {params.map((p) => <Dial key={p.id} path={`${e.path}/${p.id}`} param={p} value={values[`${e.path}/${p.id}`]} />)}
-        {!def && <span className="hint">not one of the curated effects — its parameters stay as they are</span>}
+        {!def && <Help text="Not one of the curated effects: its parameters stay as the engine set them." />}
         {rest > 0 && <span className="hint">{rest} more parameter{rest === 1 ? '' : 's'} at the engine's defaults</span>}
       </div>
     </li>
@@ -122,7 +123,7 @@ export function EffectsBody() {
               title={`${c.name}: ${c.hint}${Object.keys(catalog).length > 0 && !known ? ' — not in this engine' : ''}`} onClick={() => void cp().addEffect(c.name)}><Icon size={16} /><span>{c.name}</span></button> })}</div>
         </div>))}
       {effects.length ? <ul className="comp-effect-list">{effects.map((e) => { const c = CURATED.find((x) => x.name === e.name.replace(/ \d+$/, '')); return <EffectRow key={e.uid} e={e} def={c ? catalog[c.name] : undefined} dials={c?.dials ?? []} /> })}</ul>
-        : <span className="hint">No effect on this layer. Compare with <b>Before</b> under the viewer once there is one.</span>}
+        : <span className="hint">No effect on this layer. <Help text="Click a tile to add one. The viewer's Before shows the frame with every effect off." /></span>}
     </div>
   )
 }

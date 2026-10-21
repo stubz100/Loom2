@@ -366,6 +366,14 @@ class CompositionResult(BaseModel):
     composition: Composition
 
 
+class MaskFromContent(BaseModel):
+    """D116: a mask traced from the layer's visible content at `t`; with `follow`, keyed on every frame of the shot."""
+    t: float = 0.0
+    follow: bool = True
+    tolerance: float = Field(1.5, ge=0.1, le=64.0)     # pixels: no point of the outline is farther than this from the polygon
+    max_points: int = Field(160, ge=8, le=1000)
+
+
 def _ec_error(e: EffectCraftError) -> HTTPException:
     return HTTPException(503 if "not built" in str(e) else 422, str(e))
 
@@ -522,6 +530,23 @@ async def composition_property_get(svc: Svc, fid: str, lid: str, path: str, t: f
         raise HTTPException(404, str(e.args[0]))
     except EffectCraftError as e:
         raise _ec_error(e)
+
+
+@router.post("/finals/{fid}/composition/layers/{lid}/mask_from_content", response_model=CompositionResult)
+async def composition_mask_from_content(svc: Svc, fid: str, lid: str, body: MaskFromContent):
+    """D116: a new mask on the layer traced from what is visible on it — a character's matte, a prop's alpha, the shadows — at the frame
+    under `t`; with `follow` (the default) the path is keyed on every frame of the shot so the mask follows. The result says the mask's
+    uid, its points and the frames keyed. 422 when the layer has nothing to trace (the plate; an empty frame)."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        result, c = await asyncio.to_thread(cs.mask_from_content, f, svc.effectcraft, _lid(lid), body.t, body.follow, body.tolerance, body.max_points)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return {"result": result, "composition": c.model_dump()}
 
 
 @router.get("/finals/{fid}/composition/effects", response_model=CompositionLayers)

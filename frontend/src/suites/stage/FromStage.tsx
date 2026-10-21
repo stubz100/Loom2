@@ -3,6 +3,7 @@
 // prompt, size, count, results — `ShotTab` without the clip, which belongs to Animate). The passes render headless when the stage is not on
 // screen (headless.ts). Loaded lazily with the stage's code, so Image's eager bundle carries no three.js.
 import { CommandButton } from '../../frame/CommandButton'
+import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { ShotTab, StageFoot, useStageLoad } from './StageParts'
 import { st, useStage } from './stageStore'
@@ -12,7 +13,7 @@ export function FromStage() {
   useStageLoad()
   const stages = useStage((s) => s.stages)
   const current = useStage((s) => s.current)
-  if (!stages.length) return <div className="from-stage"><p className="hint">No stage in this project yet — make one in Animate (its Clay level).</p><CommandButton id="global.suite.stage" text label="Open Animate · Clay" /></div>
+  if (!stages.length) return <div className="from-stage"><p className="hint">No stage yet. <Help text="Make one in Animate, at its Clay level." /></p><CommandButton id="global.suite.stage" text label="Open Animate · Clay" /></div>
   return (
     <div className="from-stage">
       <div className="kv"><span>stage</span>

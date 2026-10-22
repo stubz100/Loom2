@@ -9852,7 +9852,7 @@ export interface components {
             /** Te Device */
             te_device: string;
             /** Te Id */
-            te_id: string;
+            te_id: string | null;
             /** Tile Size */
             tile_size?: number | null;
             /** Tiled Vae */

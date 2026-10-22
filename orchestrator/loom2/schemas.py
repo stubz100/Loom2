@@ -460,7 +460,7 @@ class T2IPreview(Open):
     style_id: str | None = None                   # D85: the Story style carried, and the fragment appended after the prompt
     style_text: str | None = None
     model_id: str
-    te_id: str
+    te_id: str | None                             # None where the checkpoint carries its own encoder (Lumina 2, SD 3.5) — a str here failed the reply
     negative_used: bool
     turbo_strength: float | None = None
     weight_dtype: str

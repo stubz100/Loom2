@@ -16264,8 +16264,15 @@
             "type": "string"
           },
           "te_id": {
-            "title": "Te Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Te Id"
           },
           "tile_size": {
             "anyOf": [

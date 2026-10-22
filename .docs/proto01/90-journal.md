@@ -8029,3 +8029,22 @@ The author asked for a review of the state of things, then "record all this and 
 - **No rig acceptance re-run for D121** (AW1–AW4 and this): the changes are frontend only, with no request, recipe or job changed (the e2e
   drives every request the modes make against the orchestrator and the fake engine), and no rig script uses the changed hooks. The GPU ran
   only the headed checks (AW2's animate 17/17, AW4's pip 4/4), one at a time with nothing on the queue (D97).
+
+## 2026-10-23 00:09 — Generate under Lumina 2 and SD 3.5 Medium: the preview's reply failed, and its 500 reached the panel as `TypeError: Failed to fetch`
+
+- **The author's report:** with Lumina 2 or SD 3.5 picked, Generate was disabled and the panel's line under it said `TypeError: Failed
+  to fetch`.
+- **Cause:** `/recipes/preview` typed `T2IPreview.te_id` as `str`. Both checkpoints carry their own encoder (D91's Lumina 2 all-in-one,
+  SD 3.5 Medium), so the effective `te_id` is None and the reply failed validation (`ResponseValidationError`). That 500 came from
+  Starlette's outermost ServerErrorMiddleware, outside CORS and without its headers, so the WebView saw a network failure, not an error
+  reply. Every other text-to-image model has a separate encoder and previewed. D91's rig runs (sm_acceptance) went through the queue,
+  which never builds this reply.
+- **Fix:** `te_id: str | None` (`schemas.py`; OpenAPI and `schema.d.ts` regenerated, D38). And `api.ErrorsAsJson`, inside CORS: an
+  unexpected exception answers a 500 the client can read, `{"detail": "Internal error (<type>): see the orchestrator's log"}`, then is
+  raised again (as ServerErrorMiddleware does), so uvicorn logs the traceback and a test client still raises it; a reply already under way
+  is left alone. The panel would now have shown the error's name instead of a network failure.
+- **Tests:** `test_preview_models.py` — every text-to-image model in `/capabilities` previews the panel's default recipe (tree and text)
+  in both variants, Lumina 2's `te_id` None; a route that raises answers the JSON 500 with the CORS header and the next request is served,
+  and a raising test client still raises. Each fails with its fix reverted. Under a real uvicorn: the 500 with `access-control-allow-origin`,
+  the traceback in the log, `/health` and `/capabilities` served after it. Offline 501 passed (3 new), frontend build clean, e2e 52/52 full.
+- **No rig run:** no graph, recipe or job changed; the preview is the plan a submission would follow.

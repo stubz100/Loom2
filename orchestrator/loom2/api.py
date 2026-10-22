@@ -71,6 +71,7 @@ def create_app(state_dir: Path | None = None, project: Path | None = None, ready
                   docs_url="/docs" if dev else None, redoc_url="/redoc" if dev else None, openapi_url="/openapi.json" if dev else None)
     open_paths = OPEN_PATHS | (DEV_DOCS if dev else set())
     app.state.services = svc
+    app.add_middleware(ErrorsAsJson)                          # inside CORS (a later add_middleware wraps an earlier one)
     app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["X-Loom-Width", "X-Loom-Height", "X-Loom-Channels", "Content-Disposition"])
 
@@ -110,6 +111,35 @@ def _openapi_with_contract(app: FastAPI):
         app.openapi_schema = schema
         return schema
     return openapi
+
+
+class ErrorsAsJson:
+    """An unexpected exception in a route answers a JSON 500 that names it, from inside CORS so the WebView can read it: the bare 500
+    of Starlette's outermost ServerErrorMiddleware carries no CORS headers, and the client saw only `TypeError: Failed to fetch` (the
+    Generate panel under Lumina 2 and SD 3.5, 2026-10-23). The exception is raised again after the reply, as ServerErrorMiddleware does,
+    so the server still logs it and a test client still raises it."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def tracked(message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracked)
+        except Exception as e:
+            if not started:                                       # a reply under way (a streamed file) cannot become a 500
+                await JSONResponse({"detail": f"Internal error ({type(e).__name__}): see the orchestrator's log"}, status_code=500)(scope, receive, send)
+            raise
 
 
 def _status_handler(status: int):

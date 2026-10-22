@@ -331,4 +331,13 @@ more than the bar, it becomes a snapshot refreshed on drag end (ArtCraft redraws
   (play, step, ±10, first / last, in / out, previous / next key) runs the level on screen — 26 transport commands down to 12, the keys
   unchanged. One Timeline component under every viewer: Clay's range and its camera's and objects' keys on rows (drag a key, right-click to
   remove it, a motion clip's bake as a bar), Performance's in / out and the clip's markers, Final's lanes. e2e 52/52 under both variants.
+- **2026-10-22 23:08 — AW4 built: the viewport's camera chrome** (journal of that time). The camera pill (look through, pick a camera, set the
+  lens), the lens readout, the picture-in-picture of the active camera in the free view (on by default; +0.078 ms a frame, +15 %, measured in
+  a visible Edge on the rig). The chrome reads the camera at the playhead (a keyed camera's lens is its key's).
+
+  | Clay with the PiP (the rig, a visible window) | The timeline at Clay (AW2) |
+  | --- | --- |
+  | ![Clay with the PiP](img/26-aw4-clay-pip.jpg) | ![The timeline](img/26-aw2-timeline-clay.jpg) |
+
+- **Owed:** the author's click-through (UX9) — [27 · Trying Animate's three modes](27-testing-modes.md). The other checks of §9 are in it.
 

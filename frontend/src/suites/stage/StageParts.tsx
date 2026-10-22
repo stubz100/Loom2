@@ -7,11 +7,11 @@
 // the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
-import { Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User } from 'lucide-react'
+import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User, Video } from 'lucide-react'
 import { PresetPanel } from '../../frame/PresetPanel'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { CommandButton, CommandRow } from '../../frame/CommandButton'
-import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
+import { handleKeyFor, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
@@ -27,7 +27,7 @@ import { askConfirm, askText, useSession } from '../../store/session'
 import { ShotHead } from './ShotStepper'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageObject } from '../../api/types'
-import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
+import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
 import { TRANSPORT_IDS } from '../animate/transport'
@@ -282,22 +282,23 @@ function CameraEditor({ c }: { c: StageCamera }) {
  *  fields are under its row in the Scene's outliner (CameraEditor). */
 export function CamerasTab() {
   const current = useStage((s) => s.current)
-  const view = useStage((s) => s.view)
+  const guides = useStage((s) => s.guides)
   const cam = useStage((s) => s.activeCamera())
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
-  markUsed('stage.camera.add'); markUsed('stage.frameAll')
+  markUsed('stage.camera.add')
   return (
     <div className="stage-panel">
       <div className="head"><b>Cameras</b><span className="hint">{current.cameras.length}</span><CommandButton id="stage.camera.add" /></div>
       {cam && <>
-        <div className="kv"><span>active</span><span><button className="quiet" title="Its row in the Scene's outliner: the lens, the roll, where it stands" onClick={() => { st().selectCamera(cam.id); document.getElementById('anim-sec-scene')?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }}>{cam.name}</button> <span className="hint">· {cam.focal_mm} mm</span></span></div>
+        <div className="kv"><span>active</span><span>★ {cam.name}</span></div>
+        <div className="kv"><span>lens</span><span className="focals">{FOCALS.map((f) => <button key={f} type="button" className={cam.focal_mm === f ? 'active' : ''} onClick={() => st().updateCamera(cam.id, { focal_mm: f })} title={`${f} mm on ${cam.name}`}>{f}</button>)} mm</span></div>
         <div className="verbs">
-          <CommandButton id="stage.view.camera" text label={view === 'camera' ? 'Back to the free view' : 'Look through'} active={view === 'camera'} />
           <CommandButton id="stage.camera.setFromView" text label="Set from view" />
-          <CommandButton id="stage.frameAll" text label="Frame all" />
+          <CommandButton id="stage.anim.keyCamera" text label="Key camera" />
+          <CommandButton id="stage.guides" text label="Guides" active={guides} />
         </div>
         <div className="verbs"><CommandButton id="stage.camera.toShot" text /></div>
-        <Help text="The shot renders through the active camera (★ in the outliner). To move it: drag its body in the free view, or type where it stands under its row; Set from view puts it where the free view is." />
+        <Help text="The shot renders through the active camera (★). The pill over the viewport looks through it and picks another; drag its body in the free view to move it, or type where it stands under its row in Scene; Set from view puts it where the free view is. D121 (AW4)." />
       </>}
     </div>
   )
@@ -606,16 +607,16 @@ export function Strip() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [])
-  const view = useStage((s) => s.view)
   const guides = useStage((s) => s.guides)
+  const pip = useStage((s) => s.pip)
   const current = useStage((s) => s.current)
   if (!current) return <div className="stage-strip-wrap"><div className="stage-strip"><AnimateLevels /></div></div>
   return (
     <div className="stage-strip-wrap">
       <div className="stage-strip">
         <AnimateLevels />{/* D95 (AN1): Animate's viewer levels */}
-        <CommandRow ids={['stage.view.free', 'stage.view.camera']} active={view === 'camera' ? 'stage.view.camera' : 'stage.view.free'} labels={{ 'stage.view.free': 'free', 'stage.view.camera': 'camera' }} />
         <CommandButton id="stage.guides" active={guides} />
+        <CommandButton id="stage.view.pip" active={pip} />{/* D121 (AW4); the view switch is the camera pill over the viewport */}
         <CommandButton id="stage.frameAll" />
         <span className="spacer" />
         <span className="hint">{current.name} · {current.size.w}×{current.size.h}</span>
@@ -672,6 +673,58 @@ function Timeline() {
   )
 }
 
+// ------------------------------------------------------------------ D121 (AW4): the viewport's camera chrome
+/** The active camera as the viewport shows it — sampled at the playhead (a keyed camera's lens and place are its keys'), T8. */
+function useShotCamera(): StageCamera | null {
+  const current = useStage((s) => s.current)
+  const frame = useStage((s) => s.frame)
+  return useMemo(() => { const cam = current?.cameras.find((c) => c.id === current.active_camera); return current && cam ? sampleCamera(cam, keyframesOf(current).camera[cam.id], frame) : null }, [current, frame])
+}
+
+/** The camera pill over the viewport's top right — the camera the shot renders through and its lens; a click looks through it (again: back
+ *  to the free view); its menu picks another camera, sets the lens, sets the camera from the view, adds one, toggles the PiP and guides. */
+function CameraPill() {
+  const current = useStage((s) => s.current)
+  const view = useStage((s) => s.view)
+  const pip = useStage((s) => s.pip)
+  const guides = useStage((s) => s.guides)
+  const cam = useShotCamera()
+  markUsed('stage.view.camera'); markUsed('stage.view.free')
+  if (!current || !cam) return null
+  const through = view === 'camera'
+  const items = (): MenuItem[] => [
+    ...current.cameras.map((c) => ({ label: `${c.id === current.active_camera ? '★ ' : ''}${c.name} · ${c.focal_mm} mm`, run: () => st().selectCamera(c.id) })), sep,
+    ...FOCALS.map((f) => ({ label: `${f} mm`, checked: cam.focal_mm === f, run: () => st().updateCamera(cam.id, { focal_mm: f }) })), sep,
+    { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.view.pip', checked: pip }, { cmd: 'stage.guides', checked: guides }]
+  return (
+    <div className="cam-pill" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <button type="button" className={`cam-pill-main${through ? ' active' : ''}`} aria-pressed={through} onClick={() => runCommand(through ? 'stage.view.free' : 'stage.view.camera')}
+        title={through ? `Looking through ${cam.name} — a click goes back to the free view (0)` : `The shot renders through ${cam.name} — a click looks through it (0)`}>
+        <Video size={14} /> {through ? `${cam.name} · ${cam.focal_mm} mm` : `Free view · ★ ${cam.name} · ${cam.focal_mm} mm`}
+      </button>
+      <MenuButton label="Cameras and lens" icon={Aperture} items={items} />
+    </div>
+  )
+}
+
+/** The lens in large type over the viewport for a moment after it changes (the pill's menu, the camera's row, a key) — ArtCraft's focal display. */
+function LensReadout() {
+  const cam = useShotCamera()
+  const playing = useStage((s) => s.playing)
+  const [shown, setShown] = useState<number | null>(null)
+  const last = useRef<{ id: string; focal: number } | null>(null)
+  useEffect(() => {
+    if (!cam) return
+    const prev = last.current
+    last.current = { id: cam.id, focal: cam.focal_mm }
+    if (!prev || (prev.id === cam.id && prev.focal === cam.focal_mm) || playing) return  // the first sight of a camera is no change; a zoom played is not shown
+    setShown(cam.focal_mm)
+    const t = window.setTimeout(() => setShown(null), 1200)
+    return () => window.clearTimeout(t)
+  }, [cam?.id, cam?.focal_mm]) // eslint-disable-line react-hooks/exhaustive-deps
+  return shown === null ? null : <div className="lens-readout" aria-live="polite">{shown} mm</div>
+}
+
 // ------------------------------------------------------------------ Stage · the viewport
 function Viewport() {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -690,6 +743,9 @@ function Viewport() {
   const poseMode = useStage((s) => s.posing)                                           // D121: the pose pill (not the Motion section on screen) shows the joint pickers
   const figure = useStage((s) => { const o = s.object(s.selected); return o?.kind === 'mannequin' ? o : null })
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [pipRect, setPipRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)   // D121 (AW4): where the PiP sits
+  const pip = useStage((s) => s.pip)
+  const shotCam = useShotCamera()
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
     (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
       if (it && e) st().addObject(it.media === 'mesh' ? 'mesh' : 'plane', null, (p ? e.place(p.x, p.y) : null) ?? e.centre(), it.id) },         // P18: a mesh lands as a prop
@@ -713,8 +769,9 @@ function Viewport() {
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on) })   // ST3 / ST4, D111
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
-    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
-    const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
+    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), gizmoMode: () => engine.gizmoMode(), pipRect: () => engine.pipRect(),
+      frameTime: (n: number, on: boolean) => { const was = useStage.getState().pip; engine.setPip(on); const t = engine.measureFrame(n); engine.setPip(was); return t }, meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
+    const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }); setPipRect(engine.pipRect()) })
     ro.observe(host)
     engine.start()
     return () => { ro.disconnect(); engine.dispose(); engineRef.current = null; viewport.centre = undefined; viewport.freePose = undefined; viewport.frame = undefined; viewport.handPreset = undefined; useStage.setState({ passRenderer: null, sequenceRenderer: null, plateProjector: null }) }
@@ -722,7 +779,7 @@ function Viewport() {
   useEffect(() => { const e = engineRef.current; if (!e) return; if (active) e.start(); else e.stop() }, [active])
   const frame = useStage((s) => s.frame)
   const playing = useStage((s) => s.playing)
-  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }) } }, [current, frame])   // ST4: the document at the frame
+  useEffect(() => { const e = engineRef.current; if (e && current) { e.setAspect(current.size.w / current.size.h); e.sync(sampleDoc(current, frame)); setRect({ ...e.frameRect() }); setPipRect(e.pipRect()) } }, [current, frame])   // ST4: the document at the frame
   useEffect(() => {                                                                                                     // ST4: playback loops over the range at the project's fps
     if (!playing || !current) return
     const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))
@@ -732,7 +789,8 @@ function Viewport() {
   useEffect(() => { engineRef.current?.select(selected) }, [selected])
   useEffect(() => { engineRef.current?.selectCamera(selectedCamera) }, [selectedCamera])                   // D119 (SC1)
   useEffect(() => { engineRef.current?.setTool(tool, snap) }, [tool, snap])
-  useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current); setPipRect(e.pipRect()) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const e = engineRef.current; if (!e) return; e.setPip(pip); setPipRect(e.pipRect()) }, [pip])   // D121 (AW4)
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
   useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
   useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -782,7 +840,11 @@ function Viewport() {
         {poseMode && <Help text="Orange spheres are joints: click one for its rotate gizmo. Blue cubes are hands and feet: drag one and the elbow or knee follows. Done (or a click on the floor) ends pose mode." />}
       </div>}
       {current && view === 'camera' && rect && guides && <div className="frame-guides" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}><i className="thirds" /><i className="centre" /></div>}
-      {current && view === 'camera' && <div className="view-tag">camera view · {st().activeCamera()?.name} · {st().activeCamera()?.focal_mm} mm</div>}
+      {current && <CameraPill />}{/* D121 (AW4): which camera, its lens, look through — ArtCraft's camera pill */}
+      <LensReadout />
+      {current && pipRect && view === 'free' && <button type="button" className="pip-frame" style={{ left: pipRect.x, top: pipRect.y, width: pipRect.w, height: pipRect.h }}
+        onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => runCommand('stage.view.camera')}
+        title="The active camera's picture — a click looks through it"><span>{shotCam?.name} · {shotCam?.focal_mm} mm</span></button>}
       {current && !current.objects.length && <div className="stage-empty"><div>Empty stage — add a set and a figure from the Scene section, or drop a Catalogue image.<div className="quick-cards"><CommandButton id="stage.add.set.room" text /><CommandButton id="stage.add.mannequin.adult" text /></div></div></div>}
     </div>
   )

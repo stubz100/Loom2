@@ -40,6 +40,9 @@ editor's stage. This script drives a headed Edge — the same Chromium as WebVie
                      10k synthetic project (PROJECT=F:/loom2-projects/synthetic-10k, made by make_synthetic_assets.py),
                      editor fps while six 4K layers with advanced blends re-render every frame, Animate player frame
                      latency on a 121-frame 1024×576 proxy. Numbers only — the budgets are judged in the journal.
+  pip                D121 (AW4): the active camera's picture-in-picture at Animate · Clay — the viewport's frame time with and without
+                     it on a busy stage (a room, three figures, a stand-in; CPU and GPU, a pixel read-back per frame), and the PiP's
+                     picture following a figure moved on the stage
   tour               runs every Edit command (tools, view, layers, masks, selection, transform, brush, files) through
                      the dev command hook with a document open, checks the resulting state, answers the in-app
                      dialogs, and reports any page exception or crash overlay per step
@@ -48,7 +51,7 @@ Needs the orchestrator venv (PIL, websockets) and the frontend dev server on 142
 `npx vite --host 127.0.0.1 --port 1420 --strictPort`). Starts its own orchestrator (port 8769, temp state) and closes
 everything afterwards. Env: EXTRA="&renderer=webgl" (or "&probe=0") appends dev deep-link flags; OUT= output folder.
 
-    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|heal|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf]
+    orchestrator/.venv/Scripts/python.exe scripts/edit_headed_check.py [render|paint|kit|layers|props|transform|smartsel|heal|masks|tour|cmpdiag|grid|brush|selection|psd|animate|perf|pip]
 """
 from __future__ import annotations
 
@@ -1243,6 +1246,57 @@ def animate_check(cdp: CDP, clip_id: str, asset_id: str, clip_b: str | None = No
     return fails
 
 
+def make_busy_stage() -> str:
+    """D121 (AW4): a stage with a room, three figures and a crate through the API — the measured scene."""
+    st = api("POST", "/stages", {"name": "PiP test"})
+    t = lambda x, z=0.0, s=1.0: {"pos": [x, 0, z], "rot": [0, 0, 0], "scale": [s, s, s]}
+    objs = [{"id": "set_room", "kind": "set", "name": "Room", "preset": "room", "transform": t(0)},
+            {"id": "fig_a", "kind": "mannequin", "name": "Ada", "preset": "adult", "transform": t(-1.2, 0.3)},
+            {"id": "fig_b", "kind": "mannequin", "name": "Ben", "preset": "adult", "transform": t(0.2, -0.4)},
+            {"id": "fig_c", "kind": "mannequin", "name": "Cleo", "preset": "child", "transform": t(1.3, 0.5)},
+            {"id": "box_1", "kind": "prop", "name": "Crate", "preset": "crate", "transform": t(0.8, 1.2)}]
+    api("PUT", f"/stages/{st['id']}", {**st, "objects": objs})
+    return st["id"]
+
+
+def pip_check(cdp: CDP, stage_id: str) -> list[str]:
+    """D121 (AW4): the PiP's cost (the viewport's frame time with and without it) and that it follows the stage."""
+    failures: list[str] = []
+
+    def check(ok: bool, text: str) -> None:
+        print(("ok   " if ok else "FAIL ") + text)
+        if not ok:
+            failures.append(text)
+
+    H = "window.__loom2Stage"
+    cdp.eval(f"{H}.open('{stage_id}').then(() => 1)")
+    ok = cdp.wait_for(f"!!({H}.pipRect && {H}.pipRect()) && {H}.state().current?.objects.length === 5", timeout=30, settle=1.5)
+    check(ok, "the busy stage open at Clay with the PiP in the free view")
+    if not ok:
+        return failures
+    view = cdp.eval("(() => { const c = document.querySelector('canvas.stage-canvas'); return { w: c.width, h: c.height, dpr: window.devicePixelRatio } })()")
+    cdp.eval(f"{H}.frameTime(20, true); 1")                                                   # warm up
+    runs = [cdp.eval(f"{H}.frameTime(60, {str(on).lower()})") for on in (False, True, False, True, False, True)]
+    off, on = sorted(runs[0::2])[1], sorted(runs[1::2])[1]
+    print(f"     viewport {view['w']}x{view['h']} device px (dpr {view['dpr']}): {off:.3f} ms a frame without the PiP, {on:.3f} ms with it "
+          f"(runs {', '.join(f'{x:.3f}' for x in runs)})")
+    check(on <= off * 1.2 or on - off <= 0.25, f"the PiP costs {on - off:+.3f} ms a frame ({(on / off - 1) * 100:+.0f} %): within 20 % or a quarter millisecond")
+    # the PiP follows: a figure moved on the stage changes the PiP's picture
+    rect = cdp.eval(f"(() => {{ const r = {H}.pipRect(); const c = document.querySelector('canvas.stage-canvas').getBoundingClientRect(); return {{ x: c.left + r.x, y: c.top + r.y, w: r.w, h: r.h }} }})()")
+    dpr = view["dpr"] or 1
+    box = tuple(int(v * dpr) for v in (rect["x"] + 2, rect["y"] + 2, rect["x"] + rect["w"] - 2, rect["y"] + rect["h"] - 16))
+    a = cdp.shot(OUT / "pip-0.png").crop(box)
+    cdp.eval(f"{H}.setTransform('fig_b', {{ pos: [0.2, 0, 1.6], rot: [0, 90, 0], scale: [1, 1, 1] }}); 1")
+    time.sleep(1.0)
+    b = cdp.shot(OUT / "pip-1.png").crop(box)
+    pa, pb = list(a.getdata()), list(b.getdata())
+    diff = sum(abs(x[0] - y[0]) + abs(x[1] - y[1]) + abs(x[2] - y[2]) for x, y in zip(pa, pb)) / (3 * len(pa))
+    check(diff > 1.0, f"the PiP follows a figure moved on the stage (mean change {diff:.2f} per channel)")
+    errs = cdp.page_errors()
+    check(not errs, "no page errors" + ("".join("\n       " + e for e in errs) if errs else ""))
+    return failures
+
+
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "render"
     if not EDGE:
@@ -1285,6 +1339,9 @@ def main() -> int:
             clip_id = make_coded_clip(tmp / "proj", frames=24, fps=16, size=(320, 192), asset_id=asset["id"])
             clip_b = make_coded_clip(tmp / "proj", frames=48, fps=16, size=(320, 192), asset_id=asset["id"])      # the compare partner (twice the frames)
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=animate&clip={clip_id}{extra}"
+        elif mode == "pip":
+            pip_stage = make_busy_stage()
+            url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=stage{extra}"
         elif mode == "keepalive":
             ka_doc = make_4k_document(PORT)                     # D69: the 6×4K document the release policy is sized on
             url = f"http://127.0.0.1:{DEV}/?token={TOKEN}&port={PORT}&suite=edit&doc={ka_doc}{extra}"
@@ -1320,7 +1377,7 @@ def main() -> int:
         t0 = time.time()
         badge = None
         while time.time() - t0 < 30 and not badge:
-            badge = cdp.eval("document.querySelector('.anim-canvas') ? 'player' : null" if mode == "animate" else "document.querySelector('.tile, .cat-grid') ? 'catalogue' : null" if mode == "perf" else "document.querySelector('.badge-renderer')?.textContent?.trim() || null")
+            badge = cdp.eval("document.querySelector('canvas.stage-canvas, .placeholder') ? 'stage' : null" if mode == "pip" else "document.querySelector('.anim-canvas') ? 'player' : null" if mode == "animate" else "document.querySelector('.tile, .cat-grid') ? 'catalogue' : null" if mode == "perf" else "document.querySelector('.badge-renderer')?.textContent?.trim() || null")
             if badge in (None, "…"):
                 badge = None; time.sleep(0.5)
         time.sleep(1.5)
@@ -1331,6 +1388,14 @@ def main() -> int:
             except Exception:
                 pass
             print(f"\nperf: {'all budgets met' if not failures else f'{len(failures)} over budget'}")
+            return 1 if failures else 0
+        if mode == "pip":
+            failures += pip_check(cdp, pip_stage)
+            try:
+                cdp.call("Browser.close")
+            except Exception:
+                pass
+            print(f"\npip: {'all checks passed' if not failures else f'{len(failures)} FAILED'}")
             return 1 if failures else 0
         if mode == "animate":
             failures += animate_check(cdp, clip_id, asset["id"], clip_b)

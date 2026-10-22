@@ -179,3 +179,12 @@
 @keyframes step-pulse { 50% { background: var(--accent); } }
 /* AW3: a clip's editor under its row in Clips */
 .clip-item .clip-editor { margin: 2px 0 8px; padding: 6px 6px 4px; border-left: 2px solid var(--accent); }
+/* D121 (AW4): the viewport's camera chrome — the camera pill (top right), the lens in large type for a moment after it changes, the PiP's frame
+   (the picture itself is drawn by the engine into the canvas; the frame is a transparent button over it) */
+.cam-pill { position: absolute; right: 10px; top: 10px; display: flex; align-items: center; gap: 2px; padding: 3px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(4px); z-index: 2; }
+.cam-pill-main { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 8px; background: none; border: 1px solid transparent; border-radius: var(--radius); color: var(--fg); }
+.cam-pill-main.active { border-color: var(--accent); color: var(--accent); }
+.lens-readout { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); padding: 8px 18px; font-size: 22px; font-weight: 700; color: var(--fg); background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); pointer-events: none; z-index: 2; }
+.pip-frame { position: absolute; padding: 0; background: transparent; border: 1px solid var(--line2); border-radius: 2px; box-shadow: 0 2px 10px var(--shadow); cursor: pointer; z-index: 1; }
+.pip-frame:hover { border-color: var(--accent); }
+.pip-frame span { position: absolute; left: 4px; bottom: 3px; font-size: 10px; color: var(--fg2); background: color-mix(in srgb, var(--bg1) 70%, transparent); padding: 0 4px; border-radius: 2px; }

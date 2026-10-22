@@ -1,6 +1,6 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, PersonStanding, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, PersonStanding, PictureInPicture2, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
@@ -36,9 +36,11 @@ registerCommands([
   tool('path', 'Path (click the floor to add to the figure\'s path)', Route, 'P'),                                           // CA1
   { id: 'stage.path.clear', scope: 'stage', label: 'Clear the path', icon: X, placement: ['panel', 'context'], when: () => !!sel()?.path?.length, run: () => st().clearPath(sel()!.id) },
   { id: 'stage.snap', scope: 'stage', label: 'Snap (0.25 m · 15°)', icon: Magnet, keys: 'Q', placement: ['toolbar', 'context'], when: hasStage, run: () => st().setSnap(!st().snap) },
-  { id: 'stage.view.free', scope: 'stage', label: 'Free view', icon: Eye, placement: ['strip'], when: hasStage, run: () => st().setView('free') },
+  { id: 'stage.view.free', scope: 'stage', label: 'Free view', icon: Eye, placement: ['toolbar'], when: hasStage, run: () => st().setView('free') },
   { id: 'stage.view.camera', scope: 'stage', label: 'Camera view (look through)', icon: Video, keys: '0', placement: ['strip', 'panel', 'context'], when: () => hasStage() && !!st().activeCamera(), run: () => st().setView(st().view === 'camera' ? 'free' : 'camera') },
-  { id: 'stage.guides', scope: 'stage', label: 'Framing guides', icon: Grid3x3, placement: ['strip'], when: hasStage, run: () => st().setGuides(!st().guides) },
+  { id: 'stage.guides', scope: 'stage', label: 'Framing guides', icon: Grid3x3, placement: ['strip', 'context'], when: hasStage, run: () => st().setGuides(!st().guides) },
+  // D121 (AW4): the active camera's picture in the free view's corner (a click on it looks through); on by default, the strip and the camera pill toggle it
+  { id: 'stage.view.pip', scope: 'stage', label: 'Picture-in-picture of the active camera', icon: PictureInPicture2, placement: ['strip', 'context'], when: hasStage, run: () => st().setPip(!st().pip) },
   // D90 (02 §8.2): Shift+F, off Home (the transport's first frame) — beside F (frame the selection)
   { id: 'stage.frameAll', scope: 'stage', label: 'Frame everything', icon: Focus, keys: 'Shift+F', hint: 'F frames the selection; Home is the timeline\'s first frame',placement: ['strip', 'panel', 'context'], when: hasStage, run: () => st().frameView(null) },
   { id: 'stage.frameSel', scope: 'stage', label: 'Frame the selection', icon: Crosshair, keys: 'F', placement: ['context', 'inspector'], when: hasSel, run: () => st().frameView([st().selected!]) },

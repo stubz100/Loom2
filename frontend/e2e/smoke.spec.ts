@@ -502,11 +502,11 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect.poll(async () => (await api<{ items: { name: string; revision: number; objects: { kind: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')?.objects.length ?? 0, { timeout: 10_000 }).toBe(2)
   const before = (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!
   expect(before.revision).toBeGreaterThanOrEqual(1)
-  // camera view shows the framing rectangle; the free view does not
-  await openSection(page, 'Camera')
-  await page.locator('.stage-panel button', { hasText: /^Look through$/ }).click()
+  // camera view shows the framing rectangle; the free view does not (D121 AW4: the camera pill over the viewport looks through)
+  await expect(page.locator('.frame-guides')).toHaveCount(0)
+  await page.locator('.cam-pill .cam-pill-main').click()
   await expect(page.locator('.frame-guides')).toBeVisible()
-  await expect(page.locator('.view-tag')).toContainText('35 mm')
+  await expect(page.locator('.cam-pill .cam-pill-main')).toContainText('35 mm')
   await page.screenshot({ path: 'node_modules/.e2e/stage-camera-view.png' })                     // a look for the journal: the framing rectangle over the set
   await page.reload()
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Animate/)
@@ -2569,4 +2569,32 @@ test('the one timeline and transport (D121 AW2): Clay keys the camera on its row
   await page.keyboard.press('Alt+ArrowLeft')
   await expect(tl.locator('.frame-field')).toHaveValue('0')
   await page.screenshot({ path: 'node_modules/.e2e/d121-timeline-clay.png' })
+  // D121 (AW4): the camera chrome — the PiP of the active camera in the free view (a click looks through), the pill's lens, the readout
+  const pipFrame = page.locator('.stage-host .pip-frame')
+  await expect(pipFrame).toBeVisible()
+  await expect(pipFrame).toContainText('Camera 1 · 35 mm')
+  const hook = () => page.evaluate(() => (window as unknown as { __loom2Stage: { pipRect: () => unknown } }).__loom2Stage.pipRect())
+  expect(await hook()).not.toBeNull()
+  // the PiP's cost on a busier stage (a room, three figures, a stand-in): the viewport's frame time without and with it (CPU and GPU, Edge's ANGLE)
+  await libAdd(page, 'sets', 'room'); await libAdd(page, 'figures', 'Adult'); await libAdd(page, 'figures', 'Child'); await libAdd(page, 'standins', 'crate')
+  await page.locator('#anim-sec-shot .col-sec-head').click()
+  const ms = await page.evaluate(() => { const h = (window as unknown as { __loom2Stage: { frameTime: (n: number, on: boolean) => number } }).__loom2Stage; h.frameTime(10, true); return [h.frameTime(60, false), h.frameTime(60, true), h.frameTime(60, false), h.frameTime(60, true)] })
+  console.log(`[aw4] viewport frame time (headless Edge, the median of five batches of 60, twice): ${ms[0].toFixed(3)} / ${ms[2].toFixed(3)} ms without the PiP, ${ms[1].toFixed(3)} / ${ms[3].toFixed(3)} ms with it`)
+  expect(Math.min(ms[1], ms[3])).toBeLessThan(Math.max(ms[0], ms[2]) * 1.5 + 0.5)                       // a loose bound here; the 20 % bar is judged on the numbers
+  await page.locator('.cam-pill button[aria-label="Cameras and lens"]').click()
+  await page.locator('.ctx-menu button.item', { hasText: /^50 mm$/ }).click()
+  await expect(page.locator('.stage-host .lens-readout')).toHaveText('50 mm')
+  await expect(page.locator('.cam-pill .cam-pill-main')).toContainText('50 mm')
+  await expect(pipFrame).toContainText('Camera 1 · 50 mm')
+  await pipFrame.click()                                                                                    // looks through
+  await expect(page.locator('.cam-pill .cam-pill-main')).toHaveClass(/active/)
+  await expect(pipFrame).toHaveCount(0)                                                                     // no PiP while looking through
+  await page.locator('.cam-pill .cam-pill-main').click()                                                    // back to the free view
+  await expect(pipFrame).toBeVisible()
+  await page.locator('.stage-strip button[aria-label^="Picture-in-picture"]').click()                      // the strip's toggle
+  await expect(pipFrame).toHaveCount(0)
+  expect(await hook()).toBeNull()
+  await page.locator('.stage-strip button[aria-label^="Picture-in-picture"]').click()
+  await expect(pipFrame).toBeVisible()
+  await page.screenshot({ path: 'node_modules/.e2e/d121-camera-chrome.png' })
 })

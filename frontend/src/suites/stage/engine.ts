@@ -53,6 +53,7 @@ export class StageEngine {
   private floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private ray = new THREE.Raycaster()
   private view: View = 'free'
+  private pip = false                                              // D121 (AW4): the active camera's picture in the free view's corner
   private aspect = 16 / 9
   private dirty = true
   private raf = 0
@@ -902,6 +903,59 @@ export class StageEngine {
       r.setViewport(0, 0, this.w, this.h); r.setClearColor(0x1d1e22, 1)
       for (const h of this.camHelpers.values()) h.visible = true
       r.render(this.scene, this.free)
+      this.renderPip()
     }
+  }
+
+  // ---- D121 (AW4): the picture-in-picture of the active camera -------------------------------------------------------------------
+  setPip(on: boolean): void { this.pip = on; this.dirty = true }
+  /** Where the PiP sits (CSS px from the viewport's top left): the bottom right of the free view, at most 320 px wide at the shot's aspect. */
+  pipRect(): { x: number; y: number; w: number; h: number } | null {
+    if (!this.pip || this.view !== 'free' || !this.activeCam) return null
+    const w = Math.round(Math.min(320, this.w * 0.3)), h = Math.round(w / this.aspect)
+    if (w < 80 || h + 24 > this.h) return null
+    return { x: this.w - w - 12, y: this.h - h - 12, w, h }
+  }
+  /** The shot camera's view into the PiP's corner, as the camera view draws it (helpers, glyphs, gizmo and light aims out, billboards facing
+   *  it) — reusing the frame's shadow map, so the second picture costs its draw calls, not another shadow pass. */
+  private renderPip(): void {
+    const p = this.pipRect()
+    if (!p) return
+    const r = this.renderer
+    const hidden: THREE.Object3D[] = []
+    const hide = (o: THREE.Object3D | undefined) => { if (o && o.visible) { o.visible = false; hidden.push(o) } }
+    hide(this.selection); hide(this.gizmo.getHelper())
+    for (const h of this.camHelpers.values()) hide(h)
+    for (const l of this.lights.values()) hide(l.aim)
+    for (const e of this.entries.values()) e.pickers?.forEach(hide)                                     // pose mode's joint pickers and handles
+    if (this.ik) hide(this.ik.proxy)
+    for (const e of this.entries.values()) if (e.doc.kind === 'plane' && e.doc.billboard) { e.body.lookAt(this.shot.position); e.body.updateMatrixWorld() }
+    const y = this.h - p.y - p.h
+    r.setViewport(p.x, y, p.w, p.h); r.setScissor(p.x, y, p.w, p.h); r.setScissorTest(true)
+    r.setClearColor(0x1d1e22, 1); r.clear()
+    const auto = r.shadowMap.autoUpdate, mats = this.scene.matrixWorldAutoUpdate
+    r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = false
+    this.scene.matrixWorldAutoUpdate = false                         // the frame's render brought every matrix up to date (the billboards just above)
+    r.render(this.scene, this.shot)
+    this.scene.matrixWorldAutoUpdate = mats
+    r.shadowMap.autoUpdate = auto
+    r.setScissorTest(false); r.setViewport(0, 0, this.w, this.h)
+    for (const o of hidden) o.visible = true
+    for (const e of this.entries.values()) if (e.doc.kind === 'plane' && e.doc.billboard) e.body.lookAt(this.free.position)
+  }
+  /** AW4's measurement: the viewport's frame time in ms (CPU and GPU — a one-pixel read-back after each render waits for the frame;
+   *  gl.finish returned at once in Edge), the PiP as set: five batches of `n` frames, the median batch over `n` (the browser's clock
+   *  steps by 0.1 ms, too coarse for one frame). */
+  measureFrame(n = 60): number {
+    const gl = this.renderer.getContext()
+    const px = new Uint8Array(4)
+    const batches: number[] = []
+    for (let b = 0; b < 5; b++) {
+      const t0 = performance.now()
+      for (let i = 0; i < n; i++) { this.renderNow(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px) }
+      batches.push((performance.now() - t0) / n)
+    }
+    batches.sort((a, b) => a - b)
+    return batches[2]
   }
 }

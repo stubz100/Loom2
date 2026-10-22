@@ -7966,8 +7966,39 @@ The author asked for a review of the state of things, then "record all this and 
   row, drags the key at 8 to 20, drags the range's end to 60 on the ruler, removes a key by its right-click; End / Home / → / Alt+← move the
   playhead); the final-shot scenario scrubs by the transport's frame field. Vitest 417 + 3 skipped, typecheck and build clean, lint 0 errors
   (79), e2e 52/52 full and 52/52 open.
-- **The headed Animate check** (\`scripts/edit_headed_check.py animate\`, a visible Edge on a Vite dev server on 1420 started for it and stopped
+- **The headed Animate check** (`scripts/edit_headed_check.py animate`, a visible Edge on a Vite dev server on 1420 started for it and stopped
   by its PID after): all 17 steps pass on the one transport — exact frames stepping both ways and at random, play, in / out from the playhead,
-  the extracted range's three pins on the timeline (\`.timeline .marker.pin\`), onion skin, the frames track, compare. Its screenshot showed the
+  the extracted range's three pins on the timeline (`.timeline .marker.pin`), onion skin, the frames track, compare. Its screenshot showed the
   Shot section empty at Performance on the Image to video card without a Story shot: it now says so in a line (*Not for a Story shot*, the
-  rest behind its ?). (The script prints an arrow: run it with \`PYTHONIOENCODING=utf-8\` on this console.)
+  rest behind its ?). (The script prints an arrow: run it with `PYTHONIOENCODING=utf-8` on this console.)
+
+## 2026-10-22 23:08 — AW4 built (D121, proto01_animate 26 §5.6): the viewport's camera chrome — the camera pill, the lens readout, the PiP
+
+- **The camera pill** over the viewport's top right (`StageParts.CameraPill`, replacing the camera view's corner tag): *Free view · ★ Camera 1 ·
+  35 mm*, or *Camera 1 · 35 mm* while looking through; a click looks through (again: back), its lens menu (`Cameras and lens`) picks another
+  camera, sets the lens (24 · 35 · 50 · 85), Set from view, Add camera, the PiP and the guides. The strip's free / camera switch is gone (the
+  pill is its home); the Camera section keeps the active camera, its lens presets, Set from view, Key camera, the guides and New shot from
+  this camera — its duplicate Look through went. The chrome reads the camera **sampled at the playhead** (`useShotCamera`): a keyed camera's
+  lens is its key's, so the pill showed 35 mm after a lens change that went into the key at frame 0 (T8: display == reality) — now it shows
+  what the viewport renders.
+- **The lens readout:** after the active camera's lens changes (the pill, its row, a key), the focal length in large type for 1.2 s (not
+  while playing a zoom).
+- **The picture-in-picture** (`engine.renderPip`, `stage.view.pip`, on by default, the strip and the pill toggle it): in the free view the
+  shot camera's picture in the bottom right (≤ 320 px at the shot's aspect, a second scissored render as the camera view draws it — the
+  glyphs, gizmo, light aims, pose pickers and selection out, billboards facing the shot), a transparent frame over it with the camera and
+  lens; a click looks through. It reuses the frame's shadow map and skips the matrix walk (the frame's render updated them), so the second
+  picture costs its draw calls only.
+- **Measured** (`scripts/edit_headed_check.py pip`, new: a room, three figures and a crate made through the API; Edge visible on the RX 9070 XT
+  at 1585×1098 device px, dpr 1.5; `engine.measureFrame`: five batches of 60 renders each followed by a one-pixel read-back — `gl.finish`
+  returned at once, and Edge's clock steps by 0.1 ms): **0.520 ms a frame without the PiP, 0.598 ms with it (+0.078 ms, +15 %)**, inside
+  26 §7's 20 %. The first cut cost +0.115 ms (+23 %) before the matrix walk was skipped. The PiP follows a figure moved on the stage (the
+  PiP's pixels changed by 2.1 per channel); no page errors. Headless Edge in the e2e: 0.39–0.45 ms without, 0.50–0.51 ms with. Vite on 1420
+  was started for the run and stopped by its PID; the engine stayed off (nothing on the queue).
+- **Tests:** the e2e's timeline scenario goes on to the chrome — the PiP's frame and label in the free view, the hook's rect, the lens set to
+  50 mm by the pill's menu (the readout, the pill and the PiP's label say so — the key at frame 0 took it), a click on the PiP looks through
+  and the PiP goes, the pill brings the free view back, the strip toggles the PiP off and on; the busier stage's frame time printed with a
+  loose bound. The stage scenario looks through by the pill. Vitest 417 + 3 skipped, typecheck and build clean, lint 0 errors (79), e2e 52/52
+  full and 52/52 open, headed pip 4/4, headed animate 17/17 (the run of 22:44).
+- Also: three lines of the 22:44 entry above carried literal backslashes before their backticks (an escaping slip when it was written);
+  removed, nothing else changed.
+- **D121's waves are built** (AW1 → AW3 → AW2 → AW4). Owed: the author's click-through (UX9) — `.docs/proto01_animate/27-testing-modes.md`.

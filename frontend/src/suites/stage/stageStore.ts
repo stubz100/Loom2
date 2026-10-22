@@ -94,6 +94,7 @@ interface StageState {
   snap: boolean
   view: View
   guides: boolean
+  pip: boolean                                              // D121 (AW4): the active camera's picture-in-picture in the free view
   undo: StageDoc[]; redo: StageDoc[]
   saving: boolean
   frameRequest: { ids: string[] | null; n: number }         // the viewport frames these (null = everything) when n changes
@@ -200,6 +201,7 @@ interface StageState {
   setSnap: (on: boolean) => void
   setView: (v: View) => void
   setGuides: (on: boolean) => void
+  setPip: (on: boolean) => void
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
   setFromImage: (assetId: string) => Promise<void>            // SC3 (D120): a Catalogue image → MoGe's relief as a locked set with the picture's camera (a job; the stage reloads when it lands)
   pendingSet: string | null                                   // SC3: the image → set job in flight for the open stage
@@ -288,7 +290,7 @@ let shotPreviewSeq = 0
 const thumbed = new Set<string>()                                            // P18: mesh assets whose thumbnail this session already rendered
 
 export const useStage = create<StageState>()((set, get) => ({
-  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
+  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, pip: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
@@ -636,6 +638,7 @@ export const useStage = create<StageState>()((set, get) => ({
   setSnap: (snap) => set({ snap }),
   setView: (view) => set({ view }),
   setGuides: (guides) => set({ guides }),
+  setPip: (pip) => set({ pip }),
 
   addObject: (kind, preset = null, pos, assetId = null) => {
     const cur = get().current

@@ -194,9 +194,12 @@ export class StageEngine {
   }
 
   // ---- tools --------------------------------------------------------------------------------------------------------------------
+  private tool: Tool = 'select'
+  private modeOf(): 'translate' | 'rotate' | 'scale' { return this.tool === 'rotate' ? 'rotate' : this.tool === 'scale' ? 'scale' : 'translate' }
   setTool(tool: Tool, snap: boolean): void {
+    this.tool = tool
     if (tool === 'select' || tool === 'path') { this.gizmo.enabled = false; this.gizmo.detach() } else {
-      this.gizmo.setMode(tool === 'move' ? 'translate' : tool === 'rotate' ? 'rotate' : 'scale')
+      this.gizmo.setMode(this.modeOf())
       this.gizmo.enabled = true
       const sel = this.selectedId
       if (sel) this.attach(sel)
@@ -240,10 +243,14 @@ export class StageEngine {
     const r = this.canvas.getBoundingClientRect()
     return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height }
   }
+  /** The object takes the gizmo in the tool's mode — a camera's body (translate whatever the tool) or a joint (rotate, local) may have left it
+   *  in theirs (the author, 2026-10-22: the rotate tool moved an object selected after a camera). */
   private attach(id: string): void {
     const e = this.entries.get(id)
-    if (e && !e.doc.locked) { this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(e.holder) }
+    if (e && !e.doc.locked) { this.gizmo.setMode(this.modeOf()); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(e.holder) }
   }
+  /** The gizmo's mode now (the dev hook; the e2e reads it). */
+  gizmoMode(): string { return this.gizmo.object ? this.gizmo.mode : 'none' }
   private commitGizmo(): void {
     if (this.posing || this.ik) { this.commitPose(); return }
     const o = this.gizmo.object as THREE.Group | undefined

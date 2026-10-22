@@ -8,12 +8,13 @@ export interface TileProps {
   onClick: (e: React.MouseEvent, id: string) => void; onDouble: (id: string) => void; dragItems?: () => DragItem[]; onContext?: (e: React.MouseEvent, id: string) => void
   onLineage?: (id: string) => void
   onEdit?: (id: string) => void                                    // D95 (IM1, UX0): Image's results — ✎ Edit on the tile, opened in place
+  corner?: { icon?: React.ReactNode; label: string; run: () => void }   // a pick started from a panel (the Bin): the verb's button top right, always shown
 }
 
 /** The scene of a JSON prompt, else the prompt text, for the caption. */
 const promptLine = (a: Asset) => ((a.prompt_json as { scene?: string } | null)?.scene ?? a.prompt_text ?? '').trim()
 
-export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit }: TileProps) {
+export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner }: TileProps) {
   const thumb = api.thumbUrl(a.id, size > 256 ? 512 : 256)
   const stateBadge = a.state === 'keep' ? '✓' : a.state === 'reject' ? '✗' : null
   const derived = a.root_id && a.root_id !== a.id
@@ -39,6 +40,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
           : <span className="badge-dot" title="derived from another asset">⤷</span>)}
       </div>
       {onEdit && a.kind === 'image' && <button type="button" className="tile-edit" title="Edit this image (Image · Edit, in place) — or double-click it, or E" aria-label="Edit" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(a.id) }}>✎ Edit</button>}
+      {corner && <button type="button" className="tile-pick" title={corner.label} aria-label={corner.label} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); corner.run() }}>{corner.icon ?? '＋'}</button>}
       {a.rating > 0 && <span className="stars">{'★'.repeat(a.rating)}</span>}
       {pinned > 0 && <span className="pin">C{pinned}</span>}
       {caption === 'model' && <div className="label"><span>{a.model_id ?? a.suite}</span><span style={{ marginLeft: 'auto' }}>{a.seed ?? ''}</span></div>}

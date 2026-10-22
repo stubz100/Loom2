@@ -7,6 +7,7 @@ import type { Asset } from '../../api/types'
 import { showMenu } from '../../frame/ContextMenu'
 import { mediaOf } from '../../frame/drag'
 import { editPresence } from '../../frame/editPresence'
+import { command } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { useAlbum } from './albumStore'
 import { useBin, type Query } from './catalogueStore'
@@ -27,8 +28,8 @@ const playClip = (a: Asset) => void import('../animate/animateStore').then(async
   if (clip) { await an.loadClips(); an.select(clip) }
 })
 
-/** A Bin verb: a menu entry that is also the double-click. */
-interface Verb { label: string; run: () => void }
+/** A Bin verb: a menu entry that is also the double-click; a pick started from a panel names one by `id` (session.ui.pick). */
+interface Verb { id: string; label: string; run: () => void }
 
 /** The verbs of a Bin tile, the mode's likely one first (the double-click). */
 /** An image plane at the viewport's centre on the open stage (the stage's code loads with it; the Clay level has it loaded already). */
@@ -44,19 +45,20 @@ function setFromImage(id: string): void {
 }
 
 function verbs(a: Asset, suite: string): Verb[] {
-  if (a.kind === 'video') return [{ label: 'Play in Animate', run: () => playClip(a) }]
+  if (a.kind === 'video') return [{ id: 'play', label: 'Play in Animate', run: () => playClip(a) }]
   if (a.kind !== 'image') return []
-  const edit: Verb[] = suite === 'edit' && editPresence.hasDoc ? [{ label: 'Add as a layer', run: () => addLayer(a.id) }] : []
-  const rest: Verb[] = [{ label: 'Use as a reference (Image · Make)', run: () => asReference(a.id) }, { label: 'Open in Image · Edit', run: () => openInEdit(a.id) },
-    { label: 'Set as the start frame (Animate)', run: () => asStart(a.id) }]
+  const edit: Verb[] = suite === 'edit' && editPresence.hasDoc ? [{ id: 'edit.layer', label: 'Add as a layer', run: () => addLayer(a.id) }] : []
+  const rest: Verb[] = [{ id: 'reference', label: 'Use as a reference (Image · Make)', run: () => asReference(a.id) }, { id: 'edit.open', label: 'Open in Image · Edit', run: () => openInEdit(a.id) },
+    { id: 'start', label: 'Set as the start frame (Animate)', run: () => asStart(a.id) }]
   const first = suite === 'animate' || suite === 'stage' ? rest[2] : suite === 'generate' ? rest[0] : null
-  const plane: Verb[] = suite === 'stage' ? [{ label: 'Add to the stage (image plane)', run: () => addPlane(a.id) }, { label: 'Add to the stage (a set from this image)', run: () => setFromImage(a.id) }] : []   // D95 (AN1, UX0 #18): the Clay level's verb
+  const plane: Verb[] = suite === 'stage' ? [{ id: 'stage.plane', label: 'Add to the stage (image plane)', run: () => addPlane(a.id) }, { id: 'stage.set', label: 'Add to the stage (a set from this image)', run: () => setFromImage(a.id) }] : []   // D95 (AN1, UX0 #18): the Clay level's verb
   return [...edit, ...plane, ...(first ? [first] : []), ...rest.filter((x) => x !== first)]
 }
 
 export function Bin() {
   const project = useSession((s) => s.project)
   const suite = useSession((s) => s.ui.suite)
+  const pick = useSession((s) => s.ui.pick) ?? null
   const q = useBin((s) => s.q)
   const items = useBin((s) => s.items)
   const total = useBin((s) => s.total)
@@ -74,6 +76,10 @@ export function Bin() {
   const open = (p: string) => void useBin.getState().setQuery(p === 'unprocessed' || p === 'all' ? { folder: p, group_id: undefined } : { folder: 'all', group_id: p })
   const groups = tree?.children ?? []
   const first = (a: Asset) => verbs(a, suite)[0]
+  // a pick started from a panel: the verb it names on each tile that has it — the corner button, and the double-click while it lasts
+  const picked = (a: Asset): Verb | undefined => (pick ? verbs(a, suite).find((v) => v.id === pick.verb) : undefined)
+  const PickIcon = pick ? command(pick.cmd)?.icon : undefined
+  const endPick = () => useSession.getState().setUi({ pick: null })
   return (
     <div className="bin">
       <nav className="bin-places" aria-label="Bin places">
@@ -90,12 +96,15 @@ export function Bin() {
           <input type="search" aria-label="search the Bin" placeholder="search" value={q.search} onChange={(e) => void useBin.getState().setQuery({ search: e.target.value })} />
           <span className="meta">{loading ? 'loading…' : `${shown.length}${total != null && total > shown.length ? ` of ${total}` : ''}`}</span>
           <span className="spacer" />
-          <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>
+          {pick
+            ? <span className="meta picking">picking for: {pick.label} <button type="button" className="quiet" aria-label="stop picking" title="Stop picking (the tiles' corner buttons go)" onClick={endPick}>✕</button></span>
+            : <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>}
         </div>
         <div className="bin-grid" onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (
             <Tile key={a.id} a={a} size={TILE} fill caption="off" selected={selected === a.id} primary={selected === a.id} pinned={0}
-              onClick={(_e, id) => setSelected(id)} onDouble={() => first(a)?.run()} onContext={(e) => { e.preventDefault(); setSelected(a.id); showMenu(e, verbs(a, suite)) }}
+              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); showMenu(e, verbs(a, suite)) }}
+              corner={(() => { const pv = picked(a); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined })()}
               dragItems={() => [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }]} />
           ))}
           {!loading && !shown.length && <span className="meta">Nothing here.</span>}

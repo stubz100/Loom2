@@ -7811,3 +7811,19 @@ The author asked for a review of the state of things, then "record all this and 
   Playwright reports as "no tests found"; the orchestrator the rig starts stops its engine with it (8188 free after). Left for the second
   slice: the things cut out and modelled in one job (D109's path, E30's `props` arm), the sky backdrop, a lens field before the job, the
   figures' shadows on the relief.
+
+## 2026-10-22 19:03 — The Bin's pick icon and the rotate tool (the author's notes of the evening; doc 25 §1 notes 5 and 6)
+
+- **The pick** (`session.ui.pick: {verb, cmd, label}`, `BinPick`): *Add image plane…* and *From an image…* (the Clay Library, the viewport's
+  Add menu) open the Bin and start one — `stage.plane` / `stage.set` with their command for the icon. The Bin's verbs carry ids now
+  (`stage.plane`, `stage.set`, `reference`, `edit.layer`, `edit.open`, `start`, `play`); while a pick lasts, every tile that has the named verb
+  shows `Tile`'s new `corner` button (`.tile-pick`, top right, the accent, the command's icon, the verb as its label) — a click runs exactly
+  that verb and ends the pick; the double-click does the same while it lasts; the right-click lists every verb as before; the Bin's bar
+  reads *picking for: <the verb>* with a ✕ (`stop picking`); a suite change drops the pick (`setSuite`). No key: D32.
+- **The rotate tool:** `engine.attach` set the space and the free-rotate ball but not the mode, so an object selected after a camera's body
+  (SC1: translate whatever the tool) or after a joint (rotate, local) kept the gizmo the way they left it — the author saw the rotate tool
+  move. The engine remembers the tool (`this.tool`, `modeOf()`) and `attach` sets the mode from it every time; `gizmoMode()` is a dev hook.
+- **Tests:** the set scenario starts the pick from the Library, sees *picking for*, checks the right-click still lists the verb (Escape
+  closes it), clicks the corner button and sees the pick end; the stage scenario (the camera's body clicked) switches to Rotate, selects an
+  object and reads `gizmoMode() === 'rotate'`, then Move → `translate`; the plane scenario's double-click runs through the pick unchanged.
+  Vitest 402 + 3 skipped, lint 75, build clean; the e2e (the set, stage and plane scenarios, then both variants' full runs) is owed — the author's own Vite dev server holds 1420 since 18:41 and the e2e refuses a busy port by design (it is left alone; that server serves this working tree, so the pick button and the rotate fix are live in the app).

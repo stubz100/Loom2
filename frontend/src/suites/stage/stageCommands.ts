@@ -55,9 +55,9 @@ registerCommands([
   { id: 'stage.object.rename', scope: 'stage', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: hasSel,
     run: () => { const o = sel()!; void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) }) } },
   { id: 'stage.add.set.image', scope: 'stage', label: 'Set from an image…', icon: ImagePlus, hint: 'a picture of a place as a relief the camera can move in a little (MoGe, D120) — pick the picture in the Bin', placement: ['panel', 'context'], when: hasStage,
-    run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true }); useSession.getState().toast('Pick a picture in the Bin: right-click it › Add to the stage (a set from this image)', 'info') } },
+    run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true, pick: { verb: 'stage.set', cmd: 'stage.add.set.image', label: 'Add to the stage (a set from this image)' } }); useSession.getState().toast('Pick a picture in the Bin: its corner button makes the set (or right-click it)', 'info') } },
   { id: 'stage.add.plane', scope: 'stage', label: 'Add image plane…', icon: ImagePlus, placement: ['panel', 'context'], when: hasStage,
-    run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true }); useSession.getState().toast('Pick an image in the Bin: drag it onto the viewport, or double-click it (right-click › Add to the stage)', 'info') } },
+    run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true, pick: { verb: 'stage.plane', cmd: 'stage.add.plane', label: 'Add to the stage (image plane)' } }); useSession.getState().toast('Pick an image in the Bin: its corner button adds the plane — or drag it onto the viewport, or double-click it (right-click › Add to the stage)', 'info') } },
   // CA1 (proto01_animate 01 step 5): the motion library
   { id: 'stage.motion.apply', scope: 'stage', label: 'Apply the clip at the playhead', icon: Play, hint: 'the picked library clip on the selected figure, as keys from the playhead (one undo step)', placement: ['panel', 'context'],
     when: () => sel()?.kind === 'mannequin' && !!useMotion.getState().picked && !useMotion.getState().applying, run: () => void useMotion.getState().apply() },

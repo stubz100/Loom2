@@ -16,6 +16,13 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
 4. "We also need a comprehensive outliner, where every object can be selected and all their properties are easily accessed (like how we
    did it with the layers in Final)."
 
+5. (The evening, after SC3's first slice.) "When selecting any object from the Bin, there should be a small icon on the top right corner
+   (based on the original selection criteria) that will action the image selection. This top-right icon should only appear when the
+   selection was initiated from the main panel and should correspond to the exact response as the origin of the action — when clicked on
+   Sets: From an image…, the icon should correspond to *Add to the stage (a set from an image)*; when clicked on Image planes: Add image
+   plane…, then *Add to the stage (image plane)*, etc. The right-clicks should remain also!"
+6. "The rotate button on the 3D view is moving and not rotating the object."
+
 ## 2 · What each meets today
 
 | Note | Today | The gap |
@@ -78,6 +85,13 @@ check row here.
   Rig (`engine/spikes/sc3_rig.py`, the real engine through the app): bench/sets/room.jpg (1280×720) → the job done in 18 s with the engine's start inside it (22 s the first time), the relief 227,775 vertices / 449,624 faces, 10.4 MiB, lens 69.16° × 42.36°, the floor 0.938 m under the camera, median depth 4.67 m; on the stage the locked Picture set and the Picture camera at [0, 0.938, 0] looking down −Z at 26.1 mm, active; the asset of kind mesh with lineage image-to-set and its thumbnail; the engine stopped with the orchestrator (8188 free). Not in this slice (the next): the things cut out and stood
   on the clean plate as models (D109's path, measured in E30 — today they are made by hand: the mask job, the remove, *Make a 3D prop…*,
   the model placed), the masked pixels (the sky) as a backdrop, a lens field before the job, figures' shadows on the relief (it is unlit).
+
+- **2026-10-22 19:03 — notes 5 and 6 answered.** The Bin has a **pick**: a panel button that wants a picture (*Add image plane…*, *From an image…*)
+  starts one (`session.ui.pick`: the Bin verb it names, the command whose icon it carries, its label); while it lasts every tile that has
+  that verb shows a small accent button top right with the command's icon — a click runs exactly that verb (the plane, the set) and ends
+  the pick; the Bin's bar says *picking for: …* with a ✕ to stop; a double-click runs the pick's verb too; the right-click keeps every verb;
+  a suite change drops the pick. The rotate tool: an object selected after a camera's body (translate whatever the tool, SC1) or after a
+  joint (rotate, local) kept their gizmo mode — now the object takes the gizmo in the tool's mode every time.
 
 ## 4 · Checks for the author
 

@@ -23,7 +23,12 @@ interface UiState {
   imageLast?: 'generate' | 'edit'                                              // D95 (IM1): the Image tab returns to the mode last open under it (Make or Edit)
   dockTab?: 'queue' | 'bin'                                                     // D95 (AN1, 04 C1): the Dock shows the render queue or the Bin
   animateLast?: 'animate' | 'stage'                                            // D95 (AN1): the Animate tab returns to the level last open (Performance or Clay)
+  pick?: BinPick | null                                                        // a pick started from a panel (the author, 2026-10-22): the Bin's tiles show its button top right
 }
+
+/** A pick started from a panel's button ("Add image plane…", "Set from an image…"): the Bin verb it stands for, the command whose icon the
+ *  tiles' corner button carries, the label the button says. The corner click runs the verb and ends the pick; ✕ in the Bin's bar or a suite change ends it too. */
+export interface BinPick { verb: string; cmd: string; label: string }
 
 export interface SessionState {
   backend: Backend | null; backendError: string | null; wsStatus: 'open' | 'closed'
@@ -147,7 +152,7 @@ export const useSession = create<SessionState>()(
 
       setSuite: (suite) => {
         if (suite === 'models') { get().openModels({ missing: true }); return }   // D90 (02 §7): the old routes (the Fetch buttons) open the sheet on the missing weights
-        set({ ui: { ...get().ui, suite, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' ? { animateLast: suite } : {}) } })
+        set({ ui: { ...get().ui, suite, pick: null, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' ? { animateLast: suite } : {}) } })
       },
       openModels: (o = {}) => set({ modelsSheet: { tab: o.tab ?? 'roster', missing: !!o.missing } }),
       closeModels: () => set({ modelsSheet: null }),

@@ -5,6 +5,7 @@ import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
 import { DEFAULT_RAIL, TOP_TABS, widthKeyOf } from '../../frame/railTabs'
 import { useSession } from '../../store/session'
 import { nextFinalStep, useFinals } from './finalShot'
+import { stageSteps, type StepInput } from './steps'
 import { st, useStage } from './stageStore'
 
 const OBJ = (id: string, kind: StageObject['kind']): StageObject => ({ id, kind, name: id, preset: null, asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
@@ -20,7 +21,7 @@ const lay = (id: string, kind: string, status: string, done = 0): Lay => ({ id, 
 describe('D121: a level is a mode', () => {
   it('gives each Animate level its own rail and the tab one panel width', () => {
     expect(DEFAULT_RAIL.stage.map((t) => t.id)).toEqual(['shot', 'scene', 'motion', 'camera'])
-    expect(DEFAULT_RAIL.animate.map((t) => t.id)).toEqual(['shot', 'performance', 'clips', 'selection'])
+    expect(DEFAULT_RAIL.animate.map((t) => t.id)).toEqual(['shot', 'performance', 'clips'])                 // AW3: a clip's details under its row
     expect(DEFAULT_RAIL.final.map((t) => t.id)).toEqual(['shot', 'layers', 'output'])
     expect(TOP_TABS.find((t) => t.id === 'animate')?.suites).toEqual(['animate', 'stage', 'final'])
     expect(['stage', 'animate', 'final'].map(widthKeyOf)).toEqual(['animate', 'animate', 'animate'])
@@ -84,5 +85,30 @@ describe("D121: the Final shot card's next step", () => {
   it('does not assemble while a layer is short of frames, and says so', () => {
     set(fin('f1', 'stg_1', [lay('plate', 'plate', 'done', 9), lay('fig_1', 'figure', 'done', 5)]))
     expect(step()).toMatchObject({ label: 'Assemble ▶', run: null, why: 'a layer is not made yet' })
+  })
+})
+
+describe('D121 (AW3): the Shot stepper', () => {
+  const base: StepInput = { camera: 'Camera 1', passes: null, stills: 0, frameRunning: false, clips: 0, clipRunning: false, final: null, making: false, comp: null }
+  const states = (i: Partial<StepInput>) => stageSteps({ ...base, ...i }).map((s) => `${s.id}:${s.state}${s.count ? `:${s.count}` : ''}`)
+  it('reads a new stage as nothing done, and sends each step where its verb is', () => {
+    expect(states({})).toEqual(['passes:none', 'frame:none', 'clip:none', 'final:none', 'composition:none', 'render:none'])
+    expect(stageSteps(base).map((s) => s.cmd)).toEqual(['anim.step.passes', 'stage.frame.make', 'anim.step.clip', 'anim.step.final', 'anim.step.final.open', 'anim.step.final.open'])
+    expect(stageSteps(base)[0].tip).toContain('none yet')
+  })
+  it('marks stale passes, counts the frames and the clips, and shows what runs', () => {
+    expect(states({ passes: { n: 5, size: '1280×720', stale: true }, stills: 2, clipRunning: true }).slice(0, 3)).toEqual(['passes:stale', 'frame:fresh:2', 'clip:running'])
+    expect(states({ passes: { n: 5, size: '1280×720', stale: false }, frameRunning: true, clips: 3 }).slice(0, 3)).toEqual(['passes:fresh', 'frame:running', 'clip:fresh:3'])
+  })
+  it('follows the final through its layers, the composition and the render', () => {
+    expect(states({ making: true })[3]).toBe('final:running')
+    expect(states({ final: { layers: 4, done: 0, running: false, assembled: false } })[3]).toBe('final:none:0/4')
+    expect(states({ final: { layers: 4, done: 2, running: false, assembled: false } })[3]).toBe('final:partial:2/4')
+    expect(states({ final: { layers: 4, done: 2, running: true, assembled: false } })[3]).toBe('final:running:2/4')
+    const done = { final: { layers: 4, done: 4, running: false, assembled: true } }
+    expect(states({ ...done, comp: { revision: 3, stale: false, rendered: null, rendering: false } }).slice(3)).toEqual(['final:fresh', 'composition:fresh:r3', 'render:none'])
+    expect(states({ ...done, comp: { revision: 3, stale: true, rendered: null, rendering: true } }).slice(4)).toEqual(['composition:stale:r3', 'render:running'])
+    expect(states({ ...done, comp: { revision: 5, stale: false, rendered: 3, rendering: false } })[5]).toBe('render:stale')
+    expect(states({ ...done, comp: { revision: 5, stale: false, rendered: 5, rendering: false } })[5]).toBe('render:fresh')
   })
 })

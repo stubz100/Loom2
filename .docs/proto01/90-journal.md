@@ -7919,3 +7919,24 @@ The author asked for a review of the state of things, then "record all this and 
   1 · 2 · 3). Vitest 407 + 3 skipped, typecheck and build clean, lint 0 errors (79 warnings, from 82), e2e 51/51 full and 51/51 open,
   agents check clean. Screenshots for the author: `.docs/proto01_animate/img/26-aw1-*.jpg` (Clay, Performance's Stage clip and Final shot
   cards, Final with a composition open). The Clay one shows why AW3's stage picker matters: the e2e project's 15 stages push Scene off screen.
+
+## 2026-10-22 22:21 — AW3 built (D121, proto01_animate 26 §5.5): the Shot section's stepper, the stage picker, the clip's editor under its row
+
+- **The Shot head** (`suites/stage/ShotStepper.tsx`: `ShotHead`, `StagePicker`, `ShotStepper`) heads every level: the For chip and the Story
+  shot's recipe, then — at Clay, at Final, and at Performance for the stage's cards (not for Image to video) — **the stage picker** (a select
+  of the project's stages, New stage, what it holds; it replaces the list of every stage, which pushed Scene off screen with 15 stages) and
+  **the stepper**: passes · frame · clip · final · composition · render, each a dot (hollow not yet, filled done, amber stale, pulsing
+  running, half a final part made), a count where there is one, the words in its tooltip (D116), a click to the level and card where the
+  step's verb is — `anim.step.passes` (Clay), `stage.frame.make` (Image › From a stage), `anim.step.clip` / `anim.step.final` (Performance's
+  cards), `anim.step.final.open` (the stage's newest final opened at Final). The rule is pure (`suites/stage/steps.ts`, `stageSteps`); the
+  states come from the stage's passes and stills / clips, the session's jobs by their origin, the newest final and its composition.
+- **One poll for the finals** (`finalShot.useFinalsPoll`): the stepper, the Final shot card and the Final level's finals share one 3 s timer
+  (a tick reloads only while a layer, an assembly or a render moves) and load the stage's finals when the stage changes.
+- **Performance's Clips:** the selected clip's editor (its facts and verbs, the harvested frames, the lineage — UX0 #17's three folds) opens
+  **under its row**, as a layer's at Final and a thing's at Clay; the row's second click folds it; the Selection section and its rail stop
+  are gone (Performance: Shot · Performance · Clips).
+- **Tests:** modes.test.ts (the stepper on a new stage, stale passes, counts, running steps, the final through its layers, the composition
+  and the render, each step's command; the rails); the e2e: the stage scenarios pick their stage in the Shot head, the three-modes scenario
+  reads the stepper (passes none → done after the foot's Render passes; no stepper on the Image to video card) and jumps by it (frame → Image
+  · From a stage, final → Performance's Final shot card). Vitest 410 + 3 skipped, typecheck and build clean, lint 0 errors (79), e2e 51/51
+  full and 51/51 open. The screenshots in `.docs/proto01_animate/img/26-aw1-*.jpg` taken again with the Shot head.

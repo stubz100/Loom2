@@ -323,3 +323,7 @@ more than the bar, it becomes a snapshot refreshed on drag end (ArtCraft redraws
   | ![Clay](img/26-aw1-clay.jpg) | ![Performance](img/26-aw1-performance.jpg) |
   | **Performance · Final shot** | **Final** |
   | ![Final shot](img/26-aw1-performance-final-shot.jpg) | ![Final](img/26-aw1-final.jpg) |
+
+- **2026-10-22 — AW3 built: the Shot head** (journal of the same evening). The stage picker and the stepper head every level (the stage's
+  cards only, at Performance); a step's dot is its state and a click opens the level and card where its verb is; one poll for the finals;
+  the clip's editor under its row in Clips, the Selection section gone. The screenshots above show it. e2e 51/51 under both variants.

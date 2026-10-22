@@ -41,6 +41,16 @@ registerCommands([
   // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
   { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
   { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },
+  // D121 (AW3): the Shot stepper's steps — each opens the level and card where the step's verb is (the foot); the frame's is stage.frame.make
+  { id: 'anim.step.passes', scope: 'animate', label: 'The passes (Animate · Clay)', icon: Layers, placement: ['panel'], run: () => useSession.getState().setSuite('stage') },
+  { id: 'anim.step.clip', scope: 'animate', label: "The stage's clip (Performance · Stage clip)", icon: Clapperboard, placement: ['panel'], run: () => { useAnimRoute.getState().set('clip'); useSession.getState().setSuite('animate') } },
+  { id: 'anim.step.final', scope: 'animate', label: 'The final shot (Performance · Final shot)', icon: Layers, placement: ['panel'], run: () => { useAnimRoute.getState().set('final'); useSession.getState().setSuite('animate') } },
+  { id: 'anim.step.final.open', scope: 'animate', label: "The final's composition (Animate · Final)", icon: Film, placement: ['panel'],
+    run: () => void Promise.all([import('../stage/finalShot'), import('../stage/stageStore')]).then(([m, s]) => {     // the stage's newest final with a composition, else the Final level as it is
+      const id = s.useStage.getState().current?.id
+      const f = m.useFinals.getState().finals.filter((x) => x.stage_id === id).at(-1)
+      if (f && m.useFinals.getState().compositions[f.id]) m.useFinals.getState().openFinal(f.id); else useSession.getState().setSuite('final')
+    }) },
   { id: 'anim.final.play', scope: 'animate', label: 'Play / pause the composition', icon: Play, placement: ['toolbar'], when: atFinal, run: () => cp().togglePlay() },
   { id: 'anim.final.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, placement: ['toolbar'], when: atFinal, run: () => cp().step(-1) },
   { id: 'anim.final.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, placement: ['toolbar'], when: atFinal, run: () => cp().step(1) },

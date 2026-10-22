@@ -24,8 +24,7 @@ import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { ForChip } from '../story/ForChip'
-import { ForRecipe } from '../story/RecipeSteps'
+import { ShotHead } from './ShotStepper'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
@@ -56,25 +55,6 @@ function devHook(): Record<string, unknown> {
 if (DEV_HOOKS) devHook()
 
 // ------------------------------------------------------------------ Panel
-/** D95 (AN1): the project's stages — Animate's Shot section. */
-export function StageList() {
-  const current = useStage((s) => s.current)
-  const stages = useStage((s) => s.stages)
-  return (
-    <div className="stage-panel">
-      <div className="stage-list">
-        <div className="head"><b>Stages</b><CommandButton id="stage.new" /></div>
-        {!stages.length && <span className="hint">None yet.</span>}
-        {stages.map((s) => (
-          <button key={s.id} className={`stage-row${current?.id === s.id ? ' active' : ''}`} onClick={() => void st().open(s.id)} title={`${s.size.w}×${s.size.h} @ ${s.size.fps} · revision ${s.revision}`}>
-            <span className="name">{s.name}</span><span className="meta">{s.objects.length} object{s.objects.length === 1 ? '' : 's'} · {s.cameras.length} cam</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 /** D95 (AN1): what can be put on the stage — Animate's Scene section (with the Outliner). D119 (SC2): the preset groups (figures, sets,
  *  stand-ins) and the author's templates sit behind a + each, as Image's fields; Cast props and meshes keep their picture cards. */
 /** One Scene (the author, 2026-10-22: "merge Scene and Outliner — they are essentially the same"): every kind of thing is a group —
@@ -183,7 +163,7 @@ export function ClayColumn({ tab }: { tab: string }) {
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   return (
     <AnimColumn suite="stage" sections={CLAY_SECTIONS} tab={tab}>
-      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" /><StageList /></Sec>
+      <Sec id="shot" title="Shot"><ShotHead /></Sec>
       <Sec id="scene" title="Scene"><SceneTab /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>

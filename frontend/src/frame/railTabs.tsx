@@ -1,5 +1,5 @@
 // Rail tab definitions per suite (07 §2). A leaf module: suites and the frame both import it, it imports neither.
-import { Aperture, Boxes, Brush, Camera, Clapperboard, Cpu, Film, Files, GitBranch, Globe, Images, Lasso, Layers, ListTree, MonitorPlay, Package, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Users, Wand2 } from 'lucide-react'
+import { Aperture, Boxes, Brush, Camera, Clapperboard, Cpu, Film, Files, GitBranch, Globe, Images, Lasso, Layers, MonitorPlay, Package, PersonStanding, Shapes, SlidersHorizontal, Sparkles, Users, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export interface RailTab { id: string; label: string; key?: string; icon: ReactNode }
@@ -15,7 +15,7 @@ const shot: RailTab = { id: 'shot', label: 'Shot', icon: <Clapperboard size={18}
 const CLAY_RAIL: RailTab[] = [shot, { id: 'scene', label: 'Scene', icon: <Shapes size={18} /> },
   { id: 'motion', label: 'Motion', icon: <PersonStanding size={18} /> }, { id: 'camera', label: 'Camera', icon: <Camera size={18} /> }]
 const PERFORMANCE_RAIL: RailTab[] = [shot, { id: 'performance', label: 'Performance', icon: <Aperture size={18} /> },
-  { id: 'clips', label: 'Clips', icon: <Film size={18} /> }, { id: 'selection', label: 'Selection', icon: <ListTree size={18} /> }]
+  { id: 'clips', label: 'Clips', icon: <Film size={18} /> }]   // AW3: a clip's details under its row, as a layer's at Final and a thing's at Clay
 const FINAL_RAIL: RailTab[] = [shot, { id: 'layers', label: 'Layers', icon: <Layers size={18} /> },   // AE2–3: the selected layer's editor under its row (UX9 U1)
   { id: 'output', label: 'Output', icon: <MonitorPlay size={18} /> }]
 

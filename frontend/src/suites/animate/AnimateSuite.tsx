@@ -8,7 +8,7 @@ import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
 import { X } from 'lucide-react'
-import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
@@ -23,9 +23,8 @@ import { byOrder, shortName } from '../../store/modelCaps'
 import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
-import { ForChip } from '../story/ForChip'
-import { ForRecipe } from '../story/RecipeSteps'
-import { ClipFoot, StageClipCard, StageList, useStageLoad } from '../stage/StageParts'
+import { ClipFoot, StageClipCard, useStageLoad } from '../stage/StageParts'
+import { ShotHead } from '../stage/ShotStepper'
 import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
 import { useAnimRoute, type AnimRoute } from './routeStore'
 import { Player } from './Player'
@@ -231,6 +230,7 @@ function ClipsTab() {
   useEffect(() => { void an().loadClipStates() }, [])                     // the states and the Trash may have moved in the Catalogue
   const shown = useMemo(() => visibleClips(clips, assets, live, filter), [clips, assets, live, filter])
   const total = live ? clips.filter((c) => !c.asset_id || live[c.asset_id]).length : clips.length
+  const [folded, setFolded] = useState<string | null>(null)              // AW3: the clip whose editor its row's second click folded
   return (
     <div className="clip-list">
       <div className="clip-filter">
@@ -239,10 +239,15 @@ function ClipsTab() {
       </div>
       {shown.map((c) => {
         const a = c.asset_id ? assets[c.asset_id] : undefined
-        return <button key={c.id} className={`clip-row${c.id === current ? ' active' : ''}`} data-id={c.id} onClick={() => an().select(c.id)} onContextMenu={(e) => showMenu(e, clipMenu(c.id))} title={`${c.prompt} — right-click for its verbs`}>
-          {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
-          <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
-        </button>
+        const on = c.id === current
+        return <div key={c.id} className={`clip-item${on ? ' active' : ''}`}>
+          <button className={`clip-row${on ? ' active' : ''}`} data-id={c.id} aria-expanded={on ? folded !== c.id : undefined} onContextMenu={(e) => showMenu(e, clipMenu(c.id))}
+            onClick={() => { if (on) setFolded(folded === c.id ? null : c.id); else { setFolded(null); an().select(c.id) } }} title={`${c.prompt} — click: in the player, its details under it (again: folded); right-click: its verbs`}>
+            {c.asset_id ? <img src={api.thumbUrl(c.asset_id, 256)} alt="" /> : <span />}
+            <span>{c.prompt || '(no prompt)'}<small>{shortName(c.model_id, caps)} · {c.preset} · {c.frames} f @ {c.fps} · seed {c.seed}{a?.state && a.state !== 'none' ? ` · ${a.state}` : ''}</small></span>
+          </button>
+          {on && folded !== c.id && <div className="row-editor clip-editor"><ClipSelection /></div>}{/* AW3 (D121): the clip's editor under its row, as a layer's at Final */}
+        </div>
       })}
       {!total ? <span className="hint">No clips in this project yet.</span> : !shown.length ? <span className="hint">No clip matches — {total} in all.</span> : null}
     </div>
@@ -259,9 +264,9 @@ function useAnimateLoad(): void {
   useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
 }
 
-// D95 (AN1) → D121 (proto01_animate 26 §5.3): the Performance level's column — Shot · Performance · Clips · Selection. The Performance
+// D95 (AN1) → D121 (proto01_animate 26 §5.3): the Performance level's column — Shot · Performance · Clips (AW3: a clip's details under its row). The Performance
 // section's cards are the ways to a moving picture; the foot follows the card. Clay's column is StageParts.ClayColumn, Final's FinalSuite.
-const PERFORMANCE_SECTIONS = ['shot', 'performance', 'clips', 'selection'] as const
+const PERFORMANCE_SECTIONS = ['shot', 'performance', 'clips'] as const   // AW3: the clip's details open under its row (the Selection section is gone)
 
 const CARDS: { id: AnimRoute; label: string; title: string }[] = [
   { id: 'i2v', label: 'Image to video', title: 'A clip from a start (and end) image: the prompt says the motion' },
@@ -279,7 +284,7 @@ function RouteSwitch() {
   )
 }
 
-/** The selected clip in Selection: what it is and its verbs, the frames harvested from it, its lineage (UX0 #17: three folds). */
+/** The selected clip's editor, under its row in Clips (AW3, D121): what it is and its verbs, the frames harvested from it, its lineage (UX0 #17's three folds). */
 function ClipSelection() {
   const clip = useAnimate((s) => s.clips.find((c) => c.id === s.current))
   if (!clip) return <span className="hint">No clip selected. <Help text="Clips appear in the Clips section as they finish." /></span>
@@ -297,13 +302,12 @@ function PerformanceColumnBody({ tab }: { tab: string }) {
   const route = useAnimRoute((r) => r.route)
   return (
     <AnimColumn suite="animate" sections={PERFORMANCE_SECTIONS} tab={tab}>
-      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" />{route !== 'i2v' && <StageList />}</Sec>
+      <Sec id="shot" title="Shot"><ShotHead stage={route !== 'i2v'} /></Sec>{/* AW3: the stage and its steps for the stage's cards */}
       <Sec id="performance" title="Performance" tools={<RouteSwitch />}>
         {route === 'i2v' ? <><InputsTab /><h4>Model</h4><ModelTab /><h4>Length &amp; size</h4><LengthTab /><h4>Presets</h4><PresetsTab /></>
           : route === 'clip' ? <StageClipCard /> : <FinalSection />}
       </Sec>
       <Sec id="clips" title="Clips"><ClipsTab /></Sec>
-      <Sec id="selection" title="Selection"><ClipSelection /></Sec>
     </AnimColumn>
   )
 }

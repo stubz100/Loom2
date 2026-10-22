@@ -10,8 +10,8 @@ import { Help } from '../../frame/Help'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import type { SuiteDef } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
-import { ForChip } from '../story/ForChip'
-import { rendering, useFinals } from '../stage/finalShot'
+import { rendering, useFinals, useFinalsPoll } from '../stage/finalShot'
+import { ShotHead } from '../stage/ShotStepper'
 import { st, useStage } from '../stage/stageStore'
 import { AnimColumn, Sec } from './column'
 import { useComposition } from './compositionStore'
@@ -20,26 +20,16 @@ import { FinalViewer } from './FinalViewer'
 import './animate.css'
 
 const FINAL_SECTIONS = ['shot', 'layers', 'output'] as const
-const POLL_MS = 3000
 
-/** The stage's finals, one to open — the Final level's Shot section (Performance › Final shot makes them). */
+/** The stage's finals, one to open — under the Shot head's stage and steps (Performance › Final shot makes them). */
 function FinalPicker() {
-  const project = useSession((s) => s.project)
-  const stages = useStage((s) => s.stages)
   const current = useStage((s) => s.current)
   const finals = useFinals((s) => s.finals)
   const comps = useFinals((s) => s.compositions)
   const open = useComposition((s) => s.finalId)
-  useEffect(() => { if (project?.open) void st().load() }, [project?.open, project?.path])
-  useEffect(() => { void useFinals.getState().load() }, [current?.id])
-  useEffect(() => { const t = window.setInterval(() => void useFinals.getState().tick(), POLL_MS); return () => window.clearInterval(t) }, [])   // a render's clip lands
+  useFinalsPoll(current?.id)                                                       // a render's clip lands (one poll for every view of the finals)
   return (
     <div className="final-picker">
-      <div className="kv"><span>stage</span>
-        <select aria-label="the stage" value={current?.id ?? ''} onChange={(e) => { if (e.target.value) void st().open(e.target.value) }}>
-          {!current && <option value="">— pick a stage —</option>}
-          {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select></div>
       {current && !finals.length && <span className="hint">No final shot on this stage. <Help text="Performance › Final shot makes one: the scene split into layers, performed, matted and assembled; Make the composition, then Open it here." /></span>}
       {finals.map((f) => {
         const c = comps[f.id] ?? null
@@ -84,10 +74,11 @@ function OutputSection() {
 
 function FinalColumn({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
+  useEffect(() => { if (project?.open) void st().load() }, [project?.open, project?.path])   // the stages for the Shot head's picker
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
   return (
     <AnimColumn suite="final" sections={FINAL_SECTIONS} tab={tab}>
-      <Sec id="shot" title="Shot"><ForChip maker="animate" /><FinalPicker /></Sec>
+      <Sec id="shot" title="Shot"><ShotHead /><FinalPicker /></Sec>
       <Sec id="layers" title="Layers"><LayersSection /></Sec>
       <Sec id="output" title="Output"><OutputSection /></Sec>
     </AnimColumn>

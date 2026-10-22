@@ -1,7 +1,6 @@
 // D111 (PS5): the final shot in Animate's Shot section — *Make the final shot…* splits the finished scene into layers (their passes rendered
 // here and stored with the final); the stage's finals listed with their layers. PS5b: the plate's still (*Make the plate*) and its
 // projection along the camera path, which runs here when the still lands. PS5c–f add the characters, mattes, assembly and re-takes.
-import { useEffect } from 'react'
 import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
@@ -9,12 +8,11 @@ import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand } from '../../frame/commands'
 import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, nextFinalStep, readyToAssemble, rendering, useFinals } from './finalShot'
+import { assembling, batchCount, nextFinalStep, readyToAssemble, rendering, useFinals, useFinalsPoll } from './finalShot'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
 const METHOD_LABEL: Record<string, string> = { projected: 'the set, projected', move: 'Wan Animate', rendered: 'its 3D model', drawn: 'drawn on its model', stage: "Stage's" }
-const POLL_MS = 3000
 
 function statusText(l: FinalLayer, projecting: boolean, frames: number): string {
   if (l.kind === 'plate') {
@@ -95,8 +93,7 @@ export function FinalSection() {
   const current = useStage((s) => s.current)
   const finals = useFinals((s) => s.finals)
   const making = useFinals((s) => s.making)
-  useEffect(() => { void useFinals.getState().load() }, [current?.id])
-  useEffect(() => { const t = window.setInterval(() => void useFinals.getState().tick(), POLL_MS); return () => window.clearInterval(t) }, [])
+  useFinalsPoll(current?.id)                                                    // D121: one poll for every view of the finals
   if (!current) return null
   const mine = finals.filter((f) => f.stage_id === current.id)
   return (

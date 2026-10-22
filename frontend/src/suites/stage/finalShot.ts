@@ -3,6 +3,7 @@
 // camera (the plate: the bare set's depth and lit clay; a figure alone with the set: its pose and depth; a prop alone with the set: its
 // beauty and depth; the shadows: everything, lit) and uploads them (each frame once, by its hash) into a final record on the server.
 // The later steps make each layer's own frames and the assembly from these.
+import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api, http, sha256Hex, unwrap, type ApiError } from '../../api/client'
 import type { Composition, Final, StageDoc, StageObject } from '../../api/types'
@@ -342,4 +343,18 @@ export function nextFinalStep(stageId: string | null): FinalStep {
   if (!f.assembled_at) return readyToAssemble(f) ? { label: 'Assemble ▶', run: () => void fs.assemble(f.id) } : { label: 'Assemble ▶', run: null, why: 'a layer is not made yet' }
   if (!fs.compositions[f.id]) return { label: 'Make the composition ▶', run: () => void fs.compose(f.id) }
   return { label: 'Open in Final ▸', run: () => fs.openFinal(f.id) }
+}
+
+// ---- D121 (AW3): one poll for every mounted view of the finals -------------------------------------------------------------------------
+let polls = 0
+let pollTimer: number | null = null
+/** The stage's finals loaded (again when the stage changes) and polled every 3 s while any view of them is mounted — the Final shot card, the
+ *  Final level's Shot section, the stepper — one timer for all of them (a tick reloads only while a layer, an assembly or a render moves). */
+export function useFinalsPoll(stageId: string | null | undefined): void {
+  useEffect(() => { void useFinals.getState().load() }, [stageId])
+  useEffect(() => {
+    polls++
+    if (pollTimer === null) pollTimer = window.setInterval(() => void useFinals.getState().tick(), 3000)
+    return () => { polls--; if (!polls && pollTimer !== null) { window.clearInterval(pollTimer); pollTimer = null } }
+  }, [])
 }

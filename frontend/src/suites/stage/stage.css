@@ -165,3 +165,21 @@
 /* D121: Performance's Stage clip card */
 .stage-clip .start-stills { margin-bottom: 4px; }
 .stage-clip .shot-prompt { width: 100%; }
+/* D121 (AW3): the Shot head — the stage picker and the stepper (the pipeline's steps, a dot each: hollow not yet, filled done, amber stale,
+   pulsing running, half a final part made) */
+.shot-head { display: grid; gap: 6px; }
+.stage-picker { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stage-picker .lbl { color: var(--fg2); font-size: 12px; min-width: 40px; }
+.stage-picker select { flex: 1; min-width: 120px; }
+.shot-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.shot-stepper .step { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 11px; border: 1px solid transparent; border-radius: var(--radius); background: none; color: var(--fg2); }
+.shot-stepper .step:hover { border-color: var(--line); color: var(--fg1); }
+.shot-stepper .step small { color: var(--fg3); }
+.shot-stepper .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--fg3); box-sizing: border-box; }
+.shot-stepper .s-fresh .dot { background: var(--keep); border-color: var(--keep); }
+.shot-stepper .s-stale .dot { background: var(--warn); border-color: var(--warn); }
+.shot-stepper .s-partial .dot { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border-color: var(--accent); }
+.shot-stepper .s-running .dot { border-color: var(--accent); animation: step-pulse 1s ease-in-out infinite; }
+@keyframes step-pulse { 50% { background: var(--accent); } }
+/* AW3: a clip's editor under its row in Clips */
+.clip-item .clip-editor { margin: 2px 0 8px; padding: 6px 6px 4px; border-left: 2px solid var(--accent); }

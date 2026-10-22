@@ -1,6 +1,6 @@
 # 25 · The Clay level's coherence — the author's notes of 2026-10-22 and the plan (D119)
 
-Status: **proposed 2026-10-22; D119 recorded; SC1 and SC2 built the same day (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
+Status: **proposed 2026-10-22; D119 recorded; SC1 and SC2 built and E30 run the same day (→ D120) (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
 plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind the +, E30 → SC3 a set from an image.
 
 ## 1 · The notes (the author, 2026-10-22, after AE4)
@@ -31,8 +31,8 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
 | --- | --- | --- | --- | --- |
 | **SC1 · the scene outliner, the camera as an object** | One outliner in the Scene section with a row for everything — the stage (the root: the frame, the ambient, rename / delete), the set, each camera (★ the active one; focal, roll, position, target; Look through, Set from view, To shot, Key camera, rename, delete), each light (LightControls), figure (character, pose, path), prop / mesh (MeshProp), plane (faces camera), with the transform, the parent and the object verbs under the selected row (UX9 U1's pattern). The Selection section goes at the Clay level; the Camera section's verbs move to the rows (its head keeps *Add camera*). In the viewport every camera has a **body** (a small frustum with a handle at its position) that is picked and dragged like an object: dragging moves the camera and its target together; double-click looks through it. | `StageParts.tsx`, `engine.ts`, `stageStore.ts`, `stageCommands.ts`, `AnimateSuite.tsx` | no | 1 |
 | **SC2 · the preset panel** | One component behind the **+** of any item: a small panel with the presets as icon tiles (frame/PresetIcons), the chosen one marked, and the verbs — *Save the current as a preset…*, *Rename…*, *Delete* (asks), *Set as default*, *Make its picture* (the swatch / sample job, D91), *Show the words*. Under the item only the + and the chosen one's tile stay. Used by Image's field presets and Saved panels, the styles, Animate's presets, Edit's brushes, Stage's poses, and the **Clay library**: sets, props, mannequins and lights as templates with icons, plus the author's own templates — an arrangement saved from the outliner (the set with its props and lights, D108's "sets are architecture" kept: a template is a recipe of objects, not a mesh). | `frame/PresetPanel.tsx` (new), `PresetIcons`, `fieldPresets`, `GenerateColumn`, `AnimateSuite`, `EditSuite`, `StageParts`, `preset_icons` | the picture jobs only | 1–2 |
-| **E30 · a set from an image** (spike) | Two set images (a room, a street) through (a) **MoGe's relief**: the depth as a displaced grid textured by the image, the camera moving within a parallax budget; (c) **cut and relief**: SAM 3 cuts the free-standing things, Pixal3D makes each a model, MoGe's relief carries the rest. Measured: how far the camera moves before the relief tears (±10° / ±0.5 m at the Draft size), whether the passes the pipeline wants (depth, clay, mask) come out of it, and the plate: an image set projects *itself* along the camera path — the relief has the depth PS5b lacks. Time and VRAM. | `engine/spikes/e30_set_from_image.py` | yes | 1 |
-| **SC3 · a set from an image** (after E30's decision) | *Set from an image…* in the Library (a Catalogue image or a Klein still of a place): the relief as a set object (its depth and clay passes from the relief, its plate the image), the cut-out things as props; the camera free within the budget E30 found, the outliner saying when it leaves it. | `stages.py`, `engine.ts`, `graphs.py`, `StageParts` | yes | 2 |
+| **E30 · a set from an image** (spike) | Two set images (a room, a street) through (a) **MoGe's relief**: the depth as a displaced grid textured by the image, the camera moving within a parallax budget; (c) **cut and relief**: SAM 3 cuts the free-standing things, Pixal3D makes each a model, MoGe's relief carries the rest. Measured: how far the camera moves before the relief tears (±10° / ±0.5 m at the Draft size), whether the passes the pipeline wants (depth, clay, mask) come out of it, and the plate: an image set projects *itself* along the camera path — the relief has the depth PS5b lacks. Time and VRAM. | `engine/spikes/e30_set_from_image.py`, `frontend/src/spikes/e30Set.ts` | yes | 1 — **ran 2026-10-22, §3b** |
+| **SC3 · a set from an image** (after E30's decision) | *Set from an image…* in the Library (a Catalogue image or a Klein still of a place): the relief as a set object (its depth and clay passes from the relief, its plate the image), the cut-out things as props; the camera free within the budget E30 found (±0.25 m / ±5° / orbit ±10° for a Draft shot), the outliner saying when it leaves it. After E30 (D120): the lens shown and editable (MoGe's wobbles), the masked pixels (the sky) a backdrop at the far depth, the sheet for a smooth place and the cut where things stay (both from one MoGe run), the things' models scaled by the width of their front edge and stood on the fitted floor plane, the picture itself as the plate at every camera. | `stages.py`, `engine.ts`, `graphs.py`, `StageParts` | yes | 2 |
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
 check row here.
@@ -58,6 +58,16 @@ check row here.
   click with new ids (a parent inside the template kept), deleted from the panel. Lights and image planes stay single buttons; Cast props
   and meshes keep their picture cards.
 
+- **2026-10-22 17:51 — E30 run → D120.** `engine/spikes/e30_set_from_image.py` (the engine half) and `frontend/src/spikes/e30Set.ts` (Edge, WebGL): four
+  set images frozen in `bench/sets/` (E22's room with its things, E28b's clean room, PS5b's bare room, a new Klein alley at night), each a
+  MoGe relief two ways (cut at depth jumps / one sheet), the room also as D109's pipeline (the clean room's relief + E28c's models at the
+  footprints the point map gives E28b's masks) and as the picture cut without a clean plate; 28 camera moves each, the holes inside the
+  picture and the smear counted apart from the picture's own edge; sheets `engine/spikes/out/e30/sheet_*.jpg` (beauty · clay · depth).
+  Found: MoGe is quick (under a second an image, 1.4 GB) and its relief **does not tear inside an empty picture** for any move tried; the
+  picture's edge is the limit (dolly in free, truck ±0.25 m 5 %, pan ±5° 10 %, orbit ±10° 3–6 %); things left in the picture tear
+  behind themselves (2–7 %), cut out without a clean plate 14 %; on the clean plate with the things as models the room moves like an
+  empty one (≤ 0.1 %). The lens MoGe recovers wobbles (75° from the PNG, 69° from its JPEG) — SC3 shows it and lets the author set it.
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -65,4 +75,6 @@ check row here.
 | SC1: is the camera's body in the view the right thing to grab? Dragging moves camera and target together — right, or should the target have its own handle? | |
 | SC1: the editor under the row — is anything you need still far from the thing? | |
 | SC2: the + panel — which verbs are missing? Should the chosen preset's tile stay beside the +, or the + alone? | |
-| E30 / SC3: how far should the camera move in an image set before it is a different shot? | |
+| E30 / SC3: how far should the camera move in an image set before it is a different shot? E30 says the picture's edge is the limit (10 % of the frame at truck ±0.5 m or pan ±5°) — is 10 % the bar, or should the edge be filled (a Klein outpaint of the plate before the relief)? | |
+| E30: `engine/spikes/out/e30/sheet_room_props.jpg` — the clean room with the things as models: do they sit where the picture had them? `sheet_room_cut.jpg` and `sheet_room_sheet.jpg` — the picture with its things left in: the holes behind them (cut) or the skirts (sheet) — which do you prefer when a thing is not worth a model? | |
+| E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |

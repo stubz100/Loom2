@@ -1,5 +1,5 @@
 // loom2 frontend — M0 spike harness. Plain DOM for the spikes (React arrives with the real frame in M1).
-// Routes: #e1 (WebGPU compositor) · #e1-webgl · #e2 (loopback transfer) · #e3 (brush) · #e6 (video scrub) · #e10 (stage passes, D74) · #e11 (stage shots, D74) · #e13 (timeline, D74) · #e14 (mesh views, D74) · #all
+// Routes: #e1 (WebGPU compositor) · #e1-webgl · #e2 (loopback transfer) · #e3 (brush) · #e6 (video scrub) · #e10 (stage passes, D74) · #e11 (stage shots, D74) · #e13 (timeline, D74) · #e14 (mesh views, D74) · #all · #e30 (a set from an image, D119 / E30)
 import './spikes.css'
 import { runE1 } from './e1Compositor'
 import { runE2 } from './e2Transfer'
@@ -9,6 +9,7 @@ import { runE10 } from './e10Stage'
 import { runE11 } from './e11Shots'
 import { runE13 } from './e13Timeline'
 import { runE14 } from './e14Mesh'
+import { runE30 } from './e30Set'
 import { hostInfo } from './report'
 
 const ORDER = ['e1', 'e1-webgl', 'e2', 'e3', 'e6']
@@ -46,6 +47,7 @@ async function route() {
     else if (current === 'e11') await runE11(mount, out)
     else if (current === 'e13') await runE13(mount, out)
     else if (current === 'e14') await runE14(mount, out)
+    else if (current === 'e30') await runE30(mount, out)
     else out.textContent = 'pick a spike above, or #all to run the sequence'
   } catch (e) {
     out.textContent = `FAILED: ${(e as Error).stack ?? e}`

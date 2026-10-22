@@ -1,0 +1,24 @@
+{
+ "made_by": "engine/spikes/e30_set_from_image.py sources",
+ "images": {
+  "room": {
+   "from": "engine/spikes/out/e22/stills/plate.png",
+   "what": "E22's plate: a room with a crate, a stool block, a table and a big block"
+  },
+  "room_empty": {
+   "from": "engine/spikes/out/e28b/plate_empty.png",
+   "what": "E28b's clean room: the same room with the things removed (D108)"
+  },
+  "bare": {
+   "from": "engine/spikes/out/ps5b/still.png",
+   "what": "PS5b's still: a bare room, the window on the left"
+  },
+  "street": {
+   "model": "flux-2-klein-9b",
+   "seed": 20261022,
+   "prompt": "An empty narrow cobbled alley at night after rain, old brick walls, a few neon shop signs, wet stones reflecting the lights, no people, eye-level wide shot, cinematic.",
+   "what": "a Klein 9B still of an empty alley at night (made by `sources`)",
+   "exec_s": 22.4
+  }
+ }
+}

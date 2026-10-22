@@ -35,6 +35,7 @@ orchestrator/spikes/out/
 frontend/public/spikes/*.mp4
 frontend/public/spikes/e13/
 frontend/public/spikes/e14/
+frontend/public/spikes/e30/
 frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/schemas/

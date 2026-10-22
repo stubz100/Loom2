@@ -7722,3 +7722,57 @@ The author asked for a review of the state of things, then "record all this and 
 - Gotchas: a preset tile's accessible name is its label — the e2e looks tiles up by `aria-label`; the panel is `position: fixed`, so a
   click elsewhere both closes it and lands where it was aimed. The floor-path scenario's pose click (`point`) had to follow the tiles behind the Motion
   section's + — the targeted run caught it; the `.pose-card` styles went with the list they dressed.
+
+## 2026-10-22 17:51 — E30 ran: a set from an image (D119 → D120)
+
+- **The question** (the author: "we should be able to create 3D scenes from images"; doc 25 §3): can an image of a place become a set
+  the camera moves in, and how far. **The spike:** `engine/spikes/e30_set_from_image.py` — `sources` freezes four set images in
+  `bench/sets/` (room: E22's plate with its crate, stool block, table and big block; room_empty: E28b's clean room; bare: PS5b's bare
+  room; street: a new Klein 9B alley at night, 22 s); `relief` runs MoGe-2 on the engine (`LoadMoGeModel` → `MoGeInference` →
+  `MoGePointMapToMesh` → `SaveGLB`, plus MoGe's depth / normal / mask renders) two ways per image — **cut** (discontinuity 0.04: the
+  mesh is cut at depth jumps, a move opens honest holes) and **sheet** (0: one rubber sheet, a move stretches); `props` is D109's
+  pipeline offline — E28b's SAM 3 masks over the room's point map give each thing's footprint, E28c's Pixal3D models are stood on the
+  clean room's relief there; `render` moves the camera in Edge (`frontend/src/spikes/e30Set.ts`, `e2e/spikes/e30.run.mjs`: WebGL2, the
+  engine stopped first — D97) through 28 moves (truck ±0.25 / 0.5 / 1 m, pedestal ±0.25 / 0.5 m, dolly −0.5 / −1 / +0.5 m, pan ±5 / 10 /
+  20°, tilt ±5 / 10°, orbit ±10 / 20° about the median depth) and counts, per move, the **holes inside the picture** (coverage pass; the
+  holes connected to the frame's border are the picture's own edge and counted apart — a flood fill) and the **smear** (a texel spread
+  over more than three pixels, from the UV Jacobian's area — the max of the two derivatives missed the one-way skirts); `score` makes
+  the budget table and the sheets (`out/e30/sheet_<scene>.jpg`: beauty = the picture re-projected with magenta holes · clay · depth).
+- **MoGe:** 0.66 GB of weights, 1.4 GB of VRAM in use, 3.3 s the first image (the load) and 0.1–0.9 s after; a 1280×720 picture at
+  stride 2 is ≈ 230k vertices / 459k triangles, a 10.5 MB GLB with the picture as its texture (the 1024×576 alley 7 MB); the lens it
+  recovers 69–77° horizontal, the floor 0.89–1.06 m under the camera. **The lens is the least stable number:** the room read 75° from
+  the PNG and 69° from the same picture as a JPEG (q95); the floor's height and the things' places did not move.
+- **The things' footprints** (`props`): the front edge of each mask's lowest rows in the point map; the width there (0.37–1.09 m) is the
+  sound size — the height read from the mask's top (0.31–0.71 m) comes out 10–35 % under E28b's fit, so the model is scaled by its
+  width; a thing's own lowest pixels float 4–9 cm above the floor plane fitted to the picture's lowest rows (residual 6.5 cm), so the
+  model stands on the plane. On the sheet the four stand where the picture had them.
+- **The budget** (tear = holes inside the picture + smear, % of the frame; the picture's edge apart):
+
+  | scene | at rest | truck ±0.25 | truck ±0.5 | truck ±1 | dolly in 1 m | orbit ±10° | orbit ±20° |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | bare room, clean room (cut or sheet) | 0.0 | 0.0 | 0.0 | 0.0–0.9 | 0.0 | 0.0–0.7 | 0.1–5.2 |
+  | **clean room + the things as models** | 0.1 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0–0.1 | 0.0–0.1 |
+  | the room with its things, cut | 1.7 (the seams) | 2.0 | 2.6 | 3.8 | 2.4 | 2.7–3.0 | 3.6–4.1 |
+  | the room with its things, sheet | 0.0 | 0.1 | 0.6 | 2.1 | 0.5 | 1.4–1.9 | 4.4–7.3 |
+  | the room with its things cut out, no clean plate | 14.2 | 14.1 | 14.0 | 13.8 | 3.7 | 6.9–13.1 | 6.6–12.2 |
+  | the alley, cut / sheet | 1.9 / 0.0 | 1.9 / 0.0 | 1.9 / 0.0 | 2.5 / 0.0 | 2.7 / 0.0 | 2.0 / 0.0 | 2.5 / 0.1–0.3 |
+
+  **The picture's edge** (the same for every arm; what no image set can show): dolly in 0 % (free), dolly out 0.5 m 25 %; truck
+  ±0.25 m 5 %, ±0.5 m 10 %, ±1 m 20 %; pedestal +0.25 m 7 %, −0.25 m 14 %; pan ±5° 10 %, ±10° 18 %, ±20° 33 %; tilt ±5° 13 %, ±10°
+  23 %; orbit ±10° 3–6 %, ±20° 7–12 %. Pan and tilt about the camera itself never tear — they only show the edge.
+- **Read:** an empty picture's relief holds for every move tried — the relief is good enough that the limit is the frame, not the
+  geometry. Things left in the picture are the trouble: the cut leaves a seam along every silhouette even at rest (1.7 %) and holes
+  behind the things when the camera moves; the sheet hides the seams and smears skirts instead (the stool's skirt at truck 1 m is the
+  textbook 2.5D artefact) — on a smooth place (the alley) the sheet is the better relief (0.0–0.3 %), where things stay the cut is
+  honest. Cutting the things out without a clean plate is useless (14 % holes). **D109's pipeline is the set:** the things cut (SAM 3),
+  the plate cleaned (the app's remove path, D108), the clean plate's relief as the set, the things as their Pixal3D models on it — the
+  room then moves like an empty one. The relief re-projected at the shot's camera *is* the plate (PS5b's projection had no depth; this
+  has it), and MoGe's depth / normal / mask and the mesh's clay are the passes. → **D120**; SC3 builds it (doc 25 §3: the lens shown and
+  editable, the sky as a backdrop at the far depth, the budget ±0.25 m / ±5° / orbit ±10° for a Draft shot with the outliner saying
+  when the camera leaves it).
+- Gotchas: `MoGePointMapToMesh` gives glTF coordinates (X right, Y up, the camera at the origin looking −Z) and the picture's UVs — the
+  lens is read back from the vertices (x / −z against u − ½); `SaveGLB` writes `e30/<tag>_00001_.glb` under the engine's output with the
+  texture inside; MoGe's `apply_mask` drops the sky (the alley's 2 % at rest is the sky and the seams at the bricks' edges) — SC3 wants
+  those pixels as a backdrop, not holes; E28c's models face the camera at yaw 0 as their references did; the render of ten scenes ×
+  28 moves takes 5 s in headless Edge, so the budget table is cheap to extend. The engine ran alone and was stopped before Edge
+  rendered (D97). Vite dev on 1420 was mine for the run and stopped by PID after it.

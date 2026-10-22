@@ -5,7 +5,7 @@
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
-import { Camera, Eye, EyeOff, Lock, LockOpen } from 'lucide-react'
+import { Camera, Eye, EyeOff, Frame, Lock, LockOpen } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
@@ -46,7 +46,8 @@ function devHook(): Record<string, unknown> {
     renderGuide: () => st().renderGuide(), setShotStart: (id: string | null) => st().setShotStart(id), animateShot: () => st().animateShot(),
     updateCamera: (id: string, patch: Partial<StageCamera>) => st().updateCamera(id, patch), setTransform: (id: string, t: { pos: number[]; rot: number[]; scale: number[] }) => st().setTransform(id, t),
     frameAll: () => st().frameView(null),
-    bindFigure: (id: string, pid: string | null, v?: string | null) => st().bindFigure(id, pid, v ?? null), select: (id: string | null) => st().select(id) }   // D93 (C8)
+    bindFigure: (id: string, pid: string | null, v?: string | null) => st().bindFigure(id, pid, v ?? null), select: (id: string | null) => st().select(id),   // D93 (C8)
+    selectCamera: (id: string | null) => st().selectCamera(id) }   // D119 (SC1)
   return w.__loom2Stage
 }
 if (DEV_HOOKS) devHook()
@@ -119,67 +120,142 @@ export function PassesRow() {
   )
 }
 
+/** D119 (SC1): the scene outliner — every thing of the stage as a row (the stage itself, the objects, the cameras); the selected row's
+ *  editor opens under it (UX9 U1's pattern), so nothing is edited far from its row. A camera row selects the camera as an object (its
+ *  body takes the gizmo in the viewport) and makes it the active one. */
 export function OutlinerTab() {
   const current = useStage((s) => s.current)
   const selected = useStage((s) => s.selected)
+  const selectedCamera = useStage((s) => s.selectedCamera)
+  const stageSelected = useStage((s) => s.stageSelected)
+  const saving = useStage((s) => s.saving)
   if (!current) return null
   const rename = (id: string, name: string) => void askText({ title: 'Rename', initial: name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(id, { name: n.trim() }) })
+  const renameCam = (c: StageCamera) => void askText({ title: 'Rename camera', initial: c.name }).then((n) => { if (n?.trim()) st().updateCamera(c.id, { name: n.trim() }) })
   return (
-    <div className="stage-panel">
-      <div className="head"><b>Outliner</b><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'}</span></div>
-      {!current.objects.length && <span className="hint">Nothing on the stage. <Help text="Add from the Library above." /></span>}
+    <div className="stage-panel outliner" aria-label="the scene outliner">
+      <div className="head"><b>Outliner</b><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'} · {current.cameras.length} camera{current.cameras.length === 1 ? '' : 's'}</span>
+        <Help text="Everything on the stage, one row each: the stage, its objects and its cameras. Click a row to edit the thing under it — its transform, its own settings, its verbs; click again to close. A camera's row selects its body in the viewport too (drag it there; double-click looks through it)." /></div>
+      <div className={`outl-row${stageSelected ? ' active' : ''}`} data-row="stage" onClick={() => (stageSelected ? st().select(null) : st().selectStage())}
+        onDoubleClick={() => st().frameView(null)}>
+        <Frame size={13} /><span className="name">{current.name}</span><span className="meta">{current.size.w}×{current.size.h} @ {current.size.fps}{saving ? ' · saving…' : ''}</span>
+        {stageSelected && <StageEditor />}
+      </div>
+      {!current.objects.length && <span className="hint">Nothing on the stage yet. <Help text="Add from the Library above, or drop a Catalogue image or model on the viewport." /></span>}
       {current.objects.map((o) => (
-        <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} onClick={() => st().select(o.id)} onDoubleClick={() => st().frameView([o.id])}
-          onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
+        <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} data-row="object" data-kind={o.kind} onClick={() => st().select(selected === o.id ? null : o.id)}
+          onDoubleClick={() => st().frameView([o.id])} onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
           <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
           <span className="kind">{o.kind}</span>
           <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename(o.id, o.name) }}>{o.name}</span>
           {(o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id && <BoundTag o={o} />}
           <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
           <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
+          {selected === o.id && <ObjectEditor o={o} />}
         </div>
       ))}
-      <h4>Cameras</h4>
       {current.cameras.map((c) => (
-        <div key={c.id} className={`outl-row${current.active_camera === c.id ? ' active' : ''}`} onClick={() => st().setActiveCamera(c.id)}
-          onContextMenu={(e) => { e.preventDefault(); st().setActiveCamera(c.id); showMenu(e, cameraMenu()) }}>
-          <Camera size={13} /><span className="name">{c.name}</span><span className="meta">{c.focal_mm} mm</span>
+        <div key={c.id} className={`outl-row${selectedCamera === c.id ? ' active' : ''}${current.active_camera === c.id ? ' cam-active' : ''}`} data-row="camera"
+          onClick={() => st().selectCamera(selectedCamera === c.id ? null : c.id)} onDoubleClick={() => { st().selectCamera(c.id); st().setView('camera') }}
+          onContextMenu={(e) => { e.preventDefault(); st().selectCamera(c.id); showMenu(e, cameraMenu()) }}>
+          <Camera size={13} /><span className="kind">camera</span>
+          <span className="name" onDoubleClick={(e) => { e.stopPropagation(); renameCam(c) }}>{c.name}</span>
+          {current.active_camera === c.id && <span className="meta" title="The active camera: the one the shot renders through">★</span>}
+          <span className="meta">{c.focal_mm} mm</span>
+          {selectedCamera === c.id && <CameraEditor c={c} />}
         </div>
       ))}
     </div>
   )
 }
 
+/** D119 (SC1): the stage's own editor under its row — the frame, the contents, the ambient (D110), rename / delete. */
+function StageEditor() {
+  const current = useStage((s) => s.current)
+  if (!current) return null
+  return (
+    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <h4>{current.name} <span className="hint">· revision {current.revision}</span></h4>
+      <div className="kv"><span>frame</span><span>{current.size.w}×{current.size.h} @ {current.size.fps} fps (the project format)</span></div>
+      <div className="kv"><span>contents</span><span>{current.objects.length} objects · {current.cameras.length} cameras</span></div>
+      <AmbientControl />{/* D110 (PS4): the sky under the lights */}
+      <div className="verbs"><CommandRow ids={['stage.frameAll', 'stage.rename', 'stage.delete']} /></div>
+    </div>
+  )
+}
+
+/** D119 (SC1): an object's editor under its row — the transform, the kind's own fields, the parent, the object verbs (the Selection section of before). */
+function ObjectEditor({ o }: { o: StageObject }) {
+  const current = useStage((s) => s.current)
+  const t = o.transform
+  if (!current) return null
+  return (
+    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <h4>{o.name} <span className="hint">· {o.kind}{o.preset ? ` · ${o.preset}` : ''}</span></h4>
+      <Vec label="position" v={t.pos} onChange={(pos) => st().setTransform(o.id, { ...t, pos })} />
+      <Vec label="rotation" v={t.rot} onChange={(rot) => st().setTransform(o.id, { ...t, rot })} step={1} />
+      <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
+      {o.kind === 'mannequin' && <FigureCharacter o={o} />}
+      {o.kind === 'mesh' && <MeshProp o={o} />}
+      {o.kind === 'light' && <LightControls o={o} />}
+      {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(the Motion section poses the joints)</span></span></div>}
+      {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
+      <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
+      <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>
+    </div>
+  )
+}
+
+/** D119 (SC1): a camera's editor under its row — the lens, the roll, where it stands and what it looks at, and its verbs (Look through,
+ *  Set from view, To shot, Key camera, rename, delete). In the viewport the camera's body takes the gizmo while its row is selected. */
+function CameraEditor({ c }: { c: StageCamera }) {
+  const current = useStage((s) => s.current)
+  const view = useStage((s) => s.view)
+  if (!current) return null
+  markUsed('stage.camera.setFromView'); markUsed('stage.camera.delete'); markUsed('stage.view.camera'); markUsed('stage.camera.rename'); markUsed('stage.anim.keyCamera')
+  return (
+    <div className="row-editor stage-insp" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <h4>{c.name} <span className="hint">· camera{current.active_camera === c.id ? ' · active' : ''}</span></h4>
+      <Vec label="position" v={c.pos} onChange={(pos) => st().updateCamera(c.id, { pos })} />
+      <Vec label="target" v={c.target} onChange={(target) => st().updateCamera(c.id, { target })} />
+      <div className="kv"><span>focal</span>
+        <span className="focals">{FOCALS.map((f) => <button key={f} className={c.focal_mm === f ? 'active' : ''} onClick={() => st().updateCamera(c.id, { focal_mm: f })}>{f}</button>)}
+          <input type="number" min={8} max={400} step={1} value={c.focal_mm} onChange={(e) => st().updateCamera(c.id, { focal_mm: Math.max(8, Math.min(400, Number(e.target.value) || 35)) })} /> mm</span></div>
+      <div className="kv"><span>sensor</span><span>{c.sensor_mm} mm · frame {current.size.w}×{current.size.h}</span></div>
+      <div className="kv"><span>roll</span><input type="number" step={1} value={c.roll} onChange={(e) => st().updateCamera(c.id, { roll: Number(e.target.value) || 0 })} /></div>
+      <div className="verbs">
+        <CommandButton id="stage.view.camera" text label={view === 'camera' ? 'Back to the free view' : 'Look through'} active={view === 'camera'} />
+        <CommandButton id="stage.camera.setFromView" text label="Set from view" />
+        <CommandButton id="stage.anim.keyCamera" text />
+        <CommandButton id="stage.camera.toShot" text />
+        <CommandButton id="stage.camera.rename" />
+        <CommandButton id="stage.camera.delete" />
+      </div>
+      <Help text="Position and target are metres on the stage; drag the camera's body in the free view to move both together. Set from view puts the camera where the free view is. Look through shows the frame it renders; Key camera keeps this placement at the playhead (ST4)." />
+    </div>
+  )
+}
+
+/** D119 (SC1): the Camera section is the shot's camera — the active one at a glance and the verbs that act on it; each camera's own
+ *  fields are under its row in the Scene's outliner (CameraEditor). */
 export function CamerasTab() {
   const current = useStage((s) => s.current)
   const view = useStage((s) => s.view)
   const cam = useStage((s) => s.activeCamera())
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
-  markUsed('stage.camera.add'); markUsed('stage.camera.setFromView'); markUsed('stage.camera.delete'); markUsed('stage.view.camera'); markUsed('stage.frameAll')
+  markUsed('stage.camera.add'); markUsed('stage.frameAll')
   return (
     <div className="stage-panel">
-      <div className="head"><b>Cameras</b><CommandButton id="stage.camera.add" /></div>
-      {current.cameras.map((c) => (
-        <div key={c.id} className={`outl-row${current.active_camera === c.id ? ' active' : ''}`} onClick={() => st().setActiveCamera(c.id)}
-          onContextMenu={(e) => { e.preventDefault(); st().setActiveCamera(c.id); showMenu(e, cameraMenu()) }}
-          onDoubleClick={() => void askText({ title: 'Rename camera', initial: c.name }).then((n) => { if (n?.trim()) st().updateCamera(c.id, { name: n.trim() }) })}>
-          <Camera size={13} /><span className="name">{c.name}</span><span className="meta">{c.focal_mm} mm</span>
-        </div>
-      ))}
+      <div className="head"><b>Cameras</b><span className="hint">{current.cameras.length}</span><CommandButton id="stage.camera.add" /></div>
       {cam && <>
-        <h4>{cam.name}</h4>
-        <div className="kv"><span>focal</span>
-          <span className="focals">{FOCALS.map((f) => <button key={f} className={cam.focal_mm === f ? 'active' : ''} onClick={() => st().updateCamera(cam.id, { focal_mm: f })}>{f}</button>)}
-            <input type="number" min={8} max={400} step={1} value={cam.focal_mm} onChange={(e) => st().updateCamera(cam.id, { focal_mm: Math.max(8, Math.min(400, Number(e.target.value) || 35)) })} /> mm</span></div>
-        <div className="kv"><span>sensor</span><span>{cam.sensor_mm} mm · frame {current.size.w}×{current.size.h}</span></div>
-        <div className="kv"><span>roll</span><input type="number" step={1} value={cam.roll} onChange={(e) => st().updateCamera(cam.id, { roll: Number(e.target.value) || 0 })} /></div>
+        <div className="kv"><span>active</span><span><button className="quiet" title="Its row in the Scene's outliner: the lens, the roll, where it stands" onClick={() => { st().selectCamera(cam.id); document.getElementById('anim-sec-scene')?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }}>{cam.name}</button> <span className="hint">· {cam.focal_mm} mm</span></span></div>
         <div className="verbs">
           <CommandButton id="stage.view.camera" text label={view === 'camera' ? 'Back to the free view' : 'Look through'} active={view === 'camera'} />
           <CommandButton id="stage.camera.setFromView" text label="Set from view" />
           <CommandButton id="stage.frameAll" text label="Frame all" />
-          <CommandButton id="stage.camera.delete" />
         </div>
         <div className="verbs"><CommandButton id="stage.camera.toShot" text /></div>
+        <Help text="The shot renders through the active camera (★ in the outliner). To move it: drag its body in the free view, or type where it stands under its row; Set from view puts it where the free view is." />
       </>}
     </div>
   )
@@ -543,6 +619,8 @@ function Viewport() {
     const engine = new StageEngine(canvas, {
       onPick: (id) => st().select(id),
       onTransformed: (id, t) => st().setTransform(id, t),
+      onPickCamera: (id) => st().selectCamera(id),
+      onCameraMoved: (id, pos) => st().moveCamera(id, pos),                                                // D119 (SC1): the camera's body dragged
       onPosed: (id, joints) => st().setJoints(id, joints),
       onDetailError: (_id, message) => useSession.getState().toast(`The Detailed mannequin did not load — the figure stays Simple: ${message}`, 'error'),   // CA1
       onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),
@@ -552,7 +630,7 @@ function Viewport() {
     useStage.setState({ passRenderer: (cam, w, h) => engine.renderPasses(cam, w, h), sequenceRenderer: (fr, w, h, kind, restore, on) => engine.renderSequence(fr, w, h, kind, restore, on),
       plateProjector: (fr, w, h, plate, proj, aspect, restore, on) => engine.renderProjected(fr, w, h, plate, proj, aspect, restore, on) })   // ST3 / ST4, D111
     viewport.handPreset = (id, side, preset) => engine.handPreset(id, side, preset)                                   // CA1
-    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
+    if (DEV_HOOKS) Object.assign(devHook(), { screenOf: (at: string) => engine.screenOf(at as Joint), cameraScreen: (id: string) => engine.cameraScreen(id), meshes: () => ({ loaded: [...engine.meshesLoaded], failed: Object.fromEntries(engine.meshesFailed) }) })   // the smoke test aims the mouse at joints and handles; P18 asks which props loaded
     const ro = new ResizeObserver(() => { const r = host.getBoundingClientRect(); engine.resize(Math.round(r.width), Math.round(r.height)); setRect({ ...engine.frameRect() }) })
     ro.observe(host)
     engine.start()
@@ -567,7 +645,9 @@ function Viewport() {
     const t = window.setInterval(() => { const s = st(); const cur = s.current; if (!cur) return; s.setFrame(s.frame + 1 > cur.range.end ? cur.range.start : s.frame + 1) }, 1000 / Math.max(1, current.size.fps))
     return () => window.clearInterval(t)
   }, [playing, current?.size.fps]) // eslint-disable-line react-hooks/exhaustive-deps
+  const selectedCamera = useStage((s) => s.selectedCamera)
   useEffect(() => { engineRef.current?.select(selected) }, [selected])
+  useEffect(() => { engineRef.current?.selectCamera(selectedCamera) }, [selectedCamera])                   // D119 (SC1)
   useEffect(() => { engineRef.current?.setTool(tool, snap) }, [tool, snap])
   useEffect(() => { const e = engineRef.current; if (!e) return; e.setView(view); if (view === 'camera' && current) e.sync(current) }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
@@ -589,19 +669,26 @@ function Viewport() {
     const p = eng.pick(e.clientX, e.clientY)
     if (p.joint && p.id) { st().selectJoint(p.joint) }                                 // the rotate gizmo moves to the joint (FK)
     else if (p.ik && p.id) { st().selectJoint(null); eng.startIk(p.id, p.ik) }         // a translate handle on the hand / foot (IK)
+    else if (p.camera) st().selectCamera(p.camera)                                      // D119 (SC1): a camera's body — the camera as the selection
     else st().select(p.id)
+  }
+  const onDouble = (e: React.MouseEvent) => {                                           // D119 (SC1): a double-click on a camera's body looks through it
+    const eng = engineRef.current
+    const p = eng ? eng.pick(e.clientX, e.clientY) : null
+    if (p?.camera) { st().selectCamera(p.camera); st().setView('camera') }
   }
   const onMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     const eng = engineRef.current
-    const id = eng ? eng.pick(e.clientX, e.clientY).id : null
-    if (id) st().select(id)
-    showMenu(e, viewportMenu(!!id))
+    const p = eng ? eng.pick(e.clientX, e.clientY) : { id: null }
+    if (p.camera) { st().selectCamera(p.camera); showMenu(e, cameraMenu()); return }
+    if (p.id) st().select(p.id)
+    showMenu(e, viewportMenu(!!p.id))
   }
   markUsed('stage.tool.select'); markUsed('stage.tool.move'); markUsed('stage.tool.rotate'); markUsed('stage.tool.scale'); markUsed('stage.snap'); markUsed('stage.undo'); markUsed('stage.redo')
   return (
     <div ref={(el) => { (hostRef as React.MutableRefObject<HTMLDivElement | null>).current = el; dropRef(el) }} className={`stage-host${over ? ' over' : ''}`}
-      onPointerDown={onDown} onPointerUp={onUp} onPointerMove={(e) => { lastPointer.current = { x: e.clientX, y: e.clientY } }} onContextMenu={onMenu}>
+      onPointerDown={onDown} onPointerUp={onUp} onPointerMove={(e) => { lastPointer.current = { x: e.clientX, y: e.clientY } }} onContextMenu={onMenu} onDoubleClick={onDouble}>
       <canvas ref={canvasRef} className="stage-canvas" />
       {current && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />
@@ -630,44 +717,4 @@ function Vec({ label, v, onChange, step = 0.05 }: { label: string; v: number[]; 
 }
 
 /** D95 (AN1): the stage's selection — an object, else the stage and its active camera — in Animate's Selection section. */
-export function StageSelection() {
-  const current = useStage((s) => s.current)
-  const o = useStage((s) => s.object(s.selected))
-  const cam = useStage((s) => s.activeCamera())
-  const saving = useStage((s) => s.saving)
-  if (!current) return <span className="hint">No stage open.</span>
-  if (o) {
-    const t = o.transform
-    return (
-      <div className="stage-insp">
-        <h4>{o.name} <span className="hint">· {o.kind}{o.preset ? ` · ${o.preset}` : ''}</span></h4>
-        <Vec label="position" v={t.pos} onChange={(pos) => st().setTransform(o.id, { ...t, pos })} />
-        <Vec label="rotation" v={t.rot} onChange={(rot) => st().setTransform(o.id, { ...t, rot })} step={1} />
-        <Vec label="scale" v={t.scale} onChange={(scale) => st().setTransform(o.id, { ...t, scale })} step={0.05} />
-        {o.kind === 'mannequin' && <FigureCharacter o={o} />}
-        {o.kind === 'mesh' && <MeshProp o={o} />}
-        {o.kind === 'light' && <LightControls o={o} />}
-        {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select>{Object.keys(o.pose?.joints ?? {}).length ? <span className="hint"> edited</span> : null}</span></div>}
-        {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
-        <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
-        <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>
-      </div>
-    )
-  }
-  return (
-    <div className="stage-insp">
-      <h4>{current.name} <span className="hint">{saving ? '· saving…' : `· revision ${current.revision}`}</span></h4>
-      <div className="kv"><span>frame</span><span>{current.size.w}×{current.size.h} @ {current.size.fps} fps (the project format)</span></div>
-      <div className="kv"><span>contents</span><span>{current.objects.length} objects · {current.cameras.length} cameras</span></div>
-      <AmbientControl />{/* D110 (PS4): the sky under the lights */}
-      <div className="verbs"><CommandRow ids={['stage.rename', 'stage.delete']} /></div>
-      {cam && <>{/* the active camera's placement (its lens and verbs are in the Camera section) */}
-        <h4>{cam.name}</h4>
-        <Vec label="position" v={cam.pos} onChange={(pos) => st().updateCamera(cam.id, { pos })} />
-        <Vec label="target" v={cam.target} onChange={(target) => st().updateCamera(cam.id, { target })} />
-      </>}
-      <p className="hint">Nothing selected. <Help text="Select an object in the viewport or the Scene's Outliner to edit it; add from the Scene section or the viewport's right-click menu." /></p>
-    </div>
-  )
-}
 

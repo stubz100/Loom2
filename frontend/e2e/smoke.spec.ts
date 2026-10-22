@@ -480,8 +480,9 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await page.locator('.stage-empty button', { hasText: /^Add set · room$/ }).click()
   await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                        // the Library's figure card
   await openSection(page, 'Scene')
-  await expect(page.locator('.outl-row .kind')).toHaveCount(2)
-  await expect(page.locator('.outl-row.active', { has: page.locator('.kind') }).locator('.name')).toHaveText('Figure 1')   // the last added is selected (the camera row is "active" in its own sense)
+  await expect(page.locator('.outl-row[data-row="object"]')).toHaveCount(2)                                              // D119 (SC1): one outliner — the stage, the objects, the cameras
+  await expect(page.locator('.outl-row[data-row="camera"]')).toHaveCount(1)
+  await expect(page.locator('.outl-row.active .name')).toHaveText('Figure 1')                                            // the last added is selected; its editor under its row
   await expect(page.locator('.panel .stage-insp h4')).toContainText('Figure 1')
   await expect.poll(async () => (await api<{ items: { name: string; revision: number; objects: { kind: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')?.objects.length ?? 0, { timeout: 10_000 }).toBe(2)
   const before = (await api<{ items: { id: string; name: string; revision: number }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!
@@ -496,7 +497,20 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Animate/)
   await page.locator('.stage-row', { hasText: 'Alley at night' }).click()
   await openSection(page, 'Scene')
-  await expect(page.locator('.outl-row .kind')).toHaveCount(2)
+  await expect(page.locator('.outl-row[data-row="object"]')).toHaveCount(2)
+  // D119 (SC1): the camera is an object — its row opens its editor and its body in the free view is clicked to select it
+  await page.locator('.outl-row[data-row="camera"]').first().click()
+  await expect(page.locator('.outl-row[data-row="camera"].active .row-editor h4')).toContainText('Camera 1')
+  await page.locator('.outl-row[data-row="camera"] .name').first().click()                                               // again (on its name: the editor is part of the row): closed
+  await expect(page.locator('.row-editor')).toHaveCount(0)
+  await page.locator('.outl-row[data-row="stage"]').click()
+  await expect(page.locator('.outl-row[data-row="stage"] .row-editor')).toContainText('the project format')
+  const camId = (await api<{ items: { name: string; cameras: { id: string }[] }[] }>('GET', '/stages')).items.find((s) => s.name === 'Alley at night')!.cameras[0].id
+  await page.locator('canvas.stage-canvas').hover()
+  const at = await page.evaluate((id) => (window as unknown as { __loom2Stage: { cameraScreen: (id: string) => { x: number; y: number } | null } }).__loom2Stage.cameraScreen(id), camId)
+  expect(at).not.toBeNull()
+  await page.mouse.click(at!.x, at!.y)
+  await expect(page.locator('.outl-row[data-row="camera"].active .row-editor h4')).toContainText('Camera 1')
 })
 
 test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits one joint by number and saves the pose to the project library', async ({ page }) => {
@@ -541,7 +555,7 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   expect(m1.r_hip[0]).toBe(m2.l_hip[0]); expect(m1.r_hip[1]).toBe(-m2.l_hip[1] || 0); expect(m1.l_shoulder[0]).toBe(m2.r_shoulder[0])
   // one joint by number: the Joint picker then the x field
   await page.locator('.stage-panel select').last().selectOption('r_elbow')
-  const x = page.locator('.stage-panel .vec input').first()
+  const x = page.locator('#anim-sec-motion .stage-panel .vec input').first()                                 // the joint's field (D119 SC1: the figure's editor under its row has vecs too)
   await x.fill('-90'); await x.dispatchEvent('change')
   await expect.poll(async () => (await figure())?.pose?.joints.r_elbow?.[0], { timeout: 10_000 }).toBe(-90)
   // save it to the project's library and see it back as a card
@@ -622,6 +636,8 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await openSection(page, 'Camera')
   const box = (await page.locator('canvas.stage-canvas').boundingBox())!
   await page.mouse.click(box.x + 60, box.y + box.height - 40)                                                // empty floor, bottom-left (the gizmo bar sits top-left; toasts bottom-right, over the viewport since AN1): nothing selected, Selection shows the camera
+  await openSection(page, 'Scene')
+  await page.locator('.outl-row[data-row="camera"]').first().click()                                        // D119 (SC1): the camera's editor under its row
   await expect(page.locator('.panel .stage-insp h4', { hasText: 'Camera 1' })).toBeVisible()            // D95 (AN1): Selection shows the stage, then its active camera
   const z = page.locator('.panel .stage-insp .vec input').nth(2)                                           // the camera's position z
   await z.fill('2'); await z.dispatchEvent('change')
@@ -1971,16 +1987,16 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await openSection(page, 'Scene')
   // the left figure: the Inspector's tiles (the Cast's characters by their heroes)
-  await page.locator('.outl-row', { hasText: 'Left one' }).click()
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Left one' }) }).click()
   const tile = page.locator(`.panel [aria-label="the figure's character"] button[aria-label="${ana.name}"]`)   // D95 (AN1): the Selection section
   await expect(tile.locator('img')).toBeVisible()
   await tile.click()
-  await expect(page.locator('.outl-row', { hasText: 'Left one' }).locator('.bound-tag')).toContainText(ana.name)
+  await expect(page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Left one' }) }).locator('.bound-tag')).toContainText(ana.name)
   // the right figure: right-click ▸ Bind to a character ▸ Bo
-  await page.locator('.outl-row', { hasText: 'Right one' }).click({ button: 'right' })
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Right one' }) }).click({ button: 'right' })
   await page.locator('.ctx-menu .item.sub', { hasText: 'Bind to a character' }).hover()
   await page.locator('.ctx-menu button.item', { hasText: bo.name }).click()
-  await expect(page.locator('.outl-row', { hasText: 'Right one' }).locator('.bound-tag')).toContainText(bo.name)
+  await expect(page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Right one' }) }).locator('.bound-tag')).toContainText(bo.name)
   await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.map((o) => [o.id, o.profile_id]), { timeout: 10_000 }).toEqual([['fig_r', bo.id], ['fig_l', ana.id]])
   // the Render tab: the deck's figure slots (image 2 the left figure's, image 3 the right's) and the lines
   await stageRoute(page)
@@ -2173,8 +2189,8 @@ test('a body on the Cast sheet (CA0, 01 §9): height, build and an attachment sa
   await page.locator('.stage-row', { hasText: `Cave ${name}` }).click()
   await expect.poll(async () => (await api<{ objects: { body: Body | null }[] }>('GET', `/stages/${st.id}`)).objects[0].body?.height_m ?? null, { timeout: 10_000 }).toBe(2.4)
   await openSection(page, 'Scene')
-  await page.locator('.outl-row', { hasText: 'Grak' }).click()
-  await expect(page.locator('#anim-sec-selection')).toContainText('from Cast — 2.40 m · heavy · horns')
+  await page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Grak' }) }).click()
+  await expect(page.locator('.outl-row[data-row="object"].active .row-editor')).toContainText('from Cast — 2.40 m · heavy · horns')   // D119 (SC1): the figure's editor under its row
   await page.locator('.stage-row', { hasText: `Cave ${name}` }).click()
   await page.waitForTimeout(500)
   await page.screenshot({ path: 'node_modules/.e2e/ca0-body-stage.png' })                  // a look for the journal: the ogre beside nothing, 2.4 m

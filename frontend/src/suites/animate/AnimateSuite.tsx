@@ -21,7 +21,7 @@ import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimP
 import { ForChip } from '../story/ForChip'
 import { ForRecipe } from '../story/RecipeSteps'
 import { useColumnSync } from '../../frame/columnSync'
-import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, StageSelection, useStageLoad } from '../stage/StageParts'
+import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, useStageLoad } from '../stage/StageParts'
 import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
 import { FinalViewer } from './FinalViewer'
@@ -311,7 +311,7 @@ function AnimateColumnBody({ tab }: { tab: string }) {
       </Sec>
       <Sec id="clips" title="Clips"><ClipsTab /></Sec>
       <Sec id="layers" title="Layers"><LayersSection /></Sec>{/* AE2–3 (D114): the composition's layers at the Final level, the selected one's editor under its row */}
-      <Sec id="selection" title="Selection">{level === 'stage' ? <StageSelection /> : <ClipSelection />}</Sec>
+      {level !== 'stage' && <Sec id="selection" title="Selection"><ClipSelection /></Sec>}{/* D119 (SC1): at the Clay level a thing is edited under its row in the Scene's outliner */}
     </div>
   )
 }

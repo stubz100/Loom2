@@ -16,6 +16,10 @@
 .outl-row .kind { color: var(--fg3); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; min-width: 54px; }
 .outl-row .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .outl-row .quiet { padding: 0 3px; min-height: 18px; }
+.outl-row { flex-wrap: wrap; }                                                       /* D119 (SC1): the selected row's editor under it */
+.outl-row .row-editor { flex-basis: 100%; margin: 4px 0 2px; padding: 6px 6px 4px; border-top: 1px solid var(--line); cursor: default; }
+.outl-row.cam-active .kind { color: var(--accent); }
+.outl-row[data-row="stage"] { font-weight: 600; }
 .stage-strip { display: flex; align-items: center; gap: 6px; }
 .stage-strip .spacer { flex: 1; }
 .stage-host { position: relative; width: 100%; height: 100%; min-height: 240px; background: var(--deep); overflow: hidden; }

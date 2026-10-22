@@ -27,8 +27,11 @@ export interface EngineHooks {
   onFreeCameraMoved?: () => void
   /** P18: a mesh asset's GLB arrived and a fitted view of it is ready — the store may make it the asset's thumbnail. */
   onMeshThumb?: (assetId: string, view: Blob) => void
+  /** D119 (SC1): a camera's body was clicked in the free view, or dragged there (its new position; the store moves its target along). */
+  onPickCamera?: (id: string) => void
+  onCameraMoved?: (id: string, pos: number[]) => void
 }
-export interface Pick { id: string | null; joint?: Joint; ik?: Chain }
+export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string }
 
 interface Entry { holder: THREE.Group; body: THREE.Object3D; doc: StageObject; figure?: Mannequin; pickers?: THREE.Object3D[]; detailed?: Detailed; proxy?: Proxy }
 
@@ -144,7 +147,7 @@ export class StageEngine {
   }
 
   // ---- views and cameras ----------------------------------------------------------------------------------------------------------
-  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; for (const l of this.lights.values()) l.aim.visible = view === 'free'; this.dirty = true }
+  setView(view: View): void { this.view = view; this.gizmo.camera = view === 'camera' ? this.shot : this.free; this.orbit.enabled = view === 'free'; if (this.selectedCamId) this.selectCamera(this.selectedCamId); for (const l of this.lights.values()) l.aim.visible = view === 'free'; this.dirty = true }
   setAspect(aspect: number): void { this.aspect = aspect; this.dirty = true }
   /** The rectangle (canvas px) the render camera's frame occupies — the framing guides draw over it. */
   frameRect(): { x: number; y: number; w: number; h: number } {
@@ -197,6 +200,7 @@ export class StageEngine {
       this.gizmo.enabled = true
       const sel = this.selectedId
       if (sel) this.attach(sel)
+      else if (this.selectedCamId) this.selectCamera(this.selectedCamId)                 // D119: a camera's body only moves — translate whatever the tool
     }
     this.gizmo.setTranslationSnap(snap ? 0.25 : null)
     this.gizmo.setRotationSnap(snap ? rad(15) : null)
@@ -204,15 +208,37 @@ export class StageEngine {
     this.dirty = true
   }
   private selectedId: string | null = null
+  private selectedCamId: string | null = null
   select(id: string | null): void {
     if (this.selectedId !== id || this.ik) this.endPosing()
     this.selectedId = id
+    if (id) this.selectedCamId = null
     const e = id ? this.entries.get(id) : undefined
-    if (e && this.gizmo.enabled && !e.doc.locked && !this.posing) this.attach(id!); else if (!this.posing) this.gizmo.detach()
+    if (e && this.gizmo.enabled && !e.doc.locked && !this.posing) this.attach(id!); else if (!this.posing && !this.selectedCamId) this.gizmo.detach()
     this.selection.visible = !!e
     if (e) { this.selection.setFromObject(e.holder) }
     this.showPickers()
     this.dirty = true
+  }
+  /** D119 (SC1): a camera as the selection — its body takes the translate gizmo in the free view and the selection box. */
+  selectCamera(id: string | null): void {
+    this.selectedCamId = id
+    if (id) { this.endPosing(); this.selectedId = null; this.showPickers() }
+    const h = id ? this.camHelpers.get(id) : undefined
+    if (h && this.gizmo.enabled && this.view === 'free') { this.gizmo.setMode('translate'); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(h) }
+    else if (!this.selectedId && !this.posing) this.gizmo.detach()
+    this.selection.visible = !!h && this.view === 'free'
+    if (h) this.selection.setFromObject(h)
+    this.dirty = true
+  }
+  /** D119 (SC1): where a camera's body is on the canvas (client px), for a click to land on it — null when it is off screen or hidden. */
+  cameraScreen(id: string): { x: number; y: number } | null {
+    const h = this.camHelpers.get(id)
+    if (!h || !h.visible) return null
+    const p = h.position.clone().project(this.camera())
+    if (p.z > 1) return null
+    const r = this.canvas.getBoundingClientRect()
+    return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height }
   }
   private attach(id: string): void {
     const e = this.entries.get(id)
@@ -222,6 +248,8 @@ export class StageEngine {
     if (this.posing || this.ik) { this.commitPose(); return }
     const o = this.gizmo.object as THREE.Group | undefined
     if (!o) return
+    const camId = o.userData.cameraId as string | undefined
+    if (camId) { this.hooks.onCameraMoved?.(camId, [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4))); return }   // D119: a camera's body moved
     const id = [...this.entries.entries()].find(([, e]) => e.holder === o)?.[0]
     if (!id) return
     const r = o.rotation
@@ -325,12 +353,17 @@ export class StageEngine {
       const hit = this.ray.intersectObjects(sel.pickers.filter((p) => p.visible), false)[0]
       if (hit) return hit.object.userData.joint ? { id: this.selectedId, joint: hit.object.userData.joint as Joint } : { id: this.selectedId, ik: hit.object.userData.ik as Chain }
     }
-    const hits = this.ray.intersectObjects([...this.entries.values()].map((e) => e.body), true)
+    const hits = this.ray.intersectObjects([...[...this.entries.values()].map((e) => e.body), ...this.camHelpers.values()], true)   // D119: the cameras' bodies too
     for (const h of hits) {
       let hidden = false
       for (let p: THREE.Object3D | null = h.object; p; p = p.parent) if (!p.visible) { hidden = true; break }
       if (hidden || h.object.userData.joint || h.object.userData.ik) continue
-      for (let o: THREE.Object3D | null = h.object; o; o = o.parent) { const id = o.userData.stageId as string | undefined; if (id) return { id } }
+      for (let o: THREE.Object3D | null = h.object; o; o = o.parent) {
+        const id = o.userData.stageId as string | undefined
+        if (id) return { id }
+        const cam = o.userData.cameraId as string | undefined
+        if (cam) return { id: null, camera: cam }
+      }
     }
     return { id: null }
   }
@@ -379,11 +412,14 @@ export class StageEngine {
     for (const [id, h] of [...this.camHelpers]) if (!cams.has(id)) { this.scene.remove(h); this.camHelpers.delete(id) }
     for (const c of doc.cameras) {
       let h = this.camHelpers.get(c.id)
-      if (!h) { h = this.cameraGlyph(); this.camHelpers.set(c.id, h); this.scene.add(h) }
-      h.position.set(c.pos[0], c.pos[1], c.pos[2]); h.lookAt(c.target[0], c.target[1], c.target[2])
+      if (!h) { h = this.cameraGlyph(c.id); this.camHelpers.set(c.id, h); this.scene.add(h) }
+      if (!(this.gizmo.dragging && this.gizmo.object === h)) h.position.set(c.pos[0], c.pos[1], c.pos[2])   // D119: not under the hand that drags it
+      h.lookAt(c.target[0], c.target[1], c.target[2])
       h.visible = this.view === 'free'
       ;(h.children[0] as THREE.Mesh).material = c.id === doc.active_camera ? this.camActiveMat : this.camMat
     }
+    if (this.selectedCamId && !cams.has(this.selectedCamId)) this.selectCamera(null)
+    else if (this.selectedCamId) { const h = this.camHelpers.get(this.selectedCamId); if (h) this.selection.setFromObject(h); this.selection.visible = this.view === 'free' }
     this.applyShot(doc.cameras.find((c) => c.id === doc.active_camera) ?? doc.cameras[0] ?? null)
     if (this.selectedId && this.entries.has(this.selectedId)) this.selection.setFromObject(this.entries.get(this.selectedId)!.holder)
     this.dirty = true
@@ -425,8 +461,9 @@ export class StageEngine {
   }
   private camMat = new THREE.MeshBasicMaterial({ color: 0x8899bb, wireframe: true })
   private camActiveMat = new THREE.MeshBasicMaterial({ color: 0xf0b040, wireframe: true })
-  private cameraGlyph(): THREE.Object3D {
+  private cameraGlyph(id: string): THREE.Object3D {
     const g = new THREE.Group()
+    g.userData.cameraId = id                                           // D119 (SC1): picked and dragged like an object
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.3), this.camMat); g.add(body)
     const lens = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 4, 1, true), this.camMat); lens.rotation.x = -Math.PI / 2; lens.position.z = 0.25; g.add(lens)
     return g

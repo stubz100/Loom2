@@ -1,6 +1,6 @@
 # 25 · The Clay level's coherence — the author's notes of 2026-10-22 and the plan (D119)
 
-Status: **proposed 2026-10-22; D119 recorded; SC1 begun the same day.** The author's four notes, what each meets in the app today, and the
+Status: **proposed 2026-10-22; D119 recorded; SC1 built the same day (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
 plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind the +, E30 → SC3 a set from an image.
 
 ## 1 · The notes (the author, 2026-10-22, after AE4)
@@ -36,6 +36,17 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
 check row here.
+
+## 3b · Status
+
+- **2026-10-22 15:16 — SC1 built.** The Scene's outliner lists the stage (its row: the frame, the contents, the ambient, Frame all / rename / delete),
+  every object (its row: the transform, the kind's fields, the parent, the verbs — the Selection section's contents of before) and every
+  camera (★ the active one; its row: position, target, focal, sensor, roll, Look through / Set from view / Key camera / To shot / rename /
+  delete). Clicking a row opens its editor under it; again closes it. A camera's row selects the camera as an object and makes it the
+  active one; in the free view every camera has a body (the glyph) that is clicked to select and dragged with the translate gizmo — its
+  target follows by the same move — and double-clicked to look through; right-click gives the camera menu. The Selection section is gone
+  at the Clay level (it stays for the clip levels); the Camera section keeps Add camera, the active camera at a glance (its name jumps
+  to its row) and the shot's verbs. Checks below.
 
 ## 4 · Checks for the author
 

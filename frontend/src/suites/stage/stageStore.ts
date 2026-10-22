@@ -176,6 +176,11 @@ interface StageState {
   undoEdit: () => void
   redoEdit: () => void
   select: (id: string | null) => void
+  selectedCamera: string | null                             // D119 (SC1): a camera selected as an object (its row's editor, its body's gizmo); it is the active one too
+  stageSelected: boolean                                    // D119 (SC1): the stage row selected (the frame, the ambient, rename / delete)
+  selectCamera: (id: string | null) => void
+  selectStage: () => void
+  moveCamera: (id: string, pos: number[]) => void           // D119 (SC1): the camera's body dragged — its target follows by the same move
   setTool: (t: Tool) => void
   setSnap: (on: boolean) => void
   setView: (v: View) => void
@@ -266,7 +271,7 @@ let shotPreviewSeq = 0
 const thumbed = new Set<string>()                                            // P18: mesh assets whose thumbnail this session already rendered
 
 export const useStage = create<StageState>()((set, get) => ({
-  stages: [], current: null, selected: null, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
+  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
@@ -521,10 +526,10 @@ export const useStage = create<StageState>()((set, get) => ({
     } catch (e) { useSession.getState().toast(`New stage failed: ${(e as ApiError).detail ?? e}`, 'error'); return null }
   },
   open: async (id) => {
-    if (!id) { set({ current: null, selected: null, undo: [], redo: [] }); return }
+    if (!id) { set({ current: null, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [] }); return }
     try {
       const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
-      set({ current: st, selected: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
+      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
         shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
       void get().loadShots(); void get().refreshShotPreview()
       if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
@@ -552,7 +557,15 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; set({ current: { ...u[u.length - 1], revision: cur.revision }, undo: u.slice(0, -1), redo: [...get().redo, cur] }); schedule(get, set) },
   redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; set({ current: { ...r[r.length - 1], revision: cur.revision }, redo: r.slice(0, -1), undo: [...get().undo, cur] }); schedule(get, set) },
-  select: (id) => set({ selected: id, selectedJoint: null }),
+  select: (id) => set({ selected: id, selectedJoint: null, selectedCamera: null, stageSelected: false }),
+  selectCamera: (id) => { set({ selected: null, selectedJoint: null, selectedCamera: id, stageSelected: false }); if (id) get().setActiveCamera(id) },
+  selectStage: () => set({ selected: null, selectedJoint: null, selectedCamera: null, stageSelected: true }),
+  moveCamera: (id, pos) => {
+    const c = get().current?.cameras.find((x) => x.id === id)
+    if (!c) return
+    const d = [pos[0] - c.pos[0], pos[1] - c.pos[1], pos[2] - c.pos[2]]
+    get().updateCamera(id, { pos: pos.map((v) => +v.toFixed(4)), target: c.target.map((v, i) => +(v + d[i]).toFixed(4)) })
+  },
   setTool: (tool) => set({ tool }),
   setSnap: (snap) => set({ snap }),
   setView: (view) => set({ view }),

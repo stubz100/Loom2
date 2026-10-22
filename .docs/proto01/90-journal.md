@@ -7678,3 +7678,21 @@ The author asked for a review of the state of things, then "record all this and 
   fields and panels, the styles, Animate's and Edit's presets, Stage's poses and the Clay library with icons and the author's templates),
   E30 (a set from an image: MoGe's relief and Pixal3D's cut-outs measured on two set images — how far the camera may move, the passes, the
   plate as the image itself) and SC3 after E30's decision. **D119** holds it. SC1 starts now.
+
+## 2026-10-22 15:16 — SC1 built (D119): the scene outliner with the camera as an object
+
+- **The outliner** (`OutlinerTab`, StageParts.tsx): one list — the stage row, the object rows, the camera rows (`data-row`), the selected
+  row's editor under it (`StageEditor`, `ObjectEditor`, `CameraEditor`; UX9 U1's pattern): the stage's frame, contents, ambient and verbs;
+  an object's transform, its kind's fields (character, pose, mesh prop, light, the plane's billboard), parent and verbs; a camera's
+  position, target, focal, sensor, roll and verbs. `StageSelection` is gone, the Selection section with it at the Clay level
+  (AnimateSuite renders it for the clip levels only); the Camera section is the shot's camera: Add camera, the active one's name (a
+  button to its row) and lens, Look through / Set from view / Frame all / To shot.
+- **The camera as an object:** the store gains `selectedCamera` and `stageSelected` beside `selected` (`selectCamera` makes the camera
+  the active one too; `selectStage`; `moveCamera` moves position and target by the same delta); the engine's camera glyph carries
+  `userData.cameraId`, `pick` returns `{camera}` for a hit on it, `selectCamera` puts the translate gizmo on the glyph in the free view
+  (whatever the tool; the selection box around it), `commitGizmo` reports the move through `onCameraMoved`, `sync` leaves a glyph alone
+  while it is being dragged, `cameraScreen(id)` says where a camera's body is on the canvas (the dev hook; the e2e clicks it). The
+  viewport: a click on a camera's body selects it, a double-click looks through it, a right-click opens the camera menu.
+- **Tests:** `outliner.test.tsx` (the rows; a camera row selects, activates and opens its editor, again closes; an object row's editor and
+  the camera selection dropped; the stage row's frame and ambient; `moveCamera`); the e2e stage scenarios read the new rows, open a
+  camera's editor, the stage's, and click the camera's body in the viewport through the dev hook. Vitest 397 + 3 (outliner.test.tsx's five), lint 75, build clean; e2e: the twelve Stage scenarios green on the new rows, the full runs 47 + 2 in both variants where the two were the posing scenario's joint field (its selector now scoped to the Motion section — the figure's editor under its row has vecs too) and a scenario hit by a concurrent Playwright start (the LoRA slots' timeout, the final shot's missing trace) — both green alone.

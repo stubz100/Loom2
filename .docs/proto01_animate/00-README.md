@@ -34,6 +34,7 @@ character image as an input of wan-animate and create very precise movement and 
 | [22](22-testing-expand.md) | **Trying Expand from Image** (for the author) | D115: a character's coverage expanded with the poses picked as icons; the images as its candidates |
 | [23](23-testing-e29.md) | **Looking at E29** (for the author) | lip-sync in the clay route: S2V as the layer loses the pose; an S2V talking head driving Wan Animate's face keeps it (Q25) |
 | [24](24-testing-e24.md) | **Looking at E24** (for the author) | post-processing: Wan 2.2's low-noise expert over the layer and the shot (15 min, softer, shimmer, the face drifts) and LTX-2.3 locked to the shot's depth (2 min, the structure held, the surfaces repainted smooth) are both out; the proposal: no pass by default, A6 as a tool later, A3 on a close shot |
+| [25-scene-coherence.md](25-scene-coherence.md) | The author's four notes after AE4 (a set from an image, the camera as an object, the + as a preset panel, one outliner) and the plan SC1 · SC2 · E30 → SC3 (D119) |
 
 Background reading, in this order:
 

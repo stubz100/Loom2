@@ -7666,3 +7666,15 @@ The author asked for a review of the state of things, then "record all this and 
   cancel) — and `run_comp_render` logs which ones were rendered as they are. Re-running stays the author's (Process again); an automatic
   re-run before the render is a one-line change if they want it (doc 21 asks).
 - Offline 491 full and 491 open, settings audit 272 / 0, the final-shot e2e scenario green in both variants, Vitest 392 + 3, build clean, lint 75.
+
+## 2026-10-22 14:51 — D119 recorded: the Clay level's coherence (proto01_animate 25) — the author's four notes after AE4
+
+- The author, on their own project: a stage offers only the set presets ("we should be able to create 3D scenes from images"); the camera
+  cannot be found or grabbed in the 3D view (its numbers sit in the Selection section at the bottom); the Clay menus want Image's template
+  structure, and the + itself wants to become a small panel with the presets as icons and their verbs instead of tiles piling up under
+  the item; and an outliner where everything is selected and edited in place, as the Final level's layers.
+- **Doc 25** maps each note to what the app has today and plans SC1 (the scene outliner with the camera as a pickable body in the view,
+  the editor under the row, the Selection section gone at the Clay level), SC2 (the preset panel behind the + — one component for Image's
+  fields and panels, the styles, Animate's and Edit's presets, Stage's poses and the Clay library with icons and the author's templates),
+  E30 (a set from an image: MoGe's relief and Pixal3D's cut-outs measured on two set images — how far the camera may move, the passes, the
+  plate as the image itself) and SC3 after E30's decision. **D119** holds it. SC1 starts now.

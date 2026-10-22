@@ -23,6 +23,8 @@
 /* a pick started from a panel: the verb's button, always shown, in the accent so it reads as the thing to click */
 .tile .tile-pick { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; min-height: 0; display: grid; place-items: center; border-radius: var(--radius); background: var(--accent); color: #fff; border: 1px solid rgba(0,0,0,.35); box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 .tile .tile-pick:hover { filter: brightness(1.15); }
+.tile .tile-pick { z-index: 2; }
+.tile .tile-pick + .stars { top: 30px; }                      /* the rating's stars share the corner: they step down while the button is there */
 .bin-bar .meta.picking { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }
 .tile .badge-dot { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font-size: 11px; background: var(--overlay); color: var(--fg); }
 .tile .badge-dot.keep { color: var(--keep); } .tile .badge-dot.reject { color: var(--reject); }

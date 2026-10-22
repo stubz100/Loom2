@@ -7827,3 +7827,10 @@ The author asked for a review of the state of things, then "record all this and 
   closes it), clicks the corner button and sees the pick end; the stage scenario (the camera's body clicked) switches to Rotate, selects an
   object and reads `gizmoMode() === 'rotate'`, then Move → `translate`; the plane scenario's double-click runs through the pick unchanged.
   Vitest 402 + 3 skipped, lint 75, build clean; the e2e (the set, stage and plane scenarios, then both variants' full runs) is owed — the author's own Vite dev server holds 1420 since 18:41 and the e2e refuses a busy port by design (it is left alone; that server serves this working tree, so the pick button and the rotate fix are live in the app).
+
+## 2026-10-22 19:13 — The pick's e2e ran (the owed runs of 18:51 / 19:03)
+
+- 1420 came free (the author's dev server stopped), so the three touched scenarios ran: the set scenario found the corner button under the
+  rating's stars on a rated tile (`.stars` sits in the same corner and took the click) — `.tile-pick` now stacks above and the stars step
+  down 26 px while the button is there; the stage scenario read the gizmo's mode as `rotate` then `translate` as expected; the plane
+  scenario's double-click ran through the pick unchanged. Then the full runs: e2e 50/50 full and 50/50 open; nothing else changed since 19:03 (Vitest 402 + 3 skipped, lint 75, build clean).

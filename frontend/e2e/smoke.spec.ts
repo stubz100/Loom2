@@ -519,9 +519,10 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await page.mouse.click(at!.x, at!.y)
   await expect(page.locator('.outl-row[data-row="camera"].active .row-editor h4')).toContainText('Camera 1')
   // the rotate tool after a camera (the author, 2026-10-22: it moved the object instead): the object's gizmo follows the tool
-  await page.locator('button.cmd-btn[aria-label^="Rotate"]').first().click()
-  await page.locator('.outl-row[data-row="object"] .name').first().click()
   const mode = () => page.evaluate(() => (window as unknown as { __loom2Stage: { gizmoMode: () => string } }).__loom2Stage.gizmoMode())
+  await page.locator('button.cmd-btn[aria-label^="Rotate"]').first().click()
+  await expect.poll(mode).toBe('rotate')                                                                                      // the camera's body turns under Rotate (the author, later that day)
+  await page.locator('.outl-row[data-row="object"] .name').first().click()
   await expect.poll(mode).toBe('rotate')
   await page.locator('button.cmd-btn[aria-label^="Move"]').first().click()
   await expect.poll(mode).toBe('translate')
@@ -2387,14 +2388,24 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
   await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
-  await expect(bin.locator('.bin-bar .picking')).toContainText('picking for: Add to the stage (a set from this image)')         // the pick started from the panel
+  const picking = bin.locator('.bin-bar .picking')
+  await expect(picking).toContainText('picking for: Add to the stage (a set from this image)')                               // the pick started from the panel
   const tile = bin.locator('.bin-grid .tile').first()
   await expect(tile).toBeVisible()
-  await tile.click({ button: 'right' })                                                                                       // the right-click keeps every verb
+  const corner = tile.locator('button.tile-pick[aria-label="Add to the stage (a set from this image)"]')
+  await expect(corner).toBeVisible()
+  await page.keyboard.press('Escape')                                                                                         // Escape ends the pick
+  await expect(picking).toHaveCount(0)
+  await expect(corner).toHaveCount(0)
+  await page.locator('.lib-row[data-group="sets"] button', { hasText: /^From an image/ }).click()                          // again
+  await expect(picking).toHaveCount(1)
+  await tile.click({ button: 'right' })                                                                                       // a right-click ends it too — and still opens every verb
   await expect(page.locator('.ctx-menu button.item', { hasText: /a set from this image/ })).toBeVisible()
+  await expect(picking).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(page.locator('.ctx-menu')).toHaveCount(0)
-  await tile.locator('button.tile-pick[aria-label="Add to the stage (a set from this image)"]').click()                          // the corner button: the job through the fake engine
+  await page.locator('.lib-row[data-group="sets"] button', { hasText: /^From an image/ }).click()                          // a third time: the corner button
+  await corner.click()                                                                                                        // the job through the fake engine
   await expect(bin.locator('.bin-bar .picking')).toHaveCount(0)                                                                // the pick ends with it
   const row = page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })
   await expect(row).toHaveCount(1, { timeout: 30_000 })                                                                      // the stage reloaded with it

@@ -663,6 +663,7 @@ function Viewport() {
       onTransformed: (id, t) => st().setTransform(id, t),
       onPickCamera: (id) => st().selectCamera(id),
       onCameraMoved: (id, pos) => st().moveCamera(id, pos),                                                // D119 (SC1): the camera's body dragged
+      onCameraTurned: (id, target, roll) => st().updateCamera(id, { target, roll }),                      // the body turned with the rotate tool
       onPosed: (id, joints) => st().setJoints(id, joints),
       onDetailError: (_id, message) => useSession.getState().toast(`The Detailed mannequin did not load — the figure stays Simple: ${message}`, 'error'),   // CA1
       onMeshThumb: (assetId, view) => void st().uploadMeshThumbnail(assetId, view),

@@ -30,6 +30,7 @@ export interface EngineHooks {
   /** D119 (SC1): a camera's body was clicked in the free view, or dragged there (its new position; the store moves its target along). */
   onPickCamera?: (id: string) => void
   onCameraMoved?: (id: string, pos: number[]) => void
+  onCameraTurned?: (id: string, target: number[], roll: number) => void     // the camera's body turned with the rotate tool: a new target at the old distance, the roll about it
 }
 export interface Pick { id: string | null; joint?: Joint; ik?: Chain; camera?: string }
 
@@ -47,6 +48,7 @@ export class StageEngine {
   private shot = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 500)   // the render camera (the document's active camera)
   private entries = new Map<string, Entry>()
   private camHelpers = new Map<string, THREE.Object3D>()
+  private camTargets = new Map<string, number[]>()                   // each camera's target as last synced (the turn keeps its distance)
   private selection = new THREE.BoxHelper(new THREE.Object3D(), 0xf0b040)
   private floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private ray = new THREE.Raycaster()
@@ -228,7 +230,7 @@ export class StageEngine {
     this.selectedCamId = id
     if (id) { this.endPosing(); this.selectedId = null; this.showPickers() }
     const h = id ? this.camHelpers.get(id) : undefined
-    if (h && this.gizmo.enabled && this.view === 'free') { this.gizmo.setMode('translate'); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(h) }
+    if (h && this.gizmo.enabled && this.view === 'free') { this.gizmo.setMode(this.tool === 'rotate' ? 'rotate' : 'translate'); this.gizmo.setSpace('world'); this.gizmo.showXYZE = true; this.gizmo.attach(h) }   // the author, 2026-10-22: the body turns under Rotate; scale moves
     else if (!this.selectedId && !this.posing) this.gizmo.detach()
     this.selection.visible = !!h && this.view === 'free'
     if (h) this.selection.setFromObject(h)
@@ -256,7 +258,21 @@ export class StageEngine {
     const o = this.gizmo.object as THREE.Group | undefined
     if (!o) return
     const camId = o.userData.cameraId as string | undefined
-    if (camId) { this.hooks.onCameraMoved?.(camId, [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4))); return }   // D119: a camera's body moved
+    if (camId) {                                                                                             // D119: a camera's body moved — or turned (the rotate tool)
+      if (this.gizmo.mode === 'rotate') {
+        const t = this.camTargets.get(camId) ?? [o.position.x, o.position.y, o.position.z - 1]
+        const dist = Math.max(0.05, Math.hypot(t[0] - o.position.x, t[1] - o.position.y, t[2] - o.position.z))
+        const target = new THREE.Vector3(0, 0, 1).applyQuaternion(o.quaternion).multiplyScalar(dist).add(o.position)
+        const ref = new THREE.Object3D(); ref.position.copy(o.position); ref.lookAt(target)                 // what sync would set with roll 0
+        const d = ref.quaternion.clone().invert().multiply(o.quaternion)                                   // what is left: a turn about the glyph's own +Z
+        let roll = -deg(2 * Math.atan2(d.z, d.w))
+        roll = ((roll + 540) % 360) - 180
+        this.hooks.onCameraTurned?.(camId, [target.x, target.y, target.z].map((v) => +v.toFixed(4)), +roll.toFixed(2))
+        return
+      }
+      this.hooks.onCameraMoved?.(camId, [o.position.x, o.position.y, o.position.z].map((v) => +v.toFixed(4)))
+      return
+    }
     const id = [...this.entries.entries()].find(([, e]) => e.holder === o)?.[0]
     if (!id) return
     const r = o.rotation
@@ -420,8 +436,12 @@ export class StageEngine {
     for (const c of doc.cameras) {
       let h = this.camHelpers.get(c.id)
       if (!h) { h = this.cameraGlyph(c.id); this.camHelpers.set(c.id, h); this.scene.add(h) }
-      if (!(this.gizmo.dragging && this.gizmo.object === h)) h.position.set(c.pos[0], c.pos[1], c.pos[2])   // D119: not under the hand that drags it
-      h.lookAt(c.target[0], c.target[1], c.target[2])
+      this.camTargets.set(c.id, c.target)
+      if (!(this.gizmo.dragging && this.gizmo.object === h)) {                                              // D119: not under the hand that drags or turns it
+        h.position.set(c.pos[0], c.pos[1], c.pos[2])
+        h.lookAt(c.target[0], c.target[1], c.target[2])
+        h.rotateZ(rad(-c.roll))                                                                            // the glyph looks down +Z, the camera down −Z: the roll turns the other way
+      }
       h.visible = this.view === 'free'
       ;(h.children[0] as THREE.Mesh).material = c.id === doc.active_camera ? this.camActiveMat : this.camMat
     }

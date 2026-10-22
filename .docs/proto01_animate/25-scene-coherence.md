@@ -93,6 +93,11 @@ check row here.
   a suite change drops the pick. The rotate tool: an object selected after a camera's body (translate whatever the tool, SC1) or after a
   joint (rotate, local) kept their gizmo mode — now the object takes the gizmo in the tool's mode every time.
 
+- **2026-10-22 19:21 — the follow-ups to notes 5 and 6** ("the pick button works — add a cancel when a right click or the escape button is pressed";
+  "camera still don't rotate"): Escape and a right-click end the pick (the right-click on a tile still opens every verb; the ✕ in the bar
+  stays the mouse placement). The camera's body takes the **rotate** gizmo under Rotate (translate under Move and Scale): a turn is a new
+  target at the old distance and the roll about it (`onCameraTurned` → `updateCamera {target, roll}`); the glyph shows the roll now.
+
 ## 4 · Checks for the author
 
 | Check | Your note |

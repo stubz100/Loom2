@@ -7834,3 +7834,17 @@ The author asked for a review of the state of things, then "record all this and 
   rating's stars on a rated tile (`.stars` sits in the same corner and took the click) — `.tile-pick` now stacks above and the stars step
   down 26 px while the button is there; the stage scenario read the gizmo's mode as `rotate` then `translate` as expected; the plane
   scenario's double-click ran through the pick unchanged. Then the full runs: e2e 50/50 full and 50/50 open; nothing else changed since 19:03 (Vitest 402 + 3 skipped, lint 75, build clean).
+
+## 2026-10-22 19:21 — The pick cancels on Escape or a right-click; the camera's body turns under Rotate (the author's follow-ups)
+
+- **The pick** (`Bin.tsx`): while one lasts a window keydown listener (capture) ends it on Escape; a right-click on the grid ends it, on a tile
+  too — the tile's verbs still open as a menu, so the right-click remains the long way. The ✕ in the bar stays as the mouse placement (D32).
+- **The camera** ("camera still don't rotate"): SC1 gave the camera's body the translate gizmo whatever the tool. Now `selectCamera` takes
+  the rotate gizmo under Rotate (Move and Scale keep translate); the glyph looks down its +Z (the lens cone sits on +z), so in
+  `commitGizmo` a turned glyph gives a **new target at the old distance** (`camTargets`, kept at sync) and the **roll** as what is left
+  about that axis against a fresh lookAt (`−deg(2·atan2(d.z, d.w))`, the sign flipped because the render camera looks down −Z);
+  `onCameraTurned → updateCamera {target, roll}` (a keyed camera takes it as a key, as a move). `sync` applies the roll to the glyph
+  (`rotateZ(−roll)`) and leaves the glyph alone while it is dragged or turned.
+- **Tests:** the set scenario starts the pick, ends it with Escape (the bar and the corner buttons go), starts it again, ends it with a
+  right-click that still lists the verb, starts it a third time and picks with the corner; the stage scenario reads the gizmo's mode as
+  `rotate` with the camera's body attached under Rotate, then the object's. Vitest 402 + 3 skipped, lint 75, typecheck clean; the e2e (the set and stage scenarios, then both variants' full runs) is owed again — the author's own Vite dev server holds 1420 and it is left alone; that server serves this working tree, so both changes are live in the app.

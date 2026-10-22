@@ -80,6 +80,12 @@ export function Bin() {
   const picked = (a: Asset): Verb | undefined => (pick ? verbs(a, suite).find((v) => v.id === pick.verb) : undefined)
   const PickIcon = pick ? command(pick.cmd)?.icon : undefined
   const endPick = () => useSession.getState().setUi({ pick: null })
+  useEffect(() => {                                                       // Escape ends the pick (the ✕ in the bar is its mouse placement, D32)
+    if (!pick) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); endPick() } }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [pick])
   return (
     <div className="bin">
       <nav className="bin-places" aria-label="Bin places">
@@ -100,7 +106,8 @@ export function Bin() {
             ? <span className="meta picking">picking for: {pick.label} <button type="button" className="quiet" aria-label="stop picking" title="Stop picking (the tiles' corner buttons go)" onClick={endPick}>✕</button></span>
             : <span className="meta">drag a tile where it is used · double-click: {suite === 'stage' ? 'an image plane / play' : suite === 'animate' ? 'start frame / play' : suite === 'edit' ? 'a layer' : 'a reference'}</span>}
         </div>
-        <div className="bin-grid" onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
+        <div className="bin-grid" onContextMenu={(e) => { if (pick) { e.preventDefault(); endPick() } }}                 // a right-click ends the pick (on a tile the verbs still open)
+          onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (
             <Tile key={a.id} a={a} size={TILE} fill caption="off" selected={selected === a.id} primary={selected === a.id} pinned={0}
               onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); showMenu(e, verbs(a, suite)) }}

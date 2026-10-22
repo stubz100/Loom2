@@ -808,7 +808,7 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     does not move, so the composition stays fresh) and a take on the Story shot the final was made for."""
     from ..compositions import CompositionStore
     from ..effectcraft import render_argv
-    from ..final_assembly import conform_24
+    from ..final_assembly import conform_24, mix_audio
     from ..finals import FinalStore
     from ..fsio import utc_now
     from ..trainer import _kill
@@ -864,7 +864,12 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
                                   start_asset_id=parents[0] if parents else "", beats=[], params={"recipe": recipe.model_dump(), "final_id": f.id, "render": stats},
                                   timings={"render_s": render_s})
     q.progress(job, "encoding the proxy")
-    rec = await asyncio.to_thread(clips.encode_proxy, rec)
+    timing = await asyncio.to_thread(cs.audio_timing, f, c)                                             # D118 (AE4b): the lines ride the proxy
+    mix = await asyncio.to_thread(mix_audio, timing, f.frames / float(f.rate or 16), tmp / "mix.wav") if timing else None
+    rec = await asyncio.to_thread(clips.encode_proxy, rec, audio=mix)
+    if mix is not None:
+        rec.audio_asset_id = timing[0]["asset_id"]
+        job.log_tail.append(f"{len(timing)} line{'s' if len(timing) != 1 else ''} mixed into the proxy")
     asset = await asyncio.to_thread(q.catalogue.ingest_file, q.ws.path / rec.proxy_path, kind="video", in_place=True, job_id=job.id, batch_id=job.batch_id,
                                     suite="stage", model_id="composition", seed=job.seed, prompt_text=f.name,
                                     params={"clip_id": rec.id, "final_id": f.id, "recipe": recipe.model_dump(), "render": stats},

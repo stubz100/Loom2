@@ -160,13 +160,25 @@ class Fake:
                     it["frameRate"] = float(p["frameRate"])
                 out.append({"item": it["id"], "frameRate": it.get("frameRate"), "frames": 0})
             return {"items": out}
+        if cid == "layer.select":                                        # D118 (AE4b): a selection the next edit.clear removes
+            self.sel_layers = [int(x) for x in p.get("layers") or []]
+            return self.sel_layers
+        if cid == "edit.clear":
+            self.edit()
+            c = self.comp(p.get("comp"))
+            sel = getattr(self, "sel_layers", [])
+            before = len(c["layers"])
+            c["layers"] = [l for l in c["layers"] if l["id"] not in sel]
+            self.sel_layers = []
+            return before - len(c["layers"])
         if cid == "layer.addItem":
             self.edit()
             c = self.comp(p.get("comp"))
             item = self.p["items"][str(p["item"])]
             i = self.nid()
+            t = float(p.get("time", 0.0))                                   # D118 (AE4b): `time` is the layer's In point (an audio line placed on the lanes)
             c["layers"].insert(0, {"id": i, "name": item["name"], "item": item["id"], "type": "AV", "label": "Lavender", "blendMode": "Normal", "trackMatte": None,
-                                   "parent": None, "in": 0.0, "out": c["duration"], "start": 0.0, "stretch": 100.0,
+                                   "parent": None, "in": t, "out": c["duration"], "start": t, "stretch": 100.0,
                                    "anchor": [c["width"] / 2, c["height"] / 2, 0.0], "position": [c["width"] / 2, c["height"] / 2, 0.0], "scale": [100.0, 100.0, 100.0],
                                    "rotation": 0.0, "opacity": 100.0, "switches": dict(SWITCHES), "masks": [], "effects": [], "keys": {}})
             return {"layer": i}

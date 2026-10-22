@@ -5,6 +5,7 @@
 // selected one brighter, its points draggable (one `mask.setVertex` each). The lanes under the transport are the layers' bars (AE2d). The
 // Before toggle shows the frame with every effect off (AE3).
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { api } from '../../api/client'
 import { CommandRow } from '../../frame/CommandButton'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
@@ -193,6 +194,7 @@ function Lanes({ rate, duration }: { rate: number; duration: number }) {
   const frame = useComposition((s) => s.frame)
   const keysOf = useComposition((s) => s.keysOf)
   const busy = useComposition((s) => s.busy)
+  const audioOf = useComposition((s) => s.audioOf)
   const track = useRef<HTMLDivElement>(null)
   const [ld, setLd] = useState<LaneDrag | null>(null)
   const pct = (t: number) => `${(Math.max(0, Math.min(duration, t)) / duration) * 100}%`
@@ -225,11 +227,12 @@ function Lanes({ rate, duration }: { rate: number; duration: number }) {
         const lin = ld?.id === l.id && (ld.mode === 'move' || ld.mode === 'in') ? l.in + d : l.in
         const lout = ld?.id === l.id && (ld.mode === 'move' || ld.mode === 'out') ? l.out + d : l.out
         const sel = selected === l.id
+        const audio = audioOf(l.id)                                            // D118 (AE4b): a line's bar shows its waveform
         return (
-          <div key={l.id} className={`lane${sel ? ' selected' : ''}`} data-lane={l.id} role="listitem" onClick={() => useComposition.getState().select(sel ? null : l.id)}>
-            <span className="lane-name" title={l.name}>{l.name}</span>
+          <div key={l.id} className={`lane${sel ? ' selected' : ''}${audio ? ' audio' : ''}`} data-lane={l.id} role="listitem" onClick={() => useComposition.getState().select(sel ? null : l.id)}>
+            <span className="lane-name" title={audio ? `${l.name} · ${audio.text}` : l.name}>{audio ? '🔊 ' : ''}{l.name}</span>
             <div className="lane-track" ref={i === 0 ? track : undefined}>
-              <div className={`bar${ld?.id === l.id ? ' dragging' : ''}`} style={{ left: pct(lin), width: `calc(${pct(lout)} - ${pct(lin)})` }}
+              <div className={`bar${ld?.id === l.id ? ' dragging' : ''}`} style={{ left: pct(lin), width: `calc(${pct(lout)} - ${pct(lin)})`, ...(audio ? { backgroundImage: `url(${api.thumbUrl(audio.asset_id, 256)})` } : {}) }}
                 title={`${l.name}: ${lin.toFixed(2)}–${lout.toFixed(2)} s · drag to move, the ends to trim, Alt-drag to slip`} onPointerDown={(e) => start(e, l, 'move')}>
                 <span className="h h-in" onPointerDown={(e) => start(e, l, 'in')} />
                 <span className="h h-out" onPointerDown={(e) => start(e, l, 'out')} />

@@ -816,6 +816,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Audio Add
+         * @description D118 (AE4b): a line attached as an audio layer of the composition at `t`, bound to the character's layer.
+         */
+        post: operations["composition_audio_add_finals__fid__composition_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/composition/audio/{layer}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Composition Audio Remove
+         * @description D118 (AE4b): the audio layer taken out of the composition.
+         */
+        delete: operations["composition_audio_remove_finals__fid__composition_audio__layer__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/composition/batch": {
         parameters: {
             query?: never;
@@ -1178,6 +1218,26 @@ export interface paths {
          * @description A layer's pass (or own) frame as PNG — the panel's previews.
          */
         get: operations["final_frame_finals__fid__layers__lid___name___n__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Final Lines
+         * @description D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs.
+         */
+        get: operations["final_lines_finals__fid__lines_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3487,6 +3547,53 @@ export interface components {
             /** W */
             w: number | null;
         };
+        /** AudioBody */
+        AudioBody: {
+            /** Asset Id */
+            asset_id: string;
+            /** Index */
+            index?: number | null;
+            /** Layer Id */
+            layer_id?: string | null;
+            /** Node Id */
+            node_id?: string | null;
+            /**
+             * T
+             * @default 0
+             */
+            t?: number;
+        };
+        /**
+         * AudioLayer
+         * @description D118 (AE4b): a spoken line as an audio layer of the composition, bound to the character's layer; its timing (in, out, start) lives on
+         *     the layer itself, placed on the lanes like a picture layer. `file` is the WAV copied under the final's folder (the project moves as one).
+         */
+        AudioLayer: {
+            /** Asset Id */
+            asset_id: string;
+            /** Duration S */
+            duration_s: number | null;
+            /**
+             * File
+             * @default
+             */
+            file: string;
+            /** Final Layer */
+            final_layer: string | null;
+            /** Index */
+            index: number | null;
+            /** Layer */
+            layer: number;
+            /** Node Id */
+            node_id: string | null;
+            /** Speaker */
+            speaker: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
         /**
          * AudioRef
          * @description D88 XL (experimental): the spoken line a lip-sync clip follows (an `audio` asset, CN2).
@@ -3983,6 +4090,8 @@ export interface components {
         Composition: {
             /** Assembled At */
             assembled_at: string | null;
+            /** Audio */
+            audio: components["schemas"]["AudioLayer"][];
             /** Clip Id */
             clip_id: string | null;
             /**
@@ -5029,6 +5138,36 @@ export interface components {
             profile_id?: string | null;
             /** Version */
             version?: string | null;
+        };
+        /**
+         * FinalLine
+         * @description D118 (AE4b): a voiced line of the shot's Dialogue nodes, with the final's layer its speaker's character performs (None: none).
+         */
+        FinalLine: {
+            /** Audio Asset Id */
+            audio_asset_id: string;
+            /** Duration S */
+            duration_s?: number | null;
+            /** Index */
+            index: number;
+            /** Layer Id */
+            layer_id?: string | null;
+            /** Node Id */
+            node_id: string;
+            /** Speaker */
+            speaker?: string | null;
+            /** Speaker Name */
+            speaker_name?: string | null;
+            /**
+             * Text
+             * @default
+             */
+            text?: string;
+        };
+        /** FinalLines */
+        FinalLines: {
+            /** Items */
+            items: components["schemas"]["FinalLine"][];
         };
         /** FinalList */
         FinalList: {
@@ -12044,6 +12183,73 @@ export interface operations {
             };
         };
     };
+    composition_audio_add_finals__fid__composition_audio_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AudioBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    composition_audio_remove_finals__fid__composition_audio__layer__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                layer: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     composition_batch_finals__fid__composition_batch_post: {
         parameters: {
             query?: never;
@@ -12653,6 +12859,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_lines_finals__fid__lines_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalLines"];
                 };
             };
             /** @description Validation Error */

@@ -239,3 +239,8 @@
 .comp-passes .take { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 4px; border-radius: 4px; }
 .comp-passes .take.shown { background: var(--overlay); }
 .comp-passes .take .name { flex: 1; }
+/* D118 (AE4b): a line as an audio layer — its row and its lane with the waveform */
+.comp-layer-list li.audio { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.comp-layer-list li.audio .name { font-style: italic; }
+.final-lanes .lane.audio .bar { background-color: color-mix(in srgb, var(--accent) 22%, var(--bg3)); background-size: 100% 100%; background-repeat: no-repeat; opacity: .95; }
+.final-lanes .lane.audio .lane-name { color: var(--fg2); }

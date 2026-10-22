@@ -985,6 +985,148 @@
         "title": "AssetRecord",
         "type": "object"
       },
+      "AudioBody": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "layer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer Id"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "t": {
+            "default": 0.0,
+            "title": "T",
+            "type": "number"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "AudioBody",
+        "type": "object"
+      },
+      "AudioLayer": {
+        "description": "D118 (AE4b): a spoken line as an audio layer of the composition, bound to the character's layer; its timing (in, out, start) lives on\nthe layer itself, placed on the lanes like a picture layer. `file` is the WAV copied under the final's folder (the project moves as one).",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "file": {
+            "default": "",
+            "title": "File",
+            "type": "string"
+          },
+          "final_layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Layer"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "integer"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "final_layer",
+          "asset_id",
+          "node_id",
+          "index",
+          "speaker",
+          "text",
+          "duration_s",
+          "file"
+        ],
+        "title": "AudioLayer",
+        "type": "object"
+      },
       "AudioRef": {
         "description": "D88 XL (experimental): the spoken line a lip-sync clip follows (an `audio` asset, CN2).",
         "properties": {
@@ -2271,6 +2413,13 @@
             ],
             "title": "Assembled At"
           },
+          "audio": {
+            "items": {
+              "$ref": "#/components/schemas/AudioLayer"
+            },
+            "title": "Audio",
+            "type": "array"
+          },
           "clip_id": {
             "anyOf": [
               {
@@ -2386,6 +2535,7 @@
           "stack",
           "layers",
           "sources",
+          "audio",
           "clip_id",
           "rendered_revision",
           "render_job_id",
@@ -4911,6 +5061,95 @@
           "passes"
         ],
         "title": "FinalLayerIn",
+        "type": "object"
+      },
+      "FinalLine": {
+        "description": "D118 (AE4b): a voiced line of the shot's Dialogue nodes, with the final's layer its speaker's character performs (None: none).",
+        "properties": {
+          "audio_asset_id": {
+            "title": "Audio Asset Id",
+            "type": "string"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "layer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer Id"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "speaker_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Name"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "index",
+          "audio_asset_id"
+        ],
+        "title": "FinalLine",
+        "type": "object"
+      },
+      "FinalLines": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FinalLine"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FinalLines",
         "type": "object"
       },
       "FinalList": {
@@ -20831,6 +21070,111 @@
         ]
       }
     },
+    "/finals/{fid}/composition/audio": {
+      "post": {
+        "description": "D118 (AE4b): a line attached as an audio layer of the composition at `t`, bound to the character's layer.",
+        "operationId": "composition_audio_add_finals__fid__composition_audio_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudioBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Audio Add",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/composition/audio/{layer}": {
+      "delete": {
+        "description": "D118 (AE4b): the audio layer taken out of the composition.",
+        "operationId": "composition_audio_remove_finals__fid__composition_audio__layer__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "title": "Layer",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Audio Remove",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/composition/batch": {
       "post": {
         "description": "Several engine commands as one edit (one save, one revision; the first refusal stops it, 422 with the engine's message).",
@@ -21882,6 +22226,49 @@
           }
         },
         "summary": "Final Frame",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/lines": {
+      "get": {
+        "description": "D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs.",
+        "operationId": "final_lines_finals__fid__lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalLines"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Lines",
         "tags": [
           "finals"
         ]

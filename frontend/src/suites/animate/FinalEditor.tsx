@@ -199,10 +199,38 @@ function LayerEditor({ l }: { l: CompLayer }) {
   )
 }
 
+/** D118 (AE4b): the shot's voiced lines as a picker — a menu at the pointer; a line attaches at the playhead, bound to its speaker's layer. */
+async function pickLine(at: { clientX: number; clientY: number }): Promise<void> {
+  const lines = await cp().loadLines()
+  const items: MenuItem[] = lines.length
+    ? lines.map((ln) => ({ label: `${ln.speaker_name ?? 'someone'}: "${ln.text.length > 40 ? `${ln.text.slice(0, 40)}…` : ln.text}"${ln.duration_s ? ` · ${ln.duration_s.toFixed(1)} s` : ''}${ln.layer_id ? '' : ' · no layer of theirs here'}`,
+        run: () => { void cp().attachLine(ln) } }))
+    : [{ label: 'No voiced line in this shot — voice one in Story · Flow (🎙)', disabled: true, run: () => {} }]
+  showMenu(at, items)
+}
+
+/** D118 (AE4b): an audio layer's row — the line, where it plays, remove; no blend, matte or parent. */
+function AudioRow({ l, a }: { l: CompLayer; a: NonNullable<ReturnType<typeof cp>['comp']>['audio'][number] }) {
+  const selected = useComposition((s) => s.selected === l.id)
+  const busy = useComposition((s) => s.busy)
+  const menu = (): MenuItem[] => [{ cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, sep, { label: 'Remove the line', danger: true, run: () => { void cp().removeAudio(l.id) } }]
+  return (
+    <li className={`audio${selected ? ' selected' : ''}`} data-layer={l.id} data-audio={a.asset_id} data-index={l.index} onClick={() => cp().select(selected ? null : l.id)}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); cp().select(l.id); showMenu(e, menu()) }}>
+      <span className="sw on" title="A spoken line: it plays where its bar sits on the lanes">🔊</span>
+      <span className="name" title={`${a.text || l.name} · plays ${l.in.toFixed(2)}–${l.out.toFixed(2)} s`}>{l.name}</span>
+      <span className="hint">{l.in.toFixed(2)}–{l.out.toFixed(2)} s</span>
+      <button type="button" className="quiet danger" title="Remove the line from the composition" disabled={busy} onClick={(e) => { e.stopPropagation(); void cp().removeAudio(l.id) }}>×</button>
+    </li>
+  )
+}
+
 function LayerRow({ l }: { l: CompLayer }) {
   const selected = useComposition((s) => s.selected === l.id)
   const layers = useComposition((s) => s.layers)
   const busy = useComposition((s) => s.busy)
+  const audio = useComposition((s) => s.audioOf(l.id))
+  if (audio) return <AudioRow l={l} a={audio} />
   const sw = l.switches
   const on = (k: string) => !!sw[k]
   const others = layers.filter((o) => o.id !== l.id)
@@ -255,7 +283,9 @@ export function LayersSection() {
   return (
     <div className="comp-layers">
       <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock', 'gap', 'anim.final.trimIn', 'anim.final.trimOut']} />
-        <Help text="Top to bottom as composited. Click a row to open its editor under it (Properties · Masks · Effects); click again to fold it. A row's right-click menu orders it." /></div>
+        <button type="button" className="quiet" data-attach-line title="Attach a voiced line of this shot as an audio layer at the playhead (D118): move it on its lane, trim its ends; the render carries it"
+          onClick={(e) => { const at = { clientX: e.clientX, clientY: e.clientY }; void pickLine(at) }}>Attach a line…</button>
+        <Help text="Top to bottom as composited. Click a row to open its editor under it (Properties · Masks · Effects · Passes); click again to fold it. A row's right-click menu orders it. A line attached here is an audio layer: it plays where its bar sits on the lanes, and the lip-sync pass reads it." /></div>
       <ul className="comp-layer-list">{layers.map((l) => <LayerRow key={l.id} l={l} />)}</ul>
     </div>
   )

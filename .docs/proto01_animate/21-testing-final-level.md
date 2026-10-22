@@ -81,6 +81,11 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   the repaint you saw in E24.
 - **Check:** is the take-as-source model clear — one layer, several versions, one shown? Should a pass run on the shown take (a pass over
   a pass) or always on the performed frames (as it does now: the shown source feeds the next pass)?
+- **A line on the lanes** (D118): in the Layers toolbar, **Attach a line…** lists the voiced lines of this shot's Dialogue nodes (voice one in
+  Story · Flow with 🎙 first; this rig's shot has none unless you add one). A line attaches at the playhead as an audio layer bound to its
+  speaker's layer: a 🔊 row in Layers and a bar with its waveform on the lanes. Drag the bar to move where the speech starts, its ends to
+  trim, Alt-drag to slip; **Render the finished shot** carries the lines in the clip. × on the row removes it.
+- **Check:** is a line as a layer the right feel — and is the waveform on the bar enough to place it against the picture?
 
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
@@ -116,6 +121,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | The ? everywhere instead of text: right? | |
 | The Performance tree and the foot's strip: right place for the verbs? | |
 | Passes: the take-as-source model clear? A pass over a pass, or always over the performed frames? | |
+| A line as an audio layer on the lanes: the right feel? The waveform enough to place it? | |
 
 ## The first look (2026-10-21) and what it changed
 

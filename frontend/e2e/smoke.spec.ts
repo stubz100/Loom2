@@ -985,6 +985,11 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await settled()
   await editor.locator('.take-list li[data-take^="take_"] button[title^="Drop"]').click()
   await expect(editor.locator('.take-list li[data-take^="take_"]')).toHaveCount(0)
+  // D118 (AE4b): the line picker — this shot has no voiced line, so the menu says so
+  await page.locator('#anim-sec-layers button[data-attach-line]').click()
+  await expect(page.locator('.ctx-menu')).toContainText('No voiced line in this shot')
+  await page.locator('#anim-sec-layers button[data-attach-line]').click()                // a second press on the opener closes it
+  await expect(page.locator('.ctx-menu')).toHaveCount(0)
   await page.locator('.final-section [data-render]').click()
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)

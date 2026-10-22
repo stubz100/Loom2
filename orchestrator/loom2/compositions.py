@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,21 @@ class CompositionLayer(BaseModel):
     offset_px: list[float] = Field(default_factory=lambda: [0.0, 0.0])   # D107: her contact offset, the layer's position from the centre
 
 
+class AudioLayer(BaseModel):
+    """D118 (AE4b): a spoken line as an audio layer of the composition, bound to the character's layer; its timing (in, out, start) lives on
+    the layer itself, placed on the lanes like a picture layer. `file` is the WAV copied under the final's folder (the project moves as one)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    layer: int                                     # EffectCraft's layer id
+    final_layer: str | None = None                 # the final's layer the line belongs to (the speaker's character), None when no layer matched
+    asset_id: str                                  # the Catalogue's audio asset (CN2)
+    node_id: str | None = None                     # the Flow's Dialogue node and the line's index, when it came from one
+    index: int | None = None
+    speaker: str | None = None                     # the profile
+    text: str = ""
+    duration_s: float | None = None
+    file: str = ""                                 # audio/<asset>.wav under the final's folder
+
+
 class Composition(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = COMPOSITION_SCHEMA_VERSION
@@ -51,6 +67,7 @@ class Composition(BaseModel):
     stack: list[str] = Field(default_factory=list) # the actors far to near (the assembly's most common order)
     layers: list[CompositionLayer] = Field(default_factory=list)
     sources: dict[str, str | None] = Field(default_factory=dict)   # D118: per final layer, the take its footage shows (None: the original)
+    audio: list[AudioLayer] = Field(default_factory=list)          # D118 (AE4b): the lines as audio layers
     clip_id: str | None = None                     # the finished shot: the last `comp_render` (the final's clip too)
     rendered_revision: int | None = None           # the revision that render saw (edits since: the clip is behind)
     render_job_id: str | None = None
@@ -239,6 +256,62 @@ class CompositionStore:
         c.stale = False
         self.save(c)
         return c
+
+    # ---- D118 (AE4b): the line as an audio layer -------------------------------------------------
+    def add_audio(self, f: Final, ec: EffectCraft, src: Path, meta: dict[str, Any], t: float, name: str) -> Composition:
+        """The line's WAV copied under the final's folder, imported and added as a layer at `t` (its In point), named for the character and
+        the line, recorded with what it is; one save."""
+        c = self._open(f, ec)
+        d = self.folder(f.id) / "audio"
+        d.mkdir(parents=True, exist_ok=True)
+        dst = d / f"{meta['asset_id']}{src.suffix.lower() or '.wav'}"
+        if not dst.is_file():
+            shutil.copyfile(src, dst)
+        r = ec.command("file.import", {"paths": [str(dst)]})
+        if r.get("errors") or not r.get("items"):
+            raise ValueError(f"import {dst.name}: {'; '.join(map(str, r.get('errors') or ['no item']))}")
+        lid = int(ec.command("layer.addItem", {"item": int(r["items"][0]), "time": float(t)})["layer"])
+        ec.command("layer.rename", {"layer": lid, "name": name})
+        c.audio.append(AudioLayer(layer=lid, file=f"audio/{dst.name}", **{k: v for k, v in meta.items() if k in ("final_layer", "asset_id", "node_id", "index", "speaker", "text", "duration_s")}))
+        return self._edited(f, ec, c)
+
+    def remove_audio(self, f: Final, ec: EffectCraft, layer: int) -> Composition:
+        """The audio layer taken out of the composition (selected, cleared) and off the record; the WAV stays for another attach."""
+        c = self._open(f, ec)
+        if not any(a.layer == layer for a in c.audio):
+            raise KeyError(f"the composition has no audio layer {layer}")
+        ec.command("layer.select", {"layers": [layer]})
+        ec.command("edit.clear", {})
+        c.audio = [a for a in c.audio if a.layer != layer]
+        return self._edited(f, ec, c)
+
+    def audio_timing(self, f: Final, c: Composition) -> list[dict[str, Any]]:
+        """Every audio layer with its In, Out and start in seconds, read from the project file (the engine's ticks, or the fake's seconds):
+        the samples from `in - start` to `out - start` of the file play at `in`…`out` of the shot."""
+        try:
+            pj = read_json(self.ecproj(f.id))
+        except (OSError, ValueError):
+            return []
+        secs = max(1e-6, f.frames / float(f.rate or 16))
+        out: list[dict[str, Any]] = []
+        comp_layers: dict[int, dict] = {}
+        scale = 1.0
+        for it in (pj.get("items") or {}).values():
+            kd = it.get("kind") or {}
+            if kd.get("type") == "Comp":
+                scale = float(kd.get("duration") or 0) / secs or 1.0            # ticks per second
+                for l in kd.get("layers") or []:
+                    comp_layers[int(l["id"])] = {"in": l.get("in_point", 0) / scale, "out": l.get("out_point", 0) / scale, "start": l.get("start_time", 0) / scale}
+        if not comp_layers:
+            for comp in (pj.get("comps") or {}).values():
+                for l in comp.get("layers") or []:
+                    comp_layers[int(l["id"])] = {"in": float(l.get("in", 0)), "out": float(l.get("out", 0)), "start": float(l.get("start", 0))}
+        for a in c.audio:
+            tl = comp_layers.get(a.layer)
+            if tl is None:
+                continue
+            out.append({**a.model_dump(), **tl, "path": str(self.folder(f.id) / a.file)})
+        return out
 
     def sync_sources(self, f: Final, ec: EffectCraft) -> Composition:
         """Every layer whose source moved on the final (a pass landed, a take chosen) swapped in the composition."""

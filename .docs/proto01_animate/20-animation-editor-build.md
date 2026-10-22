@@ -150,3 +150,6 @@ Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; th
 - **2026-10-22 (journal 2026-10-22 08:37):** AE4a built — the `layer_pass` recipe (Clean up on Wan 2.2's low-noise expert, Creative on LTX-2.3 locked to
   the layer's depth; E24's graphs in `engine/graphs.py`), the take recorded on the layer as its source, the composition's footage swapped
   by `file.replaceFootage`, the Passes part under the layer's row. Next: AE4b, the line as an audio layer.
+- **2026-10-22 (journal 2026-10-22 09:11):** AE4b built — the shot's voiced lines listed (`GET /finals/{fid}/lines`), a line attached at the playhead as an
+  audio layer bound to its speaker's layer (the WAV copied under the final, `file.import` + `layer.addItem`), its row and its lane with the
+  waveform, the lanes' move / trim / slip as for a picture layer, the render mixing the lines into the proxy. Next: AE4c, the face pass.

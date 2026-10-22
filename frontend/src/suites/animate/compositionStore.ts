@@ -32,6 +32,9 @@ export type EditorTab = 'props' | 'masks' | 'effects' | 'passes'
 /** D118 (AE4a): a pass on a layer — the preset and its strength; Face and Lip-sync come with AE4c. */
 export type PassPreset = 'cleanup' | 'creative'
 export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string }
+/** D118 (AE4b): a voiced line of the shot, as GET /finals/{fid}/lines reports it. */
+export interface FinalLine { node_id: string; index: number; speaker: string | null; speaker_name: string | null; text: string; audio_asset_id: string; duration_s: number | null; layer_id: string | null }
+export type AudioLayer = Composition['audio'][number]
 export const MASK_MODES = ['Add', 'Subtract', 'Intersect', 'Lighten', 'Darken', 'Difference', 'None']
 interface TreeNode { path?: string; name?: string; uid?: number; type?: string; value?: unknown; mask?: { inverted?: boolean; mode?: string }; children?: TreeNode[] }
 /** The masks of a layer's property tree (`masks/mask`, `masks/mask#2` …): uid, name, feather (one number: the x), opacity, expansion, mode, inverted. */
@@ -168,6 +171,14 @@ interface CompState {
   dropTake: (take: string) => Promise<boolean>
   /** Every layer whose source moved on the final swapped in the composition (called when a pass's job lands). */
   syncSources: () => Promise<void>
+  // ---- D118 (AE4b): the line as an audio layer ----
+  /** The audio layer behind an engine layer id, when it is one. */
+  audioOf: (layer: number) => AudioLayer | null
+  /** The shot's voiced lines (GET /finals/{fid}/lines). */
+  loadLines: () => Promise<FinalLine[]>
+  /** A line attached at the playhead as an audio layer bound to its speaker's layer. */
+  attachLine: (line: FinalLine) => Promise<boolean>
+  removeAudio: (layer: number) => Promise<boolean>
   setMaskField: (uid: number, field: 'feather' | 'opacity' | 'expansion', value: number) => Promise<boolean>
   setMaskMode: (uid: number, mode: string) => Promise<boolean>
   invertMask: (uid: number, value: boolean) => Promise<boolean>
@@ -426,6 +437,39 @@ export const useComposition = create<CompState>((set, get) => {
       try {
         const r = await http.DELETE('/finals/{fid}/layers/{lid}/takes/{take}', { params: { path: { fid: s.finalId, lid, take } } })
         if (r.error) { useSession.getState().toast(`Take: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    // ---- D118 (AE4b): the line as an audio layer ----
+    audioOf: (layer) => get().comp?.audio.find((a) => a.layer === layer) ?? null,
+    loadLines: async () => {
+      const fid = get().finalId
+      if (!fid) return []
+      const r = await http.GET('/finals/{fid}/lines', { params: { path: { fid } } })
+      return r.error ? [] : ((r.data as { items: FinalLine[] }).items ?? [])
+    },
+    attachLine: async (line) => {
+      const s = get()
+      if (!s.finalId || !s.final) return false
+      set({ busy: true })
+      try {
+        const r = await http.POST('/finals/{fid}/composition/audio', { params: { path: { fid: s.finalId } },
+          body: { asset_id: line.audio_asset_id, layer_id: line.layer_id, node_id: line.node_id, index: line.index, t: s.frame / s.final.rate } })
+        if (r.error) { useSession.getState().toast(`Line: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        useSession.getState().toast(`${line.speaker_name ?? 'The line'} attached at the playhead — move it on its lane`, 'success')
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    removeAudio: async (layer) => {
+      const s = get()
+      if (!s.finalId) return false
+      set({ busy: true })
+      try {
+        const r = await http.DELETE('/finals/{fid}/composition/audio/{layer}', { params: { path: { fid: s.finalId, layer } } })
+        if (r.error) { useSession.getState().toast(`Line: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        if (s.selected === layer) set({ selected: null })
         await edited()
         return true
       } finally { set({ busy: false }) }

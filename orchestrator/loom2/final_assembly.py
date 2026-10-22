@@ -113,6 +113,44 @@ def check_ready(store: FinalStore, f: Final) -> list[str]:
     return out
 
 
+def mix_audio(timing: list[dict[str, Any]], seconds: float, out: Path) -> Path | None:
+    """D118 (AE4b): the composition's audio layers mixed into one WAV of the shot's length — each line's samples from `in - start` to
+    `out - start` placed at `in` (numpy; a rate that differs from the first line's is resampled linearly). None when no line plays."""
+    import soundfile as sf
+    tracks = []
+    for a in timing:
+        p = Path(a["path"])
+        if not p.is_file() or a["out"] <= a["in"]:
+            continue
+        data, sr = sf.read(str(p), dtype="float32", always_2d=True)
+        tracks.append((a, data, sr))
+    if not tracks:
+        return None
+    sr = tracks[0][2]
+    n = int(round(seconds * sr))
+    mix = np.zeros((n, 2), dtype=np.float32)
+    for a, data, rate in tracks:
+        if data.shape[1] == 1:
+            data = np.repeat(data, 2, axis=1)
+        if rate != sr:
+            m = int(round(len(data) * sr / rate))
+            xs = np.linspace(0, len(data) - 1, m)
+            data = np.stack([np.interp(xs, np.arange(len(data)), data[:, k]) for k in range(2)], axis=1).astype(np.float32)
+        s0 = max(0, int(round((a["in"] - a["start"]) * sr)))
+        s1 = min(len(data), int(round((a["out"] - a["start"]) * sr)))
+        at = int(round(a["in"] * sr))
+        if s1 <= s0 or at >= n:
+            continue
+        seg = data[s0:s1][: max(0, n - at)]
+        mix[at:at + len(seg)] += seg
+    peak = float(np.abs(mix).max()) if n else 0.0
+    if peak > 0.99:
+        mix *= 0.99 / peak
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(out), mix, sr)
+    return out
+
+
 def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, comp_dir: Path | None = None) -> dict[str, Any]:
     """Composite the final's layers into `out_dir/NNNN.png`; returns what it did (offsets, occlusions, the stack order, time).
 

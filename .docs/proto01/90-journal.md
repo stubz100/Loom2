@@ -7523,3 +7523,29 @@ The author asked for a review of the state of things, then "record all this and 
 - Gotchas: `get_project` lists items without paths — the project file has them (`items[*].kind.path`, the comp's `layers[*].source.item`;
   the fake's flat `comps[*].layers[*].item`); the test rig's `_tree` fakes a fixed roster — a new model's weights are written in the test;
   a replaced sequence is interpreted at 30 fps unless told the rate.
+
+## 2026-10-22 09:11 — AE4b built: the line as an audio layer (D118) — the shot's voiced lines, attached at the playhead and bound to the speaker's layer, moved on the lanes, mixed into the render
+
+- **The composition record** gains `audio: [AudioLayer {layer, final_layer, asset_id, node_id, index, speaker, text, duration_s, file}]`;
+  `add_audio` copies the line's WAV under the final's folder (`audio/<asset>.wav`: the project moves as one — EffectCraft's items keep
+  paths relative only under the project's root), `file.import` → `layer.addItem {item, time}` (the In point; the layer's start follows)
+  → `layer.rename` ("Mara · Hello there"); `remove_audio` = `layer.select` + `edit.clear` (the engine has no layer.delete);
+  `audio_timing` reads every audio layer's In / Out / start from the project file (the engine's ticks, scaled by the comp's duration
+  against the shot's length; the fake's seconds). **The render** (`run_comp_render`) mixes the lines into one WAV of the shot's length —
+  each line's samples from `in − start` to `out − start` placed at `in`, a differing rate resampled linearly, the peak held under 0.99 —
+  and the proxy carries it (`encode_proxy(audio=…)`, D88's path); the clip records the first line's asset.
+- **Routes:** `GET /finals/{fid}/lines` (the Dialogue nodes bound to the final's Story shot, their voiced lines with the speaker's name
+  and the final layer that performs the speaker's character), `POST /finals/{fid}/composition/audio {asset_id, layer_id, node_id, index,
+  t}`, `DELETE …/composition/audio/{layer}`.
+- **The UI:** *Attach a line…* in the Layers toolbar opens the lines as a menu at the pointer (speaker: "text" · seconds; "no layer of
+  theirs here" when the speaker's character has no layer; a disabled line when the shot has no voiced line); the line attaches at the
+  playhead. An audio layer's row is a 🔊 row (the line, where it plays, ×; trim in / out in its menu); its lane carries the waveform
+  (the audio asset's thumbnail) on the bar, moved / trimmed / slipped like a picture layer. The engine answers `layer.timing` on it; slip
+  reports 0 (no footage to slide: the WAV starts at the layer's start).
+- **Fakes and tests:** the fake honours `layer.addItem {time}` as the In point and takes `layer.select` + `edit.clear`;
+  `test_audio_layer_ae4b` adds a line, reads its timing back, moves it by the lanes' command, mixes it (silence before its In, sound
+  after), renders through the fake CLI and finds the proxy's audio stream, removes it; the routes test lists the lines of a Dialogue
+  node bound to the final's shot with the speaker's layer matched, and refuses a non-audio asset. The e2e final-shot scenario opens the
+  picker and reads its empty state. Offline 485 full and 485 open, settings audit 265 fields / 0 problems (12 allowed with a reason), agents_check and model_literals_check clean, e2e 49/49 full and open (one open run failed once in the final-shot scenario — the tail-only log kept no detail; green alone and on a full rerun), Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4b_rig.py): E29b's English line ingested as an audio asset of the PS5 project, attached to Mara's layer at 1.0 s (In 1.0, Out 5.81), moved to 1.5 s by the lanes' command, the shot rendered in 6 s (81 frames in 2.0 s, conformed to 121 at 24 fps, "1 line mixed into the proxy") with the line in the proxy's audio stream (5.04 s) and the clip's audio_asset_id set, the line removed (rev 59, no audio) — through the app on the real engine (effectcraft-cli on the CPU, RIFE).
+- Gotchas: `create_node` keeps the content fields only — a node's bound shot is set by bind or on the record; the fake's `layer.addItem`
+  ignored `time` until now (every layer at 0).

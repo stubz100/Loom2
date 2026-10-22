@@ -302,6 +302,30 @@ class FinalAndComposition(BaseModel):
     composition: Composition | None = None
 
 
+class FinalLine(BaseModel):
+    """D118 (AE4b): a voiced line of the shot's Dialogue nodes, with the final's layer its speaker's character performs (None: none)."""
+    node_id: str
+    index: int
+    speaker: str | None = None
+    speaker_name: str | None = None
+    text: str = ""
+    audio_asset_id: str
+    duration_s: float | None = None
+    layer_id: str | None = None
+
+
+class FinalLines(BaseModel):
+    items: list[FinalLine]
+
+
+class AudioBody(BaseModel):
+    asset_id: str                                  # the line's audio asset
+    layer_id: str | None = None                    # the final's layer the line belongs to
+    node_id: str | None = None
+    index: int | None = None
+    t: float = 0.0                                 # where the line starts in the shot (seconds)
+
+
 class JobQueued(BaseModel):
     job_id: str
 
@@ -647,6 +671,78 @@ async def composition_mask_from_content(svc: Svc, fid: str, lid: str, body: Mask
     except EffectCraftError as e:
         raise _ec_error(e)
     return {"result": result, "composition": c.model_dump()}
+
+
+@router.get("/finals/{fid}/lines", response_model=FinalLines)
+async def final_lines(svc: Svc, fid: str):
+    """D118 (AE4b): the voiced lines of the Dialogue nodes bound to the final's Story shot, each with the layer its speaker performs."""
+    from ..story import StoryStore
+    ws, cat, _ = svc.require_project()
+    f = await asyncio.to_thread(FinalStore(ws).get, fid)
+    if f is None:
+        raise HTTPException(404, "final not found")
+    if not f.shot_id:
+        return {"items": []}
+    store = StoryStore(ws)
+    nodes = await asyncio.to_thread(store.flow_nodes)
+    items = []
+    for n in sorted(nodes.values(), key=lambda x: x.id):
+        if n.type != "dialogue" or n.shot_id != f.shot_id:
+            continue
+        for i, ln in enumerate(n.lines):
+            if not ln.audio_asset_id:
+                continue
+            a = await asyncio.to_thread(cat.get, ln.audio_asset_id)
+            p = await asyncio.to_thread(store.profile, ln.speaker) if ln.speaker else None
+            layer = next((x.id for x in f.layers if x.kind == "figure" and ln.speaker and x.profile_id == ln.speaker), None)
+            items.append({"node_id": n.id, "index": i, "speaker": ln.speaker, "speaker_name": p.name if p else None, "text": ln.text, "audio_asset_id": ln.audio_asset_id,
+                          "duration_s": a.duration_s if a else None, "layer_id": layer})
+    return {"items": items}
+
+
+@router.post("/finals/{fid}/composition/audio", response_model=Composition)
+async def composition_audio_add(svc: Svc, fid: str, body: AudioBody):
+    """D118 (AE4b): a line attached as an audio layer of the composition at `t`, bound to the character's layer."""
+    from ..story import StoryStore
+    cs, f = await _final_for_composition(svc, fid)
+    _, cat, _ = svc.require_project()
+    a = await asyncio.to_thread(cat.get, body.asset_id)
+    if a is None or a.kind != "audio":
+        raise HTTPException(422, "the asset is not an audio asset")
+    if body.layer_id is not None and not any(x.id == body.layer_id for x in f.layers):
+        raise HTTPException(404, f"the final has no layer {body.layer_id}")
+    text, speaker, speaker_name = "", None, None
+    if body.node_id is not None:
+        n = await asyncio.to_thread(StoryStore(svc.ws).flow_node, body.node_id)
+        if n is not None and body.index is not None and 0 <= body.index < len(n.lines):
+            text, speaker = n.lines[body.index].text, n.lines[body.index].speaker
+            p = await asyncio.to_thread(StoryStore(svc.ws).profile, speaker) if speaker else None
+            speaker_name = p.name if p else None
+    who = speaker_name or next((x.name for x in f.layers if x.id == body.layer_id), None) or "line"
+    name = f"{who} · {(text or a.prompt_text or 'line')[:28]}"
+    meta = {"final_layer": body.layer_id, "asset_id": body.asset_id, "node_id": body.node_id, "index": body.index, "speaker": speaker, "text": text, "duration_s": a.duration_s}
+    try:
+        c = await asyncio.to_thread(cs.add_audio, f, svc.effectcraft, cat.abs_path(a), meta, body.t, name)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return c.model_dump()
+
+
+@router.delete("/finals/{fid}/composition/audio/{layer}", response_model=Composition)
+async def composition_audio_remove(svc: Svc, fid: str, layer: int):
+    """D118 (AE4b): the audio layer taken out of the composition."""
+    cs, f = await _final_for_composition(svc, fid)
+    try:
+        c = await asyncio.to_thread(cs.remove_audio, f, svc.effectcraft, layer)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return c.model_dump()
 
 
 @router.post("/finals/{fid}/composition/sync", response_model=Composition)

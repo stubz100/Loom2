@@ -900,6 +900,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   // AE2c: a rectangle mask drawn on the frame with the tool, its outline over the frame (UX9 U3); AE2d: the layer's out trimmed to the playhead, the lanes
   await editor.locator('.segmented button', { hasText: 'Masks' }).click()
   await editor.locator('.verbs button[title^="Mask: rectangle"]').click()
+  await expect(page.locator('.final-viewer .final-view')).toHaveClass(/masking/)                                    // the tool is on: the frame takes the clicks, not a mask's path
   const box = (await page.locator('.final-viewer img.final-frame').boundingBox())!
   await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
   await page.mouse.down()
@@ -911,6 +912,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 6/)
   // a shape from points (the pen): three clicks, the first point again closes it
   await editor.locator('.verbs button[title^="Mask: pen"]').click()
+  await expect(page.locator('.final-viewer .final-view')).toHaveClass(/masking/)                                    // the tool is on: the frame takes the clicks, not a mask's path
   for (const [fx, fy] of [[0.7, 0.2], [0.9, 0.3], [0.8, 0.6]]) await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy)
   await expect(page.locator('.final-viewer svg.mask-overlay g.mask.drawing circle')).toHaveCount(3)
   await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.2)
@@ -935,7 +937,9 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 10/)
   await settled()
   await editor.locator('.verbs button[title^="Mask: object"]').click()
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5)
+  await expect(page.locator('.final-viewer .final-view')).toHaveClass(/masking/)                                    // the tool is on: the frame takes the clicks, not a mask's path
+  const pic = (await page.locator('.final-viewer img.final-frame').boundingBox())!
+  await page.locator('.final-viewer img.final-frame').click({ position: { x: pic.width * 0.5, y: pic.height * 0.5 } })   // the frame itself: waits until no toast covers the point
   await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 11/)
   await editor.locator('.segmented button', { hasText: 'Effects' }).click()
   await expect(editor.locator('.comp-effect-list li')).toHaveCount(1)                                                 // the Object Matte is an effect on the layer
@@ -985,6 +989,24 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await settled()
   await editor.locator('.take-list li[data-take^="take_"] button[title^="Drop"]').click()
   await expect(editor.locator('.take-list li[data-take^="take_"]')).toHaveCount(0)
+  // D118 (AE4c): the Face pass — the head tracked from the figure's keypoints, one Animate batch on the fake engine (9 frames), the take
+  // "the head" shown with her matte following; Lip-sync waits for a line on the layer; the take dropped
+  await expect(editor.locator('.pass-tile[data-pass="lipsync"]')).toBeDisabled()
+  await expect(editor.locator('.verbs label', { hasText: 'strength' })).toHaveCount(1)
+  await editor.locator('.pass-tile[data-pass="face"]').click()
+  await expect(editor.locator('.verbs label', { hasText: 'strength' })).toHaveCount(0)                   // no strength for the face pass
+  await editor.locator('.verbs button[title^="Run the pass"]').click()
+  await expect.poll(async () => (await api<{ items: { kind: string; status: string; recipe: { preset: string } }[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'layer_pass' && j.recipe.preset === 'face').map((j) => j.status).join(','), { timeout: 90_000 }).toBe('done')
+  await expect(editor.locator('.take-list li[data-take^="take_"]')).toHaveCount(1, { timeout: 15_000 })
+  await expect(editor.locator('.take-list li[data-take^="take_"]')).toHaveClass(/shown/)
+  await expect(editor.locator('.take-list li[data-take^="take_"] .name')).toContainText('Face')
+  await expect(editor.locator('.take-list li[data-take^="take_"] .name')).toContainText('the head')
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 20/, { timeout: 15_000 })   // the composition took the take (and her matte)
+  await settled()
+  await editor.locator('.take-list li[data-take^="take_"] button[title^="Drop"]').click()
+  await expect(editor.locator('.take-list li[data-take^="take_"]')).toHaveCount(0)
+  await expect(page.locator('.final-viewer [data-comp-state]')).toHaveText(/revision 21/)
+  await settled()
   // D118 (AE4b): the line picker — this shot has no voiced line, so the menu says so
   await page.locator('#anim-sec-layers button[data-attach-line]').click()
   await expect(page.locator('.ctx-menu')).toContainText('No voiced line in this shot')

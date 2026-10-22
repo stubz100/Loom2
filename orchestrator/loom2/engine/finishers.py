@@ -682,6 +682,9 @@ class LayerPassFinisher:
         f = store.get(recipe.final_id)
         if f is None:
             raise ValueError(f"the final {recipe.final_id} is gone")
+        if recipe.preset in ("face", "lipsync"):
+            await _finish_face_step(job, recipe, paths, q, store, f)
+            return
         if len(paths) != f.frames:
             raise ValueError(f"the pass returned {len(paths)} frames for {f.frames}")
         w, h = f.size["w"], f.size["h"]
@@ -703,6 +706,105 @@ class LayerPassFinisher:
         job.result["final_id"], job.result["layer_id"], job.result["take_id"] = f.id, recipe.layer_id, take_id
         job.log_tail.append(f"{recipe.preset} pass at {recipe.strength:g}: {len(paths)} frames → take {take_id} of {recipe.layer_id}, now its source")
         q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+
+
+async def _finish_face_step(job: JobRecord, recipe: LayerPass, paths: list[Path], q: JobQueue, store: Any, f: Any) -> None:
+    """D118 (AE4c): one step of the face pass landed. A talking head (`face_video` k) is kept under the take's work dir and the next window
+    — or the first head batch — is queued; a head batch (`head` k, RGBA: the render and its silhouette) is kept and the next batch queued,
+    carrying its last frames; after the last batch the heads are stitched (finals.stitch), pasted back onto the layer's shown frames at
+    their boxes under the grown, feathered mask (heads.paste_head), the layer's matte updated in the box (the composition's matte footage
+    too, keeping a nearer prop's cut), and the take is recorded as the layer's source. The same origin rides every step, so the Final
+    level sees one running pass. A failure anywhere drops the take's folder."""
+    from ..compositions import CompositionStore
+    from ..finals import stitch
+    from ..fsio import read_json
+    from ..heads import CROP, paste_take
+    step = recipe.step
+    if step is None:
+        raise ValueError("the face pass runs in steps")
+    layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
+    if layer is None:
+        raise ValueError(f"the final has no layer {recipe.layer_id}")
+    take_dir = store.pass_dir(f.id, layer.id, f"passes/{step.take_id}")
+    work = take_dir / "work"
+    try:
+        plan = read_json(work / "plan.json")
+        if step.stage == "face_video":
+            wnd = plan["windows"][step.k]
+            if len(paths) < int(wnd["frames"]):
+                raise ValueError(f"the talking head returned {len(paths)} frames for {wnd['frames']}")
+
+            def keep_face() -> None:
+                d = work / "face" / str(step.k)
+                d.mkdir(parents=True, exist_ok=True)
+                for i, src in enumerate(paths[: int(wnd["frames"])]):
+                    with Image.open(src) as im:
+                        im = im.convert("RGB")
+                        if im.size != (CROP, CROP):
+                            im = im.resize((CROP, CROP), Image.LANCZOS)
+                        im.save(d / f"{i:04d}.png")
+            await asyncio.to_thread(keep_face)
+            job.log_tail.append(f"talking head {step.k + 1} of {len(plan['windows'])}: {wnd['frames']} frames")
+            if step.k + 1 < len(plan["windows"]):
+                nxt = {"take_id": step.take_id, "stage": "face_video", "k": step.k + 1}
+                model = recipe.model_id
+            else:
+                nxt = {"take_id": step.take_id, "stage": "head", "k": 0}
+                spec = next((s for s in registry.animate_specs() if registry.offered(s, q.app.settings.variant)), None)
+                if spec is None:
+                    raise ValueError("no pose-driven model in this build")
+                model = spec.id
+        else:
+            batch = plan["batches"][step.k]
+            if len(paths) < int(batch["frames"]):
+                raise ValueError(f"the head batch returned {len(paths)} frames for {batch['frames']}")
+
+            def keep_head() -> None:
+                d = work / "head" / str(step.k)
+                d.mkdir(parents=True, exist_ok=True)
+                for i, src in enumerate(paths[: int(batch["frames"])]):
+                    with Image.open(src) as im:
+                        im = im.convert("RGBA")
+                        if im.size != (CROP, CROP):
+                            im = im.resize((CROP, CROP), Image.LANCZOS)
+                        im.save(d / f"{i:04d}.png")
+            await asyncio.to_thread(keep_head)
+            job.log_tail.append(f"head batch {step.k + 1} of {len(plan['batches'])}: {batch['frames']} frames rendered and matted")
+            if step.k + 1 < len(plan["batches"]):
+                nxt = {"take_id": step.take_id, "stage": "head", "k": step.k + 1}
+                model = recipe.model_id
+            else:
+                root = store.folder(f.id)
+                n = f.frames
+                base = sorted((root / plan["base"]).glob("*.png"))
+                mattes = sorted((root / plan["matte"]).glob("*.png")) if plan.get("matte") else []
+                comp_m = CompositionStore(q.ws).footage(f.id) / f"{layer.id}_matte"
+                comp_mattes = sorted(comp_m.glob("*.png")) if comp_m.is_dir() else []
+                heads = stitch([sorted((work / "head" / str(k)).glob("*.png")) for k in range(len(plan["batches"]))], n)
+                boxes = [tuple(int(v) for v in b) for b in plan["boxes"]]
+
+                def paste_all() -> None:
+                    paste_take(take_dir, heads, base, mattes, comp_mattes, boxes, n)       # the frames, head/, matte/, matte_comp/
+                    shutil.rmtree(work, ignore_errors=True)
+                await asyncio.to_thread(paste_all)
+                take = {"id": step.take_id, "preset": recipe.preset, "strength": recipe.strength, "model_id": recipe.model_id, "job_id": job.id, "frames": n, "seed": job.seed,
+                        "made_at": utc_now(), "head": True, "matte": len(mattes) == n, "boxes": [list(boxes[0]), list(boxes[-1])], "ref": plan.get("ref"),
+                        "lines": [{"layer": w_.get("layer"), "text": w_.get("text"), "f0": w_["f0"], "f1": w_["f1"]} for w_ in plan.get("windows") or []]}
+                f = await asyncio.to_thread(store.add_take, f.id, recipe.layer_id, take, True)
+                job.result["final_id"], job.result["layer_id"], job.result["take_id"] = f.id, recipe.layer_id, step.take_id
+                job.log_tail.append(f"{recipe.preset} pass: {n} heads pasted back → take {step.take_id} of {recipe.layer_id}, now its source"
+                                    + (f" ({len(plan.get('windows') or [])} line window(s))" if recipe.preset == "lipsync" else ""))
+                q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+                return
+        nj = q.submit({**recipe.model_dump(), "model_id": model, "step": nxt, "seeds": [job.seed]},
+                      origin=JobOrigin(**job.origin.model_dump()) if job.origin else None)[0]
+        job.result["final_id"], job.result["layer_id"], job.result["take_id"], job.result["next_job_id"] = f.id, recipe.layer_id, step.take_id, nj.id
+        f = await asyncio.to_thread(store.update_layer, f.id, recipe.layer_id, job_ids=[*layer.job_ids, nj.id])
+        job.log_tail.append(f"next: {nxt['stage']} {nxt['k'] + 1} ({nj.id})")
+        q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+    except Exception:
+        shutil.rmtree(take_dir, ignore_errors=True)
+        raise
 
 
 def finisher_for(recipe: AnyRecipe) -> Finisher:

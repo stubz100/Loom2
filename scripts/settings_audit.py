@@ -104,6 +104,7 @@ RECEIVERS: dict[str, tuple[tuple[str, ...], list[str] | None]] = {
     "TtsItem": (("it",), ["voices.py", "engine/pipeline.py"]),      # CN2: `for it in recipe.items`
     "ExtendFrom": (("ext",), ["queue.py"]),                        # D88 XE: `ext = recipe.extend_from` in _check_extend
     "AnimateChain": (("chain",), None),                             # D111 (PS5c): `chain = recipe.chain` in the Wan Animate graph and prepare_i2v
+    "PassStep": (("step",), None),                                  # D118 (AE4c): `step = recipe.step` in prepare_face_pass, build_face_pass and the face finisher
 }
 
 

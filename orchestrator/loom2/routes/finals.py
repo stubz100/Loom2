@@ -287,8 +287,9 @@ class MatteBody(BaseModel):
 
 
 class PassBody(BaseModel):
-    """D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another."""
-    preset: Literal["cleanup", "creative"] = "cleanup"
+    """D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`
+    (the strength unused)."""
+    preset: Literal["cleanup", "creative", "face", "lipsync"] = "cleanup"
     strength: float = Field(0.10, ge=0.02, le=0.9)
     seed: int | None = None
 
@@ -360,7 +361,9 @@ async def final_layer_matte(svc: Svc, fid: str, lid: str, body: MatteBody):
 @router.post("/finals/{fid}/layers/{lid}/pass", response_model=JobQueued)
 async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     """D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to
-    the layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later)."""
+    the layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).
+    AE4c: Face and Lip-sync on a character layer with keypoints and a matte — a chain of jobs (the talking head per line window for
+    Lip-sync, then Wan Animate on the head crop in batches), the last of which pastes the heads back and records the take."""
     from ..finals import FINAL_LAYER_SURFACE
     from ..models import registry
     from ..origin import JobOrigin
@@ -376,15 +379,44 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
         raise HTTPException(422, "a pass runs on a character layer or the plate for now")
     if layer.frames_done != f.frames:
         raise HTTPException(422, f"{layer.name} has no frames yet — make the layer first")
-    graph = "wan22" if body.preset == "cleanup" else "ltx23"
-    spec = next((s for s in registry.video_specs() if s.graph == graph and registry.offered(s, svc.app.settings.variant)
-                 and (graph != "ltx23" or s.recipes.guide_lora)), None)
-    if spec is None:
-        raise HTTPException(422, f"the {body.preset} pass's model is not in this build")
+    variant = svc.app.settings.variant
     seed = layer.seed if body.seed is None else body.seed
+    recipe: dict[str, Any] = {"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "seeds": [seed]}
+    payload: dict[str, Any] = {"layer": lid, "pass": body.preset, "strength": body.strength}
+    if body.preset in ("face", "lipsync"):                                # AE4c (E29b): the head as its own layer, in steps
+        from ..fsio import new_id
+        if layer.kind != "figure":
+            raise HTTPException(422, "the face pass renders a character's head: run it on a character layer")
+        if not layer.keypoints:
+            raise HTTPException(422, f"{layer.name} has no keypoints — the face pass tracks the head from the Stage's")
+        if len(list(store.pass_dir(fid, lid, "matte").glob("*.png"))) != f.frames:
+            raise HTTPException(422, f"{layer.name} has no matte yet — matte it first")
+        animate = next((s for s in registry.animate_specs() if registry.offered(s, variant)), None)
+        if animate is None:
+            raise HTTPException(422, "no pose-driven model in this build")
+        model_id, stage = animate.id, "head"
+        if body.preset == "lipsync":
+            s2v = next((s for s in registry.lipsync_specs() if registry.offered(s, variant)), None)
+            if s2v is None:
+                raise HTTPException(422, "no lip-sync model in this build")
+            cs = CompositionStore(ws)
+            c = await asyncio.to_thread(cs.get, f)
+            lines = [t for t in (await asyncio.to_thread(cs.audio_timing, f, c) if c else []) if t.get("final_layer") == lid]
+            if not lines:
+                raise HTTPException(422, f"attach a line to {layer.name} first (Layers › Attach a line…) — Lip-sync follows the lines on the layer")
+            model_id, stage = s2v.id, "face_video"
+        await asyncio.to_thread(store.sweep_unfinished, fid, lid)
+        take_id = new_id("take")
+        recipe |= {"model_id": model_id, "step": {"take_id": take_id, "stage": stage, "k": 0}}
+        payload["take"] = take_id
+    else:
+        graph = "wan22" if body.preset == "cleanup" else "ltx23"
+        spec = next((s for s in registry.video_specs() if s.graph == graph and registry.offered(s, variant) and (graph != "ltx23" or s.recipes.guide_lora)), None)
+        if spec is None:
+            raise HTTPException(422, f"the {body.preset} pass's model is not in this build")
+        recipe["model_id"] = spec.id
     try:
-        jobs = svc.queue.submit({"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "model_id": spec.id, "seeds": [seed]},
-                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "pass": body.preset, "strength": body.strength}))
+        jobs = svc.queue.submit(recipe, origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload=payload))
     except ValueError as e:
         raise HTTPException(422, str(e))
     await svc.queue.flush()

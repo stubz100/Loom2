@@ -1404,6 +1404,118 @@ def build_layer_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: s
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=PASS_PROMPT)
 
 
+FACE_PROMPT = "the character's head and shoulders, following the motion, a calm natural face, sharp, soft light"
+LIPSYNC_PROMPT = "the character's head and shoulders, speaking the line with natural mouth movements, following the motion, sharp, soft light"
+TALK_PROMPT = "a close-up of the character speaking the line softly to the camera, small natural mouth movements, a calm still face, steady camera, soft light"
+
+
+def build_face_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: str, i: dict[str, Any], variant: str = "full") -> Compiled:
+    """D118 (AE4c, from E29b): one step of the face pass at the head crop's size (512²). `face_video` — the S2V graph (D88 XL) on the
+    reference's head crop with the window's audio: the talking head Animate takes as its face video. `head` — Wan Animate (CN4's graph) on
+    the pose pass cropped to the head, the reference's head crop as the reference, the face video when a line plays, the previous batch's
+    last frames continuing the motion (E23a W1), then the rendered head matted by PS5d's model (SAM 3 by text, BiRefNet under `open`) and
+    saved RGBA — the colour and the silhouette in one file (JoinImageWithAlpha writes 1 − mask, so the mask is inverted first)."""
+    from ..recipes import matte_mode
+    spec = registry.get(recipe.model_id)
+    if spec is None or spec.video is None:
+        raise CompileError(f"{recipe.model_id!r} is not a video model of this build")
+    roles, video = spec.roles, spec.video
+    w, h, frames, fps = int(i["w"]), int(i["h"]), int(i["frames"]), int(i["fps"])
+    stage = i.get("stage") or "head"
+    g: dict[str, Any] = {}
+    if stage == "face_video":
+        if spec.graph != "wan_s2v" or not i.get("audio"):
+            raise CompileError(f"the talking head runs on the S2V model with the line's audio; {spec.label} is not it")
+        _, unet = roster.require(spec.id)
+        _, te = roster.require(roles.te.default)
+        _, vae = roster.require(roles.vae)
+        _, aenc = roster.require(roles.extra["audio_encoder"])
+        ep = video.presets.get("draft") or next(iter(video.presets.values()))
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["4"] = {"class_type": "AudioEncoderLoader", "inputs": {"audio_encoder_name": aenc}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": TALK_PROMPT, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": video.negative, "clip": ["2", 0]}}
+        g["100"] = {"class_type": "LoadImage", "inputs": {"image": i["ref"]}}
+        g["100s"] = {"class_type": "ImageScale", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        g["8"] = {"class_type": "LoadAudio", "inputs": {"audio": i["audio"]}}
+        g["9"] = {"class_type": "AudioEncoderEncode", "inputs": {"audio_encoder": ["4", 0], "audio": ["8", 0]}}
+        g["7"] = {"class_type": "WanSoundImageToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames,
+                                                                   "batch_size": 1, "audio_encoder_output": ["9", 0], "ref_image": ["100s", 0]}}
+        g["11"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1", 0], "shift": float(ep.shift or 8.0)}}
+        g["12"] = {"class_type": "KSampler", "inputs": {"model": ["11", 0], "seed": int(seed), "steps": int(ep.steps), "cfg": float(ep.cfg_high or 6.0), "sampler_name": "uni_pc",
+                                                        "scheduler": "simple", "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["7", 2], "denoise": 1.0}}
+        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["12", 0], "vae": ["3", 0]}}
+        prompt = TALK_PROMPT
+    else:
+        if spec.graph != "wan_animate":
+            raise CompileError(f"the head renders on the pose-driven model; {spec.label} is not it")
+        if not i.get("pose") or not i.get("ref"):
+            raise CompileError("the head step needs the pose crop video and the head reference (pipeline.prepare_face_pass)")
+        _, unet = roster.require(spec.id)
+        _, lora = roster.require(roles.extra["lightning"])
+        _, cv = roster.require(roles.extra["clip_vision"])
+        _, te = roster.require(roles.te.default)
+        _, vae = roster.require(roles.vae)
+        ep = video.presets.get("draft") or next(iter(video.presets.values()))
+        prompt = LIPSYNC_PROMPT if i.get("face") else FACE_PROMPT
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["1l"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora, "strength_model": 1.0}}
+        g["1s"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1l", 0], "shift": float(ep.shift or 8.0)}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["4"] = {"class_type": "CLIPVisionLoader", "inputs": {"clip_name": cv}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": video.negative, "clip": ["2", 0]}}
+        g["100"] = {"class_type": "LoadImage", "inputs": {"image": i["ref"]}}
+        g["100s"] = {"class_type": "ImageScale", "inputs": {"image": ["100", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        g["8"] = {"class_type": "CLIPVisionEncode", "inputs": {"clip_vision": ["4", 0], "image": ["100s", 0], "crop": "center"}}
+        g["52"] = {"class_type": "LoadVideo", "inputs": {"file": i["pose"]}}
+        g["53"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["52", 0]}}
+        g["54"] = {"class_type": "ImageScale", "inputs": {"image": ["53", 0], "upscale_method": "lanczos", "width": w, "height": h, "crop": "center"}}
+        g["11"] = {"class_type": "WanAnimateToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames,
+                                                                "batch_size": 1, "clip_vision_output": ["8", 0], "reference_image": ["100s", 0], "pose_video": ["54", 0],
+                                                                "continue_motion_max_frames": 5, "video_frame_offset": int(i.get("offset") or 0)}}
+        if i.get("face"):
+            g["70"] = {"class_type": "LoadVideo", "inputs": {"file": i["face"]}}
+            g["71"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["70", 0]}}
+            g["11"]["inputs"]["face_video"] = ["71", 0]
+        carry = list(i.get("carry") or [])
+        if carry:
+            link: list = ["c0", 0]
+            for n_, name in enumerate(carry):
+                g[f"c{n_}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+                if n_:
+                    g[f"cb{n_}"] = {"class_type": "ImageBatch", "inputs": {"image1": link, "image2": [f"c{n_}", 0]}}
+                    link = [f"cb{n_}", 0]
+            g["11"]["inputs"]["continue_motion"] = link
+        g["12"] = {"class_type": "KSampler", "inputs": {"model": ["1s", 0], "seed": int(seed), "steps": int(ep.steps), "cfg": float(ep.cfg_high or 1.0), "sampler_name": "euler",
+                                                        "scheduler": "simple", "positive": ["11", 0], "negative": ["11", 1], "latent_image": ["11", 2], "denoise": 1.0}}
+        g["13"] = {"class_type": "TrimVideoLatent", "inputs": {"samples": ["12", 0], "trim_amount": ["11", 3]}}
+        g["14"] = {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["3", 0]}}
+        mode = matte_mode(variant)                                        # the rendered head's silhouette, PS5d's way
+        sid = registry.segment_model(mode)
+        if mode == "subject":
+            _, bg = roster.require(sid)
+            g["m1"] = {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": bg}}
+            g["m5"] = {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["m1", 0], "image": ["14", 0]}}
+        else:
+            _, ckpt = roster.require(sid)
+            g["m1"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}}
+            g["m4"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "person", "clip": ["m1", 1]}}
+            g["m5"] = {"class_type": "SAM3_Detect", "inputs": {"model": ["m1", 0], "image": ["14", 0], "conditioning": ["m4", 0], "threshold": 0.4, "refine_iterations": 2,
+                                                              "individual_masks": False}}
+        g["m6"] = {"class_type": "InvertMask", "inputs": {"mask": ["m5", 0]}}
+        g["10"] = {"class_type": "JoinImageWithAlpha", "inputs": {"image": ["14", 0], "alpha": ["m6", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
+    step = recipe.step
+    summary = {"model_id": spec.id, "label": spec.label, "preset": recipe.preset, "strength": recipe.strength, "final_id": recipe.final_id, "layer_id": recipe.layer_id,
+               "stage": stage, "k": int(i.get("k") or 0), "of": int(i.get("of") or 1), "take_id": step.take_id if step else None, "width": w, "height": h, "frames": frames,
+               "fps": fps, "offset": int(i.get("offset") or 0), "face": bool(i.get("face")), "carry": len(i.get("carry") or []), "seed": int(seed)}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
+
+
 def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
@@ -1453,9 +1565,14 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         c = build_matte_sequence(recipe, roster, i["video"], out_prefix)
     elif isinstance(recipe, LayerPass):
         i = inputs or {}
-        if "video" not in i or "first" not in i:
-            raise CompileError("layer_pass needs the uploaded frames (pipeline.prepare_layer_pass)")
-        c = build_layer_pass(recipe, roster, seed, out_prefix, i)
+        if recipe.preset in ("face", "lipsync"):                          # AE4c: a step of the face pass
+            if "stage" not in i:
+                raise CompileError("the face pass needs its step's uploads (pipeline.prepare_face_pass)")
+            c = build_face_pass(recipe, roster, seed, out_prefix, i, variant)
+        else:
+            if "video" not in i or "first" not in i:
+                raise CompileError("layer_pass needs the uploaded frames (pipeline.prepare_layer_pass)")
+            c = build_layer_pass(recipe, roster, seed, out_prefix, i)
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -1503,6 +1620,10 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         ids = spec.weights() if spec else [recipe.model_id]
         if recipe.preset == "creative" and spec is not None and spec.recipes.guide_lora:
             ids = [*ids, spec.recipes.guide_lora]
+        if recipe.preset in ("face", "lipsync") and (recipe.step is None or recipe.step.stage == "head"):   # AE4c: the head step mattes its result too
+            from ..recipes import matte_mode
+            m = registry.get(registry.segment_model(matte_mode(variant)))
+            ids = [*ids, *(m.weights() if m else [])]
         return ids
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)

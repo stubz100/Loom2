@@ -240,6 +240,32 @@ class FinalStore:
             return self.pass_dir(fid, lid, f"passes/{layer.source}")
         return self.pass_dir(fid, lid, "frames")
 
+    def matte_dir(self, fid: str, lid: str) -> Path:
+        """D118 (AE4c): where a character layer's matte is — the shown take's own `matte/` when the pass changed her silhouette (the face
+        pass does), else the layer's `matte/` (PS5d)."""
+        f = self.get(fid)
+        layer = next((x for x in f.layers if x.id == lid), None) if f else None
+        if f is not None and layer is not None and layer.source and any(t.get("id") == layer.source for t in layer.takes):
+            d = self.pass_dir(fid, lid, f"passes/{layer.source}/matte")
+            if len(list(d.glob("*.png"))) == f.frames:
+                return d
+        return self.pass_dir(fid, lid, "matte")
+
+    def sweep_unfinished(self, fid: str, lid: str) -> int:
+        """D118 (AE4c): the folders of passes that never became takes (a chain that failed in the engine) dropped; how many."""
+        f = self.get(fid)
+        layer = next((x for x in f.layers if x.id == lid), None) if f else None
+        if layer is None:
+            return 0
+        root = self.pass_dir(fid, lid, "passes")
+        keep = {t.get("id") for t in layer.takes}
+        n = 0
+        for d in root.glob("take_*") if root.is_dir() else []:
+            if d.is_dir() and d.name not in keep:
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+        return n
+
     def add_take(self, fid: str, lid: str, take: dict[str, Any], use: bool = True) -> Final:
         """D118: a pass's result recorded on the layer, and shown as its source when `use`."""
         f = self.get(fid)

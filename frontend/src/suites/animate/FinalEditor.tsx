@@ -12,23 +12,24 @@ import { Help } from '../../frame/Help'
 import { fmtTime } from './animateStore'
 import { EffectsBody } from './Effects'
 import { useSession } from '../../store/session'
-import { MASK_MODES, useComposition, type CompLayer, type EditorTab, type FlatProp, type MaskInfo, type PassPreset, type PropKey, type Take } from './compositionStore'
+import { MASK_MODES, PASS_LABEL, useComposition, type CompLayer, type EditorTab, type FlatProp, type MaskInfo, type PassPreset, type PropKey, type Take } from './compositionStore'
 
 const BLEND_MODES = ['Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Darken', 'Lighten', 'Soft Light', 'Hard Light', 'Difference']
 const MATTE_KINDS: [string, string][] = [['luma', 'luma'], ['lumaInverted', 'luma inverted'], ['alpha', 'alpha'], ['alphaInverted', 'alpha inverted']]
 const LABELS: Record<string, string> = { 'transform/anchor': 'Anchor', 'transform/position': 'Position', 'transform/scale': 'Scale', 'transform/rotation': 'Rotation', 'transform/opacity': 'Opacity' }
 const TABS: [EditorTab, string, string][] = [['props', 'Properties', 'transform, opacity, keyframes'], ['masks', 'Masks', 'shapes that keep or cut parts of the layer'], ['effects', 'Effects', 'colour, blur, grain, mattes, mood'],
-  ['passes', 'Passes', "AI passes over the layer's frames: clean-up, creative; the face pass and lip-sync next"]]
-// D118 (AE4a): the passes as tiles — the two that run now and the two of AE4c, shown but not yet offered
-const PASSES: { id: PassPreset | 'face' | 'lipsync'; label: string; hint: string; strength: number; soon?: boolean }[] = [
+  ['passes', 'Passes', "AI passes over the layer's frames: clean-up, creative, the face pass, lip-sync"]]
+// D118 (AE4a): the passes as tiles; AE4c (E29b): Face and Lip-sync — the head as its own layer, rendered at 512 px and pasted back
+const PASSES: { id: PassPreset; label: string; hint: string; strength: number; head?: boolean }[] = [
   { id: 'cleanup', label: 'Clean up', hint: "Wan 2.2's low-noise expert over the layer at a low strength: cleaner hands and surfaces (E24 A2); about 15 min for 81 frames", strength: 0.1 },
   { id: 'creative', label: 'Creative', hint: "LTX-2.3 locked to the layer's Stage depth: a repaint of the surfaces — for creative upgrades, it distorts (E24 C3); about 2 min", strength: 0.35 },
-  { id: 'face', label: 'Face', hint: 'The head rendered at 512 px as its own layer and pasted back: a sharp, recognisable face (E29b) — comes with AE4c', strength: 0.5, soon: true },
-  { id: 'lipsync', label: 'Lip-sync', hint: 'The face pass with a line: the mouth follows the words (E29b) — comes with AE4c, with the line as an audio layer', strength: 0.5, soon: true },
+  { id: 'face', label: 'Face', hint: "The head tracked from the Stage's keypoints, rendered at 512 px by Wan Animate from the character's reference and pasted back under a grown, feathered mask: a sharp, recognisable face (E29b); the layer's matte follows; about 5 min for 77 frames, in batches", strength: 0.5, head: true },
+  { id: 'lipsync', label: 'Lip-sync', hint: "The face pass with the lines attached to this layer: a talking head of the reference per line (S2V, English) drives the mouth; about 10 min per line window plus the face pass. Attach a line first (Layers › Attach a line…)", strength: 0.5, head: true },
 ]
 const PASSES_HELP = "A pass is a job that reads the layer's frames and writes a new version — a take — which the layer shows as its source; the original stays, "
   + 'and any take can be shown again or dropped. The composition keeps the layer\'s transforms, masks, effects and keys across a swap. Before compares nothing here: '
-  + 'pick Original to see the layer as performed. A pass runs on the GPU like any job, one at a time; the Dock shows it.'
+  + 'pick Original to see the layer as performed. A pass runs on the GPU like any job, one at a time; the Dock shows it. Face and Lip-sync run as several jobs '
+  + '(the talking head per line, the head in 77-frame batches, then the paste); the take lands after the last.'
 const MASK_TOOLS_HELP = 'Rectangle and ellipse: drag on the frame. Pen: click the points of a shape, the first again (or a double-click) closes it, Esc drops it. '
   + "From the layer: what is visible on the layer at the playhead — a character's silhouette, a prop, the shadows — traced into a mask that follows across the shot. "
   + "Object: click a thing on the frame; EffectCraft's Object Matte cuts the layer to it and follows it (an effect, under Effects). "
@@ -155,17 +156,22 @@ function PassesBody() {
   const strength = useComposition((s) => s.passStrength)
   const busy = useComposition((s) => s.busy)
   const running = useSession((s) => Object.values(s.jobs).find((j) => j.kind === 'layer_pass' && j.origin?.ref === finalId && (j.origin?.payload as { layer?: string } | undefined)?.layer === lid && (j.status === 'queued' || j.status === 'running')))
+  const hasLine = useComposition((s) => !!s.comp?.audio.some((a) => a.final_layer === s.finalLayerId()))
   if (!lid || !layer) return <span className="hint">Not on this layer. <Help text="A pass runs on a character layer or the plate — a matte is made with its character, the shadows come from the Stage." /></span>
   const takes = (layer.takes ?? []) as unknown as Take[]
   const source = layer.source ?? null
+  const isFigure = layer.kind === 'figure'
+  const off = (p: typeof PASSES[number]) => (p.head && !isFigure) || (p.id === 'lipsync' && !hasLine)
+  const head = PASSES.find((p) => p.id === preset)?.head
   return (
     <div className="comp-passes" data-layer={lid}>
       <div className="pass-tiles" role="radiogroup" aria-label="the pass">
-        {PASSES.map((p) => <button key={p.id} type="button" className={`pass-tile${preset === p.id ? ' active' : ''}`} role="radio" aria-checked={preset === p.id} disabled={!!p.soon} data-pass={p.id}
-          title={p.hint} onClick={() => !p.soon && cp().setPass(p.id as PassPreset, p.strength)}>{p.label}{p.soon && <small>soon</small>}</button>)}
+        {PASSES.map((p) => <button key={p.id} type="button" className={`pass-tile${preset === p.id ? ' active' : ''}`} role="radio" aria-checked={preset === p.id} disabled={off(p)} data-pass={p.id}
+          title={off(p) ? (p.head && !isFigure ? 'The face pass renders a character\'s head: a character layer' : 'Attach a line to this layer first (Layers › Attach a line…)') : p.hint}
+          onClick={() => !off(p) && cp().setPass(p.id, p.strength)}>{p.label}</button>)}
       </div>
       <div className="verbs">
-        <label title="How much the pass is let change the picture (0.02–0.9)">strength <NumField key={`s:${strength}`} value={strength} step={0.05} onCommit={(v) => cp().setPass(preset, Math.max(0.02, Math.min(0.9, v)))} label="pass strength" /></label>
+        {!head && <label title="How much the pass is let change the picture (0.02–0.9)">strength <NumField key={`s:${strength}`} value={strength} step={0.05} onCommit={(v) => cp().setPass(preset, Math.max(0.02, Math.min(0.9, v)))} label="pass strength" /></label>}
         <CommandRow ids={['anim.final.pass.run']} />
         {running && <span className="hint" data-pass-running>{running.status === 'queued' ? 'queued' : `${Math.round((running.progress ?? 0) * 100)} %`} · {running.progress_text ?? 'the pass runs'}</span>}
         <Help text={PASSES_HELP} />
@@ -177,7 +183,7 @@ function PassesBody() {
         </li>
         {takes.map((t) => (
           <li key={t.id} className={`take${source === t.id ? ' shown' : ''}`} data-take={t.id}>
-            <span className="name">{PASSES.find((p) => p.id === t.preset)?.label ?? t.preset} <span className="hint">· {t.strength} · {when(t.made_at)}</span></span>
+            <span className="name">{PASS_LABEL[t.preset as PassPreset] ?? t.preset} <span className="hint">· {t.head ? (t.lines?.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'}` : 'the head') : t.strength} · {when(t.made_at)}</span></span>
             {source !== t.id ? <button type="button" className="quiet" title="Show this take" disabled={busy} onClick={() => void cp().useTake(t.id)}>✓ show</button> : <span className="hint">shown</span>}
             <button type="button" className="quiet danger" title="Drop this take (its frames too)" disabled={busy} onClick={() => void cp().dropTake(t.id)}>×</button>
           </li>))}

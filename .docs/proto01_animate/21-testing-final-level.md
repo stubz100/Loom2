@@ -86,6 +86,13 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   speaker's layer: a 🔊 row in Layers and a bar with its waveform on the lanes. Drag the bar to move where the speech starts, its ends to
   trim, Alt-drag to slip; **Render the finished shot** carries the lines in the clip. × on the row removes it.
 - **Check:** is a line as a layer the right feel — and is the waveform on the bar enough to place it against the picture?
+- **Face and Lip-sync** (D118, AE4c — E29b's head layer as a pass): on Mara's row, Passes › **Face** renders her head anew at 512 px (Wan
+  Animate on the head crop, from the reference's head), mattes it and pastes it back under a mask grown beyond the new head — the halo you
+  saw on E29b's clips is what that mask is for. **Lip-sync** needs a line on her layer first (Attach a line…): the talking head of her
+  reference speaks the line (S2V) and drives the mouth. Both run as several jobs (the Dock shows them one after another); the take lands
+  after the last, named "the head" or "1 line", and her matte follows the new head in the composition. No strength for these two.
+- **Check:** the face — sharper and still her? The mouth — natural at this size, in time with the line? Any halo or seam left around the
+  head? Is the chain of jobs legible in the Dock, or should the pass show as one job with steps?
 
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
@@ -122,6 +129,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | The Performance tree and the foot's strip: right place for the verbs? | |
 | Passes: the take-as-source model clear? A pass over a pass, or always over the performed frames? | |
 | A line as an audio layer on the lanes: the right feel? The waveform enough to place it? | |
+| Face / Lip-sync: sharper and still her? The mouth natural and in time? Halo or seam left? The chain of jobs legible? | |
 
 ## The first look (2026-10-21) and what it changed
 

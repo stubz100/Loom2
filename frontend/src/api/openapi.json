@@ -10666,13 +10666,15 @@
         "type": "object"
       },
       "PassBody": {
-        "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another.",
+        "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`\n(the strength unused).",
         "properties": {
           "preset": {
             "default": "cleanup",
             "enum": [
               "cleanup",
-              "creative"
+              "creative",
+              "face",
+              "lipsync"
             ],
             "title": "Preset",
             "type": "string"
@@ -21918,7 +21920,7 @@
     },
     "/finals/{fid}/layers/{lid}/pass": {
       "post": {
-        "description": "D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to\nthe layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).",
+        "description": "D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to\nthe layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).\nAE4c: Face and Lip-sync on a character layer with keypoints and a matte — a chain of jobs (the talking head per line window for\nLip-sync, then Wan Animate on the head crop in batches), the last of which pastes the heads back and records the take.",
         "operationId": "final_layer_pass_finals__fid__layers__lid__pass_post",
         "parameters": [
           {

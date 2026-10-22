@@ -164,6 +164,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
     out_dir.mkdir(parents=True, exist_ok=True)
     n, w, h = f.frames, f.size["w"], f.size["h"]
     pd = lambda lid, name: _frames(store.pass_dir(f.id, lid, name))   # noqa: E731
+    md = lambda lid: _frames(store.matte_dir(f.id, lid))               # noqa: E731  (AE4c: the shown take's matte when the pass changed her silhouette)
     plate = _frames(store.frames_dir(f.id, "plate"))
     bare_d, bare_c = pd("plate", "depth"), pd("plate", "clay")
     shadows = pd("shadows", "clay")
@@ -176,7 +177,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
     # the characters' contact offsets (D107), one per layer over the shot
     offsets: dict[str, tuple[float, float]] = {}
     for x in figs:
-        dep, mt = pd(x.id, "depth"), pd(x.id, "matte")
+        dep, mt = pd(x.id, "depth"), md(x.id)
         step = max(1, n // 24)                                               # two dozen frames tell the median
         sm = [np.abs(gray(dep[i]) - gray(bare_d[i])) > DEPTH_EPS for i in range(0, n, step)]
         mm = [gray(mt[i]) * dilate(sm[k], GROW) for k, i in enumerate(range(0, n, step))]
@@ -197,7 +198,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
             dep = gray(pd(x.id, "depth")[i])
             sm = np.abs(dep - bd) > DEPTH_EPS
             actors |= sm
-            mt = gray(pd(x.id, "matte")[i]) * dilate(sm, GROW)
+            mt = gray(md(x.id)[i]) * dilate(sm, GROW)
             al = soft(mt, 1.2) * dilate(mt > 0.5, 3)
             dx, dy = offsets[x.id]
             grown = max_filter(np.where(sm, dep, 0.0), 15)

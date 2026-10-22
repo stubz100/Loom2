@@ -9989,6 +9989,59 @@
    "search_aliases": null,
    "essentials_category": null,
    "has_intermediate_output": false
+  },
+  "JoinImageWithAlpha": {
+   "input": {
+    "required": {
+     "image": [
+      "IMAGE",
+      {}
+     ],
+     "alpha": [
+      "MASK",
+      {}
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "image",
+     "alpha"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "IMAGE"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "IMAGE"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "JoinImageWithAlpha",
+   "display_name": "Join Image with Alpha",
+   "description": "",
+   "python_module": "comfy_extras.nodes_compositing",
+   "category": "image/compositing",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": [
+    "add transparency",
+    "apply alpha",
+    "composite alpha",
+    "RGBA"
+   ],
+   "essentials_category": null,
+   "has_intermediate_output": false
   }
  }
 }

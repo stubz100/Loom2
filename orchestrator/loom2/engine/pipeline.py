@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -110,8 +111,13 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         spec = registry.get(recipe.model_id)
         params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id,
                   "preset": recipe.preset, "strength": recipe.strength}
-        est = ({"seconds": 950.0, "source": "E24 2026-10-21: the low-noise expert over 81 frames at 832×480 took 913–965 s whatever the strength"} if recipe.preset == "cleanup"
-               else {"seconds": 120.0, "source": "E24 2026-10-21: LTX-2.3 locked to the depth over 81 frames at 832×512 took 54–118 s"})
+        if recipe.preset in ("face", "lipsync"):                      # AE4c (E29b): one step of the chain — the talking head, or a head batch
+            params["step"] = recipe.step.model_dump() if recipe.step else None
+            est = ({"seconds": 560.0, "source": "E29 2026-10-21: S2V on a 512² head, 77 frames at 20 steps, 554 s"} if recipe.step and recipe.step.stage == "face_video"
+                   else {"seconds": 310.0, "source": "E29b 2026-10-21: Wan Animate on the 512² head crop, 77 frames, 306 s; the matte and the paste after"})
+        else:
+            est = ({"seconds": 950.0, "source": "E24 2026-10-21: the low-noise expert over 81 frames at 832×480 took 913–965 s whatever the strength"} if recipe.preset == "cleanup"
+                   else {"seconds": 120.0, "source": "E24 2026-10-21: LTX-2.3 locked to the depth over 81 frames at 832×512 took 54–118 s"})
     elif isinstance(recipe, AssembleFinal):                           # D111 (PS5e): a CPU job — the final's layers composited
         params = {"final_id": recipe.final_id}
         est = {"seconds": None, "source": "CPU (the layers' PNG sequences → clip); the Dock shows frames done"}
@@ -219,6 +225,10 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
     if isinstance(recipe, MatteSequence):
         return {"video": _placeholder_video(object_info)}
     if isinstance(recipe, LayerPass):
+        if recipe.preset in ("face", "lipsync"):                      # AE4c: the step's inputs at the head crop's size
+            return {"stage": recipe.step.stage if recipe.step else "head", "k": 0, "of": 1, "ref": img, "audio": _placeholder_audio(object_info),
+                    "pose": _placeholder_video(object_info), "face": _placeholder_video(object_info) if recipe.preset == "lipsync" else None, "carry": [],
+                    "w": 512, "h": 512, "frames": 77, "offset": 0, "fps": 16}
         return {"video": _placeholder_video(object_info), "first": img, "depth": _placeholder_video(object_info), "w": 832, "h": 480, "frames": 81, "fps": 16, "pad": [0, 0]}
     return {}
 
@@ -519,11 +529,14 @@ def _pad_rows_cols(a, py: int, px: int):
 async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> dict[str, Any]:
     """D118 (AE4a): the layer's active frames as one near-lossless video (the guide encoding) and its first frame as PNG, uploaded; for the
     creative pass the layer's Stage depth as a video too (its own depth pass, else the shot's — the max over every layer's inverse depth).
-    The picture is padded to the model's cell (LTX's IC-LoRA wants an even latent height: 64 px) by edge rows / columns; the finisher crops."""
+    The picture is padded to the model's cell (LTX's IC-LoRA wants an even latent height: 64 px) by edge rows / columns; the finisher crops.
+    The face pass (AE4c) prepares its step instead (prepare_face_pass)."""
     import numpy as np
     from PIL import Image
     from ..finals import FinalStore
     from ..stages import encode_guide
+    if recipe.preset in ("face", "lipsync"):
+        return await prepare_face_pass(job, recipe, q)
     store = FinalStore(q.ws)
     f = store.get(recipe.final_id)
     if f is None:
@@ -587,6 +600,130 @@ async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> 
         await asyncio.to_thread(encode_guide, depth, tmp / "depth.mp4", f.rate)
         inputs["depth"] = await q.engine.client.upload_image(tmp / "depth.mp4")
     job.log_tail.append(f"{len(frames)} frames of {layer.name} uploaded for the {recipe.preset} pass at {recipe.strength:g}" + (f" (padded {px}×{py})" if px or py else ""))
+    return inputs
+
+
+async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> dict[str, Any]:
+    """D118 (AE4c, from E29b): one step of the face pass. The first step writes the take's plan under `passes/<take>/work/`: the head boxes
+    from the layer's keypoints, the Animate batches (finals.plan_batches), the reference's head crop (the placed reference, else the
+    layer's first shown frame), the pose pass cropped to the head as one video, and for Lip-sync the line windows (heads.windows) with
+    their audio cut from the lines' files. A `face_video` step uploads the head crop and its window's audio for the S2V talking head; a
+    `head` step uploads the pose crop video, the head crop, the face video composed from the talking heads (the reference's head where no
+    line plays) and the previous batch's last frames to carry the motion."""
+    from PIL import Image
+    from ..compositions import CompositionStore
+    from ..finals import CARRY, FinalStore, plan_batches
+    from ..fsio import atomic_write_json, read_json
+    from ..heads import CROP, box_crop, head_boxes, slice_audio, windows
+    from ..stages import encode_guide
+    step = recipe.step
+    if step is None:
+        raise ValueError("the face pass runs in steps")
+    store = FinalStore(q.ws)
+    f = store.get(recipe.final_id)
+    if f is None:
+        raise ValueError(f"the final {recipe.final_id} is not in the project")
+    layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
+    if layer is None:
+        raise ValueError(f"the final has no layer {recipe.layer_id}")
+    root = store.folder(f.id)
+    work = store.pass_dir(f.id, layer.id, f"passes/{step.take_id}/work")
+    work.mkdir(parents=True, exist_ok=True)
+    plan_p = work / "plan.json"
+    if not plan_p.is_file():
+
+        def first() -> dict[str, Any]:
+            kps = store.keypoints(f.id, layer.id)
+            if len(kps) < f.frames:
+                raise ValueError(f"{layer.name} has keypoints for {len(kps)} of {f.frames} frames — the face pass tracks the head from them")
+            base_dir = store.frames_dir(f.id, layer.id)
+            base = sorted(base_dir.glob("*.png"))
+            if len(base) != f.frames:
+                raise ValueError(f"{layer.name} has {len(base)} frames, the final {f.frames} — make it first")
+            matte_dir = store.matte_dir(f.id, layer.id)
+            w, h = f.size["w"], f.size["h"]
+            boxes = head_boxes(kps, f.frames, w, h)
+            placed = root / layer.id / "reference.png"
+            ref_src = placed if placed.is_file() else base[0]
+            box_crop(Image.open(ref_src).convert("RGB"), boxes[0]).save(work / "ref_head.png")
+            pose = sorted(store.pass_dir(f.id, layer.id, "pose").glob("*.png"))
+            if len(pose) != f.frames:
+                raise ValueError(f"{layer.name} has no pose pass for every frame")
+            pd = work / "pose_head"
+            pd.mkdir(exist_ok=True)
+            crops = []
+            for i, (p_, b) in enumerate(zip(pose, boxes)):
+                q_ = pd / f"{i:04d}.png"
+                box_crop(Image.open(p_).convert("RGB"), b).save(q_)
+                crops.append(q_)
+            encode_guide(crops, work / "pose_head.mp4", f.rate)
+            wins: list[dict[str, Any]] = []
+            if recipe.preset == "lipsync":
+                cs = CompositionStore(q.ws)
+                c = cs.get(f)
+                timing = [t for t in (cs.audio_timing(f, c) if c else []) if t.get("final_layer") == layer.id and t.get("path")]
+                if not timing:
+                    raise ValueError(f"no line is attached to {layer.name} — attach one in the Layers toolbar first")
+                wins = windows(timing, f.rate, f.frames)
+                for wnd in wins:
+                    slice_audio(Path(wnd["path"]), float(wnd["file_t0"]), wnd["frames"] / f.rate, work / f"line_{wnd['k']}.wav")
+                    wnd.pop("path", None)
+            return {"schema_version": 1, "boxes": boxes, "batches": plan_batches(f.frames), "windows": wins, "base": base_dir.relative_to(root).as_posix(),
+                    "matte": matte_dir.relative_to(root).as_posix() if len(list(matte_dir.glob("*.png"))) == f.frames else None,
+                    "ref": "reference" if ref_src == placed else "frame 0", "w": w, "h": h, "rate": f.rate}
+        plan = await asyncio.to_thread(first)
+        atomic_write_json(plan_p, plan)
+    plan = read_json(plan_p)
+    up = q.engine.client.upload_image
+    if step.stage == "face_video":
+        wins = plan["windows"]
+        if step.k >= len(wins):
+            raise ValueError(f"the plan has {len(wins)} line window(s), not a window {step.k}")
+        wnd = wins[step.k]
+        inputs: dict[str, Any] = {"stage": "face_video", "k": step.k, "of": len(wins), "ref": await up(work / "ref_head.png"), "audio": await up(work / f"line_{step.k}.wav"),
+                                  "w": CROP, "h": CROP, "frames": int(wnd["frames"]), "offset": 0, "fps": f.rate}
+        job.log_tail.append(f"line window {step.k + 1} of {len(wins)}: {wnd['frames']} frames of the head of {layer.name} for the talking head")
+        return inputs
+    batches = plan["batches"]
+    if step.k >= len(batches):
+        raise ValueError(f"the plan has {len(batches)} batch(es), not a batch {step.k}")
+    batch = batches[step.k]
+    inputs = {"stage": "head", "k": step.k, "of": len(batches), "pose": await up(work / "pose_head.mp4"), "ref": await up(work / "ref_head.png"), "face": None, "carry": [],
+              "w": CROP, "h": CROP, "frames": int(batch["frames"]), "offset": int(batch["offset"]), "fps": f.rate}
+    if recipe.preset == "lipsync":
+        face_mp4 = work / "face.mp4"
+        if not face_mp4.is_file():
+
+            def compose() -> None:                                       # the talking heads in their windows, the reference's head elsewhere
+                d = work / "face_all"
+                d.mkdir(exist_ok=True)
+                ref = work / "ref_head.png"
+                src = [ref] * f.frames
+                for wnd in plan["windows"]:
+                    heads = sorted((work / "face" / str(wnd["k"])).glob("*.png"))
+                    for j, i in enumerate(range(int(wnd["f0"]), int(wnd["f1"]))):
+                        if j < len(heads):
+                            src[i] = heads[j]
+                out = []
+                for i, p_ in enumerate(src):
+                    q_ = d / f"{i:04d}.png"
+                    shutil.copyfile(p_, q_)
+                    out.append(q_)
+                encode_guide(out, face_mp4, f.rate)
+            await asyncio.to_thread(compose)
+        inputs["face"] = await up(face_mp4)
+    if step.k > 0:
+        prev = sorted((work / "head" / str(step.k - 1)).glob("*.png"))[-CARRY:]
+        if len(prev) != CARRY:
+            raise ValueError(f"batch {step.k - 1} left {len(prev)} frames to carry, not {CARRY}")
+        cd = work / "carry"
+        cd.mkdir(exist_ok=True)
+        for i, p_ in enumerate(prev):                                     # RGB copies: LoadImage would read the matte as the mask
+            q_ = cd / f"{step.k:02d}_{i}.png"
+            Image.open(p_).convert("RGB").save(q_)
+            inputs["carry"].append(await up(q_))
+    job.log_tail.append(f"head batch {step.k + 1} of {len(batches)}: {batch['frames']} frames of the head crop of {layer.name} from frame {batch['offset']}"
+                        + (" with the talking head as the face" if inputs["face"] else ""))
     return inputs
 
 

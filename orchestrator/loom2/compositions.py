@@ -214,11 +214,13 @@ class CompositionStore:
             ec.open(final)
 
     # ---- D118 (AE4a): the layer's footage swapped for a take ---------------------------------------
-    def item_of(self, f: Final, c: Composition, layer_id: str) -> int | None:
-        """The footage item behind a layer's engine layer, read from the project file's composition (its layers name their source item)."""
+    def item_of(self, f: Final, c: Composition, layer_id: str, matte: bool = False) -> int | None:
+        """The footage item behind a layer's engine layer (or, with `matte`, behind a character's matte layer), read from the project file's
+        composition (its layers name their source item)."""
         cl = next((x for x in c.layers if x.id == layer_id), None)
-        if cl is None:
+        if cl is None or (matte and cl.matte is None):
             return None
+        want = cl.matte if matte else cl.layer
         try:
             pj = read_json(self.ecproj(f.id))
         except (OSError, ValueError):
@@ -228,13 +230,22 @@ class CompositionStore:
             if kd.get("type") != "Comp":
                 continue
             for l in kd.get("layers") or []:
-                if l.get("id") == cl.layer and (l.get("source") or {}).get("type") == "Footage":
+                if l.get("id") == want and (l.get("source") or {}).get("type") == "Footage":
                     return int(l["source"]["item"])
         for comp in (pj.get("comps") or {}).values():                     # the fake's flat form: a layer names its item
             for l in comp.get("layers") or []:
-                if l.get("id") == cl.layer and l.get("item") is not None:
+                if l.get("id") == want and l.get("item") is not None:
                     return int(l["item"])
         return None
+
+    def matte_footage(self, f: Final, layer_id: str, take_id: str | None) -> Path:
+        """D118 (AE4c): the composition footage of a character's matte for a source — the take's `matte_comp/` when the pass changed her
+        silhouette (the face pass), else the assembly's `comp/<layer>_matte/`."""
+        if take_id:
+            d = FinalStore(self.ws).pass_dir(f.id, layer_id, f"passes/{take_id}/matte_comp")
+            if len(list(d.glob("*.png"))) == f.frames:
+                return d
+        return self.footage(f.id) / f"{layer_id}_matte"
 
     def set_source(self, f: Final, ec: EffectCraft, layer_id: str, take_id: str | None) -> Composition:
         """The layer's footage item replaced by the take's frames (or its original frames): `file.replaceFootage` keeps the layer's
@@ -250,6 +261,12 @@ class CompositionStore:
             raise ValueError(f"no frames for {layer_id} under {d.name}")
         ec.command("file.replaceFootage", {"item": item, "path": str(first), "sequence": True})
         ec.command("file.interpretFootage", {"items": [item], "frameRate": float(f.rate)})
+        mitem = self.item_of(f, c, layer_id, matte=True)
+        if mitem is not None:                                             # AE4c: her matte follows the source (the face pass changes her silhouette)
+            mfirst = self.matte_footage(f, layer_id, take_id) / "0000.png"
+            if mfirst.is_file():
+                ec.command("file.replaceFootage", {"item": mitem, "path": str(mfirst), "sequence": True})
+                ec.command("file.interpretFootage", {"items": [mitem], "frameRate": float(f.rate)})
         c.sources[layer_id] = take_id
         c = self._edited(f, ec, c)
         c.final_revision = f.revision                                 # the swap is the final's own change: not stale
@@ -407,7 +424,7 @@ class CompositionStore:
         for l in c.layers:
             if str(l.layer) == str(ref) or l.name == ref or (l.matte is not None and str(l.matte) == str(ref)) or f"{l.name} · matte" == ref:
                 if l.kind == "figure":
-                    return l, self.footage(f.id) / f"{l.id}_matte"
+                    return l, self.matte_footage(f, l.id, c.sources.get(l.id))
                 if l.kind == "prop":
                     return l, self.footage(f.id) / l.id
                 if l.kind == "shadows":

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .models import registry
 
@@ -475,21 +475,42 @@ class CompRender(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-LayerPassPreset = Literal["cleanup", "creative"]
+LayerPassPreset = Literal["cleanup", "creative", "face", "lipsync"]
+
+
+class PassStep(BaseModel):
+    """D118 (AE4c): where a chained pass stands — the face pass is several engine jobs on one take: for Lip-sync the S2V talking head per
+    line window (`face_video`, k = the window), then Wan Animate on the head crop in 77-frame batches (`head`, k = the batch); the last
+    batch's finisher pastes the heads back and records the take. The route sets the first step; each finisher queues the next."""
+    take_id: str
+    stage: Literal["face_video", "head"] = "head"
+    k: int = Field(0, ge=0, le=400)
 
 
 class LayerPass(BaseModel):
     """D118 (AE4a): a pass on a final's layer — its frames through a video model, the result a *take* the layer shows as its source (the
     original kept, switchable). `cleanup`: Wan 2.2's low-noise expert over the clip at a low strength (E24 A2 — the author saw the hands
-    improve); `creative`: LTX-2.3 locked to the layer's Stage depth (E24 C3 — a repaint, for creative upgrades). Face and Lip-sync come
-    with AE4c. `model_id` is the pass's video model, picked by the route for the preset (a wan22 or an ltx23 spec of this build)."""
+    improve); `creative`: LTX-2.3 locked to the layer's Stage depth (E24 C3 — a repaint, for creative upgrades). AE4c (E29b): `face` — the
+    head tracked from the layer's keypoints, rendered at 512² by Wan Animate from the reference's head and the pose crop, matted, pasted
+    back grown and feathered (a sharp, recognisable face; `strength` unused); `lipsync` — the face pass with the lines attached to the
+    layer: an S2V talking head of the reference per line window as Animate's face video. `model_id` is this step's model (the S2V spec for
+    a `face_video` step, else the pass's video model), picked by the route and the finisher for the preset."""
     kind: Literal["layer_pass"] = "layer_pass"
     final_id: str
     layer_id: str
     preset: LayerPassPreset = "cleanup"
     strength: float = Field(0.10, ge=0.02, le=0.9)
     model_id: str
+    step: PassStep | None = None                  # AE4c: the face pass's chain position (required for face / lipsync)
     seeds: list[int] = Field(default_factory=lambda: [0])
+
+    @model_validator(mode="after")
+    def _face_has_step(self) -> "LayerPass":
+        if self.preset in ("face", "lipsync") and self.step is None:
+            raise ValueError("the face pass runs in steps: give it its first step (the route does)")
+        if self.preset not in ("face", "lipsync") and self.step is not None:
+            raise ValueError(f"the {self.preset} pass runs in one job: no step")
+        return self
 
 
 Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],

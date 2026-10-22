@@ -1136,6 +1136,8 @@ export interface paths {
          * Final Layer Pass
          * @description D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to
          *     the layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).
+         *     AE4c: Face and Lip-sync on a character layer with keypoints and a matte — a chain of jobs (the talking head per line window for
+         *     Lip-sync, then Wan Animate on the head crop in batches), the last of which pastes the heads back and records the take.
          */
         post: operations["final_layer_pass_finals__fid__layers__lid__pass_post"];
         delete?: never;
@@ -7449,7 +7451,8 @@ export interface components {
         };
         /**
          * PassBody
-         * @description D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another.
+         * @description D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`
+         *     (the strength unused).
          */
         PassBody: {
             /**
@@ -7457,7 +7460,7 @@ export interface components {
              * @default cleanup
              * @enum {string}
              */
-            preset?: "cleanup" | "creative";
+            preset?: "cleanup" | "creative" | "face" | "lipsync";
             /** Seed */
             seed?: number | null;
             /**

@@ -153,3 +153,7 @@ Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; th
 - **2026-10-22 (journal 2026-10-22 09:11):** AE4b built — the shot's voiced lines listed (`GET /finals/{fid}/lines`), a line attached at the playhead as an
   audio layer bound to its speaker's layer (the WAV copied under the final, `file.import` + `layer.addItem`), its row and its lane with the
   waveform, the lanes' move / trim / slip as for a picture layer, the render mixing the lines into the proxy. Next: AE4c, the face pass.
+- **2026-10-22 (journal 2026-10-22 10:11):** AE4c built — Face and Lip-sync as presets of the `layer_pass` recipe run in steps (`PassStep`: the S2V talking
+  head per line window, Wan Animate on the head crop in 77-frame batches, the paste), the head tracked from the layer's keypoints
+  (`loom2/heads.py`, E29b's tracker), the rendered head matted in the same graph and pasted back under a grown, feathered mask, the take's
+  own matte followed by the assembly and the composition. Next: AE4d, LatentSync as a tool.

@@ -7549,3 +7549,43 @@ The author asked for a review of the state of things, then "record all this and 
   picker and reads its empty state. Offline 485 full and 485 open, settings audit 265 fields / 0 problems (12 allowed with a reason), agents_check and model_literals_check clean, e2e 49/49 full and open (one open run failed once in the final-shot scenario — the tail-only log kept no detail; green alone and on a full rerun), Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4b_rig.py): E29b's English line ingested as an audio asset of the PS5 project, attached to Mara's layer at 1.0 s (In 1.0, Out 5.81), moved to 1.5 s by the lanes' command, the shot rendered in 6 s (81 frames in 2.0 s, conformed to 121 at 24 fps, "1 line mixed into the proxy") with the line in the proxy's audio stream (5.04 s) and the clip's audio_asset_id set, the line removed (rev 59, no audio) — through the app on the real engine (effectcraft-cli on the CPU, RIFE).
 - Gotchas: `create_node` keeps the content fields only — a node's bound shot is set by bind or on the record; the fake's `layer.addItem`
   ignored `time` until now (every layer at 0).
+
+## 2026-10-22 10:11 — AE4c built: the face pass (D118, from E29b) — Face and Lip-sync as passes on a character layer, the head as its own layer in a chain of jobs
+
+- **The recipe:** `LayerPass.preset` gains `face` and `lipsync`; `step: PassStep {take_id, stage: face_video | head, k}` says where a chained
+  pass stands (required for the two, refused for the others). The route (`POST …/layers/{lid}/pass`) checks a character layer with
+  keypoints and a matte, for Lip-sync a line attached to the layer (AE4b's audio layers, `audio_timing` filtered by `final_layer`), picks
+  the S2V spec for the first `face_video` step else the Animate spec, sweeps the folders of passes that never became takes, and queues
+  the first step with the take id in the origin's payload (the Final level sees one running pass through the chain).
+- **`loom2/heads.py`** (E29b's code as product): `head_boxes` (the box from the nose, eyes and ears, 2.6 × nose–neck, smoothed over 9 frames,
+  the head in the upper part, clamped), `box_crop` to 512², `paste_mask` (the union of the new head's silhouette and the old one's, grown
+  6 % of the side, feathered 4 %, inside E29b's rounded square — the halo the author saw was the old head's remains around a plain
+  feathered square), `paste_head`, `windows` (the line windows from the lanes' timing, runs of ≤ 77 frames on the 4n + 1 grid, each with
+  where its audio starts in the file), `slice_audio`.
+- **The steps.** `prepare_face_pass` writes the take's plan on the first step (`passes/<take>/work/plan.json`: the boxes, `plan_batches`, the
+  windows with their audio cut to WAVs, the reference's head crop from the placed reference else the layer's first shown frame, the pose
+  pass cropped to the head as one video); a `face_video` step uploads the head crop and the window's audio; a `head` step uploads the pose
+  crop video, the head crop, the face video composed from the talking heads (the reference's head where no line plays; made once) and the
+  previous batch's last 5 frames as RGB (LoadImage would read the matte as a mask). `build_face_pass`: the S2V graph at 512² (draft, 20
+  steps, the calm talking-head prompt) or CN4's Animate graph on the crop (`video_frame_offset` seeks both the pose and the face video,
+  `continue_motion` from the carried frames) followed by the matte of the rendered head in the same graph — SAM 3 by "person" (BiRefNet
+  under `open`, `matte_mode`) → InvertMask → JoinImageWithAlpha (the node writes 1 − mask) → one RGBA PNG per frame. `_finish_face_step`
+  keeps each step under the work dir and queues the next (the model switched to the Animate spec after the last window; `result.next_job_id`
+  points on); after the last batch: `stitch`, the paste under `paste_mask` onto the shown source's frames, the layer's matte updated in the
+  box (old outside, the new head's silhouette inside), the composition's matte footage too (a nearer prop's cut kept as the ratio of the
+  old comp matte to the old matte), the heads kept RGBA under `passes/<take>/head/` (AE4d works on them), the take recorded
+  (`head`, `matte`, `boxes`, `ref`, `lines`) and shown. A failure drops the take's folder.
+- **The matte follows the source:** `FinalStore.matte_dir` (the shown take's `matte/` when it has one), the assembly reads it;
+  `CompositionStore.item_of(…, matte=True)`, `matte_footage` (the take's `matte_comp/` else `comp/<layer>_matte/`), `set_source` swaps her
+  matte item with her footage, `content_footage` (D116's mask from content) reads the same.
+- **UI:** the Face and Lip-sync tiles live (no strength for them; Lip-sync disabled until a line is on the layer, the tile's title says so);
+  a take row reads "the head" or "n lines"; the toast says the pass is several jobs. `PASS_LABEL` / `PASS_STRENGTH` in the store.
+- **Fakes and tests:** the catalogue fixture gains `JoinImageWithAlpha`; the settings audit learns `PassStep` is read as `step`.
+  `test_face_pass_ae4c`: the boxes, the paste and the windows; the Face chain on a 13-frame final with BATCH shrunk to 9 (two batches, the
+  second carrying 5 from offset 9), the take's frames / RGBA heads / matte / comp matte, the paste inside the box and nothing outside,
+  `frames_dir` and `matte_dir` on the take, the composition's two items swapped and back; Lip-sync with a line attached (the talking head's
+  window from the fake's timing, then the batches with the face video, the lines on the take); a take dropped; an orphan swept; the route's
+  refusals (the plate, no line, no keypoints). The e2e final-shot scenario runs Face on Mara's layer (one 9-frame batch), reads "the head",
+  the composition's revision, drops it; Lip-sync is disabled without a line. Offline 488 full and 488 open, settings audit 269 fields / 0 problems, agents_check and model_literals_check clean, e2e 49/49 full and open (the object-matte step flaked twice in full runs: a stacked toast over the frame's centre swallowed the click — the scenario clicks the frame element now and waits for the tool), Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4c_rig.py: the PS5 final through the app on the real engine, E20's line en1 attached to Mara's layer at 1.0 s): Lip-sync — the talking head for the line's window (65 frames, 368 s), two head batches of 77 frames each rendered and matted in one graph (286 s, 264 s), the take in 917 s — FaceSim 0.43 / 0.62 / 0.57 against the reference's head (E29b's L2h 0.42–0.61, the performed crop 0.25–0.30), sync r 0.30 (E29b 0.31), articulation 33.5; Face — 512 s, FaceSim 0.63 / 0.71 / 0.62; the composition synced to each and the finished shot rendered in 5 s (out/ae4c/final_lipsync.mp4, final_face.mp4, the sheets). The first paste carried a dark rim in (seam 3.1 / 5.0): the model shades the background around the head and the wide colour paste brought it along — the colour now comes in under the head's own silhouette with a hair-thin margin, the matte does the cutting (heads.paste_head; seam 1.55 / 1.64 after `ae4c_rig.py --repaste` from the kept heads, 7 s a take); seen through the matte the new head is clean, no halo (out/ae4c/paste_check.jpg). To save later: the second batch renders 77 frames for the 4 it needs (plan_batches sizes every batch at 77, ≈ 4 min).
+- Gotchas: `JobRecord.recipe` is a dict; the fake EffectCraft's `layer.addItem` plays an audio layer to the comp's end (the window follows
+  the timing, not the file); the Bash heredocs of this session broke on long patch bodies — patches went through files.

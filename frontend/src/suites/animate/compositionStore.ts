@@ -29,9 +29,11 @@ export interface MaskInfo { uid: number; name: string; path: string; feather: nu
 export type MaskTool = 'off' | 'rect' | 'ellipse' | 'poly' | 'object'
 export type MaskView = 'lines' | 'fill'
 export type EditorTab = 'props' | 'masks' | 'effects' | 'passes'
-/** D118 (AE4a): a pass on a layer — the preset and its strength; Face and Lip-sync come with AE4c. */
-export type PassPreset = 'cleanup' | 'creative'
-export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string }
+/** D118 (AE4a): a pass on a layer — the preset and its strength; AE4c: Face and Lip-sync (the head as its own layer, E29b; no strength). */
+export type PassPreset = 'cleanup' | 'creative' | 'face' | 'lipsync'
+export const PASS_LABEL: Record<PassPreset, string> = { cleanup: 'Clean up', creative: 'Creative', face: 'Face', lipsync: 'Lip-sync' }
+export const PASS_STRENGTH: Record<PassPreset, number> = { cleanup: 0.1, creative: 0.35, face: 0.5, lipsync: 0.5 }
+export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
 /** D118 (AE4b): a voiced line of the shot, as GET /finals/{fid}/lines reports it. */
 export interface FinalLine { node_id: string; index: number; speaker: string | null; speaker_name: string | null; text: string; audio_asset_id: string; duration_s: number | null; layer_id: string | null }
 export type AudioLayer = Composition['audio'][number]
@@ -405,7 +407,7 @@ export const useComposition = create<CompState>((set, get) => {
       return ok
     },
     // ---- D118 (AE4a): passes ----
-    setPass: (preset, strength) => set({ passPreset: preset, passStrength: strength ?? (preset === 'cleanup' ? 0.1 : 0.35) }),
+    setPass: (preset, strength) => set({ passPreset: preset, passStrength: strength ?? PASS_STRENGTH[preset] }),
     finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
     runPass: async () => {
       const s = get()
@@ -413,7 +415,8 @@ export const useComposition = create<CompState>((set, get) => {
       if (!s.finalId || !lid) { useSession.getState().toast('A pass runs on a character layer or the plate', 'info'); return false }
       const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength } })
       if (r.error) { useSession.getState().toast(`Pass: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
-      useSession.getState().toast(`${s.passPreset === 'cleanup' ? 'Clean up' : 'Creative'} pass queued on the layer — its take lands as the layer's source`, 'success')
+      useSession.getState().toast(`${PASS_LABEL[s.passPreset]} pass queued on the layer — its take lands as the layer's source`
+        + (s.passPreset === 'face' || s.passPreset === 'lipsync' ? ' (several jobs: the head in batches, then the paste)' : ''), 'success')
       void get().reload()
       return true
     },

@@ -331,10 +331,9 @@ function LayerRow({ l }: { l: CompLayer }) {
 }
 
 export function LayersSection() {
-  const level = useComposition((s) => s.level)
   const comp = useComposition((s) => s.comp)
   const layers = useComposition((s) => s.layers)
-  if (level !== 'final' || !comp) return <span className="hint">Not at the Final level. <Help text="In the Shot section, a final shot's Open in Final opens its composition here: the layers, each one's properties, masks and effects." /></span>
+  if (!comp) return <span className="hint">No composition open. <Help text="Open a final in the Shot section above (or Performance › Final shot › Open in Final): its layers show here, each one's editor under its row — properties, masks, effects, passes." /></span>
   return (
     <div className="comp-layers">
       <div className="verbs"><CommandRow ids={['anim.final.undo', 'anim.final.redo', 'gap', 'anim.final.layer.up', 'anim.final.layer.down', 'anim.final.layer.hide', 'anim.final.layer.solo', 'anim.final.layer.lock', 'gap', 'anim.final.trimIn', 'anim.final.trimOut']} />

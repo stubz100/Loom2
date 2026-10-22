@@ -159,3 +159,9 @@
 .shot-tab .kv .shot-prompt { min-height: 48px; }
 .rig-strip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }
 .rig-strip button { font-size: 11px; padding: 2px 7px; min-height: 22px; }
+/* D121: the pose pill — pose mode by the selected figure (ArtCraft's Enter Pose Mode / Done), centred over the viewport's top */
+.pose-pill { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: color-mix(in srgb, var(--bg1) 85%, transparent); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(4px); }
+.pose-pill .cmd-btn.active { border-color: var(--accent); color: var(--accent); }
+/* D121: Performance's Stage clip card */
+.stage-clip .start-stills { margin-bottom: 4px; }
+.stage-clip .shot-prompt { width: 100%; }

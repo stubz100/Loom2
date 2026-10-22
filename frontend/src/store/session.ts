@@ -22,7 +22,7 @@ interface UiState {
   storyLast?: 'story' | 'catalogue'                                            // D90: the Story tab returns to the workspace last open under it
   imageLast?: 'generate' | 'edit'                                              // D95 (IM1): the Image tab returns to the mode last open under it (Make or Edit)
   dockTab?: 'queue' | 'bin'                                                     // D95 (AN1, 04 C1): the Dock shows the render queue or the Bin
-  animateLast?: 'animate' | 'stage'                                            // D95 (AN1): the Animate tab returns to the level last open (Performance or Clay)
+  animateLast?: 'animate' | 'stage' | 'final'                                  // D95 (AN1) → D121: the Animate tab returns to the level last open (Performance, Clay or Final)
   pick?: BinPick | null                                                        // a pick started from a panel (the author, 2026-10-22): the Bin's tiles show its button top right
 }
 
@@ -102,7 +102,7 @@ export const useSession = create<SessionState>()(
         }
         const q0 = new URLSearchParams(location.search)
         const deep = q0.get('suite') === 'animate' && q0.get('tab') === 'sequence' ? 'story' : q0.get('suite')   // 17 SY4: the Sequence tab moved to Story · Episode
-        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(deep)) get().setSuite(deep as Suite)
+        if (deep && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(deep)) get().setSuite(deep as Suite)
         else if (get().ui.suite === 'models') set({ ui: { ...get().ui, suite: 'catalogue' } })   // D90: a remembered Models suite lands in the Catalogue
         try {
           await get().refreshAll()
@@ -111,7 +111,7 @@ export const useSession = create<SessionState>()(
           return
         }
         const start = get().health?.start_suite
-        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'story', 'models'].includes(start)) get().setSuite(start as Suite)
+        if (!deep && start && ['catalogue', 'generate', 'edit', 'animate', 'stage', 'final', 'story', 'models'].includes(start)) get().setSuite(start as Suite)
         socket?.close()
         let everOpen = false
         socket = new EventsSocket(
@@ -152,7 +152,7 @@ export const useSession = create<SessionState>()(
 
       setSuite: (suite) => {
         if (suite === 'models') { get().openModels({ missing: true }); return }   // D90 (02 §7): the old routes (the Fetch buttons) open the sheet on the missing weights
-        set({ ui: { ...get().ui, suite, pick: null, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' ? { animateLast: suite } : {}) } })
+        set({ ui: { ...get().ui, suite, pick: null, ...(suite === 'story' || suite === 'catalogue' ? { storyLast: suite } : {}), ...(suite === 'generate' || suite === 'edit' ? { imageLast: suite } : {}), ...(suite === 'animate' || suite === 'stage' || suite === 'final' ? { animateLast: suite } : {}) } })
       },
       openModels: (o = {}) => set({ modelsSheet: { tab: o.tab ?? 'roster', missing: !!o.missing } }),
       closeModels: () => set({ modelsSheet: null }),

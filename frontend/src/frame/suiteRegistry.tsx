@@ -11,7 +11,7 @@ import { CatalogueSuite } from '../suites/catalogue/CatalogueSuite'
 import { GenerateSuite } from '../suites/generate/GenerateSuite'
 import { ImageModeSwitch } from './ImageModeSwitch'
 import { lazySuite, preloadSuite } from './lazySuite'
-import { DEFAULT_RAIL, sharedKeyOf, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
+import { DEFAULT_RAIL, STORY_RAIL, type GroupRailTab, type RailTab } from './railTabs'
 
 export interface SuiteDef {
   id: string
@@ -36,6 +36,9 @@ export const SUITE_DEFS: Record<string, SuiteDef> = {
   animate: lazySuite({ id: 'animate', rail: DEFAULT_RAIL.animate, keepAlive: true, noInspector: true, panelTitle: 'Animate' }, () => import('../suites/animate/AnimateSuite').then((m) => m.AnimateSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
   models: lazySuite({ id: 'models', rail: DEFAULT_RAIL.models }, () => import('../suites/models/ModelsSuite').then((m) => m.ModelsSuite), ['Panel', 'Strip', 'Stage', 'Inspector']),
   stage: lazySuite({ id: 'stage', rail: DEFAULT_RAIL.stage, keepAlive: true, noInspector: true, panelTitle: 'Animate' }, () => import('../suites/stage/StageSuite').then((m) => m.StageSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),   // P13 / ST1 (D81): three.js, its own WebGL2 canvas
+  // D121: Animate's Final level as a suite of its own (the composition's column, strip, viewer and foot); its frames are cached in the store,
+  // so its viewer need not stay mounted
+  final: lazySuite({ id: 'final', rail: DEFAULT_RAIL.final, noInspector: true, panelTitle: 'Animate' }, () => import('../suites/animate/FinalSuite').then((m) => m.FinalSuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),
   story: lazySuite({ id: 'story', rail: DEFAULT_RAIL.story }, () => import('../suites/story/StorySuite').then((m) => m.StorySuite), ['Panel', 'Strip', 'Stage', 'Inspector', 'PrimaryAction']),   // 17 (D85): no GPU stage, nothing kept alive
 }
 
@@ -49,14 +52,14 @@ export const SUITE_DEFS: Record<string, SuiteDef> = {
 interface RailState { active: Record<string, string>; setActive: (suite: string, tab: string) => void }
 const useRailState = create<RailState>()((set, get) => ({ active: {}, setActive: (suite, tab) => set({ active: { ...get().active, [suite]: tab } }) }))
 
-export const setRailTab = (suite: string, tab: string) => useRailState.getState().setActive(sharedKeyOf(suite), tab)
+export const setRailTab = (suite: string, tab: string) => useRailState.getState().setActive(suite, tab)
 
 // ?suite=X&tab=Y opens that panel section at launch (07 §1.7 deep links; scripts/csp_check.py and the acceptance loops use it)
 {
   const q = new URLSearchParams(location.search)
   const s0 = q.get('suite'), t0 = q.get('tab')
   const [s, t] = s0 === 'animate' && t0 === 'sequence' ? ['story', 'episode'] : [s0, t0]    // 17 SY4 (D85): the Sequence tab moved to Story · Episode (one release of redirect)
-  if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(sharedKeyOf(s), t)
+  if (s && t && SUITE_DEFS[s]?.rail.some((r) => r.id === t)) useRailState.getState().setActive(s, t)
   // D71: ?suite=edit&tool=ai&ai=select[&sel=subject][&asset=<id>] — Edit with that tool / AI operation chosen (frame/openWith.ts)
   if (q.get('tool') || q.get('ai')) void import('./openWith').then((m) => { const d = m.deepLinkOf(q); if (d) void m.openWith(d.assetId, d.o) })
 }
@@ -64,9 +67,9 @@ export const setRailTab = (suite: string, tab: string) => useRailState.getState(
 export function useSuiteRail() {
   const suite = useSession((s) => s.ui.suite)
   const tabs = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []
-  const active = useRailState((r) => r.active[sharedKeyOf(suite)]) ?? tabs[0]?.id ?? ''
+  const active = useRailState((r) => r.active[suite]) ?? tabs[0]?.id ?? ''
   const setActive = useRailState((r) => r.setActive)
-  return { tabs, active, setActive: (tab: string) => setActive(sharedKeyOf(suite), tab) }
+  return { tabs, active, setActive: (tab: string) => setActive(suite, tab) }
 }
 
 /** D90: the rail the frame shows — the Story tab's six workspaces across the Story and Catalogue suites, else the suite's own tabs. */
@@ -75,11 +78,11 @@ export function useRailEntries(): { entries: GroupRailTab[]; isActive: (e: Group
   const active = useRailState((r) => r.active)
   const own = SUITE_DEFS[suite]?.rail ?? DEFAULT_RAIL[suite] ?? []
   const entries = suite === 'story' || suite === 'catalogue' ? STORY_RAIL : own.map((t) => ({ ...t, suite }))
-  const activeOf = (s: string) => active[sharedKeyOf(s)] ?? (SUITE_DEFS[s]?.rail ?? DEFAULT_RAIL[s] ?? [])[0]?.id
+  const activeOf = (s: string) => active[s] ?? (SUITE_DEFS[s]?.rail ?? DEFAULT_RAIL[s] ?? [])[0]?.id
   return {
     entries,
     isActive: (e) => e.suite === suite && activeOf(e.suite) === e.id,
-    open: (e) => { useRailState.getState().setActive(sharedKeyOf(e.suite), e.id); if (e.suite !== suite) useSession.getState().setSuite(e.suite as never) },
+    open: (e) => { useRailState.getState().setActive(e.suite, e.id); if (e.suite !== suite) useSession.getState().setSuite(e.suite as never) },
   }
 }
 

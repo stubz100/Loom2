@@ -1,13 +1,12 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, Sun, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, PersonStanding, Sun, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
 import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
-import { useFinals } from './finalShot'
-import { useComposition } from '../animate/compositionStore'
+import { nextFinalStep, useFinals } from './finalShot'
 import type { HandPreset } from './detailed'
 import { profilesForMentions } from '../story/storyStore'
 import { useMotion } from './motion/motionStore'
@@ -87,14 +86,14 @@ registerCommands([
   { id: 'stage.figure.openInCast', scope: 'stage', label: 'Open the character in Story · Cast', icon: UserRound, placement: ['inspector', 'context'], when: () => !!sel()?.profile_id,
     run: () => { const o = sel(); if (o?.profile_id) void import('../../store/origin').then((m) => m.goToStory({ tab: 'cast', id: o.profile_id!, ...(o.version ? { version: o.version } : {}) })) } },
   // ST3: the frame (the Render tab; D90 02 §8.1: a shot is a Story shot)
-  { id: 'stage.shot.generate', scope: 'stage', label: 'Render frame', icon: Aperture, keys: 'Ctrl+Enter', placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,
+  { id: 'stage.shot.generate', scope: 'stage', label: 'Render frame', icon: Aperture, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering,
     run: () => void st().generateShot() },
-  { id: 'stage.shot.passes', scope: 'stage', label: 'Render the passes', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderPasses() },
+  { id: 'stage.shot.passes', scope: 'stage', label: 'Render the passes', icon: Layers, keys: 'Ctrl+Enter', placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderPasses() },
   { id: 'stage.shot.clearRefs', scope: 'stage', label: 'Clear the references', icon: X, placement: ['panel'], when: () => st().shot.refs.length > 0, run: () => st().setShot({ refs: [] }) },
   // ST4: keyframes and the clip — D90 (02 §8.2): the transport keys of Animate and the Episode lane; the previous / next key moved to Alt+← / →
   // D99 (UX0 #19): the viewer levels by number — 2 goes to Performance from here (1, Clay, is this level); the strip's switch is their mouse home
-  { id: 'stage.level.performance', scope: 'stage', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => { useComposition.getState().setLevel('performance'); useSession.getState().setSuite('animate') } },
-  { id: 'stage.level.final', scope: 'stage', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => { useComposition.getState().setLevel('final'); useSession.getState().setSuite('animate') } },   // AE1 / AP1 (D114)
+  { id: 'stage.level.performance', scope: 'stage', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
+  { id: 'stage.level.final', scope: 'stage', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },   // AE1 / AP1 (D114) → D121: a suite of its own
   { id: 'stage.anim.play', scope: 'stage', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['strip'], when: hasStage, run: () => st().setPlaying(!st().playing) },
   { id: 'stage.anim.prev', scope: 'stage', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame - 1) },
   { id: 'stage.anim.next', scope: 'stage', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame + 1) },
@@ -111,10 +110,19 @@ registerCommands([
   { id: 'stage.anim.setStart', scope: 'stage', label: 'Range starts here (in)', icon: Diamond, keys: 'I', placement: ['strip'], when: hasStage, run: () => st().setRange(st().frame, Math.max(st().frame + 1, st().current!.range.end)) },
   { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here (out)', icon: Diamond, keys: 'O', placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
-  { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().guideEntry() && !!st().shotStart && !st().rendering && !!st().clipCaps(), run: () => void st().animateShot() },
+  { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !!st().shotStart && !st().rendering && !!st().clipCaps(),
+    run: () => void (async () => { if ((!st().guideEntry() || st().guideStale()) && !(await st().renderGuide())) return; await st().animateShot() })() },   // D121: the sequence first when missing or stale
+  // D121: the stills of a stage are made in Image (D95) — the stage clip's start picker sends there; pose mode by the figure, not by the column
+  { id: 'stage.frame.make', scope: 'stage', label: 'Make a frame (Image · From a stage)', icon: Aperture, placement: ['panel'], when: hasStage,
+    run: () => { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); useSession.getState().setSuite('generate') } },
+  { id: 'stage.pose.mode', scope: 'stage', label: 'Pose the figure', hint: 'its joints and hands in the viewport; again (Done) to stop', icon: PersonStanding, placement: ['toolbar', 'context'],
+    when: () => sel()?.kind === 'mannequin', run: () => st().setPosing(!st().posing) },
   // D111 (PS5): the finished scene split into layers (the passes rendered here; the layers are made from them on the queue)
   { id: 'stage.final.make', scope: 'stage', label: 'Make the final shot…', icon: Layers, hint: 'the scene through the active camera, split into layers: the plate, each character, each prop, the shadows',
     placement: ['panel'], when: () => hasStage() && !!st().activeCamera() && !useFinals.getState().making && !st().rendering, run: () => void useFinals.getState().make(16) },
+  // D121: Performance › Final shot's foot — the newest final's next step (make it, the plate, each character, assemble, compose, open in Final)
+  { id: 'stage.final.next', scope: 'stage', label: "The final shot's next step", icon: Layers, placement: ['panel'], when: () => !!nextFinalStep(st().current?.id ?? null).run,
+    run: () => nextFinalStep(st().current?.id ?? null).run?.() },
   { id: 'stage.undo', scope: 'stage', label: 'Undo', icon: Undo2, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: () => st().undo.length > 0, run: () => st().undoEdit() },
   { id: 'stage.redo', scope: 'stage', label: 'Redo', icon: Redo2, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: () => st().redo.length > 0, run: () => st().redoEdit() },
 ])
@@ -141,7 +149,7 @@ export function bindItems(): MenuItem[] {
 export function viewportMenu(onObject: boolean): MenuItem[] {
   return onObject
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
-      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
+      ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
     : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.toShot' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,

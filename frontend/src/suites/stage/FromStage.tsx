@@ -1,6 +1,6 @@
 // D95 (AN1, UX0 #5): Image · Make's *From a stage* — stills from a stage, the stage edited in Animate (its Clay level). Pick a stage and a
 // camera here; the form is the stage's own still form (method, image 1 = the pass, the reference deck with the figures' bound slots, the
-// prompt, size, count, results — `ShotTab` without the clip, which belongs to Animate). The passes render headless when the stage is not on
+// prompt, size, count, results — `ShotTab`; the clip and the final shot are Animate · Performance's, D121). The passes render headless when the stage is not on
 // screen (headless.ts). Loaded lazily with the stage's code, so Image's eager bundle carries no three.js.
 import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
@@ -28,7 +28,7 @@ export function FromStage() {
           {current.cameras.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.focal_mm} mm</option>)}
         </select>
       </div>}
-      {current && <ShotTab stillsOnly />}
+      {current && <ShotTab />}
     </div>
   )
 }

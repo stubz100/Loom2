@@ -3,7 +3,7 @@
 // store takes the width on release.
 import { useSession } from '../store/session'
 import { clampWidth, INSPECTOR_MIN, PANEL_MIN } from './panelWidth'
-import { sharedKeyOf } from './railTabs'
+import { widthKeyOf } from './railTabs'
 
 export function Resizer({ side }: { side: 'panel' | 'inspector' }) {
   const key = side === 'panel' ? 'panelWidths' : 'inspectorWidths'
@@ -19,14 +19,14 @@ export function Resizer({ side }: { side: 'panel' | 'inspector' }) {
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up)
       const s = useSession.getState()
-      s.setUi({ [key]: { ...(s.ui[key] ?? {}), [sharedKeyOf(s.ui.suite)]: w } })
+      s.setUi({ [key]: { ...(s.ui[key] ?? {}), [widthKeyOf(s.ui.suite)]: w } })
     }
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
   }
   const reset = () => {
     const s = useSession.getState()
     const rest = { ...(s.ui[key] ?? {}) }
-    delete rest[sharedKeyOf(s.ui.suite)]
+    delete rest[widthKeyOf(s.ui.suite)]
     s.setUi({ [key]: rest })
   }
   return <div className={`resizer ${side}`} role="separator" aria-orientation="vertical" aria-label={`Resize the ${side} (double-click: default width)`}

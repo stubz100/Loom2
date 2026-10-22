@@ -71,6 +71,12 @@ export function Bin() {
     if (!useAlbum.getState().tree) void useAlbum.getState().load()
   }, [project?.path])
   const shown = useMemo(() => (q.kind ? items.filter((a) => a.kind === q.kind) : items), [items, q.kind])   // a new asset lands before the next load
+  useEffect(() => {                                                       // Escape ends the pick (the ✕ in the bar is its mouse placement, D32); before any return (rules of hooks)
+    if (!pick) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); useSession.getState().setUi({ pick: null }) } }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [pick])
   if (!project?.open) return <span className="meta">No project open.</span>
   const place = q.group_id ?? q.folder
   const open = (p: string) => void useBin.getState().setQuery(p === 'unprocessed' || p === 'all' ? { folder: p, group_id: undefined } : { folder: 'all', group_id: p })
@@ -80,12 +86,6 @@ export function Bin() {
   const picked = (a: Asset): Verb | undefined => (pick ? verbs(a, suite).find((v) => v.id === pick.verb) : undefined)
   const PickIcon = pick ? command(pick.cmd)?.icon : undefined
   const endPick = () => useSession.getState().setUi({ pick: null })
-  useEffect(() => {                                                       // Escape ends the pick (the ✕ in the bar is its mouse placement, D32)
-    if (!pick) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); endPick() } }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [pick])
   return (
     <div className="bin">
       <nav className="bin-places" aria-label="Bin places">

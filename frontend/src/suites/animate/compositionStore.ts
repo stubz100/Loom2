@@ -9,7 +9,6 @@ import { baseUrl, getBackend, http, unwrap } from '../../api/client'
 import type { Composition, Final } from '../../api/types'
 import { useSession } from '../../store/session'
 
-export type Level = 'performance' | 'final'
 export type Side = 'half' | 'full'
 export const REST_MS = 300                 // the playhead still this long: the full frame
 const FULL_KEEP = 12                       // full frames kept (≈ 1.2 MB each at 832×480); every ½ frame of the shot is kept (≈ 150 KB)
@@ -86,7 +85,6 @@ export function effectsOf(tree: TreeNode | undefined): EffectInfo[] {
 const detail = (e: unknown): string => (e as { detail?: string }).detail ?? (e as Error).message ?? String(e)
 
 interface CompState {
-  level: Level
   finalId: string | null
   final: Final | null
   comp: Composition | null
@@ -96,8 +94,8 @@ interface CompState {
   fetching: boolean
   filled: number                           // ½ frames cached at this revision
   error: string | null
-  setLevel: (level: Level) => void
-  /** Show this final's composition at the Final level (its record and composition loaded, the first frame asked for). */
+  /** Show this final's composition at the Final level (its record and composition loaded, the first frame asked for); the level itself is
+   *  the `final` suite (D121) — the caller switches to it. */
   open: (finalId: string) => Promise<void>
   /** Load the final and its composition again; a new revision drops the cached frames. */
   reload: () => Promise<void>
@@ -323,7 +321,7 @@ export const useComposition = create<CompState>((set, get) => {
     try { await call(); await edited(); return true } catch (e) { useSession.getState().toast(`${what}: ${detail(e)}`, 'error'); return false } finally { set({ busy: false }) }
   }
   return {
-    level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
+    finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
     layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
@@ -591,10 +589,8 @@ export const useComposition = create<CompState>((set, get) => {
     // ---- AE2d: timing ----
     setTiming: (id, patch) => get().command('layer.timing', { layers: [id], ...patch }, 'Timing'),
     slip: (id, delta) => get().command('layer.slip', { layers: [id], delta }, 'Slip'),
-    setLevel: (level) => { if (level !== 'final') get().togglePlay(false); set({ level }) },
     open: async (finalId) => {
       if (get().finalId !== finalId) { get().togglePlay(false); set({ finalId, frame: 0, shown: null, comp: null, final: null }) }
-      set({ level: 'final' })
       await get().reload()
     },
     reload: async () => {

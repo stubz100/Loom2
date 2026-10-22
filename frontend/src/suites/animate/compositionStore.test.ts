@@ -36,7 +36,7 @@ describe('AP1 thin: the composition viewer', () => {
   it('opens at ½ (frame 0), scrubs at ½, shows the full frame at rest, and keeps what it got', async () => {
     const s = useComposition.getState()
     await s.open('fin_1')
-    expect(useComposition.getState().level).toBe('final')
+    expect(useComposition.getState().finalId).toBe('fin_1')                   // D121: the level is the final suite; the store holds the final
     expect(frames()).toEqual(['t=0&side=416'])                                 // ½ of 832
     await vi.waitFor(() => { expect(useComposition.getState().error).toBeNull(); expect(useComposition.getState().shown).toMatchObject({ frame: 0, side: 'half', revision: 0 }) })
     useComposition.getState().setFrame(3)

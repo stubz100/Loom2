@@ -184,8 +184,8 @@ async function openImage(page: import('@playwright/test').Page, mode: 'Make' | '
   await expect(page.locator('.panel .head .image-mode .segmented button.active')).toHaveText(mode)
 }
 
-/** D95 (AN1): Animate's viewer levels — the Animate tab, then the strip's Clay | Performance switch. */
-async function openAnimate(page: import('@playwright/test').Page, level: 'Clay' | 'Performance'): Promise<void> {
+/** D95 (AN1) → D121: Animate's levels, each a mode — the Animate tab, then the strip's Clay | Performance | Final switch. */
+async function openAnimate(page: import('@playwright/test').Page, level: 'Clay' | 'Performance' | 'Final'): Promise<void> {
   await page.locator('nav.tabs button.tab', { hasText: 'Animate' }).click()
   await page.locator('.animate-levels button', { hasText: level }).click()
   await expect(page.locator('.animate-levels button.active')).toHaveText(level)
@@ -208,11 +208,19 @@ async function openSection(page: import('@playwright/test').Page, title: string)
   await expect(btn).toHaveClass(/active/)                                                                      // the rail follows the scroll (useColumnSync)
 }
 
-/** D95 (AN1): the stage's render form — Animate's Performance section, its From the stage card (Stage's old Render tab). */
-async function stageRoute(page: import('@playwright/test').Page): Promise<void> {
-  await openSection(page, 'Performance')
-  await page.locator('.col-sec-head .segmented button', { hasText: 'From the stage' }).click()
+/** D121 (D95): the stage's frame form — Image › Make with its source From a stage (Stage's old Render tab; stills are made in Image). */
+async function fromStage(page: import('@playwright/test').Page): Promise<void> {
+  await openImage(page, 'Make')
+  await page.locator('.gen-source .segmented button', { hasText: 'From a stage' }).click()
   await expect(page.locator('.shot-tab')).toBeVisible()
+}
+
+/** D121: a card of Animate's Performance level — Image to video, Stage clip or Final shot (the foot follows the card). */
+async function perfCard(page: import('@playwright/test').Page, card: 'Image to video' | 'Stage clip' | 'Final shot'): Promise<void> {
+  await openAnimate(page, 'Performance')
+  await openSection(page, 'Performance')
+  await page.locator('.perf-cards button', { hasText: card }).click()
+  await expect(page.locator('.perf-cards button.active')).toHaveText(card)
 }
 
 /** Press on `from`, carry the tile to `tab` and rest there until its suite is up (D71 spring-loaded tabs); the pointer stays down. */
@@ -543,6 +551,9 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   const WALK: Record<string, number[]> = { r_shoulder: [22, 0, -6], r_elbow: [0, 0, 0] }                                 // builders.ts POSES.walk (the right arm)
   await libAdd(page, 'poses', 'walk')
   await expect.poll(async () => (await figure())?.pose?.preset, { timeout: 10_000 }).toBe('walk')
+  // D121: pose mode by the selected figure's pill over the viewport (the pickers no longer follow the Motion section on screen)
+  await page.locator('.pose-pill button').click()
+  await expect(page.locator('.pose-pill button')).toHaveClass(/active/)
   // the mouse on the figure: a click on the elbow's picker selects that joint (the rotate gizmo moves there)
   const at = async (what: string) => (await page.evaluate((w) => (window as unknown as { __loom2Stage: { screenOf: (at: string) => { x: number; y: number } | null } }).__loom2Stage.screenOf(w), what))!
   const elbow = await at('r_elbow')
@@ -600,7 +611,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
   await libAdd(page, 'figures', 'Adult')
-  await stageRoute(page)
+  await fromStage(page)                                                                                     // D121: the frame is made in Image
   await expect(page.locator('.shot-tab .method.active b')).toHaveText('Clay reference')
   await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
   type Doc = { id: string; name: string; revision: number; group_id: string | null; passes: { camera_id: string; revision: number; assets: Record<string, string>; keypoints: number[][][]; legend: Record<string, string> }[] }
@@ -643,8 +654,8 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
-  // a shot first (the clip starts from it)
-  await stageRoute(page)
+  // a shot first (the clip starts from it) — D121: made in Image › From a stage
+  await fromStage(page)
   const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
@@ -652,6 +663,7 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await page.locator('.shot-tab .shot-thumb').first().click()                                               // the clip starts from this shot
   await expect(page.locator('.shot-tab .shot-thumb.start')).toHaveCount(1)
   // keys: the camera at frame 0, then a move at frame 8 (a keyed camera takes the edit as a key); the range is 0–8 (9 frames = 8n + 1)
+  await openAnimate(page, 'Clay')
   const tl = page.locator('.stage-timeline')
   await tl.locator('button', { hasText: /^Key camera$/ }).click()
   await tl.locator('.frame-field').fill('8'); await tl.locator('.frame-field').dispatchEvent('change')
@@ -670,25 +682,26 @@ test('a clip (P13 / ST4, D81): the camera is keyed on the timeline, the depth se
   await expect.poll(async () => { const d = await doc(); const ks = Object.values(d.keyframes.camera)[0] ?? []; return ks.map((k) => k.frame).join(',') + '|' + d.range.end }, { timeout: 10_000 }).toBe('0,8|8')
   expect((Object.values((await doc()).keyframes.camera)[0])[1].pos[2]).toBe(2)
   expect(tl.locator('.key-mark')).toHaveCount(2)
-  // the sequence: nine depth frames become one video asset on the album page, recorded under the camera's passes entry
-  await stageRoute(page)
-  await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
+  // the sequence: nine depth frames become one video asset on the album page, recorded under the camera's passes entry (D121: the Stage clip card)
+  await perfCard(page, 'Stage clip')
+  await expect(page.locator('.stage-clip .shot-thumb.start')).toHaveCount(1)                                // the start picked in Image
+  await page.locator('.stage-clip button', { hasText: /^Render sequence$/ }).click()
   await expect.poll(async () => (await doc()).passes[0]?.guides?.depth?.frames ?? 0, { timeout: 60_000 }).toBe(9)
   const guide = (await doc()).passes[0].guides!.depth
   const gasset = await api<AssetLite & { kind: string; lineage_kind: string | null; frames: number | null; fps: number | null; params: { pass: string; keypoints: unknown[] } }>('GET', `/assets/${guide.asset_id}`)
   expect(gasset.kind).toBe('video'); expect(gasset.lineage_kind).toBe('stage-pass'); expect(gasset.frames).toBe(9); expect(gasset.params.pass).toBe('depth-sequence'); expect(gasset.params.keypoints).toHaveLength(9)
-  await expect(page.locator('.shot-tab .guide-state')).toContainText('9 frames')
-  // Animate ▶: the I2V job with the guide; the fake engine decodes nine frames; the clip carries lineage to the shot and the guide
-  const animate = page.locator('.shot-tab button', { hasText: /^Render clip/ })
+  await expect(page.locator('.stage-clip .guide-state')).toContainText('9 frames')
+  // Render clip ▶ (the foot): the I2V job with the guide; the fake engine decodes nine frames; the clip carries lineage to the shot and the guide
+  const animate = page.locator('.panel .foot button.primary', { hasText: /^Render clip/ })
   if (JSON.parse(process.env.LOOM2_E2E ?? '{}').variant === 'open') {                                       // D26: LTX-2.3 is full-only — the section says so
-    await expect(page.locator('.shot-tab .clip-section')).toContainText('No clip model in this build')
+    await expect(page.locator('.stage-clip .clip-section')).toContainText('No clip model in this build')
     await expect(animate).toBeDisabled()
     return
   }
   await expect(animate).toBeEnabled()
   await animate.click()
-  await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
-  const startId = await page.locator('.shot-tab .shot-thumb.start').getAttribute('src')
+  await expect(page.locator('.stage-clip .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
+  const startId = await page.locator('.stage-clip .shot-thumb.start').getAttribute('src')
   const clips = (await api<{ items: (AssetLite & { kind: string; parents: string[]; lineage_kind: string | null; frames: number | null; origin: { suite: string; surface: string } | null; params: { recipe: { guide: { kind: string } } } })[] }>('GET', '/assets?suite=stage&sort=created_desc&limit=20')).items.filter((a) => a.kind === 'video' && a.lineage_kind === 'stage-shot')
   expect(clips).toHaveLength(1)
   expect(clips[0].frames).toBe(9); expect(clips[0].origin).toMatchObject({ suite: 'stage', surface: 'clip' }); expect(clips[0].params.recipe.guide.kind).toBe('depth')
@@ -706,27 +719,29 @@ test("a pose-driven shot (19 / CN4, D87): the Render tab's Animate method takes 
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
-  await stageRoute(page)
+  await fromStage(page)                                                                                     // D121: the frame in Image
   const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
   await expect(go).toBeEnabled({ timeout: 15_000 })
   await go.click()
   await expect(page.locator('.shot-tab .shot-thumb')).toHaveCount(1, { timeout: 45_000 })
   await page.locator('.shot-tab .shot-thumb').first().click()                                               // the character: the picked result
+  await openAnimate(page, 'Clay')
   const rangeEnd = page.locator('.stage-timeline .range-field input').nth(1)
   await rangeEnd.fill('8'); await rangeEnd.dispatchEvent('change')                                          // 9 frames: 4n + 1 on Wan's grid
-  // the method: Animate — the guide is the pose sequence (Depth is disabled), at the model's grid
-  await page.locator('.shot-tab button[aria-label="clip method animate"]').click()
-  await expect(page.locator('.shot-tab button[aria-label="clip method animate"]')).toHaveClass(/active/)
-  await expect(page.locator('.shot-tab .segmented button', { hasText: /^Depth$/ })).toBeDisabled()
-  await expect(page.locator('.shot-tab .clip-section .hint').last()).toContainText('for 77 frames')                 // the E19 note sits in its ? (D116)
+  // the method: Animate — the guide is the pose sequence (Depth is disabled), at the model's grid (D121: the Stage clip card)
+  await perfCard(page, 'Stage clip')
+  await page.locator('.stage-clip button[aria-label="clip method animate"]').click()
+  await expect(page.locator('.stage-clip button[aria-label="clip method animate"]')).toHaveClass(/active/)
+  await expect(page.locator('.stage-clip .segmented button', { hasText: /^Depth$/ })).toBeDisabled()
+  await expect(page.locator('.stage-clip .clip-section .hint').last()).toContainText('for 77 frames')                 // the E19 note sits in its ? (D116)
   type Doc = { id: string; name: string; passes: { guides?: Record<string, { asset_id: string; frames: number; size: { w: number; h: number } }> }[] }
   const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === name)!
-  await page.locator('.shot-tab button', { hasText: /^Render sequence$/ }).click()
+  await page.locator('.stage-clip button', { hasText: /^Render sequence$/ }).click()
   await expect.poll(async () => (await doc()).passes[0]?.guides?.pose?.frames ?? 0, { timeout: 60_000 }).toBe(9)
   const guide = (await doc()).passes[0].guides!.pose
   expect(guide.size.w % 16).toBe(0); expect(guide.size.h).toBe(480)                                        // Wan's 480p, on the 16 grid
-  await page.locator('.shot-tab button', { hasText: /^Render clip/ }).click()
-  await expect(page.locator('.shot-tab .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
+  await page.locator('.panel .foot button.primary', { hasText: /^Render clip/ }).click()
+  await expect(page.locator('.stage-clip .clip-thumb')).toHaveCount(1, { timeout: 120_000 })
   type Clip = AssetLite & { kind: string; parents: string[]; model_id: string | null; frames: number | null; params: { recipe: { guide: { kind: string } } } }
   const caps = await api<{ stage: { animate: { model_id: string } } }>('GET', '/capabilities')
   const clips = (await api<{ items: Clip[] }>('GET', '/assets?kind=video&suite=stage&sort=created_desc&limit=20')).items.filter((a) => a.model_id === caps.stage.animate.model_id)
@@ -849,6 +864,8 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await libAdd(page, 'standins', 'crate')
   await page.locator('.lib-row[data-group="lights"] button', { hasText: /^Add light$/ }).click()
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // half a second: 9 frames at F16
+  await perfCard(page, 'Final shot')                                                                        // D121: the layered route is Performance's
+  await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Make the final shot/)              // the foot: the final shot's next step
   await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
   await expect(dialog).toContainText(/4 layers/)
   await expect(dialog).toContainText(/9 frames/)
@@ -891,6 +908,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const matteJob = (await api<{ items: { id: string; kind: string; status: string }[] }>('GET', '/jobs')).items.find((j) => fig.job_ids.includes(j.id) && j.kind === 'matte_sequence')
   expect(matteJob?.status).toBe('done')                                                                    // PS5d: SAM 3 on the layer's frames, by itself
   // PS5e: the assembly — the layers composited into a clip on the final
+  await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Assemble/)                          // D121: the next step, in the foot too
   await page.locator('.final-section .final-foot button', { hasText: 'Assemble the shot' }).click()
   type Done = { clip_id: string | null; assembly: { frames: number; conform?: string } | null }
   await expect.poll(async () => (await api<Done>('GET', `/finals/${fin.id}`)).clip_id, { timeout: 60_000 }).toBeTruthy()
@@ -905,13 +923,17 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   type Comp = { revision: number; stack: string[]; clip_id: string | null; layers: { id: string }[] }
   const comp = await api<Comp>('GET', `/finals/${fin.id}/composition`)
   expect(comp.layers.map((l) => l.id)).toEqual(['plate', 'shadows', ...comp.stack])
+  await page.screenshot({ path: 'node_modules/.e2e/d121-performance-final-shot.png' })                  // D121: a look for the author — Performance's Final shot card
   await page.locator('.final-section [data-open-final]').click()
   await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText(/Final/)
+  await expect(page.locator('#anim-sec-shot .final-pick.active')).toContainText(fin.name)                  // D121: the Final level's own column — the final open
+  await expect(page.locator('#anim-sec-performance')).toHaveCount(0)                                        // and nothing of the other levels
   await expect(page.locator('.final-viewer img.final-frame')).toBeVisible()
   await expect(page.locator('.final-viewer .final-chip')).toHaveText(/^\d+ %$/)                           // the number alone (UX9 U2)
   await page.locator('.final-viewer .final-scrub').fill('4')
   await expect(page.locator('.final-viewer .counter')).toHaveText(/^frame 4 \//)
   await expect.poll(async () => page.locator('.final-viewer img.final-frame').getAttribute('data-side'), { timeout: 10_000 }).toBe('full')   // at rest: the full frame
+  await page.screenshot({ path: 'node_modules/.e2e/d121-final.png' })                                     // D121: the Final level with its composition open
   // AE2: the editor — Layers and Properties in the column; each edit one engine command, the viewer following the new revision
   await expect(page.locator('#anim-sec-layers .comp-layer-list li')).toHaveCount(5)                       // the character, her matte, the prop, the shadows, the plate
   const row = (name: RegExp) => page.locator('#anim-sec-layers .comp-layer-list li').filter({ has: page.locator('.name', { hasText: name }) })   // by the name, not the selects' options
@@ -1068,11 +1090,11 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await editor.locator('.verbs button[title^="Remove the processing layer"]').click()
   await expect(page.locator('#anim-sec-layers li[data-processing="true"]')).toHaveCount(0, { timeout: 15_000 })
   await settled()
-  await page.locator('.final-section [data-render]').click()
+  await page.locator('.panel .foot button.primary', { hasText: /^Render the finished shot/ }).click()          // D121: the Final level's foot
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)
   expect(finished.clip_id).toBe((await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id)                // the finished shot is the final's clip
-  await expect(page.locator('.final-section [data-comp-rev]')).toHaveText(/rendered at revision \d+/)   // the revision the render saw (the edits above moved it)
+  await expect(page.locator('#anim-sec-output [data-render-state]')).toHaveText(/rendered at revision \d+/, { timeout: 15_000 })   // the revision the render saw (the edits above moved it)
 })
 
 test('a world (17 / SY0, D85): the Story suite\'s World tab adds a style and a logline that save with their revision; Generate\'s Style picker appends the fragment, which the job records', async ({ page }) => {
@@ -1286,9 +1308,8 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   expect(shot.versions[0].stage_id).toBeTruthy()
   expect(shot.versions[0].camera_id).toBeTruthy()
   await expect(page.locator('.panel .foot .estimate')).toContainText(/no clip yet/)
-  // back in Stage: the Shot tab renders the passes and generates (the fake engine answers) → the result lands on the shot as its frame
-  await openAnimate(page, 'Clay')
-  await stageRoute(page)
+  // the stage's frame form (D121: Image › From a stage) renders the passes and generates (the fake engine answers) → the result lands on the shot as its frame
+  await fromStage(page)
   await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
   await page.locator('.shot-tab .shot-prompt').fill('a gatehouse at dawn')
   const go = page.locator('.panel .foot button.primary', { hasText: /^Render frame/ })
@@ -2021,8 +2042,8 @@ test('figures bound to characters (D93 · C8): a figure picks a character in the
   await page.locator('.ctx-menu button.item', { hasText: bo.name }).click()
   await expect(page.locator('.outl-row[data-row="object"]').filter({ has: page.locator('.name', { hasText: 'Right one' }) }).locator('.bound-tag')).toContainText(bo.name)
   await expect.poll(async () => (await api<StageLite>('GET', `/stages/${st0.id}`)).objects.map((o) => [o.id, o.profile_id]), { timeout: 10_000 }).toEqual([['fig_r', bo.id], ['fig_l', ana.id]])
-  // the Render tab: the deck's figure slots (image 2 the left figure's, image 3 the right's) and the lines
-  await stageRoute(page)
+  // the frame form (D121: Image › From a stage): the deck's figure slots (image 2 the left figure's, image 3 the right's) and the lines
+  await fromStage(page)
   await expect(page.locator('.shot-tab .figure-slot')).toHaveCount(2, { timeout: 20_000 })
   await expect(page.locator('.shot-tab .figure-slot').nth(0).locator('.fig-badge')).toHaveText(`fig 1 · ${ana.name}`)
   await expect(page.locator('.shot-tab .figure-lines')).toContainText(`figure 1 · ${ana.name} → image 2`)
@@ -2166,7 +2187,7 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await dialog.locator('button.primary').click()
   await expect(page.locator('.stage-row.active')).toContainText('Plane test')
   await openSection(page, 'Scene')
-  await expect(page.locator('.passes-row')).toContainText('No passes yet for')                              // #16: the passes at a glance
+  await expect(page.locator('.panel .foot [data-passes-state]')).toContainText('No passes yet for')         // #16: the passes at a glance (D121: in the Clay foot)
   await page.locator('.lib-row[data-group="planes"] button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
@@ -2339,11 +2360,10 @@ test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows i
     await page.locator('.detail-level .kv', { hasText: 'right hand' }).locator('button', { hasText: /^fist$/ }).click()
     return Object.keys((await doc())?.objects[0]?.pose?.extra ?? {}).sort().join(',')
   }, { timeout: 15_000 }).toBe('index_01_r,index_02_r,index_03_r,pinky_01_r')
-  // the passes render with the mannequin in them
+  // the passes render with the mannequin in them (D121: the Clay level's foot)
   await openAnimate(page, 'Clay')
-  await stageRoute(page)
-  await page.locator('.shot-tab button', { hasText: /^Render passes$/ }).click()
-  await expect(page.locator('.shot-tab .pass-side')).toContainText(/\d+ passes · \d+×\d+/, { timeout: 30_000 })   // rendered: '5 passes · 1280×720 · current'
+  await page.locator('.panel .foot button.primary', { hasText: /^Render passes/ }).click()
+  await expect(page.locator('.panel .foot [data-passes-state]')).toContainText(/\d+ passes at \d+×\d+/, { timeout: 30_000 })   // rendered: 'Camera 1 · 5 passes at 1280×720 · current'
   await page.screenshot({ path: 'node_modules/.e2e/ca1-detailed.png' })
 })
 
@@ -2432,3 +2452,52 @@ test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the
   const pc = doc.cameras.find((c) => c.id === set.plate_camera_id)!
   expect(pc.name).toBe('Picture camera'); expect(pc.pos[1]).toBe(1); expect(doc.active_camera).toBe(pc.id)
 })
+
+test('the three modes (D121, proto01_animate 26): each Animate level has its own column, rail and foot — Clay, Performance with its three cards, Final; the keys switch them', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Modes')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
+  await libAdd(page, 'figures', 'Adult')
+  const sections = () => page.locator('.panel .anim-column > section.col-sec').evaluateAll((els) => els.map((e) => e.id.replace('anim-sec-', '')))
+  const rail = () => page.locator('nav.rail > button[aria-label]:not(.cmd-btn)').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
+  // Clay: the scene and its motion; the foot renders the passes; the selected figure carries the pose pill
+  await expect.poll(sections).toEqual(['shot', 'scene', 'motion', 'camera'])
+  await expect.poll(rail).toEqual(['Shot', 'Scene', 'Motion', 'Camera'])
+  await expect(page.locator('.panel .foot button.primary')).toHaveText(/^Render passes/)
+  await expect(page.locator('.pose-pill button')).toHaveText(/^Pose Figure 1/)
+  await page.locator('#anim-sec-shot .col-sec-head').click()                                                // the figures' preset panel closes with a click elsewhere
+  await expect(page.locator('[data-preset-panel]')).toHaveCount(0)
+  await page.screenshot({ path: 'node_modules/.e2e/d121-clay.png' })
+  // Performance: the moving picture; each card names the foot's verb
+  await openAnimate(page, 'Performance')
+  await expect.poll(sections).toEqual(['shot', 'performance', 'clips', 'selection'])
+  await expect.poll(rail).toEqual(['Shot', 'Performance', 'Clips', 'Selection'])
+  for (const [card, verb] of [['Image to video', /^Animate/], ['Stage clip', /^Render clip/], ['Final shot', /^Make the final shot/]] as const) {
+    await page.locator('.perf-cards button', { hasText: card }).click()
+    await expect(page.locator('.panel .foot button.primary')).toHaveText(verb)
+  }
+  await page.locator('.perf-cards button', { hasText: 'Stage clip' }).click()
+  await expect(page.locator('.stage-clip button', { hasText: /^Make a frame/ })).toBeVisible()            // the frame is made in Image
+  await page.screenshot({ path: 'node_modules/.e2e/d121-performance.png' })
+  // Final: the composition; nothing open yet — the foot says why
+  await openAnimate(page, 'Final')
+  await expect.poll(sections).toEqual(['shot', 'layers', 'output'])
+  await expect.poll(rail).toEqual(['Shot', 'Layers', 'Output'])
+  await expect(page.locator('.panel .foot button.primary')).toBeDisabled()
+  await expect(page.locator('.panel .foot .estimate')).toContainText('open a final in the Shot section')
+  await expect(page.locator('.final-viewer .anim-empty')).toContainText('no final open')
+  await expect(page.locator('.strip button[aria-label^="Onion"]')).toHaveCount(0)                           // F6: the player's controls stay at Performance
+  // the level keys: 2 → Performance, 1 → Clay, 3 → Final
+  await page.locator('.final-viewer').click({ position: { x: 10, y: 10 } })
+  await page.keyboard.press('2')
+  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Performance')
+  await page.keyboard.press('1')
+  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Clay')
+  await page.keyboard.press('3')
+  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Final')
+})
+

@@ -131,6 +131,7 @@ export async function makeClipFor(s: Shot, v: ShotVersion, nodeId?: string | nul
   if (v.frame_asset_id) an.setStart(v.frame_asset_id)
   const line = clipPrefill(f.node_id ? st.flowNodes[f.node_id] : undefined)
   if (line) an.set({ prompt: line })
+  void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('i2v'))   // D121: the frame is the start of an image-to-video clip
   useSession.getState().setSuite('animate')
   toast(`Animate for ${forLabel(f)} — ${v.frame_asset_id ? 'its frame is the start; ' : 'it has no frame yet: set a start; '}the clips come back as its takes`)
 }

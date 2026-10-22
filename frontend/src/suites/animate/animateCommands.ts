@@ -1,11 +1,12 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
 import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
-import { registerCommands, sep, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, registerCommands, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
+import { useAnimRoute } from './routeStore'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
   Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
@@ -14,13 +15,22 @@ const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
 const hasStart = () => !!an().panel.start
-const atFinal = () => cp().level === 'final' && !!cp().comp
+/** D121: the Final level is the `final` suite; Performance's own commands stay off there (they share the animate scope's keys). */
+const atFinal = () => useSession.getState().ui.suite === 'final' && !!cp().comp
+/** D121: the command behind the Performance card's verb (the stage's commands register with the stage's code, which Performance loads). */
+const cardCmd = () => { const r = useAnimRoute.getState().route; return r === 'clip' ? 'stage.clip.animate' : r === 'final' ? 'stage.final.next' : 'anim.animate' }
+const cardOn = () => { const c = command(cardCmd()); return !!c && isEnabled(c) }
+/** The open final's composition is being rendered (a comp_render job queued or running). */
+const compRendering = () => { const id = cp().finalId; return !!id && Object.values(useSession.getState().jobs).some((j) => j.kind === 'comp_render' && j.origin?.ref === id && (j.status === 'queued' || j.status === 'running')) }
 const selLayer = () => (atFinal() ? cp().layers.find((l) => l.id === cp().selected) ?? null : null)
 const hasSel = () => !!selLayer()
 
 registerCommands([
   // render
-  { id: 'anim.animate', scope: 'animate', label: 'Animate', icon: Clapperboard, keys: 'Ctrl+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(false) },
+  { id: 'anim.animate', scope: 'animate', label: 'Animate', icon: Clapperboard, placement: ['panel'], when: hasStart, run: () => void an().animate(false) },
+  // D121: Ctrl+Enter is the Performance card's verb — Animate ▶ (image to video), Render clip ▶ (the stage clip), the final shot's next step
+  { id: 'anim.run', scope: 'animate', label: "Run the card's verb", hint: "Animate ▶, Render clip ▶ or the final shot's next step — the Performance card decides", icon: Clapperboard, keys: 'Ctrl+Enter', placement: ['panel'],
+    when: () => useSession.getState().ui.suite === 'animate' && cardOn(), run: () => { runCommand(cardCmd()) } },
   { id: 'anim.stage', scope: 'animate', label: 'Queue', hint: 'add to the queue and run it later — Run now in the Dock', icon: Layers, keys: 'Ctrl+Shift+Enter', placement: ['panel'], when: hasStart, run: () => void an().animate(true) },
   { id: 'anim.swap', scope: 'animate', label: 'Swap start and end', icon: ArrowLeftRight, placement: ['panel'], when: () => !!an().panel.end, run: () => an().swap() },
   { id: 'anim.clearStart', scope: 'animate', label: 'Clear start frame', icon: X, placement: ['panel', 'context'], when: hasStart, run: () => an().setStart(null) },
@@ -29,8 +39,8 @@ registerCommands([
   // D99 (UX0 #19): the viewer levels by number — 1 goes to Clay (the stage) from here; the strip's switch is their mouse home
   { id: 'anim.level.clay', scope: 'animate', label: 'Animate · Clay', keys: '1', placement: ['strip'], run: () => useSession.getState().setSuite('stage') },
   // AE1 / AP1 (D114): the Final level — the composition's frames; its own transport (the clip player's keys stay the clip's)
-  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => cp().setLevel('performance') },
-  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => cp().setLevel('final') },
+  { id: 'anim.level.performance', scope: 'animate', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
+  { id: 'anim.level.final', scope: 'animate', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },
   { id: 'anim.final.play', scope: 'animate', label: 'Play / pause the composition', icon: Play, placement: ['toolbar'], when: atFinal, run: () => cp().togglePlay() },
   { id: 'anim.final.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, placement: ['toolbar'], when: atFinal, run: () => cp().step(-1) },
   { id: 'anim.final.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, placement: ['toolbar'], when: atFinal, run: () => cp().step(1) },
@@ -63,6 +73,9 @@ registerCommands([
   { id: 'anim.final.trimIn', scope: 'animate', label: 'Trim in to the playhead', icon: TrimInIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { in: cp().frame / (cp().final?.rate ?? 16) }) },
   { id: 'anim.final.trimOut', scope: 'animate', label: 'Trim out to the playhead', icon: TrimOutIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { out: (cp().frame + 1) / (cp().final?.rate ?? 16) }) },
   // AE3: before / after — the frame with every effect off (nothing saved)
+  // D121: the Final level's foot — the composition rendered into the finished shot (effectcraft-cli on the CPU); finalShot loads with the stage's code
+  { id: 'anim.final.render', scope: 'animate', label: 'Render the finished shot', hint: "the composition at Best and Full on the CPU; the clip becomes the final's and a take on its shot", icon: Film, keys: 'Ctrl+Enter', placement: ['panel'], when: () => atFinal() && !compRendering(),
+    run: () => { const id = cp().finalId; if (id) void import('../stage/finalShot').then((m) => m.useFinals.getState().render(id)) } },
   { id: 'anim.final.before', scope: 'animate', label: 'Before', hint: 'the frame with every effect off; again for after', icon: BeforeIcon, placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().compareBefore(!cp().before) },
   { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
   { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },

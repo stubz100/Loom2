@@ -39,7 +39,7 @@ export type EventFrame = S['EventFrame']
 export type Recipe = S['Recipe']
 
 // ---- UI-side types (not API shapes) ---------------------------------------------------------------------------------
-export type Suite = 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'story' | 'models'
+export type Suite = 'catalogue' | 'generate' | 'edit' | 'animate' | 'stage' | 'final' | 'story' | 'models'   // D121: Animate's levels — stage (Clay), animate (Performance), final (Final)
 export type StageDoc = S['Stage']                              // P13 / ST1 (D81): a 3D blocking document
 export type StageObject = S['StageObject']
 export type StageCamera = S['StageCamera']

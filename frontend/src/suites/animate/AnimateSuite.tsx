@@ -1,6 +1,9 @@
 // Animate suite (11): Panel (Inputs / Model / Length & Size / Presets / Clips), Strip (view, speed, loop, onion, counter),
 // Stage (Mediabunny player · filmstrip · compare, transport, timeline with in/out, S/E, beats and harvested pins, live
 // jobs), Inspector (Clip / Frames / Lineage). Every action is a registry command (animateCommands.ts, D32).
+// D121 (proto01_animate 26 §5.3): this suite is Animate's Performance level, a mode of its own — its column (Shot · Performance · Clips ·
+// Selection), the player, and the foot that follows the Performance card (Image to video · Stage clip · Final shot). Clay is the stage
+// suite (StageParts.ClayColumn), Final the final suite (FinalSuite.tsx).
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
@@ -22,13 +25,11 @@ import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
 import { ForChip } from '../story/ForChip'
 import { ForRecipe } from '../story/RecipeSteps'
-import { useColumnSync } from '../../frame/columnSync'
-import { CamerasTab, PassesRow, PosesTab, SceneTab, ShotTab, StageFoot, StageList, useStageLoad } from '../stage/StageParts'
-import { useAnimRoute } from './routeStore'
+import { ClipFoot, StageClipCard, StageList, useStageLoad } from '../stage/StageParts'
+import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
+import { useAnimRoute, type AnimRoute } from './routeStore'
 import { Player } from './Player'
-import { FinalViewer } from './FinalViewer'
-import { LayersSection } from './FinalEditor'
-import { useComposition } from './compositionStore'
+import { AnimColumn, Sec } from './column'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
 import { beatDrop, endDrop, startDrop } from '../../frame/dropRules'
@@ -258,27 +259,22 @@ function useAnimateLoad(): void {
   useEffect(() => { if (caps && !caps.models[an().panel.model_id]) { const next = (def && caps.models[def] ? def : '') || byOrder(caps.models)[0]?.[0]; if (next) an().setModel(next) } }, [caps, def])
 }
 
-// D95 (AN1, proto01_animate 03 §4.2, UX0 #9): Animate's one column, the same at both viewer levels — Shot · Scene · Motion · Camera ·
-// Performance · Clips · Selection (Plate, Edit, Finish and Output join with CA3, AE1 and AE5). The rail jumps to a section and follows the
-// scroll. Stage's parts (StageParts.tsx) and Animate's own fill the sections; the right Inspector is gone (Selection).
-export const ANIM_SECTIONS = ['shot', 'scene', 'motion', 'camera', 'performance', 'clips', 'layers', 'selection'] as const   // AE2–3: Layers at the Final level holds the selected layer's editor (UX9 U1)
+// D95 (AN1) → D121 (proto01_animate 26 §5.3): the Performance level's column — Shot · Performance · Clips · Selection. The Performance
+// section's cards are the ways to a moving picture; the foot follows the card. Clay's column is StageParts.ClayColumn, Final's FinalSuite.
+const PERFORMANCE_SECTIONS = ['shot', 'performance', 'clips', 'selection'] as const
 
-function Sec({ id, title, tools, children }: { id: string; title: string; tools?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section id={`anim-sec-${id}`} className="col-sec">
-      <h4 className="col-sec-head"><span>{title}</span><span className="spacer" />{tools}</h4>
-      {children}
-    </section>
-  )
-}
+const CARDS: { id: AnimRoute; label: string; title: string }[] = [
+  { id: 'i2v', label: 'Image to video', title: 'A clip from a start (and end) image: the prompt says the motion' },
+  { id: 'clip', label: 'Stage clip', title: "The stage's sequence (depth or pose) animated from one of its frames — LTX-2.3's IC-LoRA, or Wan Animate with one figure" },
+  { id: 'final', label: 'Final shot', title: "The layered route: the scene split into layers — the plate, each character performed by Wan Animate, the props, the shadows — matted, assembled and composed for the Final level" },
+]
 
-/** Performance's two cards: a clip from a start image (today's form), or stills and clips from the stage (Stage's Render). */
+/** D121: Performance's cards — what the moving picture is made from; the card chosen is the method and names the foot's verb. */
 function RouteSwitch() {
   const route = useAnimRoute((r) => r.route)
   return (
-    <span className="segmented" role="group" aria-label="Performance route">
-      <button type="button" className={route === 'i2v' ? 'active' : ''} aria-pressed={route === 'i2v'} onClick={() => useAnimRoute.getState().set('i2v')} title="A clip from a start (and end) image: the prompt says the motion">Image to video</button>
-      <button type="button" className={route === 'stage' ? 'active' : ''} aria-pressed={route === 'stage'} onClick={() => useAnimRoute.getState().set('stage')} title="From the stage: stills and clips from its passes (clay, depth, pose)">From the stage</button>
+    <span className="segmented perf-cards" role="group" aria-label="Performance card">
+      {CARDS.map((c) => <button key={c.id} type="button" className={route === c.id ? 'active' : ''} aria-pressed={route === c.id} onClick={() => useAnimRoute.getState().set(c.id)} title={c.title}>{c.label}</button>)}
     </span>
   )
 }
@@ -296,42 +292,33 @@ function ClipSelection() {
   )
 }
 
-function AnimateColumnBody({ tab }: { tab: string }) {
+function PerformanceColumnBody({ tab }: { tab: string }) {
   useStageLoad(); useAnimateLoad()
-  const host = useRef<HTMLDivElement>(null)
-  useColumnSync(host, 'animate', ANIM_SECTIONS, 'anim-sec-', tab)
-  const level = useSession((s) => s.ui.suite)
   const route = useAnimRoute((r) => r.route)
-  useEffect(() => {                                                       // the first open at the Clay level starts on the stage's card
-    const r = useAnimRoute.getState()
-    if (!r.chosen && level === 'stage') useAnimRoute.setState({ route: 'stage' })
-  }, [level])
   return (
-    <div ref={host} className="col-column anim-column">
-      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" /><StageList /></Sec>
-      <Sec id="scene" title="Scene"><SceneTab /><PassesRow /></Sec>
-      <Sec id="motion" title="Motion"><PosesTab /></Sec>
-      <Sec id="camera" title="Camera"><CamerasTab /></Sec>
+    <AnimColumn suite="animate" sections={PERFORMANCE_SECTIONS} tab={tab}>
+      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" />{route !== 'i2v' && <StageList />}</Sec>
       <Sec id="performance" title="Performance" tools={<RouteSwitch />}>
-        {route === 'i2v' ? <><InputsTab /><h4>Model</h4><ModelTab /><h4>Length &amp; size</h4><LengthTab /><h4>Presets</h4><PresetsTab /></> : <ShotTab />}
+        {route === 'i2v' ? <><InputsTab /><h4>Model</h4><ModelTab /><h4>Length &amp; size</h4><LengthTab /><h4>Presets</h4><PresetsTab /></>
+          : route === 'clip' ? <StageClipCard /> : <FinalSection />}
       </Sec>
       <Sec id="clips" title="Clips"><ClipsTab /></Sec>
-      <Sec id="layers" title="Layers"><LayersSection /></Sec>{/* AE2–3 (D114): the composition's layers at the Final level, the selected one's editor under its row */}
-      {level !== 'stage' && <Sec id="selection" title="Selection"><ClipSelection /></Sec>}{/* D119 (SC1): at the Clay level a thing is edited under its row in the Scene's outliner */}
-    </div>
+      <Sec id="selection" title="Selection"><ClipSelection /></Sec>
+    </AnimColumn>
   )
 }
 
-export function AnimateColumn({ tab }: { tab: string }) {
+export function PerformanceColumn({ tab }: { tab: string }) {
   const project = useSession((s) => s.project)
   if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
-  return <AnimateColumnBody tab={tab} />
+  return <PerformanceColumnBody tab={tab} />
 }
 
-/** The foot follows Performance's card: Animate ▶ / Queue for image to video, Render frame (or New stage) for the stage. */
-export function AnimateFoot() {
+/** D121: the foot follows Performance's card — Animate ▶ / Queue for image to video, Render clip ▶ for the stage clip, the next step for the
+ *  final shot. Ctrl+Enter is the card's verb (anim.run). */
+export function PerformanceFoot() {
   const route = useAnimRoute((r) => r.route)
-  return route === 'stage' ? <StageFoot /> : <PrimaryAction />
+  return route === 'clip' ? <ClipFoot /> : route === 'final' ? <FinalShotFoot /> : <PrimaryAction />
 }
 
 function PrimaryAction() {
@@ -356,8 +343,8 @@ export function useAnimateKeys() {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'animate') return
       if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
-      if (inField(e)) { if (primaryInField(e, ['anim.animate', 'anim.stage'])) e.stopImmediatePropagation(); return }   // D90 (B8): Ctrl+Enter from the prompt
-      if (handleKeyFor('animate', e)) e.stopImmediatePropagation()
+      if (inField(e)) { if (primaryInField(e, ['anim.run', 'anim.stage'])) e.stopImmediatePropagation(); return }   // D90 (B8): Ctrl+Enter from the prompt (D121: the card's verb)
+      if (handleKeyFor('animate', e, (c) => !c.id.startsWith('anim.final.'))) e.stopImmediatePropagation()   // D121: the Final level's commands are its own suite's
     }
     window.addEventListener('keydown', h, { capture: true })
     return () => window.removeEventListener('keydown', h, { capture: true })
@@ -538,17 +525,16 @@ function Stage() {
   const onion = useAnimate((s) => s.onion)
   const running = useSession((s) => Object.values(s.jobs).some((j) => j.kind === 'i2v' && j.status === 'running'))
   const startSet = useAnimate((s) => !!s.panel.start)
-  const level = useComposition((s) => s.level)
+  const route = useAnimRoute((r) => r.route)                             // D121: the empty viewer says what the card wants
   useEffect(() => { if (project?.open) void an().loadClips() }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
   // deep link ?clip=<id> (the headed check and the verification loop)
   useEffect(() => { const q = new URLSearchParams(location.search).get('clip'); if (q && clips.some((c) => c.id === q) && an().current !== q) an().select(q) }, [clips])
   usePlayback()
   if (!project?.open) return <div className="placeholder"><div><h2>Animate</h2>open or create a project to begin</div></div>
-  if (level === 'final') return <FinalViewer />                            // AE1 / AP1 (D114): the composition's frames, its own transport
   return (
     <div className="anim-stage">
       <div className="anim-view" onContextMenu={(e) => { if (clip) showMenu(e, playerMenu()) }}>
-        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : <>set a start frame (Shift+A on a Catalogue tile, or drop it on Performance's start slot), write the motion, Animate ▶
+        {!clip ? <div className="anim-empty"><h2>Animate</h2>{running ? 'rendering the first clip — it opens here when the proxy is ready' : route === 'clip' ? 'pick a frame of the stage, then Render clip ▶ — the clip opens here' : route === 'final' ? "the final shot's steps are in the column — Play ▶ shows the assembled shot here" : <>set a start frame (Shift+A on a Catalogue tile, or drop it on Performance's start slot), write the motion, Animate ▶
           {!startSet && <div className="quick-cards"><CommandCard id="global.start.animate" hint="pick a still in the Catalogue" /></div>}</>}</div>
           : view === 'compare' ? <Compare clip={clip} /> : <Player clip={clip} frame={frame} onion={onion} />}
       </div>
@@ -647,5 +633,5 @@ function LineageTab({ clip }: { clip: Clip }) {
 export const AnimateSuite: SuiteDef = {
   id: 'animate',
   rail: DEFAULT_RAIL.animate,
-  Panel: AnimateColumn, Strip: StripWithKeys, Stage, Inspector: () => null, PrimaryAction: AnimateFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
+  Panel: PerformanceColumn, Strip: StripWithKeys, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
 }

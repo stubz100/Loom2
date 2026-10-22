@@ -53,9 +53,9 @@ const board = () => { const g = node()?.board_group_id; return g ? findNode(useA
 /** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
  *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
 function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate'): void {
-  // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself and its clips in Animate (Clay, the stage card)
+  // D95 (AN1): a still from the stage is made in Image (From a stage); the stage itself in Animate's Clay, its clips in Performance's Stage clip card (D121)
   if (where === 'image') { void import('../generate/generateStore').then((g) => g.useGenerate.setState({ source: 'stage' })); useSession.getState().setSuite('generate') }
-  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('stage')); useSession.getState().setSuite('stage') }
+  else { void import('../animate/routeStore').then((r) => r.useAnimRoute.getState().set('clip')); useSession.getState().setSuite('stage') }
   void import('../stage/stageStore').then((m) => { const st = m.useStage.getState(); const go = st.current?.id === stageId ? Promise.resolve() : st.open(stageId); void go.then(() => {
     if (cam) m.useStage.getState().setActiveCamera(cam)
     if (!speakers?.length) return

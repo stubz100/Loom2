@@ -7867,3 +7867,55 @@ The author asked for a review of the state of things, then "record all this and 
 - **Tests:** outliner.test (the grouped order, the nine group headers, the figures' count), propBinding.test (the props' panel: the tiles,
   the "!" badge, the click places), the posing e2e (Rotate keeps `r_elbow` and the gizmo's mode, selecting the same figure keeps it), the
   3D-prop and the props scenarios through the panels. Vitest 402 + 3 skipped, lint 75, typecheck clean, e2e 50/50 full and 50/50 open — which also covers the pick's Escape / right-click cancel and the camera's rotate of 19:21 whose runs were owed (the tile's right-click had not ended the pick: showMenu stops the event before the grid's handler, so the tile's own handler ends it now).
+
+## 2026-10-22 21:29 — D121: Animate's levels become modes (proto01_animate 26); the build starts
+
+- **The review** (`.docs/proto01_animate/26-animate-modes.md`, written this evening at the author's question "could we create a similar
+  workflow as ArtCraft, with a cleaner UI?"): ArtCraft's 3D stage reads as one tool because of four rules — a mode owns its chrome, the
+  viewport carries the mode's tools, one selected thing gets one small editor, the output step is nearly empty — not because of its
+  features (loom2 is ahead there). Animate today breaks them in eight places (26 §3, F1–F8): one column at every level, three transports
+  and three timelines, the pipeline's steps in four places, pose mode by scroll position, three patterns for the selected thing, the
+  player's strip at Final, results in four places, the camera's chrome in the column.
+- **The author: "I like your proposal, let's start"** → **D121** (13): each level a mode with its own column, rail, strip, viewer and foot;
+  the Frame step to Image › From a stage (D95); a pose pill; the Shot stepper; one timeline; the camera pill and a PiP.
+- **Implementation choice recorded in D121:** each level is a suite under the Animate tab — `stage` (Clay), `animate` (Performance) and a
+  new `final` (Final) — the way Image holds `generate` and `edit` as Make and Edit. 26 §5.1 had proposed one suite with a level flag;
+  the frame's suites already give a suite its own rail, panel, strip, stage and foot, so this is the same result with less churn. The
+  panel's width stays one for the tab (`widthKeyOf`); the rail state and the column are per level.
+- **Order:** AW1 (a level is a mode) → AW3 (the stepper, the clips' editor under the row) → AW2 (one timeline, one transport) → AW4 (the
+  camera pill, the lens readout, the PiP). No GPU work; the e2e and the headed checks at each wave. AW0's HTML mock is skipped: the
+  go-ahead came on the ASCII wireframes of 26 §5, and the built app's screenshots replace it.
+
+## 2026-10-22 22:06 — AW1 built (D121, proto01_animate 26 §5): a level is a mode
+
+- **Three suites under the Animate tab:** `stage` (Clay), `animate` (Performance) and a new `final` (Final, `suites/animate/FinalSuite.tsx`),
+  as Image holds Make and Edit. Each has its own rail and column (`DEFAULT_RAIL.stage / animate / final`: Shot · Scene · Motion · Camera;
+  Shot · Performance · Clips · Selection; Shot · Layers · Output), its strip, its viewer and its foot; the panel's width stays one for the tab
+  (`railTabs.widthKeyOf`, which replaces `sharedKeyOf`; the rail state and the column are the suite's own). The composition store lost its
+  `level` flag — the Final level is the suite; `openFinal` switches to it; `animateLast`, the deep links and `TOP_TABS` know `final`. The
+  column's parts are shared (`suites/animate/column.tsx`: `Sec`, `AnimColumn`).
+- **Clay** (`StageParts.ClayColumn` / `ClayFoot`): the foot is *Render passes ▶* (Ctrl+Enter, moved from the frame's verb) with the passes' state
+  (the passes row of AN1 #16 is gone from Scene); **the pose pill** over the viewport on the selected figure (*Pose Figure 1* / *Done posing*,
+  `stage.pose.mode`, also in the figure's right-click and the Motion section) drives the joint pickers — no longer the Motion section being on
+  screen (F4); `stageStore.posing`, cleared when the selection moves to another thing, set when a joint is picked by name.
+- **Performance** (`AnimateSuite`): the cards **Image to video · Stage clip · Final shot** (`routeStore`: i2v · clip · final; D121 kept the words of
+  what they make); the foot follows the card — *Animate ▶* / Queue, *Render clip ▶* (`ClipFoot`; `stage.clip.animate` now renders the sequence
+  first when it is missing or stale, `stageStore.guideStale`), the final shot's next step (`FinalPanel.FinalShotFoot`, `stage.final.next`,
+  `finalShot.nextFinalStep`: make it, the plate, each character, assemble, compose, open in Final); Ctrl+Enter is the card's verb (`anim.run`).
+  The **Stage clip card** (`StageParts.StageClipCard`): the start among the stage's stills with *Make a frame ▸* (`stage.frame.make` → Image ·
+  From a stage), the prompt, the method and guide, the stage's clips. **The Frame step left Animate** (D95): `ShotTab` is Image › From a
+  stage's form alone. The empty viewer says what the card wants.
+- **Final** (`FinalSuite`): Shot (the stage's finals to open, *Make the composition* when assembled), Layers (AE2–AE4's editor), Output (the
+  shot's facts, the composition's revision, what was rendered and from which revision, Play ▶, Make the composition again); the foot
+  *Render the finished shot ▶* (`anim.final.render`, Ctrl+Enter); the strip has the levels and the final's name only (F6); its key hook
+  dispatches `anim.final.*` and the level keys only.
+- **Gone:** the rig strip in the foot (the stepper replaces it in AW3), the passes row, the frame form's clip and final steps (`stillsOnly`),
+  `sharedKeyOf`. Kept: every right-click menu, the clip and final rows' own buttons.
+- **Also fixed:** the Bin's Escape hook sat after an early return (a conditional hook, lint's one error since 19:21) — moved above it.
+- **Tests:** `suites/stage/modes.test.ts` (the rails per level and the tab's one width; pose mode by the figure; the final's next step in the
+  pipeline's order, waiting and refusing with a reason); the e2e: the stage scenarios make their frames in Image · From a stage and their clips
+  in the Stage clip card, the final-shot scenario runs in the Final shot card and renders from the Final level's foot, the posing scenario
+  presses the pose pill, and a new scenario walks the three modes (their sections, rails and feet, the three cards' verbs, the level keys
+  1 · 2 · 3). Vitest 407 + 3 skipped, typecheck and build clean, lint 0 errors (79 warnings, from 82), e2e 51/51 full and 51/51 open,
+  agents check clean. Screenshots for the author: `.docs/proto01_animate/img/26-aw1-*.jpg` (Clay, Performance's Stage clip and Final shot
+  cards, Final with a composition open). The Clay one shows why AW3's stage picker matters: the e2e project's 15 stages push Scene off screen.

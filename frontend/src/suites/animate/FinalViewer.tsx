@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import { CommandRow } from '../../frame/CommandButton'
+import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
 import { chipText, maskPathD, snapTime, useComposition, type CompLayer } from './compositionStore'
@@ -87,10 +88,10 @@ export function FinalViewer() {
   const off = layerOffset()
   const toLayer = ([x, y]: [number, number]): [number, number] => [x - off[0], y - off[1]]
   if (!finalId || !final) {
-    return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — in the Shot section: make the final shot, assemble it, <b>Make the composition</b>, then <b>Open in Final</b></div></div></div>
+    return <div className="anim-stage final-viewer"><div className="anim-view"><div className="anim-empty"><h2>Final</h2>no final open — open one in the Shot section <Help text="Performance › Final shot makes a final: the scene split into layers, performed, matted and assembled; Make the composition, then Open it here." /></div></div></div>
   }
   if (!comp) {
-    return <div className="anim-stage final-viewer" data-final={final.id}><div className="anim-view"><div className="anim-empty"><h2>{final.name}</h2>no composition yet — assemble the shot, then <b>Make the composition</b> in the Shot section</div></div></div>
+    return <div className="anim-stage final-viewer" data-final={final.id}><div className="anim-view"><div className="anim-empty"><h2>{final.name}</h2>no composition yet — Make the composition in the Shot section</div></div></div>
   }
   const n = final.frames
   const ghost = drag && (maskTool === 'rect' || maskTool === 'ellipse')

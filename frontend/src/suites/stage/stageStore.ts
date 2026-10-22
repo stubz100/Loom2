@@ -97,6 +97,8 @@ interface StageState {
   saving: boolean
   frameRequest: { ids: string[] | null; n: number }         // the viewport frames these (null = everything) when n changes
   selectedJoint: string | null                              // ST2: the joint the rotate gizmo is on
+  posing: boolean                                           // D121: pose mode on the selected figure (the pose pill) — its joint pickers in the viewport
+  setPosing: (on: boolean) => void
   userPoses: Record<string, PoseDef>                        // ST2: the project's saved poses (stages/poses.json)
   selectJoint: (j: string | null) => void
   setJoints: (id: string, joints: Record<string, number[]>) => void
@@ -166,6 +168,7 @@ interface StageState {
   flush: () => Promise<void>
   setShotStart: (id: string | null) => void
   guideEntry: () => GuideEntry | null
+  guideStale: () => boolean                                 // D121: no sequence, or one from another range, length or revision
   guideSize: () => [number, number]                         // the clip model's grid at the project's aspect
   renderGuide: () => Promise<boolean>
   animateShot: () => Promise<Job[] | null>
@@ -280,7 +283,7 @@ let shotPreviewSeq = 0
 const thumbed = new Set<string>()                                            // P18: mesh assets whose thumbnail this session already rendered
 
 export const useStage = create<StageState>()((set, get) => ({
-  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
+  stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, posing: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
   frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
@@ -351,6 +354,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   setShotStart: (shotStart) => set({ shotStart }),
   guideEntry: () => { const e = get().passesEntry() as (PassesEntry & { guides?: Record<string, GuideEntry> }) | null; return e?.guides?.[get().guideKind] ?? null },
+  guideStale: () => { const g = get().guideEntry(); const cur = get().current; return !g || !cur || g.range.start !== cur.range.start || g.frames !== get().guideFrames() || cur.revision > g.revision + 1 },
   guideSize: () => {
     const cur = get().current
     const aspect = cur ? cur.size.w / Math.max(1, cur.size.h) : 16 / 9
@@ -495,7 +499,8 @@ export const useStage = create<StageState>()((set, get) => ({
     set({ shots: [a, ...get().shots] })
   },
 
-  selectJoint: (j) => set({ selectedJoint: j }),
+  selectJoint: (j) => set(j ? { selectedJoint: j, posing: true } : { selectedJoint: null }),   // D121: a joint picked by name enters pose mode
+  setPosing: (on) => set(on && get().object(get().selected)?.kind === 'mannequin' ? { posing: true } : { posing: false, selectedJoint: null }),
   setJoints: (id, joints) => {
     const o = get().sampledDoc()?.objects.find((x) => x.id === id) ?? get().object(id)
     if (!o || JSON.stringify(effectiveJoints(o)) === JSON.stringify(joints)) return        // a gizmo click without a turn commits nothing (no undo entry)
@@ -566,7 +571,7 @@ export const useStage = create<StageState>()((set, get) => ({
     if (!id) { set({ current: null, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [] }); return }
     try {
       const st = await unwrap(http.GET('/stages/{st_id}', { params: { path: { st_id: id } } }))
-      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
+      set({ current: st, selected: null, selectedCamera: null, stageSelected: false, posing: false, selectedJoint: null, undo: [], redo: [], stages: get().stages.some((s) => s.id === st.id) ? get().stages.map((s) => (s.id === st.id ? st : s)) : [st, ...get().stages],
         shot: { ...get().shot, refs: [], use_as_is: false }, shots: [], frame: st.range?.start ?? 0, playing: false, shotStart: null })
       void get().loadShots(); void get().refreshShotPreview()
       if (st.objects.some((o) => o.profile_id)) { profilesForMentions(); get().syncBodies() }        // CA0: the bound figures' bodies
@@ -594,9 +599,10 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; set({ current: { ...u[u.length - 1], revision: cur.revision }, undo: u.slice(0, -1), redo: [...get().redo, cur] }); schedule(get, set) },
   redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; set({ current: { ...r[r.length - 1], revision: cur.revision }, redo: r.slice(0, -1), undo: [...get().undo, cur] }); schedule(get, set) },
-  select: (id) => set({ selected: id, selectedJoint: id && id === get().selected ? get().selectedJoint : null, selectedCamera: null, stageSelected: false }),   // the same figure again keeps its joint (the author, 2026-10-22)
-  selectCamera: (id) => { set({ selected: null, selectedJoint: null, selectedCamera: id, stageSelected: false }); if (id) get().setActiveCamera(id) },
-  selectStage: () => set({ selected: null, selectedJoint: null, selectedCamera: null, stageSelected: true }),
+  select: (id) => { const same = !!id && id === get().selected                       // the same figure again keeps its joint and pose mode (the author, 2026-10-22)
+    set({ selected: id, selectedJoint: same ? get().selectedJoint : null, posing: same ? get().posing : false, selectedCamera: null, stageSelected: false }) },   // the same figure again keeps its joint (the author, 2026-10-22)
+  selectCamera: (id) => { set({ selected: null, selectedJoint: null, posing: false, selectedCamera: id, stageSelected: false }); if (id) get().setActiveCamera(id) },
+  selectStage: () => set({ selected: null, selectedJoint: null, posing: false, selectedCamera: null, stageSelected: true }),
   moveCamera: (id, pos) => {
     const c = get().current?.cameras.find((x) => x.id === id)
     if (!c) return

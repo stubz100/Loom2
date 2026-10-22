@@ -247,3 +247,11 @@
 .comp-passes .pass-mouth { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }   /* AE4d: the mouth's two ways under the Lip-sync tile */
 .comp-passes .pass-scope { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }   /* AE4e: this layer | everything below */
 .comp-layers .name .stale, .comp-processing .stale { color: var(--warn, #d9a441); font-weight: 600; font-size: 11px; }
+/* D121: the Performance cards and the Final level's Shot and Output sections */
+.perf-cards button { padding: 2px 8px; }
+.final-picker { display: grid; gap: 4px; }
+.final-pick { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); }
+.final-pick.active { border-color: var(--accent); }
+.final-pick .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.final-pick .meta { color: var(--fg3); font-size: 11px; }
+.final-output .verbs { display: flex; gap: 6px; margin-top: 6px; }

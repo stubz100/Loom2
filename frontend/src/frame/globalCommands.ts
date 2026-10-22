@@ -1,6 +1,6 @@
 // Global commands (07 §4): frame toggles, settings, help, the command palette. Suite switching stays on the
 // TopBar tabs (Ctrl+1…5) and is registered here so the help overlay lists it.
-import { Boxes, Clapperboard, FilePlus, Film, Images, Menu, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, Pencil, RefreshCw, Settings, Shapes, Sparkles } from 'lucide-react'
+import { Boxes, Clapperboard, FilePlus, Film, Images, Menu, MonitorPlay, FolderOpen, FolderPlus, Info, Keyboard, LayoutGrid, Maximize2, PanelBottom, PanelLeft, PanelRight, Pencil, RefreshCw, Settings, Shapes, Sparkles } from 'lucide-react'
 const CircleHelp = Info
 import { useSession } from '../store/session'
 import { TOP_TABS } from './railTabs'
@@ -36,9 +36,10 @@ registerCommands([
   { id: 'global.suite.generate', scope: 'global', label: 'Image · Make', icon: Sparkles, placement: ['topbar', 'panel'], run: () => s().setSuite('generate') },
   { id: 'global.suite.edit', scope: 'global', label: 'Image · Edit', icon: Pencil, placement: ['topbar', 'panel'], run: () => s().setSuite('edit') },
   { id: 'global.suite.animate', scope: 'global', label: 'Animate', keys: 'Ctrl+3', placement: ['topbar'], run: () => void openTop('animate') },
-  // AN1: Animate's viewer levels (frame/AnimateLevels.tsx) — Clay is the stage suite (P13, D81), Performance the animate suite
+  // AN1: Animate's viewer levels (frame/AnimateLevels.tsx) — Clay is the stage suite (P13, D81), Performance the animate suite, (D121) Final the final suite
   { id: 'global.suite.stage', scope: 'global', label: 'Animate · Clay', icon: Shapes, placement: ['topbar', 'strip'], run: () => s().setSuite('stage') },
   { id: 'global.animate.performance', scope: 'global', label: 'Animate · Performance', icon: Film, placement: ['topbar', 'strip'], run: () => s().setSuite('animate') },
+  { id: 'global.animate.final', scope: 'global', label: 'Animate · Final', icon: MonitorPlay, placement: ['topbar', 'strip'], run: () => s().setSuite('final') },   // D121: the Final level, a mode of its own
   { id: 'global.suite.catalogue', scope: 'global', label: 'Catalogue (Story)', icon: Images, placement: ['rail'], run: () => s().setSuite('catalogue') },
   { id: 'global.suite.models', scope: 'global', label: 'Models & engine…', icon: Boxes, placement: ['topbar'], run: () => s().openModels() },
   ...(['world', 'cast', 'catalogue', 'shots', 'flow', 'episode'] as const).map((w, i) => ({

@@ -200,7 +200,7 @@ export const useFinals = create<FinalsState>((set, get) => ({
       if (useComposition.getState().finalId === id) void useComposition.getState().reload()
     } catch (e) { useSession.getState().toast(`Make the composition: ${(e as ApiError).detail ?? (e as Error).message ?? e}`, 'error') }
   },
-  openFinal: (id) => { void useComposition.getState().open(id); useSession.getState().setSuite('animate') },
+  openFinal: (id) => { void useComposition.getState().open(id); useSession.getState().setSuite('final') },   // D121: the Final level is a suite of its own
   render: async (id) => {
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
@@ -318,3 +318,28 @@ export const useFinals = create<FinalsState>((set, get) => ({
     catch (e) { useSession.getState().toast(`Delete the final: ${(e as ApiError).detail ?? e}`, 'error') }
   },
 }))
+
+// ---- D121: the final shot's next step (Performance › Final shot's foot, `stage.final.next`) ----------------------------------------------
+export interface FinalStep { label: string; run: (() => void) | null; why?: string }
+/** The next thing the stage's newest final needs, in the pipeline's order: make it, the plate, each character performed (the matte follows by
+ *  itself), the assembly, the composition, then the Final level. A step that waits on the queue has no `run` and says why. */
+export function nextFinalStep(stageId: string | null): FinalStep {
+  const fs = useFinals.getState()
+  if (fs.making) return { label: 'Splitting…', run: null, why: `${fs.making.what} · ${fs.making.done} / ${fs.making.total}` }
+  const f = stageId ? fs.finals.filter((x) => x.stage_id === stageId).at(-1) : undefined
+  if (!f) {
+    const s = st()
+    const why = !stageId || !s.current ? 'open a stage in Clay' : !s.activeCamera() ? 'the stage has no camera' : s.rendering ? 'rendering…' : undefined
+    return { label: 'Make the final shot… ▶', run: why ? null : () => void fs.make(16), why }
+  }
+  const plate = f.layers.find((l) => l.kind === 'plate' && (l.status === 'passes' || l.status === 'failed'))
+  if (plate) return { label: 'Make the plate ▶', run: () => void fs.plate(f.id) }
+  const fig = f.layers.find((l) => l.kind === 'figure' && (l.status === 'passes' || l.status === 'failed'))
+  if (fig) return { label: `Perform ${fig.name} ▶`, run: () => void fs.perform(f.id, fig.id) }
+  const working = f.layers.find((l) => l.status === 'queued' || l.status === 'running')
+  if (working) return { label: 'Working…', run: null, why: `${working.name}: ${working.status === 'queued' ? 'in the queue' : 'running'}` }
+  if (assembling(f.id)) return { label: 'Assembling…', run: null, why: `${f.name}: the layers into the shot` }
+  if (!f.assembled_at) return readyToAssemble(f) ? { label: 'Assemble ▶', run: () => void fs.assemble(f.id) } : { label: 'Assemble ▶', run: null, why: 'a layer is not made yet' }
+  if (!fs.compositions[f.id]) return { label: 'Make the composition ▶', run: () => void fs.compose(f.id) }
+  return { label: 'Open in Final ▸', run: () => fs.openFinal(f.id) }
+}

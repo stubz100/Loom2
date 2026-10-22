@@ -6,8 +6,10 @@ import { Help } from '../../frame/Help'
 import { api } from '../../api/client'
 import type { Final, FinalLayer } from '../../api/types'
 import { CommandButton } from '../../frame/CommandButton'
+import { markUsed, runCommand } from '../../frame/commands'
+import { useSession } from '../../store/session'
 import { showMenu } from '../../frame/ContextMenu'
-import { assembling, batchCount, readyToAssemble, rendering, useFinals } from './finalShot'
+import { assembling, batchCount, nextFinalStep, readyToAssemble, rendering, useFinals } from './finalShot'
 import { useStage } from './stageStore'
 
 const KIND_LABEL: Record<string, string> = { plate: 'plate', figure: 'character', prop: 'prop', shadows: 'shadows' }
@@ -107,5 +109,20 @@ export function FinalSection() {
         {mine.map((f) => <FinalRow key={f.id} f={f} />)}
       </div>
     </details>
+  )
+}
+
+/** D121 (proto01_animate 26 §5.3): Performance › Final shot's foot — the stage's newest final's next step (`stage.final.next`), or why it waits. */
+export function FinalShotFoot() {
+  const current = useStage((s) => s.current)
+  useFinals((s) => s.finals); useFinals((s) => s.making); useFinals((s) => s.compositions)    // re-render as the final moves on
+  useSession((s) => s.jobs)
+  markUsed('stage.final.next')
+  const step = nextFinalStep(current?.id ?? null)
+  return (
+    <div>
+      <button className="primary" disabled={!step.run} onClick={() => runCommand('stage.final.next')} title="The final shot's next step: make it, the plate, each character, the assembly, the composition, then the Final level (Ctrl+Enter)">{step.label}</button>
+      <div className="estimate">{step.why ? <span style={{ color: 'var(--fg3)' }}>{step.why}</span> : <span>{current ? `${current.name} · the next step` : ''}</span>}</div>
+    </div>
   )
 }

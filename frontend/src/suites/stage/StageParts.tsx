@@ -3,6 +3,8 @@
 // button or a menu entry; keys are accelerators. Keep-alive (D69): the engine pauses while the suite is hidden and keeps its view. D93 (C8):
 // a figure is bound to a Cast character (the Inspector's tiles, "Bind to a character ▸"); the Outliner shows who; the Render tab's deck shows
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
+// D121 (proto01_animate 26 §5.2): the Clay level is a mode of its own — its column (Shot · Scene · Motion · Camera), its foot (Render passes ▶),
+// the viewport with the pose pill; the stage's frame form (`ShotTab`) is Image › From a stage's, the stage clip (`StageClipCard`) Performance's.
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User } from 'lucide-react'
@@ -18,14 +20,14 @@ import { api } from '../../api/client'
 import { DEV_HOOKS } from '../../devHooks'
 import { BoundTag, FigureCharacter, LibraryProps, MeshProp } from './FigureBinding'
 import { AmbientControl, LightControls } from './LightControls'
-import { FinalSection } from './FinalPanel'
-import { assembling, readyToAssemble, rendering as compRendering, useFinals } from './finalShot'
 import { MotionLibrary } from './motion/MotionLibrary'
 import { HAND_PRESETS, type HandPreset } from './detailed'
 import { useStageActive } from '../../frame/stageKeep'
-import { useSuiteRail } from '../../frame/suiteRegistry'
 import { askConfirm, askText, useSession } from '../../store/session'
-import type { Asset, StageCamera, StageObject } from '../../api/types'
+import { ForChip } from '../story/ForChip'
+import { ForRecipe } from '../story/RecipeSteps'
+import { AnimColumn, Sec } from '../animate/column'
+import type { StageCamera, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
@@ -171,18 +173,40 @@ function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
   )
 }
 
-/** D95 (AN1, UX0 #16): the active camera's passes at a glance in Scene — rendered or not, current or behind the scene — and Render passes. */
-export function PassesRow() {
+// ------------------------------------------------------------------ D121: the Clay level's column and foot
+const CLAY_SECTIONS = ['shot', 'scene', 'motion', 'camera'] as const
+
+/** D121 (26 §5.2): the Clay level's column — the shot (its For chip, the stages), what stands on the stage, its motion, its camera. */
+export function ClayColumn({ tab }: { tab: string }) {
+  const project = useSession((s) => s.project)
+  useStageLoad()
+  if (!project?.open) return <span className="hint">Open or create a project to begin.</span>
+  return (
+    <AnimColumn suite="stage" sections={CLAY_SECTIONS} tab={tab}>
+      <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" /><StageList /></Sec>
+      <Sec id="scene" title="Scene"><SceneTab /></Sec>
+      <Sec id="motion" title="Motion"><PosesTab /></Sec>
+      <Sec id="camera" title="Camera"><CamerasTab /></Sec>
+    </AnimColumn>
+  )
+}
+
+/** D121: the Clay level's foot — Render passes ▶ (Ctrl+Enter) for the active camera, with their state at a glance (D95 UX0 #16's row);
+ *  New stage… while none is open. The frame and the clip are made from these passes at the other levels (Image · From a stage, Performance). */
+export function ClayFoot() {
   const current = useStage((s) => s.current)
   const cam = useStage((s) => s.activeCamera())
   const entry = useStage((s) => s.passesEntry())
   const stale = useStage((s) => s.passesStale())
   const rendering = useStage((s) => s.rendering)
-  if (!current || !cam) return null
+  markUsed('stage.new'); markUsed('stage.shot.passes')
+  if (!current) return <div><button className="primary" onClick={() => runCommand('stage.new')}>New stage…</button></div>
+  const reason = !cam ? 'no camera' : rendering ? 'rendering…' : null
   return (
-    <div className="stage-panel passes-row">
-      <span className="hint">{entry ? `Passes · ${cam.name} · ${Object.keys(entry.assets).length} at ${entry.size.w}×${entry.size.h} · ${stale ? `revision ${entry.revision}, the scene moved on` : 'current'}` : `No passes yet for ${cam.name}`}</span>
-      <CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : entry && !stale ? 'Render again' : 'Render passes'} />
+    <div>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.passes')} title="The active camera's passes — clay, depth, normals, pose, masks — rendered as the stage's assets (Ctrl+Enter)">
+        {rendering ? 'Rendering…' : entry && !stale ? 'Render the passes again ▶' : 'Render passes ▶'}</button>
+      <div className="estimate" data-passes-state>{reason ?? (entry ? `${cam!.name} · ${Object.keys(entry.assets).length} passes at ${entry.size.w}×${entry.size.h} · ${stale ? `revision ${entry.revision}, the scene moved on` : 'current'}` : `No passes yet for ${cam!.name}`)}</div>
     </div>
   )
 }
@@ -233,7 +257,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'mesh' && <MeshProp o={o} />}
       {o.kind === 'light' && <LightControls o={o} />}
       {o.kind === 'set' && o.preset === 'image' && <ImageSetFields o={o} />}
-      {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(the Motion section poses the joints)</span></span></div>}
+      {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(Pose, over the viewport, poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
       <div className="verbs"><CommandRow ids={['stage.object.duplicate', 'stage.object.lock', 'stage.object.hide', 'stage.frameSel', 'stage.object.reset', 'stage.object.delete']} /></div>
@@ -329,10 +353,11 @@ export function PosesTab() {
   const current = useStage((s) => s.current)
   const o = useStage((s) => s.object(s.selected))
   const joint = useStage((s) => s.selectedJoint)
+  const posing = useStage((s) => s.posing)
   const userPoses = useStage((s) => s.userPoses)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   markUsed('stage.pose.mirror'); markUsed('stage.pose.reset'); markUsed('stage.pose.save')
-  if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">No figure selected. <Help text="Select a figure, then click a joint for the rotate gizmo, or drag a hand / foot handle." /></span></div></>
+  if (!o || o.kind !== 'mannequin') return <><MotionLibrary /><div className="stage-panel"><div className="head"><b>Poses</b></div><span className="hint">No figure selected. <Help text="Select a figure, then Pose (over the viewport, or its right-click): click a joint for the rotate gizmo, or drag a hand / foot handle." /></span></div></>
   const joints = effectiveJoints(o)
   const v = joint ? (joints[joint] ?? [0, 0, 0]) : null
   const setJoint = (nv: number[]) => { if (joint) st().setJoints(o.id, { ...joints, [joint]: nv }) }
@@ -363,10 +388,10 @@ export function PosesTab() {
           </div>)
       })()}
       <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text /></div>
-      <h4>Joint</h4>
+      <h4>Joint <CommandButton id="stage.pose.mode" text label={posing ? 'Done posing' : 'Pose'} active={posing} /></h4>
       <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
       {v && <Vec label="x · y · z °" v={v} onChange={setJoint} step={5} />}
-      <p className="hint">Gizmos <Help text="Orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools." /></p>
+      <p className="hint">Gizmos <Help text="Pose shows them on the figure: orange spheres are joints (rotate), blue cubes are hands and feet (drag; elbow and shoulder follow). The figure's own transform stays on the Move / Rotate tools." /></p>
     </div>
     </>
   )
@@ -375,7 +400,8 @@ export function PosesTab() {
 // ST3 (16 §3e / §7): the generation form for the blocking — the method (D78: clay reference by default, exact pose as the switch), image 1
 // locked to the pass the method takes, the reference deck (D73), the prompt, the size tier and the candidates; the passes render on
 // Generate when stale (or by the button), the results land below with lineage to the passes.
-/** `stillsOnly` (D95, Image's From a stage): the stills without the clip fold, which belongs to Animate. */
+// D121: the form is Image › From a stage's alone (D95: stills are made in Image); the clip is Performance's Stage clip card, the final shot
+// its Final shot card. A still clicked here is the stage clip's start there.
 /** D116: one step of the shot as a tree node — folded by its summary; the step's state and verb on the summary line (the verb's click
  *  does not fold it). */
 function Step({ id, title, state, verb, children }: { id: string; title: string; state?: React.ReactNode; verb?: React.ReactNode; children: React.ReactNode }) {
@@ -388,7 +414,7 @@ function Step({ id, title, state, verb, children }: { id: string; title: string;
   )
 }
 
-export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
+export function ShotTab() {
   const current = useStage((s) => s.current)
   const cam = useStage((s) => s.activeCamera())
   const sh = useStage((s) => s.shot)
@@ -398,7 +424,6 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
   const shots = useStage((s) => s.shots)
   const shotStart = useStage((s) => s.shotStart)
   const stills = shots.filter((a) => a.kind !== 'video')
-  const clips = shots.filter((a) => a.kind === 'video')
   const entry = useStage((s) => s.passesEntry())
   const stale = useStage((s) => s.passesStale())
   const caps = useSession((s) => s.capabilities?.stage)
@@ -418,7 +443,7 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
   return (
     <div className="stage-panel shot-tab tree">
       <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" />
-        <Help text="The shot's steps, top to bottom: the frame (a Stage shot of the scene from the passes), the clip (the pass sequence animated), the final shot (the scene split into layers, performed, assembled and finished). Each step folds by its title; its verb sits on the title line and in the foot." /></div>
+        <Help text="A frame of the stage through its active camera: the method reads the scene from the pass (image 1); the references and the figures' characters give the look. The stage's clip and its final shot are made in Animate › Performance (D121)." /></div>
       <Step id="frame" title="Frame" state={stills.length ? `${stills.length} rendered` : entry ? 'passes ready' : 'no passes'}
         verb={<CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} />}>
         <div className="kv tall"><span>method</span>
@@ -475,21 +500,17 @@ export function ShotTab({ stillsOnly = false }: { stillsOnly?: boolean } = {}) {
         {pv && pv.missing.length > 0 && <p className="disabled-why">Weights missing for this method: {pv.missing.map((m) => m.model_id).join(', ')} — Models › Fetch.</p>}
         <div className="kv tall"><span>results{stills.length ? <span className="hint"> · {stills.length}</span> : null}</span>
           <div>
-            {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Catalogue (lineage: the pass and the references). Click one: the clip starts from it." /></span>}
-            <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
+            {!stills.length && <span className="hint">None yet. <Help text="The frames of this stage land here and in the Catalogue (lineage: the pass and the references). Click one: it is the start of the stage's clip (Animate › Performance › Stage clip)." /></span>}
+            <div className="shot-results">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the stage clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
           </div></div>
       </Step>
-      {!stillsOnly && <Step id="clip" title="Clip" state={`frames ${current.range.start}–${current.range.end}${clips.length ? ` · ${clips.length} rendered` : ''}`}
-        verb={<CommandButton id="stage.clip.animate" text label="Render clip ▶" />}><ClipSection clips={clips} /></Step>}
-      {!stillsOnly && <FinalSection />}{/* D111 (PS5): its own step */}
     </div>
   )
 }
 
 // ST4 (16 §8): the clip — the pass sequence over the range (depth by default, pose as the weaker second, D76) rendered by the viewport,
-// the start frame picked among the shots, Animate ▶ through LTX-2.3's IC-LoRA; the stage's clips land here and in Animate.
-function ClipSection({ clips }: { clips: Asset[] }) {
-  const current = useStage((s) => s.current)!
+// the start frame picked among the shots, Animate ▶ through LTX-2.3's IC-LoRA; the stage's clips land in the card and in Animate.
+function ClipSection() {
   const kind = useStage((s) => s.guideKind)
   const g = useStage((s) => s.guideEntry())
   const rendering = useStage((s) => s.rendering)
@@ -500,8 +521,8 @@ function ClipSection({ clips }: { clips: Asset[] }) {
   const clipCap = method === 'animate' ? caps?.animate : caps?.clip
   const [gw, gh] = st().guideSize()
   const n = st().guideFrames()
-  const stale = !!g && (g.range.start !== current.range.start || g.frames !== n || current.revision > g.revision + 1)
-  markUsed('stage.clip.guide'); markUsed('stage.clip.animate')
+  const stale = useStage((s) => s.guideStale())
+  markUsed('stage.clip.guide')
   return (
     <div className="clip-section">
       <div className="kv"><span>method</span><span className="segmented">
@@ -514,10 +535,52 @@ function ClipSection({ clips }: { clips: Asset[] }) {
         {rendering && rendered ? `rendering ${rendered.done} / ${rendered.total || n}…` : g ? `${kind} sequence · ${g.frames} frames · ${g.size.w}×${g.size.h} · ${g.fps} fps${stale ? ' · from an earlier range or revision — render again' : ' · current'}` : `no ${kind} sequence yet · ${n} frames at ${gw}×${gh} (8n + 1 for the clip model)`}
       </div>
       <div className="verbs"><CommandButton id="stage.clip.guide" text label={rendering ? 'Rendering…' : 'Render sequence'} /></div>
-      {!shotStart && <p className="disabled-why">Click one of the results above to start the clip from it.</p>}
+      {!shotStart && <p className="disabled-why">Pick the start above.</p>}
       {clipCap && <p className="hint">{clipCap.label} · ≈ {clipCap.seconds != null ? Math.round(clipCap.seconds) : '?'} s for {method === 'animate' ? '77 frames' : '121 frames'}{clipCap.health === 'missing' ? ' · weights missing — Models › Fetch' : ''}<Help text={method === 'animate' ? 'Wan Animate (E19): one figure in the camera; the picked result is the character.' : 'LTX-2.3 with its IC-LoRA (E11): the depth or pose sequence from the picked frame.'} /></p>}
+    </div>
+  )
+}
+
+/** D121 (26 §5.3): Performance's Stage clip card — the stage's start frame (picked among its stills, made in Image › From a stage), what the
+ *  scene is (the prompt the clip shares with the frame), the clip's method and guide, and the stage's clips. Render clip ▶ is the foot's. */
+export function StageClipCard() {
+  const current = useStage((s) => s.current)
+  const shots = useStage((s) => s.shots)
+  const shotStart = useStage((s) => s.shotStart)
+  const prompt = useStage((s) => s.shot.prompt_text)
+  if (!current) return <span className="hint">Open a stage in Clay first.</span>
+  const stills = shots.filter((a) => a.kind !== 'video')
+  const clips = shots.filter((a) => a.kind === 'video')
+  return (
+    <div className="stage-panel stage-clip" data-card="clip">
+      <div className="kv tall"><span>start <Help text="The clip starts from one of the stage's frames — the stills made from it in Image › From a stage. With Wan Animate the picked frame is the character who performs." /></span>
+        <div>
+          <div className="shot-results start-stills">{stills.slice(0, 12).map((a) => <img key={a.id} className={`shot-thumb${shotStart === a.id ? ' start' : ''}`} src={api.thumbUrl(a.id, 256)} alt="" title={`${a.model_id ?? ''} · seed ${a.seed ?? ''} — click: the clip starts from this frame`} onClick={() => st().setShotStart(shotStart === a.id ? null : a.id)} />)}</div>
+          {!stills.length && <span className="hint">No frame of this stage yet.</span>}
+          <div className="verbs"><CommandButton id="stage.frame.make" text label="Make a frame ▸" /></div>
+        </div></div>
+      <div className="kv tall"><span>prompt</span><textarea className="shot-prompt" rows={2} value={prompt} placeholder="what the scene is (the frame's prompt)" onChange={(e) => st().setShot({ prompt_text: e.target.value })} /></div>
+      <ClipSection />
       {clips.length > 0 && <><h4>Clips · {clips.length}</h4>
         <div className="clip-results">{clips.slice(0, 9).map((a) => <span key={a.id} className="clip-thumb"><img className="shot-thumb" src={api.thumbUrl(a.id, 256)} alt="" title={`${a.frames ?? '?'} frames · ${a.model_id ?? ''}`} /><span className="n">{a.frames ?? '?'} f</span></span>)}</div></>}
+    </div>
+  )
+}
+
+/** D121: the Stage clip card's foot — Render clip ▶ (the sequence rendered first when it is missing or stale), with the model's estimate. */
+export function ClipFoot() {
+  const current = useStage((s) => s.current)
+  const shotStart = useStage((s) => s.shotStart)
+  const rendering = useStage((s) => s.rendering)
+  const method = useStage((s) => s.clipMethod)
+  const caps = useSession((s) => s.capabilities?.stage)
+  markUsed('stage.clip.animate')
+  const cap = method === 'animate' ? caps?.animate : caps?.clip
+  const reason = !current ? 'open a stage in Clay' : !cap ? 'no clip model in this build' : !shotStart ? 'pick the start' : rendering ? 'rendering the sequence…' : null
+  return (
+    <div>
+      <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.clip.animate')} title="The stage's sequence animated from the start frame — the sequence is rendered first when it is missing or stale (Ctrl+Enter)">Render clip ▶</button>
+      <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <span>{cap!.label} · ≈ {cap!.seconds != null ? Math.round(cap!.seconds) : '?'} s</span>}</div>
     </div>
   )
 }
@@ -528,36 +591,7 @@ export function useStageLoad(): void {
   useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes(); void st().loadTemplates() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/** D116: the shot's steps as one strip in the foot — the passes, the guide sequence, the clip, the final shot and (for the stage's newest final)
- *  its assembly, composition, Final level and render; the author's "rig", at hand whatever the column shows. */
-function RigStrip() {
-  const current = useStage((s) => s.current)
-  const passesBusy = useStage((s) => s.rendering)
-  const finals = useFinals((s) => s.finals)
-  const comps = useFinals((s) => s.compositions)
-  if (!current) return null
-  const f = finals.filter((x) => x.stage_id === current.id).at(-1) ?? null
-  const comp = f ? comps[f.id] ?? null : null
-  const busy = f ? assembling(f.id) : false
-  const renders = f ? compRendering(f.id) : false
-  return (
-    <div className="rig-strip" aria-label="the shot's steps" data-rig-strip>
-      <CommandButton id="stage.shot.passes" text label={passesBusy ? 'Passes…' : 'Passes'} />
-      <CommandButton id="stage.clip.guide" text label="Sequence" />
-      <CommandButton id="stage.clip.animate" text label="Clip ▶" />
-      <CommandButton id="stage.final.make" text label="Final…" />
-      {f && <>
-        <button className="quiet" disabled={!readyToAssemble(f) || busy} onClick={() => void useFinals.getState().assemble(f.id)} title={`${f.name}: composite the layers into the shot`}>{busy ? 'Assembling…' : 'Assemble'}</button>
-        {f.assembled_at && <button className="quiet" disabled={busy} onClick={() => void useFinals.getState().compose(f.id)} title={comp ? `${f.name}: the composition written afresh (the edits are dropped)` : `${f.name}: an EffectCraft composition to finish by hand`}>{comp ? 'Composition ↻' : 'Composition'}</button>}
-        {comp && <button className="quiet" onClick={() => useFinals.getState().openFinal(f.id)} title={`${f.name} at Animate's Final level`}>Open in Final</button>}
-        {comp && <button className="quiet" disabled={renders} onClick={() => void useFinals.getState().render(f.id)} title={`${f.name}: the finished shot rendered on the CPU`}>{renders ? 'Rendering…' : comp.clip_id ? 'Render ↻' : 'Render'}</button>}
-      </>}
-      <Help text="The shot's steps in order: the passes of the scene, the frame (Render frame below), the guide sequence, the clip, the final shot split into layers, its assembly, the composition to finish by hand at the Final level, the finished render. The Performance section has each step in full." />
-    </div>
-  )
-}
-
-/** The foot while Animate's Performance card is From the stage (D95 AN1): New stage, else Render frame ×n with its estimate. */
+/** Image › From a stage's foot (D95 AN1): New stage, else Render frame ×n with its estimate. */
 export function StageFoot() {
   const current = useStage((s) => s.current)
   const rendering = useStage((s) => s.rendering)
@@ -571,7 +605,6 @@ export function StageFoot() {
   const reason = !cam ? 'no camera' : rendering ? 'rendering the passes…' : err ? err : !pv ? 'preparing…' : missing.length ? `weights missing: ${missing.map((m) => m.model_id).join(', ')}` : pv.estimate.vram_fit === 'over' ? 'VRAM estimate exceeds the budget' : null
   return (
     <div>
-      <RigStrip />{/* D116: the shot's steps at hand, above the primary */}
       <button className="primary" disabled={!!reason} onClick={() => runCommand('stage.shot.generate')} title="Render the passes if they are stale, then queue the frame (Ctrl+Enter)">Render frame{count > 1 ? ` ×${count}` : ''} ▶</button>
       <div className="estimate">{reason ? <span style={{ color: 'var(--fg3)' }}>{reason}</span> : <><span className={`dot ${pv?.estimate.vram_fit ?? 'ok'}`} />≈ {Math.round((pv?.estimate.seconds ?? 0) * count)} s · {String(pv?.params?.label ?? '')}</>}</div>
     </div>
@@ -584,7 +617,7 @@ export function Strip() {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'stage') return
       if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
-      if (inField(e)) { primaryInField(e, ['stage.shot.generate']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
+      if (inField(e)) { primaryInField(e, ['stage.shot.passes']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
       handleKeyFor('stage', e)
     }
     window.addEventListener('keydown', h)
@@ -653,7 +686,8 @@ function Viewport() {
   const guides = useStage((s) => s.guides)
   const frameReq = useStage((s) => s.frameRequest)
   const selectedJoint = useStage((s) => s.selectedJoint)
-  const poseMode = useSuiteRail().active === 'motion'                                  // ST2 → D95 (AN1): the Motion section shows the joint pickers
+  const poseMode = useStage((s) => s.posing)                                           // D121: the pose pill (not the Motion section on screen) shows the joint pickers
+  const figure = useStage((s) => { const o = s.object(s.selected); return o?.kind === 'mannequin' ? o : null })
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const { ref: dropRef, over } = useDropTarget((d) => onlyAssets(d) && d.items.some((i) => i.media !== 'video') && !!useStage.getState().current,
     (d) => { const it = d.items.find((i) => i.kind === 'asset' && i.media !== 'video'); const e = engineRef.current; const p = lastPointer.current
@@ -741,6 +775,10 @@ function Viewport() {
       {current && <div className="gizmo-bar" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
         <CommandRow ids={['stage.tool.select', 'stage.tool.move', 'stage.tool.rotate', 'stage.tool.scale', 'stage.tool.path', 'gap', 'stage.snap', 'gap', 'stage.undo', 'stage.redo']} active={`stage.tool.${tool}`} />
         {snap && <span className="hint">snap</span>}
+      </div>}
+      {current && figure && <div className="pose-pill" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>{/* D121: pose mode by the figure, ArtCraft's Enter Pose Mode / Done */}
+        <CommandButton id="stage.pose.mode" text active={poseMode} label={poseMode ? `Done posing ${figure.name}` : `Pose ${figure.name}`} />
+        {poseMode && <Help text="Orange spheres are joints: click one for its rotate gizmo. Blue cubes are hands and feet: drag one and the elbow or knee follows. Done (or a click on the floor) ends pose mode." />}
       </div>}
       {current && view === 'camera' && rect && guides && <div className="frame-guides" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}><i className="thirds" /><i className="centre" /></div>}
       {current && view === 'camera' && <div className="view-tag">camera view · {st().activeCamera()?.name} · {st().activeCamera()?.focal_mm} mm</div>}

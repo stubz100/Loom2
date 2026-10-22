@@ -130,12 +130,17 @@ def check(f: Final) -> None:
 def plan_batches(n: int) -> list[dict[str, int]]:
     """A performance of n frames in Wan Animate's batches (E23a, W1): one batch of n frames (the model's 4k + 1 grid, at least 9) when it
     fits, else 77-frame batches, each after the first carrying the previous one's last 5 frames and reading the pose guide from where
-    those 5 began (offsets 0, 77, 149, …: 72 new frames each)."""
+    those 5 began (offsets 0, 77, 149, …: 72 new frames each). The last batch is only as long as the frames still owed plus the carry, on
+    the grid and at least 9 (AE4's follow-up, 2026-10-22: a second batch of 77 frames for the 4 an 81-frame shot needs cost ≈ 4 min a pass)."""
     if n <= BATCH:
         m = max(9, n)
         return [{"frames": m + (-(m - 1) % 4), "offset": 0}]
     count = 1 + -(-(n - BATCH) // (BATCH - CARRY))
-    return [{"frames": BATCH, "offset": 0 if k == 0 else BATCH + (BATCH - CARRY) * (k - 1)} for k in range(count)]
+    out = [{"frames": BATCH, "offset": 0 if k == 0 else BATCH + (BATCH - CARRY) * (k - 1)} for k in range(count)]
+    owed = n - (BATCH + (BATCH - CARRY) * (count - 2))               # the new frames the last batch still has to make
+    m = max(9, owed + CARRY)
+    out[-1]["frames"] = min(BATCH, m + (-(m - 1) % 4))
+    return out
 
 
 def stitch(batches: list[list[Path]], n: int) -> list[Path]:

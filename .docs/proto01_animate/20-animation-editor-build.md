@@ -166,3 +166,6 @@ Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; th
   above that layer on sync (`Final.processing`, `Composition.processing`, stale by the layers' signature; run again replaces, remove drops).
   **AE4 is complete.** Next: the author's looks at doc 21 (§4: the passes, the line on the lanes, Face / Lip-sync, the two mouths, the
   processing layers).
+- **2026-10-22 (journal 2026-10-22 13:59):** AE4's follow-ups — `plan_batches` sizes the last Animate batch to the frames owed plus the carry (an 81-frame
+  shot: 77 + 9 instead of 77 + 77; the face passes and PS5c's performances alike); a stale processing layer asks before the finished
+  shot is rendered (Render anyway), the job's log names it.

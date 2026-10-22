@@ -954,6 +954,9 @@ async def run_comp_render(job: JobRecord, recipe: CompRender, q: JobQueue) -> bo
     c = await asyncio.to_thread(cs.get, f)
     if c is None:
         raise ValueError(f"the final {f.id} has no composition yet (make it first)")
+    stale = [pid for pid, v in (c.processing_stale or {}).items() if v]
+    if stale:                                                          # AE4e: the UI asked before; the log says what the shot carries
+        job.log_tail.append(f"{len(stale)} processing layer(s) stale ({', '.join(stale)}): rendered as they are — a layer below changed since")
     tmp = q.ws.temp_dir / f"comp-render-{job.id}"
     shutil.rmtree(tmp, ignore_errors=True)
     (tmp / "f16").mkdir(parents=True)

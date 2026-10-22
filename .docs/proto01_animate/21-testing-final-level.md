@@ -106,7 +106,8 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   you run it again (Process again, the same pass and strength: the layer is replaced in place, its own transforms and masks kept).
   Remove the processing layer drops it with its frames.
 - **Check:** is a processing layer the right unit for "post on everything below", or would you rather have one at the top only? Does
-  stale read clearly? Should a stale layer re-run by itself when the render is asked for?
+  stale read clearly? Rendering the finished shot with a stale processing layer asks first (Render anyway) and the job's log says so;
+  re-running it stays yours (Process again) — say if you would rather have it run by itself before the render.
 
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
@@ -145,7 +146,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | A line as an audio layer on the lanes: the right feel? The waveform enough to place it? | |
 | Face / Lip-sync: sharper and still her? The mouth natural and in time? Halo or seam left? The chain of jobs legible? | |
 | The mouth by the model vs the talking head: which reads better? Glasses and teeth kept? The engine's stop around it acceptable? | |
-| Processing layers: the right unit? Stale clear? Re-run by itself before a render? | |
+| Processing layers: the right unit? Stale clear? (A stale layer now asks before a render: Render anyway / cancel — re-running stays yours; say if you want it automatic) | |
 
 ## The first look (2026-10-21) and what it changed
 

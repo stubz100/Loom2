@@ -56,9 +56,9 @@ truth from here; the table above stays as written.
 | Phase | Planned | Delivered | Still open |
 | --- | --- | --- | --- |
 | 0–2 | UX0 · IM1 · AN1 · RC0 · CA0 · CA1 | all built and rig-checked (D99, D101, D104); UX0 and CA0 accepted by the author | — |
-| 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113) | **E29 lip-sync and E24 post-processing not run** — moved before AE4 |
+| 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113); E29 / E29b and E24 ran 2026-10-21 (docs 23, 24; D117) and shaped AE4 (D118) | — |
 | gate | a D-number per group | rate and joins D102 · mode D103 · shadows D105–D107 · props D108–D110 · the preview route D113 | lip-sync and the post stages: undecided until E29 / E24 |
-| 4 · the editor | AE1 · AP1 · AE2 · AE3 | nothing | **the whole phase — starts now (D114)** |
+| 4 · the editor | AE1 · AP1 · AE2 · AE3 | AE1 (the pin, the composition, `comp_render`), AP1 thin (the Final level), AE2 (layers, properties, masks, lanes), AE3 (effects) — 2026-10-20/21 (doc 20 §5) | the author's looks at 21 |
 | 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below; **AE4 built as AE4a–e** (D118, 2026-10-22: passes on layers, the line on the lanes, Face / Lip-sync, the lip-sync model as a tool, processing layers — doc 20 §6) | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · AE5 |
 | 6 · review | UX9 | begun 2026-10-21 with the author's look at 21: U1–U3 (journal 2026-10-21 13:58), U4–U7 (D116, journal 2026-10-21 16:42); the ? sweep over the whole app (journal 2026-10-21 18:24) | 15, 17, 18 closed by the author (D117); 21's second look owed; the rest of the register after it |
 | 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it |

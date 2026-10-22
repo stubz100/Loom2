@@ -7653,3 +7653,16 @@ The author asked for a review of the state of things, then "record all this and 
   scenario runs Clean up over everything below Mara, sees the processing row, its record and removes it. Offline 491 full and 491 open (the open run's one failure was the route test asking Creative, which open does not offer — Clean up now), settings audit 272 fields / 0 problems, agents_check (8 docs) and model_literals_check clean, e2e 49/49 full and open, Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4e_rig.py, the PS5 final through the app on the real engine and the real effectcraft-cli): Creative at 0.35 over the stack from Mara down in 101 s (128 s cold: the copy rendered by effectcraft-cli, the 81 frames padded 0×32 and cropped back), the composition synced — 'Processed · Creative (Mara down)' at index 5 with Mara at 6 (layer.addItem's index honoured), not stale — and the shot rendered in 5 s (out/ae4e/final_processed_creative.mp4); the plate nudged below it → stale; run again in 85 s → the same engine layer's footage replaced, not stale, one processed layer; dropped → gone, 8 layers again. The first run of the rig script failed on its own nudge parameters (the command takes x, y).
 - Gotchas: the fake marks a matte layer's video switch off by convention (the test compares the layers below with the original, not with
   "all on"); `layer.addItem {index}` is honoured by the engine, ignored by the fake (the row lands on top there).
+
+## 2026-10-22 13:59 — AE4's follow-ups: the last Animate batch only as long as owed; a stale processing layer asks before a render
+
+- **The last batch** (`finals.plan_batches`): a performance or a head pass of n > 77 frames ran 77-frame batches to the end — the rig's
+  81-frame shot rendered a second batch of 77 for the 4 frames it needed (≈ 4 min a face pass, and the same in PS5c's performances). The
+  last batch is now the frames still owed plus the 5 carried, on the 4k + 1 grid and at least 9: 81 → 77 + 9, 161 → 77 + 77 + 17, 150
+  → 77 + 77 + 9; 149 stays 77 + 77. `stitch` is unchanged (the first batch whole, every later one without its carried frames, cut to n).
+  The rig (ae4c_rig.py --arms face on the PS5 final): the Face pass in 313 s instead of 512 s — the first batch 268 s, the second 45 s for its 9 frames instead of 252–264 s for 77 — FaceSim 0.63 / 0.71 / 0.63 as before, seam 0.78, the join across frames 74–80 continuous to the eye (out/ae4c/join_74_80.jpg).
+- **A stale processing layer at render time** (doc 21's open question, answered conservatively): *Render the finished shot* reads the
+  composition first and, when a processing layer is stale, asks — "N processing layer(s) stale — render anyway?" (Render anyway /
+  cancel) — and `run_comp_render` logs which ones were rendered as they are. Re-running stays the author's (Process again); an automatic
+  re-run before the render is a one-line change if they want it (doc 21 asks).
+- Offline 491 full and 491 open, settings audit 272 / 0, the final-shot e2e scenario green in both variants, Vitest 392 + 3, build clean, lint 75.

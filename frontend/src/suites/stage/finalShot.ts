@@ -205,6 +205,17 @@ export const useFinals = create<FinalsState>((set, get) => ({
     const f = get().finals.find((x) => x.id === id)
     if (!f) return
     try {
+      // AE4e: a processing layer whose layers below changed since it was rendered would freeze the old picture into the shot — ask first
+      let stale: string[] = []
+      try {
+        const c = await unwrap(http.GET('/finals/{fid}/composition', { params: { path: { fid: id } } }))
+        stale = Object.entries((c as { processing_stale?: Record<string, boolean> }).processing_stale ?? {}).filter(([, v]) => v).map(([k]) => k)
+      } catch { stale = [] }
+      if (stale.length) {
+        const ok = await askConfirm({ title: `${f.name}: ${stale.length} processing layer${stale.length === 1 ? ' is' : 's are'} stale — render anyway?`,
+          text: 'A layer below changed since it was rendered. Process it again first (its row in Final · Passes), or render the shot as it is.', okLabel: 'Render anyway' })
+        if (!ok) return
+      }
       await unwrap(http.POST('/finals/{fid}/composition/render', { params: { path: { fid: id } } }))
       set({ awaiting: { ...get().awaiting, [id]: { was: f.clip_id ?? null, since: Date.now(), field: 'clip_id' } } })
       useSession.getState().toast(`${f.name}: rendering the finished shot (effectcraft-cli on the CPU; the Dock shows the frames) — it becomes the final's clip`, 'info')

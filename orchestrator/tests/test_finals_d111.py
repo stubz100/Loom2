@@ -174,8 +174,12 @@ def test_an_empty_set_has_its_own_lead():
 def test_batches_and_stitching():
     from loom2.finals import plan_batches, stitch
     assert plan_batches(33) == [{"frames": 33, "offset": 0}] and plan_batches(34) == [{"frames": 37, "offset": 0}] and plan_batches(5) == [{"frames": 9, "offset": 0}]
-    assert plan_batches(161) == [{"frames": 77, "offset": 0}, {"frames": 77, "offset": 77}, {"frames": 77, "offset": 149}]      # E23a's 10 s at F16
-    assert len(plan_batches(149)) == 2 and len(plan_batches(150)) == 3
+    assert plan_batches(161) == [{"frames": 77, "offset": 0}, {"frames": 77, "offset": 77}, {"frames": 17, "offset": 149}]      # E23a's 10 s at F16: the last batch only what is owed (12) plus the carry
+    assert plan_batches(81) == [{"frames": 77, "offset": 0}, {"frames": 9, "offset": 77}]                                      # the rig's 81: 4 owed → 9, not 77 (AE4's follow-up)
+    assert plan_batches(149) == [{"frames": 77, "offset": 0}, {"frames": 77, "offset": 77}] and plan_batches(150)[-1] == {"frames": 9, "offset": 149}
+    for n in (78, 81, 100, 149, 150, 161, 300):
+        plan = plan_batches(n)
+        assert all(b["frames"] % 4 == 1 and 9 <= b["frames"] <= 77 for b in plan) and plan[0]["frames"] + sum(b["frames"] - 5 for b in plan[1:]) >= n
     a = [Path(f"a{i}") for i in range(77)]
     b = [Path(f"b{i}") for i in range(77)]
     out = stitch([a, b], 100)

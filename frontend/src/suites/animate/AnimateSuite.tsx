@@ -14,7 +14,7 @@ import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { fieldGlyph } from '../../frame/presetGlyphs'
-import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
@@ -349,7 +349,7 @@ export function useAnimateKeys() {
       if (useSession.getState().ui.suite !== 'animate') return
       if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
       if (inField(e)) { if (primaryInField(e, ['anim.run', 'anim.stage'])) e.stopImmediatePropagation(); return }   // D90 (B8): Ctrl+Enter from the prompt (D121: the card's verb)
-      if (handleKeyFor('animate', e, (c) => !c.id.startsWith('anim.final.'))) e.stopImmediatePropagation()   // D121: the Final level's commands are its own suite's
+      if (handleKeysAt('animate', e)) e.stopImmediatePropagation()   // D121: Performance's reach (animateCommands.ts) — Final's commands are its own mode's
     }
     window.addEventListener('keydown', h, { capture: true })
     return () => window.removeEventListener('keydown', h, { capture: true })

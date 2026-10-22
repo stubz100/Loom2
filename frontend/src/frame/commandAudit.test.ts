@@ -4,6 +4,7 @@
 //
 // The registering modules are found by reading the sources, so a new `registerCommands([...])` anywhere under src/ joins the audit.
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import type { Suite } from '../api/types'
 import type { Command, Placement, Scope } from './commands'
 import { SHARED_KEYS } from './keymap'
 
@@ -155,6 +156,35 @@ describe('D32 command audit', () => {
     const retired = ['stage.anim.play', 'stage.anim.prev', 'stage.anim.next', 'stage.anim.back10', 'stage.anim.fwd10', 'stage.anim.first', 'stage.anim.last', 'stage.anim.setStart', 'stage.anim.setEnd',
       'stage.anim.prevKey', 'stage.anim.nextKey', 'anim.final.play', 'anim.final.stepBack', 'anim.final.stepForward', 'anim.final.home', 'anim.final.end']
     expect(retired.filter((id) => commands.command(id))).toEqual([])
+  })
+
+  it("lists at each Animate mode what its keys reach, and no two scopes a mode joins share a chord (D121)", async () => {
+    const { TRANSPORT_IDS } = await import('../suites/animate/transport')
+    const at = (suite: Suite) => commands.commandsAt(suite).map((c) => c.id)
+    const shared = (id: string) => TRANSPORT_IDS.has(id) || /^anim\.(level|step|for)\./.test(id)
+    // Final: its own commands, the mode keys, the Shot head's and the one transport, nothing of Performance's
+    expect(at('final')).toEqual(expect.arrayContaining(['anim.final.render', 'anim.play', 'anim.prevKey', 'anim.level.clay', 'anim.step.passes', 'anim.for.back']))
+    expect(at('final').filter((id) => !id.startsWith('anim.final.') && !shared(id))).toEqual([])
+    // Clay: the stage's own, then the shared ones of the animate scope
+    expect(at('stage')).toEqual(expect.arrayContaining(['stage.shot.passes', 'anim.play', 'anim.setIn', 'anim.nextKey', 'anim.level.performance', 'anim.level.final']))
+    expect(at('stage').filter((id) => !id.startsWith('stage.') && !shared(id))).toEqual([])
+    // Performance: the animate scope but Final's
+    expect(at('animate')).toEqual(expect.arrayContaining(['anim.run', 'anim.play', 'anim.keep', 'anim.level.final']))
+    expect(at('animate').filter((id) => id.startsWith('anim.final.'))).toEqual([])
+    expect(at('generate')).toEqual(commands.commandsFor('generate').map((c) => c.id))   // a suite without a reach: its own scope
+    // a reach joins scopes, and its key hook answers with the first match: a chord two of them shared would hide the second
+    const clash: string[] = []
+    for (const suite of ['stage', 'animate', 'final'] as Suite[]) {
+      const cmds = commands.commandsAt(suite)
+      for (const a of cmds) for (const b of cmds) {
+        if (a.id >= b.id || a.scope === b.scope) continue
+        const bn = new Set(chordsOf(b).map((k) => norm(commands.parseChord(k))))
+        for (const k of chordsOf(a)) if (bn.has(norm(commands.parseChord(k)))) clash.push(`${suite} ${k}: ${a.id}, ${b.id}`)
+      }
+    }
+    expect(clash).toEqual([])
+    // the stage's own mode keys are gone: anim.level.* reach every mode
+    expect(['stage.level.performance', 'stage.level.final'].filter((id) => commands.command(id))).toEqual([])
   })
 
   it('marks a command used by hand only where the same file renders, runs or lists it (D90, 01 §11.3)', () => {

@@ -92,9 +92,6 @@ registerCommands([
   { id: 'stage.shot.passes', scope: 'stage', label: 'Render the passes', icon: Layers, keys: 'Ctrl+Enter', placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderPasses() },
   { id: 'stage.shot.clearRefs', scope: 'stage', label: 'Clear the references', icon: X, placement: ['panel'], when: () => st().shot.refs.length > 0, run: () => st().setShot({ refs: [] }) },
   // ST4: keyframes and the clip — D90 (02 §8.2): the transport keys of Animate and the Episode lane; the previous / next key moved to Alt+← / →
-  // D99 (UX0 #19): the viewer levels by number — 2 goes to Performance from here (1, Clay, is this level); the strip's switch is their mouse home
-  { id: 'stage.level.performance', scope: 'stage', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
-  { id: 'stage.level.final', scope: 'stage', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },   // AE1 / AP1 (D114) → D121: a suite of its own
   // D121 (AW2): play, step, first / last, the range's ends and previous / next key are the one transport's (anim.*, transport.ts); the stage's
   // own timeline verbs are the keys
   { id: 'stage.anim.keyCamera', scope: 'stage', label: 'Key the camera here', icon: Diamond, placement: ['strip', 'context'], when: () => hasStage() && !!st().activeCamera(), run: () => st().keyCamera() },

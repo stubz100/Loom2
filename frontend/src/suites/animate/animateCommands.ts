@@ -1,13 +1,13 @@
 // Animate commands (11 §9, 07 §3c, D32): one definition each for the transport buttons, the strip, the inspector verbs,
 // the right-click menus and the keys. Keys are accelerators for buttons that exist anyway.
 import { ArrowLeftRight, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Columns2, Download, Eye, Film, Layers, Pause, Play, Repeat, RotateCcw, Scissors, Shuffle, SkipBack, SkipForward, Sparkles, SquareX, StepBack, StepForward, Trash, X } from 'lucide-react'
-import { command, isEnabled, registerCommands, runCommand, sep, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, registerCommands, runCommand, sep, setReach, type Command, type MenuItem } from '../../frame/commands'
 import { http, unwrap, type ApiError } from '../../api/client'
 import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { useAnimRoute } from './routeStore'
-import { neighbour, transport } from './transport'
+import { neighbour, transport, TRANSPORT_IDS } from './transport'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
   Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
@@ -135,6 +135,14 @@ registerCommands([
   { id: 'anim.trash', scope: 'animate', label: 'Move to trash', icon: Trash, danger: true, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => void an().trashClip() },
   { id: 'anim.toCatalogue', scope: 'animate', label: 'Show in Catalogue', icon: Film, placement: ['inspector', 'context'], when: () => !!an().clip()?.asset_id, run: () => { useSession.getState().setSuite('catalogue'); void import('../catalogue/catalogueStore').then((m) => { const c = m.useCatalogue.getState(); void c.setQuery({ folder: 'clips' }).then(() => { const id = an().clip()?.asset_id; if (id) c.select(id, 'single') }) }) } },
 ])
+
+// D121: what each mode's keys reach (commands.ts reachOf), one rule for its key hook, the help overlay and the palette. The three share the
+// one transport, the mode switches (1 · 2 · 3) and the Shot head's commands (the stepper, the For chip); Clay adds the stage's own,
+// Performance the rest of this scope but Final's, Final its own.
+const shared = (c: Command) => TRANSPORT_IDS.has(c.id) || /^anim\.(level|step|for)\./.test(c.id)
+setReach('stage', [{ scope: 'stage' }, { scope: 'animate', only: shared }])
+setReach('animate', [{ scope: 'animate', only: (c) => !c.id.startsWith('anim.final.') }])
+setReach('final', [{ scope: 'animate', only: (c) => c.id.startsWith('anim.final.') || shared(c) }])
 
 /** D88 XE (experimental): continue the clip on its own model — the prompt is the clip's, editable; the caveat said before the job. */
 async function extendClip(): Promise<void> {

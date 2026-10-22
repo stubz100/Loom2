@@ -3,6 +3,7 @@
 // overlay all read from here, so a key is only ever an accelerator for something that is also clickable.
 // The `placement` tuple is non-empty by type: a command cannot be registered as keyboard-only.
 import type { ComponentType } from 'react'
+import type { Suite } from '../api/types'
 import { DEV_HOOKS } from '../devHooks'
 import { loadOverrides, type Overrides } from './keyStore'
 
@@ -72,7 +73,21 @@ export function runCommand(id: string): boolean {
 export function markUsed(id: string): void { USED.add(id) }
 // dev: the headed check (`scripts/edit_headed_check.py tour`) runs every command of a scope through this hook
 if (DEV_HOOKS) (window as unknown as { __loom2Commands?: unknown }).__loom2Commands = { commandsFor, runCommand, isEnabled, command }
-export function unusedCommands(scope: Scope): Command[] { return commandsFor(scope).filter((c) => !USED.has(c.id)) }
+export function unusedCommands(suite: Suite): Command[] { return commandsAt(suite).filter((c) => !USED.has(c.id)) }
+
+// D121: what a suite's keys reach when that is not simply its own scope. Animate's three modes are three suites over two scopes: Clay
+// answers with the stage's commands and the animate scope's shared ones (the one transport, the mode switches, the Shot head's), Performance
+// with the animate scope's except Final's, Final with Final's and the shared ones. The suite's key hook (handleKeysAt), the help overlay
+// (?), the palette (Ctrl+K) and the dev audit of unshown commands read the one list, so a key and its listing cannot drift apart.
+export interface Reach { scope: Scope; only?: (c: Command) => boolean }
+const REACH = new Map<Suite, Reach[]>()
+export function setReach(suite: Suite, reach: Reach[]): void { REACH.set(suite, reach) }
+/** The scopes, and which of their commands, a suite's keys reach; a suite without a registered reach reaches its own scope. */
+export function reachOf(suite: Suite): Reach[] { return REACH.get(suite) ?? [{ scope: suite as Scope }] }
+/** The commands a suite's keys reach, its reach's order (its own scope first). */
+export function commandsAt(suite: Suite): Command[] { return reachOf(suite).flatMap(({ scope, only }) => commandsFor(scope).filter((c) => !only || only(c))) }
+/** A suite's key hook: the first enabled command its reach answers with. */
+export function handleKeysAt(suite: Suite, e: KeyboardEvent): boolean { return reachOf(suite).some(({ scope, only }) => handleKeyFor(scope, e, only)) }
 
 // ---- shortcuts ---------------------------------------------------------------------------------------------
 interface Chord { ctrl: boolean; shift: boolean; alt: boolean; key: string }

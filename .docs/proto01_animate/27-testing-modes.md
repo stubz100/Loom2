@@ -24,8 +24,8 @@ click-through, and your notes decide what changes next. Wherever a small **?** s
 
 - Under the viewport: one transport (the same buttons at every level) and a ruler. The **range** is the bright band — drag its ends.
 - **Key camera** at frame 0, type 30 in the frame field, move the camera, **Key camera** again: a row *camera · Camera 1* with two
-  diamonds. Drag a diamond to another frame; right-click it to remove it; click it to go there. A motion clip applied to a figure shows as a
-  bar on the figure's row.
+  diamonds. Drag a diamond to another frame (or right-click it: *Move this key to the playhead*); right-click it to remove it; click it to
+  go there. A motion clip applied to a figure shows as a bar on the figure's row.
 - Keys: Space plays, ← / → step, Home / End the range's ends, Alt+← / → the previous / next key — the same at every level.
 - **Check:** are the rows the right ones (the camera and each keyed object)? Do you miss the old single scrubber anywhere?
 
@@ -49,6 +49,7 @@ click-through, and your notes decide what changes next. Wherever a small **?** s
   composition* when it is assembled). Layers is the editor you know; **Output** says what was rendered and from which revision; the foot is
   **Render the finished shot ▶** (Ctrl+Enter).
 - The lanes are the same timeline as Clay's: drag a bar, its ends, Alt-drag to slip.
+- Press **?** here, then at Clay and at Performance: each lists its own mode's commands and keys (the transport in all three).
 - **Check:** is anything you need at Final still only at Performance? Does Output say enough?
 
 ## Notes

@@ -1,9 +1,9 @@
-// Ctrl+K command palette (07 §3e): every registered command of the global scope and the current suite,
+// Ctrl+K command palette (07 §3e): every registered command of the global scope and what the current suite's keys reach (D121),
 // filtered as you type, with its shortcut; Enter runs the highlighted one.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { useSession } from '../store/session'
-import { commandsFor, isEnabled, keyLabel, markUsed, type Command, type Scope } from './commands'
+import { commandsAt, commandsFor, isEnabled, keyLabel, markUsed, type Command } from './commands'
 
 interface PaletteState { open: boolean; toggle: () => void; close: () => void }
 export const usePalette = create<PaletteState>()((set, get) => ({ open: false, toggle: () => set({ open: !get().open }), close: () => set({ open: false }) }))
@@ -15,7 +15,7 @@ export function CommandPalette() {
   const [q, setQ] = useState('')
   const [at, setAt] = useState(0)
   const input = useRef<HTMLInputElement>(null)
-  const all = useMemo(() => [...commandsFor(suite as Scope), ...commandsFor('global')], [suite, open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const all = useMemo(() => [...commandsAt(suite), ...commandsFor('global')], [suite, open]) // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean)
     return all.filter((c) => words.every((w) => c.label.toLowerCase().includes(w) || c.id.includes(w) || (c.keys ?? '').toLowerCase().includes(w)))

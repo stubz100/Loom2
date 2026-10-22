@@ -11,7 +11,7 @@ import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lo
 import { PresetPanel } from '../../frame/PresetPanel'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
-import { handleKeyFor, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
+import { handleKeysAt, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
@@ -30,7 +30,6 @@ import type { StageCamera, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleCamera, sampleDoc } from './anim'
 import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
 import { keyRuns, stageSpan } from '../animate/timelineMath'
-import { TRANSPORT_IDS } from '../animate/transport'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
@@ -602,7 +601,7 @@ export function Strip() {
       if (useSession.getState().ui.suite !== 'stage') return
       if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
       if (inField(e)) { primaryInField(e, ['stage.shot.passes']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
-      if (!handleKeyFor('stage', e)) handleKeyFor('animate', e, (c) => TRANSPORT_IDS.has(c.id))   // D121 (AW2): the one transport, beside the stage's own keys
+      handleKeysAt('stage', e)                                           // D121: Clay's reach — the stage's keys, then the one transport and the mode keys (animateCommands.ts)
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -647,12 +646,13 @@ function Timeline() {
     const { runs, singles } = keyRuns(frames)
     return { id, label, selected: sel, onSelect, data: { kind: id.slice(0, 3) },
       bars: runs.map(([a, b]) => ({ id: `${a}`, from: a, to: b, label: `motion · ${b - a + 1}`, className: 'motion', title: `${b - a + 1} keys frame by frame (a motion clip), frames ${a}–${b}` })),
-      keys: singles.map((f) => ({ frame: f, title: `key at frame ${f} — click: go there; drag: move it; right-click: remove it` })) }
+      keys: singles.map((f) => ({ frame: f, title: `key at frame ${f} — click: go there; drag: move it; right-click: move it to the playhead or remove it` })) }
   }
   const rows: TLRow[] = []
   if (cam && camKeys.length) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))
   for (const o of objects) rows.push(row(`obj:${o.id}`, o.name, k.objects[o.id].map((x) => x.frame), selected === o.id, () => st().select(o.id)))
   const keyMenu = (e: React.MouseEvent, r: string, f: number) => showMenu(e, [{ label: `Go to frame ${f}`, run: () => { st().setPlaying(false); st().setFrame(f) } },
+    { label: `Move this key to the playhead (frame ${frame})`, disabled: frame === f, run: () => st().moveKey(r, f, frame) },   // D32: the drag's menu equivalent
     { label: 'Remove this key', danger: true, run: () => st().removeRowKey(r, f) }])
   return (
     <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>

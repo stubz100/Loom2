@@ -8002,3 +8002,30 @@ The author asked for a review of the state of things, then "record all this and 
 - Also: three lines of the 22:44 entry above carried literal backslashes before their backticks (an escaping slip when it was written);
   removed, nothing else changed.
 - **D121's waves are built** (AW1 → AW3 → AW2 → AW4). Owed: the author's click-through (UX9) — `.docs/proto01_animate/27-testing-modes.md`.
+
+## 2026-10-22 23:31 — D121 follow-up: each mode's keys are one list (the help overlay, the palette and the key hooks read it); a key's drag gets its menu twin
+
+- **Found after AW4:** the help overlay (`?`) and the palette (Ctrl+K) took the suite's id for a command scope. At Final (`final`, no scope
+  of its own) they listed no Animate command at all; at Clay they had lost the transport since AW2 retired the stage's own (play, the steps,
+  Home / End, I / O and the previous / next key were dispatched from the animate scope there, but listed nowhere).
+- **The reach** (`frame/commands.ts`: `setReach`, `reachOf`, `commandsAt`, `handleKeysAt`): a suite registers which scopes, and which of
+  their commands, its keys answer with; a suite without one reaches its own scope. `animateCommands.ts` registers the three modes': Clay the
+  stage scope, then the animate scope's shared commands (the one transport, `anim.level.*`, the Shot head's `anim.step.*` and `anim.for.*`);
+  Performance the animate scope but `anim.final.*`; Final `anim.final.*` and the shared ones. The three key hooks call `handleKeysAt` (their
+  inline filters gone); the help overlay heads the section with the mode's name (Animate · Clay / Performance / Final) and lists
+  `commandsAt`, as do the palette and the dev audit of unshown commands.
+- **The stage's own mode keys retired:** `stage.level.performance` and `stage.level.final` (2 and 3 at Clay) duplicated `anim.level.*`,
+  which now reach every mode; the mode switch runs the same three commands at each.
+- **The gestures in `?` follow D121:** a clip's start / end thumbnails are in its details (Clips), not the Inspector; a joint is posed
+  while posing (the pose pill), not by the Motion section being on screen; Scene rows, not the Outliner; the transform numbers under the
+  object's Scene row; the timeline's drags (the range's ends, a key) with their equivalents; Final's lanes (drag, trim, Alt-slip) listed for
+  the first time.
+- **D32:** a key dragged on Clay's timeline (AW2) had no mouse equivalent; its right-click now offers *Move this key to the playhead (frame N)*.
+- **Tests:** a new audit case — each mode's reach (Final: nothing of Performance's; Clay: nothing outside the stage scope and the shared
+  commands; Performance: nothing of Final's; a suite without a reach: its own scope) and no chord shared by two scopes of one reach (none
+  found); the retired ids absent. The e2e's modes scenario opens `?` at Final (the heading; Render the finished shot and Play / pause listed,
+  the card's verb not; the slip gesture) and Ctrl+K at Clay (Play / pause found); the timeline scenario moves a key to the playhead by its
+  menu. Vitest 418 + 3 skipped, typecheck and build clean, lint 0 errors (79 warnings), e2e 52/52 full and 52/52 open, agents check clean.
+- **No rig acceptance re-run for D121** (AW1–AW4 and this): the changes are frontend only, with no request, recipe or job changed (the e2e
+  drives every request the modes make against the orchestrator and the fake engine), and no rig script uses the changed hooks. The GPU ran
+  only the headed checks (AW2's animate 17/17, AW4's pip 4/4), one at a time with nothing on the queue (D97).

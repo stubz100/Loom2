@@ -2515,6 +2515,22 @@ test('the three modes (D121, proto01_animate 26): each Animate level has its own
   await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Clay')
   await page.keyboard.press('3')
   await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Final')
+  // D121: ? and Ctrl+K list what the mode's keys reach — at Final its own commands and the one transport, not Performance's
+  await page.keyboard.press('?')
+  await expect(page.locator('.cmd-help h4.sect').first()).toHaveText('Animate · Final')
+  await expect(page.locator('.cmd-help section').first().locator('.row', { hasText: /^Render the finished shot/ })).toHaveCount(1)
+  await expect(page.locator('.cmd-help section').first().locator('.row', { hasText: /^Play \/ pause/ })).toHaveCount(1)
+  await expect(page.locator('.cmd-help section').first().locator('.row', { hasText: /^Run the card's verb/ })).toHaveCount(0)
+  await expect(page.locator('.cmd-help section', { has: page.locator('h4', { hasText: 'gestures' }) }).locator('.row', { hasText: /slip/ })).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cmd-help')).toHaveCount(0)
+  await page.keyboard.press('1')                                                                  // Clay: the palette finds the one transport
+  await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Clay')
+  await page.keyboard.press('Control+k')
+  await page.locator('.palette input').fill('play')
+  await expect(page.locator('.palette .item .lbl', { hasText: /^Play \/ pause$/ })).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.palette')).toHaveCount(0)
 })
 
 
@@ -2554,6 +2570,11 @@ test('the one timeline and transport (D121 AW2): Clay keys the camera on its row
   await page.mouse.move(ruler.x + (60 * ruler.width) / span, out.y + out.height / 2, { steps: 6 })
   await page.mouse.up()
   await expect.poll(async () => (await doc()).range.end, { timeout: 10_000 }).toBe(60)
+  // the drag's menu equivalent (D32): the key at 20 moved to the playhead by its right-click
+  await tl.locator('.frame-field').fill('30'); await tl.locator('.frame-field').dispatchEvent('change')
+  await camRow.locator('.tl-key').nth(1).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Move this key to the playhead (frame 30)' }).click()
+  await expect.poll(camFrames, { timeout: 10_000 }).toEqual([0, 30])
   // a key removed by its right-click
   await camRow.locator('.tl-key').nth(1).click({ button: 'right' })
   await page.locator('.ctx-menu button.item', { hasText: 'Remove this key' }).click()

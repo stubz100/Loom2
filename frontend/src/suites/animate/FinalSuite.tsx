@@ -1,10 +1,11 @@
 // D121 (proto01_animate 26 §5.4): Animate's Final level as a mode of its own — its column (Shot · Layers · Output), its strip, the viewer
 // (FinalViewer: the composition's frames, its transport and lanes) and its foot (Render the finished shot ▶). ArtCraft's Record mode is the
 // model: the picture, the lanes and one verb. The Shot section opens a final of the stage; Layers is AE2–AE4's editor; Output says what was
-// rendered and from which revision. Keys: the animate scope's Final commands and the level keys only (Performance's transport stays off).
+// rendered and from which revision. Keys: Final's reach (animateCommands.ts) — its own commands, the mode keys, the Shot head's and the one
+// transport (the composition's here); Performance's player keys stay off.
 import { useEffect } from 'react'
 import { AnimateLevels } from '../../frame/AnimateLevels'
-import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
+import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
 import { inField } from '../../frame/fieldKeys'
 import { Help } from '../../frame/Help'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
@@ -14,7 +15,6 @@ import { rendering, useFinals, useFinalsPoll } from '../stage/finalShot'
 import { ShotHead } from '../stage/ShotStepper'
 import { st, useStage } from '../stage/stageStore'
 import { AnimColumn, Sec } from './column'
-import { TRANSPORT_IDS } from './transport'
 import { useComposition } from './compositionStore'
 import { LayersSection } from './FinalEditor'
 import { FinalViewer } from './FinalViewer'
@@ -86,14 +86,15 @@ function FinalColumn({ tab }: { tab: string }) {
   )
 }
 
-/** The Final level's keys: its own commands (anim.final.*), the level keys and the one transport (it runs the composition's here, AW2). */
+/** The Final level's keys: its reach (animateCommands.ts) — its own commands (anim.final.*), the mode keys, the Shot head's and the one
+ *  transport (it runs the composition's here, AW2). */
 function useFinalKeys(): void {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'final') return
       if (document.querySelector('.ctx-menu')) return                     // an open menu owns the arrows, Space and Enter
       if (inField(e)) return
-      if (handleKeyFor('animate', e, (c) => c.id.startsWith('anim.final.') || c.id.startsWith('anim.level.') || TRANSPORT_IDS.has(c.id))) e.stopImmediatePropagation()   // AW2: the one transport too
+      if (handleKeysAt('final', e)) e.stopImmediatePropagation()
     }
     window.addEventListener('keydown', h, { capture: true })
     return () => window.removeEventListener('keydown', h, { capture: true })

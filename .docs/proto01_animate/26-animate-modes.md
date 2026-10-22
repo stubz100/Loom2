@@ -339,5 +339,10 @@ more than the bar, it becomes a snapshot refreshed on drag end (ArtCraft redraws
   | --- | --- |
   | ![Clay with the PiP](img/26-aw4-clay-pip.jpg) | ![The timeline](img/26-aw2-timeline-clay.jpg) |
 
+- **2026-10-22 23:31 — each mode's keys, one list** (journal of that time). `?` and Ctrl+K took the suite's id for a command scope: at Final
+  they listed no Animate command, at Clay not the one transport. A mode now registers its *reach* (the scopes and which of their commands
+  its keys answer with); its key hook, the help overlay, the palette and the audit read it. The stage's own mode keys (2, 3) retired for the
+  shared `anim.level.*`; the help's gestures follow the modes; a key dragged on Clay's timeline has its right-click twin (*Move this key to
+  the playhead*).
 - **Owed:** the author's click-through (UX9) — [27 · Trying Animate's three modes](27-testing-modes.md). The other checks of §9 are in it.
 

@@ -22,8 +22,11 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   Commands register at import: a command module a lazy suite owns loads with it — keep Pixi and Mediabunny out of eager modules.
 - **A top tab's modes (D95, D121).** Image holds `generate` and `edit` (Make, Edit); Animate holds `stage`, `animate` and `final` (Clay,
   Performance, Final) — each a suite with its own rail, column, strip, viewer and foot (`TOP_TABS` in `railTabs.tsx`). The Animate levels
-  share one panel width (`widthKeyOf`); the rail state and the column are per suite. A level's keys: its suite's hook dispatches its scope
-  (`final` dispatches the animate scope's `anim.final.*` and level keys only).
+  share one panel width (`widthKeyOf`); the rail state and the column are per suite. A level's keys are its **reach** (`setReach` in
+  `commands.ts`, registered in `animateCommands.ts`): Clay the stage scope and the animate scope's shared commands (the one transport,
+  `anim.level.*`, the Shot head's `anim.step.*` / `anim.for.*`), Performance the animate scope but `anim.final.*`, Final `anim.final.*` and
+  the shared ones. The level's key hook (`handleKeysAt`), the help overlay, the palette and the dev audit (`commandsAt`) read the one list;
+  `commandAudit.test.ts` fails on a chord two scopes of one reach share.
 - **Error boundaries.** `ErrorBoundary.tsx` wraps the app and every lazy suite part: a render error or a chunk that failed to load
   shows where it happened (the Stage explains, the panel says one line, strip / inspector / foot stay empty) instead of blanking the
   window. A failed load is not cached by `lazySuite` (Try again re-imports), but the browser keeps a failed module for the page, so a
@@ -35,11 +38,13 @@ Inspector are keyed by the suite id, so switching suites remounts them.
   `when` (enabled predicate), `run`, and a **non-empty `placement` tuple** (`context`, `toolbar`, `strip`, `panel`, `inspector`, `topbar`,
   `rail`, `dock`). The type makes a keyboard-only command impossible.
 - Render with `CommandButton.tsx` / `CommandRow` and menu items `cmdItem(id)`. Tooltips and menu entries show the key via `titleFor` /
-  `keyLabel`; the help overlay (`HelpOverlay.tsx`, `?`) and the palette (`CommandPalette.tsx`, Ctrl+K) read the same registry.
+  `keyLabel`; the help overlay (`HelpOverlay.tsx`, `?`) and the palette (`CommandPalette.tsx`, Ctrl+K) read the same registry, through
+  `commandsAt(suite)`: what the suite's keys reach.
 - `MenuButton` is a **press menu** (D55, PhotoCraft `press_menu.rs`): the press opens it, releasing that press over an entry chooses it,
   releasing anywhere else leaves it open (a click then chooses); a press on the open menu's button closes it. `openPressMenu` in
   `ContextMenu.tsx` owns the gesture; plain `showMenu` (right-click menus) is unchanged.
-- Keys are dispatched by `useKeyboardMap.ts` (global) and the suites' key hooks via `handleKeyFor(scope, e)`. Never add a raw `keydown`
+- Keys are dispatched by `useKeyboardMap.ts` (global) and the suites' key hooks via `handleKeyFor(scope, e)` (a suite with a reach:
+  `handleKeysAt(suite, e)`). Never add a raw `keydown`
   listener for a user action that has no command; a hook that must see a key first (a hold, a capture-phase claim) matches it with
   `matchesCommand(e, command(id))`, never a literal key — the user may have remapped it.
 - **Keys are remappable (D72).** `keymap.ts` holds the user's overrides (`loom2.keys`, `keyStore.ts`); the registry keeps each command's

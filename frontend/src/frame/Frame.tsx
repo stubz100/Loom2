@@ -3,7 +3,7 @@ import { useSession } from '../store/session'
 import { AskDialog } from './AskDialog'
 import { Banner } from './Banner'
 import { CommandPalette } from './CommandPalette'
-import { unusedCommands, type Scope } from './commands'
+import { unusedCommands } from './commands'
 import { ContextMenuHost } from './ContextMenu'
 import { Dock } from './Dock'
 import { HelpOverlay } from './HelpOverlay'
@@ -40,7 +40,7 @@ export function Frame() {
   // dev audit (07 §3c): commands of the current suite that no menu or toolbar has rendered yet
   useEffect(() => {
     if (!import.meta.env.DEV) return
-    const t = setTimeout(() => { const u = unusedCommands(ui.suite as Scope); if (u.length) console.info(`[commands] not yet shown by a menu/toolbar in ${ui.suite}: ${u.map((c) => c.id).join(', ')}`) }, 4000)
+    const t = setTimeout(() => { const u = unusedCommands(ui.suite); if (u.length) console.info(`[commands] not yet shown by a menu/toolbar in ${ui.suite}: ${u.map((c) => c.id).join(', ')}`) }, 4000)
     return () => clearTimeout(t)
   }, [ui.suite])
   // dev deep links for the headless verification loop: &ctx=<css selector> opens that element's context menu,

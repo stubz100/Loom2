@@ -52,8 +52,9 @@ def follow_chain(o: Orch, job_id: str) -> list[dict]:
         t0 = time.time()
         j = o.wait_job(job_id, {"done", "failed", "cancelled"}, timeout=3600)
         c = (j.get("result") or {}).get("compiled") or {}
-        log(f"  {j['status']} {job_id}: {c.get('stage')} {c.get('k')}+1/{c.get('of')} · {c.get('frames')} frames · {time.time() - t0:.0f} s · {(j.get('log_tail') or [])[-1:]}")
-        out.append({"job_id": job_id, "status": j["status"], "stage": c.get("stage"), "k": c.get("k"), "frames": c.get("frames"), "wall_s": round(time.time() - t0),
+        stage = c.get("stage") or ((j.get("recipe") or {}).get("step") or {}).get("stage")
+        log(f"  {j['status']} {job_id}: {stage} {c.get('k')}+1/{c.get('of')} · {c.get('frames')} frames · {time.time() - t0:.0f} s · {(j.get('log_tail') or [])[-1:]}")
+        out.append({"job_id": job_id, "status": j["status"], "stage": stage, "k": c.get("k"), "frames": c.get("frames"), "wall_s": round(time.time() - t0),
                     "error": j.get("error")})
         if j["status"] != "done":
             break
@@ -161,7 +162,7 @@ def repaste(arms: list[str]) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arms", default="lipsync,face")
+    ap.add_argument("--arms", default="lipsync,face", help="lipsync (the talking head drives the mouth), face, mouth (Lip-sync with the mouth by the model, AE4d)")
     ap.add_argument("--repaste", action="store_true", help="no GPU: paste the kept heads of the existing face / lipsync takes again (heads.paste_take), measure, render")
     a = ap.parse_args()
     arms = [x for x in a.arms.split(",") if x]
@@ -203,9 +204,10 @@ def main() -> int:
             mine = [x for x in c["audio"] if x.get("final_layer") == LID]
         log(f"the line on the lanes: layer {mine[0]['layer']} · composition rev {c['revision']}")
         for arm in arms:
-            preset = "lipsync" if arm == "lipsync" else "face"
+            preset = "lipsync" if arm in ("lipsync", "mouth") else "face"
+            body = {"preset": preset, **({"mouth": "model"} if arm == "mouth" else {})}        # AE4d: the mouth by the model (LatentSync in its venv)
             t0 = time.time()
-            r = h.post(f"/finals/{FID}/layers/{LID}/pass", json={"preset": preset}, timeout=120)
+            r = h.post(f"/finals/{FID}/layers/{LID}/pass", json=body, timeout=120)
             if r.status_code != 200:
                 log(f"{arm}: refused {r.status_code} {r.text[:300]}")
                 results["arms"][arm] = {"error": r.text[:300]}
@@ -215,7 +217,7 @@ def main() -> int:
             total = round(time.time() - t0)
             fin = h.get(f"/finals/{FID}").json()
             lay = next(x for x in fin["layers"] if x["id"] == LID)
-            take = next((t for t in lay["takes"] if t["preset"] == preset), None)
+            take = lay["takes"][-1] if lay["takes"] and lay["takes"][-1]["preset"] == preset else None
             if not take or lay["source"] != take["id"] or any(s["status"] != "done" for s in steps):
                 log(f"{arm}: no take ({[s['status'] for s in steps]})")
                 results["arms"][arm] = {"steps": steps, "wall_s": total, "error": "no take"}

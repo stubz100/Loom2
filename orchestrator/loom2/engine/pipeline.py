@@ -61,7 +61,8 @@ class Plan:
 
 def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = None) -> Plan:
     """Raises CompileError for parameters no graph accepts (an unsupported size, a beat past the clip)."""
-    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS, AssembleFinal, CompRender))
+    mouth = isinstance(recipe, LayerPass) and recipe.step is not None and recipe.step.stage == "mouth"   # AE4d: the lip-sync model in its venv
+    quick = (isinstance(recipe, Inpaint) and recipe.mode == "quick_remove") or isinstance(recipe, (Render, TrainLora, TTS, AssembleFinal, CompRender)) or mouth
     needs: list[str] = []
     if isinstance(recipe, TrainLora):
         needs.append("reference set")
@@ -113,7 +114,9 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
                   "preset": recipe.preset, "strength": recipe.strength}
         if recipe.preset in ("face", "lipsync"):                      # AE4c (E29b): one step of the chain — the talking head, or a head batch
             params["step"] = recipe.step.model_dump() if recipe.step else None
+            params["mouth"] = recipe.mouth
             est = ({"seconds": 560.0, "source": "E29 2026-10-21: S2V on a 512² head, 77 frames at 20 steps, 554 s"} if recipe.step and recipe.step.stage == "face_video"
+                   else {"seconds": 120.0, "source": "E29b 2026-10-21: LatentSync 1.5 on 77 head frames (120 at 25 fps) in 104 s, the engine stopped"} if mouth
                    else {"seconds": 310.0, "source": "E29b 2026-10-21: Wan Animate on the 512² head crop, 77 frames, 306 s; the matte and the paste after"})
         else:
             est = ({"seconds": 950.0, "source": "E24 2026-10-21: the low-noise expert over 81 frames at 832×480 took 913–965 s whatever the strength"} if recipe.preset == "cleanup"
@@ -174,7 +177,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
     return Plan(kind=recipe.kind, model_id=None if quick else str(params["model_id"]) if resolved else getattr(recipe, "model_id", None), engine=not quick,
                 warm_group=warm_group(recipe, variant), vram_gb=estimate_vram_gb(recipe, variant), estimate=est, params=params, needs=needs,
                 weights=recipe_weights(recipe, variant), count=len(getattr(recipe, "seeds", None) or [0]),
-                gpu=isinstance(recipe, TrainLora) or (isinstance(recipe, TTS) and recipe.tier == "cloning"))   # CN2: the cloning tier takes the card (2.6 GB, the engine stopped)
+                gpu=isinstance(recipe, TrainLora) or (isinstance(recipe, TTS) and recipe.tier == "cloning") or mouth)   # CN2: the cloning tier takes the card (2.6 GB, the engine stopped); AE4d: the mouth step too
 
 
 def _placeholder_image(object_info: dict) -> str:

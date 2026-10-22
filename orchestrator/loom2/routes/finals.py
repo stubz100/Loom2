@@ -292,6 +292,7 @@ class PassBody(BaseModel):
     preset: Literal["cleanup", "creative", "face", "lipsync"] = "cleanup"
     strength: float = Field(0.10, ge=0.02, le=0.9)
     seed: int | None = None
+    mouth: Literal["head", "model"] = "head"       # AE4d (lipsync): the S2V talking head drives the mouth, or the lip-sync model redraws it
 
 
 class SourceBody(BaseModel):
@@ -396,19 +397,25 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
             raise HTTPException(422, "no pose-driven model in this build")
         model_id, stage = animate.id, "head"
         if body.preset == "lipsync":
-            s2v = next((s for s in registry.lipsync_specs() if registry.offered(s, variant)), None)
-            if s2v is None:
-                raise HTTPException(422, "no lip-sync model in this build")
             cs = CompositionStore(ws)
             c = await asyncio.to_thread(cs.get, f)
             lines = [t for t in (await asyncio.to_thread(cs.audio_timing, f, c) if c else []) if t.get("final_layer") == lid]
             if not lines:
                 raise HTTPException(422, f"attach a line to {layer.name} first (Layers › Attach a line…) — Lip-sync follows the lines on the layer")
-            model_id, stage = s2v.id, "face_video"
+            if body.mouth == "model":                                     # AE4d: the lip-sync model on the rendered heads — no talking head first
+                from ..lipsync import lipsync_available
+                why = lipsync_available(svc.app.settings)
+                if why:
+                    raise HTTPException(422, why)
+            else:
+                s2v = next((s for s in registry.lipsync_specs() if registry.offered(s, variant)), None)
+                if s2v is None:
+                    raise HTTPException(422, "no lip-sync model in this build")
+                model_id, stage = s2v.id, "face_video"
         await asyncio.to_thread(store.sweep_unfinished, fid, lid)
         take_id = new_id("take")
-        recipe |= {"model_id": model_id, "step": {"take_id": take_id, "stage": stage, "k": 0}}
-        payload["take"] = take_id
+        recipe |= {"model_id": model_id, "step": {"take_id": take_id, "stage": stage, "k": 0}, "mouth": body.mouth if body.preset == "lipsync" else "head"}
+        payload["take"], payload["mouth"] = take_id, body.mouth
     else:
         graph = "wan22" if body.preset == "cleanup" else "ltx23"
         spec = next((s for s in registry.video_specs() if s.graph == graph and registry.offered(s, variant) and (graph != "ltx23" or s.recipes.guide_lora)), None)

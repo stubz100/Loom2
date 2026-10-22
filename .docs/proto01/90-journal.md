@@ -7589,3 +7589,38 @@ The author asked for a review of the state of things, then "record all this and 
   the composition's revision, drops it; Lip-sync is disabled without a line. Offline 488 full and 488 open, settings audit 269 fields / 0 problems, agents_check and model_literals_check clean, e2e 49/49 full and open (the object-matte step flaked twice in full runs: a stacked toast over the frame's centre swallowed the click — the scenario clicks the frame element now and waits for the tool), Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4c_rig.py: the PS5 final through the app on the real engine, E20's line en1 attached to Mara's layer at 1.0 s): Lip-sync — the talking head for the line's window (65 frames, 368 s), two head batches of 77 frames each rendered and matted in one graph (286 s, 264 s), the take in 917 s — FaceSim 0.43 / 0.62 / 0.57 against the reference's head (E29b's L2h 0.42–0.61, the performed crop 0.25–0.30), sync r 0.30 (E29b 0.31), articulation 33.5; Face — 512 s, FaceSim 0.63 / 0.71 / 0.62; the composition synced to each and the finished shot rendered in 5 s (out/ae4c/final_lipsync.mp4, final_face.mp4, the sheets). The first paste carried a dark rim in (seam 3.1 / 5.0): the model shades the background around the head and the wide colour paste brought it along — the colour now comes in under the head's own silhouette with a hair-thin margin, the matte does the cutting (heads.paste_head; seam 1.55 / 1.64 after `ae4c_rig.py --repaste` from the kept heads, 7 s a take); seen through the matte the new head is clean, no halo (out/ae4c/paste_check.jpg). To save later: the second batch renders 77 frames for the 4 it needs (plan_batches sizes every batch at 77, ≈ 4 min).
 - Gotchas: `JobRecord.recipe` is a dict; the fake EffectCraft's `layer.addItem` plays an audio layer to the comp's end (the window follows
   the timing, not the file); the Bash heredocs of this session broke on long patch bodies — patches went through files.
+
+## 2026-10-22 13:13 — AE4d built: the lip-sync model as a tool (D118, from E29b's L3a) — LatentSync 1.5 in its own venv as the face pass's `mouth` step
+
+- **The tool:** `tools/lipsync/` — `sync.py` (loom2's runner: a request JSON in, LatentSync's own inference called in-process from the checkout,
+  the venv's Scripts first on PATH for the ffmpeg the code calls by name), `constraints.txt` (torch pinned to the ROCm build), `AGENTS.md`;
+  `scripts/lipsync-setup.ps1` clones the checkout at the pin (a229c39), patches the face detector's ONNX provider to the CPU, makes the
+  venv on Python 3.11 (decord has no 3.12 wheel) with the engine's ROCm torch, installs the requirements minus the CUDA ONNX runtime,
+  gradio, lpips and scenedetect, copies ffmpeg from imageio-ffmpeg, puts the weights under `checkpoints/` (the U-Net, config, whisper tiny,
+  insightface's buffalo_l, face-alignment's files; the syncnet and the eval models left out — 5.3 GB, copied from the spike's checkout
+  today), caches the SD VAE (MIT) in HF_HOME. The code is Apache-2.0, the 1.5 weights OpenRAIL++: the tool is offered under `full` only.
+  Both folders git-ignored. `Settings.lipsync` {python, run, checkout, steps 20, guidance 1.5}.
+- **The step:** `PassStep.stage` gains `mouth`; `LayerPass.mouth` = `head` (the S2V talking head drives Animate's face video, AE4c) or `model`.
+  With `model` the route skips the talking head (the chain starts at the head batches; it still wants a line on the layer and the tool
+  available, else 422 with the setup script named), and the last head batch's finisher queues the `mouth` step instead of pasting.
+  `plan()` marks it CPU-path and GPU (`engine=False, gpu=True`: the queue stops the engine for it, as for the trainer; `recipe_weights` []
+  — the model lives in its venv, not the roster). `lipsync.run_mouth` (loom2/lipsync.py): the kept heads stitched, resampled nearest to
+  25 fps (81 → 127 frames) as one near-lossless mp4, the layer's lines mixed over the shot (`mix_audio` on the lanes' timing), the runner
+  with its log in `state/logs/lipsync-<job>.log`, a cancel killing the process tree, the output decoded and resampled back under the
+  heads' own silhouettes (`work/head_mouth/`), then `finish_face_take` (the paste code of AE4c's finisher, now a function both call)
+  records the take with `mouth: model`, `mouth_s`, `mouth_steps` and the lines it followed. `/capabilities.experimental.mouth_model`
+  (available, why, steps, guidance, seconds_per_77, the licence line) — `ExperimentalMouthModelCaps`.
+- **UI:** with Lip-sync chosen, a *mouth* switch under the tiles (talking head | the model; the model disabled with the capability's reason
+  when the tool is not set up or under `open`), a ? on the two ways; a take reads "1 line, the model" / "the model's mouth".
+- **Fakes and tests:** `orchestrator/tests/fake_lipsync.py` (the input's frames with the mouth painted red, back at the input's rate; the e2e
+  smoke's settings point at it with a dummy checkpoint); `test_mouth_by_the_model`: the resampling, the availability sentences (no venv
+  → the setup script named; `open` → not offered), the plan's flags for the head and the mouth steps, the chain head 0 → head 1 → mouth,
+  the take with the model's mouth and its lines, the red mouth under the kept silhouette in `head/0000.png`, the log's lines. Offline 489 full and 489 open (the open run's one failure was the new test reading the env's variant for its no-venv case; fixed), settings audit 271 fields / 0 problems, agents_check (8 docs) and model_literals_check clean, e2e 49/49 full and open, Vitest 392 + 3, build clean, lint 75.
+  The rig (ae4c_rig.py --arms mouth, the PS5 final through the app, the line at 1.0 s; the base was the Face take — a pass over a pass): the two head batches (283 s, 252 s), then the mouth step with the engine stopped — the model loaded and ran in 81 s (91 s the step), 11 of 127 frames at 25 fps took the last face's geometry — the take in 626 s: FaceSim 0.36 / 0.41 / 0.54 against the reference's head (the talking-head mouth 0.43–0.62, E29b's L3a 0.48–0.56), sync r 0.12 by the proxy (unreliable on a moving head), articulation 31.0, seam 1.1; the composition synced and the shot rendered (out/ae4c/final_mouth.mp4, mouth_sheet.jpg). To the eye the model's face region is soft at 512² (LatentSync works at 256² and pastes the face back upsampled), invisible at the head's size in the frame; the mouth opens on the vowels. The lipsync-setup script built the tool from the spike's checkout and venv recipe in 4 min; the mouth step's first run stopped at the detector's gap (above).
+- **The detector's gap:** the first rig run stopped at "Face not detected" — LatentSync raises on the first frame its insightface detector
+  finds no face in, and 11 of the 127 frames at 25 fps had the head turned away (the face behind the hair). The runner patches
+  `ImageProcessor.affine_transform`: such a frame takes the last detected face's three landmarks for its warp (the mouth redrawn at the
+  last geometry, the clip keeps its length), the count on the job's log; the first frame must have a face.
+- Gotchas: a venv-based tool's availability is a machine fact — the test gives Settings a missing python rather than assuming one;
+  `ae4b_rig.py`'s `ingest_file` moved E29b's WAV into the catalogue (`move=False` since); the agents check reads backticked paths as
+  repository paths — an external script is named without them.

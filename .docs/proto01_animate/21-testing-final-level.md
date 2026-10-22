@@ -93,6 +93,12 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   after the last, named "the head" or "1 line", and her matte follows the new head in the composition. No strength for these two.
 - **Check:** the face — sharper and still her? The mouth — natural at this size, in time with the line? Any halo or seam left around the
   head? Is the chain of jobs legible in the Dock, or should the pass show as one job with steps?
+- **The mouth by the model** (D118, AE4d): with Lip-sync chosen, a *mouth* switch under the tiles — **talking head** (as above) or **the model**:
+  the head is rendered calm, then LatentSync redraws the mouth from the line (E29b's L3a, the most natural mouth to the eye there). A
+  separate tool in its own venv, set up once by `scripts/lipsync-setup.ps1`; the engine stops while it runs (one job on the card), about
+  two minutes for a shot of this length on top of the face pass. Full variant only (the weights' licence). The take reads "1 line, the model".
+- **Check:** the two mouths side by side on the same line — which reads better at this size? Does the model's mouth keep her glasses and
+  the teeth natural? Is the engine's stop and restart around it acceptable in the flow?
 
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
@@ -130,6 +136,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | Passes: the take-as-source model clear? A pass over a pass, or always over the performed frames? | |
 | A line as an audio layer on the lanes: the right feel? The waveform enough to place it? | |
 | Face / Lip-sync: sharper and still her? The mouth natural and in time? Halo or seam left? The chain of jobs legible? | |
+| The mouth by the model vs the talking head: which reads better? Glasses and teeth kept? The engine's stop around it acceptable? | |
 
 ## The first look (2026-10-21) and what it changed
 

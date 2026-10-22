@@ -64,6 +64,17 @@ class VoicesSettings(BaseModel):
     cloning_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"     # Apache-2.0; the GPU with the engine stopped (E20: 3–5 s a line at a 2.6 GB peak)
 
 
+class LipsyncSettings(BaseModel):
+    """D118 (AE4d, from E29b): the lip-sync model as a tool — LatentSync 1.5 in its own venv `tools/lipsync/.venv` with the checkout
+    `tools/lipsync/LatentSync` (scripts/lipsync-setup.ps1, tools/lipsync/AGENTS.md); never the engine's. The weights are OpenRAIL++: `full` only."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    python: str = str(REPO_ROOT / "tools" / "lipsync" / ".venv" / "Scripts" / "python.exe")
+    run: str = str(REPO_ROOT / "tools" / "lipsync" / "sync.py")
+    checkout: str = str(REPO_ROOT / "tools" / "lipsync" / "LatentSync")
+    steps: int = 20                                          # E29b: 20 steps at guidance 1.5 — the model's own defaults
+    guidance: float = 1.5
+
+
 class EffectCraftSettings(BaseModel):
     """AE1 (proto01_animate 20 §2, D114): the animation editor's engine — the pinned `effectcraft-cli` (engine/effectcraft.pin.json, built by
     scripts/build_effectcraft.py into engine/tools/, never in git) driven as one MCP session beside the orchestrator (loom2/effectcraft.py).
@@ -146,6 +157,7 @@ class Settings(BaseModel):
     engine: EngineSettings = Field(default_factory=EngineSettings)
     trainer: TrainerSettings = Field(default_factory=TrainerSettings)   # LT2 (D86)
     voices: VoicesSettings = Field(default_factory=VoicesSettings)      # CN2 (D87)
+    lipsync: LipsyncSettings = Field(default_factory=LipsyncSettings)   # AE4d (D118): the lip-sync model as a tool
     api_host: str = "127.0.0.1"
     api_port: int = 8765
     thumbnail_sizes: list[int] = Field(default_factory=lambda: [256, 512, 1024])

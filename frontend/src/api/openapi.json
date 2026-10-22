@@ -4121,11 +4121,15 @@
           },
           "lipsync": {
             "$ref": "#/components/schemas/ExperimentalLipsyncCaps"
+          },
+          "mouth_model": {
+            "$ref": "#/components/schemas/ExperimentalMouthModelCaps"
           }
         },
         "required": [
           "extend",
-          "lipsync"
+          "lipsync",
+          "mouth_model"
         ],
         "title": "ExperimentalCaps",
         "type": "object"
@@ -4271,6 +4275,52 @@
           "caveat"
         ],
         "title": "ExperimentalLipsyncCaps",
+        "type": "object"
+      },
+      "ExperimentalMouthModelCaps": {
+        "additionalProperties": true,
+        "description": "D118 (AE4d): the lip-sync model as a tool — whether LatentSync can redraw a face pass's mouth (its venv, its weights; `full` only).",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "guidance": {
+            "title": "Guidance",
+            "type": "number"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "seconds_per_77": {
+            "title": "Seconds Per 77",
+            "type": "number"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "available",
+          "steps",
+          "guidance",
+          "seconds_per_77",
+          "licence"
+        ],
+        "title": "ExperimentalMouthModelCaps",
         "type": "object"
       },
       "ExportRequest": {
@@ -9049,6 +9099,45 @@
         "title": "LipsyncQueued",
         "type": "object"
       },
+      "LipsyncSettings": {
+        "description": "D118 (AE4d, from E29b): the lip-sync model as a tool — LatentSync 1.5 in its own venv `tools/lipsync/.venv` with the checkout\n`tools/lipsync/LatentSync` (scripts/lipsync-setup.ps1, tools/lipsync/AGENTS.md); never the engine's. The weights are OpenRAIL++: `full` only.",
+        "properties": {
+          "checkout": {
+            "default": "<repo>\\tools\\lipsync\\LatentSync",
+            "title": "Checkout",
+            "type": "string"
+          },
+          "guidance": {
+            "default": 1.5,
+            "title": "Guidance",
+            "type": "number"
+          },
+          "python": {
+            "default": "<repo>\\tools\\lipsync\\.venv\\Scripts\\python.exe",
+            "title": "Python",
+            "type": "string"
+          },
+          "run": {
+            "default": "<repo>\\tools\\lipsync\\sync.py",
+            "title": "Run",
+            "type": "string"
+          },
+          "steps": {
+            "default": 20,
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "python",
+          "run",
+          "checkout",
+          "steps",
+          "guidance"
+        ],
+        "title": "LipsyncSettings",
+        "type": "object"
+      },
       "Location": {
         "properties": {
           "group_id": {
@@ -10668,6 +10757,15 @@
       "PassBody": {
         "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another. AE4c: `face` and `lipsync`\n(the strength unused).",
         "properties": {
+          "mouth": {
+            "default": "head",
+            "enum": [
+              "head",
+              "model"
+            ],
+            "title": "Mouth",
+            "type": "string"
+          },
           "preset": {
             "default": "cleanup",
             "enum": [
@@ -13777,6 +13875,9 @@
             "title": "Hf Home",
             "type": "string"
           },
+          "lipsync": {
+            "$ref": "#/components/schemas/LipsyncSettings"
+          },
           "log_level": {
             "default": "INFO",
             "title": "Log Level",
@@ -13848,6 +13949,7 @@
           "engine",
           "trainer",
           "voices",
+          "lipsync",
           "api_host",
           "api_port",
           "thumbnail_sizes",

@@ -1616,6 +1616,8 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
     if isinstance(recipe, LayerPass):                                 # D118: the pass's model (the creative one rides its IC-LoRA)
+        if recipe.step is not None and recipe.step.stage == "mouth":
+            return []                                                 # AE4d: the lip-sync model lives in its own venv, not the roster
         spec = registry.get(recipe.model_id)
         ids = spec.weights() if spec else [recipe.model_id]
         if recipe.preset == "creative" and spec is not None and spec.recipes.guide_lora:

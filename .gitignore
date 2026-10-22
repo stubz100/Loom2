@@ -53,3 +53,6 @@ mixamo/
 # E29b (D117): the lip-sync spike's standalone models and their venv
 engine/spikes/third_party/
 engine/spikes/.venv_lip/
+# AE4d (D118): the lip-sync model as a tool — its checkout (with the weights) and its venv (scripts/lipsync-setup.ps1)
+tools/lipsync/LatentSync/
+tools/lipsync/.venv/

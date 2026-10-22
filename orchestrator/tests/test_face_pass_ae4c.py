@@ -240,3 +240,70 @@ def test_face_pass_routes(tmp_path: Path):
         FinalStore(svc.ws).update_layer(f.id, "fig", keypoints=False)
         r = cl.post(f"/finals/{f.id}/layers/fig/pass", json={"preset": "face"}, headers=H)
         assert r.status_code == 422 and "keypoints" in r.json()["detail"]
+
+
+async def test_mouth_by_the_model(tmp_path: Path, object_info: dict, monkeypatch):
+    """D118 (AE4d): Lip-sync with the mouth by the model — the head batches, then the lip-sync runner (the fake, in place of LatentSync) on the
+    kept heads as a CPU-path job that takes the card, its output back under the heads' silhouettes, the take with the model's mouth."""
+    import sys
+    import test_lifecycle
+    from loom2 import finals as finals_mod
+    from loom2.compositions import CompositionStore
+    from loom2.config import Settings
+    from loom2.effectcraft import EffectCraft
+    from loom2.engine.pipeline import plan
+    from loom2.finals import FinalStore
+    from loom2.lipsync import lipsync_available, nearest
+    from loom2.models import registry
+    from loom2.origin import JobOrigin
+    from loom2.recipes import parse_recipe
+    from loom2.stages import StageStore
+    from test_layer_pass_ae4 import _wav
+    assert nearest(16, 16, 25) == [0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13, 13, 14, 15, 15] and len(nearest(81, 16, 25)) == 127
+    assert "lipsync-setup" in (lipsync_available(Settings(variant="full", lipsync={"python": str(tmp_path / "nope.exe")})) or "")   # no venv: the setup script is named
+    assert "open variant" in (lipsync_available(Settings(variant="open")) or "")
+    monkeypatch.setattr(finals_mod, "BATCH", 9)
+    rig = test_lifecycle.Rig(tmp_path, object_info)
+    try:
+        ck = tmp_path / "lipsync" / "checkpoints"
+        ck.mkdir(parents=True)
+        (ck / "latentsync_unet.pt").write_bytes(b"x")
+        rig.app.update_settings({"effectcraft": {"cli": str(FAKE)}, "lipsync": {"python": sys.executable, "run": str(Path(__file__).parent / "fake_lipsync.py"), "checkout": str(ck.parent)}})
+        assert lipsync_available(rig.app.settings) is None
+        st = StageStore(rig.ws).create("Room")
+        f, _ = _final_with_head(rig.ws, st.id, st.cameras[0].id, tmp_path / "src")
+        ec, cs = EffectCraft(rig.app), CompositionStore(rig.ws)
+        cs.make(f, ec)
+        wav = _wav(tmp_path / "line.wav", seconds=0.5)
+        meta = {"final_layer": "fig", "asset_id": "ast_line1", "node_id": None, "index": None, "speaker": None, "text": "Hello there", "duration_s": 0.5}
+        c = cs.add_audio(f, ec, wav, meta, 0.0625, "Mara · Hello there")
+        ec.stop()
+        animate = next(s for s in registry.animate_specs())
+        _fake_weights(tmp_path, [animate, registry.get(registry.segment_model("text"))])
+        rig.queue.load()
+        await rig.queue.start()
+        store = FinalStore(rig.ws)
+        take_id = "take_mouth0001"
+        data = {"kind": "layer_pass", "final_id": f.id, "layer_id": "fig", "preset": "lipsync", "mouth": "model", "model_id": animate.id, "step": {"take_id": take_id, "stage": "head", "k": 0}}
+        p0 = plan(parse_recipe(data), "full")
+        assert p0.engine is True and p0.gpu is False and p0.params["mouth"] == "model"
+        pm = plan(parse_recipe({**data, "step": {"take_id": take_id, "stage": "mouth", "k": 0}}), "full")
+        assert pm.engine is False and pm.gpu is True and pm.weights == [] and pm.estimate["seconds"] == 120.0
+        job = rig.queue.submit(data, origin=JobOrigin(suite="stage", surface="final_layer", ref=f.id, payload={"layer": "fig", "pass": "lipsync", "take": take_id, "mouth": "model"}))[0]
+        jobs = await _run_chain(rig, job.id)
+        assert [(j.result["compiled"].get("stage") if j.result.get("compiled") else "mouth", j.recipe["step"]["k"]) for j in jobs] == [("head", 0), ("head", 1), ("mouth", 0)]
+        mouth = jobs[-1]
+        assert mouth.result["take_id"] == take_id and any("mouth by the model" in line for line in mouth.log_tail)
+        lay = next(x for x in store.get(f.id).layers if x.id == "fig")
+        t = lay.takes[-1]
+        assert lay.source == take_id and t["preset"] == "lipsync" and t["mouth"] == "model" and t["mouth_steps"] == 20 and t["mouth_s"] >= 0
+        assert t["lines"] == [{"layer": c.audio[0].layer, "text": "Hello there", "f0": 1, "f1": N}]            # the fake's layer plays to the comp's end
+        d = store.pass_dir(f.id, "fig", f"passes/{take_id}")
+        head = np.asarray(Image.open(d / "head" / "0000.png").convert("RGBA"))
+        px = head[int(512 * 0.7), 256]
+        assert head.shape == (512, 512, 4) and px[0] > 240 and px[1] < 20 and px[2] < 20 and px[3] == 255     # the fake's red mouth (through h264), the silhouette kept
+        assert head[20, 20, 0] < 240 and not (d / "work").exists() and len(list(d.glob("*.png"))) == N
+        log = (rig.app.logs_dir / f"lipsync-{mouth.id}.log").read_text(encoding="utf-8")
+        assert "syncing head_25.mp4 to lines.wav" in log and "done in" in log
+    finally:
+        await rig.close()

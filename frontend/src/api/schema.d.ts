@@ -4764,6 +4764,7 @@ export interface components {
         ExperimentalCaps: {
             extend: components["schemas"]["ExperimentalExtendCaps"];
             lipsync: components["schemas"]["ExperimentalLipsyncCaps"];
+            mouth_model: components["schemas"]["ExperimentalMouthModelCaps"];
         } & {
             [key: string]: unknown;
         };
@@ -4815,6 +4816,26 @@ export interface components {
             };
             /** Seconds Max */
             seconds_max?: number | null;
+            /** Why */
+            why?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ExperimentalMouthModelCaps
+         * @description D118 (AE4d): the lip-sync model as a tool — whether LatentSync can redraw a face pass's mouth (its venv, its weights; `full` only).
+         */
+        ExperimentalMouthModelCaps: {
+            /** Available */
+            available: boolean;
+            /** Guidance */
+            guidance: number;
+            /** Licence */
+            licence: string;
+            /** Seconds Per 77 */
+            seconds_per_77: number;
+            /** Steps */
+            steps: number;
             /** Why */
             why?: string | null;
         } & {
@@ -6828,6 +6849,38 @@ export interface components {
             /** Staged */
             staged: boolean;
         };
+        /**
+         * LipsyncSettings
+         * @description D118 (AE4d, from E29b): the lip-sync model as a tool — LatentSync 1.5 in its own venv `tools/lipsync/.venv` with the checkout
+         *     `tools/lipsync/LatentSync` (scripts/lipsync-setup.ps1, tools/lipsync/AGENTS.md); never the engine's. The weights are OpenRAIL++: `full` only.
+         */
+        LipsyncSettings: {
+            /**
+             * Checkout
+             * @default <repo>\tools\lipsync\LatentSync
+             */
+            checkout: string;
+            /**
+             * Guidance
+             * @default 1.5
+             */
+            guidance: number;
+            /**
+             * Python
+             * @default <repo>\tools\lipsync\.venv\Scripts\python.exe
+             */
+            python: string;
+            /**
+             * Run
+             * @default <repo>\tools\lipsync\sync.py
+             */
+            run: string;
+            /**
+             * Steps
+             * @default 20
+             */
+            steps: number;
+        };
         /** Location */
         Location: {
             /** Group Id */
@@ -7455,6 +7508,12 @@ export interface components {
          *     (the strength unused).
          */
         PassBody: {
+            /**
+             * Mouth
+             * @default head
+             * @enum {string}
+             */
+            mouth?: "head" | "model";
             /**
              * Preset
              * @default cleanup
@@ -8748,6 +8807,7 @@ export interface components {
              * @default F:/HF_HOME
              */
             hf_home: string;
+            lipsync: components["schemas"]["LipsyncSettings"];
             /**
              * Log Level
              * @default INFO

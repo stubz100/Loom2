@@ -851,10 +851,21 @@ class ExperimentalLipsyncCaps(Open):
     caveat: str
 
 
+class ExperimentalMouthModelCaps(Open):
+    """D118 (AE4d): the lip-sync model as a tool — whether LatentSync can redraw a face pass's mouth (its venv, its weights; `full` only)."""
+    available: bool
+    why: str | None = None
+    steps: int
+    guidance: float
+    seconds_per_77: float
+    licence: str
+
+
 class ExperimentalCaps(Open):
     """D88: features shipped before their bars are met — each with the caveat the UI shows beside its verb."""
     extend: ExperimentalExtendCaps
     lipsync: ExperimentalLipsyncCaps
+    mouth_model: ExperimentalMouthModelCaps
 
 
 class JobsSubmitted(Out):

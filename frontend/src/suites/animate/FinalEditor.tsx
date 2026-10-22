@@ -12,7 +12,7 @@ import { Help } from '../../frame/Help'
 import { fmtTime } from './animateStore'
 import { EffectsBody } from './Effects'
 import { useSession } from '../../store/session'
-import { MASK_MODES, PASS_LABEL, useComposition, type CompLayer, type EditorTab, type FlatProp, type MaskInfo, type PassPreset, type PropKey, type Take } from './compositionStore'
+import { MASK_MODES, PASS_LABEL, useComposition, type CompLayer, type EditorTab, type FlatProp, type MaskInfo, type PassMouth, type PassPreset, type PropKey, type Take } from './compositionStore'
 
 const BLEND_MODES = ['Normal', 'Multiply', 'Screen', 'Overlay', 'Add', 'Darken', 'Lighten', 'Soft Light', 'Hard Light', 'Difference']
 const MATTE_KINDS: [string, string][] = [['luma', 'luma'], ['lumaInverted', 'luma inverted'], ['alpha', 'alpha'], ['alphaInverted', 'alpha inverted']]
@@ -157,6 +157,8 @@ function PassesBody() {
   const busy = useComposition((s) => s.busy)
   const running = useSession((s) => Object.values(s.jobs).find((j) => j.kind === 'layer_pass' && j.origin?.ref === finalId && (j.origin?.payload as { layer?: string } | undefined)?.layer === lid && (j.status === 'queued' || j.status === 'running')))
   const hasLine = useComposition((s) => !!s.comp?.audio.some((a) => a.final_layer === s.finalLayerId()))
+  const mouth = useComposition((s) => s.passMouth)
+  const mm = useSession((s) => (s.capabilities?.experimental as { mouth_model?: { available: boolean; why: string | null; seconds_per_77: number; licence: string } } | undefined)?.mouth_model)
   if (!lid || !layer) return <span className="hint">Not on this layer. <Help text="A pass runs on a character layer or the plate — a matte is made with its character, the shadows come from the Stage." /></span>
   const takes = (layer.takes ?? []) as unknown as Take[]
   const source = layer.source ?? null
@@ -170,6 +172,16 @@ function PassesBody() {
           title={off(p) ? (p.head && !isFigure ? 'The face pass renders a character\'s head: a character layer' : 'Attach a line to this layer first (Layers › Attach a line…)') : p.hint}
           onClick={() => !off(p) && cp().setPass(p.id, p.strength)}>{p.label}</button>)}
       </div>
+      {preset === 'lipsync' && <div className="pass-mouth">
+        <span className="hint">mouth</span>
+        <span className="segmented" role="group" aria-label="the mouth" data-mouth={mouth}>
+          <button type="button" className={mouth === 'head' ? 'active' : ''} aria-pressed={mouth === 'head'} title="A talking head of the reference speaks the line (S2V) and drives the mouth as Wan Animate's face video (E29b L2h)" onClick={() => cp().setMouth('head')}>talking head</button>
+          <button type="button" className={mouth === 'model' ? 'active' : ''} aria-pressed={mouth === 'model'} disabled={!mm?.available}
+            title={mm?.available ? `LatentSync 1.5 redraws the mouth on the rendered head (E29b L3a: the most natural to the eye) — about ${Math.round(mm.seconds_per_77)} s per 77 frames, the engine stopped meanwhile. ${mm.licence}` : (mm?.why ?? 'the lip-sync model is not set up (scripts/lipsync-setup.ps1)')}
+            onClick={() => mm?.available && cp().setMouth('model')}>the model</button>
+        </span>
+        <Help text="Two ways to move the mouth. The talking head: S2V speaks the line as a close-up of the reference and Wan Animate follows that face (the mouth can look exaggerated at this size). The model: the head is rendered calm, then LatentSync redraws the mouth from the line — a separate tool in its own venv, the engine stopped while it runs; full variant only (its weights are OpenRAIL++)." />
+      </div>}
       <div className="verbs">
         {!head && <label title="How much the pass is let change the picture (0.02–0.9)">strength <NumField key={`s:${strength}`} value={strength} step={0.05} onCommit={(v) => cp().setPass(preset, Math.max(0.02, Math.min(0.9, v)))} label="pass strength" /></label>}
         <CommandRow ids={['anim.final.pass.run']} />
@@ -183,7 +195,7 @@ function PassesBody() {
         </li>
         {takes.map((t) => (
           <li key={t.id} className={`take${source === t.id ? ' shown' : ''}`} data-take={t.id}>
-            <span className="name">{PASS_LABEL[t.preset as PassPreset] ?? t.preset} <span className="hint">· {t.head ? (t.lines?.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'}` : 'the head') : t.strength} · {when(t.made_at)}</span></span>
+            <span className="name">{PASS_LABEL[t.preset as PassPreset] ?? t.preset} <span className="hint">· {t.head ? (t.lines?.length ? `${t.lines.length} line${t.lines.length === 1 ? '' : 's'}${(t.mouth as PassMouth | undefined) === 'model' ? ', the model' : ''}` : (t.mouth as PassMouth | undefined) === 'model' ? "the model's mouth" : 'the head') : t.strength} · {when(t.made_at)}</span></span>
             {source !== t.id ? <button type="button" className="quiet" title="Show this take" disabled={busy} onClick={() => void cp().useTake(t.id)}>✓ show</button> : <span className="hint">shown</span>}
             <button type="button" className="quiet danger" title="Drop this take (its frames too)" disabled={busy} onClick={() => void cp().dropTake(t.id)}>×</button>
           </li>))}

@@ -483,7 +483,7 @@ class PassStep(BaseModel):
     line window (`face_video`, k = the window), then Wan Animate on the head crop in 77-frame batches (`head`, k = the batch); the last
     batch's finisher pastes the heads back and records the take. The route sets the first step; each finisher queues the next."""
     take_id: str
-    stage: Literal["face_video", "head"] = "head"
+    stage: Literal["face_video", "head", "mouth"] = "head"     # AE4d: `mouth` — the lip-sync model on the rendered heads, the engine stopped
     k: int = Field(0, ge=0, le=400)
 
 
@@ -502,6 +502,7 @@ class LayerPass(BaseModel):
     strength: float = Field(0.10, ge=0.02, le=0.9)
     model_id: str
     step: PassStep | None = None                  # AE4c: the face pass's chain position (required for face / lipsync)
+    mouth: Literal["head", "model"] = "head"      # AE4d (lipsync): the mouth by the S2V talking head as Animate's face video, or redrawn by the lip-sync model
     seeds: list[int] = Field(default_factory=lambda: [0])
 
     @model_validator(mode="after")

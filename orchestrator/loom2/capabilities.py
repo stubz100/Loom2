@@ -226,7 +226,17 @@ def _experimental(svc: Services, variant: str) -> dict:
                "missing": missing, "presets": presets, "frames_max": frames, "fps": fps, "seconds_max": round(frames / fps, 2),
                "languages": spec.recipes.lipsync_languages, "caveat": LIPSYNC_CAVEAT}
         break
-    return {"extend": {"models": models, "caveat": EXTEND_CAVEAT}, "lipsync": lip}
+    return {"extend": {"models": models, "caveat": EXTEND_CAVEAT}, "lipsync": lip, "mouth_model": _mouth_model(svc)}
+
+
+def _mouth_model(svc: Services) -> dict:
+    """D118 (AE4d): whether the lip-sync model (LatentSync 1.5 in its own venv, tools/lipsync) can redraw a face pass's mouth — `full` only
+    (the weights are OpenRAIL++), E29b's measured pace."""
+    from .lipsync import SECONDS_PER_77, lipsync_available
+    s = svc.app.settings
+    why = lipsync_available(s)
+    return {"available": why is None, "why": why, "steps": s.lipsync.steps, "guidance": s.lipsync.guidance, "seconds_per_77": SECONDS_PER_77,
+            "licence": "LatentSync 1.5 — the code Apache-2.0, the weights OpenRAIL++ (the full variant only)"}
 
 
 def _mesh(svc: Services, variant: str) -> dict:

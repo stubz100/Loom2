@@ -157,3 +157,7 @@ Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; th
   head per line window, Wan Animate on the head crop in 77-frame batches, the paste), the head tracked from the layer's keypoints
   (`loom2/heads.py`, E29b's tracker), the rendered head matted in the same graph and pasted back under a grown, feathered mask, the take's
   own matte followed by the assembly and the composition. Next: AE4d, LatentSync as a tool.
+- **2026-10-22 (journal 2026-10-22 13:13):** AE4d built — LatentSync 1.5 as a tool in its own venv (`tools/lipsync/`, `scripts/lipsync-setup.ps1`, `full`
+  only), the Lip-sync preset's second mouth (`LayerPass.mouth = model`): the chain renders the heads calm, then the `mouth` step runs the
+  model with the engine stopped on the kept heads and the layer's lines, back under the heads' silhouettes, then the paste. Next: AE4e,
+  processing layers.

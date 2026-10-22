@@ -33,7 +33,8 @@ export type EditorTab = 'props' | 'masks' | 'effects' | 'passes'
 export type PassPreset = 'cleanup' | 'creative' | 'face' | 'lipsync'
 export const PASS_LABEL: Record<PassPreset, string> = { cleanup: 'Clean up', creative: 'Creative', face: 'Face', lipsync: 'Lip-sync' }
 export const PASS_STRENGTH: Record<PassPreset, number> = { cleanup: 0.1, creative: 0.35, face: 0.5, lipsync: 0.5 }
-export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
+export type PassMouth = 'head' | 'model'
+export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; mouth?: PassMouth; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
 /** D118 (AE4b): a voiced line of the shot, as GET /finals/{fid}/lines reports it. */
 export interface FinalLine { node_id: string; index: number; speaker: string | null; speaker_name: string | null; text: string; audio_asset_id: string; duration_s: number | null; layer_id: string | null }
 export type AudioLayer = Composition['audio'][number]
@@ -163,7 +164,9 @@ interface CompState {
   // ---- D118 (AE4a): passes on the selected layer ----
   passPreset: PassPreset
   passStrength: number
+  passMouth: PassMouth                                   // AE4d (lipsync): the talking head drives the mouth, or the lip-sync model redraws it
   setPass: (preset: PassPreset, strength?: number) => void
+  setMouth: (mouth: PassMouth) => void
   /** The final's layer behind the selected composition layer (null for a matte or the shadows). */
   finalLayerId: () => string | null
   /** A pass queued on the selected layer's final layer (a GPU job); its take lands as the layer's source and the composition syncs. */
@@ -311,7 +314,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -408,12 +411,13 @@ export const useComposition = create<CompState>((set, get) => {
     },
     // ---- D118 (AE4a): passes ----
     setPass: (preset, strength) => set({ passPreset: preset, passStrength: strength ?? PASS_STRENGTH[preset] }),
+    setMouth: (mouth) => set({ passMouth: mouth }),
     finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
     runPass: async () => {
       const s = get()
       const lid = s.finalLayerId()
       if (!s.finalId || !lid) { useSession.getState().toast('A pass runs on a character layer or the plate', 'info'); return false }
-      const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength } })
+      const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength, mouth: s.passMouth } })
       if (r.error) { useSession.getState().toast(`Pass: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
       useSession.getState().toast(`${PASS_LABEL[s.passPreset]} pass queued on the layer — its take lands as the layer's source`
         + (s.passPreset === 'face' || s.passPreset === 'lipsync' ? ' (several jobs: the head in batches, then the paste)' : ''), 'success')

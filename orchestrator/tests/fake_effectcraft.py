@@ -144,6 +144,22 @@ class Fake:
                                            "frameRate": p.get("frameRate")}
                 items.append(i)
             return {"items": items, "comps": [], "errors": [], "warnings": []}
+        if cid == "file.replaceFootage":                                # D118 (AE4a): a footage item's file swapped — the layers keep everything
+            self.edit()
+            it = self.p["items"].get(str(p["item"]))
+            if it is None or it.get("type") != "Footage":
+                raise ValueError("select footage")
+            it["path"], it["sequence"] = p["path"], bool(p.get("sequence", True))
+            return None
+        if cid == "file.interpretFootage":
+            self.edit()
+            out = []
+            for i in p.get("items") or []:
+                it = self.p["items"][str(i)]
+                if "frameRate" in p:
+                    it["frameRate"] = float(p["frameRate"])
+                out.append({"item": it["id"], "frameRate": it.get("frameRate"), "frames": 0})
+            return {"items": out}
         if cid == "layer.addItem":
             self.edit()
             c = self.comp(p.get("comp"))

@@ -126,7 +126,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
     out_dir.mkdir(parents=True, exist_ok=True)
     n, w, h = f.frames, f.size["w"], f.size["h"]
     pd = lambda lid, name: _frames(store.pass_dir(f.id, lid, name))   # noqa: E731
-    plate = pd("plate", "frames")
+    plate = _frames(store.frames_dir(f.id, "plate"))
     bare_d, bare_c = pd("plate", "depth"), pd("plate", "clay")
     shadows = pd("shadows", "clay")
     props = [x for x in f.layers if x.kind == "prop"]
@@ -164,7 +164,7 @@ def assemble_frames(store: FinalStore, f: Final, out_dir: Path, progress=None, c
             dx, dy = offsets[x.id]
             grown = max_filter(np.where(sm, dep, 0.0), 15)
             fill = float(np.median(dep[sm])) if sm.any() else 0.0
-            layers.append({"id": x.id, "kind": "figure", "img": shift(rgb(pd(x.id, "frames")[i]), dx, dy), "alpha": np.clip(shift(al, dx, dy), 0, 1),
+            layers.append({"id": x.id, "kind": "figure", "img": shift(rgb(_frames(store.frames_dir(f.id, x.id))[i]), dx, dy), "alpha": np.clip(shift(al, dx, dy), 0, 1),
                            "alpha0": al, "offset": (dx, dy), "depth": shift(np.where(grown > 0, grown, fill), dx, dy), "order": fill})
         ratio = np.clip(gray(shadows[i]) / np.maximum(8 / 255, gray(bare_c[i])), 0.0, 1.0)
         ratio[dilate(actors, 2)] = 1.0

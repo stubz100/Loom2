@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -1323,7 +1323,88 @@ def build_matte_sequence(recipe: MatteSequence, roster: Roster, video_name: str,
     return Compiled(graph=g, output_node="99", summary={"model_id": sid, "mode": recipe.mode, "text": recipe.text, "threshold": recipe.threshold}, serialized_prompt=recipe.text)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints | MatteSequence, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+PASS_PROMPT = "the same scene, the same people and things, sharp and clean, natural motion, steady camera"
+
+
+def build_layer_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: str, i: dict[str, Any]) -> Compiled:
+    """D118 (AE4a, from E24): a video model over a layer's frames. `cleanup` — Wan 2.2's low-noise expert with WanImageToVideo's conditioning
+    from the clip's first frame (the concat channels the model was trained on), the clip VAE-encoded as the latent, KSampler on the quality
+    preset's 20-step schedule at `strength`. `creative` — LTX-2.3 with its IC-LoRA on the layer's depth over the clip's latent, the distilled
+    8-step schedule split at `strength` (SplitSigmasDenoise), the AV latent as the model wants it, the guides cropped off."""
+    spec = registry.get(recipe.model_id)
+    if spec is None or spec.video is None:
+        raise CompileError(f"{recipe.model_id!r} is not a video model of this build")
+    roles, w, h, frames, fps = spec.roles, int(i["w"]), int(i["h"]), int(i["frames"]), int(i["fps"])
+    strength = max(0.02, min(0.9, float(recipe.strength)))
+    g: dict[str, Any] = {}
+    if recipe.preset == "cleanup":
+        if spec.graph != "wan22" or "low_expert" not in roles.extra:
+            raise CompileError(f"the clean-up pass runs on Wan 2.2's low-noise expert; {spec.label} has none")
+        _, low = roster.require(roles.extra["low_expert"])
+        _, te = roster.require(roles.te.default)
+        _, vae = roster.require(roles.vae)
+        ep = spec.video.presets.get("quality") or next(iter(spec.video.presets.values()))
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": low, "weight_dtype": "default"}}
+        g["1s"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1", 0], "shift": float(ep.shift)}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": te, "type": "wan", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vae}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": PASS_PROMPT, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": spec.video.negative, "clip": ["2", 0]}}
+        g["20"] = {"class_type": "LoadVideo", "inputs": {"file": i["video"]}}
+        g["21"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["20", 0]}}
+        g["22"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["21", 0], "vae": ["3", 0]}}
+        g["100"] = {"class_type": "LoadImage", "inputs": {"image": i["first"]}}
+        g["7"] = {"class_type": "WanImageToVideo", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "vae": ["3", 0], "width": w, "height": h, "length": frames, "batch_size": 1,
+                                                              "start_image": ["100", 0]}}
+        g["9"] = {"class_type": "KSampler", "inputs": {"model": ["1s", 0], "seed": int(seed), "steps": int(ep.steps), "cfg": float(ep.cfg_low), "sampler_name": "euler", "scheduler": "simple",
+                                                     "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["22", 0], "denoise": strength}}
+        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
+    else:
+        if spec.graph != "ltx23" or not spec.recipes.guide_lora:
+            raise CompileError(f"the creative pass runs on LTX-2.3 with its IC-LoRA; {spec.label} has none")
+        if not i.get("depth"):
+            raise CompileError("the creative pass needs the layer's depth video (pipeline.prepare_layer_pass)")
+        _, unet = roster.require(spec.id)
+        _, ic = roster.require(spec.recipes.guide_lora)
+        _, te1 = roster.require(roles.te.default)
+        _, te2 = roster.require(roles.extra["projection"])
+        _, vvae = roster.require(roles.vae)
+        _, avae = roster.require(roles.extra["audio_vae"])
+        ep = spec.video.presets.get("draft") or next(iter(spec.video.presets.values()))
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}}
+        g["50"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": ic, "strength_model": 1.0}}
+        g["51"] = {"class_type": "GetICLoRAParameters", "inputs": {"iclora_model": ["50", 0]}}
+        g["2"] = {"class_type": "DualCLIPLoader", "inputs": {"clip_name1": te1, "clip_name2": te2, "type": "ltxv"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": vvae}}
+        g["99a"] = {"class_type": "VAELoader", "inputs": {"vae_name": avae}}
+        g["5"] = {"class_type": "CLIPTextEncode", "inputs": {"text": PASS_PROMPT, "clip": ["2", 0]}}
+        g["6"] = {"class_type": "CLIPTextEncode", "inputs": {"text": spec.video.negative, "clip": ["2", 0]}}
+        g["7"] = {"class_type": "LTXVConditioning", "inputs": {"positive": ["5", 0], "negative": ["6", 0], "frame_rate": float(fps)}}
+        g["30"] = {"class_type": "LoadVideo", "inputs": {"file": i["video"]}}
+        g["31"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["30", 0]}}
+        g["32"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["31", 0], "vae": ["3", 0]}}
+        g["52"] = {"class_type": "LoadVideo", "inputs": {"file": i["depth"]}}
+        g["53"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["52", 0]}}
+        g["54"] = {"class_type": "LTXVAddGuide", "inputs": {"positive": ["7", 0], "negative": ["7", 1], "vae": ["3", 0], "latent": ["32", 0], "image": ["53", 0],
+                                                            "frame_idx": 0, "strength": 0.8, "iclora_parameters": ["51", 0]}}
+        g["12"] = {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": frames, "frame_rate": fps, "batch_size": 1, "audio_vae": ["99a", 0]}}
+        g["13"] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": ["54", 2], "audio_latent": ["12", 0]}}
+        g["14"] = {"class_type": "BasicGuider", "inputs": {"model": ["50", 0], "conditioning": ["54", 0]}}
+        g["15"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": int(seed)}}
+        g["16"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
+        g["17"] = {"class_type": "LTXVScheduler", "inputs": {"steps": int(ep.steps), "max_shift": 2.05, "base_shift": 0.95, "stretch": True, "terminal": 0.1, "latent": ["13", 0]}}
+        g["18"] = {"class_type": "SplitSigmasDenoise", "inputs": {"sigmas": ["17", 0], "denoise": strength}}
+        g["19"] = {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["15", 0], "guider": ["14", 0], "sampler": ["16", 0], "sigmas": ["18", 1], "latent_image": ["13", 0]}}
+        g["60"] = {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["19", 0]}}
+        g["61"] = {"class_type": "LTXVCropGuides", "inputs": {"positive": ["54", 0], "negative": ["54", 1], "latent": ["60", 0]}}
+        g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["61", 2], "vae": ["3", 0]}}
+    g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
+    summary = {"model_id": spec.id, "label": spec.label, "preset": recipe.preset, "strength": strength, "final_id": recipe.final_id, "layer_id": recipe.layer_id,
+               "width": w, "height": h, "frames": frames, "fps": fps, "pad": list(i.get("pad") or [0, 0]), "seed": int(seed)}
+    return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=PASS_PROMPT)
+
+
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -1370,6 +1451,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if "video" not in i:
             raise CompileError("matte_sequence needs the uploaded frames (pipeline.prepare_matte)")
         c = build_matte_sequence(recipe, roster, i["video"], out_prefix)
+    elif isinstance(recipe, LayerPass):
+        i = inputs or {}
+        if "video" not in i or "first" not in i:
+            raise CompileError("layer_pass needs the uploaded frames (pipeline.prepare_layer_pass)")
+        c = build_layer_pass(recipe, roster, seed, out_prefix, i)
     else:
         raise NotImplementedError(f"recipe kind '{recipe.kind}' has no compiler")
     c.notes = resolve_names(object_info, c.graph)
@@ -1412,6 +1498,12 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
     if isinstance(recipe, (ImageToMesh, Keypoints, MatteSequence)):
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
+    if isinstance(recipe, LayerPass):                                 # D118: the pass's model (the creative one rides its IC-LoRA)
+        spec = registry.get(recipe.model_id)
+        ids = spec.weights() if spec else [recipe.model_id]
+        if recipe.preset == "creative" and spec is not None and spec.recipes.guide_lora:
+            ids = [*ids, spec.recipes.guide_lora]
+        return ids
     if isinstance(recipe, I2V):
         spec = registry.get(recipe.model_id)
         ids = spec.weights() if spec else [recipe.model_id]

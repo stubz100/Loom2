@@ -55,6 +55,8 @@ class FinalLayer(BaseModel):
     reference_asset_id: str | None = None          # PS5c: the animation reference placed where the figure starts (E23c: no ghost)
     guide_asset_id: str | None = None              # PS5c: the pose sequence as one video
     batches: list[dict[str, Any]] = Field(default_factory=list)   # PS5c: [{k, job_id, clip_id}] in order
+    takes: list[dict[str, Any]] = Field(default_factory=list)     # D118 (AE4a): the layer's passes — [{id, preset, strength, model_id, job_id, frames, seed, made_at}]
+    source: str | None = None                                      # D118: the take the layer shows (its frames under passes/<id>/), None = the original frames
 
 
 class Final(BaseModel):
@@ -229,6 +231,51 @@ class FinalStore:
 
     def pass_dir(self, fid: str, layer: str, name: str) -> Path:
         return self.folder(fid) / layer / name
+
+    def frames_dir(self, fid: str, lid: str) -> Path:
+        """D118: where the layer's frames are — a take's `passes/<id>/` when one is its source, else its own `frames/`."""
+        f = self.get(fid)
+        layer = next((x for x in f.layers if x.id == lid), None) if f else None
+        if layer is not None and layer.source and any(t.get("id") == layer.source for t in layer.takes):
+            return self.pass_dir(fid, lid, f"passes/{layer.source}")
+        return self.pass_dir(fid, lid, "frames")
+
+    def add_take(self, fid: str, lid: str, take: dict[str, Any], use: bool = True) -> Final:
+        """D118: a pass's result recorded on the layer, and shown as its source when `use`."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        layer.takes = [t for t in layer.takes if t.get("id") != take["id"]] + [take]
+        return self.update_layer(fid, lid, takes=layer.takes, source=take["id"] if use else layer.source)
+
+    def set_source(self, fid: str, lid: str, take_id: str | None) -> Final:
+        """D118: the layer shows this take (its frames must be on disk), or its original frames with None."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None:
+            raise KeyError(f"{fid} has no layer {lid}")
+        if take_id is not None:
+            if not any(t.get("id") == take_id for t in layer.takes):
+                raise KeyError(f"{lid} has no take {take_id}")
+            if len(list(self.pass_dir(fid, lid, f"passes/{take_id}").glob("*.png"))) != f.frames:
+                raise ValueError(f"the take {take_id} has no frames on disk")
+        return self.update_layer(fid, lid, source=take_id)
+
+    def remove_take(self, fid: str, lid: str, take_id: str) -> Final:
+        """D118: a take dropped (its frames too); the source falls back to the original when it was this one."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        layer = next((x for x in f.layers if x.id == lid), None)
+        if layer is None or not any(t.get("id") == take_id for t in layer.takes):
+            raise KeyError(f"{lid} has no take {take_id}")
+        shutil.rmtree(self.pass_dir(fid, lid, f"passes/{take_id}"), ignore_errors=True)
+        return self.update_layer(fid, lid, takes=[t for t in layer.takes if t.get("id") != take_id], source=None if layer.source == take_id else layer.source)
 
     def get(self, fid: str) -> Final | None:
         p = self.path(fid)

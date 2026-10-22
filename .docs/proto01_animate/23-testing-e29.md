@@ -69,4 +69,4 @@ better; (b) the head layer, lines by L3 only; (c) something else you saw in the 
 | --- | --- |
 | Is the mouth readable in `l2.mp4` at all? | |
 | Q25: (a), (b) or (c)? | answered 2026-10-21 → D117, E29b |
-| E29b: the head layer as a face pass — yes? L3's mouth better than Animate's? | |
+| E29b: the head layer as a face pass — yes? L3's mouth better than Animate's? | **"significantly better"** (the author, 2026-10-21); a halo of the old head shows on occasions — the paste mask (D118: the new head's own silhouette); lip-sync as a pass on the layer with the line's timing → D118 |

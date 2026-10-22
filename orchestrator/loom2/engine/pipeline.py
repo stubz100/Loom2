@@ -22,7 +22,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -80,7 +80,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("passes")
     if isinstance(recipe, (ImageToMesh, Keypoints)):
         needs.append("source")
-    if isinstance(recipe, (MatteSequence, AssembleFinal, CompRender)):
+    if isinstance(recipe, (MatteSequence, AssembleFinal, CompRender, LayerPass)):
         needs.append("final")
     if isinstance(recipe, T2I):
         params = effective_params(recipe)
@@ -106,6 +106,12 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         spec = registry.get(recipe.model_id)
         params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id, "text": recipe.text}
         est = {"seconds": 60.0, "source": "E23b 2026-10-19: SAM 3 on 161 frames at 832×480, 56 s"}
+    elif isinstance(recipe, LayerPass):                               # D118 (AE4a): a video model over a layer's frames (E24's measures)
+        spec = registry.get(recipe.model_id)
+        params = {"model_id": recipe.model_id, "label": spec.label if spec else recipe.model_id, "final_id": recipe.final_id, "layer_id": recipe.layer_id,
+                  "preset": recipe.preset, "strength": recipe.strength}
+        est = ({"seconds": 950.0, "source": "E24 2026-10-21: the low-noise expert over 81 frames at 832×480 took 913–965 s whatever the strength"} if recipe.preset == "cleanup"
+               else {"seconds": 120.0, "source": "E24 2026-10-21: LTX-2.3 locked to the depth over 81 frames at 832×512 took 54–118 s"})
     elif isinstance(recipe, AssembleFinal):                           # D111 (PS5e): a CPU job — the final's layers composited
         params = {"final_id": recipe.final_id}
         est = {"seconds": None, "source": "CPU (the layers' PNG sequences → clip); the Dock shows frames done"}
@@ -212,6 +218,8 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
         return {"image": img}
     if isinstance(recipe, MatteSequence):
         return {"video": _placeholder_video(object_info)}
+    if isinstance(recipe, LayerPass):
+        return {"video": _placeholder_video(object_info), "first": img, "depth": _placeholder_video(object_info), "w": 832, "h": 480, "frames": 81, "fps": 16, "pad": [0, 0]}
     return {}
 
 
@@ -301,6 +309,11 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     if isinstance(recipe, MatteSequence):                              # D111 (PS5d): the layer's frames go in as one video
         q.progress(job, "uploading frames")
         inputs = await prepare_matte(job, recipe, q)
+        object_info = await q.object_info_refresh()
+        q.check_cancel(job)
+    if isinstance(recipe, LayerPass):                                  # D118 (AE4a): the layer's frames as one video, its first frame, its depth
+        q.progress(job, "uploading frames")
+        inputs = await prepare_layer_pass(job, recipe, q)
         object_info = await q.object_info_refresh()
         q.check_cancel(job)
     if isinstance(recipe, ImageToMesh):                                # P18: the source photo goes in through /upload/image
@@ -491,6 +504,90 @@ async def prepare_matte(job: JobRecord, recipe: MatteSequence, q: JobQueue) -> d
     name = await q.engine.client.upload_image(out)
     job.log_tail.append(f"{len(frames)} frames of {recipe.layer_id} uploaded for SAM 3 ({recipe.text!r})")
     return {"video": name}
+
+
+def _pad_rows_cols(a, py: int, px: int):
+    """Edge-replicated padding at the bottom and the right (the picture stays at the origin; the finisher crops it back)."""
+    import numpy as np
+    if py:
+        a = np.concatenate([a, np.repeat(a[-1:], py, axis=0)], axis=0)
+    if px:
+        a = np.concatenate([a, np.repeat(a[:, -1:], px, axis=1)], axis=1)
+    return a
+
+
+async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> dict[str, Any]:
+    """D118 (AE4a): the layer's active frames as one near-lossless video (the guide encoding) and its first frame as PNG, uploaded; for the
+    creative pass the layer's Stage depth as a video too (its own depth pass, else the shot's — the max over every layer's inverse depth).
+    The picture is padded to the model's cell (LTX's IC-LoRA wants an even latent height: 64 px) by edge rows / columns; the finisher crops."""
+    import numpy as np
+    from PIL import Image
+    from ..finals import FinalStore
+    from ..stages import encode_guide
+    store = FinalStore(q.ws)
+    f = store.get(recipe.final_id)
+    if f is None:
+        raise ValueError(f"the final {recipe.final_id} is not in the project")
+    layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
+    if layer is None:
+        raise ValueError(f"the final has no layer {recipe.layer_id}")
+    frames = sorted(store.frames_dir(recipe.final_id, recipe.layer_id).glob("*.png"))
+    if len(frames) != f.frames:
+        raise ValueError(f"the layer {layer.name} has {len(frames)} frames, the final {f.frames} — make it first")
+    spec = registry.get(recipe.model_id)
+    mult = 64 if recipe.preset == "creative" else int(spec.geometry.size_mult if spec and spec.geometry else 16)
+    w, h = f.size["w"], f.size["h"]
+    px, py = (-w) % mult, (-h) % mult
+    tmp = q.ws.temp_dir / "passes" / f"{recipe.final_id}-{recipe.layer_id}-{job.id}"
+    tmp.mkdir(parents=True, exist_ok=True)
+
+    def padded(paths: list[Path], sub: str, mode: str = "RGB") -> list[Path]:
+        if not (px or py):
+            return paths
+        d = tmp / sub
+        d.mkdir(exist_ok=True)
+        out = []
+        for i, p in enumerate(paths):
+            a = np.asarray(Image.open(p).convert(mode))
+            q_ = d / f"{i:04d}.png"
+            Image.fromarray(_pad_rows_cols(a, py, px)).save(q_)
+            out.append(q_)
+        return out
+    rgb = await asyncio.to_thread(padded, frames, "rgb")
+    await asyncio.to_thread(encode_guide, rgb, tmp / "in.mp4", f.rate)
+    video = await q.engine.client.upload_image(tmp / "in.mp4")
+    first = await q.engine.client.upload_image(rgb[0])
+    inputs: dict[str, Any] = {"video": video, "first": first, "w": w + px, "h": h + py, "frames": len(frames), "fps": f.rate, "pad": [px, py]}
+    if recipe.preset == "creative":
+        own = sorted(store.pass_dir(recipe.final_id, recipe.layer_id, "depth").glob("*.png"))
+        if len(own) == f.frames:
+            depth = own
+        else:                                                              # the shot's depth: the nearest surface over every layer's pass
+            dirs = [d for d in (store.pass_dir(recipe.final_id, x.id, "depth") for x in f.layers) if d.is_dir()]
+
+            def compose() -> list[Path]:
+                d_out = tmp / "depth_in"
+                d_out.mkdir(exist_ok=True)
+                out = []
+                for i in range(f.frames):
+                    acc = None
+                    for d in dirs:
+                        p = d / f"{i:04d}.png"
+                        if p.is_file():
+                            a = np.asarray(Image.open(p).convert("L"))
+                            acc = a if acc is None else np.maximum(acc, a)
+                    if acc is None:
+                        raise ValueError("the final has no depth passes to lock the creative pass to")
+                    p_ = d_out / f"{i:04d}.png"
+                    Image.fromarray(np.repeat(acc[..., None], 3, axis=2)).save(p_)
+                    out.append(p_)
+                return out
+            depth = await asyncio.to_thread(compose)
+        depth = await asyncio.to_thread(padded, depth, "depth")
+        await asyncio.to_thread(encode_guide, depth, tmp / "depth.mp4", f.rate)
+        inputs["depth"] = await q.engine.client.upload_image(tmp / "depth.mp4")
+    job.log_tail.append(f"{len(frames)} frames of {layer.name} uploaded for the {recipe.preset} pass at {recipe.strength:g}" + (f" (padded {px}×{py})" if px or py else ""))
+    return inputs
 
 
 async def prepare_keypoints(job: JobRecord, recipe: Keypoints, q: JobQueue) -> dict[str, Any]:

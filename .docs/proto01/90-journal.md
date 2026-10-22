@@ -7476,3 +7476,50 @@ The author asked for a review of the state of things, then "record all this and 
   DeepCache and the GPU ONNX (`onnxruntime` CPU for insightface, `providers` patched to CPU in `face_detector.py`), the 1.5 weights
   (`latentsync_unet.pt` 5.1 GB, whisper tiny, the auxiliary models; the syncnet left out; 7.7 GB on disk — the eval models in auxiliary
   are dead weight to delete with the loser), ffmpeg from imageio-ffmpeg on the venv's path under the name the code calls.
+
+## 2026-10-22 07:58 — D118: passes on layers — the face pass with lip-sync, clean-up and creative per layer, the line as an audio layer on the lanes; AE4 planned (20 §6) and started
+
+- **The author on E29b and 24:** "significantly better"; a slight halo of the original head on occasions — "probably just tuning the mask
+  around the new head" (yes: the paste mask is a rounded square; the new head's own silhouette, grown and feathered, is the fix); on 24,
+  the low-expert pass "made improvements on Mara's hands", the depth-locked LTX clips "a lot of visible distortion — only for creative
+  upgrades" — so doc 24's "no pass" is amended; "attach post-processing to each layer, or processing layers that process all below layers
+  equally — is it possible per layer? how does this work in effectcraft?"; lip-sync as such a pass; the line attached with timing
+  controls, start / end at least; "Wonderful! Let's continue".
+- **EffectCraft's side, probed:** effects are per layer; `layer.newAdjustment` (everything below), `layer.precompose` (nested comps),
+  `file.replaceFootage {item, path}` (a footage item's file swapped: the layer keeps its transforms, masks, effects, keys — the source
+  swap for a take), `file.import` of a WAV gives an audio item (`layer.addItem {item, time, index, position, duration}` — no name
+  parameter, rename after). 134 kB of commands listed by `list_commands`.
+- **D118** recorded; **20 §6** holds AE4's plan: AE4a the pass job and the source swap (Clean up, Creative first; the Passes part under
+  the layer's row with the takes), AE4b the line as an audio layer on the lanes, AE4c the face pass (Face, Lip-sync by the face video),
+  AE4d the lip-sync model as a tool (LatentSync in its own venv, `full` only), AE4e processing layers. Starting AE4a.
+
+## 2026-10-22 08:37 — AE4a built: a pass on a layer (D118) — the `layer_pass` job, the take as the layer's source, the composition's footage swapped, the Passes part under the layer's row
+
+- **The recipe** `LayerPass {final_id, layer_id, preset: cleanup | creative, strength, model_id, seeds}` (the route picks the model: a wan22
+  spec for Clean up, an ltx23 spec with its IC-LoRA for Creative — `open` has no LTX); **plan** needs the final, the estimate from E24
+  (≈ 950 s / ≈ 120 s); **prepare** uploads the layer's active frames as one near-lossless video (the guide encoding) and its first frame,
+  for Creative the layer's own depth pass (else the shot's: the max over every layer's inverse depth), the picture padded by edge rows /
+  columns to the model's cell (LTX's IC-LoRA wants an even latent height — 64 px) and cropped back by the finisher; **the graphs** are
+  E24's (`build_layer_pass`: WanImageToVideo's conditioning from the first frame + the clip's VAE latent + KSampler at the strength on the
+  quality preset's schedule; LTX's guide chain over the clip's latent with SplitSigmasDenoise at the strength); **the finisher** writes
+  `passes/<take>/NNNN.png` under the layer, records the take `{id, preset, strength, model_id, job_id, frames, seed, made_at}` and makes it
+  the layer's `source`. `FinalStore.frames_dir` is where a layer's frames are — the assembly and the composition read it, so a take feeds
+  the assembled clip too.
+- **The composition:** `sources` per layer; `set_source` finds the layer's footage item in the project file (the composition's layers name
+  their source item) and runs `file.replaceFootage {item, path, sequence}` + `file.interpretFootage {items, frameRate}` (the replaced
+  sequence came in at 30 fps otherwise) — the layer keeps its transforms, masks, effects and keys; one save, the composition not stale.
+  `sync_sources` swaps every layer whose source moved; the Final level calls `POST …/composition/sync` when it sees a pass job land.
+  Routes: `POST /finals/{fid}/layers/{lid}/pass`, `POST …/source {take}`, `DELETE …/takes/{take}`, `POST …/composition/sync`.
+- **The Passes part** (the fourth tab under the layer's row): the four tiles (Face and Lip-sync say *soon*), the strength, *Run the pass*
+  (`anim.final.pass.run`, in the row's menu too), the running job's progress, the takes with *Original* first — ✓ show, shown, ×. A ?
+  explains the take-as-source model.
+- **Fakes and tests:** the fake engine answers an uploaded clip's frames for a graph that VAE-encodes a LoadVideo (the LTX pass has no
+  *ToVideo node); the fake EffectCraft takes `file.replaceFootage` / `file.interpretFootage`; the engine catalogue fixture gains
+  `SplitSigmasDenoise`; `fake_models` writes the Wan 2.2 weights. `test_layer_pass_ae4`: the clean-up job end to end (the take, the
+  frames, `frames_dir`, the sync — the project file's item path on the take, not stale, no save when nothing moved — the assembly on the
+  active source, the source back, the take removed), the creative job padded 32 → 64 and cropped back, the routes (a prop refused, the
+  strength checked, a wrong take 404); the e2e final-shot scenario runs Clean up on Mara's layer (the fake engine), sees the take shown
+  and the composition's revision move, shows the original, drops the take. Offline 484 passed in 143.52s (0:02:23) (full), 484 passed in 137.25s (0:02:17) (open); settings audit 265 fields, 0 problems; agents_check and model_literals_check clean; e2e 49 passed (3.3m) / 49 passed (3.3m); Vitest 392 + 3; build clean; lint 75. **On the rig** (`engine/spikes/ae4a_rig.py`: the PS5 final through a private orchestrator on the real engine): the clean-up pass on Mara's layer landed as a take in ≈ 13 min (the first run's log crashed on a cp1252 print after the job — the rig now writes utf-8), the sync swapped her footage in the composition (revision 53 → 54, the frame changed), the creative pass on the Room at 0.35 took 111 s (padded 0×32, cropped back) and the sync took both (55, not stale), the plate set back to its original (56); Mara's clean-up take stays shown for the author's look at doc 21 §4.
+- Gotchas: `get_project` lists items without paths — the project file has them (`items[*].kind.path`, the comp's `layers[*].source.item`;
+  the fake's flat `comps[*].layers[*].item`); the test rig's `_tree` fakes a fixed roster — a new model's weights are written in the test;
+  a replaced sequence is interpreted at 30 fps unless told the rate.

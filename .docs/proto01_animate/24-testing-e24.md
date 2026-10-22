@@ -42,5 +42,5 @@ afresh (stage C). Everything is under `engine\spikes\out\e24\`.
 
 | Check | Answer |
 | --- | --- |
-| Any gain visible in a2a / c1a / c3a over the input? | |
-| The post stages: no pass by default (assembly + RIFE), A6 as a tool later, A3 on a close shot with E29b — agreed? | |
+| Any gain visible in a2a / c1a / c3a over the input? | **a2a / a2b and c1a / c1b improved Mara's hands; the c3 clips introduce a lot of visible distortion — for creative upgrades only** (the author, 2026-10-21) |
+| The post stages: no pass by default (assembly + RIFE), A6 as a tool later, A3 on a close shot with E29b — agreed? | **amended → D118**: post-processing attached to each layer (Clean up = the low-expert pass, Creative = the depth-locked LTX pass, off by default), or processing layers over the stack below; the face pass with lip-sync as a pass too |

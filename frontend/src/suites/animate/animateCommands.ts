@@ -8,7 +8,7 @@ import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
-  Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon } from 'lucide-react'
+  Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
 
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
@@ -55,6 +55,8 @@ registerCommands([
   { id: 'anim.final.mask.object', scope: 'animate', label: 'Mask: object', hint: "click a thing on the frame: EffectCraft's Object Matte cuts the layer to it and follows it across the shot (an effect on the layer)", icon: ObjectIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskTool(cp().maskTool === 'object' ? 'off' : 'object') },
   { id: 'anim.final.mask.track', scope: 'animate', label: 'Mask: follow the motion', hint: "EffectCraft tracks what is inside the selected mask from the playhead to the end and keys its shape on every frame", icon: TrackIcon, placement: ['toolbar', 'context'], when: () => hasSel() && cp().selectedMask !== null && !cp().busy, run: () => void cp().trackMask() },
   { id: 'anim.final.mask.view', scope: 'animate', label: 'Mask fill', hint: 'show the masks filled instead of as outlines (like Quick mask in Edit)', icon: FillIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => cp().setMaskView(cp().maskView === 'fill' ? 'lines' : 'fill') },
+  // D118 (AE4a): a pass on the selected layer — the preset and strength chosen in the Passes part; its take becomes the layer's source
+  { id: 'anim.final.pass.run', scope: 'animate', label: 'Run the pass', hint: "the chosen pass over the layer's frames as a GPU job; its result a take the layer shows", icon: PassIcon, placement: ['toolbar', 'context'], when: () => cp().finalLayerId() !== null, run: () => void cp().runPass() },
   { id: 'anim.final.trimIn', scope: 'animate', label: 'Trim in to the playhead', icon: TrimInIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { in: cp().frame / (cp().final?.rate ?? 16) }) },
   { id: 'anim.final.trimOut', scope: 'animate', label: 'Trim out to the playhead', icon: TrimOutIcon, placement: ['toolbar', 'context'], when: hasSel, run: () => void cp().setTiming(cp().selected!, { out: (cp().frame + 1) / (cp().final?.rate ?? 16) }) },
   // AE3: before / after — the frame with every effect off (nothing saved)

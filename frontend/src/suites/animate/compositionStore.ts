@@ -28,7 +28,10 @@ export interface MaskInfo { uid: number; name: string; path: string; feather: nu
   vertices: [number, number][]; inTangents: [number, number][]; outTangents: [number, number][]; closed: boolean; animated: boolean }
 export type MaskTool = 'off' | 'rect' | 'ellipse' | 'poly' | 'object'
 export type MaskView = 'lines' | 'fill'
-export type EditorTab = 'props' | 'masks' | 'effects'
+export type EditorTab = 'props' | 'masks' | 'effects' | 'passes'
+/** D118 (AE4a): a pass on a layer — the preset and its strength; Face and Lip-sync come with AE4c. */
+export type PassPreset = 'cleanup' | 'creative'
+export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string }
 export const MASK_MODES = ['Add', 'Subtract', 'Intersect', 'Lighten', 'Darken', 'Difference', 'None']
 interface TreeNode { path?: string; name?: string; uid?: number; type?: string; value?: unknown; mask?: { inverted?: boolean; mode?: string }; children?: TreeNode[] }
 /** The masks of a layer's property tree (`masks/mask`, `masks/mask#2` …): uid, name, feather (one number: the x), opacity, expansion, mode, inverted. */
@@ -152,6 +155,19 @@ interface CompState {
   trackMask: () => Promise<boolean>
   /** EffectCraft's Object Matte on the selected layer from a click (layer pixels): applied at the playhead, propagated over the whole shot. */
   objectMatte: (point: [number, number]) => Promise<boolean>
+  // ---- D118 (AE4a): passes on the selected layer ----
+  passPreset: PassPreset
+  passStrength: number
+  setPass: (preset: PassPreset, strength?: number) => void
+  /** The final's layer behind the selected composition layer (null for a matte or the shadows). */
+  finalLayerId: () => string | null
+  /** A pass queued on the selected layer's final layer (a GPU job); its take lands as the layer's source and the composition syncs. */
+  runPass: () => Promise<boolean>
+  /** The take the layer shows (null: its original frames); the composition swaps the footage in the same call. */
+  useTake: (take: string | null) => Promise<boolean>
+  dropTake: (take: string) => Promise<boolean>
+  /** Every layer whose source moved on the final swapped in the composition (called when a pass's job lands). */
+  syncSources: () => Promise<void>
   setMaskField: (uid: number, field: 'feather' | 'opacity' | 'expansion', value: number) => Promise<boolean>
   setMaskMode: (uid: number, mode: string) => Promise<boolean>
   invertMask: (uid: number, value: boolean) => Promise<boolean>
@@ -185,6 +201,8 @@ let playTimer: number | null = null
 const key = (rev: number, frame: number, side: Side) => `${rev}:${frame}:${side}`
 /** The jobs the page knows: one running means the session renders on demand only (D97 / D113). */
 export const queueBusy = (): boolean => Object.values(useSession.getState().jobs).some((j) => j.status === 'running')
+
+const seenPasses = new Set<string>()                                           // D118: the pass jobs already synced into the composition
 
 function clearCache(): void {
   for (const u of cache.values()) URL.revokeObjectURL(u)
@@ -280,7 +298,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -374,6 +392,49 @@ export const useComposition = create<CompState>((set, get) => {
       const ok = await get().batch([{ id: 'time.set', params: { time: t } }, { id: 'track.mask', params: { layer: s.selected, mask: s.selectedMask, method: 'positionScaleRotation', direction: 'forward', wait: true } }], 'Follow the motion')
       if (ok) useSession.getState().toast('The mask follows the motion from the playhead to the end', 'success')
       return ok
+    },
+    // ---- D118 (AE4a): passes ----
+    setPass: (preset, strength) => set({ passPreset: preset, passStrength: strength ?? (preset === 'cleanup' ? 0.1 : 0.35) }),
+    finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
+    runPass: async () => {
+      const s = get()
+      const lid = s.finalLayerId()
+      if (!s.finalId || !lid) { useSession.getState().toast('A pass runs on a character layer or the plate', 'info'); return false }
+      const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength } })
+      if (r.error) { useSession.getState().toast(`Pass: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+      useSession.getState().toast(`${s.passPreset === 'cleanup' ? 'Clean up' : 'Creative'} pass queued on the layer — its take lands as the layer's source`, 'success')
+      void get().reload()
+      return true
+    },
+    useTake: async (take) => {
+      const s = get()
+      const lid = s.finalLayerId()
+      if (!s.finalId || !lid) return false
+      set({ busy: true })
+      try {
+        const r = await http.POST('/finals/{fid}/layers/{lid}/source', { params: { path: { fid: s.finalId, lid } }, body: { take } })
+        if (r.error) { useSession.getState().toast(`Take: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    dropTake: async (take) => {
+      const s = get()
+      const lid = s.finalLayerId()
+      if (!s.finalId || !lid) return false
+      set({ busy: true })
+      try {
+        const r = await http.DELETE('/finals/{fid}/layers/{lid}/takes/{take}', { params: { path: { fid: s.finalId, lid, take } } })
+        if (r.error) { useSession.getState().toast(`Take: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    syncSources: async () => {
+      const s = get()
+      if (!s.finalId || !s.comp) return
+      const r = await http.POST('/finals/{fid}/composition/sync', { params: { path: { fid: s.finalId } } })
+      if (!r.error) await edited()
     },
     objectMatte: async (point) => {
       const s = get()
@@ -496,7 +557,12 @@ export const useComposition = create<CompState>((set, get) => {
     },
     settle: () => { if (!get().playing && get().comp) request(get().frame, 'full') },
     tick: async () => {
-      const { final, comp, playing } = get()
+      const { final, comp, playing, finalId } = get()
+      if (finalId && comp) {                                                   // D118: a pass's job landed — the composition takes the layer's new source
+        for (const j of Object.values(useSession.getState().jobs)) {
+          if (j.kind === 'layer_pass' && j.origin?.ref === finalId && j.status === 'done' && !seenPasses.has(j.id)) { seenPasses.add(j.id); void get().syncSources() }
+        }
+      }
       if (!final || !comp || playing || inflight || wanted || queueBusy()) return
       for (let i = 0; i < final.frames; i++) {
         const frame = (get().frame + i) % final.frames

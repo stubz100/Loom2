@@ -2347,6 +2347,20 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "sources": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Sources",
+            "type": "object"
+          },
           "stack": {
             "items": {
               "type": "string"
@@ -2371,6 +2385,7 @@
           "stale",
           "stack",
           "layers",
+          "sources",
           "clip_id",
           "rendered_revision",
           "render_job_id",
@@ -4512,6 +4527,28 @@
         "title": "Final",
         "type": "object"
       },
+      "FinalAndComposition": {
+        "properties": {
+          "composition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Composition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final": {
+            "$ref": "#/components/schemas/Final"
+          }
+        },
+        "required": [
+          "final"
+        ],
+        "title": "FinalAndComposition",
+        "type": "object"
+      },
       "FinalCreate": {
         "properties": {
           "camera_id": {
@@ -4707,6 +4744,17 @@
             "title": "Seed",
             "type": "integer"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "status": {
             "default": "passes",
             "enum": [
@@ -4729,6 +4777,14 @@
               }
             ],
             "title": "Still Asset Id"
+          },
+          "takes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Takes",
+            "type": "array"
           },
           "version": {
             "anyOf": [
@@ -4760,7 +4816,9 @@
           "seed",
           "reference_asset_id",
           "guide_asset_id",
-          "batches"
+          "batches",
+          "takes",
+          "source"
         ],
         "title": "FinalLayer",
         "type": "object"
@@ -10368,6 +10426,40 @@
         "title": "NodeShot",
         "type": "object"
       },
+      "PassBody": {
+        "description": "D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another.",
+        "properties": {
+          "preset": {
+            "default": "cleanup",
+            "enum": [
+              "cleanup",
+              "creative"
+            ],
+            "title": "Preset",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "strength": {
+            "default": 0.1,
+            "maximum": 0.9,
+            "minimum": 0.02,
+            "title": "Strength",
+            "type": "number"
+          }
+        },
+        "title": "PassBody",
+        "type": "object"
+      },
       "PassesUpload": {
         "description": "ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18\nkeypoints behind the pose pass and the mask pass's colour legend.",
         "properties": {
@@ -13944,6 +14036,23 @@
           "shutting_down"
         ],
         "title": "ShuttingDown",
+        "type": "object"
+      },
+      "SourceBody": {
+        "properties": {
+          "take": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take"
+          }
+        },
+        "title": "SourceBody",
         "type": "object"
       },
       "SpawnBody": {
@@ -21296,6 +21405,49 @@
         ]
       }
     },
+    "/finals/{fid}/composition/sync": {
+      "post": {
+        "description": "D118: every layer whose source moved on the final (a pass landed) swapped in the composition — the Final level calls it when a\npass's job lands.",
+        "operationId": "composition_sync_finals__fid__composition_sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Composition Sync",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/{lid}/frames": {
       "put": {
         "description": "A layer's own sequence made by the client (PS5b: the projected plate) — stored as its `frames/`; the layer is done.",
@@ -21420,6 +21572,68 @@
         ]
       }
     },
+    "/finals/{fid}/layers/{lid}/pass": {
+      "post": {
+        "description": "D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to\nthe layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).",
+        "operationId": "final_layer_pass_finals__fid__layers__lid__pass_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Pass",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
     "/finals/{fid}/layers/{lid}/run": {
       "post": {
         "description": "PS5c: perform a character layer — its figure's character (the bound Cast version's animation reference) placed where the figure\nstarts (E23c: no ghost), Wan Animate Move on the layer's pose sequence in 77-frame batches (E23a W1), each batch queuing the next.\nA run again is a re-take of this layer alone.",
@@ -21477,6 +21691,129 @@
           }
         },
         "summary": "Final Layer Run",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/source": {
+      "post": {
+        "description": "D118: the take the layer shows (None: its original frames); the composition, when there is one, swaps the layer's footage.",
+        "operationId": "final_layer_source_finals__fid__layers__lid__source_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalAndComposition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Source",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/layers/{lid}/takes/{take}": {
+      "delete": {
+        "description": "D118: a take dropped; the layer falls back to its original frames when it showed this one (the composition follows).",
+        "operationId": "final_layer_take_delete_finals__fid__layers__lid__takes__take__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lid",
+            "required": true,
+            "schema": {
+              "title": "Lid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "take",
+            "required": true,
+            "schema": {
+              "title": "Take",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalAndComposition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Layer Take Delete",
         "tags": [
           "finals"
         ]

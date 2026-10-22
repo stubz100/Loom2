@@ -47,6 +47,7 @@ def fake_models(root: Path) -> list[str]:
     specs += registry.mesh_specs()                                     # P18: Pixal3D and its encoders (the fake engine writes a GLB)
     specs += registry.animate_specs()                                  # CN4: Wan2.2 Animate, CLIP vision, the LightX2V LoRA (the Stage's animate method)
     specs += registry.lipsync_specs()                                  # D88 XL: Wan2.2 S2V and wav2vec2 (experimental lip-sync)
+    specs += [s for s in registry.video_specs() if s.graph == "wan22"]   # D118 (AE4a): the clean-up pass runs on Wan 2.2's low-noise expert
     specs += [s for s in registry.image_specs() if s.recipes.train]     # LT2: the LoRA bases (the fake trainer never loads them)
     specs += [s for s in registry.load().values() if s.recipes.keypoints]   # CA1b: SDPose + RT-DETR (the fake engine answers with an A-pose person)
     specs += [registry.get(registry.segment_model("text"))]                   # D111 (PS5d): SAM 3 mattes a character layer (the fake answers a mask a frame)

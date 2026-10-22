@@ -50,6 +50,7 @@ class Composition(BaseModel):
     stale: bool = False                            # computed on read: the final changed since (assembled again, a layer re-made)
     stack: list[str] = Field(default_factory=list) # the actors far to near (the assembly's most common order)
     layers: list[CompositionLayer] = Field(default_factory=list)
+    sources: dict[str, str | None] = Field(default_factory=dict)   # D118: per final layer, the take its footage shows (None: the original)
     clip_id: str | None = None                     # the finished shot: the last `comp_render` (the final's clip too)
     rendered_revision: int | None = None           # the revision that render saw (edits since: the clip is behind)
     render_job_id: str | None = None
@@ -94,6 +95,7 @@ def relativise(text: str, root: Path) -> str:
 
 class CompositionStore:
     def __init__(self, ws: Workspace) -> None:
+        self.ws = ws
         self.finals = FinalStore(ws)
 
     def folder(self, fid: str) -> Path:
@@ -154,7 +156,7 @@ class CompositionStore:
             return lid
         layers: list[CompositionLayer] = []
         plate = by_id["plate"]
-        layers.append(CompositionLayer(id="plate", kind="plate", name=plate.name, layer=added(imported(root / "plate" / "frames" / "0000.png"), plate.name)))
+        layers.append(CompositionLayer(id="plate", kind="plate", name=plate.name, layer=added(imported(FinalStore(self.ws).frames_dir(f.id, "plate") / "0000.png"), plate.name)))
         shadows = by_id["shadows"]
         sid = added(imported(self.footage(f.id) / "shadow" / "0000.png"), shadows.name)
         ec.command("layer.setBlendMode", {"layers": [sid], "mode": "Multiply"})
@@ -166,14 +168,14 @@ class CompositionStore:
                 continue
             dx, dy = offsets.get(x.id, (0.0, 0.0))
             matte = added(imported(self.footage(f.id) / f"{x.id}_matte" / "0000.png"), f"{x.name} · matte")
-            fig = added(imported(root / x.id / "frames" / "0000.png"), x.name)
+            fig = added(imported(FinalStore(self.ws).frames_dir(f.id, x.id) / "0000.png"), x.name)
             ec.command("layer.setTrackMatte", {"layer": fig, "matte": matte, "kind": "luma"})
             for l in (fig, matte):
                 ec.tool("set_property", {"layer": l, "path": "transform/position", "value": [w / 2 + dx, h / 2 + dy]})
             ec.command("layer.setParent", {"layers": [matte], "parent": fig})   # drag her and her matte follows
             layers.append(CompositionLayer(id=x.id, kind="figure", name=x.name, layer=fig, matte=matte, offset_px=[dx, dy]))
         c = Composition(final_id=f.id, effectcraft=pinned_version(), assembled_at=f.assembled_at, final_revision=f.revision, stack=list(f.assembly["stack"]),
-                        layers=layers)
+                        layers=layers, sources={x.id: x.source for x in f.layers})
         self._write(f, ec, c, save_as=True)
         self.save(c)
         return c
@@ -193,6 +195,58 @@ class CompositionStore:
         if save_as:
             ec.project = None                                             # the session saved the temp name: hold the real file instead
             ec.open(final)
+
+    # ---- D118 (AE4a): the layer's footage swapped for a take ---------------------------------------
+    def item_of(self, f: Final, c: Composition, layer_id: str) -> int | None:
+        """The footage item behind a layer's engine layer, read from the project file's composition (its layers name their source item)."""
+        cl = next((x for x in c.layers if x.id == layer_id), None)
+        if cl is None:
+            return None
+        try:
+            pj = read_json(self.ecproj(f.id))
+        except (OSError, ValueError):
+            return None
+        for it in (pj.get("items") or {}).values():
+            kd = it.get("kind") or {}
+            if kd.get("type") != "Comp":
+                continue
+            for l in kd.get("layers") or []:
+                if l.get("id") == cl.layer and (l.get("source") or {}).get("type") == "Footage":
+                    return int(l["source"]["item"])
+        for comp in (pj.get("comps") or {}).values():                     # the fake's flat form: a layer names its item
+            for l in comp.get("layers") or []:
+                if l.get("id") == cl.layer and l.get("item") is not None:
+                    return int(l["item"])
+        return None
+
+    def set_source(self, f: Final, ec: EffectCraft, layer_id: str, take_id: str | None) -> Composition:
+        """The layer's footage item replaced by the take's frames (or its original frames): `file.replaceFootage` keeps the layer's
+        transforms, masks, effects and keys; `file.interpretFootage` keeps the rate. One save; the composition stays fresh to the final."""
+        c = self._open(f, ec)
+        item = self.item_of(f, c, layer_id)
+        if item is None:
+            raise KeyError(f"the composition has no footage for the layer {layer_id}")
+        store = FinalStore(self.ws)
+        d = store.pass_dir(f.id, layer_id, f"passes/{take_id}") if take_id else store.pass_dir(f.id, layer_id, "frames")
+        first = d / "0000.png"
+        if not first.is_file():
+            raise ValueError(f"no frames for {layer_id} under {d.name}")
+        ec.command("file.replaceFootage", {"item": item, "path": str(first), "sequence": True})
+        ec.command("file.interpretFootage", {"items": [item], "frameRate": float(f.rate)})
+        c.sources[layer_id] = take_id
+        c = self._edited(f, ec, c)
+        c.final_revision = f.revision                                 # the swap is the final's own change: not stale
+        c.stale = False
+        self.save(c)
+        return c
+
+    def sync_sources(self, f: Final, ec: EffectCraft) -> Composition:
+        """Every layer whose source moved on the final (a pass landed, a take chosen) swapped in the composition."""
+        c = self._open(f, ec)
+        for x in f.layers:
+            if any(cl.id == x.id for cl in c.layers) and c.sources.get(x.id) != x.source:
+                c = self.set_source(f, ec, x.id, x.source)
+        return c
 
     # ---- editing ---------------------------------------------------------------------------------
     def _open(self, f: Final, ec: EffectCraft) -> Composition:

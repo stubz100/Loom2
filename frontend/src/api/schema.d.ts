@@ -1022,6 +1022,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/composition/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Composition Sync
+         * @description D118: every layer whose source moved on the final (a pass landed) swapped in the composition — the Final level calls it when a
+         *     pass's job lands.
+         */
+        post: operations["composition_sync_finals__fid__composition_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/frames": {
         parameters: {
             query?: never;
@@ -1062,6 +1083,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/layers/{lid}/pass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Layer Pass
+         * @description D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to
+         *     the layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later).
+         */
+        post: operations["final_layer_pass_finals__fid__layers__lid__pass_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finals/{fid}/layers/{lid}/run": {
         parameters: {
             query?: never;
@@ -1079,6 +1121,46 @@ export interface paths {
          */
         post: operations["final_layer_run_finals__fid__layers__lid__run_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final Layer Source
+         * @description D118: the take the layer shows (None: its original frames); the composition, when there is one, swaps the layer's footage.
+         */
+        post: operations["final_layer_source_finals__fid__layers__lid__source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finals/{fid}/layers/{lid}/takes/{take}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Final Layer Take Delete
+         * @description D118: a take dropped; the layer falls back to its original frames when it showed this one (the composition follows).
+         */
+        delete: operations["final_layer_take_delete_finals__fid__layers__lid__takes__take__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3937,6 +4019,10 @@ export interface components {
              * @default 1
              */
             schema_version: number;
+            /** Sources */
+            sources: {
+                [key: string]: string | null;
+            };
             /** Stack */
             stack: string[];
             /**
@@ -4815,6 +4901,11 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** FinalAndComposition */
+        FinalAndComposition: {
+            composition?: components["schemas"]["Composition"] | null;
+            final: components["schemas"]["Final"];
+        };
         /** FinalCreate */
         FinalCreate: {
             /** Camera Id */
@@ -4899,6 +4990,8 @@ export interface components {
              * @default 0
              */
             seed: number;
+            /** Source */
+            source: string | null;
             /**
              * Status
              * @default passes
@@ -4907,6 +5000,10 @@ export interface components {
             status: "passes" | "queued" | "running" | "done" | "failed";
             /** Still Asset Id */
             still_asset_id: string | null;
+            /** Takes */
+            takes: {
+                [key: string]: unknown;
+            }[];
             /** Version */
             version: string | null;
         };
@@ -7212,6 +7309,25 @@ export interface components {
             shot: components["schemas"]["Shot"] | null;
         };
         /**
+         * PassBody
+         * @description D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another.
+         */
+        PassBody: {
+            /**
+             * Preset
+             * @default cleanup
+             * @enum {string}
+             */
+            preset?: "cleanup" | "creative";
+            /** Seed */
+            seed?: number | null;
+            /**
+             * Strength
+             * @default 0.1
+             */
+            strength?: number;
+        };
+        /**
          * PassesUpload
          * @description ST3 (16 §7): the passes the client rendered for one camera — each a PNG already put through `PUT /blobs/{sha}` — with the COCO-18
          *     keypoints behind the pose pass and the mask pass's colour legend.
@@ -8675,6 +8791,11 @@ export interface components {
         ShuttingDown: {
             /** Shutting Down */
             shutting_down: boolean;
+        };
+        /** SourceBody */
+        SourceBody: {
+            /** Take */
+            take?: string | null;
         };
         /** SpawnBody */
         SpawnBody: {
@@ -12267,6 +12388,37 @@ export interface operations {
             };
         };
     };
+    composition_sync_finals__fid__composition_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Composition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_layer_frames_finals__fid__layers__lid__frames_put: {
         parameters: {
             query?: never;
@@ -12339,6 +12491,42 @@ export interface operations {
             };
         };
     };
+    final_layer_pass_finals__fid__layers__lid__pass_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PassBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     final_layer_run_finals__fid__layers__lid__run_post: {
         parameters: {
             query?: never;
@@ -12362,6 +12550,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_layer_source_finals__fid__layers__lid__source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalAndComposition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_layer_take_delete_finals__fid__layers__lid__takes__take__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                lid: string;
+                take: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalAndComposition"];
                 };
             };
             /** @description Validation Error */

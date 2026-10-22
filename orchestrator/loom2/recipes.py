@@ -475,9 +475,26 @@ class CompRender(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender],
+LayerPassPreset = Literal["cleanup", "creative"]
+
+
+class LayerPass(BaseModel):
+    """D118 (AE4a): a pass on a final's layer — its frames through a video model, the result a *take* the layer shows as its source (the
+    original kept, switchable). `cleanup`: Wan 2.2's low-noise expert over the clip at a low strength (E24 A2 — the author saw the hands
+    improve); `creative`: LTX-2.3 locked to the layer's Stage depth (E24 C3 — a repaint, for creative upgrades). Face and Lip-sync come
+    with AE4c. `model_id` is the pass's video model, picked by the route for the preset (a wan22 or an ltx23 spec of this build)."""
+    kind: Literal["layer_pass"] = "layer_pass"
+    final_id: str
+    layer_id: str
+    preset: LayerPassPreset = "cleanup"
+    strength: float = Field(0.10, ge=0.02, le=0.9)
+    model_id: str
+    seeds: list[int] = Field(default_factory=lambda: [0])
+
+
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],
                    Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender | LayerPass
 
 
 class RecipeEnvelope(BaseModel):

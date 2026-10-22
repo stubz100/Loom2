@@ -99,6 +99,22 @@ viewer's feel can be judged then, before AE2's controls are designed.
   its result. A rule changed in one place changes both.
 - **No native dialogs, mouse first, files are truth** as everywhere (CLAUDE.md).
 
+## 6 · AE4 — passes on layers (D118)
+
+The post stage as the author shaped it after E24 and E29b: processing attached to a layer, the result a new footage version the layer
+takes as its source; the line as an audio layer with the lanes' timing; processing layers over the stack after. Four steps, each with
+its tests, a commit and a rig run:
+
+| Step | What | Where |
+| --- | --- | --- |
+| **AE4a · the pass job and the source swap** | a `layer_pass` recipe `{final_id, layer_id, preset, strength, line?, seeds}` and `run_layer_pass`: the layer's frames (a figure's `frames/`, a prop's RGBA under `comp/`, the plate's) through the pass's graph, written as `passes/<pass id>/NNNN.png` under the layer; the layer record keeps `takes: [{id, preset, strength, line, job_id, frames, made_at}]` and `source` (the active take or the original); the composition's footage item swapped by `file.replaceFootage` (the layer keeps its transforms, masks, effects and keys); **Clean up** and **Creative** first (E24's graphs moved into `engine/graphs.py` as `build_layer_pass`); the editor's **Passes** part under the layer's row: the presets as tiles, the strength, Run, the takes listed with ✓ use / ×, the stale mark; `POST /finals/{fid}/layers/{lid}/pass`, `POST …/source` | orchestrator recipes / finishers / finals / compositions / routes; frontend FinalEditor + compositionStore |
+| **AE4b · the line as an audio layer** | the shot's Dialogue lines with audio (CN2) listed for the character; **Attach a line…** imports the WAV into the composition and adds it as an audio layer named for the character and the line, bound by a record on the composition (`audio: [{layer, final_layer, asset_id, line}]`), placed at the playhead; the lanes draw audio layers with a waveform; move / trim / slip as the picture layers; the pass reads the timing | compositions, routes, FinalViewer lanes, a dialog |
+| **AE4c · the face pass** | Face and Lip-sync: the head box from the layer's keypoints (E29b's tracker), the head crop of the pose pass and of the reference, Wan Animate at 512² in 77-frame batches chained like PS5c, the S2V head per line window as the face video (Lip-sync), the rendered head matted (SAM 3 / BiRefNet, PS5d's path), grown and feathered, pasted back; the result a take like any pass | finishers (the head pipeline from e29b), graphs, finals |
+| **AE4d · the lip-sync model as a tool** | LatentSync in its own venv (`tools/lipsync/`, a setup script like voices), the Lip-sync preset's second option "mouth by the model" on the rendered head; the weights fetched on demand with the licence note; `open` variant: not offered | scripts, finishers, capabilities |
+| **AE4e · processing layers** | the same passes over the flattened stack below a point (the engine renders it with the layers below only), a frozen adjustment layer, stale when the layers below change | compositions, finishers, FinalEditor |
+
+Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; the author's look follows doc 21's pattern.
+
 ## 5 · Status
 
 - **2026-10-20 (journal 2026-10-20 17:37):** AE1 steps 1–2 built — the pin and `scripts/build_effectcraft.py`, Settings › effectcraft, the client
@@ -129,3 +145,8 @@ viewer's feel can be judged then, before AE2's controls are designed.
 - **2026-10-21 (journal 2026-10-21 16:42):** D116 — help behind a ? (house rule 11; Animate and Stage swept), the masks grown (pen icon, marching
   outlines, Lines | Fill, from the layer's content keyed over the shot, EffectCraft's mask tracking and Object Matte), the Performance panel
   a tree of the shot's steps with their verbs in the foot above Render frame. Next: the author's look; the ? sweep over the other suites.
+- **2026-10-22 (journal 2026-10-22 07:58):** D118 — AE4 as passes on layers (§6): the face pass with lip-sync, clean-up, creative; the line as an audio
+  layer with the lanes' timing; processing layers after. Building AE4a.
+- **2026-10-22 (journal 2026-10-22 08:37):** AE4a built — the `layer_pass` recipe (Clean up on Wan 2.2's low-noise expert, Creative on LTX-2.3 locked to
+  the layer's depth; E24's graphs in `engine/graphs.py`), the take recorded on the layer as its source, the composition's footage swapped
+  by `file.replaceFootage`, the Passes part under the layer's row. Next: AE4b, the line as an audio layer.

@@ -73,6 +73,15 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   the room. Press **Before** under the viewer to see the frame without effects, again for after. Then select the Shadows row and add
   **Gaussian Blur** (blurriness 6) to soften the shadows. Each effect has on / off, reset and ×.
 
+- **Passes** (the fourth part, D118): the four tiles — **Clean up** and **Creative** run now, **Face** and **Lip-sync** say *soon* (AE4c).
+  With Mara's row selected pick **Clean up**, leave the strength at 0.10 and press **Run the pass**: a GPU job (≈ 15 min for this shot —
+  the Dock shows it; the viewer keeps working). When it lands, the take appears in the list under *Original* as *shown*: the layer now
+  shows the pass's frames and the viewer redraws; her transforms, masks, effects and keys stay. **✓ show** on *Original* brings the
+  performed frames back; ✓ show on the take again; **×** drops a take and its frames. Try **Creative** at 0.35 on the Room layer (≈ 2 min):
+  the repaint you saw in E24.
+- **Check:** is the take-as-source model clear — one layer, several versions, one shown? Should a pass run on the shown take (a pass over
+  a pass) or always on the performed frames (as it does now: the shown source feeds the next pass)?
+
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
 Back at the **Clay** level, the rail's **Performance** tab: the panel is now a tree of the shot's steps — **Frame** (method, image 1,
@@ -106,6 +115,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | Follow the motion, the Object Matte: useful? | |
 | The ? everywhere instead of text: right? | |
 | The Performance tree and the foot's strip: right place for the verbs? | |
+| Passes: the take-as-source model clear? A pass over a pass, or always over the performed frames? | |
 
 ## The first look (2026-10-21) and what it changed
 

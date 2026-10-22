@@ -30,8 +30,9 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
+from ..fsio import utc_now
 from ..body import Body
 from ..finals import FINAL_LAYER_SURFACE, FINAL_PLATE_SURFACE
 from ..story import BODY_FIT_SURFACE, FOR_SHOT, PROP_MODEL_SURFACE, body_fit_origin
@@ -668,7 +669,45 @@ class MatteFinisher:
         q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
 
 
+class LayerPassFinisher:
+    """D118 (AE4a): the pass's frames become a take of the layer (`passes/<take>/`, cropped back from the model's padding, at the final's
+    size), and the layer takes it as its source; the composition follows when the Final level syncs (routes: …/composition/sync)."""
+    frees_cache = True
+
+    async def finish(self, job: JobRecord, recipe: LayerPass, files: list[dict], sub: Submission, q: JobQueue) -> None:
+        from ..finals import FinalStore
+        from ..fsio import new_id
+        paths = [p for p in (output_path(q, f) for f in sorted(files, key=lambda x: x["filename"])) if p.is_file()]
+        store = FinalStore(q.ws)
+        f = store.get(recipe.final_id)
+        if f is None:
+            raise ValueError(f"the final {recipe.final_id} is gone")
+        if len(paths) != f.frames:
+            raise ValueError(f"the pass returned {len(paths)} frames for {f.frames}")
+        w, h = f.size["w"], f.size["h"]
+        take_id = new_id("take")
+
+        def write() -> None:
+            d = store.pass_dir(f.id, recipe.layer_id, f"passes/{take_id}")
+            d.mkdir(parents=True, exist_ok=True)
+            for i, src in enumerate(paths):
+                with Image.open(src) as im:
+                    im = im.convert("RGB")
+                    if im.size != (w, h):
+                        im = im.crop((0, 0, w, h)) if im.width >= w and im.height >= h else im.resize((w, h), Image.BILINEAR)
+                    im.save(d / f"{i:04d}.png")
+        await asyncio.to_thread(write)
+        take = {"id": take_id, "preset": recipe.preset, "strength": recipe.strength, "model_id": recipe.model_id, "job_id": job.id, "frames": len(paths),
+                "seed": job.seed, "made_at": utc_now()}
+        f = await asyncio.to_thread(store.add_take, f.id, recipe.layer_id, take, True)
+        job.result["final_id"], job.result["layer_id"], job.result["take_id"] = f.id, recipe.layer_id, take_id
+        job.log_tail.append(f"{recipe.preset} pass at {recipe.strength:g}: {len(paths)} frames → take {take_id} of {recipe.layer_id}, now its source")
+        q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+
+
 def finisher_for(recipe: AnyRecipe) -> Finisher:
+    if isinstance(recipe, LayerPass):
+        return LayerPassFinisher()
     if isinstance(recipe, MatteSequence):
         return MatteFinisher()
     if isinstance(recipe, Keypoints):

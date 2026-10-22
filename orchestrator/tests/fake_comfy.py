@@ -132,6 +132,20 @@ class FakeComfy:
             frames = [f for f in c.decode(video=0)]
         return (frames[0].width, frames[0].height, len(frames)) if frames else None
 
+    def _loaded_video(self, graph: dict) -> tuple[int, int, int] | None:
+        """D118: a graph that VAE-encodes a LoadVideo (the layer passes) — the uploaded video's size and frame count, else None."""
+        if not any(n.get("class_type") == "VAEEncode" for n in graph.values()):
+            return None
+        lv = next((n for n in graph.values() if n.get("class_type") == "LoadVideo"), None)
+        data = self.uploaded(lv["inputs"].get("file", "")) if lv else []
+        if not data:
+            return None
+        import io
+        import av
+        with av.open(io.BytesIO(data[-1])) as c:
+            frames = [f for f in c.decode(video=0)]
+        return (frames[0].width, frames[0].height, len(frames)) if frames else None
+
     async def _execute(self, pid: str, graph: dict) -> None:
         await asyncio.sleep(0.05)
         save = next((n for n in graph.values() if n.get("class_type") == "SaveImage"), None)
@@ -153,6 +167,8 @@ class FakeComfy:
             w, h, count = int(vid["inputs"].get("width", 64)), int(vid["inputs"].get("height", 64)), int(vid["inputs"].get("length", 1))
         elif sam_video:                                          # D111 (PS5d): SAM 3 over an uploaded video answers one mask per frame
             w, h, count = sam_video
+        elif (loaded := self._loaded_video(graph)):              # D118 (AE4a): a pass over an uploaded clip answers one frame per frame
+            w, h, count = loaded
         else:
             (w, h), count = self._output_size(), 1
         out_dir = self.output_dir / subfolder if subfolder else self.output_dir

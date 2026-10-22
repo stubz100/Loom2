@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from ..compositions import Composition, CompositionStore
@@ -284,6 +286,22 @@ class MatteBody(BaseModel):
     text: str = "person"                           # what SAM 3 looks for in the layer's frames
 
 
+class PassBody(BaseModel):
+    """D118 (AE4a): a pass on the layer — the preset and its strength; a seed given is a re-run with another."""
+    preset: Literal["cleanup", "creative"] = "cleanup"
+    strength: float = Field(0.10, ge=0.02, le=0.9)
+    seed: int | None = None
+
+
+class SourceBody(BaseModel):
+    take: str | None = None                        # the take the layer shows; None: its original frames
+
+
+class FinalAndComposition(BaseModel):
+    final: Final
+    composition: Composition | None = None
+
+
 class JobQueued(BaseModel):
     job_id: str
 
@@ -313,6 +331,88 @@ async def final_layer_matte(svc: Svc, fid: str, lid: str, body: MatteBody):
     f = await asyncio.to_thread(store.update_layer, fid, lid, status="running", error=None, job_ids=[*layer.job_ids, jobs[0].id])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id}
+
+
+@router.post("/finals/{fid}/layers/{lid}/pass", response_model=JobQueued)
+async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
+    """D118 (AE4a): a pass on the layer's frames — Clean up (Wan 2.2's low-noise expert at a low strength) or Creative (LTX-2.3 locked to
+    the layer's depth) — as a GPU job; its result becomes a take the layer shows. A character layer or the plate (a prop's RGBA comes later)."""
+    from ..finals import FINAL_LAYER_SURFACE
+    from ..models import registry
+    from ..origin import JobOrigin
+    ws, _, _ = svc.require_project()
+    if svc.queue is None:
+        raise HTTPException(409, "no queue")
+    store = FinalStore(ws)
+    f = await asyncio.to_thread(store.get, fid)
+    layer = next((x for x in f.layers if x.id == lid), None) if f else None
+    if f is None or layer is None:
+        raise HTTPException(404, "final or layer not found")
+    if layer.kind not in ("figure", "plate"):
+        raise HTTPException(422, "a pass runs on a character layer or the plate for now")
+    if layer.frames_done != f.frames:
+        raise HTTPException(422, f"{layer.name} has no frames yet — make the layer first")
+    graph = "wan22" if body.preset == "cleanup" else "ltx23"
+    spec = next((s for s in registry.video_specs() if s.graph == graph and registry.offered(s, svc.app.settings.variant)
+                 and (graph != "ltx23" or s.recipes.guide_lora)), None)
+    if spec is None:
+        raise HTTPException(422, f"the {body.preset} pass's model is not in this build")
+    seed = layer.seed if body.seed is None else body.seed
+    try:
+        jobs = svc.queue.submit({"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "model_id": spec.id, "seeds": [seed]},
+                                origin=JobOrigin(suite="stage", surface=FINAL_LAYER_SURFACE, ref=fid, payload={"layer": lid, "pass": body.preset, "strength": body.strength}))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await svc.queue.flush()
+    f = await asyncio.to_thread(store.update_layer, fid, lid, job_ids=[*layer.job_ids, jobs[0].id])
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    return {"job_id": jobs[0].id}
+
+
+@router.post("/finals/{fid}/layers/{lid}/source", response_model=FinalAndComposition)
+async def final_layer_source(svc: Svc, fid: str, lid: str, body: SourceBody):
+    """D118: the take the layer shows (None: its original frames); the composition, when there is one, swaps the layer's footage."""
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    try:
+        f = await asyncio.to_thread(store.set_source, fid, lid, body.take)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    cs = CompositionStore(ws)
+    c = await asyncio.to_thread(cs.get, f)
+    if c is not None and any(x.id == lid for x in c.layers):
+        try:
+            c = await asyncio.to_thread(cs.set_source, f, svc.effectcraft, lid, body.take)
+        except EffectCraftError as e:
+            raise _ec_error(e)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(422, str(e))
+    return {"final": f.model_dump(), "composition": c.model_dump() if c else None}
+
+
+@router.delete("/finals/{fid}/layers/{lid}/takes/{take}", response_model=FinalAndComposition)
+async def final_layer_take_delete(svc: Svc, fid: str, lid: str, take: str):
+    """D118: a take dropped; the layer falls back to its original frames when it showed this one (the composition follows)."""
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    before = await asyncio.to_thread(store.get, fid)
+    was = next((x.source for x in before.layers if x.id == lid), None) if before else None
+    try:
+        f = await asyncio.to_thread(store.remove_take, fid, lid, take)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    cs = CompositionStore(ws)
+    c = await asyncio.to_thread(cs.get, f)
+    if c is not None and was == take and any(x.id == lid for x in c.layers):
+        try:
+            c = await asyncio.to_thread(cs.set_source, f, svc.effectcraft, lid, None)
+        except EffectCraftError as e:
+            raise _ec_error(e)
+    return {"final": f.model_dump(), "composition": c.model_dump() if c else None}
 
 
 @router.post("/finals/{fid}/assemble", response_model=JobQueued)
@@ -547,6 +647,24 @@ async def composition_mask_from_content(svc: Svc, fid: str, lid: str, body: Mask
     except EffectCraftError as e:
         raise _ec_error(e)
     return {"result": result, "composition": c.model_dump()}
+
+
+@router.post("/finals/{fid}/composition/sync", response_model=Composition)
+async def composition_sync(svc: Svc, fid: str):
+    """D118: every layer whose source moved on the final (a pass landed) swapped in the composition — the Final level calls it when a
+    pass's job lands."""
+    cs, f = await _final_for_composition(svc, fid)
+    if await asyncio.to_thread(cs.get, f) is None:
+        raise HTTPException(404, "the final has no composition yet")
+    try:
+        c = await asyncio.to_thread(cs.sync_sources, f, svc.effectcraft)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except EffectCraftError as e:
+        raise _ec_error(e)
+    return c.model_dump()
 
 
 @router.get("/finals/{fid}/composition/effects", response_model=CompositionLayers)

@@ -7726,6 +7726,56 @@
         "title": "ImageModelCaps",
         "type": "object"
       },
+      "ImageSetBody": {
+        "description": "SC3 (D120): a set from a Catalogue image — MoGe's relief of the picture, the picture's camera beside it.",
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "lens_deg": {
+            "anyOf": [
+              {
+                "maximum": 150.0,
+                "minimum": 20.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the picture's horizontal field of view in degrees when known; None = MoGe's own reading",
+            "title": "Lens Deg"
+          },
+          "relief": {
+            "default": "cut",
+            "enum": [
+              "cut",
+              "sheet"
+            ],
+            "title": "Relief",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "ImageSetBody",
+        "type": "object"
+      },
+      "ImageSetQueued": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "ImageSetQueued",
+        "type": "object"
+      },
       "ImportRequest": {
         "properties": {
           "paths": {
@@ -13116,6 +13166,11 @@
             "title": "Segment",
             "type": "array"
           },
+          "set": {
+            "default": false,
+            "title": "Set",
+            "type": "boolean"
+          },
           "stage": {
             "anyOf": [
               {
@@ -15095,6 +15150,17 @@
             ],
             "title": "Detail"
           },
+          "floor_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor Y"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15110,6 +15176,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "lens_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lens Deg"
           },
           "light": {
             "anyOf": [
@@ -15157,6 +15234,28 @@
               }
             ],
             "title": "Path"
+          },
+          "plate_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plate Asset Id"
+          },
+          "plate_camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plate Camera Id"
           },
           "pose": {
             "anyOf": [
@@ -15240,7 +15339,11 @@
           "detail",
           "shadow_proxy",
           "path",
-          "light"
+          "light",
+          "lens_deg",
+          "plate_asset_id",
+          "floor_y",
+          "plate_camera_id"
         ],
         "title": "StageObject",
         "type": "object"
@@ -25004,6 +25107,59 @@
           }
         },
         "summary": "Stage Guide",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/image-set": {
+      "post": {
+        "description": "SC3 (D120): queue the image → set job for this stage; when it finishes the stage gets the relief as a locked set standing on its\nfloor and the picture's camera (active) — `stage.updated` says so. 422 when the asset is not a Catalogue image.",
+        "operationId": "stage_image_set_stages__st_id__image_set_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageSetBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageSetQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Image Set",
         "tags": [
           "stages"
         ]

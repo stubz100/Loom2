@@ -7776,3 +7776,38 @@ The author asked for a review of the state of things, then "record all this and 
   those pixels as a backdrop, not holes; E28c's models face the camera at yaw 0 as their references did; the render of ten scenes ×
   28 moves takes 5 s in headless Edge, so the budget table is cheap to extend. The engine ran alone and was stopped before Edge
   rendered (D97). Vite dev on 1420 was mine for the run and stopped by PID after it.
+
+## 2026-10-22 18:23 — SC3 built, the first slice (D120): a set from an image
+
+- **The job** (`recipes.ImageToSet`: the picture's asset, `lens_deg` when known else MoGe's own, `relief` cut | sheet, `decimation`, the
+  `stage_id` it lands on; the spec `moge2-vitl` in `models/specs/tools.toml` — `recipes.set`, family pixal3d as the roster says, 2 GB,
+  1 s warm / 5 s cold from E30): `graphs.build_set_from_image` is E30's graph (`LoadImage → LoadMoGeModel → MoGeInference (fov from the
+  recipe or 0) → MoGePointMapToMesh (the threshold per relief kind, the picture as the texture) → SaveGLB`, MoGe's depth render beside it);
+  `pipeline.prepare_set` uploads the picture whole (≤ 2048); `finishers.SetFinisher` makes the GLB a `mesh` asset (lineage `image-to-set`,
+  the depth render its thumbnail, `params.relief` = the lens, the floor's height, the depth range and the counts read back from the
+  vertices by the new `loom2/relief.py` — E30's reading: x / −z against u − ½) and, when a stage is named, `StageStore.add_image_set` puts
+  a locked **Picture set** (`kind set`, `preset image`, `asset_id` the relief, the new fields `plate_asset_id`, `lens_deg`, `floor_y`,
+  `plate_camera_id`) and a **Picture camera** at the floor's height looking down −Z with the lens (`focal_mm_for`: 36 mm sensor) on it,
+  the camera active; `stage.updated` goes out. The route `POST /stages/{id}/image-set {asset_id, lens_deg?, relief}` queues it (404 / 422
+  on a missing stage or a non-image). The fake engine answers `SaveGLB` as it does `Save3DAdvanced` (a bare triangle: no UVs → the default
+  lens of 60°, the floor a metre under); the fixture learned MoGe's four nodes from the live engine.
+- **The UI:** the Clay Library's Sets row has *From an image…* (`stage.add.set.image`, in the viewport's Add menu too) — it opens the Bin
+  with the hint; a picture's right-click there has *Add to the stage (a set from this image)* (`stageStore.setFromImage` → the route, the
+  job followed through the session's jobs; the stage reloads with the set when it lands, a toast says the lens). The Stage engine builds
+  an image set from its GLB unlit (the picture is already lit — it is the plate), raised by `floor_y` so the relief's floor meets the stage
+  floor, casting no shadow (a shell around the set would darken it all) and, being unlit, catching none yet; a wire floor stands in while
+  it loads. The set's row (`ImageSetFields`): the lens and the picture camera with a ?, the **budget** line — `imageSetBudget`: the active
+  camera within ±0.25 m and ±5° of the picture camera, or ±0.75 m and ±10° (the orbit), reads *within the picture's budget*, else *beyond
+  … its edge will show* — and *Look through the picture's camera*.
+- **Tests:** `test_image_set_sc3.py` (the recipe and spec under both variants, the graph's lens and threshold against the fixture, the lens
+  read back from a synthetic relief grid at 70° and the bare triangle's None, the store's set and camera with the fallbacks, the job through
+  the fake engine landing on the stage, the route's 404 / 422 / 200); the e2e scenario *a set from an image* (the Library's button, the
+  Bin's right-click verb, the stage reloaded with the Picture set and the active Picture camera, the row's lens and budget, Look through,
+  the document's fields through the API); the route snapshot and the OpenAPI types regenerated. Offline 498 full and 498 open (test_image_set_sc3's six among them), settings audit clean (278 fields), agents (8 docs) and model-literal checks clean, e2e 50/50 full and open, Vitest 402 + 3 skipped, build clean, lint 75.
+- **The rig** (`engine/spikes/sc3_rig.py`: a private orchestrator, bench/sets/room.jpg imported, the route, the job on the real engine):
+  bench/sets/room.jpg (1280×720) → the job done in 18 s with the engine's start inside it (22 s the first time), the relief 227,775 vertices / 449,624 faces, 10.4 MiB, lens 69.16° × 42.36°, the floor 0.938 m under the camera, median depth 4.67 m; on the stage the locked Picture set and the Picture camera at [0, 0.938, 0] looking down −Z at 26.1 mm, active; the asset of kind mesh with lineage image-to-set and its thumbnail; the engine stopped with the orchestrator (8188 free).
+- Gotchas: a spec's family must be the roster's (MoGe is `pixal3d` there); the generated `StageObject` type makes every field required, so
+  the test factories and `turnTest` carry the four new ones; a scenario title with an apostrophe inside single quotes is a syntax error
+  Playwright reports as "no tests found"; the orchestrator the rig starts stops its engine with it (8188 free after). Left for the second
+  slice: the things cut out and modelled in one job (D109's path, E30's `props` arm), the sky backdrop, a lens field before the job, the
+  figures' shadows on the relief.

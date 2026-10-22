@@ -95,6 +95,7 @@
   "GetMeshInfo",
   "GetVideoComponents",
   "GrowMask",
+  "ImageBatch",
   "ImageCompositeMasked",
   "ImageCrop",
   "ImageCropToMask",
@@ -135,13 +136,17 @@
   "MeshToFile3D",
   "MoGeGeometryToFOV",
   "MoGeInference",
+  "MoGePointMapToMesh",
+  "MoGeRender",
   "ModelSamplingAuraFlow",
   "ModelSamplingFlux",
   "ModelSamplingSD3",
   "Pixal3DConditioning",
+  "PreviewAny",
   "PreviewImage",
   "PrimitiveInt",
   "PrimitiveString",
+  "RTDETR_detect",
   "RandomNoise",
   "ReferenceLatent",
   "RemeshMesh",
@@ -149,8 +154,10 @@
   "RenderMesh",
   "RescaleCFG",
   "SAM3_Detect",
+  "SDPoseKeypointExtractor",
   "SamplerCustomAdvanced",
   "Save3DAdvanced",
+  "SaveGLB",
   "SaveImage",
   "SaveVideo",
   "SolidMask",
@@ -175,11 +182,7 @@
   "WanAnimateToVideo",
   "WanFirstLastFrameToVideo",
   "WanImageToVideo",
-  "WanSoundImageToVideo",
-  "RTDETR_detect",
-  "SDPoseKeypointExtractor",
-  "PreviewAny",
-  "ImageBatch"
+  "WanSoundImageToVideo"
  ],
  "missing_at_capture": [],
  "object_info": {
@@ -10041,6 +10044,218 @@
     "RGBA"
    ],
    "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "MoGePointMapToMesh": {
+   "input": {
+    "required": {
+     "moge_geometry": [
+      "MOGE_GEOMETRY",
+      {}
+     ],
+     "batch_index": [
+      "INT",
+      {
+       "tooltip": "Which image of a batched MoGe geometry to mesh. Per-image vertex counts differ, so batches can't be stacked into a single MESH.",
+       "default": 0,
+       "min": 0,
+       "max": 4096
+      }
+     ],
+     "decimation": [
+      "INT",
+      {
+       "tooltip": "Vertex stride; 1 = full resolution.",
+       "default": 1,
+       "min": 1,
+       "max": 8
+      }
+     ],
+     "discontinuity_threshold": [
+      "FLOAT",
+      {
+       "tooltip": "Drop pixels whose 3x3 depth span exceeds this fraction. 0 = off.",
+       "default": 0.04,
+       "min": 0.0,
+       "max": 1.0,
+       "step": 0.01
+      }
+     ],
+     "texture": [
+      "BOOLEAN",
+      {
+       "tooltip": "Carry the source image through as the baseColor texture.",
+       "default": true
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "moge_geometry",
+     "batch_index",
+     "decimation",
+     "discontinuity_threshold",
+     "texture"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "MESH"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "MESH"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "MoGePointMapToMesh",
+   "display_name": "Convert MoGe Point Map to Mesh",
+   "description": "Convert a MoGe point map into a 3D mesh.",
+   "python_module": "comfy_extras.nodes_moge",
+   "category": "image/geometry estimation",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": [
+    "moge",
+    "mesh",
+    "geometry",
+    "point map"
+   ],
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "MoGeRender": {
+   "input": {
+    "required": {
+     "moge_geometry": [
+      "MOGE_GEOMETRY",
+      {}
+     ],
+     "output": [
+      "COMBO",
+      {
+       "tooltip": "DirectX vs OpenGL controls the normal-map green-channel convention. DirectX: green = -Y down (Unreal). OpenGL: green = +Y up (Blender, Substance, Unity, glTF).",
+       "default": "depth",
+       "multiselect": false,
+       "options": [
+        "depth",
+        "depth_colored",
+        "normal_opengl",
+        "normal_directx",
+        "mask"
+       ]
+      }
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "moge_geometry",
+     "output"
+    ]
+   },
+   "is_input_list": false,
+   "output": [
+    "IMAGE"
+   ],
+   "output_is_list": [
+    false
+   ],
+   "output_name": [
+    "IMAGE"
+   ],
+   "output_tooltips": [
+    null
+   ],
+   "output_matchtypes": null,
+   "name": "MoGeRender",
+   "display_name": "Render MoGe Geometry",
+   "description": "Render a depth map or normal map from geometry data",
+   "python_module": "comfy_extras.nodes_moge",
+   "category": "image/geometry estimation",
+   "output_node": false,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": [
+    "moge",
+    "render",
+    "geometry",
+    "depth",
+    "normal"
+   ],
+   "essentials_category": null,
+   "has_intermediate_output": false
+  },
+  "SaveGLB": {
+   "input": {
+    "required": {
+     "mesh": [
+      "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_FBX,FILE_3D_STL,FILE_3D_USDZ,FILE_3D_PLY,FILE_3D_SPLAT,FILE_3D_SPZ,FILE_3D_KSPLAT,FILE_3D_SPLAT_ANY,FILE_3D_POINT_CLOUD_ANY,FILE_3D",
+      {
+       "tooltip": "Mesh or 3D file to save"
+      }
+     ],
+     "filename_prefix": [
+      "STRING",
+      {
+       "default": "3d/ComfyUI",
+       "multiline": false
+      }
+     ]
+    },
+    "hidden": {
+     "prompt": [
+      "PROMPT"
+     ],
+     "extra_pnginfo": [
+      "EXTRA_PNGINFO"
+     ]
+    }
+   },
+   "input_order": {
+    "required": [
+     "mesh",
+     "filename_prefix"
+    ],
+    "hidden": [
+     "prompt",
+     "extra_pnginfo"
+    ]
+   },
+   "is_input_list": false,
+   "output": [],
+   "output_is_list": [],
+   "output_name": [],
+   "output_tooltips": [],
+   "output_matchtypes": null,
+   "name": "SaveGLB",
+   "display_name": "Save 3D Model",
+   "description": "",
+   "python_module": "comfy_extras.nodes_save_3d",
+   "category": "3d",
+   "output_node": true,
+   "deprecated": false,
+   "experimental": false,
+   "dev_only": false,
+   "api_node": false,
+   "price_badge": null,
+   "search_aliases": [
+    "export 3d model",
+    "save mesh"
+   ],
+   "essentials_category": "Basics",
    "has_intermediate_output": false
   }
  }

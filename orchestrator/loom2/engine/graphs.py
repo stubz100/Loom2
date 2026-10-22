@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
+from ..recipes import (FLUX2_SCHEDULE, SAMPLERS, SCHEDULERS, TE_DEVICES, WEIGHT_DTYPES, T2I, I2I, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, AssembleFinal, CompRender,I2V, LoraRef, Reangle, RefImage, Render, Segment, StageShot, TrainLora, TTS, Upscale,
                        inpaint_model_id, reangle_method, reangle_model_id, stage_model_id)
 from ..edit_ai import plan_tiles
 from ..models import registry
@@ -1181,6 +1181,34 @@ def build_mesh(recipe: ImageToMesh, roster: Roster, seed: int, out_prefix: str, 
     return Compiled(graph=g, output_node=by_role.get("save", "322"), summary=summary, serialized_prompt="")
 
 
+# ---- SC3 (D120): a set from an image — E30's graph ----------------------------------------------------------------------------------------
+RELIEF_THRESHOLD = {"cut": 0.04, "sheet": 0.0}                          # MoGePointMapToMesh's discontinuity threshold per relief kind
+
+
+def build_set_from_image(recipe: ImageToSet, roster: Roster, out_prefix: str, image_name: str) -> Compiled:
+    """MoGe-2 on the picture (its lens when the recipe gives one, else MoGe's own), the point map triangulated with the picture as the
+    texture and saved as a GLB; MoGe's depth render saved beside it for the thumbnail."""
+    spec = registry.get(recipe.model_id)
+    if spec is None or not spec.recipes.set:
+        raise CompileError(f"{recipe.model_id!r} is not an image → set model")
+    _, name = roster.require(spec.id)
+    g: dict[str, Any] = {
+        "1": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "2": {"class_type": "LoadMoGeModel", "inputs": {"model_name": name}},
+        "3": {"class_type": "MoGeInference", "inputs": {"moge_model": ["2", 0], "image": ["1", 0], "resolution_level": 9,
+                                                        "fov_x_degrees": float(recipe.lens_deg or 0.0), "batch_size": 1, "force_projection": True,
+                                                        "apply_mask": True, "refine_steps": 0}},
+        "4": {"class_type": "MoGePointMapToMesh", "inputs": {"moge_geometry": ["3", 0], "batch_index": 0, "decimation": int(recipe.decimation),
+                                                             "discontinuity_threshold": RELIEF_THRESHOLD[recipe.relief], "texture": True}},
+        "5": {"class_type": "SaveGLB", "inputs": {"mesh": ["4", 0], "filename_prefix": out_prefix}},
+        "7": {"class_type": "MoGeRender", "inputs": {"moge_geometry": ["3", 0], "output": "depth"}},
+        "99": {"class_type": "SaveImage", "inputs": {"images": ["7", 0], "filename_prefix": out_prefix + "_depth"}},
+    }
+    summary = {"model_id": spec.id, "relief": recipe.relief, "threshold": RELIEF_THRESHOLD[recipe.relief], "decimation": recipe.decimation,
+               "lens_deg": recipe.lens_deg, "stage_id": recipe.stage_id}
+    return Compiled(graph=g, output_node="5", summary=summary, serialized_prompt="")
+
+
 def upscale_factor(model_id: str) -> int:
     spec = registry.get(model_id)
     if spec is None or spec.recipes.upscale_factor is None:
@@ -1518,7 +1546,7 @@ def build_face_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: st
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=prompt)
 
 
-def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
+def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | StageShot | ImageToMesh | ImageToSet | Keypoints | MatteSequence | LayerPass, roster: Roster, object_info: dict, seed: int, out_prefix: str,
                    ref_files: dict[str, str] | None = None, inputs: dict[str, Any] | None = None, variant: str = "full") -> Compiled:
     """`inputs` carries the uploaded engine input names and sizes for the document recipes (queue._prepare_document_inputs)."""
     if isinstance(recipe, T2I):
@@ -1555,6 +1583,11 @@ def compile_recipe(recipe: T2I | I2I | Inpaint | Upscale | I2V | Reangle | Stage
         if "image" not in i:
             raise CompileError("image_to_mesh needs the uploaded source (pipeline.prepare_mesh)")
         c = build_mesh(recipe, roster, seed, out_prefix, i["image"])
+    elif isinstance(recipe, ImageToSet):
+        i = inputs or {}
+        if "image" not in i:
+            raise CompileError("image_to_set needs the uploaded picture (pipeline.prepare_set)")
+        c = build_set_from_image(recipe, roster, out_prefix, i["image"])
     elif isinstance(recipe, Keypoints):
         i = inputs or {}
         if "image" not in i:
@@ -1614,7 +1647,7 @@ def recipe_weights(recipe: T2I | I2I | Inpaint | Upscale | Segment | I2V | Reang
         return [recipe.model_id]                                      # LT2: the base's transformer (its encoder comes from HF_HOME, its VAE from the hub)
     if isinstance(recipe, TTS):
         return []                                                     # CN2: the TTS models live in HF_HOME, not the roster
-    if isinstance(recipe, (ImageToMesh, Keypoints, MatteSequence)):
+    if isinstance(recipe, (ImageToMesh, ImageToSet, Keypoints, MatteSequence)):
         spec = registry.get(recipe.model_id)
         return spec.weights() if spec else [recipe.model_id]           # P18: the transformer, both VAEs, DINOv3, MoGe, BiRefNet; CA1b: SDPose + RT-DETR
     if isinstance(recipe, LayerPass):                                 # D118: the pass's model (the creative one rides its IC-LoRA)

@@ -380,6 +380,20 @@ class ImageToMesh(BaseModel):
     seeds: list[int] = Field(default_factory=lambda: [0])
 
 
+class ImageToSet(BaseModel):
+    """SC3 (D120, after E30): a picture of a place as a set — MoGe-2's metric point map (the depth model Pixal3D carries, MIT) triangulated
+    by the engine into a textured relief with the picture as its texture (`MoGePointMapToMesh`); the camera that took the picture sits at
+    the origin looking down −Z. Seconds, not minutes. The result is a Catalogue asset of kind `mesh` (lineage `image-to-set` ← the picture)
+    and, when a stage is named, that stage gets the set standing on its floor and the picture's camera (the lens read back from the relief)."""
+    kind: Literal["image_to_set"] = "image_to_set"
+    asset_id: str                                  # the picture (a Catalogue image)
+    model_id: str = _default("set")
+    lens_deg: float | None = Field(None, ge=20, le=150)   # the picture's horizontal field of view when known; None = MoGe's own reading (E30: it wobbles)
+    relief: Literal["cut", "sheet"] = "cut"        # cut at depth jumps (honest holes behind things) or one sheet (smears instead; a smooth place)
+    decimation: int = Field(2, ge=1, le=4)         # the point map's vertex stride (2: a 1280×720 picture is ≈ 230k vertices, 10 MB)
+    stage_id: str | None = None                    # the stage the set lands on, with the picture's camera, when the job finishes
+
+
 class Render(BaseModel):
     """P17 (D83) slice 2: a draft render of a sequence — a CPU job (no engine) that becomes a Catalogue clip: every lane tick read from
     the clips' PNG masters, dissolves blended, frames mapped by nearest frame where a clip's rate differs from the lane's (D27: no
@@ -517,9 +531,9 @@ class LayerPass(BaseModel):
         return self
 
 
-Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],
+Recipe = Annotated[Union[T2I, I2I, Inpaint, Upscale, Segment, I2V, Reangle, Render, StageShot, ImageToMesh, ImageToSet, TrainLora, TTS, Keypoints, MatteSequence, AssembleFinal, CompRender, LayerPass],
                    Field(discriminator="kind")]
-AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender | LayerPass
+AnyRecipe = T2I | I2I | Inpaint | Upscale | Segment | I2V | Reangle | Render | StageShot | ImageToMesh | ImageToSet | TrainLora | TTS | Keypoints | MatteSequence | AssembleFinal | CompRender | LayerPass
 
 
 class RecipeEnvelope(BaseModel):

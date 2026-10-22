@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Graph = Literal["flux2", "klein", "krea2", "zimage", "chroma", "sd3", "lumina2",      # image: FLUX.2 family; D89 creative t2i / i2i families; D91 Lumina 2
-                "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d", "keypoints"]      # video, upscaler, subject matte, SAM, angles, mesh
+                "wan22", "wan_animate", "wan_s2v", "ltx23", "esrgan", "matte", "sam", "qwen_edit", "pixal3d", "keypoints", "image_to_set"]      # video, upscaler, subject matte, SAM, angles, mesh
 
 
 class Strict(BaseModel):
@@ -91,6 +91,7 @@ class Recipes(Strict):
     lipsync: bool = False                          # D88 XL (experimental): a talking clip from an image and a line (S2V); not an Animate-suite model
     lipsync_languages: list[str] = []              # the languages its audio encoder hears (E18: wav2vec2-large-english)
     mesh: bool = False                             # P18 (D84): image → mesh (the Pixal3D graph)
+    set: bool = False                              # SC3 (D120): image → set (MoGe's relief of a picture of a place)
     keypoints: bool = False                        # CA1b (D104): body keypoints of an image (SDPose wholebody)
     train: Train | None = None                     # LT2 (D86): a LoRA base ai-toolkit trains on this card
     sample: bool = False                           # D91: may render the style samples and the preset swatches (Settings › Samples › Sample model)

@@ -30,7 +30,7 @@ import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
-import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState } from './stageStore'
+import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState, imageSetBudget } from './stageStore'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
@@ -91,7 +91,8 @@ export function LibraryAdd() {
         <div className="lib-row" data-group="figures"><span className="lib-label">Figures</span>
           <PresetPanel label="figure presets" items={figures} showText onPick={(id) => runCommand(`stage.add.mannequin.${id}`)} title="A figure at the viewport's centre: a mannequin to pose and bind to a character" /></div>
         <div className="lib-row" data-group="sets"><span className="lib-label">Sets</span>
-          <PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" /></div>
+          <PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" />
+          <CommandButton id="stage.add.set.image" text label="From an image…" /></div>{/* SC3 (D120): MoGe's relief of a picture, the picture's camera beside it */}
         <div className="lib-row" data-group="templates"><span className="lib-label">Templates <Help text="An arrangement of this level — the set with its props, meshes, planes and lights, not the figures or the cameras — saved under a name from the stage you have, and added to any stage by a click. The author's own library beside the presets." /></span>
           <PresetPanel label="stage templates" items={tmpl} showText onPick={(id) => st().applyTemplate(id)} empty="No templates yet — arrange a set with its props and lights, then save it here."
             title="Your templates: an arrangement saved under a name; a click adds it to this stage" saveLabel="Save this arrangement as a template…" canSave={holds > 0} saveWhy="the stage has no set, prop, plane or light to save yet"
@@ -196,6 +197,22 @@ function StageEditor() {
   )
 }
 
+/** SC3 (D120): an image set's own fields — the lens MoGe read from the picture (E30: it wobbles, so it is shown), the picture's camera, and
+ *  whether the active camera is still within the budget E30 measured. */
+function ImageSetFields({ o }: { o: StageObject }) {
+  const current = useStage((s) => s.current)
+  if (!current) return null
+  const cam = current.cameras.find((c) => c.id === o.plate_camera_id)
+  const b = imageSetBudget(current, o)
+  return (
+    <>
+      <div className="kv"><span>lens</span><span>{o.lens_deg ?? '—'}° wide · {cam?.name ?? 'no picture camera'} <Help text="The horizontal field of view MoGe read from the picture (E30: it wobbles by a few degrees between a PNG and its JPEG). The picture's camera stands where the picture was taken — at the height of its floor — with this lens; it is the shot the picture already is." /></span></div>
+      <div className="kv"><span>budget</span><span className={b.within ? 'ok' : 'warn'} data-budget={b.within ? 'within' : 'beyond'}>{b.text} <Help text="E30 (D120): a relief holds for small moves. Within ±0.25 m and ±5° of the picture's camera, or an orbit of ±10° about the picture's depth, nothing tears inside the picture and its edge stays under a tenth of the frame. Beyond, the edge comes into the frame (the plate shows it) and what was hidden behind things opens up." /></span></div>
+      <div className="verbs"><button type="button" disabled={!cam} onClick={() => { if (cam) { st().selectCamera(cam.id); st().setView('camera') } }}>Look through the picture's camera</button></div>
+    </>
+  )
+}
+
 /** D119 (SC1): an object's editor under its row — the transform, the kind's own fields, the parent, the object verbs (the Selection section of before). */
 function ObjectEditor({ o }: { o: StageObject }) {
   const current = useStage((s) => s.current)
@@ -210,6 +227,7 @@ function ObjectEditor({ o }: { o: StageObject }) {
       {o.kind === 'mannequin' && <FigureCharacter o={o} />}
       {o.kind === 'mesh' && <MeshProp o={o} />}
       {o.kind === 'light' && <LightControls o={o} />}
+      {o.kind === 'set' && o.preset === 'image' && <ImageSetFields o={o} />}
       {o.kind === 'mannequin' && <div className="kv"><span>pose</span><span><select value={o.pose?.preset ?? 'stand'} onChange={(e) => st().applyPose(o.id, e.target.value)}>{POSE_NAMES.map((p) => <option key={p} value={p}>{p}</option>)}</select> <span className="hint">(the Motion section poses the joints)</span></span></div>}
       {o.kind === 'plane' && <div className="kv"><span>faces camera</span><input type="checkbox" checked={o.billboard} onChange={(e) => st().updateObject(o.id, { billboard: e.target.checked })} /></div>}
       <div className="kv"><span>parent</span><select value={o.parent ?? ''} onChange={(e) => st().updateObject(o.id, { parent: e.target.value || null })}><option value="">— none —</option>{current.objects.filter((x) => x.id !== o.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>

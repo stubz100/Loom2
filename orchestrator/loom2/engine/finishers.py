@@ -30,7 +30,7 @@ from ..edit_ai import RegionPlan, assemble_layer, combine_selection, dilate, mas
 from ..fsio import StateError, new_id
 from ..models import registry
 from ..origin import JobOrigin
-from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
+from ..recipes import I2I, I2V, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, TrainLora, Upscale, stage_model_id
 from ..roster import ROSTER_BY_ID
 from ..fsio import utc_now
 from ..body import Body
@@ -580,6 +580,44 @@ class MeshFinisher:
             await asyncio.to_thread(_prop_model_result, q, job, rec.id)
 
 
+class SetFinisher:
+    """SC3 (D120): the relief GLB becomes a Catalogue asset of kind `mesh` (lineage `image-to-set` ← the picture; the lens, the floor and the
+    depth range read back from its vertices in `params.relief`; MoGe's depth render its thumbnail) and, when the recipe names a stage, that
+    stage gets the set standing on its floor and the picture's camera as the active one."""
+    frees_cache = True
+
+    async def finish(self, job: JobRecord, recipe: ImageToSet, files: list[dict], sub: Submission, q: JobQueue) -> None:
+        from ..relief import lens_of_glb
+        from ..stages import StageStore
+        paths = [output_path(q, f) for f in files]
+        glb = next((p for p in paths if p.suffix.lower() in (".glb", ".gltf") and p.is_file()), None)
+        depth = next((p for p in paths if p.suffix.lower() == ".png" and "_depth" in p.name and p.is_file()), None)
+        if glb is None:
+            raise ValueError("the engine finished but produced no relief (no .glb among its outputs)")
+        lens = await asyncio.to_thread(lens_of_glb, glb)
+        job.log_tail.append(f"the relief: {lens['vertices']} vertices, {lens['faces']} faces, lens {lens['fov_x']}×{lens['fov_y']}°, the floor {lens['y_floor']} m under the camera, "
+                            f"median depth {lens['depth_median']} m" if lens else "the relief carries no UVs — the lens is not read from it")
+        compiled = sub.compiled
+        rec = await asyncio.to_thread(q.catalogue.ingest_file, glb, kind="mesh", move=True, job_id=job.id, batch_id=job.batch_id, suite="stage",
+                                      model_id=recipe.model_id, seed=job.seed, prompt_text=None,
+                                      params=compiled.summary | {"recipe": recipe.model_dump(), "format": "glb", "relief": lens or {}},
+                                      timings={"wall_s": q.wall_s(), "node_s": job.node_times}, compiled_graph_hash=compiled.graph_hash, variant=job.variant,
+                                      parents=[recipe.asset_id], lineage_kind="image-to-set", origin=job.origin)
+        if depth is not None:
+            rec = await asyncio.to_thread(q.catalogue.make_thumbs, rec, depth)
+        q.hub.broadcast("asset.created", rec.model_dump())
+        job.result["asset_ids"] = [rec.id]
+        job.result["relief"] = lens
+        job.log_tail.append(f"relief {rec.id}: {glb.name} ({(rec.bytes or 0) / 2**20:.1f} MiB)")
+        if recipe.stage_id:
+            st = await asyncio.to_thread(StageStore(q.ws).add_image_set, recipe.stage_id, rec.id, recipe.asset_id,
+                                         (lens or {}).get("fov_x") or recipe.lens_deg, (lens or {}).get("y_floor"))
+            obj = st.objects[-1]
+            job.result["stage_id"], job.result["set_id"], job.result["camera_id"] = st.id, obj.id, obj.plate_camera_id
+            q.hub.broadcast("stage.updated", {"id": st.id, "revision": st.revision})
+            job.log_tail.append(f"on stage {st.id}: {obj.name} with its camera {obj.plate_camera_id} (lens {obj.lens_deg}°, the floor {obj.floor_y} m under it)")
+
+
 def _prop_model_result(q: JobQueue, job: JobRecord, asset_id: str) -> None:
     """D110 (PS2): the model becomes its prop version's, with the reference it was made from (a newer reference marks it stale). Never the
     job's failure: the mesh stays in the Catalogue and the Stage library either way."""
@@ -843,6 +881,8 @@ def finisher_for(recipe: AnyRecipe) -> Finisher:
         return MatteFinisher()
     if isinstance(recipe, Keypoints):
         return KeypointsFinisher()
+    if isinstance(recipe, ImageToSet):
+        return SetFinisher()
     if isinstance(recipe, ImageToMesh):
         return MeshFinisher()
     if isinstance(recipe, I2V):

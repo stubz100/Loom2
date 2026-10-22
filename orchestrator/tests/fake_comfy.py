@@ -186,7 +186,7 @@ class FakeComfy:
                 Image.new("RGBA", (w, h), col).save(out_dir / fname)
             images.append({"filename": fname, "subfolder": subfolder, "type": "output"})
         outputs: dict = {"99": {"images": images}}
-        save3d = next((k for k, n in graph.items() if n.get("class_type") == "Save3DAdvanced"), None)
+        save3d = next((k for k, n in graph.items() if n.get("class_type") in ("Save3DAdvanced", "SaveGLB")), None)   # SC3: the relief's SaveGLB too
         if save3d:                                                      # P18: a mesh graph writes one GLB (a real, minimal one — the browser's loader reads it)
             gprefix = graph[save3d]["inputs"].get("filename_prefix", "loom2/mesh")
             gsub, _, gbase = gprefix.rpartition("/")

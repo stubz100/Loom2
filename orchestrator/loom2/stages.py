@@ -75,6 +75,10 @@ class StageObject(BaseModel):
     shadow_proxy: str | None = None                # E23d (D105): a mesh asset shaped like the character, bound to the figure, that casts its shadow
     path: list[list[float]] | None = None          # CA1: the figure's floor path, [x, z] points clicked on the floor (a library clip walks it)
     light: LightSpec | None = None                 # D110 (PS4): a light object's settings (None = E23c's key)
+    lens_deg: float | None = None                  # SC3 (D120): an image set (preset `image`, asset_id the relief): the picture's horizontal field of view
+    plate_asset_id: str | None = None              # SC3: the picture the relief was made from (the plate at the picture's camera)
+    floor_y: float | None = None                   # SC3: where the relief's floor sits under the picture's camera (metres, negative); the set is raised by it
+    plate_camera_id: str | None = None             # SC3: the camera that took the picture, added with the set
 
 
 class StageCamera(BaseModel):
@@ -217,6 +221,30 @@ class StageStore:
         merged = {**cur.model_dump(), **{k: v for k, v in data.items() if k in keep}, "id": st_id, "schema_version": STAGE_SCHEMA_VERSION,
                   "revision": cur.revision + 1, "created_at": cur.created_at, "updated_at": utc_now()}
         st = Stage.model_validate(merged)
+        check(st)
+        self.save(st)
+        return st
+
+    def add_image_set(self, st_id: str, asset_id: str, plate_id: str, lens_deg: float | None, floor_y: float | None) -> Stage:
+        """SC3 (D120): the relief as a locked set standing on the floor (raised by the floor's depth under the picture's camera) and the
+        picture's camera at that height looking down −Z with the lens, made the active one — the shot the picture already is."""
+        from .relief import DEFAULT_LENS_DEG, focal_mm_for
+        st = self.get(st_id)
+        if st is None:
+            raise KeyError(st_id)
+        lens = float(lens_deg) if lens_deg else DEFAULT_LENS_DEG
+        floor = float(floor_y) if floor_y is not None and -4.0 <= floor_y <= -0.05 else -1.0
+        n = sum(1 for o in st.objects if o.kind == "set" and o.preset == "image") + 1
+        suffix = f" {n}" if n > 1 else ""
+        cam = StageCamera(id=new_id("cam"), name=f"Picture camera{suffix}", pos=[0.0, round(-floor, 3), 0.0], target=[0.0, round(-floor, 3), -1.0],
+                          focal_mm=focal_mm_for(lens), sensor_mm=36.0)
+        obj = StageObject(id=new_id("set"), kind="set", name=f"Picture set{suffix}", preset="image", asset_id=asset_id, plate_asset_id=plate_id,
+                          lens_deg=round(lens, 2), floor_y=round(floor, 3), plate_camera_id=cam.id, locked=True, colour_id=(len(st.objects) % 12) + 1)
+        st.objects.append(obj)
+        st.cameras.append(cam)
+        st.active_camera = cam.id
+        st.revision += 1
+        st.updated_at = utc_now()
         check(st)
         self.save(st)
         return st

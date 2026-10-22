@@ -24,7 +24,7 @@ from PIL import Image
 from .. import native
 from ..documents import RasterLayer
 from ..edit_ai import RegionPlan, crop_inputs, dilate, layer_plan, outpaint_inputs, outpaint_plan, plan_region, whole_plan
-from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
+from ..recipes import I2I, I2V, T2I, TTS, AssembleFinal, CompRender, ImageToMesh, ImageToSet, Inpaint, Keypoints, LayerPass, MatteSequence, Reangle, Render, Segment, StageShot, Upscale, reangle_method, reangle_model_id, stage_model_id, warm_group, TrainLora
 from ..models import registry
 from ..roster import Roster
 from .graphs import (kept_refs, CompileError, Compiled, compile_recipe, doc_estimate_seconds, effective_params, estimate_i2v_seconds, estimate_seconds,
@@ -81,7 +81,7 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
         needs.append("source")
     if isinstance(recipe, StageShot):
         needs.append("passes")
-    if isinstance(recipe, (ImageToMesh, Keypoints)):
+    if isinstance(recipe, (ImageToMesh, ImageToSet, Keypoints)):
         needs.append("source")
     if isinstance(recipe, (MatteSequence, AssembleFinal, CompRender, LayerPass)):
         needs.append("final")
@@ -146,6 +146,12 @@ def plan(recipe: AnyRecipe, variant: str = "full", history: list[dict] | None = 
             raise CompileError(f"{recipe.model_id!r} is not an image → mesh model")
         params = {"model_id": spec.id, "label": spec.label, "resolution": recipe.resolution, "faces": recipe.faces, "cold_seconds": spec.estimates.cold_seconds}
         est = {"seconds": spec.estimates.base_seconds, "cold_seconds": spec.estimates.cold_seconds, "source": "baseline (E14 2026-10-12, warm; the cold figure beside it)"}
+    elif isinstance(recipe, ImageToSet):                              # SC3 (D120): E30's seconds — the load first, under a second a picture after
+        spec = registry.get(recipe.model_id)
+        if spec is None or not spec.recipes.set:
+            raise CompileError(f"{recipe.model_id!r} is not an image → set model")
+        params = {"model_id": spec.id, "label": spec.label, "relief": recipe.relief, "lens_deg": recipe.lens_deg, "decimation": recipe.decimation}
+        est = {"seconds": spec.estimates.base_seconds, "cold_seconds": spec.estimates.cold_seconds, "source": "baseline (E30 2026-10-22, warm; the cold figure beside it)"}
     elif isinstance(recipe, Keypoints):                               # CA1b (D104): E10's scorer — a second or two warm, the checkpoint's load cold
         spec = registry.get(recipe.model_id)
         if spec is None or not spec.recipes.keypoints:
@@ -224,7 +230,7 @@ def placeholder_inputs(recipe: AnyRecipe, object_info: dict) -> dict[str, Any]:
         return {"image": img, "w": 1024, "h": 576}
     if isinstance(recipe, StageShot):
         return {"clay": img, "pose": img}
-    if isinstance(recipe, (ImageToMesh, Keypoints)):
+    if isinstance(recipe, (ImageToMesh, ImageToSet, Keypoints)):
         return {"image": img}
     if isinstance(recipe, MatteSequence):
         return {"video": _placeholder_video(object_info)}
@@ -333,6 +339,11 @@ async def finalize(job: JobRecord, recipe: AnyRecipe, q: JobQueue) -> Submission
     if isinstance(recipe, ImageToMesh):                                # P18: the source photo goes in through /upload/image
         q.progress(job, "uploading source")
         inputs = await prepare_mesh(job, recipe, q)
+        object_info = await q.object_info_refresh()
+        q.check_cancel(job)
+    if isinstance(recipe, ImageToSet):                                 # SC3: the picture goes in whole (MoGe reads it at its own size)
+        q.progress(job, "uploading the picture")
+        inputs = await prepare_set(job, recipe, q)
         object_info = await q.object_info_refresh()
         q.check_cancel(job)
     compiled = compile_recipe(recipe, q.roster, object_info, job.seed, out_prefix=f"loom2/{job.id}", ref_files=ref_files, inputs=inputs or None,
@@ -803,6 +814,18 @@ async def prepare_mesh(job: JobRecord, recipe: ImageToMesh, q: JobQueue) -> dict
     name = await q.engine.client.upload_image(fitted)
     job.log_tail.append(f"source uploaded: {a.w}×{a.h}, {recipe.resolution} / {recipe.faces} faces")
     return {"image": name}
+
+
+async def prepare_set(job: JobRecord, recipe: ImageToSet, q: JobQueue) -> dict[str, Any]:
+    """SC3: upload the picture as PNG (≤ 2048 px — MoGe reads it at its own working size; the relief's texture is this upload)."""
+    a = q.catalogue.get(recipe.asset_id)
+    src = q.catalogue.abs_path(a) if a else None
+    if not src or not Path(src).is_file() or (a is not None and a.kind != "image"):
+        raise ValueError(f"the picture ({recipe.asset_id}) is missing from the Catalogue")
+    fitted = await asyncio.to_thread(fit_reference, q, Path(src), 2048, f"set-{recipe.asset_id}")
+    name = await q.engine.client.upload_image(fitted)
+    job.log_tail.append(f"picture uploaded: {a.w}×{a.h}, relief {recipe.relief}, lens {recipe.lens_deg or 'MoGe'}")
+    return {"image": name, "w": a.w, "h": a.h}
 
 
 async def prepare_i2v(job: JobRecord, recipe: I2V, q: JobQueue) -> dict[str, Any]:

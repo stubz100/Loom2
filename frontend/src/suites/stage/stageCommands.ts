@@ -54,6 +54,8 @@ registerCommands([
   // D95 (AN1, UX0 #18): renaming was a double-click only (D32: every action has a mouse placement)
   { id: 'stage.object.rename', scope: 'stage', label: 'Rename…', icon: Pencil, placement: ['inspector', 'context'], when: hasSel,
     run: () => { const o = sel()!; void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) }) } },
+  { id: 'stage.add.set.image', scope: 'stage', label: 'Set from an image…', icon: ImagePlus, hint: 'a picture of a place as a relief the camera can move in a little (MoGe, D120) — pick the picture in the Bin', placement: ['panel', 'context'], when: hasStage,
+    run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true }); useSession.getState().toast('Pick a picture in the Bin: right-click it › Add to the stage (a set from this image)', 'info') } },
   { id: 'stage.add.plane', scope: 'stage', label: 'Add image plane…', icon: ImagePlus, placement: ['panel', 'context'], when: hasStage,
     run: () => { useSession.getState().setUi({ dockTab: 'bin', dockOpen: true }); useSession.getState().toast('Pick an image in the Bin: drag it onto the viewport, or double-click it (right-click › Add to the stage)', 'info') } },
   // CA1 (proto01_animate 01 step 5): the motion library
@@ -119,7 +121,7 @@ registerCommands([
 
 export const addMenu = (): MenuItem => ({ label: 'Add', icon: Plus, items: [
   ...Object.keys(MANNEQUIN_PRESETS).map((p) => ({ cmd: `stage.add.mannequin.${p}` })), sep,
-  ...SET_PRESETS.map((p) => ({ cmd: `stage.add.set.${p}` })), sep,
+  ...SET_PRESETS.map((p) => ({ cmd: `stage.add.set.${p}` })), { cmd: 'stage.add.set.image' }, sep,
   ...PROP_PRESETS.map((p) => ({ cmd: `stage.add.prop.${p}` })), sep,
   { cmd: 'stage.add.light' },
 ] })

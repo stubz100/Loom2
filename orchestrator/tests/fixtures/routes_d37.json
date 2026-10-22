@@ -158,6 +158,7 @@
  "POST /shutdown",
  "POST /stages",
  "POST /stages/{st_id}/guide",
+ "POST /stages/{st_id}/image-set",
  "POST /stages/{st_id}/passes",
  "POST /story/flow/nodes",
  "POST /story/flow/nodes/{nid}/bind",

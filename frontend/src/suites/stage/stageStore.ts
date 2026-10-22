@@ -193,6 +193,8 @@ interface StageState {
   setView: (v: View) => void
   setGuides: (on: boolean) => void
   addObject: (kind: Kind, preset?: string | null, pos?: number[], assetId?: string | null) => string | null
+  setFromImage: (assetId: string) => Promise<void>            // SC3 (D120): a Catalogue image → MoGe's relief as a locked set with the picture's camera (a job; the stage reloads when it lands)
+  pendingSet: string | null                                   // SC3: the image → set job in flight for the open stage
   updateObject: (id: string, patch: Partial<StageObject>) => void
   /** D110 (PS4): the sky light's strength (null = the default: 0.85 under lights, 1.1 without). */
   setAmbient: (v: number | null) => void
@@ -279,7 +281,7 @@ const thumbed = new Set<string>()                                            // 
 
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
-  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [],
+  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [], pendingSet: null,
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
   meshes: [],
@@ -615,10 +617,20 @@ export const useStage = create<StageState>()((set, get) => ({
     const scale = kind === 'mannequin' ? (MANNEQUIN_PRESETS[preset ?? 'adult']?.scale ?? 1) : 1
     const o: StageObject = { id, kind, name, preset, asset_id: assetId, transform: { pos: pos ?? [0, 0, 0], rot: [0, 0, 0], scale: [scale, scale, scale] }, parent: null,
       locked: false, visible: true, colour_id: (cur.objects.length % 12) + 1, pose: kind === 'mannequin' ? { preset: 'stand', joints: {}, extra: {} } : null, billboard: kind === 'plane', profile_id: null, version: null, body: null, detail: null, path: null, shadow_proxy: null,
-      light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null }
+      light: kind === 'light' ? { ...NEW_LIGHT, target: [...NEW_LIGHT.target] } : null,
+      lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null }
     get().apply((d) => ({ ...d, objects: [...d.objects, o] }), 'add')
     set({ selected: id })
     return id
+  },
+  setFromImage: async (assetId) => {
+    const cur = get().current
+    if (!cur) { useSession.getState().toast('Open a stage first (the Shot section)', 'info'); return }
+    try {
+      const r = await unwrap(http.POST('/stages/{st_id}/image-set', { params: { path: { st_id: cur.id } }, body: { asset_id: assetId, lens_deg: null, relief: 'cut' } }))
+      set({ pendingSet: r.job_id })
+      useSession.getState().toast('Making a set from the picture — a few seconds once MoGe is loaded; the stage reloads with it', 'info')
+    } catch (e) { useSession.getState().toast(`Set from an image failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   updateObject: (id, patch) => get().apply((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) }), 'edit'),
   setAmbient: (v) => get().apply((d) => ({ ...d, ambient: v }), 'ambient'),
@@ -724,5 +736,35 @@ export const useStage = create<StageState>()((set, get) => ({
 
 // CA0: a Cast sheet's body edited (or the profiles loaded) — the open stage's bound figures follow
 useStory.subscribe((s, prev) => { if (s.profiles !== prev.profiles) st().syncBodies() })
+// SC3 (D120): the image → set job landed (or failed) — the stage is reloaded with its relief and the picture's camera
+useSession.subscribe((s, prev) => {
+  if (s.jobs === prev.jobs) return
+  const id = useStage.getState().pendingSet
+  if (!id) return
+  const j = s.jobs[id]
+  if (!j || j.status === 'queued' || j.status === 'running') return
+  useStage.setState({ pendingSet: null })
+  const cur = useStage.getState().current
+  if (j.status === 'done') {
+    const r = j.result as { stage_id?: string; relief?: { fov_x?: number } | null } | null
+    if (cur && r?.stage_id === cur.id) void useStage.getState().open(cur.id)
+    s.toast(r?.relief?.fov_x ? `The set is on the stage with its camera — the picture's lens reads ${r.relief.fov_x}°` : 'The set is on the stage with its camera', 'success')
+  } else s.toast(`Set from an image ${j.status}: ${j.error ?? ''}`, 'error')
+})
+
+/** SC3 (D120): how far the active camera stands from the picture's camera against E30's budget — within ±0.25 m and ±5°, or an orbit
+ *  of ±10° about the picture's depth (the camera moved under a metre, turned under 10°): the picture's edge stays under a tenth of the frame. */
+export function imageSetBudget(doc: StageDoc, o: StageObject): { within: boolean; text: string } {
+  const pc = doc.cameras.find((c) => c.id === o.plate_camera_id)
+  const ac = doc.cameras.find((c) => c.id === doc.active_camera)
+  if (!pc || !ac) return { within: true, text: 'the picture camera is gone' }
+  const d = Math.hypot(ac.pos[0] - pc.pos[0], ac.pos[1] - pc.pos[1], ac.pos[2] - pc.pos[2])
+  const dir = (c: StageCamera) => { const v = [c.target[0] - c.pos[0], c.target[1] - c.pos[1], c.target[2] - c.pos[2]]; const n = Math.hypot(v[0], v[1], v[2]) || 1; return v.map((x) => x / n) }
+  const a = dir(ac), b = dir(pc)
+  const ang = (Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180) / Math.PI
+  const within = (d <= 0.25 && ang <= 5) || (d <= 0.75 && ang <= 10)
+  const how = `${d.toFixed(2)} m, ${ang.toFixed(0)}° from the picture's camera`
+  return { within, text: within ? `within the picture's budget (${how})` : `beyond the picture's budget (${how}): its edge will show` }
+}
 
 export const st = () => useStage.getState()

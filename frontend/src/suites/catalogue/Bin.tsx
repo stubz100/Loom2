@@ -38,6 +38,11 @@ function addPlane(id: string): void {
   })
 }
 
+/** SC3 (D120): the picture as a set on the open stage — MoGe's relief with the picture's camera (a job of seconds; the stage reloads with it). */
+function setFromImage(id: string): void {
+  void import('../stage/stageStore').then((s) => s.st().setFromImage(id))
+}
+
 function verbs(a: Asset, suite: string): Verb[] {
   if (a.kind === 'video') return [{ label: 'Play in Animate', run: () => playClip(a) }]
   if (a.kind !== 'image') return []
@@ -45,7 +50,7 @@ function verbs(a: Asset, suite: string): Verb[] {
   const rest: Verb[] = [{ label: 'Use as a reference (Image · Make)', run: () => asReference(a.id) }, { label: 'Open in Image · Edit', run: () => openInEdit(a.id) },
     { label: 'Set as the start frame (Animate)', run: () => asStart(a.id) }]
   const first = suite === 'animate' || suite === 'stage' ? rest[2] : suite === 'generate' ? rest[0] : null
-  const plane: Verb[] = suite === 'stage' ? [{ label: 'Add to the stage (image plane)', run: () => addPlane(a.id) }] : []   // D95 (AN1, UX0 #18): the Clay level's verb
+  const plane: Verb[] = suite === 'stage' ? [{ label: 'Add to the stage (image plane)', run: () => addPlane(a.id) }, { label: 'Add to the stage (a set from this image)', run: () => setFromImage(a.id) }] : []   // D95 (AN1, UX0 #18): the Clay level's verb
   return [...edit, ...plane, ...(first ? [first] : []), ...rest.filter((x) => x !== first)]
 }
 

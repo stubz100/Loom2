@@ -2215,6 +2215,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stages/{st_id}/image-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage Image Set
+         * @description SC3 (D120): queue the image → set job for this stage; when it finishes the stage gets the relief as a locked set standing on its
+         *     floor and the picture's camera (active) — `stage.updated` says so. 422 when the asset is not a Catalogue image.
+         */
+        post: operations["stage_image_set_stages__st_id__image_set_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stages/{st_id}/passes": {
         parameters: {
             query?: never;
@@ -6293,6 +6314,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ImageSetBody
+         * @description SC3 (D120): a set from a Catalogue image — MoGe's relief of the picture, the picture's camera beside it.
+         */
+        ImageSetBody: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Lens Deg
+             * @description the picture's horizontal field of view in degrees when known; None = MoGe's own reading
+             */
+            lens_deg?: number | null;
+            /**
+             * Relief
+             * @default cut
+             * @enum {string}
+             */
+            relief?: "cut" | "sheet";
+        };
+        /** ImageSetQueued */
+        ImageSetQueued: {
+            /** Job Id */
+            job_id: string;
+        };
         /** ImportRequest */
         ImportRequest: {
             /** Paths */
@@ -8514,6 +8559,11 @@ export interface components {
              * @default []
              */
             segment?: string[];
+            /**
+             * Set
+             * @default false
+             */
+            set?: boolean;
             /** Stage */
             stage?: string | null;
             /** Stage Cfg */
@@ -9310,6 +9360,8 @@ export interface components {
             colour_id: number;
             /** Detail */
             detail: ("male" | "female") | null;
+            /** Floor Y */
+            floor_y: number | null;
             /** Id */
             id: string;
             /**
@@ -9317,6 +9369,8 @@ export interface components {
              * @enum {string}
              */
             kind: "mannequin" | "set" | "prop" | "plane" | "mesh" | "light";
+            /** Lens Deg */
+            lens_deg: number | null;
             light: components["schemas"]["LightSpec"] | null;
             /**
              * Locked
@@ -9329,6 +9383,10 @@ export interface components {
             parent: string | null;
             /** Path */
             path: number[][] | null;
+            /** Plate Asset Id */
+            plate_asset_id: string | null;
+            /** Plate Camera Id */
+            plate_camera_id: string | null;
             pose: components["schemas"]["Pose"] | null;
             /** Preset */
             preset: string | null;
@@ -14958,6 +15016,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Stage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_image_set_stages__st_id__image_set_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageSetBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageSetQueued"];
                 };
             };
             /** @description Validation Error */

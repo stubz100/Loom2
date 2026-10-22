@@ -56,7 +56,7 @@ truth from here; the table above stays as written.
 | Phase | Planned | Delivered | Still open |
 | --- | --- | --- | --- |
 | 0–2 | UX0 · IM1 · AN1 · RC0 · CA0 · CA1 | all built and rig-checked (D99, D101, D104); UX0 and CA0 accepted by the author | — |
-| 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113); E29 / E29b and E24 ran 2026-10-21 (docs 23, 24; D117) and shaped AE4 (D118); **E30** a set from an image ran 2026-10-22 (doc 25 §3b, D120) | SC3 |
+| 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113); E29 / E29b and E24 ran 2026-10-21 (docs 23, 24; D117) and shaped AE4 (D118); **E30** a set from an image ran 2026-10-22 (doc 25 §3b, D120), **SC3**'s first slice built the same day | SC3's second slice: the things cut out and modelled in one job |
 | gate | a D-number per group | rate and joins D102 · mode D103 · shadows D105–D107 · props D108–D110 · the preview route D113 | lip-sync and the post stages: undecided until E29 / E24 |
 | 4 · the editor | AE1 · AP1 · AE2 · AE3 | AE1 (the pin, the composition, `comp_render`), AP1 thin (the Final level), AE2 (layers, properties, masks, lanes), AE3 (effects) — 2026-10-20/21 (doc 20 §5) | the author's looks at 21 |
 | 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below; **AE4 built as AE4a–e** (D118, 2026-10-22: passes on layers, the line on the lanes, Face / Lip-sync, the lip-sync model as a tool, processing layers — doc 20 §6) | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · AE5 |

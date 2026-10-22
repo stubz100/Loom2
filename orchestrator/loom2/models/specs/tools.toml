@@ -39,3 +39,16 @@ label = "SAM 3"
 graph = "sam"
 recipes = { segment = ["text", "points", "box"] }
 estimates = { vram_gb = 5.0, doc_seconds = 3.5 }
+
+# SC3 (D120, E30 2026-10-22): a set from an image — MoGe-2's metric point map of a picture of a place, triangulated by the engine into a
+# textured relief (MoGePointMapToMesh); the camera that took the picture at the origin. Under a second an image once loaded, 1.4 GB.
+[[model]]
+id = "moge2-vitl"
+family = "pixal3d"
+label = "A set from an image · MoGe-2"
+short = "MoGe"
+hint = "a picture of a place as a relief the camera can move in a little — the picture itself is the plate"
+order = 61
+graph = "image_to_set"
+recipes = { set = true, default_for = ["set"] }
+estimates = { vram_gb = 2.0, base_seconds = 1.0, cold_seconds = 5.0 }

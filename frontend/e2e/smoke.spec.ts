@@ -2367,3 +2367,39 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   const k0 = (Object.values((await doc())!.keyframes.objects)[0] as unknown as Key[]).find((x) => x.frame === 0)!
   expect(Object.keys(k0.pose!.joints)).toHaveLength(12)                                       // spelled out, so it blends with the clip's keys
 })
+
+test('a set from an image (D120, SC3): a Bin picture becomes a relief set on the stage with the picture camera active, its lens and budget in its row', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Relief test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('.stage-row.active')).toContainText('Relief test')
+  await openSection(page, 'Scene')
+  await page.locator('.lib-row[data-group="sets"] button', { hasText: /^From an image/ }).click()                          // opens the Bin with the hint
+  const bin = page.locator('.dock .bin')
+  await expect(bin).toBeVisible()
+  await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
+  const tile = bin.locator('.bin-grid .tile').first()
+  await expect(tile).toBeVisible()
+  await tile.click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: /a set from this image/ }).click()                                 // the job through the fake engine
+  const row = page.locator('.outl-row[data-row="object"]', { has: page.locator('.kind', { hasText: 'set' }) })
+  await expect(row).toHaveCount(1, { timeout: 30_000 })                                                                      // the stage reloaded with it
+  await expect(row.locator('.name')).toHaveText('Picture set')
+  const cam = page.locator('.outl-row[data-row="camera"]', { has: page.locator('.name', { hasText: 'Picture camera' }) })
+  await expect(cam).toHaveCount(1)
+  await expect(cam).toHaveClass(/cam-active/)                                                                                 // the picture's camera is the active one
+  await row.locator('.name').click()
+  const editor = page.locator('.row-editor.stage-insp')
+  await expect(editor).toContainText(/° wide · Picture camera/)                                                               // the default lens: the fake's relief has no UVs
+  await expect(editor.locator('[data-budget]')).toHaveAttribute('data-budget', 'within')
+  await editor.locator('button', { hasText: /^Look through the picture/ }).click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  type Doc = { objects: { kind: string; preset: string | null; locked: boolean; asset_id: string | null; plate_camera_id: string | null; lens_deg: number | null; floor_y: number | null }[]; cameras: { id: string; name: string; focal_mm: number; pos: number[] }[]; active_camera: string }
+  const doc = (await api<{ items: (Doc & { name: string })[] }>('GET', '/stages')).items.find((s) => s.name === 'Relief test')!
+  const set = doc.objects.find((o) => o.kind === 'set')!
+  expect(set.preset).toBe('image'); expect(set.locked).toBe(true); expect(set.asset_id).toBeTruthy(); expect(set.lens_deg).toBe(60); expect(set.floor_y).toBe(-1)
+  const pc = doc.cameras.find((c) => c.id === set.plate_camera_id)!
+  expect(pc.name).toBe('Picture camera'); expect(pc.pos[1]).toBe(1); expect(doc.active_camera).toBe(pc.id)
+})

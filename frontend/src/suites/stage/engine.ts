@@ -386,7 +386,7 @@ export class StageEngine {
       seen.add(o.id)
       let e = this.entries.get(o.id)
       if (!e || e.doc.kind !== o.kind || e.doc.preset !== o.preset || e.doc.asset_id !== o.asset_id || JSON.stringify((e.doc as { body?: unknown }).body ?? null) !== JSON.stringify((o as { body?: unknown }).body ?? null)
-        || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null)) {
+        || (e.doc.detail ?? null) !== (o.detail ?? null) || (e.doc.shadow_proxy ?? null) !== (o.shadow_proxy ?? null) || (e.doc.floor_y ?? null) !== (o.floor_y ?? null)) {
         if (e) { this.scene.remove(e.holder); e.proxy?.dispose() }
         e = this.build(o)
         this.entries.set(o.id, e)
@@ -489,7 +489,8 @@ export class StageEngine {
         m.position.set(0, -figureChain(figure.limbs, chain as Chain).b, 0); m.userData.ik = chain; m.renderOrder = 11; m.visible = false
         figure.joints[c.lower].add(m); pickers.push(m)
       }
-    } else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)
+    } else if (o.kind === 'set' && o.preset === 'image' && o.asset_id) body = this.buildImageSet(o)
+    else if (o.kind === 'set') body = buildSet(o.preset ?? 'empty', this.setMat)
     else if (o.kind === 'prop') body = prop(o.preset ?? 'block', this.clayMat)
     else if (o.kind === 'mesh' && o.asset_id) {
       // P18 (D84): a GLB prop from the Catalogue — a placeholder box until the file arrives, then the model stood on the floor at its own size
@@ -533,12 +534,43 @@ export class StageEngine {
       bulb.userData.helper = true; g.add(bulb)
       body = g
     } else body = prop('block', this.clayMat)
-    body.traverse((c) => { c.userData.stageId = o.id; const m = c as THREE.Mesh; if (m.isMesh && !c.userData.helper && o.kind !== 'plane') { m.castShadow = true; m.receiveShadow = true } })
+    body.traverse((c) => { c.userData.stageId = o.id; const m = c as THREE.Mesh; if (m.isMesh && !c.userData.helper && o.kind !== 'plane' && !c.userData.unlit) { m.castShadow = true; m.receiveShadow = true } })
     holder.add(body)
     const entry: Entry = { holder, body, doc: o, figure, pickers }
     if (figure && o.detail) this.attachDetailed(entry, o.detail)
     if (figure && o.shadow_proxy) this.attachProxy(entry, o.shadow_proxy)
     return entry
+  }
+  /** SC3 (D120): a picture of a place as its relief (E30) — the GLB in the picture camera's frame (that camera at the origin looking down
+   *  −Z), raised so the relief's floor meets the stage floor; unlit, since the picture is already lit (it is the plate); it casts no shadow
+   *  (a shell around everything would darken the whole set) and, as a MeshBasic surface, catches none yet. A wire floor stands in until it loads. */
+  private buildImageSet(o: StageObject): THREE.Object3D {
+    const group = new THREE.Group()
+    const lift = -(o.floor_y ?? -1)
+    const stub = new THREE.Mesh(new THREE.BoxGeometry(4, 0.02, 4), new THREE.MeshBasicMaterial({ color: 0x8899bb, wireframe: true }))
+    stub.position.set(0, 0.01, -3)
+    group.add(stub)
+    const id = o.id
+    new GLTFLoader().loadAsync(api.assetUrl(o.asset_id!)).then((gltf) => {
+      const e = this.entries.get(id)
+      if (!e || e.body !== group || this.disposed) return
+      const model = gltf.scene
+      model.position.y = lift
+      model.traverse((m) => {
+        m.userData.stageId = id
+        const mm = m as THREE.Mesh
+        if (!mm.isMesh) return
+        const was = mm.material as THREE.MeshStandardMaterial
+        mm.material = new THREE.MeshBasicMaterial({ map: was.map ?? null, color: was.map ? 0xffffff : 0x9a9a9a, side: THREE.DoubleSide })
+        mm.castShadow = false; mm.receiveShadow = false; mm.userData.unlit = true
+      })
+      group.remove(stub)
+      group.add(model)
+      this.meshesLoaded.add(id)
+      if (this.selectedId === id) this.selection.setFromObject(e.holder)
+      this.dirty = true
+    }).catch((err: unknown) => { this.meshesFailed.set(id, String(err)); this.dirty = true })
+    return group
   }
   /** E23d (D105): the figure's shadow proxy — a mesh asset bound to its joints, seen by the light only; the dummy then casts nothing. */
   private attachProxy(e: Entry, assetId: string): void {

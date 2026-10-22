@@ -17,7 +17,7 @@ export async function renderTurn(body: Body | null, frames: number, fps: number,
   const dist = height / (0.7 * 2 * Math.tan(vfov / 2))
   const cam: StageCamera = { id: 'cam', name: 'Test', pos: [0, height * 0.55, dist], target: [0, height * 0.5, 0], roll: 0, focal_mm: 35, sensor_mm: 36 }
   const fig: StageObject = { id: 'fig', kind: 'mannequin', name: 'figure', preset: 'adult', asset_id: null, transform: { pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] },
-    parent: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: A_POSE, extra: {} }, billboard: false, profile_id: null, version: null, body: (body ?? null) as StageObject['body'], detail: null, path: null, shadow_proxy: null, light: null }
+    parent: null, locked: false, visible: true, colour_id: 1, pose: { preset: 'stand', joints: A_POSE, extra: {} }, billboard: false, profile_id: null, version: null, body: (body ?? null) as StageObject['body'], detail: null, path: null, shadow_proxy: null, light: null, lens_deg: null, plate_asset_id: null, floor_y: null, plate_camera_id: null }
   const doc = { schema_version: 1, id: 'turn-test', name: 'turn test', size: { w, h, fps }, objects: [fig], cameras: [cam], active_camera: 'cam',
     keyframes: { camera: {}, objects: {} }, range: { start: 0, end: frames - 1 }, passes: [], group_id: null, revision: 0, created_at: '', updated_at: '' } as unknown as StageDoc
   const seq = Array.from({ length: frames }, (_, i) => {

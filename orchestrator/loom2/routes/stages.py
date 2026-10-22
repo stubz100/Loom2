@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..fsio import atomic_write_json, read_json_or, utc_now
 from ..stages import encode_guide
@@ -95,6 +97,39 @@ class PassesUpload(BaseModel):
     passes: dict[str, str]                        # pass name → blob sha256
     keypoints: list[Any] = []                     # per figure: 18 × [x, y, visible] in `size` pixels
     legend: dict[str, Any] = {}                   # mask colour → object id / name
+
+
+class ImageSetBody(BaseModel):
+    """SC3 (D120): a set from a Catalogue image — MoGe's relief of the picture, the picture's camera beside it."""
+    asset_id: str
+    lens_deg: float | None = Field(None, ge=20, le=150, description="the picture's horizontal field of view in degrees when known; None = MoGe's own reading")
+    relief: Literal["cut", "sheet"] = "cut"
+
+
+class ImageSetQueued(BaseModel):
+    job_id: str
+
+
+IMAGE_SET_SURFACE = "image_set"
+
+
+@router.post("/stages/{st_id}/image-set", response_model=ImageSetQueued)
+async def stage_image_set(svc: Svc, st_id: str, body: ImageSetBody):
+    """SC3 (D120): queue the image → set job for this stage; when it finishes the stage gets the relief as a locked set standing on its
+    floor and the picture's camera (active) — `stage.updated` says so. 422 when the asset is not a Catalogue image."""
+    ws, catalogue, _ = svc.require_project()
+    st = await asyncio.to_thread(StageStore(ws).get, st_id)
+    if st is None:
+        raise HTTPException(404, "stage not found")
+    a = catalogue.get(body.asset_id)
+    if a is None or a.kind != "image":
+        raise HTTPException(422, "a set is made from a Catalogue image")
+    try:
+        jobs = svc.queue.submit({"kind": "image_to_set", "asset_id": body.asset_id, "lens_deg": body.lens_deg, "relief": body.relief, "stage_id": st_id},
+                                origin=JobOrigin(suite="stage", surface=IMAGE_SET_SURFACE, ref=st_id, payload={"asset_id": body.asset_id}))
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"job_id": jobs[0].id}
 
 
 @router.post("/stages/{st_id}/passes", response_model=Stage)

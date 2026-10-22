@@ -548,6 +548,12 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   const elbow = await at('r_elbow')
   await page.mouse.click(elbow.x, elbow.y)
   await expect(page.locator('.stage-panel select').last()).toHaveValue('r_elbow')
+  // the author, 2026-10-22: the tool buttons leave the joint alone, and selecting the same figure again keeps it
+  await page.locator('button.cmd-btn[aria-label^="Rotate"]').first().click()
+  await expect(page.locator('.stage-panel select').last()).toHaveValue('r_elbow')
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { gizmoMode: () => string } }).__loom2Stage.gizmoMode())).toBe('rotate')
+  await page.evaluate(() => { const w = window as unknown as { __loom2Stage: { select: (id: string) => void; state: () => { current: { objects: { id: string }[] } } } }; w.__loom2Stage.select(w.__loom2Stage.state().current.objects[0].id) })
+  await expect(page.locator('.stage-panel select').last()).toHaveValue('r_elbow')
   // a click on the right hand's handle puts a translate gizmo there; dragging its centre moves the hand, the forearm and upper arm follow (two-bone IK)
   const hand = await at('r_arm')
   await page.mouse.click(hand.x, hand.y)
@@ -761,7 +767,7 @@ test('a 3D prop (P18, D84): "Make a 3D prop…" on a tile says its cost, the fak
   await dialog.locator('input').fill('Props')
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
-  await page.locator('.lib-grid .mesh-card').first().click()
+  await libAdd(page, 'meshes', 'prop ')                                                                    // the Scene's Meshes +
   await expect(page.locator('.panel .stage-insp h4')).toContainText('Mesh 1')
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[]; failed: Record<string, string> } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)
   await expect.poll(async () => (await api<{ params: { thumb_source?: string } }>('GET', `/assets/${m.id}`)).params.thumb_source, { timeout: 15_000 }).toBe('client')   // the viewport's fitted view became the thumbnail
@@ -812,7 +818,7 @@ test('a prop (D110 PS1–PS2): Story\'s Props tab lists the props (Cast no longe
   await dialog.locator('input').fill('Props scene')
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
-  await page.locator(`.lib-grid .prop-card[data-id="${prop.id}"]`).click()
+  await libAdd(page, 'props', name)                                                                        // the Scene's Props +
   await expect(page.locator('.panel .stage-insp h4')).toContainText(name)
   await expect(page.locator('.stage-insp [aria-label="the mesh\'s prop"] button[aria-pressed="true"]')).toHaveAttribute('aria-label', name)
   await expect.poll(() => page.evaluate(() => (window as unknown as { __loom2Stage: { meshes: () => { loaded: string[] } } }).__loom2Stage.meshes().loaded.length), { timeout: 15_000 }).toBe(1)

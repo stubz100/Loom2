@@ -23,7 +23,7 @@ import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimP
 import { ForChip } from '../story/ForChip'
 import { ForRecipe } from '../story/RecipeSteps'
 import { useColumnSync } from '../../frame/columnSync'
-import { CamerasTab, LibraryAdd, OutlinerTab, PassesRow, PosesTab, ShotTab, StageFoot, StageList, useStageLoad } from '../stage/StageParts'
+import { CamerasTab, PassesRow, PosesTab, SceneTab, ShotTab, StageFoot, StageList, useStageLoad } from '../stage/StageParts'
 import { useAnimRoute } from './routeStore'
 import { Player } from './Player'
 import { FinalViewer } from './FinalViewer'
@@ -309,7 +309,7 @@ function AnimateColumnBody({ tab }: { tab: string }) {
   return (
     <div ref={host} className="col-column anim-column">
       <Sec id="shot" title="Shot"><ForChip maker="animate" /><ForRecipe maker="animate" /><StageList /></Sec>
-      <Sec id="scene" title="Scene"><LibraryAdd /><OutlinerTab /><PassesRow /></Sec>
+      <Sec id="scene" title="Scene"><SceneTab /><PassesRow /></Sec>
       <Sec id="motion" title="Motion"><PosesTab /></Sec>
       <Sec id="camera" title="Camera"><CamerasTab /></Sec>
       <Sec id="performance" title="Performance" tools={<RouteSwitch />}>

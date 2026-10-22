@@ -23,6 +23,10 @@ plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel 
    plane…, then *Add to the stage (image plane)*, etc. The right-clicks should remain also!"
 6. "The rotate button on the 3D view is moving and not rotating the object."
 
+7. (Later still.) "We should merge Scene and Outliner — they are essentially the same."
+8. "When trying to edit a detailed pose on the mannequin, the rotate still don't work."
+9. "Every time I click on something else the focus reverts back from the selected joint to the whole mannequin."
+
 ## 2 · What each meets today
 
 | Note | Today | The gap |
@@ -98,6 +102,14 @@ check row here.
   stays the mouse placement). The camera's body takes the **rotate** gizmo under Rotate (translate under Move and Scale): a turn is a new
   target at the old distance and the roll about it (`onCameraTurned` → `updateCamera {target, roll}`); the glyph shows the roll now.
 
+- **2026-10-22 20:50 — notes 7–9.** **One Scene:** the Library and the Outliner are one list (`SceneTab`): the stage's row, then every kind as a
+  group — its words and count, its + (the SC2 panel of presets: figures, sets with *From an image…*, the Cast props, the stand-ins, the
+  Catalogue meshes) or its add button (lights, image planes), then the rows of what is on the stage of that kind — the cameras last with
+  *Add camera*, the templates at the end. Nothing is listed twice and nothing is added far from where it shows. **The joint:** the tool
+  buttons took the gizmo away from a selected joint (`setTool` attached the whole figure) — now a joint keeps its rotate gizmo and a hand
+  its handle under Move / Rotate / Scale (Select hides the gizmo); a click that starts on a gizmo handle is the gizmo's, never a pick (it
+  picked the figure's body and dropped the joint); selecting the same figure again keeps its joint.
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -107,6 +119,7 @@ check row here.
 | SC2: the + panel — which verbs are missing? Should the chosen preset's tile stay beside the +, or the + alone? | |
 | E30 / SC3: how far should the camera move in an image set before it is a different shot? E30 says the picture's edge is the limit (10 % of the frame at truck ±0.5 m or pan ±5°) — is 10 % the bar, or should the edge be filled (a Klein outpaint of the plate before the relief)? | |
 | E30: `engine/spikes/out/e30/sheet_room_props.jpg` — the clean room with the things as models: do they sit where the picture had them? `sheet_room_cut.jpg` and `sheet_room_sheet.jpg` — the picture with its things left in: the holes behind them (cut) or the skirts (sheet) — which do you prefer when a thing is not worth a model? | |
+| One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | |
 | E30: the lens — MoGe read 75° from the PNG and 69° from its JPEG. Should a set from an image ask you for the lens (the Klein recipe's camera when the picture is the app's own)? | |

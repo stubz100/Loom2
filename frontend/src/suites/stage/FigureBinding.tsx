@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import type { Profile, StageObject } from '../../api/types'
 import { CommandRow } from '../../frame/CommandButton'
 import { showMenu } from '../../frame/ContextMenu'
+import { PresetPanel } from '../../frame/PresetPanel'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
 import { fieldGlyph } from '../../frame/presetGlyphs'
 import { profilesForMentions, useStory } from '../story/storyStore'
@@ -67,22 +68,12 @@ export function LibraryProps({ centre }: { centre: () => number[] }) {
   const loaded = useStory((x) => x.profilesLoaded)
   useEffect(() => { if (!loaded) profilesForMentions() }, [loaded])
   const props = profiles.filter((p) => p.cls === 'prop')
-  if (!props.length) return <span className="hint">None yet. <Help text="Make one in Story · Props: its images first, then its 3D model." /></span>
-  return (
-    <div className="lib-grid">{props.map((p) => {
-      const model = p.versions.find((v) => v.id === p.current)?.model_asset_id
-      const img = propThumb(p)
-      const place = () => { if (model) st().placeProp(p.id, centre()); else openProp(p.id) }
-      return (
-        <button key={p.id} className={`mesh-card prop-card${model ? '' : ' no-model'}`} data-id={p.id}
-          title={model ? `${p.name} — place its 3D model at the viewport's centre (bound to the prop: its version's model follows)` : `${p.name} has no 3D model yet — open it in Story · Props to make one`}
-          onClick={place}
-          onContextMenu={(e) => { e.preventDefault(); showMenu(e, [{ label: 'Place in the scene', run: place, disabled: !model }, { label: 'Open in Story · Props', run: () => openProp(p.id) }]) }}>
-          {img ? <img src={img} alt="" /> : <span className="glyph">{fieldGlyph('prop')}</span>}<span>{p.name}{model ? '' : ' · no model'}</span>
-        </button>
-      )
-    })}</div>
-  )
+  const modelOf = (p: Profile) => p.versions.find((v) => v.id === p.current)?.model_asset_id
+  const items: PresetIcon[] = props.map((p) => ({ id: p.id, label: p.name, icon: fieldGlyph('prop'), img: propThumb(p),
+    hint: modelOf(p) ? "its 3D model at the viewport's centre, bound to the prop (its version's model follows)" : 'no 3D model yet — opens in Story · Props to make one', badge: modelOf(p) ? undefined : '!' }))
+  const place = (id: string) => { const p = props.find((x) => x.id === id); if (!p) return; if (modelOf(p)) st().placeProp(p.id, centre()); else openProp(p.id) }
+  return <PresetPanel label="Cast props" items={items} showText onPick={place} empty="None yet — make one in Story · Props: its images first, then its 3D model." title="A Cast prop's 3D model at the viewport's centre, bound to the prop"
+    onContext={(id, e) => { e.preventDefault(); const p = props.find((x) => x.id === id); if (p) showMenu(e, [{ label: 'Place in the scene', run: () => place(id), disabled: !modelOf(p) }, { label: 'Open in Story · Props', run: () => openProp(id) }]) }} />
 }
 
 /** The Inspector's prop of a mesh: the Cast props with a model as tiles and "no prop"; a pinned version beside. */

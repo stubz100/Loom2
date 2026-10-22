@@ -21,6 +21,10 @@
 .outl-row { flex-wrap: wrap; }                                                       /* D119 (SC1): the selected row's editor under it */
 .outl-row .row-editor { flex-basis: 100%; margin: 4px 0 2px; padding: 6px 6px 4px; border-top: 1px solid var(--line); cursor: default; }
 .outl-row.cam-active .kind { color: var(--accent); }
+.outliner.scene .outl-group { margin-top: 2px; }                                    /* one Scene: a kind's header (its + and its words), then its rows */
+.outliner.scene .outl-group .lib-row { padding: 0 2px; }
+.outliner.scene .outl-group .outl-row { margin-left: 10px; }
+.outliner.scene .lib-label .meta { color: var(--fg3); font-size: 11px; }
 .outl-row[data-row="stage"] { font-weight: 600; }
 .stage-strip { display: flex; align-items: center; gap: 6px; }
 .stage-strip .spacer { flex: 1; }

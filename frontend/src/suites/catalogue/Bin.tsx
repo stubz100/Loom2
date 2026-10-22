@@ -110,7 +110,7 @@ export function Bin() {
           onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) void useBin.getState().loadMore() }}>
           {shown.map((a) => (
             <Tile key={a.id} a={a} size={TILE} fill caption="off" selected={selected === a.id} primary={selected === a.id} pinned={0}
-              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); showMenu(e, verbs(a, suite)) }}
+              onClick={(_e, id) => setSelected(id)} onDouble={() => { const pv = picked(a); if (pv) { pv.run(); endPick() } else first(a)?.run() }} onContext={(e) => { e.preventDefault(); setSelected(a.id); if (pick) endPick(); showMenu(e, verbs(a, suite)) }}
               corner={(() => { const pv = picked(a); return pv ? { icon: PickIcon ? <PickIcon size={13} /> : undefined, label: pv.label, run: () => { pv.run(); endPick() } } : undefined })()}
               dragItems={() => [{ kind: 'asset', id: a.id, media: mediaOf(a.kind) }]} />
           ))}

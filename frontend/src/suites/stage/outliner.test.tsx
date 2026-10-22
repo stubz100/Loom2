@@ -41,7 +41,9 @@ describe('the scene outliner (D119 SC1)', () => {
   it('lists the stage, the objects and the cameras as rows, the active camera starred, nothing open', () => {
     const h = render(<OutlinerTab />)
     expect(h.querySelectorAll('.outl-row[data-row="stage"]')).toHaveLength(1)
-    expect([...h.querySelectorAll('.outl-row[data-row="object"] .name')].map((n) => n.textContent)).toEqual(['Set 1', 'Figure 1'])
+    expect([...h.querySelectorAll('.outl-row[data-row="object"] .name')].map((n) => n.textContent)).toEqual(['Figure 1', 'Set 1'])   // grouped by kind: figures, then sets
+    expect([...h.querySelectorAll('.lib-row[data-group]')].map((n) => n.getAttribute('data-group'))).toEqual(['figures', 'sets', 'props', 'standins', 'meshes', 'lights', 'planes', 'cameras', 'templates'])
+    expect(h.querySelector('.lib-row[data-group="figures"] .lib-label')?.textContent).toContain('Figures · 1')
     expect([...h.querySelectorAll('.outl-row[data-row="camera"] .name')].map((n) => n.textContent)).toEqual(['Camera 1', 'Camera 2'])
     expect(h.querySelector('.outl-row[data-row="camera"].cam-active .name')?.textContent).toBe('Camera 1')
     expect(h.querySelectorAll('.row-editor')).toHaveLength(0)
@@ -67,7 +69,7 @@ describe('the scene outliner (D119 SC1)', () => {
   it('an object row opens its editor with the transform and the kind\'s fields; selecting an object drops the camera selection', () => {
     const h = render(<OutlinerTab />)
     click(h.querySelectorAll('.outl-row[data-row="camera"]')[0])
-    click(h.querySelectorAll('.outl-row[data-row="object"]')[1])
+    click(h.querySelectorAll('.outl-row[data-row="object"]')[0])                                   // the figure comes first now (its group)
     expect(useStage.getState().selected).toBe('fig_1')
     expect(useStage.getState().selectedCamera).toBeNull()
     const ed = h.querySelector('.outl-row[data-row="object"].active .row-editor')!

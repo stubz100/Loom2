@@ -594,7 +594,7 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   undoEdit: () => { const u = get().undo; const cur = get().current; if (!u.length || !cur) return; set({ current: { ...u[u.length - 1], revision: cur.revision }, undo: u.slice(0, -1), redo: [...get().redo, cur] }); schedule(get, set) },
   redoEdit: () => { const r = get().redo; const cur = get().current; if (!r.length || !cur) return; set({ current: { ...r[r.length - 1], revision: cur.revision }, redo: r.slice(0, -1), undo: [...get().undo, cur] }); schedule(get, set) },
-  select: (id) => set({ selected: id, selectedJoint: null, selectedCamera: null, stageSelected: false }),
+  select: (id) => set({ selected: id, selectedJoint: id && id === get().selected ? get().selectedJoint : null, selectedCamera: null, stageSelected: false }),   // the same figure again keeps its joint (the author, 2026-10-22)
   selectCamera: (id) => { set({ selected: null, selectedJoint: null, selectedCamera: id, stageSelected: false }); if (id) get().setActiveCamera(id) },
   selectStage: () => set({ selected: null, selectedJoint: null, selectedCamera: null, stageSelected: true }),
   moveCamera: (id, pos) => {

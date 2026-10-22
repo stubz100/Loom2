@@ -200,7 +200,10 @@ export class StageEngine {
   private modeOf(): 'translate' | 'rotate' | 'scale' { return this.tool === 'rotate' ? 'rotate' : this.tool === 'scale' ? 'scale' : 'translate' }
   setTool(tool: Tool, snap: boolean): void {
     this.tool = tool
-    if (tool === 'select' || tool === 'path') { this.gizmo.enabled = false; this.gizmo.detach() } else {
+    if (tool === 'select' || tool === 'path') { this.gizmo.enabled = false; this.gizmo.detach() }
+    else if (this.posing) { this.selectJoint(this.posing.id, this.posing.joint) }                                   // the author, 2026-10-22: a joint keeps its rotate gizmo under every tool button
+    else if (this.ik) { this.gizmo.setMode('translate'); this.gizmo.setSpace('world'); this.gizmo.enabled = true; this.gizmo.attach(this.ik.proxy) }
+    else {
       this.gizmo.setMode(this.modeOf())
       this.gizmo.enabled = true
       const sel = this.selectedId

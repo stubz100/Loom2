@@ -75,44 +75,98 @@ export function StageList() {
 
 /** D95 (AN1): what can be put on the stage — Animate's Scene section (with the Outliner). D119 (SC2): the preset groups (figures, sets,
  *  stand-ins) and the author's templates sit behind a + each, as Image's fields; Cast props and meshes keep their picture cards. */
-export function LibraryAdd() {
+/** One Scene (the author, 2026-10-22: "merge Scene and Outliner — they are essentially the same"): every kind of thing is a group —
+ *  its words, the count, its + (the SC2 panel of presets) or its add button, then the rows of what is on the stage of that kind; the
+ *  stage's own row first, the cameras last with Add camera, the templates at the end. A row opens its editor under it (UX9 U1); a camera
+ *  row selects the camera as an object and makes it the active one. */
+export function SceneTab() {
   const current = useStage((s) => s.current)
+  const selected = useStage((s) => s.selected)
+  const selectedCamera = useStage((s) => s.selectedCamera)
+  const stageSelected = useStage((s) => s.stageSelected)
+  const saving = useStage((s) => s.saving)
   const meshes = useStage((s) => s.meshes)
   const templates = useStage((s) => s.templates)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
   const figures = Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} /> }))
   const sets = SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))
   const standins = PROP_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'a grey stand-in shape (D109)' }))
+  const meshItems = meshes.slice(0, 48).map((m) => ({ id: m.id, label: `prop ${m.id.slice(-6)}`, icon: <Box size={18} />, img: api.thumbUrl(m.id, 256), hint: 'a Catalogue 3D model (Make a 3D prop…)' }))
   const tmpl = templates.map((t) => ({ id: t.name, label: t.name, icon: <LayoutTemplate size={18} />, hint: `${t.objects.length} object${t.objects.length === 1 ? '' : 's'}`, img: t.thumb_asset_id ? api.thumbUrl(t.thumb_asset_id, 256) : null }))
   const holds = current.objects.filter((o) => TEMPLATE_KINDS.has(o.kind)).length
+  const centre = () => viewport.centre?.() ?? [0, 0, 0]
+  const renameCam = (cam: StageCamera) => void askText({ title: 'Rename camera', initial: cam.name }).then((n) => { if (n?.trim()) st().updateCamera(cam.id, { name: n.trim() }) })
+  const groups: { key: string; label: string; of: (o: StageObject) => boolean; add: React.ReactNode; help?: string }[] = [
+    { key: 'figures', label: 'Figures', of: (o) => o.kind === 'mannequin',
+      add: <PresetPanel label="figure presets" items={figures} showText onPick={(id) => runCommand(`stage.add.mannequin.${id}`)} title="A figure at the viewport's centre: a mannequin to pose and bind to a character" /> },
+    { key: 'sets', label: 'Sets', of: (o) => o.kind === 'set',
+      add: <><PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" />
+        <CommandButton id="stage.add.set.image" text label="From an image…" /></> },                                       /* SC3 (D120) */
+    { key: 'props', label: 'Props', of: (o) => o.kind === 'mesh' && !!o.profile_id, add: <LibraryProps centre={centre} /> },      /* D110 (PS3): Story · Props, each its 3D model bound to the prop */
+    { key: 'standins', label: 'Stand-ins', of: (o) => o.kind === 'prop', help: 'Grey shapes for blocking (D109).',
+      add: <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /> },
+    { key: 'meshes', label: 'Meshes', of: (o) => o.kind === 'mesh' && !o.profile_id, help: `A Catalogue image's "Make a 3D prop…" (Pixal3D) lands here, not bound to a Cast prop.`,
+      add: <PresetPanel label="mesh models" items={meshItems} showText onPick={(id) => st().addObject('mesh', null, centre(), id)} empty="None yet — a Catalogue image's Make a 3D prop… lands here." title="A Catalogue 3D model at the viewport's centre" /> },
+    { key: 'lights', label: 'Lights', of: (o) => o.kind === 'light', add: <CommandButton id="stage.add.light" text /> },           /* D110 (PS4) */
+    { key: 'planes', label: 'Image planes', of: (o) => o.kind === 'plane', help: "A Catalogue image standing in the scene, facing the camera. Also from the Bin: drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre).",
+      add: <CommandButton id="stage.add.plane" text label="Add image plane…" /> },
+  ]
   return (
-    <div className="stage-panel library">
-      <>
-        <div className="lib-row" data-group="figures"><span className="lib-label">Figures</span>
-          <PresetPanel label="figure presets" items={figures} showText onPick={(id) => runCommand(`stage.add.mannequin.${id}`)} title="A figure at the viewport's centre: a mannequin to pose and bind to a character" /></div>
-        <div className="lib-row" data-group="sets"><span className="lib-label">Sets</span>
-          <PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" />
-          <CommandButton id="stage.add.set.image" text label="From an image…" /></div>{/* SC3 (D120): MoGe's relief of a picture, the picture's camera beside it */}
-        <div className="lib-row" data-group="templates"><span className="lib-label">Templates <Help text="An arrangement of this level — the set with its props, meshes, planes and lights, not the figures or the cameras — saved under a name from the stage you have, and added to any stage by a click. The author's own library beside the presets." /></span>
-          <PresetPanel label="stage templates" items={tmpl} showText onPick={(id) => st().applyTemplate(id)} empty="No templates yet — arrange a set with its props and lights, then save it here."
-            title="Your templates: an arrangement saved under a name; a click adds it to this stage" saveLabel="Save this arrangement as a template…" canSave={holds > 0} saveWhy="the stage has no set, prop, plane or light to save yet"
-            onSave={(name) => st().saveTemplate(name || `Template ${templates.length + 1}`)}
-            verbs={(f) => (f ? <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete the template "${f}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deleteTemplate(f) })}>Delete “{f}”</button>
-              : <span className="hint">Click a template: it is added to the stage; it can be deleted here.</span>)} /></div>
-        <h4>Props</h4>{/* D110 (PS3): Story · Props, each its 3D model bound to the prop */}
-        <LibraryProps centre={() => viewport.centre?.() ?? [0, 0, 0]} />
-        <div className="lib-row" data-group="standins"><span className="lib-label">Stand-ins <Help text="Grey shapes for blocking (D109)." /></span>
-          <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /></div>
-        <h4>Meshes{meshes.length ? ` · ${meshes.length}` : ''}</h4>
-        {!meshes.length && <span className="hint">None yet. <Help text={`A Catalogue image's "Make a 3D prop…" (Pixal3D) lands here.`} /></span>}
-        <div className="lib-grid">{meshes.slice(0, 24).map((m) => (
-          <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
-            <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
-          </button>))}</div>
-        <div className="lib-row" data-group="lights"><span className="lib-label">Lights</span><CommandButton id="stage.add.light" text /></div>{/* D110 (PS4): a sun aimed at the viewport's centre; its settings under its row */}
-        <div className="lib-row" data-group="planes"><span className="lib-label">Image planes</span><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
-        <p className="hint">From the Bin <Help text="Drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre." /></p>
-      </>
+    <div className="stage-panel outliner scene" aria-label="the scene">
+      <div className="head"><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'} · {current.cameras.length} camera{current.cameras.length === 1 ? '' : 's'}</span>
+        <Help text="Everything on the stage, one row each under its kind — the stage, the figures, the sets, the props, the lights, the cameras. Each kind's + adds one (its presets as tiles); click a row to edit the thing under it, again to close. A camera's row selects its body in the viewport and makes it the active camera; double-click looks through it." /></div>
+      <div className={`outl-row${stageSelected ? ' active' : ''}`} data-row="stage" onClick={() => (stageSelected ? st().select(null) : st().selectStage())}
+        onDoubleClick={() => st().frameView(null)}>
+        <Frame size={13} /><span className="name">{current.name}</span><span className="meta">{current.size.w}×{current.size.h} @ {current.size.fps}{saving ? ' · saving…' : ''}</span>
+        {stageSelected && <StageEditor />}
+      </div>
+      {groups.map((g) => {
+        const rows = current.objects.filter(g.of)
+        return (
+          <div key={g.key} className="outl-group" data-group-rows={g.key}>
+            <div className="lib-row" data-group={g.key}><span className="lib-label">{g.label}{rows.length ? <span className="meta"> · {rows.length}</span> : null}{g.help && <Help text={g.help} />}</span>{g.add}</div>
+            {rows.map((o) => <ObjectRow key={o.id} o={o} selected={selected === o.id} />)}
+          </div>
+        )
+      })}
+      <div className="outl-group" data-group-rows="cameras">
+        <div className="lib-row" data-group="cameras"><span className="lib-label">Cameras{current.cameras.length ? <span className="meta"> · {current.cameras.length}</span> : null}</span><CommandButton id="stage.camera.add" text /></div>
+        {current.cameras.map((cam) => (
+          <div key={cam.id} className={`outl-row${selectedCamera === cam.id ? ' active' : ''}${current.active_camera === cam.id ? ' cam-active' : ''}`} data-row="camera"
+            onClick={() => st().selectCamera(selectedCamera === cam.id ? null : cam.id)} onDoubleClick={() => { st().selectCamera(cam.id); st().setView('camera') }}
+            onContextMenu={(e) => { e.preventDefault(); st().selectCamera(cam.id); showMenu(e, cameraMenu()) }}>
+            <Camera size={13} /><span className="kind">camera</span>
+            <span className="name" onDoubleClick={(e) => { e.stopPropagation(); renameCam(cam) }}>{cam.name}</span>
+            {current.active_camera === cam.id && <span className="meta" title="The active camera: the one the shot renders through">★</span>}
+            <span className="meta">{cam.focal_mm} mm</span>
+            {selectedCamera === cam.id && <CameraEditor c={cam} />}
+          </div>
+        ))}
+      </div>
+      <div className="lib-row" data-group="templates"><span className="lib-label">Templates <Help text="An arrangement of this level — the set with its props, meshes, planes and lights, not the figures or the cameras — saved under a name from the stage as it is; a click adds it to this stage." /></span>
+        <PresetPanel label="stage templates" items={tmpl} showText onPick={(id) => st().applyTemplate(id)} empty="No templates yet — arrange a set with its props and lights, then save it here."
+          title="Your templates: an arrangement saved under a name; a click adds it to this stage" saveLabel="Save this arrangement as a template…" canSave={holds > 0} saveWhy="the stage has no set, prop, plane or light to save yet"
+          onSave={(name) => st().saveTemplate(name || `Template ${templates.length + 1}`)}
+          verbs={(f) => (f ? <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete the template "${f}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deleteTemplate(f) })}>Delete</button>
+            : <span className="hint">Click a template: it is added to the stage; it can be deleted here.</span>)} /></div>
+    </div>
+  )
+}
+export const OutlinerTab = SceneTab                                   // the name the tests and the old Stage suite know
+
+/** An object's row: the swatch, the kind, the name (double-click renames), who it is bound to, hide and lock, its editor when selected. */
+function ObjectRow({ o, selected }: { o: StageObject; selected: boolean }) {
+  const rename = () => void askText({ title: 'Rename', initial: o.name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(o.id, { name: n.trim() }) })
+  return (
+    <div className={`outl-row${selected ? ' active' : ''}${o.visible ? '' : ' hidden'}`} data-row="object" data-kind={o.kind} onClick={() => st().select(selected ? null : o.id)}
+      onDoubleClick={() => st().frameView([o.id])} onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
+      <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
+      <span className="kind">{o.kind}</span>
+      <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename() }}>{o.name}</span>
+      {(o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id && <BoundTag o={o} />}
+      <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
+      <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
+      {selected && <ObjectEditor o={o} />}
     </div>
   )
 }
@@ -129,55 +183,6 @@ export function PassesRow() {
     <div className="stage-panel passes-row">
       <span className="hint">{entry ? `Passes · ${cam.name} · ${Object.keys(entry.assets).length} at ${entry.size.w}×${entry.size.h} · ${stale ? `revision ${entry.revision}, the scene moved on` : 'current'}` : `No passes yet for ${cam.name}`}</span>
       <CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : entry && !stale ? 'Render again' : 'Render passes'} />
-    </div>
-  )
-}
-
-/** D119 (SC1): the scene outliner — every thing of the stage as a row (the stage itself, the objects, the cameras); the selected row's
- *  editor opens under it (UX9 U1's pattern), so nothing is edited far from its row. A camera row selects the camera as an object (its
- *  body takes the gizmo in the viewport) and makes it the active one. */
-export function OutlinerTab() {
-  const current = useStage((s) => s.current)
-  const selected = useStage((s) => s.selected)
-  const selectedCamera = useStage((s) => s.selectedCamera)
-  const stageSelected = useStage((s) => s.stageSelected)
-  const saving = useStage((s) => s.saving)
-  if (!current) return null
-  const rename = (id: string, name: string) => void askText({ title: 'Rename', initial: name, placeholder: 'name' }).then((n) => { if (n?.trim()) st().updateObject(id, { name: n.trim() }) })
-  const renameCam = (c: StageCamera) => void askText({ title: 'Rename camera', initial: c.name }).then((n) => { if (n?.trim()) st().updateCamera(c.id, { name: n.trim() }) })
-  return (
-    <div className="stage-panel outliner" aria-label="the scene outliner">
-      <div className="head"><b>Outliner</b><span className="hint">{current.objects.length} object{current.objects.length === 1 ? '' : 's'} · {current.cameras.length} camera{current.cameras.length === 1 ? '' : 's'}</span>
-        <Help text="Everything on the stage, one row each: the stage, its objects and its cameras. Click a row to edit the thing under it — its transform, its own settings, its verbs; click again to close. A camera's row selects its body in the viewport too (drag it there; double-click looks through it)." /></div>
-      <div className={`outl-row${stageSelected ? ' active' : ''}`} data-row="stage" onClick={() => (stageSelected ? st().select(null) : st().selectStage())}
-        onDoubleClick={() => st().frameView(null)}>
-        <Frame size={13} /><span className="name">{current.name}</span><span className="meta">{current.size.w}×{current.size.h} @ {current.size.fps}{saving ? ' · saving…' : ''}</span>
-        {stageSelected && <StageEditor />}
-      </div>
-      {!current.objects.length && <span className="hint">Nothing on the stage yet. <Help text="Add from the Library above, or drop a Catalogue image or model on the viewport." /></span>}
-      {current.objects.map((o) => (
-        <div key={o.id} className={`outl-row${selected === o.id ? ' active' : ''}${o.visible ? '' : ' hidden'}`} data-row="object" data-kind={o.kind} onClick={() => st().select(selected === o.id ? null : o.id)}
-          onDoubleClick={() => st().frameView([o.id])} onContextMenu={(e) => { e.preventDefault(); st().select(o.id); showMenu(e, viewportMenu(true)) }}>
-          <span className="swatch" style={{ background: `hsl(${(o.colour_id * 137) % 360} 55% 50%)` }} />
-          <span className="kind">{o.kind}</span>
-          <span className="name" onDoubleClick={(e) => { e.stopPropagation(); rename(o.id, o.name) }}>{o.name}</span>
-          {(o.kind === 'mannequin' || o.kind === 'mesh') && o.profile_id && <BoundTag o={o} />}
-          <button className="quiet" title={o.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { visible: !o.visible }) }}>{o.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-          <button className="quiet" title={o.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); st().updateObject(o.id, { locked: !o.locked }) }}>{o.locked ? <Lock size={13} /> : <LockOpen size={13} />}</button>
-          {selected === o.id && <ObjectEditor o={o} />}
-        </div>
-      ))}
-      {current.cameras.map((c) => (
-        <div key={c.id} className={`outl-row${selectedCamera === c.id ? ' active' : ''}${current.active_camera === c.id ? ' cam-active' : ''}`} data-row="camera"
-          onClick={() => st().selectCamera(selectedCamera === c.id ? null : c.id)} onDoubleClick={() => { st().selectCamera(c.id); st().setView('camera') }}
-          onContextMenu={(e) => { e.preventDefault(); st().selectCamera(c.id); showMenu(e, cameraMenu()) }}>
-          <Camera size={13} /><span className="kind">camera</span>
-          <span className="name" onDoubleClick={(e) => { e.stopPropagation(); renameCam(c) }}>{c.name}</span>
-          {current.active_camera === c.id && <span className="meta" title="The active camera: the one the shot renders through">★</span>}
-          <span className="meta">{c.focal_mm} mm</span>
-          {selectedCamera === c.id && <CameraEditor c={c} />}
-        </div>
-      ))}
     </div>
   )
 }
@@ -696,12 +701,12 @@ function Viewport() {
   useEffect(() => { if (frameReq.n) engineRef.current?.frame(frameReq.ids) }, [frameReq])
   useEffect(() => { engineRef.current?.setPoseMode(poseMode); if (!poseMode) st().selectJoint(null) }, [poseMode])
   useEffect(() => { const e = engineRef.current; if (e && selected) e.selectJoint(selected, selectedJoint as Joint | null) }, [selectedJoint]) // eslint-disable-line react-hooks/exhaustive-deps
-  const down = useRef<{ x: number; y: number; t: number } | null>(null)
-  const onDown = (e: ReactPointerEvent) => { if (e.button === 0) down.current = { x: e.clientX, y: e.clientY, t: Date.now() } }
+  const down = useRef<{ x: number; y: number; t: number; hot: boolean } | null>(null)
+  const onDown = (e: ReactPointerEvent) => { if (e.button === 0) down.current = { x: e.clientX, y: e.clientY, t: Date.now(), hot: !!engineRef.current?.gizmo.axis } }   // on a gizmo handle: the click is the gizmo's
   const onUp = (e: ReactPointerEvent) => {
     const d = down.current; down.current = null
     const eng = engineRef.current
-    if (!d || !eng || e.button !== 0 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
+    if (!d || !eng || e.button !== 0 || d.hot || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || eng.gizmo.dragging) return
     const s = st()
     const fig = s.object(s.selected)
     if (s.tool === 'path' && fig?.kind === 'mannequin') {                             // CA1: a click on the floor adds to the figure's path

@@ -7848,3 +7848,22 @@ The author asked for a review of the state of things, then "record all this and 
 - **Tests:** the set scenario starts the pick, ends it with Escape (the bar and the corner buttons go), starts it again, ends it with a
   right-click that still lists the verb, starts it a third time and picks with the corner; the stage scenario reads the gizmo's mode as
   `rotate` with the camera's body attached under Rotate, then the object's. Vitest 402 + 3 skipped, lint 75, typecheck clean; the e2e (the set and stage scenarios, then both variants' full runs) is owed again — the author's own Vite dev server holds 1420 and it is left alone; that server serves this working tree, so both changes are live in the app.
+
+## 2026-10-22 20:50 — One Scene, and the joint kept (the author's notes 7–9 of doc 25)
+
+- **One Scene** (`StageParts.SceneTab`, `OutlinerTab` kept as its name for the tests): the Library's rows and the Outliner's list were two
+  views of the same things; now the Scene section is one list — the stage's row; a group per kind with its words, its count, its + (the
+  SC2 panel: figures, sets + *From an image…*, the Cast props as a panel too (`LibraryProps`: the picture tiles, "!" on one without a
+  model, the right-click's Place / Open in Story), stand-ins, the Catalogue meshes as a panel) or its add button (lights, image planes),
+  then that kind's rows (`ObjectRow`); the cameras' group last with *Add camera*; the templates' row at the end. The `.lib-row[data-group]`
+  headers keep their names, so the e2e's `libAdd` reaches every + as before; the mesh and prop cards became tiles (`libAdd(page,
+  'meshes' | 'props', …)`). The counts and the ? sit in the panel's head; the "From the Bin" hint moved into the planes' ?.
+- **The joint** ("the rotate still don't work", "the focus reverts to the whole mannequin"): three causes. `engine.setTool` attached the
+  selected object whatever was posing, so the Rotate button took the gizmo off the joint and put it on the figure — a joint now keeps its
+  rotate gizmo (`selectJoint` again) and a hand its handle under Move / Rotate / Scale, Select hides it. A click that began on a gizmo
+  handle (no drag) reached the viewport's pick, hit the figure's body and re-selected the figure — the joint dropped; `onDown` notes
+  `gizmo.axis` (a handle under the pointer) and `onUp` leaves such a click to the gizmo. And the store's `select` cleared `selectedJoint`
+  even for the same figure — it keeps the joint when the id does not change.
+- **Tests:** outliner.test (the grouped order, the nine group headers, the figures' count), propBinding.test (the props' panel: the tiles,
+  the "!" badge, the click places), the posing e2e (Rotate keeps `r_elbow` and the gizmo's mode, selecting the same figure keeps it), the
+  3D-prop and the props scenarios through the panels. Vitest 402 + 3 skipped, lint 75, typecheck clean, e2e 50/50 full and 50/50 open — which also covers the pick's Escape / right-click cancel and the camera's rotate of 19:21 whose runs were owed (the tile's right-click had not ended the pick: showMenu stops the event before the grid's handler, so the tile's own handler ends it now).

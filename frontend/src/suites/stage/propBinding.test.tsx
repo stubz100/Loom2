@@ -44,10 +44,11 @@ afterEach(() => {
 describe('D110 (PS3) props in the scene', () => {
   it('the library lists the props (not the characters); a click places the model bound to the prop, one without a model is not placed', () => {
     const el = render(<LibraryProps centre={() => [1, 0, 2]} />)
-    const cards = [...el.querySelectorAll('button.prop-card')]
-    expect(cards.map((c) => c.getAttribute('data-id'))).toEqual(['prf_c', 'prf_l'])
+    act(() => (el.querySelector('[data-preset-panel-btn]') as HTMLButtonElement).click())             // the Scene's Props +: the panel
+    const cards = [...el.querySelectorAll('[data-preset-panel] button.preset-icon')]
+    expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['Chest', 'Lamp'])
     expect(cards[0].querySelector('img')!.getAttribute('src')).toContain('ast_m1')                            // the model's view
-    expect(cards[1].classList.contains('no-model')).toBe(true)
+    expect(cards[1].textContent).toContain('!')                                                               // no model: the badge
     act(() => (cards[0] as HTMLButtonElement).click())
     expect(meshes()).toHaveLength(1)
     expect(meshes()[0]).toMatchObject({ name: 'Chest', asset_id: 'ast_m1', profile_id: 'prf_c', version: null, transform: { pos: [1, 0, 2] } })

@@ -244,6 +244,47 @@ def animate_panels_path(project_dir: Path) -> Path:
     return Path(project_dir) / "animate" / "presets.json"
 
 
+# ---- D119 (SC2): stage templates — an arrangement of the Clay level saved under a name (the set with its props, lights and planes: a recipe
+#      of objects, not a mesh — D108's "sets are architecture" kept), added to a stage from the Library's preset panel.
+STAGE_TEMPLATES_SCHEMA_VERSION = 1
+
+
+class StageTemplate(BaseModel):
+    model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)
+    name: str
+    objects: list[dict[str, Any]] = Field(default_factory=list)   # StageObject records (ids are remade when the template is added)
+    saved_at: str = Field(default_factory=utc_now)
+    thumb_asset_id: str | None = None                             # a picture of the arrangement (a pass or a shot), when one was made
+
+
+class StageTemplates(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    schema_version: int = STAGE_TEMPLATES_SCHEMA_VERSION
+    templates: list[StageTemplate] = Field(default_factory=list)
+
+
+def stage_templates_path(project_dir: Path) -> Path:
+    return Path(project_dir) / "stages" / "templates.json"
+
+
+def read_stage_templates(project_dir: Path) -> StageTemplates:
+    return StageTemplates.model_validate(read_json_or(stage_templates_path(project_dir), {}))
+
+
+def put_stage_templates(project_dir: Path, body: dict[str, Any]) -> StageTemplates:
+    """Replace the list as the client sends it (distinct, non-empty names; every template with at least one object)."""
+    with _lock:
+        nxt = StageTemplates.model_validate({**body, "schema_version": STAGE_TEMPLATES_SCHEMA_VERSION})
+        names = [t.name.strip() for t in nxt.templates]
+        if any(not n for n in names) or len(set(names)) != len(names):
+            raise ValueError("stage templates need distinct names")
+        if any(not t.objects for t in nxt.templates):
+            raise ValueError("a stage template holds at least one object")
+        stage_templates_path(project_dir).parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(stage_templates_path(project_dir), nxt.model_dump())
+        return nxt
+
+
 def read_animate_panels(project_dir: Path) -> AnimatePanels:
     return AnimatePanels.model_validate(read_json_or(animate_panels_path(project_dir), {}))
 

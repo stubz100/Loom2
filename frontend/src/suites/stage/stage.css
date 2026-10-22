@@ -8,6 +8,8 @@
 .stage-row .meta, .outl-row .meta { color: var(--fg3); font-size: 11px; }
 .lib-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .lib-grid button { justify-content: flex-start; }
+.stage-panel .lib-row { display: flex; align-items: center; gap: 8px; min-height: 26px; }        /* D119 (SC2): a group's words, then its + and the chosen tile */
+.stage-panel .lib-row .lib-label { min-width: 76px; font-size: 12px; color: var(--fg2); display: inline-flex; align-items: center; gap: 4px; }
 .outl-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; font-size: 12px; cursor: pointer; color: var(--fg2); }
 .outl-row:hover { background: var(--bg2); }
 .outl-row.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
@@ -42,10 +44,6 @@
 .stage-panel .focals button.active { border-color: var(--accent); color: var(--fg); }
 .stage-panel .focals input { width: 64px; }
 /* ST2: the Poses tab */
-.pose-card { display: flex; gap: 2px; min-width: 0; }
-.pose-card > button:first-child { flex: 1; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pose-card .quiet { flex: none; width: 22px; padding: 0; color: var(--fg3); }
-.pose-card .quiet:hover { color: var(--danger, #e66); }
 .lib-grid button.active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); }
 /* ST3: the Shot tab */
 /* CA1: the motion library */

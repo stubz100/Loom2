@@ -5,7 +5,8 @@
 // which images are a figure's (the preview's `ref_list`) and how each figure is said in the prompt.
 import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
-import { Camera, Eye, EyeOff, Frame, Lock, LockOpen } from 'lucide-react'
+import { Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lock, LockOpen, PersonStanding, User } from 'lucide-react'
+import { PresetPanel } from '../../frame/PresetPanel'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow } from '../../frame/CommandButton'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
@@ -29,7 +30,7 @@ import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
-import { effectiveJoints, st, useStage, type ShotState } from './stageStore'
+import { effectiveJoints, st, TEMPLATE_KINDS, useStage, type ShotState } from './stageStore'
 import './stage.css'
 
 const FOCALS = [24, 35, 50, 85]
@@ -72,32 +73,43 @@ export function StageList() {
   )
 }
 
-/** D95 (AN1): what can be put on the stage — Animate's Scene section (with the Outliner). */
+/** D95 (AN1): what can be put on the stage — Animate's Scene section (with the Outliner). D119 (SC2): the preset groups (figures, sets,
+ *  stand-ins) and the author's templates sit behind a + each, as Image's fields; Cast props and meshes keep their picture cards. */
 export function LibraryAdd() {
   const current = useStage((s) => s.current)
   const meshes = useStage((s) => s.meshes)
+  const templates = useStage((s) => s.templates)
   if (!current) return <span className="hint">Open or make a stage in the Shot section.</span>
+  const figures = Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => ({ id: p, label: m.label, icon: <User size={18} /> }))
+  const sets = SET_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'architecture only (D108)' }))
+  const standins = PROP_PRESETS.map((p) => ({ id: p, label: p, icon: <Box size={18} />, hint: 'a grey stand-in shape (D109)' }))
+  const tmpl = templates.map((t) => ({ id: t.name, label: t.name, icon: <LayoutTemplate size={18} />, hint: `${t.objects.length} object${t.objects.length === 1 ? '' : 's'}`, img: t.thumb_asset_id ? api.thumbUrl(t.thumb_asset_id, 256) : null }))
+  const holds = current.objects.filter((o) => TEMPLATE_KINDS.has(o.kind)).length
   return (
-    <div className="stage-panel">
+    <div className="stage-panel library">
       <>
-        <h4>Figures</h4>
-        <div className="lib-grid">{Object.entries(MANNEQUIN_PRESETS).map(([p, m]) => <CommandButton key={p} id={`stage.add.mannequin.${p}`} text label={m.label} />)}</div>
-        <h4>Sets</h4>
-        <div className="lib-grid">{SET_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.set.${p}`} text label={p} />)}</div>
+        <div className="lib-row" data-group="figures"><span className="lib-label">Figures</span>
+          <PresetPanel label="figure presets" items={figures} showText onPick={(id) => runCommand(`stage.add.mannequin.${id}`)} title="A figure at the viewport's centre: a mannequin to pose and bind to a character" /></div>
+        <div className="lib-row" data-group="sets"><span className="lib-label">Sets</span>
+          <PresetPanel label="set presets" items={sets} showText onPick={(id) => runCommand(`stage.add.set.${id}`)} title="A set at the viewport's centre: architecture only — room, street, deck, empty (D108)" /></div>
+        <div className="lib-row" data-group="templates"><span className="lib-label">Templates <Help text="An arrangement of this level — the set with its props, meshes, planes and lights, not the figures or the cameras — saved under a name from the stage you have, and added to any stage by a click. The author's own library beside the presets." /></span>
+          <PresetPanel label="stage templates" items={tmpl} showText onPick={(id) => st().applyTemplate(id)} empty="No templates yet — arrange a set with its props and lights, then save it here."
+            title="Your templates: an arrangement saved under a name; a click adds it to this stage" saveLabel="Save this arrangement as a template…" canSave={holds > 0} saveWhy="the stage has no set, prop, plane or light to save yet"
+            onSave={(name) => st().saveTemplate(name || `Template ${templates.length + 1}`)}
+            verbs={(f) => (f ? <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete the template "${f}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deleteTemplate(f) })}>Delete “{f}”</button>
+              : <span className="hint">Click a template: it is added to the stage; it can be deleted here.</span>)} /></div>
         <h4>Props</h4>{/* D110 (PS3): Story · Props, each its 3D model bound to the prop */}
         <LibraryProps centre={() => viewport.centre?.() ?? [0, 0, 0]} />
-        <h4>Stand-ins <Help text="Grey shapes for blocking (D109)." /></h4>
-        <div className="lib-grid">{PROP_PRESETS.map((p) => <CommandButton key={p} id={`stage.add.prop.${p}`} text label={p} />)}</div>
+        <div className="lib-row" data-group="standins"><span className="lib-label">Stand-ins <Help text="Grey shapes for blocking (D109)." /></span>
+          <PresetPanel label="stand-in presets" items={standins} showText onPick={(id) => runCommand(`stage.add.prop.${id}`)} title="A grey stand-in shape at the viewport's centre" /></div>
         <h4>Meshes{meshes.length ? ` · ${meshes.length}` : ''}</h4>
         {!meshes.length && <span className="hint">None yet. <Help text={`A Catalogue image's "Make a 3D prop…" (Pixal3D) lands here.`} /></span>}
         <div className="lib-grid">{meshes.slice(0, 24).map((m) => (
           <button key={m.id} className="mesh-card" title={`${m.id} · add to the stage at the viewport's centre`} onClick={() => st().addObject('mesh', null, viewport.centre?.() ?? [0, 0, 0], m.id)}>
             <img src={api.thumbUrl(m.id, 256)} alt="" /><span>prop {m.id.slice(-6)}</span>
           </button>))}</div>
-        <h4>Lights</h4>{/* D110 (PS4): a sun aimed at the viewport's centre; its look, strength, colour, softness and aim in the Inspector */}
-        <div className="lib-grid"><CommandButton id="stage.add.light" text /></div>
-        <h4>Image planes</h4>
-        <div className="lib-grid"><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
+        <div className="lib-row" data-group="lights"><span className="lib-label">Lights</span><CommandButton id="stage.add.light" text /></div>{/* D110 (PS4): a sun aimed at the viewport's centre; its settings under its row */}
+        <div className="lib-row" data-group="planes"><span className="lib-label">Image planes</span><CommandButton id="stage.add.plane" text label="Add image plane…" /></div>
         <p className="hint">From the Bin <Help text="Drag an image onto the viewport (it lands where the pointer is), or double-click it there (the viewport's centre). Each card above adds at the centre." /></p>
       </>
     </div>
@@ -307,14 +319,26 @@ export function PosesTab() {
     <div className="stage-panel">
       <div className="head"><b>{o.name}</b><span className="hint">pose · {o.pose?.preset ?? 'stand'}{Object.keys(o.pose?.joints ?? {}).length ? ' (edited)' : ''}</span></div>
       <DetailLevel o={o} />
-      <h4>Presets</h4>
-      <div className="lib-grid">{POSE_NAMES.map((p) => <button key={p} className={o.pose?.preset === p && !Object.keys(o.pose?.joints ?? {}).length ? 'active' : ''} onClick={() => st().applyPose(o.id, p)}>{p}</button>)}</div>
-      <h4>Saved in this project</h4>
-      {!Object.keys(userPoses).length && <span className="hint">None yet. <Help text="Pose the figure and Save pose…." /></span>}
-      <div className="lib-grid">{Object.entries(userPoses).map(([name, def]) => (
-        <span key={name} className="pose-card"><button onClick={() => st().applyPose(o.id, def.preset ?? 'stand', def.joints)}>{name}</button>
-          <button className="quiet" title="Delete this pose" onClick={() => void askConfirm({ title: `Delete the pose "${name}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deletePose(name) })}>×</button></span>
-      ))}</div>
+      {(() => {                                                          // D119 (SC2): the poses behind a + — the built-in ones and the project's saved ones
+        const edited = Object.keys(o.pose?.joints ?? {}).length > 0
+        const built = POSE_NAMES.map((p) => ({ id: `preset:${p}`, label: p, icon: <PersonStanding size={18} />, hint: 'built in' }))
+        const saved = Object.entries(userPoses).map(([name, def]) => ({ id: `saved:${name}`, label: name, icon: <Bookmark size={18} />, hint: `saved in this project · from ${def.preset ?? 'stand'}` }))
+        const items = [...built, ...saved]
+        const cur = o.pose?.preset && !edited ? `preset:${o.pose.preset}` : null
+        return (
+          <div className="lib-row" data-group="poses"><span className="lib-label">Poses</span>
+            <PresetPanel label="pose presets" items={items} showText selected={cur} chosen={items.filter((i) => i.id === cur)}
+              title="The poses: the built-in ones and the ones saved in this project; a click poses the figure" saveLabel="Save this pose…"
+              onSave={(name) => void st().savePose(name || `Pose ${saved.length + 1}`, o.id)}
+              onPick={(id) => { const k = id.slice(0, id.indexOf(':')), n = id.slice(id.indexOf(':') + 1); if (k === 'preset') st().applyPose(o.id, n); else { const d = userPoses[n]; if (d) st().applyPose(o.id, d.preset ?? 'stand', d.joints) } }}
+              verbs={(f) => {
+                if (!f?.startsWith('saved:')) return <span className="hint">Click a pose: the figure takes it; one saved here can be deleted.</span>
+                const n = f.slice(6)
+                return <button type="button" className="quiet danger" onClick={() => void askConfirm({ title: `Delete the pose "${n}"?`, okLabel: 'Delete', danger: true }).then((ok) => { if (ok) void st().deletePose(n) })}>Delete “{n}”</button>
+              }} />
+            {edited && <span className="hint">edited</span>}
+          </div>)
+      })()}
       <div className="verbs"><CommandButton id="stage.pose.mirror" text /><CommandButton id="stage.pose.reset" text label="Reset" /><CommandButton id="stage.pose.save" text /></div>
       <h4>Joint</h4>
       <div className="kv"><span>joint</span><select value={joint ?? ''} onChange={(e) => st().selectJoint(e.target.value || null)}><option value="">— click one in the viewport —</option>{JOINTS.map((j) => <option key={j} value={j}>{j}</option>)}</select></div>
@@ -478,7 +502,7 @@ function ClipSection({ clips }: { clips: Asset[] }) {
 /** The project's stages, poses and meshes, loaded when a project opens (Animate's column mounts it, D95 AN1). */
 export function useStageLoad(): void {
   const project = useSession((s) => s.project)
-  useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project?.open) { void st().load(); void st().loadPoses(); void st().loadMeshes(); void st().loadTemplates() } }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** D116: the shot's steps as one strip in the foot — the passes, the guide sequence, the clip, the final shot and (for the stage's newest final)

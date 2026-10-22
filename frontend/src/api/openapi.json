@@ -15265,6 +15265,68 @@
         "title": "StageRange",
         "type": "object"
       },
+      "StageTemplate": {
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "saved_at": {
+            "title": "Saved At",
+            "type": "string"
+          },
+          "thumb_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Asset Id"
+          }
+        },
+        "required": [
+          "name",
+          "objects",
+          "saved_at",
+          "thumb_asset_id"
+        ],
+        "title": "StageTemplate",
+        "type": "object"
+      },
+      "StageTemplates": {
+        "properties": {
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/StageTemplate"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "templates"
+        ],
+        "title": "StageTemplates",
+        "type": "object"
+      },
       "StatePaths": {
         "additionalProperties": true,
         "properties": {
@@ -24308,6 +24370,69 @@
           }
         },
         "summary": "Presets Put",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/project/stage-templates": {
+      "get": {
+        "description": "D119 (SC2): the project's stage templates — arrangements of the Clay level saved under a name from the Library's preset panel.",
+        "operationId": "stage_templates_get_project_stage_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageTemplates"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stage Templates Get",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "operationId": "stage_templates_put_project_stage_templates_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageTemplates"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Templates Put",
         "tags": [
           "projects"
         ]

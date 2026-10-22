@@ -7,13 +7,15 @@
 // sheet is the scene, live; a "this shot" line after it), and a subject card can hold a Cast prop ("holds ▸").
 import { CaseSensitive, Hand, ImagePlus, Minus, Plus, X } from 'lucide-react'
 import { PosesSection } from './Poses'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { api } from '../../api/client'
 import { CommandButton } from '../../frame/CommandButton'
 import { markUsed, runCommand as runCommandId, sep } from '../../frame/commands'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { onlyAssets, useDropTarget } from '../../frame/drag'
 import { PresetIcons, type PresetIcon } from '../../frame/PresetIcons'
+import { PresetPanel } from '../../frame/PresetPanel'
+import { CommandRow } from '../../frame/CommandButton'
 import { aspectGlyph, fieldGlyph, tierGlyph } from '../../frame/presetGlyphs'
 import { useColumnSync } from '../../frame/columnSync'
 import { byOrder } from '../../store/modelCaps'
@@ -42,9 +44,13 @@ const SECTION_IDS = ['presets', 'prompt', 'refs', 'look', 'camera', 'model', 'si
 /** The values a field's text already holds: one for a replace field (lens, f-number…), the comma-separated parts otherwise. */
 const partsOf = (field: FieldKey, text: string) => (REPLACE.has(field) ? [text.trim()] : text.split(',').map((x) => x.trim())).filter(Boolean).map((x) => x.toLowerCase())
 
-function PresetRow({ field, value, onChange, section }: { field: FieldKey; value: string; onChange: (v: string) => void; section: string }) {
+/** D119 (SC2): a field's presets behind its + — the panel holds every tile of the World library for this field, the words toggle, Save
+ *  the current (the field's words under a name) and the verbs for the tile last clicked (its picture, edit in World, move, remove);
+ *  beside the + only the tiles in the field's text stay. */
+function FieldPresets({ field, value, onChange, section }: { field: FieldKey; value: string; onChange: (v: string) => void; section: string }) {
   const lib = useLibrary((l) => l.library)
   const showText = useGenerate((g) => !!g.presetText[section])
+  const setText = useGenerate((g) => g.setPresetText)
   const swatchUrl = useSwatches((s) => s.url)
   useSwatches((s) => s.items)                                             // re-render when a swatch lands
   const jobs = useSession((s) => s.jobs)                                  // … and when its job starts or ends (the busy mark)
@@ -55,10 +61,13 @@ function PresetRow({ field, value, onChange, section }: { field: FieldKey; value
     if (!has.has(text.toLowerCase())) { onChange(appendValue(value, text, field)); return }
     onChange(REPLACE.has(field) ? '' : value.split(',').map((x) => x.trim()).filter((x) => x && x.toLowerCase() !== text.toLowerCase()).join(', '))
   }
-  if (!items.length) return null
+  const chosen = items.filter((i) => has.has(i.text.toLowerCase()))
   return (
-    <PresetIcons label={`${FIELD_LABEL[field]} presets`} size={pic ? 44 : 38} showText={showText} items={items}
-      selected={items.filter((i) => has.has(i.text.toLowerCase())).map((i) => i.id)}
+    <PresetPanel label={`${FIELD_LABEL[field]} presets`} size={pic ? 44 : 38} showText={showText} onShowText={(on) => setText(section, on)} items={items} chosen={chosen}
+      selected={chosen.map((i) => i.id)} title={`The ${FIELD_LABEL[field]} presets: pick, save the current words, make a picture, edit, remove (Story · World holds them)`}
+      empty={<>No {FIELD_LABEL[field]} presets yet — type the words and save them here.</>}
+      canSave={!!value.trim()} saveWhy={`type ${FIELD_LABEL[field]} words first`} saveLabel={`Save the current ${FIELD_LABEL[field]} as a preset…`}
+      onSave={(name) => useLibrary.getState().add(field, value, name).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (Story · World)`, 'info') })}
       onPick={(id) => { const it = items.find((i) => i.id === id); if (it) toggle(it.text) }}
       onContext={(id, e) => {
         const it = items.find((i) => i.id === id)
@@ -66,17 +75,20 @@ function PresetRow({ field, value, onChange, section }: { field: FieldKey; value
         sy().select({ kind: 'entry', id })                               // D92: the entry is the item the World verbs act on
         showMenu(e, [
           { label: has.has(it.text.toLowerCase()) ? 'Remove from the field' : 'Add to the field', run: () => toggle(it.text) },
-          { cmd: 'story.world.entryPicture' }, { cmd: 'story.world.editEntry' }, sep, { cmd: 'story.world.remove', label: 'Remove from the library' },
+          { cmd: 'story.world.entryPicture' }, { cmd: 'story.world.editEntry' }, { cmd: 'story.world.entryEarlier' }, { cmd: 'story.world.entryLater' }, sep, { cmd: 'story.world.remove', label: 'Remove from the library' },
         ])
+      }}
+      verbs={(focused) => {
+        if (!focused) return <span className="hint">Click a tile: it joins the field; its verbs appear here.</span>
+        if (sy().selected?.id !== focused) sy().select({ kind: 'entry', id: focused })
+        return <CommandRow ids={['story.world.entryPicture', 'story.world.editEntry', 'story.world.entryEarlier', 'story.world.entryLater', 'story.world.remove']} labels={{ 'story.world.remove': 'Remove from the library' }} />
       }} />
   )
 }
 
 /** One prompt field: its input (with @ for the multiline ones), its preset icons and the + that adds the words to the World library. */
 function Field({ label, field, value, onChange, multiline, placeholder, rows, section, id, after }: { label?: string; field: FieldKey; value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; rows?: number; section: string; id?: string; after?: React.ReactNode }) {
-  const [naming, setNaming] = useState<string | null>(null)
   const mention = useMentions(value, onChange)
-  const commit = () => { if (naming !== null) void useLibrary.getState().add(field, value, naming.trim()).then((e) => { if (e) useSession.getState().toast(`“${e.name}” is in the library (Story · World)`, 'info') }); setNaming(null) }
   return (
     <>
       <label>{label ?? FIELD_LABEL[field]}</label>
@@ -86,18 +98,9 @@ function Field({ label, field, value, onChange, multiline, placeholder, rows, se
             ? <textarea id={id} value={value} rows={rows} onChange={(e) => onChange(e.target.value)} onKeyUp={mention.onKeyUp} placeholder={placeholder} />
             : <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />}
           {multiline && mention.button}
-          <button type="button" className="preset-btn" disabled={!value.trim()} title={`Add the current ${FIELD_LABEL[field]} to the library (Story · World)`} aria-label={`add ${FIELD_LABEL[field]} to the library`} onClick={() => setNaming('')}><Plus size={13} /></button>
         </div>
-        {naming !== null && (
-          <div className="saver">
-            <input type="text" autoFocus value={naming} aria-label={`name of the new ${FIELD_LABEL[field]} entry`} placeholder={`a name for it (blank: the words)`} onChange={(e) => setNaming(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setNaming(null) }} />
-            <button className="primary" onClick={commit}>Add</button>
-            <button className="quiet" onClick={() => setNaming(null)}>Cancel</button>
-          </div>
-        )}
         {after}
-        <PresetRow field={field} value={value} onChange={onChange} section={section} />
+        <FieldPresets field={field} value={value} onChange={onChange} section={section} />{/* D119 (SC2): the presets behind the +, the chosen beside it */}
       </div>
     </>
   )
@@ -538,10 +541,23 @@ function SavedSection() {
   useEffect(() => { void g.loadPresets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Section id="presets" title="Saved panels" tools={<CommandButton id="gen.savePreset" className="quiet" size={14} />}>
-      {g.presets.length
-        ? <PresetIcons label="saved panels" size={44} showText items={g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: caps?.models[pr.panel.model_id]?.label ?? pr.panel.model_id, icon: fieldGlyph('panel'), img: pr.thumb_asset_id ? api.thumbUrl(pr.thumb_asset_id, 256) : null }))} selected={g.lastPreset}
-            onPick={(id) => g.applyPreset(id)} onContext={(id, e) => { sy().select({ kind: 'panel', id }); showMenu(e, [{ cmd: 'story.world.applyPanel', label: 'Apply' }, { cmd: 'story.world.renamePanel' }, { cmd: 'story.world.editEntry', label: 'Show in Story · World' }, sep, { cmd: 'story.world.remove', label: `Delete "${id}"…` }]) }} />
-        : <p className="disabled-why">None yet — the bookmark above saves every field of the panel under a name.</p>}
+      {(() => {
+        const items = g.presets.map((pr) => ({ id: pr.name, label: pr.name, hint: caps?.models[pr.panel.model_id]?.label ?? pr.panel.model_id, icon: fieldGlyph('panel'), img: pr.thumb_asset_id ? api.thumbUrl(pr.thumb_asset_id, 256) : null }))
+        const last = items.find((i) => i.id === g.lastPreset)
+        return (                                                            // D119 (SC2): the saved panels behind the +, the one applied beside it
+          <div className="saved-panels">
+            <PresetPanel label="saved panels" size={44} showText items={items} selected={g.lastPreset} chosen={last ? [last] : []}
+              title="The saved panels: apply one, save the current panel, rename, delete" empty="None yet — Save the current panel keeps every field under a name."
+              saveLabel="Save the current panel…" onSave={(name) => g.savePreset(name || `Panel ${g.presets.length + 1}`)}
+              onPick={(id) => g.applyPreset(id)} onContext={(id, e) => { sy().select({ kind: 'panel', id }); showMenu(e, [{ cmd: 'story.world.applyPanel', label: 'Apply' }, { cmd: 'story.world.renamePanel' }, { cmd: 'story.world.editEntry', label: 'Show in Story · World' }, sep, { cmd: 'story.world.remove', label: `Delete "${id}"…` }]) }}
+              verbs={(focused) => {
+                if (!focused) return <span className="hint">Click a panel: it is applied; its verbs appear here.</span>
+                if (sy().selected?.id !== focused) sy().select({ kind: 'panel', id: focused })
+                return <CommandRow ids={['story.world.applyPanel', 'story.world.renamePanel', 'story.world.editEntry', 'story.world.remove']} labels={{ 'story.world.editEntry': 'Show in Story · World', 'story.world.remove': 'Delete' }} />
+              }} />
+            {!g.presets.length && <span className="hint">{g.presets.length} saved</span>}
+          </div>)
+      })()}
     </Section>
   )
 }

@@ -7696,3 +7696,29 @@ The author asked for a review of the state of things, then "record all this and 
 - **Tests:** `outliner.test.tsx` (the rows; a camera row selects, activates and opens its editor, again closes; an object row's editor and
   the camera selection dropped; the stage row's frame and ambient; `moveCamera`); the e2e stage scenarios read the new rows, open a
   camera's editor, the stage's, and click the camera's body in the viewport through the dev hook. Vitest 397 + 3 (outliner.test.tsx's five), lint 75, build clean; e2e: the twelve Stage scenarios green on the new rows, the full runs 47 + 2 in both variants where the two were the posing scenario's joint field (its selector now scoped to the Motion section — the figure's editor under its row has vecs too) and a scenario hit by a concurrent Playwright start (the LoRA slots' timeout, the final shot's missing trace) — both green alone.
+
+## 2026-10-22 15:36 — SC2 built (D119): the preset panel behind the +
+
+- **The component** (`frame/PresetPanel.tsx`, D32 / D92 kept): the + opens a small floating panel under itself (fixed, never clipped by
+  the column; Esc, a click outside or the + again close it) with every preset as a tile (`PresetIcons`), the words toggle, *Save the
+  current as a preset…* with the name typed in place, and the host's verbs for the tile last clicked (`verbs(focused)` — a CommandRow of
+  the host's registered commands, so each verb is a button). Beside the + only the tiles in use stay (`chosen`) — the author's "they are
+  still piling up as icons under the corresponding item" answered.
+- **The hosts:** Image's prompt fields (`FieldPresets` replaces the tiles row and the + with its naming box: the World library's entries
+  as tiles, save = add to the library, the verbs picture / edit in World / earlier / later / remove; the right-click menu kept) and the
+  Saved panels (apply, rename, show in World, delete); Edit's brushes (the dab as the tile's glyph; save, delete yours; the built-in ones
+  say so); Animate's saved panels (save, apply, delete; the one applied beside the +); the Clay level's poses (the built-in and the saved
+  ones; Save this pose…; delete a saved one; "edited" beside the + when the joints moved) and the **Library** — Figures, Sets and
+  Stand-ins behind a + each (the tiles run the `stage.add.*` commands), **Templates** the author's own arrangements: `saveTemplate` keeps
+  the stage's set, props, meshes, planes and lights (not the figures, not the cameras; a parent inside the template kept) under a name in
+  the project record `/project/stage-templates` (`library.py`: `StageTemplates`, distinct names, at least one object each;
+  `stages/templates.json`), `applyTemplate` adds them with new ids and selects the last, `deleteTemplate`. Lights and image planes stay
+  single buttons; Cast props and meshes keep their picture cards.
+- **Tests:** `PresetPanel.test.tsx` (closed with the chosen tiles, open with every tile, the verbs' focus, Save in place, Esc and the click
+  outside), `templates.test.ts` (the arrangement saved without the figures with a parent kept, added with new ids and the parent remapped,
+  deleted), `test_stage_templates_sc2.py` (the record; distinct names; an object each); the e2e scenarios reach the Library's presets through
+  `libAdd(page, group, name)` (the group's + then the tile), the poses the same, the World library's lighting tile through the field's +.
+  Vitest 402 + 3 skipped (PresetPanel 3 and templates 2 among them), offline 492 full and 492 open, settings audit clean (272 fields), agents (8 docs) and model-literal checks clean, e2e 49/49 full and open, build clean, lint 75.
+- Gotchas: a preset tile's accessible name is its label — the e2e looks tiles up by `aria-label`; the panel is `position: fixed`, so a
+  click elsewhere both closes it and lands where it was aimed. The floor-path scenario's pose click (`point`) had to follow the tiles behind the Motion
+  section's + — the targeted run caught it; the `.pose-card` styles went with the list they dressed.

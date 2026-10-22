@@ -2,6 +2,7 @@
 // Layers / Properties / History / Info; Save (the document and a Catalogue version, D95) · Export as the pinned primary actions.
 import { Ellipsis, Eye, EyeOff, Link2, Lock, LockOpen, SlidersHorizontal, Sparkles, Trash2, Unlink2 } from 'lucide-react'
 import { Help } from '../../frame/Help'
+import { PresetPanel } from '../../frame/PresetPanel'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { api, http, unwrap } from '../../api/client'
@@ -223,21 +224,27 @@ function BrushControls() {
 function BrushesTab() {
   const b = useEditor((s) => s.brush)
   const mine = useEditor((s) => s.brushPresets)
-  const [naming, setNaming] = useState<string | null>(null)
   const presets = [...BRUSH_PRESETS, ...mine]
   const isActive = (p: BrushPreset) => p.size === b.size && Math.abs(b.hardness - p.hardness) < 0.005 && Math.abs(b.flow - p.flow) < 0.005 && Math.abs(b.opacity - p.opacity) < 0.005 && Math.abs(b.spacing - p.spacing) < 0.005
   return (
     <div>
-      <div className="brush-presets">
-        {presets.map((p) => <div key={p.name} className="row"><button className={isActive(p) ? 'active' : ''} onClick={() => ed().applyBrushPreset(p)} title={`${p.size} px · hardness ${Math.round(p.hardness * 100)} % · opacity ${Math.round(p.opacity * 100)} % · flow ${Math.round(p.flow * 100)} %`}>
-          <span className="dab-slot"><span className="dab" style={{ width: Math.max(8, Math.min(26, p.size / 6)), height: Math.max(8, Math.min(26, p.size / 6)), background: `radial-gradient(circle, ${b.color} ${Math.round(p.hardness * 100)}%, transparent 100%)`, opacity: Math.max(0.35, Math.min(1, p.flow + 0.3)) }} /></span><span>{p.name}</span><span className="n">{p.size} px</span>
-        </button>{!p.builtin && <button className="quiet" title="Delete preset" onClick={() => ed().deleteBrushPreset(p.name)}>✕</button>}</div>)}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-        {naming === null ? <button onClick={() => setNaming('')}>Save current as preset…</button> : <>
-          <input type="text" autoFocus value={naming} placeholder="preset name" onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && naming.trim()) { ed().saveBrushPreset(naming.trim()); setNaming(null) } if (e.key === 'Escape') setNaming(null) }} style={{ width: 140 }} />
-          <button className="primary" disabled={!naming.trim()} onClick={() => { ed().saveBrushPreset(naming.trim()); setNaming(null) }}>Save</button><button className="quiet" onClick={() => setNaming(null)}>Cancel</button></>}
-      </div>
+      {(() => {                                                          // D119 (SC2): the brushes behind the +, the one in use beside it
+        const dab = (p: BrushPreset) => <span className="dab" style={{ width: Math.max(8, Math.min(26, p.size / 6)), height: Math.max(8, Math.min(26, p.size / 6)), background: `radial-gradient(circle, ${b.color} ${Math.round(p.hardness * 100)}%, transparent 100%)`, opacity: Math.max(0.35, Math.min(1, p.flow + 0.3)) }} />
+        const items = presets.map((p) => ({ id: p.name, label: p.name, icon: dab(p), hint: `${p.size} px · hardness ${Math.round(p.hardness * 100)} % · opacity ${Math.round(p.opacity * 100)} % · flow ${Math.round(p.flow * 100)} %${p.builtin ? ' · built in' : ''}` }))
+        const active = presets.find((p) => isActive(p))
+        return (
+          <div className="brush-presets">
+            <PresetPanel label="brush presets" size={36} showText items={items} selected={active?.name ?? null} chosen={active ? items.filter((i) => i.id === active.name) : []}
+              title="The brushes: pick one, save the current brush, delete yours" saveLabel="Save the current brush as a preset…" onSave={(name) => { if (name) ed().saveBrushPreset(name) }}
+              onPick={(id) => { const p = presets.find((x) => x.name === id); if (p) ed().applyBrushPreset(p) }}
+              verbs={(focused) => {
+                const p = presets.find((x) => x.name === focused)
+                if (!p) return <span className="hint">Click a brush: it is applied; yours can be deleted here.</span>
+                return p.builtin ? <span className="hint">{p.name} is built in.</span> : <button type="button" className="quiet danger" onClick={() => ed().deleteBrushPreset(p.name)}>Delete “{p.name}”</button>
+              }} />
+            {active && <span className="hint">{active.name} · {active.size} px</span>}
+          </div>)
+      })()}
       <h4 className="sect">Current brush</h4>
       <div className="tool-opts">
         <BrushControls />

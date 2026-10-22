@@ -1953,6 +1953,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/project/stage-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stage Templates Get
+         * @description D119 (SC2): the project's stage templates — arrangements of the Clay level saved under a name from the Library's preset panel.
+         */
+        get: operations["stage_templates_get_project_stage_templates_get"];
+        /** Stage Templates Put */
+        put: operations["stage_templates_put_project_stage_templates_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects": {
         parameters: {
             query?: never;
@@ -9337,6 +9358,31 @@ export interface components {
              */
             start: number;
         };
+        /** StageTemplate */
+        StageTemplate: {
+            /** Name */
+            name: string;
+            /** Objects */
+            objects: {
+                [key: string]: unknown;
+            }[];
+            /** Saved At */
+            saved_at: string;
+            /** Thumb Asset Id */
+            thumb_asset_id: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** StageTemplates */
+        StageTemplates: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Templates */
+            templates: components["schemas"]["StageTemplate"][];
+        };
         /** StatePaths */
         StatePaths: {
             /** Logs */
@@ -14389,6 +14435,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SavedPanels"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_templates_get_project_stage_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageTemplates"];
+                };
+            };
+        };
+    };
+    stage_templates_put_project_stage_templates_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageTemplates"];
                 };
             };
             /** @description Validation Error */

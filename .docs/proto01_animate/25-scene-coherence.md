@@ -1,6 +1,6 @@
 # 25 · The Clay level's coherence — the author's notes of 2026-10-22 and the plan (D119)
 
-Status: **proposed 2026-10-22; D119 recorded; SC1 built the same day (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
+Status: **proposed 2026-10-22; D119 recorded; SC1 and SC2 built the same day (journal 2026-10-22 15:16).** The author's four notes, what each meets in the app today, and the
 plan: SC1 the scene outliner with the camera as an object, SC2 the preset panel behind the +, E30 → SC3 a set from an image.
 
 ## 1 · The notes (the author, 2026-10-22, after AE4)
@@ -47,6 +47,16 @@ check row here.
   target follows by the same move — and double-clicked to look through; right-click gives the camera menu. The Selection section is gone
   at the Clay level (it stays for the clip levels); the Camera section keeps Add camera, the active camera at a glance (its name jumps
   to its row) and the shot's verbs. Checks below.
+
+- **2026-10-22 15:36 — SC2 built.** `frame/PresetPanel.tsx`: one panel behind an item's + — beside the + only the tiles in use; the panel holds every
+  tile (PresetIcons: glyphs or pictures), the words toggle, *Save the current as a preset…* (a name typed in place) and the host's verbs for
+  the tile last clicked (a CommandRow of its commands). Hosts: Image's prompt fields (the World library's entries; save = add to the
+  library; picture / edit in World / move / remove) and Saved panels (apply, rename, show in World, delete); Edit's brushes (save, delete
+  yours); Animate's saved panels (save, apply, delete); the Clay level's poses (the built-in and the project's saved ones; Save this pose…,
+  delete a saved one) and its **Library**: Figures, Sets and Stand-ins behind a + each, and **Templates** — the author's own: the stage's
+  set, props, meshes, planes and lights saved under a name (`/project/stage-templates`, `stages/templates.json`), added to any stage by a
+  click with new ids (a parent inside the template kept), deleted from the panel. Lights and image planes stay single buttons; Cast props
+  and meshes keep their picture cards.
 
 ## 4 · Checks for the author
 

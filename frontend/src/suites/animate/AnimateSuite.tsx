@@ -9,13 +9,15 @@ import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } fr
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
+import { PresetPanel } from '../../frame/PresetPanel'
+import { fieldGlyph } from '../../frame/presetGlyphs'
 import { handleKeyFor, markUsed, runCommand } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
 import { DEFAULT_RAIL } from '../../frame/railTabs'
 import { type SuiteDef } from '../../frame/suiteRegistry'
 import { byOrder, shortName } from '../../store/modelCaps'
-import { askText, useSession } from '../../store/session'
+import { useSession } from '../../store/session'
 import { clipMenu, playerMenu } from './animateCommands'
 import { fmtTime, modelRules, MOTION_CHIPS, useAnimate, visibleClips, type AnimPanel, type ClipFilter } from './animateStore'
 import { ForChip } from '../story/ForChip'
@@ -196,17 +198,21 @@ function LengthTab() {
 }
 
 // ------------------------------------------------------------------ Panel · Presets · Clips
+/** D119 (SC2): the saved Animate panels behind a +, the one applied beside it; save, apply, delete in the panel. */
 function PresetsTab() {
   const caps = useSession((s) => s.capabilities)
   const presets = useAnimate((s) => s.presets)
   const last = useAnimate((s) => s.lastPreset)
+  const items = presets.map((pr) => ({ id: pr.name, label: pr.name, icon: fieldGlyph('panel'), hint: `${shortName(pr.panel.model_id, caps)} · ${pr.panel.preset} · ${pr.panel.width}×${pr.panel.height}` }))
+  const cur = items.find((i) => i.id === last)
   return (
-    <div>
-      <button className="primary" onClick={() => void askText({ title: 'Save Animate preset', text: 'Model, preset, size, frames, seed mode and prompt — frames and beats are not saved.', initial: last ?? '', placeholder: 'preset name' }).then((n) => { if (n) an().savePreset(n) })}>Save panel preset…</button>
-      <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
-        {presets.map((pr) => <div key={pr.name} style={{ display: 'flex', gap: 4 }}><button style={{ flex: 1 }} className={last === pr.name ? 'active' : ''} onClick={() => an().applyPreset(pr.name)}><span>{pr.name}</span> <small>{shortName(pr.panel.model_id, caps)} · {pr.panel.preset} · {pr.panel.width}×{pr.panel.height}</small></button><button className="quiet" title="Delete preset" aria-label="Delete preset" onClick={() => an().deletePreset(pr.name)}><X size={14} /></button></div>)}
-        {!presets.length && <span className="hint">No presets yet.</span>}
-      </div>
+    <div className="anim-presets">
+      <PresetPanel label="Animate presets" size={44} showText items={items} selected={last} chosen={cur ? [cur] : []}
+        title="The saved panels: model, preset, size, frames, seed mode and prompt (frames and beats are not saved) — apply one, save the current, delete"
+        empty="None yet — Save the current panel keeps it under a name." saveLabel="Save the current panel…" onSave={(name) => an().savePreset(name || `Panel ${presets.length + 1}`)}
+        onPick={(id) => an().applyPreset(id)}
+        verbs={(f) => (f ? <button type="button" className="quiet danger" onClick={() => an().deletePreset(f)}>Delete “{f}”</button> : <span className="hint">Click a panel: it is applied; it can be deleted here.</span>)} />
+      <span className="hint">{presets.length ? `${presets.length} saved` : 'No presets yet.'}</span>
     </div>
   )
 }

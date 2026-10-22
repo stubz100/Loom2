@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..library import AnimatePanels, SavedPanels, put_animate_panels, put_panels, read_animate_panels, read_panels
+from ..library import AnimatePanels, SavedPanels, put_animate_panels, put_panels, read_animate_panels, read_panels, StageTemplates, put_stage_templates, read_stage_templates
 from ..schemas import ProjectInfo, Recents
 from ..workspace import Workspace
 from .deps import Svc
@@ -85,6 +85,23 @@ async def animate_presets_put(svc: Svc, body: dict):
     ws, _, _ = svc.require_project()
     try:
         out = await asyncio.to_thread(put_animate_panels, ws.path, body)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return out.model_dump()
+
+
+@router.get("/project/stage-templates", response_model=StageTemplates)
+async def stage_templates_get(svc: Svc):
+    """D119 (SC2): the project's stage templates — arrangements of the Clay level saved under a name from the Library's preset panel."""
+    ws, _, _ = svc.require_project()
+    return (await asyncio.to_thread(read_stage_templates, ws.path)).model_dump()
+
+
+@router.put("/project/stage-templates", response_model=StageTemplates)
+async def stage_templates_put(svc: Svc, body: dict):
+    ws, _, _ = svc.require_project()
+    try:
+        out = await asyncio.to_thread(put_stage_templates, ws.path, body)
     except ValueError as e:
         raise HTTPException(422, str(e))
     return out.model_dump()

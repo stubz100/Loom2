@@ -4,7 +4,7 @@
 // project data never lives in the engine or in component state.
 import { create } from 'zustand'
 import { api, ApiError, http, sha256Hex, unwrap } from '../../api/client'
-import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject } from '../../api/types'
+import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject, type StageTemplate } from '../../api/types'
 import { useSession } from '../../store/session'
 import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
@@ -82,6 +82,8 @@ const newId = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`
 /** D110 (PS4): a new light — E23c's strength, white, a slightly soft shadow, aimed a metre above the origin. */
 export const NEW_LIGHT = { intensity: 2.3, colour: '#ffffff', softness: 0.3, shadows: true, target: [0, 1, 0] }
 const NAMES: Record<string, string> = { mannequin: 'Figure', set: 'Set', prop: 'Prop', plane: 'Image', mesh: 'Mesh', light: 'Light' }
+/** D119 (SC2): what a stage template holds — the arrangement, not the cast (figures are bound per shot) nor the cameras. */
+export const TEMPLATE_KINDS: ReadonlySet<string> = new Set(['set', 'prop', 'mesh', 'plane', 'light'])
 
 interface StageState {
   stages: StageDoc[]
@@ -104,6 +106,11 @@ interface StageState {
   loadPoses: () => Promise<void>
   savePose: (name: string, id: string) => Promise<void>
   deletePose: (name: string) => Promise<void>
+  templates: StageTemplate[]                                // D119 (SC2): the project's stage templates (stages/templates.json) — arrangements saved from the Library's panel
+  loadTemplates: () => Promise<void>
+  saveTemplate: (name: string) => Promise<void>             // the current stage's set, props, meshes, planes and lights under a name (not the figures, not the cameras)
+  applyTemplate: (name: string) => void                     // its objects added to the current stage with new ids (parents inside the template kept)
+  deleteTemplate: (name: string) => Promise<void>
   // ST3: the Shot tab — passes rendered by the viewport, uploaded as assets; the StageShot job; its results
   shot: ShotState
   shotPreview: DocumentPreview | null
@@ -272,7 +279,7 @@ const thumbed = new Set<string>()                                            // 
 
 export const useStage = create<StageState>()((set, get) => ({
   stages: [], current: null, selected: null, selectedCamera: null, stageSelected: false, tool: 'select', snap: false, view: 'free', guides: true, undo: [], redo: [], saving: false,
-  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {},
+  frameRequest: { ids: null, n: 0 }, selectedJoint: null, userPoses: {}, templates: [],
   shot: DEFAULT_SHOT, shotPreview: null, shotPreviewError: null, rendering: false, shots: [], passRenderer: null,
   frame: 0, playing: false, guideKind: 'depth', clipMethod: 'guided', shotStart: null, rendered: null, sequenceRenderer: null, plateProjector: null,
   meshes: [],
@@ -502,6 +509,34 @@ export const useStage = create<StageState>()((set, get) => ({
   mirrorPose: (id) => { const o = get().object(id); if (o) get().setJoints(id, mirrorJoints(effectiveJoints(o))) },
   resetPose: (id) => get().applyPose(id, 'stand', {}),
   loadPoses: async () => { try { set({ userPoses: (await unwrap(http.GET('/stages/poses'))).poses as unknown as Record<string, PoseDef> }) } catch { set({ userPoses: {} }) } },
+  loadTemplates: async () => { try { set({ templates: (await unwrap(http.GET('/project/stage-templates'))).templates }) } catch { set({ templates: [] }) } },
+  saveTemplate: async (name) => {
+    const cur = get().current
+    if (!cur) return
+    const objects = cur.objects.filter((o) => TEMPLATE_KINDS.has(o.kind)).map((o) => ({ ...o, parent: o.parent && cur.objects.some((x) => x.id === o.parent && TEMPLATE_KINDS.has(x.kind)) ? o.parent : null }))
+    if (!objects.length) { useSession.getState().toast('Nothing to save: a template holds the set, the props, the planes and the lights — not the figures', 'info'); return }
+    const next = [...get().templates.filter((t) => t.name !== name), { name, objects, saved_at: new Date().toISOString(), thumb_asset_id: null }]
+    try {
+      set({ templates: (await unwrap(http.PUT('/project/stage-templates', { body: { templates: next } as never }))).templates })
+      useSession.getState().toast(`Template "${name}" saved: ${objects.length} object${objects.length === 1 ? '' : 's'}`, 'success')
+    } catch (e) { useSession.getState().toast(`Save template failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
+  applyTemplate: (name) => {
+    const t = get().templates.find((x) => x.name === name), cur = get().current
+    if (!t || !cur) return
+    const ids = new Map<string, string>()
+    const src = t.objects as unknown as StageObject[]
+    for (const o of src) ids.set(o.id, newId(o.kind === 'mannequin' ? 'fig' : o.kind))
+    const added = src.map((o, i) => ({ ...o, id: ids.get(o.id)!, parent: o.parent && ids.has(o.parent) ? ids.get(o.parent)! : null, colour_id: ((cur.objects.length + i) % 12) + 1 }))
+    get().apply((d) => ({ ...d, objects: [...d.objects, ...added] }), 'template')
+    set({ selected: added[added.length - 1]?.id ?? null, selectedCamera: null, stageSelected: false })
+    useSession.getState().toast(`"${name}" added: ${added.length} object${added.length === 1 ? '' : 's'}`, 'success')
+  },
+  deleteTemplate: async (name) => {
+    const next = get().templates.filter((t) => t.name !== name)
+    try { set({ templates: (await unwrap(http.PUT('/project/stage-templates', { body: { templates: next } as never }))).templates }) }
+    catch (e) { useSession.getState().toast(`Delete template failed: ${(e as ApiError).detail ?? e}`, 'error') }
+  },
   savePose: async (name, id) => {
     const o = get().object(id)
     if (!o || !name.trim()) return

@@ -193,6 +193,13 @@ async function openAnimate(page: import('@playwright/test').Page, level: 'Clay' 
 
 /** D95 (AN1): go to a section of Animate's one column — the rail button unless it is already the active one (clicking the active rail
  *  button folds the panel, D90), then the section into view. */
+/** D119 (SC2): the Library's presets sit behind each group's + — open the group's panel and click the tile by its name; the panel closes
+ *  with the next click elsewhere. `group`: figures | sets | standins | templates (the Scene section), poses (the Motion section). */
+async function libAdd(page: import('@playwright/test').Page, group: string, name: string): Promise<void> {
+  const row = page.locator(`.lib-row[data-group="${group}"]`)
+  if (!(await row.locator('[data-preset-panel-btn][aria-expanded="true"]').count())) await row.locator('[data-preset-panel-btn]').click()
+  await page.locator(`[data-preset-panel] button.preset-icon[aria-label^="${name}"]`).click()
+}
 async function openSection(page: import('@playwright/test').Page, title: string): Promise<void> {
   const btn = page.locator(`nav.rail button[title^="${title}"]`)
   if (await page.locator('.panel.closed').count()) await btn.click()                                          // a folded panel: the button opens it at the section
@@ -478,7 +485,7 @@ test('a stage (P13 / ST1, D81): a new stage gets a set and a figure from the Lib
   await expect(page.locator('.stage-row.active')).toContainText('Alley at night')
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /^Add set · room$/ }).click()
-  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                        // the Library's figure card
+  await libAdd(page, 'figures', 'Adult')                        // the Library's figure card
   await openSection(page, 'Scene')
   await expect(page.locator('.outl-row[data-row="object"]')).toHaveCount(2)                                              // D119 (SC1): one outliner — the stage, the objects, the cameras
   await expect(page.locator('.outl-row[data-row="camera"]')).toHaveCount(1)
@@ -526,7 +533,7 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   type Doc = { name: string; objects: { kind: string; pose: { preset: string; joints: Record<string, number[]> } | null }[] }
   const figure = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Crossing')?.objects.find((o) => o.kind === 'mannequin')   // the save is debounced: may be absent at first
   const WALK: Record<string, number[]> = { r_shoulder: [22, 0, -6], r_elbow: [0, 0, 0] }                                 // builders.ts POSES.walk (the right arm)
-  await page.locator('.lib-grid button', { hasText: /^walk$/ }).click()
+  await libAdd(page, 'poses', 'walk')
   await expect.poll(async () => (await figure())?.pose?.preset, { timeout: 10_000 }).toBe('walk')
   // the mouse on the figure: a click on the elbow's picker selects that joint (the rotate gizmo moves there)
   const at = async (what: string) => (await page.evaluate((w) => (window as unknown as { __loom2Stage: { screenOf: (at: string) => { x: number; y: number } | null } }).__loom2Stage.screenOf(w), what))!
@@ -562,7 +569,8 @@ test('posing (P13 / ST2, D81): the Poses tab applies a preset, mirrors it, edits
   await page.locator('.stage-panel button', { hasText: /^Save pose/ }).click()
   await dialog.locator('input').fill('crossing step')
   await dialog.locator('button.primary').click()
-  await expect(page.locator('.pose-card button', { hasText: /^crossing step$/ })).toBeVisible()
+  await page.locator('.lib-row[data-group="poses"] [data-preset-panel-btn]').click()
+  await expect(page.locator('[data-preset-panel] button.preset-icon[aria-label="crossing step"]')).toBeVisible()
   const lib = await api<{ poses: Record<string, { preset: string | null; joints: Record<string, number[]> }> }>('GET', '/stages/poses')
   expect(lib.poses['crossing step'].preset).toBe('walk')
   expect(lib.poses['crossing step'].joints.r_elbow[0]).toBe(-90)
@@ -577,7 +585,7 @@ test('a shot (P13 / ST3, D81): the Shot tab renders the five passes as stage-pas
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
-  await page.locator('.lib-grid button', { hasText: /Adult/ }).click()
+  await libAdd(page, 'figures', 'Adult')
   await stageRoute(page)
   await expect(page.locator('.shot-tab .method.active b')).toHaveText('Clay reference')
   await expect(page.locator('.panel .foot .estimate')).toContainText(/Klein/, { timeout: 15_000 })      // the preview names the method's model
@@ -821,11 +829,11 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
   const who = await api<{ id: string; name: string }>('POST', '/story/profiles', { name: `Fin ${Date.now().toString(36)}`, cls: 'character', hero_asset_id: img, appearance: 'a courier' })
   await api('PUT', `/story/profiles/${who.id}/versions/v1/anim-ref`, { side: 'front', asset_id: img })
-  await page.locator('.lib-grid button', { hasText: /^room$/ }).click()
-  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()
+  await libAdd(page, 'sets', 'room')
+  await libAdd(page, 'figures', 'Adult')
   await page.locator(`.panel [aria-label="the figure's character"] button[aria-label="${who.name}"]`).click()
-  await page.locator('.lib-grid button', { hasText: /^crate$/ }).click()
-  await page.locator('.lib-grid button', { hasText: /^Add light$/ }).click()
+  await libAdd(page, 'standins', 'crate')
+  await page.locator('.lib-row[data-group="lights"] button', { hasText: /^Add light$/ }).click()
   await page.evaluate(() => (window as unknown as { __loom2Stage: { setRange: (a: number, b: number) => void } }).__loom2Stage.setRange(0, 12))   // half a second: 9 frames at F16
   await page.locator('.final-section button', { hasText: /^Make the final shot/ }).click()
   await expect(dialog).toContainText(/4 layers/)
@@ -1250,7 +1258,7 @@ test('a shot (17 / SY2, D85): "New shot from this camera" in Stage makes a Story
   await dialog.locator('button.primary').click()
   await expect(page.locator('canvas.stage-canvas')).toBeVisible()
   await page.locator('.stage-empty button', { hasText: /Add set · room/ }).click()
-  await page.locator('.lib-grid button', { hasText: /Adult/ }).click()
+  await libAdd(page, 'figures', 'Adult')
   await openSection(page, 'Camera')
   await page.locator('#anim-sec-camera button[aria-label^="New shot from this camera"]').click()        // the Camera section's verb (D32)
   await expect(dialog).toContainText(/New shot from this camera/)
@@ -1726,7 +1734,8 @@ test('the World library (D92 · UI7): an entry added in Story · World gets its 
   await page.locator('.segmented button', { hasText: /^Tree$/ }).click()
   await page.locator('nav.rail button[title^="Look"]').click()
   const row = page.locator('#gen-sec-look .field', { has: page.locator('[aria-label="lighting presets"]') })
-  const tile = row.locator(`[aria-label="lighting presets"] button[aria-label="${name}"]`)
+  await row.locator('[data-preset-panel-btn]').click()                                                          // D119 (SC2): the presets behind the field's +
+  const tile = page.locator(`[data-preset-panel] [aria-label="lighting presets"] button[aria-label="${name}"]`)
   await expect(tile.locator('img')).toBeVisible()
   await tile.click()
   await expect(row.locator('input[type=text]').first()).toHaveValue(new RegExp(words.replace(/[.*+?^${}()|[\]-]/g, '\\$&')))
@@ -2144,7 +2153,7 @@ test('AN1 step 5 (D95): the Clay level adds an image plane from the Bin, renames
   await expect(page.locator('.stage-row.active')).toContainText('Plane test')
   await openSection(page, 'Scene')
   await expect(page.locator('.passes-row')).toContainText('No passes yet for')                              // #16: the passes at a glance
-  await page.locator('.lib-grid button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
+  await page.locator('.lib-row[data-group="planes"] button', { hasText: /^Add image plane/ }).click()                           // #18: opens the Bin
   const bin = page.locator('.dock .bin')
   await expect(bin).toBeVisible()
   await bin.locator('.bin-bar .segmented button', { hasText: 'Images' }).click()
@@ -2273,7 +2282,7 @@ test('the motion library (CA1, 01 step 5): the starter folder\'s clips listed in
   await dialog.locator('input').fill('Motion test')
   await dialog.locator('button.primary').click()
   await expect(page.locator('.stage-row.active')).toContainText('Motion test')
-  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                       // a figure, selected
+  await libAdd(page, 'figures', 'Adult')                       // a figure, selected
   await openSection(page, 'Motion')
   const lib = page.locator('.motion-lib')
   await lib.locator('.motion-file-head', { hasText: 'test_rig' }).click()                       // the e2e tree's starter folder holds the test rig
@@ -2305,7 +2314,7 @@ test('the Detailed level (CA1, 01 §9a): a figure switched to Detailed follows i
   await dialog.locator('input').fill('Detail test')
   await dialog.locator('button.primary').click()
   await expect(page.locator('.stage-row.active')).toContainText('Detail test')
-  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()
+  await libAdd(page, 'figures', 'Adult')
   await openSection(page, 'Motion')
   await page.locator('.detail-level .segmented button', { hasText: 'Detailed ♂' }).click()
   type Doc = { name: string; objects: { detail: string | null; pose: { extra: Record<string, number[]> } | null }[] }
@@ -2331,7 +2340,7 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   await dialog.locator('input').fill('Path test')
   await dialog.locator('button.primary').click()
   await expect(page.locator('.stage-row.active')).toContainText('Path test')
-  await page.locator('.lib-grid button', { hasText: /^Adult/ }).click()                       // a figure, selected
+  await libAdd(page, 'figures', 'Adult')                       // a figure, selected
   await page.locator('button.cmd-btn[aria-label^="Path (click the floor"]').first().click()
   const canvas = page.locator('canvas.stage-canvas')
   const box = (await canvas.boundingBox())!
@@ -2353,7 +2362,7 @@ test('a floor path (CA1, 01 step 5): the Path tool adds the floor points clicked
   await expect(page.locator('.toast')).toContainText(/along its path, feet locked/)
   // a pose preset on the keyed figure is a key at the playhead (before CA1 it changed only the unkeyed pose, which the keys hide)
   type Key = { frame: number; pose: { preset: string; joints: Record<string, number[]> } | null }
-  await page.locator('#anim-sec-motion .stage-panel:not(.motion-lib) .lib-grid button', { hasText: /^point$/ }).click()
+  await libAdd(page, 'poses', 'point')                                                       // the pose tiles sit behind the Motion section's + (D119 SC2)
   await expect.poll(async () => { const k = Object.values((await doc())?.keyframes.objects ?? {})[0] as unknown as Key[]; return k?.find((x) => x.frame === 0)?.pose?.preset ?? null }, { timeout: 10_000 }).toBe('point')
   const k0 = (Object.values((await doc())!.keyframes.objects)[0] as unknown as Key[]).find((x) => x.frame === 0)!
   expect(Object.keys(k0.pose!.joints)).toHaveLength(12)                                       // spelled out, so it blends with the clip's keys

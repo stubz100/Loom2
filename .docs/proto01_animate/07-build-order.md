@@ -59,7 +59,7 @@ truth from here; the table above stays as written.
 | 3 · spikes | E23a → E23b → CA1b → E23c → E28 → E29 → E25 → E27 → E24 | E23a–e, CA1b, E25, E28 / E28b / E28c, E27 (D102–D113) | **E29 lip-sync and E24 post-processing not run** — moved before AE4 |
 | gate | a D-number per group | rate and joins D102 · mode D103 · shadows D105–D107 · props D108–D110 · the preview route D113 | lip-sync and the post stages: undecided until E29 / E24 |
 | 4 · the editor | AE1 · AP1 · AE2 · AE3 | nothing | **the whole phase — starts now (D114)** |
-| 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · CA7 / AE4 (wait E24) · AE5 |
+| 5 · the clay pipeline | CA2 → CA6, AE4, AE5 | built as **PS1–PS5** (doc 16), see the mapping below; **AE4 built as AE4a–e** (D118, 2026-10-22: passes on layers, the line on the lanes, Face / Lip-sync, the lip-sync model as a tool, processing layers — doc 20 §6) | CA3's depth-guided plate for large moves · CA5's seam repair (W3) · AE5 |
 | 6 · review | UX9 | begun 2026-10-21 with the author's look at 21: U1–U3 (journal 2026-10-21 13:58), U4–U7 (D116, journal 2026-10-21 16:42); the ? sweep over the whole app (journal 2026-10-21 18:24) | 15, 17, 18 closed by the author (D117); 21's second look owed; the rest of the register after it |
 | 7 · Story pass | RC1–RC4 · O1–O7 · C1–C7 | RC0 only; the author chose C4 | all of it |
 
@@ -72,7 +72,7 @@ truth from here; the table above stays as written.
 | CA4 · the batch planner | PS5c: `plan_batches` (77 frames, 5 carried, the 4k + 1 grid) | the plan shown with its cost; staging |
 | CA5 · layer jobs | PS5c: chained Wan Animate runs per character, a re-take with a new seed | re-take a batch and the ones after it; the W3 healing patch at a seam |
 | CA6 · assembly | PS5d mattes + PS5e `assemble_final` (depth order, contact offsets, RIFE) — the automatic first composite (D112) | — (hand finishing is the editor's) |
-| CA7 · the final | — | waits E24; becomes AE4 |
+| CA7 · the final | AE4a–e (D118) | built 2026-10-22 after E24 / E29b: Clean up and Creative on a layer's frames or over the stack below (processing layers), Face and Lip-sync on the head as its own layer (the mouth by the talking head or by LatentSync), the line as an audio layer on the lanes |
 | CA8 · UI | the final's panel in Animate (PS5f slim) | the rest is the editor (AE2) |
 
 ### The order from here
@@ -83,7 +83,7 @@ truth from here; the table above stays as written.
 | — | **The author's looks** | docs 15, 17, 18, 19 — before AE2's viewer is designed (Q22, Q23) | no | ½ h |
 | 6 | **Review** | **UX9** | headed checks | 1–2 |
 | 3b | **The two spikes left** | **E29** lip-sync (ran 2026-10-21: L1 out, L2 keeps the pose — Q25 for the author, doc 23) → **E24** post-processing (two slices ran the same day, doc 24; the author: the low-expert pass improved the hands, the depth-locked LTX pass distorts — creative only; E29b: the head as its own layer gives the face; D118 shapes AE4 from them), then their D-number | yes, serial | ≈ 2.5 |
-| 5b | **The pipeline's rest** | **AE4** AI passes on layers (CA7) · **AE5** the output as a take · CA3's depth-guided plate · CA5's W3 repair | yes | 8–11 |
+| 5b | **The pipeline's rest** | ~~**AE4** AI passes on layers (CA7)~~ built 2026-10-22 (D118, AE4a–e) · **AE5** the output as a take · CA3's depth-guided plate · CA5's W3 repair | yes | 8–11 |
 | 7 | **Story pass** | RC1–RC4 · O1–O7 · C1–C3, C5–C7 as the author picks | rig checks | 15–20 + RC4 |
 
 **The first slice of phase 4** is AE1 plus a thin AP1: the rig's final shot opened in Animate and scrubbed there, before any editing control

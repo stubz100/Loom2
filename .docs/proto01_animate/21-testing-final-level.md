@@ -99,6 +99,14 @@ right beneath it, above the next layer, with three parts — **Properties · Mas
   two minutes for a shot of this length on top of the face pass. Full variant only (the weights' licence). The take reads "1 line, the model".
 - **Check:** the two mouths side by side on the same line — which reads better at this size? Does the model's mouth keep her glasses and
   the teeth natural? Is the engine's stop and restart around it acceptable in the flow?
+- **Processing layers** (D118, AE4e — your "process all below layers equally"): in a layer's Passes part, a switch **this layer | everything
+  below**. With *everything below*, Clean up or Creative runs over the picture as composited from that layer down (the composition is
+  rendered apart with the layers above switched off) and the result lands above that layer as a processing layer — "Processed · Creative
+  (Mara down)". The layers below stay editable; when one changes, the processing layer reads **stale** (its row and its Passes part) until
+  you run it again (Process again, the same pass and strength: the layer is replaced in place, its own transforms and masks kept).
+  Remove the processing layer drops it with its frames.
+- **Check:** is a processing layer the right unit for "post on everything below", or would you rather have one at the top only? Does
+  stale read clearly? Should a stale layer re-run by itself when the render is asked for?
 
 ## 4b. The Performance panel and the foot (D116, ≈ 2 min)
 
@@ -137,6 +145,7 @@ Open in Final · Render — so they are at hand whatever the column shows.
 | A line as an audio layer on the lanes: the right feel? The waveform enough to place it? | |
 | Face / Lip-sync: sharper and still her? The mouth natural and in time? Halo or seam left? The chain of jobs legible? | |
 | The mouth by the model vs the talking head: which reads better? Glasses and teeth kept? The engine's stop around it acceptable? | |
+| Processing layers: the right unit? Stale clear? Re-run by itself before a render? | |
 
 ## The first look (2026-10-21) and what it changed
 

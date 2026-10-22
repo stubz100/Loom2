@@ -1400,7 +1400,9 @@ def build_layer_pass(recipe: LayerPass, roster: Roster, seed: int, out_prefix: s
         g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["61", 2], "vae": ["3", 0]}}
     g["99"] = {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": out_prefix}}
     summary = {"model_id": spec.id, "label": spec.label, "preset": recipe.preset, "strength": strength, "final_id": recipe.final_id, "layer_id": recipe.layer_id,
-               "width": w, "height": h, "frames": frames, "fps": fps, "pad": list(i.get("pad") or [0, 0]), "seed": int(seed)}
+               "width": w, "height": h, "frames": frames, "fps": fps, "pad": list(i.get("pad") or [0, 0]), "seed": int(seed), "scope": recipe.scope}
+    if i.get("pid"):                                                      # AE4e: a processing layer — what went in, for the record
+        summary["processing"] = {"pid": i["pid"], "below": list(i.get("below") or []), "signature": i.get("signature")}
     return Compiled(graph=g, output_node="99", summary=summary, serialized_prompt=PASS_PROMPT)
 
 

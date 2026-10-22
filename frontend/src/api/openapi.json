@@ -2464,6 +2464,27 @@
             "title": "Made At",
             "type": "string"
           },
+          "processing": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Processing",
+            "type": "object"
+          },
+          "processing_jobs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Processing Jobs",
+            "type": "object"
+          },
+          "processing_stale": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Processing Stale",
+            "type": "object"
+          },
           "render_job_id": {
             "anyOf": [
               {
@@ -2536,6 +2557,9 @@
           "layers",
           "sources",
           "audio",
+          "processing",
+          "processing_jobs",
+          "processing_stale",
           "clip_id",
           "rendered_revision",
           "render_job_id",
@@ -4647,6 +4671,13 @@
             "title": "Name",
             "type": "string"
           },
+          "processing": {
+            "items": {
+              "$ref": "#/components/schemas/ProcessingLayer"
+            },
+            "title": "Processing",
+            "type": "array"
+          },
           "range": {
             "additionalProperties": {
               "type": "integer"
@@ -4717,6 +4748,7 @@
           "frames",
           "shot_id",
           "layers",
+          "processing",
           "clip_id",
           "assembly",
           "assembled_at",
@@ -10777,6 +10809,15 @@
             "title": "Preset",
             "type": "string"
           },
+          "scope": {
+            "default": "layer",
+            "enum": [
+              "layer",
+              "below"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "seed": {
             "anyOf": [
               {
@@ -11305,6 +11346,68 @@
           "value"
         ],
         "title": "PresetItem",
+        "type": "object"
+      },
+      "ProcessingLayer": {
+        "description": "D118 (AE4e): a pass over the flattened stack from a layer down — the composition rendered with only that layer and the ones below\nit, the pass's frames frozen as footage the composition shows right above that layer (`processing/<id>/frames/`). The composition\nsays it is stale when the layers below changed since (their signature).",
+        "properties": {
+          "above": {
+            "title": "Above",
+            "type": "string"
+          },
+          "below": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Below",
+            "type": "array"
+          },
+          "frames": {
+            "title": "Frames",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "strength": {
+            "title": "Strength",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "above",
+          "preset",
+          "strength",
+          "model_id",
+          "job_id",
+          "frames",
+          "made_at",
+          "signature",
+          "below"
+        ],
+        "title": "ProcessingLayer",
         "type": "object"
       },
       "Profile": {
@@ -22426,6 +22529,58 @@
           }
         },
         "summary": "Final Plate",
+        "tags": [
+          "finals"
+        ]
+      }
+    },
+    "/finals/{fid}/processing/{pid}": {
+      "delete": {
+        "description": "D118 (AE4e): a processing layer dropped from the final (its frames too); the composition takes its layer out.",
+        "operationId": "final_processing_remove_finals__fid__processing__pid__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fid",
+            "required": true,
+            "schema": {
+              "title": "Fid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "title": "Pid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalAndComposition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Final Processing Remove",
         "tags": [
           "finals"
         ]

@@ -59,6 +59,23 @@ class FinalLayer(BaseModel):
     source: str | None = None                                      # D118: the take the layer shows (its frames under passes/<id>/), None = the original frames
 
 
+class ProcessingLayer(BaseModel):
+    """D118 (AE4e): a pass over the flattened stack from a layer down — the composition rendered with only that layer and the ones below
+    it, the pass's frames frozen as footage the composition shows right above that layer (`processing/<id>/frames/`). The composition
+    says it is stale when the layers below changed since (their signature)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    id: str                                        # proc_<above>
+    above: str                                     # the final layer it sits above: that layer and everything below went into it
+    preset: str
+    strength: float
+    model_id: str
+    job_id: str
+    frames: int
+    made_at: str
+    signature: str                                 # the layers below as rendered (compositions.below_signature)
+    below: list[int] = Field(default_factory=list) # the engine layers that went in, top to bottom
+
+
 class Final(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
     schema_version: int = FINAL_SCHEMA_VERSION
@@ -73,6 +90,7 @@ class Final(BaseModel):
     frames: int                                    # frames per sequence at the rate
     shot_id: str | None = None                     # the Story shot it is made for (its take lands there, PS5e)
     layers: list[FinalLayer] = Field(default_factory=list)
+    processing: list[ProcessingLayer] = Field(default_factory=list)   # D118 (AE4e): the passes over the stack below a layer
     clip_id: str | None = None                     # PS5e: the assembled shot
     assembly: dict[str, Any] | None = None         # PS5e: what the assembly did (offsets, occlusions, time, the conform)
     assembled_at: str | None = None
@@ -239,6 +257,35 @@ class FinalStore:
         if layer is not None and layer.source and any(t.get("id") == layer.source for t in layer.takes):
             return self.pass_dir(fid, lid, f"passes/{layer.source}")
         return self.pass_dir(fid, lid, "frames")
+
+    def processing_dir(self, fid: str, pid: str) -> Path:
+        """D118 (AE4e): a processing layer's folder — `in/` (the stack below, rendered) and `frames/` (the pass's result)."""
+        return self.folder(fid) / "processing" / pid
+
+    def set_processing(self, fid: str, rec: ProcessingLayer) -> Final:
+        """D118 (AE4e): a processing layer recorded (replaced by id when run again); the record's revision moves."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        f.processing = [p for p in f.processing if p.id != rec.id] + [rec]
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
+
+    def remove_processing(self, fid: str, pid: str) -> Final:
+        """D118 (AE4e): a processing layer dropped (its folder too); the composition takes its layer out on the next sync."""
+        f = self.get(fid)
+        if f is None:
+            raise KeyError(fid)
+        if not any(p.id == pid for p in f.processing):
+            raise KeyError(f"{fid} has no processing layer {pid}")
+        shutil.rmtree(self.processing_dir(fid, pid), ignore_errors=True)
+        f.processing = [p for p in f.processing if p.id != pid]
+        f.revision += 1
+        f.updated_at = utc_now()
+        self.save(f)
+        return f
 
     def matte_dir(self, fid: str, lid: str) -> Path:
         """D118 (AE4c): where a character layer's matte is — the shown take's own `matte/` when the pass changed her silhouette (the face

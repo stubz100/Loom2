@@ -34,6 +34,9 @@ export type PassPreset = 'cleanup' | 'creative' | 'face' | 'lipsync'
 export const PASS_LABEL: Record<PassPreset, string> = { cleanup: 'Clean up', creative: 'Creative', face: 'Face', lipsync: 'Lip-sync' }
 export const PASS_STRENGTH: Record<PassPreset, number> = { cleanup: 0.1, creative: 0.35, face: 0.5, lipsync: 0.5 }
 export type PassMouth = 'head' | 'model'
+/** AE4e: a pass on the layer's own frames, or over the stack from the selected layer down — a processing layer above it. */
+export type PassScope = 'layer' | 'below'
+export type ProcessingRec = NonNullable<Final['processing']>[number]
 export interface Take { id: string; preset: string; strength: number; model_id?: string; job_id?: string; frames?: number; seed?: number; made_at?: string; head?: boolean; mouth?: PassMouth; lines?: { layer: number | null; text: string | null; f0: number; f1: number }[] }
 /** D118 (AE4b): a voiced line of the shot, as GET /finals/{fid}/lines reports it. */
 export interface FinalLine { node_id: string; index: number; speaker: string | null; speaker_name: string | null; text: string; audio_asset_id: string; duration_s: number | null; layer_id: string | null }
@@ -165,12 +168,19 @@ interface CompState {
   passPreset: PassPreset
   passStrength: number
   passMouth: PassMouth                                   // AE4d (lipsync): the talking head drives the mouth, or the lip-sync model redraws it
+  passScope: PassScope                                   // AE4e: this layer, or the stack from it down
   setPass: (preset: PassPreset, strength?: number) => void
   setMouth: (mouth: PassMouth) => void
+  setScope: (scope: PassScope) => void
+  pointLayerId: () => string | null                      // AE4e: the final layer the selected engine layer stands for (any kind but a processing layer)
+  processingOf: (layer: number) => ProcessingRec | null  // the final's record behind an engine layer (a stable reference: a selector's result)
+  processingStale: (layer: number) => boolean
+  runProcessingAgain: () => Promise<boolean>
+  removeProcessing: (pid: string) => Promise<boolean>
   /** The final's layer behind the selected composition layer (null for a matte or the shadows). */
   finalLayerId: () => string | null
   /** A pass queued on the selected layer's final layer (a GPU job); its take lands as the layer's source and the composition syncs. */
-  runPass: () => Promise<boolean>
+  runPass: (point?: string) => Promise<boolean>
   /** The take the layer shows (null: its original frames); the composition swaps the footage in the same call. */
   useTake: (take: string | null) => Promise<boolean>
   dropTake: (take: string) => Promise<boolean>
@@ -314,7 +324,7 @@ export const useComposition = create<CompState>((set, get) => {
   }
   return {
     level: 'performance', finalId: null, final: null, comp: null, frame: 0, playing: false, shown: null, fetching: false, filled: 0, error: null,
-    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', effects: [], fxValues: {}, catalog: {}, before: null,
+    layers: [], selected: null, props: [], keysOf: {}, uidOf: {}, busy: false, masks: [], maskTool: 'off', selectedMask: null, poly: [], maskView: 'lines', editorTab: 'props', passPreset: 'cleanup', passStrength: 0.1, passMouth: 'head', passScope: 'layer', effects: [], fxValues: {}, catalog: {}, before: null,
     loadLayers: async () => {
       const fid = get().finalId
       if (!fid || !get().comp) { set({ layers: [] }); return }
@@ -412,14 +422,46 @@ export const useComposition = create<CompState>((set, get) => {
     // ---- D118 (AE4a): passes ----
     setPass: (preset, strength) => set({ passPreset: preset, passStrength: strength ?? PASS_STRENGTH[preset] }),
     setMouth: (mouth) => set({ passMouth: mouth }),
-    finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
-    runPass: async () => {
+    setScope: (scope) => set({ passScope: scope }),
+    pointLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && cl.kind !== 'processing' ? cl.id : null },
+    processingOf: (layer) => {
       const s = get()
-      const lid = s.finalLayerId()
-      if (!s.finalId || !lid) { useSession.getState().toast('A pass runs on a character layer or the plate', 'info'); return false }
-      const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength, mouth: s.passMouth } })
+      const pid = Object.entries(s.comp?.processing ?? {}).find(([, eid]) => eid === layer)?.[0]
+      return (pid ? (s.final?.processing ?? []).find((p) => p.id === pid) : undefined) ?? null
+    },
+    processingStale: (layer) => {
+      const s = get()
+      const pid = Object.entries(s.comp?.processing ?? {}).find(([, eid]) => eid === layer)?.[0]
+      return !!pid && !!s.comp?.processing_stale?.[pid]
+    },
+    runProcessingAgain: async () => {
+      const s = get()
+      const proc = s.selected !== null ? s.processingOf(s.selected) : null
+      if (!proc) return false
+      set({ passScope: 'below', passPreset: proc.preset as PassPreset, passStrength: proc.strength })
+      return get().runPass(proc.above)
+    },
+    removeProcessing: async (pid) => {
+      const s = get()
+      if (!s.finalId) return false
+      set({ busy: true })
+      try {
+        const r = await http.DELETE('/finals/{fid}/processing/{pid}', { params: { path: { fid: s.finalId, pid } } })
+        if (r.error) { useSession.getState().toast(`Processing layer: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
+        await edited()
+        return true
+      } finally { set({ busy: false }) }
+    },
+    finalLayerId: () => { const s = get(); const cl = s.comp?.layers.find((l) => l.layer === s.selected); return cl && (cl.kind === 'figure' || cl.kind === 'plate') ? cl.id : null },
+    runPass: async (point) => {
+      const s = get()
+      const below = s.passScope === 'below'
+      const lid = point ?? (below ? s.pointLayerId() : s.finalLayerId())
+      if (!s.finalId || !lid) { useSession.getState().toast(below ? 'Pick the layer the processing starts from' : 'A pass runs on a character layer or the plate', 'info'); return false }
+      const r = await http.POST('/finals/{fid}/layers/{lid}/pass', { params: { path: { fid: s.finalId, lid } }, body: { preset: s.passPreset, strength: s.passStrength, mouth: s.passMouth, scope: s.passScope } })
       if (r.error) { useSession.getState().toast(`Pass: ${(r.error as { detail?: string }).detail ?? 'refused'}`, 'error'); return false }
-      useSession.getState().toast(`${PASS_LABEL[s.passPreset]} pass queued on the layer — its take lands as the layer's source`
+      useSession.getState().toast(below ? `${PASS_LABEL[s.passPreset]} pass queued over the stack from the layer down — a processing layer lands above it`
+        : `${PASS_LABEL[s.passPreset]} pass queued on the layer — its take lands as the layer's source`
         + (s.passPreset === 'face' || s.passPreset === 'lipsync' ? ' (several jobs: the head in batches, then the paste)' : ''), 'success')
       void get().reload()
       return true

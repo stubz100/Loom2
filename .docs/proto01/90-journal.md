@@ -7624,3 +7624,32 @@ The author asked for a review of the state of things, then "record all this and 
 - Gotchas: a venv-based tool's availability is a machine fact — the test gives Settings a missing python rather than assuming one;
   `ae4b_rig.py`'s `ingest_file` moved E29b's WAV into the catalogue (`move=False` since); the agents check reads backticked paths as
   repository paths — an external script is named without them.
+
+## 2026-10-22 13:40 — AE4e built: processing layers (D118) — a pass over the stack from a layer down, frozen above it, stale when the layers below change; AE4 complete
+
+- **The model:** the author's "processing layers that process all below layers equally" (journal 2026-10-22 07:58) as a frozen adjustment:
+  `Final.processing: [ProcessingLayer {id proc_<above>, above, preset, strength, model_id, job_id, frames, made_at, signature, below}]` — the
+  record and the frames (`processing/<id>/frames/`) are the final's truth (files first, as the takes); the composition holds the map to
+  its engine layer (`Composition.processing`, `processing_jobs`) and brings the layer in, replaces or drops it on sync, like the sources.
+- **The run:** `LayerPass.scope = below` (the recipe refuses it for Face / Lip-sync; the route wants the composition made and the layer in
+  it — any kind: a prop or the shadows as a point too). `pipeline.render_below`: a copy of the project beside it with every layer above
+  the point switched off (`compositions.below_copy` — the only place the project JSON is written to, and only a copy for a render; the
+  layers that stay are hashed without their volatile fields plus their footage paths: the *signature*), `effectcraft-cli render` on the
+  CPU beside the idle engine (D113) into `processing/<id>/in/`, then the pass as for a layer (the clip VAE-encoded, the depth for
+  Creative the shot's max); the finisher writes `frames/`, drops `in/`, records the layer on the final (replacing by id when run again).
+  `sync_sources` → `_sync_processing`: a record without an engine layer is imported and added with `layer.addItem {index}` right above
+  its layer and named "Processed · Clean up (Mara down)" (the lineage gains a `kind: processing` entry); a record whose `job_id` moved
+  gets `file.replaceFootage` (the layer keeps its own transforms, masks and effects); a record gone from the final has its layer cleared.
+  `Composition.processing_stale` is computed on read from the current project file's signature of the same layers.
+- **Routes:** `POST …/layers/{lid}/pass {scope: below}`, `DELETE /finals/{fid}/processing/{pid}` (the final's record and frames, then the sync).
+- **UI:** the Passes part gains *this layer | everything below* (a ? on what each does; Face / Lip-sync disabled below; a note when a
+  processing layer from here down already exists); a processing layer's row reads "· stale" when a layer below changed, and its Passes
+  part shows the record with *Process again* (the same pass and strength, in place) and *Remove the processing layer* — commands in the
+  row's menu too (D32).
+- **Fakes and tests:** the fake CLI renders any project path (the copy); `test_processing_ae4e`: the copy's switches and signature, the pass
+  over the stack through the fake engine, the record and the frames, the composition bringing the layer in above Mara and naming it, no
+  save when nothing moved, stale after the plate's move, run again replacing the footage on the same layer, dropped on the final → the
+  layer cleared on sync; the routes (no composition → 422, the face pass below → 422, a prop as the point, remove). The e2e final-shot
+  scenario runs Clean up over everything below Mara, sees the processing row, its record and removes it. Offline 491 full and 491 open (the open run's one failure was the route test asking Creative, which open does not offer — Clean up now), settings audit 272 fields / 0 problems, agents_check (8 docs) and model_literals_check clean, e2e 49/49 full and open, Vitest 392 + 3, build clean, lint 75. The rig (engine/spikes/ae4e_rig.py, the PS5 final through the app on the real engine and the real effectcraft-cli): Creative at 0.35 over the stack from Mara down in 101 s (128 s cold: the copy rendered by effectcraft-cli, the 81 frames padded 0×32 and cropped back), the composition synced — 'Processed · Creative (Mara down)' at index 5 with Mara at 6 (layer.addItem's index honoured), not stale — and the shot rendered in 5 s (out/ae4e/final_processed_creative.mp4); the plate nudged below it → stale; run again in 85 s → the same engine layer's footage replaced, not stale, one processed layer; dropped → gone, 8 layers again. The first run of the rig script failed on its own nudge parameters (the command takes x, y).
+- Gotchas: the fake marks a matte layer's video switch off by convention (the test compares the layers below with the original, not with
+  "all on"); `layer.addItem {index}` is honoured by the engine, ignored by the fake (the row lands on top there).

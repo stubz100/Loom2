@@ -161,3 +161,8 @@ Each step runs on the rig's final (`engine/spikes/out/ps5`) before it closes; th
   only), the Lip-sync preset's second mouth (`LayerPass.mouth = model`): the chain renders the heads calm, then the `mouth` step runs the
   model with the engine stopped on the kept heads and the layer's lines, back under the heads' silhouettes, then the paste. Next: AE4e,
   processing layers.
+- **2026-10-22 (journal 2026-10-22 13:40):** AE4e built — processing layers: `LayerPass.scope = below` renders the composition from the layer down apart
+  (`compositions.below_copy` + `effectcraft-cli render`), runs the pass over it and freezes the result as footage the composition brings in
+  above that layer on sync (`Final.processing`, `Composition.processing`, stale by the layers' signature; run again replaces, remove drops).
+  **AE4 is complete.** Next: the author's looks at doc 21 (§4: the passes, the line on the lanes, Face / Lip-sync, the two mouths, the
+  processing layers).

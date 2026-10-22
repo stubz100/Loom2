@@ -293,6 +293,7 @@ class PassBody(BaseModel):
     strength: float = Field(0.10, ge=0.02, le=0.9)
     seed: int | None = None
     mouth: Literal["head", "model"] = "head"       # AE4d (lipsync): the S2V talking head drives the mouth, or the lip-sync model redraws it
+    scope: Literal["layer", "below"] = "layer"     # AE4e: this layer's frames, or the stack from this layer down (a processing layer)
 
 
 class SourceBody(BaseModel):
@@ -376,14 +377,20 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     layer = next((x for x in f.layers if x.id == lid), None) if f else None
     if f is None or layer is None:
         raise HTTPException(404, "final or layer not found")
-    if layer.kind not in ("figure", "plate"):
+    if body.scope == "below":                                         # AE4e: the stack from this layer down — any layer the composition has
+        if body.preset in ("face", "lipsync"):
+            raise HTTPException(422, "the face pass runs on a character layer, not over the stack below")
+        c0 = await asyncio.to_thread(CompositionStore(ws).get, f)
+        if c0 is None or not any(cl.id == lid and cl.kind != "processing" for cl in c0.layers):
+            raise HTTPException(422, "make the composition first (Open in Final): the pass over the stack below renders it")
+    elif layer.kind not in ("figure", "plate"):
         raise HTTPException(422, "a pass runs on a character layer or the plate for now")
-    if layer.frames_done != f.frames:
+    elif layer.frames_done != f.frames:
         raise HTTPException(422, f"{layer.name} has no frames yet — make the layer first")
     variant = svc.app.settings.variant
     seed = layer.seed if body.seed is None else body.seed
-    recipe: dict[str, Any] = {"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "seeds": [seed]}
-    payload: dict[str, Any] = {"layer": lid, "pass": body.preset, "strength": body.strength}
+    recipe: dict[str, Any] = {"kind": "layer_pass", "final_id": fid, "layer_id": lid, "preset": body.preset, "strength": body.strength, "seeds": [seed], "scope": body.scope}
+    payload: dict[str, Any] = {"layer": lid, "pass": body.preset, "strength": body.strength, "scope": body.scope}
     if body.preset in ("face", "lipsync"):                                # AE4c (E29b): the head as its own layer, in steps
         from ..fsio import new_id
         if layer.kind != "figure":
@@ -430,6 +437,28 @@ async def final_layer_pass(svc: Svc, fid: str, lid: str, body: PassBody):
     f = await asyncio.to_thread(store.update_layer, fid, lid, job_ids=[*layer.job_ids, jobs[0].id])
     svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
     return {"job_id": jobs[0].id}
+
+
+@router.delete("/finals/{fid}/processing/{pid}", response_model=FinalAndComposition)
+async def final_processing_remove(svc: Svc, fid: str, pid: str):
+    """D118 (AE4e): a processing layer dropped from the final (its frames too); the composition takes its layer out."""
+    ws, _, _ = svc.require_project()
+    store = FinalStore(ws)
+    try:
+        f = await asyncio.to_thread(store.remove_processing, fid, pid)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0]))
+    svc.hub.broadcast("final.updated", {"id": fid, "revision": f.revision})
+    cs = CompositionStore(ws)
+    c = await asyncio.to_thread(cs.get, f)
+    if c is not None:
+        try:
+            c = await asyncio.to_thread(cs.sync_sources, f, svc.effectcraft)
+        except EffectCraftError as e:
+            raise _ec_error(e)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(422, str(e))
+    return {"final": f.model_dump(), "composition": c.model_dump() if c else None}
 
 
 @router.post("/finals/{fid}/layers/{lid}/source", response_model=FinalAndComposition)

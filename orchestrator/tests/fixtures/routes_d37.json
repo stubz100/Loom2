@@ -4,6 +4,7 @@
  "DELETE /finals/{fid}",
  "DELETE /finals/{fid}/composition/audio/{layer}",
  "DELETE /finals/{fid}/layers/{lid}/takes/{take}",
+ "DELETE /finals/{fid}/processing/{pid}",
  "DELETE /groups/{gid}",
  "DELETE /jobs/{job_id}",
  "DELETE /preset-icons/{key}",

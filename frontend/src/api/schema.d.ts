@@ -1269,6 +1269,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finals/{fid}/processing/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Final Processing Remove
+         * @description D118 (AE4e): a processing layer dropped from the final (its frames too); the composition takes its layer out.
+         */
+        delete: operations["final_processing_remove_finals__fid__processing__pid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups": {
         parameters: {
             query?: never;
@@ -4116,6 +4136,18 @@ export interface components {
             layers: components["schemas"]["CompositionLayer"][];
             /** Made At */
             made_at: string;
+            /** Processing */
+            processing: {
+                [key: string]: number;
+            };
+            /** Processing Jobs */
+            processing_jobs: {
+                [key: string]: string;
+            };
+            /** Processing Stale */
+            processing_stale: {
+                [key: string]: boolean;
+            };
             /** Render Job Id */
             render_job_id: string | null;
             /** Rendered Revision */
@@ -5000,6 +5032,8 @@ export interface components {
              * @default Final
              */
             name: string;
+            /** Processing */
+            processing: components["schemas"]["ProcessingLayer"][];
             /** Range */
             range: {
                 [key: string]: number;
@@ -7520,6 +7554,12 @@ export interface components {
              * @enum {string}
              */
             preset?: "cleanup" | "creative" | "face" | "lipsync";
+            /**
+             * Scope
+             * @default layer
+             * @enum {string}
+             */
+            scope?: "layer" | "below";
             /** Seed */
             seed?: number | null;
             /**
@@ -7743,6 +7783,34 @@ export interface components {
             field: string;
             /** Value */
             value: string;
+        };
+        /**
+         * ProcessingLayer
+         * @description D118 (AE4e): a pass over the flattened stack from a layer down — the composition rendered with only that layer and the ones below
+         *     it, the pass's frames frozen as footage the composition shows right above that layer (`processing/<id>/frames/`). The composition
+         *     says it is stale when the layers below changed since (their signature).
+         */
+        ProcessingLayer: {
+            /** Above */
+            above: string;
+            /** Below */
+            below: number[];
+            /** Frames */
+            frames: number;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Made At */
+            made_at: string;
+            /** Model Id */
+            model_id: string;
+            /** Preset */
+            preset: string;
+            /** Signature */
+            signature: string;
+            /** Strength */
+            strength: number;
         };
         /** Profile */
         Profile: {
@@ -12988,6 +13056,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlateQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    final_processing_remove_finals__fid__processing__pid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fid: string;
+                pid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalAndComposition"];
                 };
             };
             /** @description Validation Error */

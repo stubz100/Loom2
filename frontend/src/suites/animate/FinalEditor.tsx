@@ -148,31 +148,65 @@ function MasksBody() {
 // ------------------------------------------------------------------ Passes (D118, AE4a)
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
 
+/** AE4e: the Passes part on a processing layer — what it is, whether the layers below changed since, run again or drop it. */
+function ProcessingBody({ layer }: { layer: number }) {
+  const r = useComposition((s) => s.processingOf(layer))
+  const stale = useComposition((s) => s.processingStale(layer))
+  const point = useComposition((s) => s.comp?.layers.find((l) => l.id === r?.above)?.name)
+  if (!r) return null
+  return (
+    <div className="comp-passes comp-processing" data-processing={r.id} data-stale={stale ? 'true' : undefined}>
+      <span className="hint">{PASS_LABEL[r.preset as PassPreset] ?? r.preset} · {r.strength} · over everything from {point ?? r.above} down · {when(r.made_at)}
+        {stale && <strong className="stale" title="A layer below changed since this was rendered: run the pass again to catch up"> · stale</strong>}</span>
+      <div className="verbs">
+        <CommandRow ids={['anim.final.proc.again', 'anim.final.proc.remove']} />
+        <Help text="A processing layer is a pass over the picture as composited from its layer down, frozen as footage above that layer. The layers below stay editable; when one changes, this reads stale until you run it again (the same pass and strength). It takes the same passes as a layer: Clean up, Creative." />
+      </div>
+    </div>
+  )
+}
+
 function PassesBody() {
   const finalId = useComposition((s) => s.finalId)
+  const selected = useComposition((s) => s.selected)
+  const proc = useComposition((s) => (s.selected !== null ? s.processingOf(s.selected) : null))
   const lid = useComposition((s) => s.finalLayerId())
+  const point = useComposition((s) => s.pointLayerId())
+  const scope = useComposition((s) => s.passScope)
   const layer = useComposition((s) => s.final?.layers.find((x) => x.id === s.finalLayerId()))
+  const pointLayer = useComposition((s) => s.final?.layers.find((x) => x.id === s.pointLayerId()))
+  const existing = useComposition((s) => (s.final?.processing ?? []).find((p) => p.above === s.pointLayerId()))
   const preset = useComposition((s) => s.passPreset)
   const strength = useComposition((s) => s.passStrength)
   const busy = useComposition((s) => s.busy)
-  const running = useSession((s) => Object.values(s.jobs).find((j) => j.kind === 'layer_pass' && j.origin?.ref === finalId && (j.origin?.payload as { layer?: string } | undefined)?.layer === lid && (j.status === 'queued' || j.status === 'running')))
+  const target = scope === 'below' ? point : lid
+  const running = useSession((s) => Object.values(s.jobs).find((j) => j.kind === 'layer_pass' && j.origin?.ref === finalId && (j.origin?.payload as { layer?: string } | undefined)?.layer === target && (j.status === 'queued' || j.status === 'running')))
   const hasLine = useComposition((s) => !!s.comp?.audio.some((a) => a.final_layer === s.finalLayerId()))
   const mouth = useComposition((s) => s.passMouth)
   const mm = useSession((s) => (s.capabilities?.experimental as { mouth_model?: { available: boolean; why: string | null; seconds_per_77: number; licence: string } } | undefined)?.mouth_model)
-  if (!lid || !layer) return <span className="hint">Not on this layer. <Help text="A pass runs on a character layer or the plate — a matte is made with its character, the shadows come from the Stage." /></span>
-  const takes = (layer.takes ?? []) as unknown as Take[]
-  const source = layer.source ?? null
-  const isFigure = layer.kind === 'figure'
-  const off = (p: typeof PASSES[number]) => (p.head && !isFigure) || (p.id === 'lipsync' && !hasLine)
-  const head = PASSES.find((p) => p.id === preset)?.head
+  if (proc && selected !== null) return <ProcessingBody layer={selected} />
+  if (!point) return <span className="hint">Not on this layer. <Help text="A pass runs on a character layer or the plate, or over the stack from any layer down (a processing layer) — a matte is made with its character, the shadows come from the Stage." /></span>
+  const below = scope === 'below'
+  const takes = (!below && layer ? (layer.takes ?? []) : []) as unknown as Take[]
+  const source = (!below && layer ? layer.source : null) ?? null
+  const isFigure = !below && layer?.kind === 'figure'
+  const off = (p: typeof PASSES[number]) => below ? !!p.head : (!lid || (p.head && !isFigure) || (p.id === 'lipsync' && !hasLine))
+  const head = !below && PASSES.find((p) => p.id === preset)?.head
   return (
-    <div className="comp-passes" data-layer={lid}>
+    <div className="comp-passes" data-layer={target ?? point} data-scope={scope}>
+      <div className="pass-scope">
+        <span className="segmented" role="group" aria-label="what the pass runs over" data-scope={scope}>
+          <button type="button" className={!below ? 'active' : ''} aria-pressed={!below} title="The pass over this layer's own frames; its take becomes the layer's source" onClick={() => cp().setScope('layer')}>this layer</button>
+          <button type="button" className={below ? 'active' : ''} aria-pressed={below} title={`The pass over the picture as composited from ${pointLayer?.name ?? 'this layer'} down, frozen as a processing layer above it (stale when a layer below changes)`} onClick={() => cp().setScope('below')}>everything below</button>
+        </span>
+        <Help text="This layer: the pass reads the layer's frames and writes a take it shows. Everything below: the composition is rendered with only this layer and the ones under it, the pass runs over that picture, and the result sits above this layer as a processing layer — the layers below stay editable, the processing layer reads stale when one of them changes (run it again). Clean up and Creative run both ways; Face and Lip-sync need a character layer." />
+      </div>
       <div className="pass-tiles" role="radiogroup" aria-label="the pass">
         {PASSES.map((p) => <button key={p.id} type="button" className={`pass-tile${preset === p.id ? ' active' : ''}`} role="radio" aria-checked={preset === p.id} disabled={off(p)} data-pass={p.id}
-          title={off(p) ? (p.head && !isFigure ? 'The face pass renders a character\'s head: a character layer' : 'Attach a line to this layer first (Layers › Attach a line…)') : p.hint}
+          title={off(p) ? (below || (p.head && !isFigure) ? 'The face pass renders a character\'s head: a character layer, not the stack below' : !lid ? 'A pass on this layer: a character layer or the plate — or everything below' : 'Attach a line to this layer first (Layers › Attach a line…)') : p.hint}
           onClick={() => !off(p) && cp().setPass(p.id, p.strength)}>{p.label}</button>)}
       </div>
-      {preset === 'lipsync' && <div className="pass-mouth">
+      {preset === 'lipsync' && !below && <div className="pass-mouth">
         <span className="hint">mouth</span>
         <span className="segmented" role="group" aria-label="the mouth" data-mouth={mouth}>
           <button type="button" className={mouth === 'head' ? 'active' : ''} aria-pressed={mouth === 'head'} title="A talking head of the reference speaks the line (S2V) and drives the mouth as Wan Animate's face video (E29b L2h)" onClick={() => cp().setMouth('head')}>talking head</button>
@@ -188,7 +222,8 @@ function PassesBody() {
         {running && <span className="hint" data-pass-running>{running.status === 'queued' ? 'queued' : `${Math.round((running.progress ?? 0) * 100)} %`} · {running.progress_text ?? 'the pass runs'}</span>}
         <Help text={PASSES_HELP} />
       </div>
-      <ul className="take-list">
+      {below && existing && <span className="hint" data-existing-processing={existing.id}>A processing layer from here down exists ({PASS_LABEL[existing.preset as PassPreset] ?? existing.preset} · {existing.strength}); running again replaces it.</span>}
+      {!below && <ul className="take-list">
         <li className={`take${source === null ? ' shown' : ''}`} data-take="original">
           <span className="name">Original <span className="hint">· as performed</span></span>
           {source !== null ? <button type="button" className="quiet" title="Show the original frames" disabled={busy} onClick={() => void cp().useTake(null)}>✓ show</button> : <span className="hint">shown</span>}
@@ -199,7 +234,7 @@ function PassesBody() {
             {source !== t.id ? <button type="button" className="quiet" title="Show this take" disabled={busy} onClick={() => void cp().useTake(t.id)}>✓ show</button> : <span className="hint">shown</span>}
             <button type="button" className="quiet danger" title="Drop this take (its frames too)" disabled={busy} onClick={() => void cp().dropTake(t.id)}>×</button>
           </li>))}
-      </ul>
+      </ul>}
     </div>
   )
 }
@@ -248,6 +283,8 @@ function LayerRow({ l }: { l: CompLayer }) {
   const layers = useComposition((s) => s.layers)
   const busy = useComposition((s) => s.busy)
   const audio = useComposition((s) => s.audioOf(l.id))
+  const proc = useComposition((s) => s.processingOf(l.id))
+  const stale = useComposition((s) => s.processingStale(l.id))
   if (audio) return <AudioRow l={l} a={audio} />
   const sw = l.switches
   const on = (k: string) => !!sw[k]
@@ -261,19 +298,19 @@ function LayerRow({ l }: { l: CompLayer }) {
     { cmd: 'anim.final.key.position' }, { cmd: 'anim.final.key.opacity' }, sep,
     { cmd: 'anim.final.mask.rect' }, { cmd: 'anim.final.mask.ellipse' }, { cmd: 'anim.final.mask.poly' }, { cmd: 'anim.final.mask.layer' }, { cmd: 'anim.final.mask.object' },
     { cmd: 'anim.final.mask.track' }, { cmd: 'anim.final.mask.view' }, sep,
-    { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, { cmd: 'anim.final.before' }, { cmd: 'anim.final.pass.run' }, sep,
+    { cmd: 'anim.final.trimIn' }, { cmd: 'anim.final.trimOut' }, { cmd: 'anim.final.before' }, { cmd: 'anim.final.pass.run' }, { cmd: 'anim.final.proc.again' }, { cmd: 'anim.final.proc.remove' }, sep,
     { cmd: 'anim.final.undo' }, { cmd: 'anim.final.redo' },
   ]
   return (
-    <li className={selected ? 'selected' : ''} data-layer={l.id} data-index={l.index} onClick={() => cp().select(selected ? null : l.id)}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); cp().select(l.id); showMenu(e, menu()) }}>
+    <li className={selected ? 'selected' : ''} data-layer={l.id} data-index={l.index} data-processing={proc ? 'true' : undefined} data-stale={stale ? 'true' : undefined}
+      onClick={() => cp().select(selected ? null : l.id)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); cp().select(l.id); showMenu(e, menu()) }}>
       <button type="button" className={`sw ${on('video') ? 'on' : ''}`} title="Video: the layer is shown" disabled={busy} aria-pressed={on('video')}
         onClick={(e) => { e.stopPropagation(); void cp().layerSwitch(l.id, 'video', !on('video')) }}>◉</button>
       <button type="button" className={`sw ${on('solo') ? 'on' : ''}`} title="Solo: only the soloed layers are shown" disabled={busy} aria-pressed={on('solo')}
         onClick={(e) => { e.stopPropagation(); void cp().layerSwitch(l.id, 'solo', !on('solo')) }}>S</button>
       <button type="button" className={`sw ${on('locked') ? 'on' : ''}`} title="Lock: the layer cannot be changed" disabled={busy} aria-pressed={on('locked')}
         onClick={(e) => { e.stopPropagation(); void cp().layerSwitch(l.id, 'lock', !on('locked')) }}>🔒</button>
-      <span className="name" title={`${l.name} · ${l.type ?? 'layer'} · in ${l.in.toFixed(2)} s, out ${l.out.toFixed(2)} s`}>{l.name}</span>
+      <span className="name" title={`${l.name} · ${l.type ?? 'layer'} · in ${l.in.toFixed(2)} s, out ${l.out.toFixed(2)} s`}>{l.name}{stale && <strong className="stale" title="A layer below changed since this processing layer was rendered: run it again (Passes)"> · stale</strong>}</span>
       <select className="blend" value={l.blendMode} title="Blend mode" disabled={busy} onClick={(e) => e.stopPropagation()}
         onChange={(e) => void cp().setBlend(l.id, e.target.value)}>
         {(BLEND_MODES.includes(l.blendMode) ? BLEND_MODES : [l.blendMode, ...BLEND_MODES]).map((m) => <option key={m} value={m}>{m}</option>)}

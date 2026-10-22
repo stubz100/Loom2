@@ -503,6 +503,7 @@ class LayerPass(BaseModel):
     model_id: str
     step: PassStep | None = None                  # AE4c: the face pass's chain position (required for face / lipsync)
     mouth: Literal["head", "model"] = "head"      # AE4d (lipsync): the mouth by the S2V talking head as Animate's face video, or redrawn by the lip-sync model
+    scope: Literal["layer", "below"] = "layer"    # AE4e: the layer's own frames, or the stack from this layer down flattened — a processing layer
     seeds: list[int] = Field(default_factory=lambda: [0])
 
     @model_validator(mode="after")
@@ -511,6 +512,8 @@ class LayerPass(BaseModel):
             raise ValueError("the face pass runs in steps: give it its first step (the route does)")
         if self.preset not in ("face", "lipsync") and self.step is not None:
             raise ValueError(f"the {self.preset} pass runs in one job: no step")
+        if self.scope == "below" and self.preset in ("face", "lipsync"):
+            raise ValueError("the face pass runs on a character layer, not over the stack below")
         return self
 
 

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import time
 from dataclasses import asdict, dataclass, field
@@ -547,7 +548,11 @@ async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> 
     layer = next((x for x in f.layers if x.id == recipe.layer_id), None)
     if layer is None:
         raise ValueError(f"the final has no layer {recipe.layer_id}")
-    frames = sorted(store.frames_dir(recipe.final_id, recipe.layer_id).glob("*.png"))
+    extra: dict[str, Any] = {}
+    if recipe.scope == "below":                                        # AE4e: the stack from this layer down, rendered apart, is the input
+        frames, extra = await render_below(job, recipe, q, store, f)
+    else:
+        frames = sorted(store.frames_dir(recipe.final_id, recipe.layer_id).glob("*.png"))
     if len(frames) != f.frames:
         raise ValueError(f"the layer {layer.name} has {len(frames)} frames, the final {f.frames} — make it first")
     spec = registry.get(recipe.model_id)
@@ -573,7 +578,7 @@ async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> 
     await asyncio.to_thread(encode_guide, rgb, tmp / "in.mp4", f.rate)
     video = await q.engine.client.upload_image(tmp / "in.mp4")
     first = await q.engine.client.upload_image(rgb[0])
-    inputs: dict[str, Any] = {"video": video, "first": first, "w": w + px, "h": h + py, "frames": len(frames), "fps": f.rate, "pad": [px, py]}
+    inputs: dict[str, Any] = {"video": video, "first": first, "w": w + px, "h": h + py, "frames": len(frames), "fps": f.rate, "pad": [px, py], **extra}
     if recipe.preset == "creative":
         own = sorted(store.pass_dir(recipe.final_id, recipe.layer_id, "depth").glob("*.png"))
         if len(own) == f.frames:
@@ -602,8 +607,56 @@ async def prepare_layer_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> 
         depth = await asyncio.to_thread(padded, depth, "depth")
         await asyncio.to_thread(encode_guide, depth, tmp / "depth.mp4", f.rate)
         inputs["depth"] = await q.engine.client.upload_image(tmp / "depth.mp4")
-    job.log_tail.append(f"{len(frames)} frames of {layer.name} uploaded for the {recipe.preset} pass at {recipe.strength:g}" + (f" (padded {px}×{py})" if px or py else ""))
+    job.log_tail.append(f"{len(frames)} frames of {'the stack from ' + layer.name + ' down' if recipe.scope == 'below' else layer.name} uploaded for the {recipe.preset} pass at {recipe.strength:g}"
+                        + (f" (padded {px}×{py})" if px or py else ""))
     return inputs
+
+
+async def render_below(job: JobRecord, recipe: LayerPass, q: JobQueue, store: Any, f: Any) -> tuple[list[Path], dict[str, Any]]:
+    """D118 (AE4e): the composition rendered with only the layers from this one down (a copy of the project with the layers above
+    switched off, `effectcraft-cli render` on the CPU beside the idle engine — D113's on-demand render) into the processing layer's
+    `in/`; the engine layers that went in and their signature ride along for the record."""
+    import subprocess
+    from ..compositions import CompositionStore
+    from ..effectcraft import render_argv
+    from ..fsio import utc_now
+    cs = CompositionStore(q.ws)
+    c = cs.get(f)
+    if c is None:
+        raise ValueError("the final has no composition yet — make it first (Open in Final)")
+    point = next((cl for cl in c.layers if cl.id == recipe.layer_id and cl.kind != "processing"), None)
+    if point is None:
+        raise ValueError(f"the composition has no layer for {recipe.layer_id}")
+    pid = f"proc_{recipe.layer_id}"
+    pdir = store.processing_dir(f.id, pid)
+    in_dir = pdir / "in"
+    shutil.rmtree(in_dir, ignore_errors=True)
+    in_dir.mkdir(parents=True)
+    tmp_proj = cs.folder(f.id) / f"comp.below.{job.id}.ecproj"
+    below, signature = await asyncio.to_thread(cs.below_copy, f, point.layer, tmp_proj)
+    q.progress(job, f"rendering the stack from {point.name} down")
+    argv = render_argv(q.app.settings.effectcraft, tmp_proj, c.comp, in_dir / "f_[####].png")
+    env = {**os.environ, "RAYON_NUM_THREADS": str(q.app.settings.effectcraft.threads), "WGPU_BACKEND": "vulkan"}
+    log_path = q.app.logs_dir / f"below-{job.id}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def run() -> int:
+        with log_path.open("ab") as lf:
+            lf.write(f"==== launch {utc_now()} job {job.id} {' '.join(argv)}\n".encode("utf-8"))
+            lf.flush()
+            return subprocess.run(argv, stdout=lf, stderr=subprocess.STDOUT, env=env, timeout=1800).returncode
+    try:
+        rc = await asyncio.to_thread(run)
+    finally:
+        tmp_proj.unlink(missing_ok=True)
+    if rc != 0:
+        tail = log_path.read_text(encoding="utf-8", errors="replace").strip()[-400:]
+        raise ValueError(f"effectcraft-cli render of the stack below failed ({rc}): {tail}")
+    frames = sorted(in_dir.glob("*.png"))
+    if len(frames) != f.frames:
+        raise ValueError(f"the render of the stack below wrote {len(frames)} frames, the final has {f.frames}")
+    job.log_tail.append(f"the stack from {point.name} down rendered: {len(below)} layer(s), {len(frames)} frames")
+    return frames, {"pid": pid, "below": below, "signature": signature}
 
 
 async def prepare_face_pass(job: JobRecord, recipe: LayerPass, q: JobQueue) -> dict[str, Any]:

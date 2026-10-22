@@ -68,6 +68,9 @@ class Composition(BaseModel):
     layers: list[CompositionLayer] = Field(default_factory=list)
     sources: dict[str, str | None] = Field(default_factory=dict)   # D118: per final layer, the take its footage shows (None: the original)
     audio: list[AudioLayer] = Field(default_factory=list)          # D118 (AE4b): the lines as audio layers
+    processing: dict[str, int] = Field(default_factory=dict)       # D118 (AE4e): per processing layer (the final's record), its engine layer
+    processing_jobs: dict[str, str] = Field(default_factory=dict)  # … and the job whose frames its footage shows (another job: replace)
+    processing_stale: dict[str, bool] = Field(default_factory=dict)   # computed on read: the layers below changed since it was rendered
     clip_id: str | None = None                     # the finished shot: the last `comp_render` (the final's clip too)
     rendered_revision: int | None = None           # the revision that render saw (edits since: the clip is behind)
     render_job_id: str | None = None
@@ -133,10 +136,69 @@ class CompositionStore:
             return None
         c = Composition.model_validate(read_json(p))
         c.stale = c.final_revision != f.revision
+        if f.processing:
+            try:
+                sigs = self.below_signatures(f, [(rec.id, rec.below) for rec in f.processing])
+                c.processing_stale = {rec.id: sigs.get(rec.id) != rec.signature for rec in f.processing}
+            except (OSError, ValueError, KeyError):
+                c.processing_stale = {rec.id: True for rec in f.processing}
         return c
 
     def save(self, c: Composition) -> None:
-        atomic_write_json(self.record(c.final_id), c.model_dump(exclude={"stale"}))
+        atomic_write_json(self.record(c.final_id), c.model_dump(exclude={"stale", "processing_stale"}))
+
+    # ---- D118 (AE4e): the stack below a layer, rendered apart; what it looked like ----------------------------------------
+    @staticmethod
+    def _comp_layers(pj: dict) -> list[dict]:
+        """The composition's layer records top to bottom from the project file (the engine's `items[*].kind.layers`, the fake's `comps`)."""
+        for it in (pj.get("items") or {}).values():
+            kd = it.get("kind") or {}
+            if kd.get("type") == "Comp":
+                return list(kd.get("layers") or [])
+        for comp in (pj.get("comps") or {}).values():
+            return list(comp.get("layers") or [])
+        return []
+
+    @staticmethod
+    def _layer_signature(pj: dict, layers: list[dict], ids: list[int]) -> str:
+        """What the layers `ids` look like, as one hash: each record without its volatile fields, plus its footage item's path."""
+        import hashlib
+        by_id = {int(l["id"]): l for l in layers if l.get("id") is not None}
+        items = pj.get("items") or {}
+        rows = []
+        for i in ids:
+            l = by_id.get(int(i))
+            if l is None:
+                rows.append({"id": int(i), "gone": True})
+                continue
+            rec = {k: v for k, v in l.items() if k not in ("comment", "label", "markers")}
+            src = (l.get("source") or {}).get("item") if isinstance(l.get("source"), dict) else l.get("item")
+            it = items.get(str(src)) if src is not None else None
+            rec["_path"] = (it.get("path") or (it.get("kind") or {}).get("path")) if isinstance(it, dict) else None
+            rows.append(rec)
+        return hashlib.sha256(json.dumps(rows, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:24]
+
+    def below_copy(self, f: Final, point: int, out: Path) -> tuple[list[int], str]:
+        """A copy of the project for rendering the stack from the engine layer `point` down: every layer above it has its video switch off.
+        Returns the engine layers that stay (top to bottom) and their signature. The copy sits beside the project (its footage paths are
+        relative to that folder); the caller renders it and deletes it."""
+        pj = read_json(self.ecproj(f.id))
+        layers = self._comp_layers(pj)
+        pos = next((i for i, l in enumerate(layers) if int(l.get("id", -1)) == int(point)), None)
+        if pos is None:
+            raise KeyError(f"the composition has no layer {point}")
+        for l in layers[:pos]:
+            sw = l.setdefault("switches", {})
+            sw["video"] = False
+        below = [int(l["id"]) for l in layers[pos:]]
+        atomic_write_text(out, json.dumps(pj, indent=1))
+        return below, self._layer_signature(pj, layers, below)
+
+    def below_signatures(self, f: Final, wanted: list[tuple[str, list[int]]]) -> dict[str, str]:
+        """The signature of each processing layer's stack as the project file is now (compared with the record's: stale when they differ)."""
+        pj = read_json(self.ecproj(f.id))
+        layers = self._comp_layers(pj)
+        return {pid: self._layer_signature(pj, layers, ids) for pid, ids in wanted}
 
     def set_render(self, fid: str, clip_id: str, revision: int, job_id: str) -> Composition:
         """The finished shot rendered from the composition at `revision` (the `comp_render` job)."""
@@ -331,12 +393,78 @@ class CompositionStore:
         return out
 
     def sync_sources(self, f: Final, ec: EffectCraft) -> Composition:
-        """Every layer whose source moved on the final (a pass landed, a take chosen) swapped in the composition."""
+        """Every layer whose source moved on the final (a pass landed, a take chosen) swapped in the composition; AE4e: the final's
+        processing layers brought in (imported and added right above their layer), replaced when run again, taken out when dropped."""
         c = self._open(f, ec)
         for x in f.layers:
             if any(cl.id == x.id for cl in c.layers) and c.sources.get(x.id) != x.source:
                 c = self.set_source(f, ec, x.id, x.source)
+        return self._sync_processing(f, ec, c)
+
+    def _sync_processing(self, f: Final, ec: EffectCraft, c: Composition) -> Composition:
+        from .recipes import LayerPassPreset  # noqa: F401  (the labels below name the presets)
+        store = FinalStore(self.ws)
+        labels = {"cleanup": "Clean up", "creative": "Creative"}
+        changed = False
+        engine = {int(l["id"]): l for l in (ec.tool("get_comp", {"comp": COMP_NAME}).get("layers") or [])}
+        for rec in f.processing:
+            first = store.processing_dir(f.id, rec.id) / "frames" / "0000.png"
+            if not first.is_file():
+                continue
+            eid = c.processing.get(rec.id)
+            point = next((cl for cl in c.layers if cl.id == rec.above and cl.kind != "processing"), None)
+            if eid is None or eid not in engine:
+                if point is None or point.layer not in engine:
+                    continue
+                r = ec.command("file.import", {"paths": [str(first)], "sequence": True, "frameRate": f.rate})
+                if r.get("errors") or not r.get("items"):
+                    raise ValueError(f"import {first.parent.name}: {'; '.join(map(str, r.get('errors') or ['no item']))}")
+                index = engine[point.layer].get("index")
+                lid = int(ec.command("layer.addItem", {"item": int(r["items"][0]), "time": 0, **({"index": int(index)} if index else {})})["layer"])
+                name = f"Processed · {labels.get(rec.preset, rec.preset)} ({point.name} down)"
+                ec.command("layer.rename", {"layer": lid, "name": name})
+                c.processing[rec.id] = lid
+                c.processing_jobs[rec.id] = rec.job_id
+                c.layers = [cl for cl in c.layers if cl.id != rec.id] + [CompositionLayer(id=rec.id, kind="processing", name=name, layer=lid)]
+                changed = True
+            elif c.processing_jobs.get(rec.id) != rec.job_id:                 # run again: the footage replaced, the layer kept
+                item = self._item_of_engine_layer(f, eid)
+                if item is not None:
+                    ec.command("file.replaceFootage", {"item": item, "path": str(first), "sequence": True})
+                    ec.command("file.interpretFootage", {"items": [item], "frameRate": float(f.rate)})
+                    c.processing_jobs[rec.id] = rec.job_id
+                    changed = True
+        keep = {rec.id for rec in f.processing}
+        for pid in [p for p in c.processing if p not in keep]:                # dropped on the final: the layer goes
+            eid = c.processing.pop(pid)
+            c.processing_jobs.pop(pid, None)
+            if eid in engine:
+                ec.command("layer.select", {"layers": [eid]})
+                ec.command("edit.clear", {})
+            c.layers = [cl for cl in c.layers if cl.id != pid]
+            changed = True
+        if changed:
+            c = self._edited(f, ec, c)
+            c.final_revision = f.revision
+            c.stale = False
+            self.save(c)
         return c
+
+    def _item_of_engine_layer(self, f: Final, layer: int) -> int | None:
+        """The footage item behind an engine layer, read from the project file."""
+        try:
+            pj = read_json(self.ecproj(f.id))
+        except (OSError, ValueError):
+            return None
+        for l in self._comp_layers(pj):
+            if int(l.get("id", -1)) != int(layer):
+                continue
+            src = l.get("source")
+            if isinstance(src, dict) and src.get("type") == "Footage":
+                return int(src["item"])
+            if l.get("item") is not None:
+                return int(l["item"])
+        return None
 
     # ---- editing ---------------------------------------------------------------------------------
     def _open(self, f: Final, ec: EffectCraft) -> Composition:
@@ -427,6 +555,8 @@ class CompositionStore:
                     return l, self.matte_footage(f, l.id, c.sources.get(l.id))
                 if l.kind == "prop":
                     return l, self.footage(f.id) / l.id
+                if l.kind == "processing":
+                    raise ValueError("a processed stack fills the frame: nothing to trace into a mask")
                 if l.kind == "shadows":
                     return l, self.footage(f.id) / "shadow"
                 raise ValueError("the plate fills the frame: nothing to trace into a mask")

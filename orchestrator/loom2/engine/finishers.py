@@ -689,9 +689,14 @@ class LayerPassFinisher:
             raise ValueError(f"the pass returned {len(paths)} frames for {f.frames}")
         w, h = f.size["w"], f.size["h"]
         take_id = new_id("take")
+        proc = (sub.compiled.summary or {}).get("processing") if recipe.scope == "below" else None
+        if recipe.scope == "below" and not proc:
+            raise ValueError("the pass over the stack below lost its record (pipeline.render_below)")
+        d = store.processing_dir(f.id, proc["pid"]) / "frames" if proc else store.pass_dir(f.id, recipe.layer_id, f"passes/{take_id}")
 
         def write() -> None:
-            d = store.pass_dir(f.id, recipe.layer_id, f"passes/{take_id}")
+            if proc:
+                shutil.rmtree(d, ignore_errors=True)
             d.mkdir(parents=True, exist_ok=True)
             for i, src in enumerate(paths):
                 with Image.open(src) as im:
@@ -700,6 +705,16 @@ class LayerPassFinisher:
                         im = im.crop((0, 0, w, h)) if im.width >= w and im.height >= h else im.resize((w, h), Image.BILINEAR)
                     im.save(d / f"{i:04d}.png")
         await asyncio.to_thread(write)
+        if proc:                                                          # AE4e: a processing layer — the final's record; the composition brings it in on sync
+            from ..finals import ProcessingLayer
+            rec = ProcessingLayer(id=proc["pid"], above=recipe.layer_id, preset=recipe.preset, strength=recipe.strength, model_id=recipe.model_id, job_id=job.id,
+                                  frames=len(paths), made_at=utc_now(), signature=str(proc.get("signature") or ""), below=[int(x) for x in proc.get("below") or []])
+            shutil.rmtree(store.processing_dir(f.id, proc["pid"]) / "in", ignore_errors=True)
+            f = await asyncio.to_thread(store.set_processing, f.id, rec)
+            job.result["final_id"], job.result["layer_id"], job.result["processing_id"] = f.id, recipe.layer_id, proc["pid"]
+            job.log_tail.append(f"{recipe.preset} pass at {recipe.strength:g} over the stack from {recipe.layer_id} down: {len(paths)} frames → processing layer {proc['pid']}")
+            q.hub.broadcast("final.updated", {"id": f.id, "revision": f.revision})
+            return
         take = {"id": take_id, "preset": recipe.preset, "strength": recipe.strength, "model_id": recipe.model_id, "job_id": job.id, "frames": len(paths),
                 "seed": job.seed, "made_at": utc_now()}
         f = await asyncio.to_thread(store.add_take, f.id, recipe.layer_id, take, True)

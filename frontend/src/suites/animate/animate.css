@@ -245,3 +245,5 @@
 .final-lanes .lane.audio .bar { background-color: color-mix(in srgb, var(--accent) 22%, var(--bg3)); background-size: 100% 100%; background-repeat: no-repeat; opacity: .95; }
 .final-lanes .lane.audio .lane-name { color: var(--fg2); }
 .comp-passes .pass-mouth { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }   /* AE4d: the mouth's two ways under the Lip-sync tile */
+.comp-passes .pass-scope { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }   /* AE4e: this layer | everything below */
+.comp-layers .name .stale, .comp-processing .stale { color: var(--warn, #d9a441); font-weight: 600; font-size: 11px; }

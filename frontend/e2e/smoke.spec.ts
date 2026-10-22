@@ -1012,6 +1012,24 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('.ctx-menu')).toContainText('No voiced line in this shot')
   await page.locator('#anim-sec-layers button[data-attach-line]').click()                // a second press on the opener closes it
   await expect(page.locator('.ctx-menu')).toHaveCount(0)
+  // D118 (AE4e): a processing layer — Clean up over the stack from Mara's layer down (the fake CLI renders it apart, the fake engine
+  // answers the pass), brought in above her on sync; its row reads the record in Passes; removed
+  await expect(editor.locator('.segmented[data-scope] button', { hasText: 'everything below' })).toBeVisible()
+  await editor.locator('.segmented[data-scope] button', { hasText: 'everything below' }).click()
+  await expect(editor.locator('.comp-passes')).toHaveAttribute('data-scope', 'below')
+  await expect(editor.locator('.pass-tile[data-pass="face"]')).toBeDisabled()                                   // the face pass needs a character layer
+  await editor.locator('.pass-tile[data-pass="cleanup"]').click()
+  await editor.locator('.verbs button[title^="Run the pass"]').click()
+  await expect.poll(async () => (await api<{ items: { kind: string; status: string; recipe: { scope?: string } }[] }>('GET', '/jobs')).items.filter((j) => j.kind === 'layer_pass' && j.recipe.scope === 'below').map((j) => j.status).join(','), { timeout: 90_000 }).toBe('done')
+  await expect(page.locator('#anim-sec-layers li[data-processing="true"]')).toHaveCount(1, { timeout: 15_000 })
+  await expect(page.locator('#anim-sec-layers li[data-processing="true"] .name')).toContainText('Processed · Clean up')
+  await settled()
+  await page.locator('#anim-sec-layers li[data-processing="true"]').click()
+  await expect(editor.locator('.comp-processing')).toBeVisible()
+  await expect(editor.locator('.comp-processing')).not.toHaveAttribute('data-stale', 'true')
+  await editor.locator('.verbs button[title^="Remove the processing layer"]').click()
+  await expect(page.locator('#anim-sec-layers li[data-processing="true"]')).toHaveCount(0, { timeout: 15_000 })
+  await settled()
   await page.locator('.final-section [data-render]').click()
   await expect.poll(async () => (await api<Comp>('GET', `/finals/${fin.id}/composition`)).clip_id, { timeout: 60_000 }).toBeTruthy()
   const finished = await api<Done>('GET', `/finals/${fin.id}`)

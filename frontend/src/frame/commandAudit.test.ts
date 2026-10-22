@@ -141,16 +141,20 @@ describe('D32 command audit', () => {
     expect(contextOrphans([cmd('x.listed', ['context']), cmd('x.item', ['context']), cmd('x.tool.brush', ['context']), cmd('x.notAMenu', ['context']), cmd('x.button', ['toolbar'])], refs)).toEqual(['x.notAMenu'])
   })
 
-  it('gives the three transports one key set (D90, 02 §8.2): Animate, the Stage timeline, the Episode lane', () => {
-    const TRANSPORT: Record<string, [string, string, string]> = {                // normalised chord (' ' is Space): Animate · Stage · Episode
-      ' ': ['anim.play', 'stage.anim.play', 'story.episode.play'],
-      'arrowleft': ['anim.stepBack', 'stage.anim.prev', 'story.episode.stepBack'], 'arrowright': ['anim.stepForward', 'stage.anim.next', 'story.episode.stepForward'],
-      'shift+arrowleft': ['anim.back10', 'stage.anim.back10', 'story.episode.back10'], 'shift+arrowright': ['anim.fwd10', 'stage.anim.fwd10', 'story.episode.fwd10'],
-      'home': ['anim.home', 'stage.anim.first', 'story.episode.home'], 'end': ['anim.end', 'stage.anim.last', 'story.episode.end'],
+  it('gives Animate one transport and the Episode lane the same keys (D90 02 §8.2 → D121 AW2: Clay, Performance and Final share one set)', () => {
+    const TRANSPORT: Record<string, [string, string]> = {                      // normalised chord (' ' is Space): Animate's three levels · the Episode lane
+      ' ': ['anim.play', 'story.episode.play'],
+      'arrowleft': ['anim.stepBack', 'story.episode.stepBack'], 'arrowright': ['anim.stepForward', 'story.episode.stepForward'],
+      'shift+arrowleft': ['anim.back10', 'story.episode.back10'], 'shift+arrowright': ['anim.fwd10', 'story.episode.fwd10'],
+      'home': ['anim.home', 'story.episode.home'], 'end': ['anim.end', 'story.episode.end'],
     }
     const own = (id: string) => commands.defaultKeysOf(id)
     for (const [chord, ids] of Object.entries(TRANSPORT)) for (const id of ids) expect(norm(commands.parseChord(own(id)?.keys ?? '')), id).toBe(chord)
-    for (const [id, chord] of [['anim.setIn', 'i'], ['anim.setOut', 'o'], ['stage.anim.setStart', 'i'], ['stage.anim.setEnd', 'o']]) expect(norm(commands.parseChord(own(id)?.keys ?? '')), id).toBe(chord)
+    for (const [id, chord] of [['anim.setIn', 'i'], ['anim.setOut', 'o'], ['anim.prevKey', 'alt+arrowleft'], ['anim.nextKey', 'alt+arrowright']]) expect(norm(commands.parseChord(own(id)?.keys ?? '')), id).toBe(chord)
+    // the levels' own transports are gone: one command per verb
+    const retired = ['stage.anim.play', 'stage.anim.prev', 'stage.anim.next', 'stage.anim.back10', 'stage.anim.fwd10', 'stage.anim.first', 'stage.anim.last', 'stage.anim.setStart', 'stage.anim.setEnd',
+      'stage.anim.prevKey', 'stage.anim.nextKey', 'anim.final.play', 'anim.final.stepBack', 'anim.final.stepForward', 'anim.final.home', 'anim.final.end']
+    expect(retired.filter((id) => commands.command(id))).toEqual([])
   })
 
   it('marks a command used by hand only where the same file renders, runs or lists it (D90, 01 §11.3)', () => {

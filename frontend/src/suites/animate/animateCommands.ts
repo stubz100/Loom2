@@ -7,6 +7,7 @@ import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { useAnimRoute } from './routeStore'
+import { neighbour, transport } from './transport'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
   Scan as FromLayerIcon, MousePointerClick as ObjectIcon, PaintBucket as FillIcon, Route as TrackIcon, Wand2 as PassIcon } from 'lucide-react'
@@ -14,6 +15,10 @@ import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIc
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
+/** D121 (AW2): the transport of the level on screen (transport.ts); the clip player's own verbs only at Performance. */
+const tp = () => transport()
+const ready = () => !!tp()?.ready()
+const perfClip = () => useSession.getState().ui.suite === 'animate' && hasClip()
 const hasStart = () => !!an().panel.start
 /** D121: the Final level is the `final` suite; Performance's own commands stay off there (they share the animate scope's keys). */
 const atFinal = () => useSession.getState().ui.suite === 'final' && !!cp().comp
@@ -51,11 +56,6 @@ registerCommands([
       const f = m.useFinals.getState().finals.filter((x) => x.stage_id === id).at(-1)
       if (f && m.useFinals.getState().compositions[f.id]) m.useFinals.getState().openFinal(f.id); else useSession.getState().setSuite('final')
     }) },
-  { id: 'anim.final.play', scope: 'animate', label: 'Play / pause the composition', icon: Play, placement: ['toolbar'], when: atFinal, run: () => cp().togglePlay() },
-  { id: 'anim.final.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, placement: ['toolbar'], when: atFinal, run: () => cp().step(-1) },
-  { id: 'anim.final.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, placement: ['toolbar'], when: atFinal, run: () => cp().step(1) },
-  { id: 'anim.final.home', scope: 'animate', label: 'First frame', icon: ChevronFirst, placement: ['toolbar'], when: atFinal, run: () => cp().home() },
-  { id: 'anim.final.end', scope: 'animate', label: 'Last frame', icon: ChevronLast, placement: ['toolbar'], when: atFinal, run: () => cp().end() },
   // AE2: the editor — each one engine command on the composition (Layers' toolbar, the row's menu; the keys as accelerators)
   { id: 'anim.final.undo', scope: 'animate', label: 'Undo', icon: UndoIcon, keys: 'Ctrl+Z', placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().undo() },
   { id: 'anim.final.redo', scope: 'animate', label: 'Redo', icon: RedoIcon, keys: 'Ctrl+Shift+Z', placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().redo() },
@@ -87,19 +87,25 @@ registerCommands([
   { id: 'anim.final.render', scope: 'animate', label: 'Render the finished shot', hint: "the composition at Best and Full on the CPU; the clip becomes the final's and a take on its shot", icon: Film, keys: 'Ctrl+Enter', placement: ['panel'], when: () => atFinal() && !compRendering(),
     run: () => { const id = cp().finalId; if (id) void import('../stage/finalShot').then((m) => m.useFinals.getState().render(id)) } },
   { id: 'anim.final.before', scope: 'animate', label: 'Before', hint: 'the frame with every effect off; again for after', icon: BeforeIcon, placement: ['toolbar', 'context'], when: atFinal, run: () => void cp().compareBefore(!cp().before) },
-  { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: hasClip, run: () => an().togglePlay() },
-  { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(-1) },
-  { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: hasClip, run: () => an().step(1) },
-  { id: 'anim.back10', scope: 'animate', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+ArrowLeft', alt: ['Shift+,', '<'], placement: ['toolbar'], when: hasClip, run: () => an().step(-10) },
-  { id: 'anim.fwd10', scope: 'animate', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', alt: ['Shift+.', '>'], placement: ['toolbar'], when: hasClip, run: () => an().step(10) },
-  { id: 'anim.home', scope: 'animate', label: 'First frame', icon: ChevronFirst, keys: 'Home', placement: ['toolbar', 'context'], when: hasClip, run: () => { an().togglePlay(false); an().setFrame(0) } },
-  { id: 'anim.end', scope: 'animate', label: 'Last frame', icon: ChevronLast, keys: 'End', placement: ['toolbar', 'context'], when: hasClip, run: () => { an().togglePlay(false); an().setFrame((an().clip()?.frames ?? 1) - 1) } },
-  { id: 'anim.shuttleBack', scope: 'animate', label: 'Shuttle backward (J)', icon: SkipBack, keys: 'J', placement: ['context'], when: hasClip, run: () => { const s = an(); useAnimate.setState({ speed: s.speed > 0 ? -1 : Math.max(-4, s.speed * 2) }); s.togglePlay(true) } },
-  { id: 'anim.shuttleStop', scope: 'animate', label: 'Stop (K)', icon: Pause, keys: 'K', placement: ['context'], when: hasClip, run: () => { useAnimate.setState({ speed: 1 }); an().togglePlay(false) } },
-  { id: 'anim.shuttleFwd', scope: 'animate', label: 'Shuttle forward (L)', icon: SkipForward, keys: 'L', placement: ['context'], when: hasClip, run: () => { const s = an(); useAnimate.setState({ speed: s.speed < 0 ? 1 : Math.min(4, s.speed * 2) }); s.togglePlay(true) } },
-  { id: 'anim.setIn', scope: 'animate', label: 'Set in point', icon: Scissors, keys: 'I', placement: ['toolbar', 'context'], when: hasClip, run: () => an().setInOut('in') },
-  { id: 'anim.setOut', scope: 'animate', label: 'Set out point', icon: Scissors, keys: 'O', placement: ['toolbar', 'context'], when: hasClip, run: () => an().setInOut('out') },
-  { id: 'anim.clearInOut', scope: 'animate', label: 'Clear in / out', icon: SquareX, placement: ['toolbar', 'context'], when: () => an().inPoint !== null || an().outPoint !== null, run: () => an().setInOut('clear') },
+  // D121 (AW2): the one transport of Animate's three levels — each runs the transport of the level on screen (transport.ts: the stage at Clay,
+  // the clip at Performance, the composition at Final); the key set of D90 / D99, the same at every level and in the Episode lane
+  { id: 'anim.play', scope: 'animate', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['toolbar', 'context'], when: ready, run: () => tp()?.play() },
+  { id: 'anim.stepBack', scope: 'animate', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', alt: [','], placement: ['toolbar', 'context'], when: ready, run: () => tp()?.step(-1) },
+  { id: 'anim.stepForward', scope: 'animate', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', alt: ['.'], placement: ['toolbar', 'context'], when: ready, run: () => tp()?.step(1) },
+  { id: 'anim.back10', scope: 'animate', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+ArrowLeft', alt: ['Shift+,', '<'], placement: ['toolbar'], when: ready, run: () => tp()?.step(-10) },
+  { id: 'anim.fwd10', scope: 'animate', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', alt: ['Shift+.', '>'], placement: ['toolbar'], when: ready, run: () => tp()?.step(10) },
+  { id: 'anim.home', scope: 'animate', label: 'First frame', hint: "at Clay the range's start", icon: ChevronFirst, keys: 'Home', placement: ['toolbar', 'context'], when: ready, run: () => tp()?.home() },
+  { id: 'anim.end', scope: 'animate', label: 'Last frame', hint: "at Clay the range's end", icon: ChevronLast, keys: 'End', placement: ['toolbar', 'context'], when: ready, run: () => tp()?.end() },
+  { id: 'anim.prevKey', scope: 'animate', label: 'Previous key', hint: "the stage's keys, the clip's beats and harvested frames, the selected layer's keys", icon: SkipBack, keys: 'Alt+ArrowLeft', placement: ['toolbar'],
+    when: () => !!tp()?.marks && neighbour(tp()!.marks!(), tp()!.frame(), -1) !== null, run: () => { const t = tp(); const f = t?.marks ? neighbour(t.marks(), t.frame(), -1) : null; if (t && f !== null) t.seek(f) } },
+  { id: 'anim.nextKey', scope: 'animate', label: 'Next key', hint: "the stage's keys, the clip's beats and harvested frames, the selected layer's keys", icon: SkipForward, keys: 'Alt+ArrowRight', placement: ['toolbar'],
+    when: () => !!tp()?.marks && neighbour(tp()!.marks!(), tp()!.frame(), 1) !== null, run: () => { const t = tp(); const f = t?.marks ? neighbour(t.marks(), t.frame(), 1) : null; if (t && f !== null) t.seek(f) } },
+  { id: 'anim.shuttleBack', scope: 'animate', label: 'Shuttle backward (J)', icon: SkipBack, keys: 'J', placement: ['context'], when: perfClip, run: () => { const s = an(); useAnimate.setState({ speed: s.speed > 0 ? -1 : Math.max(-4, s.speed * 2) }); s.togglePlay(true) } },
+  { id: 'anim.shuttleStop', scope: 'animate', label: 'Stop (K)', icon: Pause, keys: 'K', placement: ['context'], when: perfClip, run: () => { useAnimate.setState({ speed: 1 }); an().togglePlay(false) } },
+  { id: 'anim.shuttleFwd', scope: 'animate', label: 'Shuttle forward (L)', icon: SkipForward, keys: 'L', placement: ['context'], when: perfClip, run: () => { const s = an(); useAnimate.setState({ speed: s.speed < 0 ? 1 : Math.min(4, s.speed * 2) }); s.togglePlay(true) } },
+  { id: 'anim.setIn', scope: 'animate', label: 'Set in point', hint: "the work area's start here — at Clay the stage's range", icon: Scissors, keys: 'I', placement: ['toolbar', 'context'], when: () => ready() && !!tp()?.setIn, run: () => tp()?.setIn?.() },
+  { id: 'anim.setOut', scope: 'animate', label: 'Set out point', hint: "the work area's end here — at Clay the stage's range", icon: Scissors, keys: 'O', placement: ['toolbar', 'context'], when: () => ready() && !!tp()?.setOut, run: () => tp()?.setOut?.() },
+  { id: 'anim.clearInOut', scope: 'animate', label: 'Clear in / out', icon: SquareX, placement: ['toolbar', 'context'], when: () => !!tp()?.hasInOut?.(), run: () => tp()?.clearInOut?.() },
   { id: 'anim.loop', scope: 'animate', label: 'Loop', icon: Repeat, placement: ['strip', 'context'], run: () => useAnimate.setState({ loop: !an().loop }) },
   { id: 'anim.onion', scope: 'animate', label: 'Onion skin (start / end stills at 30 %)', icon: Eye, keys: 'N', placement: ['strip', 'context'], when: hasClip, run: () => useAnimate.setState({ onion: !an().onion }) },
   { id: 'anim.view.player', scope: 'animate', label: 'Player view', icon: Film, placement: ['strip'], run: () => an().setView('player') },

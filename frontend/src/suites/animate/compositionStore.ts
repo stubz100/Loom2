@@ -8,6 +8,7 @@ import { create } from 'zustand'
 import { baseUrl, getBackend, http, unwrap } from '../../api/client'
 import type { Composition, Final } from '../../api/types'
 import { useSession } from '../../store/session'
+import { registerTransport } from './transport'
 
 export type Side = 'half' | 'full'
 export const REST_MS = 300                 // the playhead still this long: the full frame
@@ -666,3 +667,13 @@ export const useComposition = create<CompState>((set, get) => {
     },
   }
 })
+
+// D121 (AW2): the Final level's transport — the composition's frames; the selected layer's keys as the marks (no work area at Final)
+{
+  const c = () => useComposition.getState()
+  registerTransport('final', {
+    ready: () => !!c().comp && !!c().final, playing: () => c().playing, play: (on) => c().togglePlay(on),
+    frame: () => c().frame, seek: (f) => c().setFrame(f), step: (d) => c().step(d), home: () => c().home(), end: () => c().end(),
+    marks: () => { const rate = c().final?.rate ?? 16; return Object.values(c().keysOf).flat().map((k) => Math.round(k.time * rate)) },
+  })
+}

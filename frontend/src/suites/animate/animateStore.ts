@@ -9,6 +9,7 @@ import { byOrder, resolveModel } from '../../store/modelCaps'
 import { FOR_SHOT, forLabel, originFor, useMakeFor } from '../../store/origin'
 import { useSession } from '../../store/session'
 import { DEV_HOOKS } from '../../devHooks'
+import { registerTransport } from './transport'
 
 export type AnimPreset = 'draft' | 'motion' | 'quality'
 export interface Beat { frame: number; asset_id: string; strength: number }
@@ -404,3 +405,15 @@ export const useAnimate = create<AnimateState>()(
 )
 
 if (DEV_HOOKS) (window as unknown as { __loom2Animate?: typeof useAnimate }).__loom2Animate = useAnimate      // dev: the headed check drives the player
+
+// D121 (AW2): the Performance level's transport — the clip's frames, its in / out, its beats and harvested frames as the marks
+{
+  const s = () => useAnimate.getState()
+  registerTransport('animate', {
+    ready: () => !!s().clip(), playing: () => s().playing, play: (on) => s().togglePlay(on),
+    frame: () => s().frame, seek: (f) => s().setFrame(f), step: (d) => s().step(d),
+    home: () => { s().togglePlay(false); s().setFrame(0) }, end: () => { s().togglePlay(false); s().setFrame((s().clip()?.frames ?? 1) - 1) },
+    setIn: () => s().setInOut('in'), setOut: () => s().setInOut('out'), clearInOut: () => s().setInOut('clear'), hasInOut: () => s().inPoint !== null || s().outPoint !== null,
+    marks: () => { const c = s().clip(); return c ? [...c.beats.map((b) => b.frame), ...(s().pins[c.id] ?? []).map((p) => p.frame)] : [] },
+  })
+}

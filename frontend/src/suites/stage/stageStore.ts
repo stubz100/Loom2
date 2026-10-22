@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { api, ApiError, http, sha256Hex, unwrap } from '../../api/client'
 import { isDocumentPreview, type Asset, type DocumentPreview, type Job, type StageCamera, type StageDoc, type StageObject, type StageTemplate } from '../../api/types'
 import { useSession } from '../../store/session'
+import { registerTransport } from '../animate/transport'
 import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
@@ -158,6 +159,10 @@ interface StageState {
   addPathPoint: (id: string, p: [number, number]) => void
   clearPath: (id: string) => void
   removeKeyAt: (frame: number) => void
+  /** D121 (AW2): one row's key moved on the timeline (`cam:<id>` / `obj:<id>`) — the key's values kept, a key already there replaced. */
+  moveKey: (row: string, from: number, to: number) => void
+  /** D121 (AW2): one row's key removed (its right-click on the timeline). */
+  removeRowKey: (row: string, frame: number) => void
   setGuideKind: (k: GuideKind) => void
   setClipMethod: (m: ClipMethod) => void
   /** The chosen method's capabilities (model, size, frame step, frames_max …), or null when this build has none. */
@@ -340,6 +345,24 @@ export const useStage = create<StageState>()((set, get) => ({
     const objects = Object.fromEntries(Object.entries(k.objects).map(([id, ks]) => [id, withoutKey(ks, frame)]).filter(([, ks]) => (ks as ObjectKey[]).length))
     return { ...d, keyframes: { camera, objects } }
   }, 'remove keys'),
+  moveKey: (row, from, to) => {
+    const at = row.indexOf(':'), kind = row.slice(0, at), id = row.slice(at + 1)
+    if (from === to || to < 0 || (kind !== 'cam' && kind !== 'obj')) return
+    get().apply((d) => {
+      const k = keyframesOf(d)
+      if (kind === 'cam') { const ks = k.camera[id] ?? []; const key = ks.find((x) => x.frame === from); return key ? { ...d, keyframes: { ...k, camera: { ...k.camera, [id]: withKey(withoutKey(ks, from), { ...key, frame: to }) } } } : d }
+      const ks = k.objects[id] ?? []; const key = ks.find((x) => x.frame === from)
+      return key ? { ...d, keyframes: { ...k, objects: { ...k.objects, [id]: withKey(withoutKey(ks, from), { ...key, frame: to }) } } } : d
+    }, 'move key')
+  },
+  removeRowKey: (row, frame) => {
+    const at = row.indexOf(':'), kind = row.slice(0, at), id = row.slice(at + 1)
+    get().apply((d) => {
+      const k = keyframesOf(d)
+      const drop = <T extends { frame: number }>(rec: Record<string, T[]>) => { const ks = withoutKey(rec[id], frame); const out = { ...rec }; if (ks.length) out[id] = ks; else delete out[id]; return out }
+      return kind === 'cam' ? { ...d, keyframes: { ...k, camera: drop(k.camera) } } : kind === 'obj' ? { ...d, keyframes: { ...k, objects: drop(k.objects) } } : d
+    }, 'remove key')
+  },
   setGuideKind: (guideKind) => set({ guideKind: get().clipMethod === 'animate' ? 'pose' : guideKind }),
   setClipMethod: (clipMethod) => set({ clipMethod, guideKind: clipMethod === 'animate' ? 'pose' : get().guideKind }),     // Animate performs the pose pass
   clipCaps: () => { const st = useSession.getState().capabilities?.stage; return ((get().clipMethod === 'animate' ? st?.animate : st?.clip) ?? null) as ClipCaps | null },
@@ -774,3 +797,15 @@ export function imageSetBudget(doc: StageDoc, o: StageObject): { within: boolean
 }
 
 export const st = () => useStage.getState()
+
+// D121 (AW2): the Clay level's transport — the scene's frame, its range as the work area, its keys as the marks (registered with the stage's code)
+{
+  const s = () => useStage.getState()
+  registerTransport('stage', {
+    ready: () => !!s().current, playing: () => s().playing, play: (on) => s().setPlaying(on ?? !s().playing),
+    frame: () => s().frame, seek: (f) => s().setFrame(f), step: (d) => { s().setPlaying(false); s().setFrame(s().frame + d) },
+    home: () => { s().setPlaying(false); s().setFrame(s().current?.range.start ?? 0) }, end: () => { s().setPlaying(false); s().setFrame(s().current?.range.end ?? 0) },
+    setIn: () => { const f = s().frame; s().setRange(f, Math.max(f + 1, s().current!.range.end)) }, setOut: () => { const f = s().frame; s().setRange(Math.min(f - 1, s().current!.range.start), f) },
+    marks: () => s().keyedFrames(),
+  })
+}

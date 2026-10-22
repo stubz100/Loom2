@@ -122,19 +122,6 @@
 .comp-effect-list .dial input[type=text] { width: 110px; }
 .comp-effect-list .dial select { font-size: 11px; max-width: 120px; }
 /* AE2d: the lanes under the transport */
-.final-viewer .final-lanes { display: grid; gap: 2px; padding: 4px 8px 6px; font-size: 11px; border-top: 1px solid var(--line); user-select: none; }
-.final-viewer .lane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; height: 18px; cursor: pointer; color: var(--fg3); }
-.final-viewer .lane .lane-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.final-viewer .lane.selected { color: var(--fg); }
-.final-viewer .lane-track { position: relative; height: 14px; background: var(--line); border-radius: 3px; }
-.final-viewer .lane .bar { position: absolute; top: 1px; bottom: 1px; background: var(--fg3); border-radius: 3px; opacity: .75; cursor: grab; }
-.final-viewer .lane.selected .bar { background: var(--accent); opacity: 1; }
-.final-viewer .lane .bar.dragging { opacity: .6; }
-.final-viewer .lane .bar .h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; background: rgba(0, 0, 0, .25); }
-.final-viewer .lane .bar .h-in { left: 0; border-radius: 3px 0 0 3px; }
-.final-viewer .lane .bar .h-out { right: 0; border-radius: 0 3px 3px 0; }
-.final-viewer .lane .bar .key { position: absolute; top: 50%; width: 6px; height: 6px; transform: translate(-50%, -50%) rotate(45deg); background: var(--bg); border: 1px solid var(--fg); pointer-events: none; }
-.final-viewer .lane .playhead { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--fg); pointer-events: none; }
 .anim-empty { color: var(--fg3); text-align: center; }
 .anim-empty h2 { color: var(--fg2); font-weight: 500; margin: 0 0 8px; }
 
@@ -156,19 +143,6 @@
 .transport .spacer { flex: 1; }
 .transport select { min-height: 24px; }
 
-.timeline { position: relative; height: 54px; margin: 0 10px 6px; user-select: none; }
-.timeline .ruler { position: absolute; left: 0; right: 0; top: 18px; height: 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
-.timeline .range { position: absolute; top: 18px; height: 14px; background: color-mix(in srgb, var(--accent) 20%, transparent); border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); pointer-events: none; }
-.timeline .tick { position: absolute; top: 18px; width: 1px; height: 14px; background: var(--line2); pointer-events: none; }
-.timeline .tick.major { height: 18px; top: 14px; background: var(--fg3); }
-.timeline .tick span { position: absolute; top: -14px; left: 2px; font-size: 10px; color: var(--fg3); }
-.timeline .head { position: absolute; top: 12px; width: 2px; height: 26px; background: var(--accent); pointer-events: none; transform: translateX(-1px); }
-.timeline .head::after { content: ''; position: absolute; top: -5px; left: -4px; border: 5px solid transparent; border-top: 6px solid var(--accent); }
-.timeline .marker { position: absolute; top: 34px; transform: translateX(-50%); font-size: 10px; color: var(--fg2); background: var(--bg3); border-radius: 3px; padding: 0 4px; line-height: 14px; }
-.timeline .marker.beat { background: var(--info-bg); color: var(--info-fg); }
-.timeline .marker.pin { background: var(--keep-bg); color: var(--keep); cursor: pointer; }
-.timeline .handle { position: absolute; top: 16px; width: 8px; height: 18px; background: var(--accent); border-radius: 2px; cursor: ew-resize; transform: translateX(-50%); }
-.timeline .handle.out { background: var(--fg2); }
 
 .anim-interim { display: flex; gap: 8px; padding: 6px 10px; overflow-x: auto; border-top: 1px solid var(--line); background: var(--bg1); font-size: 11px; color: var(--fg2); }
 .anim-interim .card { width: 200px; flex: none; border-radius: var(--radius); background: var(--bg2); padding: 6px; display: grid; gap: 4px; }
@@ -242,7 +216,12 @@
 /* D118 (AE4b): a line as an audio layer — its row and its lane with the waveform */
 .comp-layer-list li.audio { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .comp-layer-list li.audio .name { font-style: italic; }
-.final-lanes .lane.audio .bar { background-color: color-mix(in srgb, var(--accent) 22%, var(--bg3)); background-size: 100% 100%; background-repeat: no-repeat; opacity: .95; }
+/* D121 (AW2): the Final level's lanes on the one timeline — the selected layer's bar in the accent; a line's waveform on its bar */
+.final-lanes .tl-row.lane { cursor: pointer; }
+.final-lanes .tl-row.lane .tl-bar { background: var(--fg3); border-color: transparent; opacity: .75; cursor: grab; }
+.final-lanes .tl-row.lane.selected .tl-bar { background: var(--accent); opacity: 1; }
+.final-lanes .tl-row.lane .tl-bar .h { background: color-mix(in srgb, var(--deep) 40%, transparent); }
+.final-lanes .lane.audio .tl-bar { background-color: color-mix(in srgb, var(--accent) 22%, var(--bg3)); background-size: 100% 100%; background-repeat: no-repeat; opacity: .95; }
 .final-lanes .lane.audio .lane-name { color: var(--fg2); }
 .comp-passes .pass-mouth { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }   /* AE4d: the mouth's two ways under the Lip-sync tile */
 .comp-passes .pass-scope { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }   /* AE4e: this layer | everything below */

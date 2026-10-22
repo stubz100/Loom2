@@ -28,6 +28,9 @@ import { ShotHead } from './ShotStepper'
 import { AnimColumn, Sec } from '../animate/column'
 import type { StageCamera, StageObject } from '../../api/types'
 import { keyedFrames as keyedFramesOf, keyframesOf, sampleDoc } from './anim'
+import { Timeline as TimelineView, TransportBar, type TLRow } from '../animate/Timeline'
+import { keyRuns, stageSpan } from '../animate/timelineMath'
+import { TRANSPORT_IDS } from '../animate/transport'
 import { JOINTS, MANNEQUIN_PRESETS, POSE_NAMES, PROP_PRESETS, SET_PRESETS, type Joint } from './builders'
 import { StageEngine } from './engine'
 import { viewport, viewportMenu, cameraMenu } from './stageCommands'
@@ -598,7 +601,7 @@ export function Strip() {
       if (useSession.getState().ui.suite !== 'stage') return
       if (document.querySelector('.ctx-menu')) return                     // D90: an open menu owns the arrows, Space and Enter
       if (inField(e)) { primaryInField(e, ['stage.shot.passes']); return }   // D90 (B1): a key typed into a field never reaches the tools (Delete deleted the object)
-      handleKeyFor('stage', e)
+      if (!handleKeyFor('stage', e)) handleKeyFor('animate', e, (c) => TRANSPORT_IDS.has(c.id))   // D121 (AW2): the one transport, beside the stage's own keys
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -621,32 +624,50 @@ export function Strip() {
   )
 }
 
-// ST4 (16 §8): the frame scrubber with the key markers, the range, play and step, Key camera / object — every verb a button (D32).
+// ST4 (16 §8) → D121 (AW2): Clay's timeline — the one transport (anim.*: play, step, the range's ends, previous / next key) with the frame
+// field, the range and the stage's key verbs; then the one timeline: the range as the work area (its ends dragged), a row for the active
+// camera and one for each keyed object — a motion clip's bake as a bar, single keys as diamonds (drag one to move it, right-click to remove
+// it, click to go to it). Nothing keyed: the ruler alone (the bar), as ArtCraft's collapsed timeline.
 function Timeline() {
   const current = useStage((s) => s.current)!
   const frame = useStage((s) => s.frame)
   const playing = useStage((s) => s.playing)
   const selected = useStage((s) => s.selected)
-  const keyed = keyedFramesOf(keyframesOf(current), current.active_camera)        // derived from `current` (subscribed): a selector must not return a fresh array
+  const selectedCamera = useStage((s) => s.selectedCamera)
+  const k = keyframesOf(current)                                                  // derived from `current` (subscribed): a selector must not return a fresh object
+  const keyed = keyedFramesOf(k, current.active_camera)
   const { start, end } = current.range
-  const span = Math.max(1, end - start)
-  markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey'); markUsed('stage.anim.setStart'); markUsed('stage.anim.setEnd')
+  const cam = current.cameras.find((c) => c.id === current.active_camera) ?? null
+  const camKeys = cam ? (k.camera[cam.id] ?? []).map((x) => x.frame) : []
+  const objects = current.objects.filter((o) => (k.objects[o.id] ?? []).length > 0)
+  const span = stageSpan(end, [...camKeys, ...objects.flatMap((o) => k.objects[o.id].map((x) => x.frame))])
+  markUsed('stage.anim.keyCamera'); markUsed('stage.anim.keyObject'); markUsed('stage.anim.removeKey')
+  const row = (id: string, label: string, frames: number[], sel: boolean, onSelect: () => void): TLRow => {
+    const { runs, singles } = keyRuns(frames)
+    return { id, label, selected: sel, onSelect, data: { kind: id.slice(0, 3) },
+      bars: runs.map(([a, b]) => ({ id: `${a}`, from: a, to: b, label: `motion · ${b - a + 1}`, className: 'motion', title: `${b - a + 1} keys frame by frame (a motion clip), frames ${a}–${b}` })),
+      keys: singles.map((f) => ({ frame: f, title: `key at frame ${f} — click: go there; drag: move it; right-click: remove it` })) }
+  }
+  const rows: TLRow[] = []
+  if (cam && camKeys.length) rows.push(row(`cam:${cam.id}`, `camera · ${cam.name}`, camKeys, selectedCamera === cam.id, () => st().selectCamera(cam.id)))
+  for (const o of objects) rows.push(row(`obj:${o.id}`, o.name, k.objects[o.id].map((x) => x.frame), selected === o.id, () => st().select(o.id)))
+  const keyMenu = (e: React.MouseEvent, r: string, f: number) => showMenu(e, [{ label: `Go to frame ${f}`, run: () => { st().setPlaying(false); st().setFrame(f) } },
+    { label: 'Remove this key', danger: true, run: () => st().removeRowKey(r, f) }])
   return (
     <div className="stage-timeline" onPointerDown={(e) => e.stopPropagation()}>
-      <CommandRow ids={['stage.anim.first', 'stage.anim.prevKey', 'stage.anim.back10', 'stage.anim.prev', 'stage.anim.play', 'stage.anim.next', 'stage.anim.fwd10', 'stage.anim.nextKey', 'stage.anim.last']} active={playing ? 'stage.anim.play' : undefined} />
-      <input className="frame-field" type="number" min={0} value={frame} onChange={(e) => st().setFrame(Number(e.target.value) || 0)} title="the frame the viewport shows" />
-      <div className="scrub-wrap">
-        <div className="key-marks">{keyed.filter((f) => f >= start && f <= end).map((f) => <i key={f} className={`key-mark${f === frame ? ' here' : ''}`} style={{ left: `${((f - start) / span) * 100}%` }} title={`key at frame ${f}`} />)}</div>
-        <input className="scrub" type="range" min={start} max={end} step={1} value={Math.min(end, Math.max(start, frame))} onChange={(e) => st().setFrame(Number(e.target.value))} />
-      </div>
-      <span className="range-field" title="the clip's range (frames, inclusive) at the project's fps">
-        <input type="number" min={0} value={start} onChange={(e) => st().setRange(Number(e.target.value) || 0, end)} />–<input type="number" min={1} value={end} onChange={(e) => st().setRange(start, Number(e.target.value) || 1)} /> · {current.size.fps} fps
-      </span>
-      <CommandRow ids={['stage.anim.setStart', 'stage.anim.setEnd']} />
-      <span className="sep" />
-      <CommandButton id="stage.anim.keyCamera" text label="Key camera" active={keyed.includes(frame) && !!(st().keys().camera[current.active_camera ?? ''] ?? []).some((k) => k.frame === frame)} />
-      <CommandButton id="stage.anim.keyObject" text label={selected ? 'Key object' : 'Key object (select one)'} />
-      <CommandButton id="stage.anim.removeKey" />
+      <TransportBar frame={frame} last={span[1]} playing={playing} onFrame={(f) => st().setFrame(f)} counter={`${(frame / Math.max(1, current.size.fps)).toFixed(2)} s`}>
+        <span className="range-field" title="the clip's range (frames, inclusive) at the project's fps — or drag its ends on the ruler">
+          <input type="number" min={0} value={start} onChange={(e) => st().setRange(Number(e.target.value) || 0, end)} />–<input type="number" min={1} value={end} onChange={(e) => st().setRange(start, Number(e.target.value) || 1)} /> · {current.size.fps} fps
+        </span>
+        <CommandRow ids={['anim.setIn', 'anim.setOut']} />
+        <span className="sep" />
+        <CommandButton id="stage.anim.keyCamera" text label="Key camera" active={keyed.includes(frame) && !!(st().keys().camera[current.active_camera ?? ''] ?? []).some((x) => x.frame === frame)} />
+        <CommandButton id="stage.anim.keyObject" text label={selected ? 'Key object' : 'Key object (select one)'} />
+        <CommandButton id="stage.anim.removeKey" />
+      </TransportBar>
+      <TimelineView className="stage-tl" span={span} fps={current.size.fps} frame={frame} onSeek={(f) => { st().setPlaying(false); st().setFrame(f) }}
+        work={{ from: start, to: end, title: "the clip's range", onChange: (a, b) => st().setRange(a, b) }} rows={rows}
+        onKeyDrag={(r, from, to) => st().moveKey(r, from, to)} onKeyMenu={keyMenu} />
     </div>
   )
 }

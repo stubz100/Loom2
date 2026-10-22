@@ -1,0 +1,36 @@
+/* D121 (AW2): the one timeline — a label column and a track per row; the ruler on top with the work area, ticks and the playhead; rows of
+   bars, keys and markers with the playhead's line through them. */
+.tl { display: grid; gap: 1px; padding: 2px 8px 6px; font-size: 11px; color: var(--fg2); user-select: none; background: var(--bg1); max-height: 34vh; overflow-y: auto; }
+.tl-row { display: grid; grid-template-columns: 112px 1fr; align-items: center; min-height: 18px; }
+.tl-row.selected .tl-label { color: var(--accent); font-weight: 600; }
+.tl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 6px; }
+.tl-track { position: relative; height: 18px; }
+.tl-ruler-row .tl-track { height: 24px; cursor: pointer; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; }
+.tl-work { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 20%, transparent); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); pointer-events: none; }
+.tl-ruler .tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: var(--line2); pointer-events: none; }
+.tl-ruler .tick.major { height: 11px; background: var(--fg3); }
+.tl-ruler .tick span { position: absolute; top: -12px; left: 2px; font-size: 10px; color: var(--fg3); }
+.tl-ruler .tick.major span { top: 1px; }
+.tl-handle { position: absolute; top: -2px; bottom: -2px; width: 8px; background: var(--accent); border-radius: 2px; cursor: ew-resize; transform: translateX(-50%); z-index: 2; }
+.tl-handle.out { background: var(--fg2); }
+.tl-head { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--accent); pointer-events: none; transform: translateX(-1px); z-index: 3; }
+.tl-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); pointer-events: none; transform: translateX(-0.5px); opacity: .8; }
+.tl-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; background: var(--bg3); border: 1px solid var(--line2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 4px; line-height: 12px; font-size: 10px; color: var(--fg2); box-sizing: border-box; }
+.tl-bar[draggable], .tl-bar:has(.h) { cursor: grab; }
+.tl-bar.dragging { opacity: .75; cursor: grabbing; }
+.tl-bar.motion { background: color-mix(in srgb, var(--info) 25%, var(--bg3)); border-color: var(--info); }
+.tl-bar .h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.tl-bar .h-in { left: 0; }
+.tl-bar .h-out { right: 0; }
+.tl-key { position: absolute; top: 5px; width: 7px; height: 7px; margin-left: -3.5px; background: var(--accent); transform: rotate(45deg); cursor: pointer; z-index: 1; }
+.tl-key.draggable { cursor: ew-resize; }
+.tl-key.here { background: var(--fg); }
+.tl-marker { position: absolute; top: 1px; transform: translateX(-50%); font-size: 10px; color: var(--fg2); background: var(--bg3); border-radius: 3px; padding: 0 4px; line-height: 14px; z-index: 1; }
+.tl-marker.beat { background: var(--info-bg); color: var(--info-fg); }
+.tl-marker.pin { background: var(--keep-bg); color: var(--keep); cursor: pointer; }
+/* the one transport — styled here, so every level's chunk that draws the timeline has it (Clay's does not load animate.css) */
+.tl-transport { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg1); border-top: 1px solid var(--line); font-size: 12px; color: var(--fg2); flex-wrap: wrap; }
+.tl-transport .counter { font-family: var(--mono); font-size: 12px; color: var(--fg); white-space: nowrap; }
+.tl-transport .frame-field { width: 58px; }
+.tl-transport .spacer { flex: 1; }
+.tl-transport .sep { width: 1px; height: 16px; background: var(--line2); margin: 0 2px; }

@@ -8,6 +8,7 @@ import { markUsed, runCommand } from '../../frame/commands'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import type { Job } from '../../api/types'
+import { useMakeFor } from '../../store/origin'
 import { ForChip } from '../story/ForChip'
 import { ForRecipe } from '../story/RecipeSteps'
 import { assembling, rendering, useFinals, useFinalsPoll } from './finalShot'
@@ -82,10 +83,12 @@ export function StagePicker() {
 
 /** The Shot section of a level: the For chip and the Story shot's recipe, then (when the work is the stage's) the stage and its steps. */
 export function ShotHead({ stage = true }: { stage?: boolean }) {
+  const forShot = useMakeFor((s) => s.animate)
   return (
     <div className="shot-head">
       <ForChip maker="animate" /><ForRecipe maker="animate" />
       {stage && <><StagePicker /><ShotStepper /></>}
+      {!stage && !forShot && <span className="hint">Not for a Story shot. <Help text="A clip made here stands alone in the Catalogue. Opened from Story (a shot's Make clip ▸), the shot is named here and its clips come back as its takes." /></span>}
     </div>
   )
 }

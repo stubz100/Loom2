@@ -7940,3 +7940,34 @@ The author asked for a review of the state of things, then "record all this and 
   reads the stepper (passes none → done after the foot's Render passes; no stepper on the Image to video card) and jumps by it (frame → Image
   · From a stage, final → Performance's Final shot card). Vitest 410 + 3 skipped, typecheck and build clean, lint 0 errors (79), e2e 51/51
   full and 51/51 open. The screenshots in `.docs/proto01_animate/img/26-aw1-*.jpg` taken again with the Shot head.
+
+## 2026-10-22 22:44 — AW2 built (D121, proto01_animate 26 §5.1 rule 3): one timeline, one transport
+
+- **One transport** (`suites/animate/transport.ts`): each level registers what play, step, home / end, in / out and its marks mean for it —
+  Clay (the stage store: the scene's frame, its range, its keys), Performance (the clip player: its frames, in / out, beats and harvested
+  frames), Final (the composition: its frames, the selected layer's keys) — and one command set runs the level on screen: `anim.play`,
+  `anim.stepBack` / `stepForward`, `anim.back10` / `fwd10`, `anim.home` / `end`, `anim.setIn` / `setOut` / `clearInOut`, and new
+  `anim.prevKey` / `nextKey` (Alt+← / →, now at every level). Retired: the stage's eleven (`stage.anim.play`, `prev`, `next`, `prevKey`,
+  `nextKey`, `back10`, `fwd10`, `first`, `last`, `setStart`, `setEnd`) and the Final's five (`anim.final.play`, `stepBack`, `stepForward`,
+  `home`, `end`) — 26 transport commands down to 12, the key set of D90 / D99 unchanged. Clay's key hook runs the transport ids beside its own
+  scope; the Final's runs them beside `anim.final.*`; the clip player's shuttle (J / K / L) stays Performance's.
+- **One timeline** (`suites/animate/Timeline.tsx`, its arithmetic pure in `timelineMath.ts`, styles in `timeline.css`): the transport bar (the
+  same buttons and a frame field at every level, the level's own verbs after them), a ruler with its seconds (click or drag scrubs), the
+  work area with two dragged ends, the playhead through every row, and rows of bars, keys and markers. **Clay**: the range as the work area,
+  a row for the active camera and one per keyed object — a motion clip's bake read as a bar (`keyRuns`: four or more keys frame by frame),
+  single keys as diamonds you drag to another frame (`stageStore.moveKey`) or remove by their right-click (`removeRowKey`), click to go there;
+  nothing keyed shows the ruler alone. **Performance**: the in / out as the work area (its ends dragged), the clip's row with S / E, beats ♦
+  and harvested frames ▼ (a click goes there). **Final**: the lanes — a bar per layer (drag to move, the ends to trim, Alt-drag to slip;
+  frames of the shot, written back in seconds), the selected layer's keys on its lane, a line's waveform on its bar. The old three
+  timelines' styles are gone (`.timeline` and `.stage-timeline` keep their names as containers; the headed check's `.timeline .marker.pin` holds).
+- **Tests:** `timeline.test.ts` (a frame's place on a track and back, a drag in frames, the ticks, the bars from a bake, the stage's span; each
+  level's transport behind the one command set, nothing outside Animate, marks before / after, the shuttle Performance's only); the audit's
+  transport rule now one set for Animate and the Episode lane, and the retired ids absent; a new e2e (Clay keys the camera at two frames on its
+  row, drags the key at 8 to 20, drags the range's end to 60 on the ruler, removes a key by its right-click; End / Home / → / Alt+← move the
+  playhead); the final-shot scenario scrubs by the transport's frame field. Vitest 417 + 3 skipped, typecheck and build clean, lint 0 errors
+  (79), e2e 52/52 full and 52/52 open.
+- **The headed Animate check** (\`scripts/edit_headed_check.py animate\`, a visible Edge on a Vite dev server on 1420 started for it and stopped
+  by its PID after): all 17 steps pass on the one transport — exact frames stepping both ways and at random, play, in / out from the playhead,
+  the extracted range's three pins on the timeline (\`.timeline .marker.pin\`), onion skin, the frames track, compare. Its screenshot showed the
+  Shot section empty at Performance on the Image to video card without a Story shot: it now says so in a line (*Not for a Story shot*, the
+  rest behind its ?). (The script prints an arrow: run it with \`PYTHONIOENCODING=utf-8\` on this console.)

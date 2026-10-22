@@ -6,14 +6,14 @@
 // Before toggle shows the frame with every effect off (AE3).
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
-import { CommandRow } from '../../frame/CommandButton'
+import { CommandButton } from '../../frame/CommandButton'
 import { Help } from '../../frame/Help'
 import { useSession } from '../../store/session'
 import { fmtTime } from './animateStore'
-import { chipText, maskPathD, snapTime, useComposition, type CompLayer } from './compositionStore'
+import { chipText, maskPathD, snapTime, useComposition } from './compositionStore'
+import { Timeline as TimelineView, TransportBar, type BarDrag, type TLRow } from './Timeline'
 
 interface Drag { x0: number; y0: number; dx: number; dy: number; box: DOMRect; vbox: DOMRect }                 // the frame's and the view's boxes at the press
-interface LaneDrag { id: number; mode: 'move' | 'in' | 'out' | 'slip'; x0: number; dx: number; l: CompLayer; width: number }   // the track's width at the press
 interface VertexDrag { uid: number; index: number; x0: number; y0: number; dx: number; dy: number }
 
 export function FinalViewer() {
@@ -22,6 +22,7 @@ export function FinalViewer() {
   const comp = useComposition((s) => s.comp)
   const shown = useComposition((s) => s.shown)
   const frame = useComposition((s) => s.frame)
+  const playing = useComposition((s) => s.playing)
   const filled = useComposition((s) => s.filled)
   const fetching = useComposition((s) => s.fetching)
   const error = useComposition((s) => s.error)
@@ -112,14 +113,11 @@ export function FinalViewer() {
           {before ? 'before' : chipText({ filled, final })}</span>
         {error && <div className="anim-overlay err">preview: {error}</div>}
       </div>
-      <div className="transport final-transport">
-        <CommandRow ids={['anim.final.home', 'anim.final.stepBack', 'anim.final.play', 'anim.final.stepForward', 'anim.final.end', 'gap', 'anim.final.before']} active={before ? 'anim.final.before' : undefined} />
-        <span className="counter">frame {frame} / {n - 1} · {fmtTime(frame, final.rate)}</span>
-        <input className="final-scrub" type="range" min={0} max={n - 1} step={1} value={frame} aria-label="frame"
-          onChange={(e) => useComposition.getState().setFrame(Number(e.target.value))} />
+      <TransportBar className="final-transport" frame={frame} last={n - 1} playing={playing} onFrame={(f) => useComposition.getState().setFrame(f)} counter={`frame ${frame} / ${n - 1} · ${fmtTime(frame, final.rate)}`}>
+        <CommandButton id="anim.final.before" active={!!before} />
         <span className="hint" data-comp-state>composition · revision {comp.revision}{comp.stale ? ' · stale: the final changed, make it again' : ''}{comp.clip_id ? ` · rendered at revision ${comp.rendered_revision}` : ''}</span>
-      </div>
-      <Lanes rate={final.rate} duration={n / final.rate} />
+      </TransportBar>
+      <Lanes rate={final.rate} frames={n} />
     </div>
   )
 }
@@ -188,62 +186,37 @@ function MaskOverlay({ w, h, offset, poly, scaleOf }: { w: number; h: number; of
   )
 }
 
-/** AE2d: the layers' bars over the shot — dragged to move, the ends to trim, Alt-drag to slip; the selected layer's keys; the playhead. */
-function Lanes({ rate, duration }: { rate: number; duration: number }) {
+/** AE2d → D121 (AW2): the layers as lanes of the one timeline — a bar per layer over the shot (drag to move, the ends to trim, Alt-drag to slip;
+ *  in frames of the shot, written back in seconds), the selected layer's keys on its lane, a line's waveform on its bar, the playhead. */
+function Lanes({ rate, frames }: { rate: number; frames: number }) {
   const layers = useComposition((s) => s.layers)
   const selected = useComposition((s) => s.selected)
   const frame = useComposition((s) => s.frame)
   const keysOf = useComposition((s) => s.keysOf)
   const busy = useComposition((s) => s.busy)
   const audioOf = useComposition((s) => s.audioOf)
-  const track = useRef<HTMLDivElement>(null)
-  const [ld, setLd] = useState<LaneDrag | null>(null)
-  const pct = (t: number) => `${(Math.max(0, Math.min(duration, t)) / duration) * 100}%`
-  const secOf = (px: number, width: number) => (px / Math.max(1, width)) * duration
   const step = 1 / rate
-  const start = (e: ReactPointerEvent<HTMLElement>, l: CompLayer, mode: LaneDrag['mode']) => {
-    if (e.button !== 0 || busy) return
-    e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    useComposition.getState().select(l.id)
-    setLd({ id: l.id, mode: e.altKey && mode === 'move' ? 'slip' : mode, x0: e.clientX, dx: 0, l, width: track.current?.clientWidth ?? 1 })
-  }
-  const move = (e: ReactPointerEvent<HTMLElement>) => { if (ld) setLd({ ...ld, dx: e.clientX - ld.x0 }) }
-  const end = () => {
-    if (!ld) return
-    const d = snapTime(secOf(ld.dx, ld.width), rate)
-    setLd(null)
-    if (Math.abs(d) < step / 2) return
-    const cp = useComposition.getState(), l = ld.l
-    if (ld.mode === 'move') void cp.setTiming(l.id, { delta: d })
-    else if (ld.mode === 'in') void cp.setTiming(l.id, { in: Math.max(0, Math.min(l.out - step, l.in + d)) })
-    else if (ld.mode === 'out') void cp.setTiming(l.id, { out: Math.max(l.in + step, Math.min(duration, l.out + d)) })
+  const duration = frames / rate
+  const keyFrames = selected === null ? [] : [...new Set(Object.values(keysOf).flat().map((k) => Math.round(k.time * rate)))]
+  const rows: TLRow[] = layers.map((l) => {
+    const sel = selected === l.id
+    const audio = audioOf(l.id)                                            // D118 (AE4b): a line's bar shows its waveform
+    return { id: String(l.id), className: `lane${audio ? ' audio' : ''}`, selected: sel, data: { lane: String(l.id) }, title: audio ? `${l.name} · ${audio.text}` : l.name,
+      label: <span className="lane-name">{audio ? '🔊 ' : ''}{l.name}</span>,
+      onSelect: () => useComposition.getState().select(sel ? null : l.id),
+      bars: [{ id: 'bar', from: Math.round(l.in * rate), to: Math.round(l.out * rate), drag: !busy, style: audio ? { backgroundImage: `url(${api.thumbUrl(audio.asset_id, 256)})` } : undefined,
+        title: `${l.name}: ${l.in.toFixed(2)}–${l.out.toFixed(2)} s · drag to move, the ends to trim, Alt-drag to slip` }],
+      keys: sel ? keyFrames.map((f) => ({ frame: f, title: `key at ${(f / rate).toFixed(2)} s` })) : [] }
+  })
+  const onBarDrag = (row: string, _bar: string, mode: BarDrag, delta: number) => {
+    const l = layers.find((x) => String(x.id) === row)
+    if (!l || busy) return
+    const cp = useComposition.getState(), d = snapTime(delta / rate, rate)
+    cp.select(l.id)
+    if (mode === 'move') void cp.setTiming(l.id, { delta: d })
+    else if (mode === 'in') void cp.setTiming(l.id, { in: Math.max(0, Math.min(l.out - step, l.in + d)) })
+    else if (mode === 'out') void cp.setTiming(l.id, { out: Math.max(l.in + step, Math.min(duration, l.out + d)) })
     else void cp.slip(l.id, d)
   }
-  const keyTimes = selected === null ? [] : Array.from(new Set(Object.values(keysOf).flat().map((k) => Math.round(k.time * rate) / rate)))
-  return (
-    <div className="final-lanes" role="list" aria-label="layers over time" onPointerMove={move} onPointerUp={end} onPointerCancel={() => setLd(null)}>
-      {layers.map((l, i) => {
-        const d = ld && ld.id === l.id ? snapTime(secOf(ld.dx, ld.width), rate) : 0
-        const lin = ld?.id === l.id && (ld.mode === 'move' || ld.mode === 'in') ? l.in + d : l.in
-        const lout = ld?.id === l.id && (ld.mode === 'move' || ld.mode === 'out') ? l.out + d : l.out
-        const sel = selected === l.id
-        const audio = audioOf(l.id)                                            // D118 (AE4b): a line's bar shows its waveform
-        return (
-          <div key={l.id} className={`lane${sel ? ' selected' : ''}${audio ? ' audio' : ''}`} data-lane={l.id} role="listitem" onClick={() => useComposition.getState().select(sel ? null : l.id)}>
-            <span className="lane-name" title={audio ? `${l.name} · ${audio.text}` : l.name}>{audio ? '🔊 ' : ''}{l.name}</span>
-            <div className="lane-track" ref={i === 0 ? track : undefined}>
-              <div className={`bar${ld?.id === l.id ? ' dragging' : ''}`} style={{ left: pct(lin), width: `calc(${pct(lout)} - ${pct(lin)})`, ...(audio ? { backgroundImage: `url(${api.thumbUrl(audio.asset_id, 256)})` } : {}) }}
-                title={`${l.name}: ${lin.toFixed(2)}–${lout.toFixed(2)} s · drag to move, the ends to trim, Alt-drag to slip`} onPointerDown={(e) => start(e, l, 'move')}>
-                <span className="h h-in" onPointerDown={(e) => start(e, l, 'in')} />
-                <span className="h h-out" onPointerDown={(e) => start(e, l, 'out')} />
-                {sel && keyTimes.map((t) => <i key={t} className="key" style={{ left: `${((t - lin) / Math.max(step, lout - lin)) * 100}%` }} title={`key at ${t.toFixed(2)} s`} />)}
-              </div>
-              <div className="playhead" style={{ left: pct(frame / rate) }} />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
+  return <TimelineView className="final-lanes" span={[0, frames]} fps={rate} frame={frame} onSeek={(f) => useComposition.getState().setFrame(Math.min(frames - 1, f))} rows={rows} onBarDrag={onBarDrag} />
 }

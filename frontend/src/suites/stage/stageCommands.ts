@@ -1,9 +1,8 @@
 // P13 / ST1 (D81): the Stage suite's verbs — every one has a mouse home (the gizmo bar, the panel, the Inspector, the viewport's
 // right-click menu) per D32; G / R / S / W, F, Delete, Ctrl+Z / Ctrl+Shift+Z are accelerators.
-import { Aperture, Box, PersonStanding, Sun, UserRound, UserX, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, SkipBack, SkipForward, StepBack, StepForward, Trash2, Undo2, User, Video, X } from 'lucide-react'
+import { Aperture, Box, PersonStanding, Sun, UserRound, UserX, Camera, Clapperboard, Copy, Crosshair, Diamond, Eye, EyeOff, Focus, Frame, Grid3x3, ImagePlus, Layers, Pencil, Lock, LockOpen, Magnet, Move3d, MousePointer2, Play, Plus, Redo2, Rotate3d, Route, Scaling, Trash2, Undo2, User, Video, X } from 'lucide-react'
 import { registerCommands, sep, type Command, type MenuItem } from '../../frame/commands'
 import { askConfirm, askText, useSession } from '../../store/session'
-import { neighbourKey } from './anim'
 import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
 import { nextFinalStep, useFinals } from './finalShot'
@@ -94,21 +93,12 @@ registerCommands([
   // D99 (UX0 #19): the viewer levels by number — 2 goes to Performance from here (1, Clay, is this level); the strip's switch is their mouse home
   { id: 'stage.level.performance', scope: 'stage', label: 'Animate · Performance', keys: '2', placement: ['strip'], run: () => useSession.getState().setSuite('animate') },
   { id: 'stage.level.final', scope: 'stage', label: 'Animate · Final', keys: '3', placement: ['strip'], run: () => useSession.getState().setSuite('final') },   // AE1 / AP1 (D114) → D121: a suite of its own
-  { id: 'stage.anim.play', scope: 'stage', label: 'Play / pause', icon: Play, keys: 'Space', placement: ['strip'], when: hasStage, run: () => st().setPlaying(!st().playing) },
-  { id: 'stage.anim.prev', scope: 'stage', label: 'Previous frame', icon: StepBack, keys: 'ArrowLeft', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame - 1) },
-  { id: 'stage.anim.next', scope: 'stage', label: 'Next frame', icon: StepForward, keys: 'ArrowRight', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame + 1) },
-  { id: 'stage.anim.prevKey', scope: 'stage', label: 'Previous key', icon: SkipBack, keys: 'Alt+ArrowLeft', placement: ['strip'], when: hasStage, run: () => { const f = neighbourKey(st().keyedFrames(), st().frame, -1); if (f != null) st().setFrame(f) } },
-  { id: 'stage.anim.nextKey', scope: 'stage', label: 'Next key', icon: SkipForward, keys: 'Alt+ArrowRight', placement: ['strip'], when: hasStage, run: () => { const f = neighbourKey(st().keyedFrames(), st().frame, 1); if (f != null) st().setFrame(f) } },
-  { id: 'stage.anim.back10', scope: 'stage', label: 'Back 10 frames', icon: ChevronLeft, keys: 'Shift+ArrowLeft', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame - 10) },
-  { id: 'stage.anim.fwd10', scope: 'stage', label: 'Forward 10 frames', icon: ChevronRight, keys: 'Shift+ArrowRight', placement: ['strip'], when: hasStage, run: () => st().setFrame(st().frame + 10) },
-  { id: 'stage.anim.first', scope: 'stage', label: 'First frame (range start)', icon: ChevronFirst, keys: 'Home', placement: ['strip'], when: hasStage, run: () => { st().setPlaying(false); st().setFrame(st().current!.range.start) } },
-  { id: 'stage.anim.last', scope: 'stage', label: 'Last frame (range end)', icon: ChevronLast, keys: 'End', placement: ['strip'], when: hasStage, run: () => { st().setPlaying(false); st().setFrame(st().current!.range.end) } },
+  // D121 (AW2): play, step, first / last, the range's ends and previous / next key are the one transport's (anim.*, transport.ts); the stage's
+  // own timeline verbs are the keys
   { id: 'stage.anim.keyCamera', scope: 'stage', label: 'Key the camera here', icon: Diamond, placement: ['strip', 'context'], when: () => hasStage() && !!st().activeCamera(), run: () => st().keyCamera() },
   { id: 'stage.anim.keyObject', scope: 'stage', label: 'Key the selection here (the object; nothing selected: the camera)', icon: Diamond, keys: 'Shift+K', placement: ['strip', 'inspector', 'context'], when: () => hasStage() && (!!st().selected || !!st().activeCamera()),
     run: () => { const id = st().selected; if (id) st().keyObject(id); else st().keyCamera() } },   // D99 (UX0 #19): Shift+K keys the selection, else the camera
   { id: 'stage.anim.removeKey', scope: 'stage', label: 'Remove the keys at this frame', icon: X, keys: 'Alt+Shift+K', placement: ['strip', 'context'], when: () => hasStage() && st().keyedFrames().includes(st().frame), run: () => st().removeKeyAt(st().frame) },
-  { id: 'stage.anim.setStart', scope: 'stage', label: 'Range starts here (in)', icon: Diamond, keys: 'I', placement: ['strip'], when: hasStage, run: () => st().setRange(st().frame, Math.max(st().frame + 1, st().current!.range.end)) },
-  { id: 'stage.anim.setEnd', scope: 'stage', label: 'Range ends here (out)', icon: Diamond, keys: 'O', placement: ['strip'], when: hasStage, run: () => st().setRange(Math.min(st().frame - 1, st().current!.range.start), st().frame) },
   { id: 'stage.clip.guide', scope: 'stage', label: 'Render the sequence', icon: Layers, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !st().rendering, run: () => void st().renderGuide() },
   { id: 'stage.clip.animate', scope: 'stage', label: 'Render clip', icon: Clapperboard, placement: ['panel', 'context'], when: () => hasStage() && !!st().activeCamera() && !!st().shotStart && !st().rendering && !!st().clipCaps(),
     run: () => void (async () => { if ((!st().guideEntry() || st().guideStale()) && !(await st().renderGuide())) return; await st().animateShot() })() },   // D121: the sequence first when missing or stale

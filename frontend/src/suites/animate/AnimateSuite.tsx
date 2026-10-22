@@ -8,7 +8,7 @@ import { AnimateLevels } from '../../frame/AnimateLevels'
 import { Help } from '../../frame/Help'
 import { useStageActive } from '../../frame/stageKeep'
 import { X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
@@ -28,6 +28,7 @@ import { ShotHead } from '../stage/ShotStepper'
 import { FinalSection, FinalShotFoot } from '../stage/FinalPanel'
 import { useAnimRoute, type AnimRoute } from './routeStore'
 import { Player } from './Player'
+import { Timeline as TimelineView, TransportBar, type TLMarker, type TLRow } from './Timeline'
 import { AnimColumn, Sec } from './column'
 import './animate.css'
 import { onlyAssets, useDropTarget, type DragPayload } from '../../frame/drag'
@@ -448,56 +449,42 @@ function Compare({ clip }: { clip: Clip }) {
   )
 }
 
+/** D121 (AW2): Performance's transport — the one transport (anim.*), the frame field and the counter, then the clip's in / out and its verbs. */
 function Transport({ clip }: { clip: Clip }) {
   const frame = useAnimate((s) => s.frame)
   const inPoint = useAnimate((s) => s.inPoint)
   const outPoint = useAnimate((s) => s.outPoint)
   const busy = useAnimate((s) => s.busy)
+  const playing = useAnimate((s) => s.playing)
   return (
-    <div className="transport">
-      <CommandRow ids={['anim.home', 'anim.back10', 'anim.stepBack', 'anim.play', 'anim.stepForward', 'anim.fwd10', 'anim.end']} />
-      <span className="counter">frame {frame} / {clip.frames - 1} · {fmtTime(frame, clip.fps)}</span>
+    <TransportBar frame={frame} last={clip.frames - 1} playing={playing} onFrame={(f) => { an().togglePlay(false); an().setFrame(f) }} counter={`frame ${frame} / ${clip.frames - 1} · ${fmtTime(frame, clip.fps)}`}>
       <CommandRow ids={['anim.setIn', 'anim.setOut', 'anim.clearInOut']} />
       <span>{inPoint !== null || outPoint !== null ? `in ${inPoint ?? 0} · out ${outPoint ?? clip.frames - 1}` : 'whole clip'}</span>
       <span className="spacer" />
       <CommandRow ids={['anim.extractFrame', 'anim.sendToEdit', 'anim.toShot']} />
       {busy && <span>{busy}…</span>}
-    </div>
+    </TransportBar>
   )
 }
 
+/** D121 (AW2): Performance's timeline — the one timeline: the in / out as the work area (its ends dragged), the clip's row with its start and
+ *  end stills, its beats and its harvested frames (a click goes there). */
 function Timeline({ clip }: { clip: Clip }) {
+  const caps = useSession((s) => s.capabilities)
   const frame = useAnimate((s) => s.frame)
   const inPoint = useAnimate((s) => s.inPoint)
   const outPoint = useAnimate((s) => s.outPoint)
   const pins = useAnimate((s) => s.pins[clip.id]) ?? EMPTY_PINS
-  const ref = useRef<HTMLDivElement>(null)
   const N = clip.frames
-  const pct = (f: number) => `${(f / Math.max(1, N - 1)) * 100}%`
-  const frameAt = (clientX: number) => { const r = ref.current!.getBoundingClientRect(); return Math.max(0, Math.min(N - 1, Math.round(((clientX - r.left) / r.width) * (N - 1)))) }
-  const drag = (which: 'in' | 'out') => (e: ReactPointerEvent) => {
-    e.stopPropagation(); e.preventDefault()
-    const move = (ev: PointerEvent) => { const f = frameAt(ev.clientX); const s = useAnimate.getState(); useAnimate.setState(which === 'in' ? { inPoint: Math.min(f, s.outPoint ?? N - 1) } : { outPoint: Math.max(f, s.inPoint ?? 0) }) }
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
-  }
-  const minor = N > 200 ? 8 : N > 100 ? 4 : 2
-  const ticks: number[] = []
-  for (let f = 0; f < N; f += minor) ticks.push(f)
-  return (
-    <div className="timeline" ref={ref} onContextMenu={(e) => showMenu(e, playerMenu())}>
-      <div className="ruler" onPointerDown={(e) => { an().togglePlay(false); an().setFrame(frameAt(e.clientX)); const move = (ev: PointerEvent) => an().setFrame(frameAt(ev.clientX)); const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }; window.addEventListener('pointermove', move); window.addEventListener('pointerup', up) }} title="click or drag to scrub" />
-      <div className="range" style={{ left: pct(inPoint ?? 0), width: `calc(${pct(outPoint ?? N - 1)} - ${pct(inPoint ?? 0)})` }} />
-      {ticks.map((f) => <div key={f} className={`tick${f % clip.fps === 0 ? ' major' : ''}`} style={{ left: pct(f) }}>{f % clip.fps === 0 && <span>{f / clip.fps}s</span>}</div>)}
-      <div className="marker" style={{ left: pct(0) }} title="start frame">S</div>
-      {clip.end_asset_id && <div className="marker" style={{ left: pct(N - 1) }} title="end frame (FLF)">E</div>}
-      {clip.beats.map((b, i) => <div key={i} className="marker beat" style={{ left: pct(b.frame) }} title={`beat at ${b.frame} · strength ${b.strength}`}>♦</div>)}
-      {pins.map((p) => <div key={p.asset_id} className="marker pin" style={{ left: pct(p.frame), top: 2 }} title={`extracted frame ${p.frame} — click to go there`} onClick={() => an().setFrame(p.frame)}>▼</div>)}
-      {inPoint !== null && <div className="handle in" style={{ left: pct(inPoint) }} onPointerDown={drag('in')} title="in point (drag)" />}
-      {outPoint !== null && <div className="handle out" style={{ left: pct(outPoint) }} onPointerDown={drag('out')} title="out point (drag)" />}
-      <div className="head" style={{ left: pct(frame) }} />
-    </div>
-  )
+  const markers: TLMarker[] = [{ frame: 0, glyph: 'S', title: 'start frame' },
+    ...(clip.end_asset_id ? [{ frame: N - 1, glyph: 'E', title: 'end frame (FLF)' }] : []),
+    ...clip.beats.map((b) => ({ frame: b.frame, glyph: '♦', title: `beat at ${b.frame} · strength ${b.strength}`, className: 'beat' })),
+    ...pins.map((p) => ({ frame: p.frame, glyph: '▼', title: `extracted frame ${p.frame} — click to go there`, className: 'pin', onClick: () => { an().togglePlay(false); an().setFrame(p.frame) } }))]
+  const rows: TLRow[] = [{ id: 'clip', label: shortName(clip.model_id, caps), title: clip.prompt, markers,
+    bars: [{ id: 'clip', from: 0, to: N - 1, label: clip.prompt || '(no prompt)', title: `${clip.frames} f @ ${clip.fps} fps · seed ${clip.seed}` }] }]
+  return <TimelineView className="timeline" span={[0, Math.max(1, N - 1)]} fps={clip.fps} frame={frame} onSeek={(f) => { an().togglePlay(false); an().setFrame(f) }}
+    work={{ from: inPoint ?? 0, to: outPoint ?? N - 1, title: 'in / out', onChange: (a, b) => useAnimate.setState({ inPoint: a, outPoint: b }) }} rows={rows}
+    onMenu={(e) => showMenu(e, playerMenu())} />
 }
 
 function Interim() {

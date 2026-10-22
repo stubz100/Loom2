@@ -930,7 +930,7 @@ test('a final shot (D111 PS5a–c): "Make the final shot…" splits a scene into
   await expect(page.locator('#anim-sec-performance')).toHaveCount(0)                                        // and nothing of the other levels
   await expect(page.locator('.final-viewer img.final-frame')).toBeVisible()
   await expect(page.locator('.final-viewer .final-chip')).toHaveText(/^\d+ %$/)                           // the number alone (UX9 U2)
-  await page.locator('.final-viewer .final-scrub').fill('4')
+  await page.locator('.final-viewer .frame-field').fill('4')                                               // D121 (AW2): the one transport's frame field
   await expect(page.locator('.final-viewer .counter')).toHaveText(/^frame 4 \//)
   await expect.poll(async () => page.locator('.final-viewer img.final-frame').getAttribute('data-side'), { timeout: 10_000 }).toBe('full')   // at rest: the full frame
   await page.screenshot({ path: 'node_modules/.e2e/d121-final.png' })                                     // D121: the Final level with its composition open
@@ -2517,3 +2517,56 @@ test('the three modes (D121, proto01_animate 26): each Animate level has its own
   await expect(page.locator('.animate-levels button[aria-pressed="true"]')).toHaveText('Final')
 })
 
+
+test('the one timeline and transport (D121 AW2): Clay keys the camera on its row, drags a key and the range on the ruler, removes a key; the transport keys move the playhead', async ({ page }) => {
+  await openApp(page, { suite: 'stage' })
+  await page.locator('.placeholder button', { hasText: /^New stage/ }).click()
+  const dialog = page.locator('.modal.ask')
+  await dialog.locator('input').fill('Timeline test')
+  await dialog.locator('button.primary').click()
+  await expect(page.locator('canvas.stage-canvas')).toBeVisible()
+  await page.locator('.stage-empty button', { hasText: /Adult/ }).click()
+  type Doc = { name: string; range: { start: number; end: number }; keyframes: { camera: Record<string, { frame: number }[]> } }
+  const doc = async () => (await api<{ items: Doc[] }>('GET', '/stages')).items.find((s) => s.name === 'Timeline test')!
+  const camFrames = async () => (Object.values((await doc()).keyframes?.camera ?? {})[0] ?? []).map((k) => k.frame)
+  const tl = page.locator('.stage-timeline')
+  const camRow = tl.locator('.tl-row[data-row^="cam:"]')
+  await expect(camRow).toHaveCount(0)                                                                      // nothing keyed: the ruler alone
+  await tl.locator('button', { hasText: /^Key camera$/ }).click()
+  await tl.locator('.frame-field').fill('8'); await tl.locator('.frame-field').dispatchEvent('change')
+  await tl.locator('button', { hasText: /^Key camera$/ }).click()
+  await expect(camRow.locator('.tl-key')).toHaveCount(2)
+  await expect.poll(camFrames, { timeout: 10_000 }).toEqual([0, 8])
+  // the span is [0, 132] for a 0–120 range: drag the key at 8 twelve frames right on its row
+  const span = 132
+  const track = (await camRow.locator('.tl-track').boundingBox())!
+  const kb = (await camRow.locator('.tl-key').nth(1).boundingBox())!
+  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(kb.x + kb.width / 2 + (12 * track.width) / span, kb.y + kb.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(camFrames, { timeout: 10_000 }).toEqual([0, 20])
+  // the range's end dragged on the ruler to frame 60
+  const ruler = (await tl.locator('.tl-ruler').boundingBox())!
+  const out = (await tl.locator('.tl-handle.out').boundingBox())!
+  await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(ruler.x + (60 * ruler.width) / span, out.y + out.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await doc()).range.end, { timeout: 10_000 }).toBe(60)
+  // a key removed by its right-click
+  await camRow.locator('.tl-key').nth(1).click({ button: 'right' })
+  await page.locator('.ctx-menu button.item', { hasText: 'Remove this key' }).click()
+  await expect.poll(camFrames, { timeout: 10_000 }).toEqual([0])
+  // the one transport's keys at Clay: End → the range's end, Home → its start, → a frame on, Alt+← back to the key at 0
+  await tl.locator('.counter').click()
+  await page.keyboard.press('End')
+  await expect(tl.locator('.frame-field')).toHaveValue('60')
+  await page.keyboard.press('Home')
+  await expect(tl.locator('.frame-field')).toHaveValue('0')
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight')
+  await expect(tl.locator('.frame-field')).toHaveValue('2')
+  await page.keyboard.press('Alt+ArrowLeft')
+  await expect(tl.locator('.frame-field')).toHaveValue('0')
+  await page.screenshot({ path: 'node_modules/.e2e/d121-timeline-clay.png' })
+})

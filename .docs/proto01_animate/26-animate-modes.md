@@ -327,3 +327,8 @@ more than the bar, it becomes a snapshot refreshed on drag end (ArtCraft redraws
 - **2026-10-22 — AW3 built: the Shot head** (journal of the same evening). The stage picker and the stepper head every level (the stage's
   cards only, at Performance); a step's dot is its state and a click opens the level and card where its verb is; one poll for the finals;
   the clip's editor under its row in Clips, the Selection section gone. The screenshots above show it. e2e 51/51 under both variants.
+- **2026-10-22 — AW2 built: one timeline, one transport** (journal of the same evening). Each level registers its transport; one command set
+  (play, step, ±10, first / last, in / out, previous / next key) runs the level on screen — 26 transport commands down to 12, the keys
+  unchanged. One Timeline component under every viewer: Clay's range and its camera's and objects' keys on rows (drag a key, right-click to
+  remove it, a motion clip's bake as a bar), Performance's in / out and the clip's markers, Final's lanes. e2e 52/52 under both variants.
+

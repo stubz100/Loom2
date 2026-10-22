@@ -14,6 +14,7 @@ import { rendering, useFinals, useFinalsPoll } from '../stage/finalShot'
 import { ShotHead } from '../stage/ShotStepper'
 import { st, useStage } from '../stage/stageStore'
 import { AnimColumn, Sec } from './column'
+import { TRANSPORT_IDS } from './transport'
 import { useComposition } from './compositionStore'
 import { LayersSection } from './FinalEditor'
 import { FinalViewer } from './FinalViewer'
@@ -85,14 +86,14 @@ function FinalColumn({ tab }: { tab: string }) {
   )
 }
 
-/** The Final level's keys: its own commands (anim.final.*) and the level keys; the clip player's transport is Performance's. */
+/** The Final level's keys: its own commands (anim.final.*), the level keys and the one transport (it runs the composition's here, AW2). */
 function useFinalKeys(): void {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (useSession.getState().ui.suite !== 'final') return
       if (document.querySelector('.ctx-menu')) return                     // an open menu owns the arrows, Space and Enter
       if (inField(e)) return
-      if (handleKeyFor('animate', e, (c) => c.id.startsWith('anim.final.') || c.id.startsWith('anim.level.'))) e.stopImmediatePropagation()
+      if (handleKeyFor('animate', e, (c) => c.id.startsWith('anim.final.') || c.id.startsWith('anim.level.') || TRANSPORT_IDS.has(c.id))) e.stopImmediatePropagation()   // AW2: the one transport too
     }
     window.addEventListener('keydown', h, { capture: true })
     return () => window.removeEventListener('keydown', h, { capture: true })

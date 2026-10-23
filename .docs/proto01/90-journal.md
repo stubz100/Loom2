@@ -8549,3 +8549,20 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   Offline 535 passed; Vitest 449 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 59/59 and open 59/59.
   Screenshots `proto01_UIcomp/img/sp7-*.jpg`. With SP7 every wave of D125's plan (SP0–SP7) is built on the fake engine. **Rig owed:**
   04 §8's one run of the clay final shot to its take (A1 — SP0's change; no model path changed in SP1–SP7).
+
+## 2026-10-24 01:25 — D125 A1 on the rig: the clay final shot made for its Story shot lands as that version's takes (7/7)
+
+- **The rig** (`engine/spikes/a1_rig.py`, PS5's scene on a fresh project, the real engine, one GPU job at a time): Mara and Ines as Cast
+  characters bound to Detailed figures, 5 s at F16; a Shot node's shot linked to the stage camera (S11), Animate's For chip on its v1,
+  then the product's *Make the final shot* (`useFinals().make`, its confirm clicked), the plate, both characters performed, the mattes,
+  the assembly, the composition rendered by EffectCraft.
+- **Checks, 7/7:** the confirm says the finished shot becomes a take of the chip's shot; the final carries `shot_id` and
+  `shot_version` v1; the assembly is a take of v1 and leaves its clip empty; still one shot in the project; the render is a take of v1
+  and fills its empty clip (121 frames at 24 fps, 832×480). The shot plays as PS5's (`engine/spikes/out/a1/final_sheet.jpg`, `final.mp4`).
+- **Timings:** split 27.4 s, plate still 36.4 s, Mara 2 batches in 209 s, Ines 2 in 179 s (the mattes queued by themselves after each
+  stitch), assembly 29.2 s, render 6.2 s.
+- **Found on the way:** the first attempt called the low-level `makeFinal` (as PS5's rig does), which never reads the chip — the product
+  path is `make()`; and it split in 740 s because Edge throttled the hidden rig window. The rig now starts Edge with
+  `--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling` (PS5's rig has the same
+  exposure; it ran in daytime with the window visible).
+- With this, D125's plan owes no rig run; the author's click-through stays owed.

@@ -75,7 +75,7 @@ export interface SessionState {
 /** D90 (02 §7): which tab of Models & engine opens, and whether the roster shows only the missing weights (every Fetch link does). */
 export interface ModelsSheetState { tab?: 'roster' | 'engine'; missing?: boolean }
 
-export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean; allowEmpty?: boolean }   // allowEmpty: an empty answer is one (D123's lens: MoGe reads it)
+export interface AskOptions { title: string; text?: string; initial?: string; placeholder?: string; okLabel?: string; danger?: boolean; allowEmpty?: boolean; check?: string; checkOn?: boolean }   // allowEmpty: an empty answer is one (D123's lens: MoGe reads it); D125: a confirm's one checkbox
 export interface AskRequest extends AskOptions { kind: 'confirm' | 'prompt'; resolve: (v: string | boolean | null) => void }
 
 let socket: EventsSocket | null = null
@@ -219,7 +219,7 @@ export const useSession = create<SessionState>()(
         if (kind !== 'error') setTimeout(() => get().dismissToast(id), 6000)
       },
       dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
-      askConfirm: (o) => new Promise<boolean>((resolve) => { get().ask?.resolve(null); set({ ask: { ...o, kind: 'confirm', resolve: (v) => resolve(v === true) } }) }),
+      askConfirm: (o) => new Promise<boolean>((resolve) => { get().ask?.resolve(null); set({ ask: { ...o, kind: 'confirm', resolve: (v) => resolve(v === true || v === 'checked') } }) }),
       askText: (o) => new Promise<string | null>((resolve) => { get().ask?.resolve(null); set({ ask: { ...o, kind: 'prompt', resolve: (v) => resolve(typeof v === 'string' ? v : null) } }) }),
       resolveAsk: (value) => { const a = get().ask; set({ ask: null }); a?.resolve(value) },
       dismissBanner: (id) => set({ ui: { ...get().ui, dismissedBanners: [...get().ui.dismissedBanners, id] } }),
@@ -355,6 +355,9 @@ export function onEvents<T extends EventFrame['type']>(types: readonly T[], cb: 
 /** In-app confirm (resolves false when cancelled) and text prompt (null when cancelled) — the only dialogs besides OS file pickers. */
 export const askConfirm = (o: AskOptions): Promise<boolean> => useSession.getState().askConfirm(o)
 export const askText = (o: AskOptions): Promise<string | null> => useSession.getState().askText(o)
+/** D125: a confirm with one checkbox (`o.check`) — null when cancelled, else whether the box was ticked. */
+export const askConfirmCheck = (o: AskOptions & { check: string }): Promise<{ checked: boolean } | null> =>
+  new Promise((resolve) => { const s = useSession.getState(); s.ask?.resolve(null); useSession.setState({ ask: { ...o, kind: 'confirm', resolve: (v) => resolve(v === true || v === 'checked' ? { checked: v === 'checked' } : null) } }) })
 
 if (DEV_HOOKS) {                                                       // dev: the headed check switches suites and feeds event frames (D69 release)
   const w = window as unknown as { __loom2Session?: typeof useSession; __loom2ApplyEvent?: (f: EventFrame) => void }

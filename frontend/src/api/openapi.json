@@ -10712,6 +10712,11 @@
       },
       "NodeCreate": {
         "properties": {
+          "shot": {
+            "default": true,
+            "title": "Shot",
+            "type": "boolean"
+          },
           "target": {
             "anyOf": [
               {
@@ -25917,6 +25922,7 @@
     },
     "/story/flow/nodes/{nid}": {
       "delete": {
+        "description": "The node goes; its shot stays unbound (`shot=keep`) or goes too (`shot=delete`, D125 #4 — its files stay in the Catalogue).",
         "operationId": "flow_node_delete_story_flow_nodes__nid__delete",
         "parameters": [
           {
@@ -25925,6 +25931,20 @@
             "required": true,
             "schema": {
               "title": "Nid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shot",
+            "required": false,
+            "schema": {
+              "default": "keep",
+              "enum": [
+                "keep",
+                "delete"
+              ],
+              "title": "Shot",
               "type": "string"
             }
           }

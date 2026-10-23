@@ -2451,7 +2451,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Flow Node Delete */
+        /**
+         * Flow Node Delete
+         * @description The node goes; its shot stays unbound (`shot=keep`) or goes too (`shot=delete`, D125 #4 — its files stay in the Catalogue).
+         */
         delete: operations["flow_node_delete_story_flow_nodes__nid__delete"];
         options?: never;
         head?: never;
@@ -7643,6 +7646,11 @@ export interface components {
         };
         /** NodeCreate */
         NodeCreate: {
+            /**
+             * Shot
+             * @default true
+             */
+            shot?: boolean;
             /** Target */
             target?: string | null;
             /**
@@ -15611,7 +15619,9 @@ export interface operations {
     };
     flow_node_delete_story_flow_nodes__nid__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                shot?: "keep" | "delete";
+            };
             header?: never;
             path: {
                 nid: string;

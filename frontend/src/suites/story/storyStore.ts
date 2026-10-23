@@ -23,6 +23,36 @@ export const SECTIONS: { id: Section; label: string; presets?: true }[] = [
 export const CLASS_LABEL: Record<ProfileClass, string> = { character: 'character', place: 'place', prop: 'prop' }
 /** D110 (PS1) → D125 (#2): props are the third class of Cast (Characters · Places · Props) — every profile lives on Cast, and the class
  *  switch shows them. When a profile of a class the switch hides is opened (a new prop, "Open in Story · Cast"), the switch moves to it. */
+type Edge = { from: string; to: string }
+const VISUAL = (n: FlowNode | undefined): boolean => !!n && (n.type === 'dialogue' || n.type === 'shot')
+/** D125 (S7): the visual nodes after `id` (along the edges) that have no place, up to the next node that has one of its own. */
+export function nodesAfterWithoutPlace(id: string, edges: Edge[], nodes: Record<string, FlowNode>): string[] {
+  const out: string[] = [], seen = new Set([id]), queue = edges.filter((e) => e.from === id).map((e) => e.to)
+  while (queue.length) {
+    const nid = queue.shift()!
+    if (seen.has(nid)) continue
+    seen.add(nid)
+    const n = nodes[nid]
+    if (!n || n.place_id) continue                                                  // a place of its own starts another scene
+    if (VISUAL(n)) out.push(nid)
+    queue.push(...edges.filter((e) => e.from === nid).map((e) => e.to))
+  }
+  return out
+}
+/** D125 (S7): the place of the nearest visual node before `id` that has one (along the edges, backwards), or null. */
+export function placeBefore(id: string, edges: Edge[], nodes: Record<string, FlowNode>): string | null {
+  const seen = new Set<string>(), queue = [id]
+  while (queue.length) {
+    const nid = queue.shift()!
+    if (seen.has(nid)) continue
+    seen.add(nid)
+    const n = nodes[nid]
+    if (n?.place_id && VISUAL(n)) return n.place_id
+    queue.push(...edges.filter((e) => e.to === nid).map((e) => e.from))
+  }
+  return null
+}
+
 export function revealClass(cls: ProfileClass): void {
   const f = useStory.getState().castFilter
   if (f !== 'all' && f !== cls) useStory.getState().setCastFilter(cls)
@@ -211,7 +241,7 @@ export interface StoryState {
   node: () => FlowNode | undefined
   addNode: (type: FlowNode['type'], title?: string, at?: { x: number; y: number } | null, extra?: { text?: string }) => Promise<FlowNode | null>
   patchNode: (id: string, patch: Partial<Pick<FlowNode, 'type' | 'title' | 'lines' | 'options' | 'cond' | 'set' | 'target' | 'text' | 'colour' | 'board_group_id' | 'place_id' | 'speaker_versions'>>) => Promise<void>
-  deleteNode: (id: string) => Promise<void>
+  deleteNode: (id: string, withShot?: boolean) => Promise<void>
   duplicateNode: (id: string) => Promise<void>
   moveNodes: (positions: { id: string; x: number; y: number }[]) => void
   connect: (from: string, port: string, to: string) => Promise<void>
@@ -747,7 +777,8 @@ export const useStory = create<StoryState>()((set, get) => {
     },
     selectShot: (id, version) => {
       const s = id ? get().shots.find((x) => x.id === id) : undefined
-      set({ shotId: s ? id : null, shotVersionId: s ? (version && s.versions.some((v) => v.id === version) ? version : s.current) : null })
+      set({ shotId: s ? id : null, shotVersionId: s ? (version && s.versions.some((v) => v.id === version) ? version : s.current) : null,
+        ...(s?.owner_node && get().flowNodes[s.owner_node] ? { nodeId: s.owner_node } : {}) })                   // D125 (S10): a shot selects its node
       void get().loadShotDetails()
     },
     loadShotDetails: async () => {
@@ -831,7 +862,11 @@ export const useStory = create<StoryState>()((set, get) => {
         set({ flowNodes, flowGraph: r.graph, flowLoaded: true, ...(get().nodeId && !flowNodes[get().nodeId!] ? { nodeId: null } : {}) })
       } catch (e) { if ((e as ApiError).status !== 409) toast(`Flow: ${detail(e)}`) }
     },
-    selectNode: (nodeId) => set({ nodeId, ...(nodeId ? { edge: null } : {}) }),
+    selectNode: (nodeId) => {                                                                       // D125 (S10): a node selects its shot (one panel)
+      set({ nodeId, ...(nodeId ? { edge: null } : {}) })
+      const n = nodeId ? get().flowNodes[nodeId] : undefined
+      if (n?.shot_id && (n.shot_id !== get().shotId || (n.shot_version ?? null) !== get().shotVersionId)) get().selectShot(n.shot_id, n.shot_version)
+    },
     selectEdge: (edge) => set({ edge, ...(edge ? { nodeId: null } : {}) }),
     setAddAt: (addAt) => set({ addAt }),
     node: () => { const id = get().nodeId; return id ? get().flowNodes[id] : undefined },
@@ -843,8 +878,9 @@ export const useStory = create<StoryState>()((set, get) => {
       const c = pin ? null : (await import('./storyCommands')).flowView.centre?.()
       const pos = pin ?? (c ? { x: c.x - 110 + (n0 % 4) * 40, y: c.y - 40 + (n0 % 4) * 40 } : { x: 60 + (n0 % 6) * 240, y: 60 + Math.floor(n0 / 6) * 160 })   // the view's centre, stepped so new nodes do not stack
       try {
-        const n = await unwrap(http.POST('/story/flow/nodes', { body: { type, title: title ?? '', x: pos.x, y: pos.y, text: extra?.text ?? '', target: null } }))
+        const n = await unwrap(http.POST('/story/flow/nodes', { body: { type, title: title ?? '', x: pos.x, y: pos.y, text: extra?.text ?? '', target: null, shot: true } }))
         await get().loadFlow()
+        if (n.shot_id) void get().loadShots()                                                         // D125 (#4): a visual node is made with its shot
         set({ nodeId: n.id })
         return n
       } catch (e) { toast(`Node: ${detail(e)}`); return null }
@@ -854,8 +890,8 @@ export const useStory = create<StoryState>()((set, get) => {
       set({ flowNodes: { ...get().flowNodes, [id]: { ...n, ...patch } as FlowNode } })               // at once; the save follows (one at a time per node, the latest state)
       await saveNode(get, set, id, !!(patch.type || patch.options))
     },
-    deleteNode: async (id) => {
-      try { await unwrap(http.DELETE('/story/flow/nodes/{nid}', { params: { path: { nid: id } } })); if (get().nodeId === id) set({ nodeId: null }); await get().loadFlow(); void get().loadShots() }
+    deleteNode: async (id, withShot = false) => {   // D125 (#4): its shot stays unbound, or goes too
+      try { await unwrap(http.DELETE('/story/flow/nodes/{nid}', { params: { path: { nid: id }, query: { shot: withShot ? 'delete' : 'keep' } } })); if (get().nodeId === id) set({ nodeId: null }); await get().loadFlow(); void get().loadShots() }
       catch (e) { toast(`Delete: ${detail(e)}`) }
     },
     duplicateNode: async (id) => {
@@ -875,6 +911,11 @@ export const useStory = create<StoryState>()((set, get) => {
       const edges = [...g.edges.filter((e) => !(e.from === from && e.port === port)), { from, port, to }]
       set({ flowGraph: { ...g, edges } })
       saveGraph(get, set, { edges })
+      const target = get().flowNodes[to]                                                            // D125 (S7): a node connected without a place takes the one before it
+      if (target && (target.type === 'dialogue' || target.type === 'shot') && !target.place_id) {
+        const place = placeBefore(from, edges, get().flowNodes)
+        if (place) void get().patchNode(to, { place_id: place })
+      }
     },
     disconnect: async (from, port) => {
       const g = get().flowGraph; if (!g) return

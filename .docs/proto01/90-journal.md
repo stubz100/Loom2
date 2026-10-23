@@ -8407,3 +8407,25 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
 - **Tests:** Vitest 429 + 3 skipped (`propsTab.test.ts` rewritten for the class switch); typecheck and build clean; lint 0 errors (79
   warnings). e2e full 53/54 (New angle expected the Story tab over the Catalogue — updated, rerun: passed), open 54/54. The smoke checks the four tabs and Story's five workspaces, the props class (and the
   old link), the Catalogue tab under New angle. Screenshots `proto01_UIcomp/img/sp1-*.jpg`.
+
+## 2026-10-23 21:46 — SP2 built (D125 #4, proto01_UIcomp 04 §8): a Flow node is its shot; one panel for the node and its shot; the place carried forward
+
+- **#4 / S6**: `StoryStore.create_node` makes a Dialogue or Shot node with its shot (named after the node, else *Dialogue* / *Shot*,
+  owned by it; `with_shot` / the route's `shot` False for one bound later). The shot follows the node's title until it is renamed by hand;
+  a node turned visual gets one; `DELETE /story/flow/nodes/{nid}?shot=delete` deletes its shot too (`keep`, the default, leaves it unbound).
+  `POST …/shot` reuses the node's untouched shot (renamed) instead of leaving a second one. *New shot for this node…* became *Make its
+  shot* — only for a visual node without one (made before D125, or unbound since). *Delete node* asks with one checkbox, *Delete its shot
+  too* (`askConfirmCheck`, the confirm dialog's optional checkbox).
+- **S10**: `NodeShotPanel` — the node's fields (type, title, line, lines / options / sets, where, speakers, board, problems), then its shot's
+  (name, current, the version this node shows, the version's fields and verbs, the recipe, lip-sync), then the node's verbs — the Flow's
+  and the Shots tab's Inspector alike. Selecting a node selects its shot and a shot its node, so the shot's *Make frame ▾ / Make clip ▾*
+  and the node's verbs act on what the panel shows.
+- **S7**: a node connected without a place takes the place of the visual node before it (`placeBefore`); *Also for the nodes after
+  it* (the where field, the node's right-click) gives it to the visual nodes after without one, up to the next with a place
+  (`nodesAfterWithoutPlace`).
+- OpenAPI and schema.d.ts regenerated (D38).
+- **Tests:** `test_node_is_shot_d125.py` (4), `test_story_flow_d85.py` keeps its hand-bound nodes (`with_shot=False`); `placeCarry.test.ts` (2);
+  offline 530 passed; Vitest 431 + 3 skipped (the board's tests come with SP3); typecheck and build clean; lint 0 errors (79 warnings).
+  e2e full 53/54 and open 53/54 — the D93 scenario pressed the node panel's *Make frame in Image*, now the shot's *Make frame ▾ › in
+  Image*; found with it: a node picked before the shots loaded left the shot verbs disabled — the panel now selects the shot it shows. The
+  Story scenarios (the flow, makers in context, D93) rerun in both variants: 3/3 each. Screenshots `proto01_UIcomp/img/sp2-*.jpg`.

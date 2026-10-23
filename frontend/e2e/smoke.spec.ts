@@ -1472,13 +1472,11 @@ test('a flow (17 / SY3, D85): the Strip adds Start, Dialogue and Choice nodes, h
   const f = await api<FlowLite>('GET', '/story/flow')
   expect(f.graph.start).toBe(f.nodes.find((n) => n.type === 'start')!.id)
   expect(f.graph.edges.map((e) => (e.port.startsWith('opt:') ? 'opt' : e.port)).sort()).toEqual(['opt', 'out', 'out'])
-  // the Dialogue gets its own shot (loom R146); Validate: the shot is not final yet — one advisory problem
+  // D125 (#4): the Dialogue was made with its own shot (loom R146), which took the title "Hello" with it; the panel shows the node, then the
+  // shot; no "New shot for this node…" any more. Validate: the shot is not final yet — one advisory problem
   await dlg.locator('.head').click()
-  await page.locator('.inspector button[aria-label^="New shot for this node"]').click()
-  const dialog = page.locator('.modal.ask')
-  await expect(dialog).toContainText(/New shot for this node/)
-  await dialog.locator('button.primary').click()
-  await expect(page.locator('.inspector .node-insp')).toContainText('Hello · v1 · open')
+  await expect(page.locator('.inspector [data-testid="node-shot-panel"] .shot-head')).toHaveText('Shot · Hello')
+  await expect(page.locator('.inspector button[aria-label^="Make its shot"]')).toHaveCount(0)
   await expect.poll(async () => (await api<{ items: { name: string; owner_node: string | null }[] }>('GET', '/story/shots')).items.find((s) => s.name === 'Hello')?.owner_node).toBeTruthy()
   await page.locator('.story-strip button[aria-label="Validate"]').click()
   await expect(page.locator('.story-strip .hint')).toContainText(/1 problem/)
@@ -1993,7 +1991,8 @@ test('a subject per speaker, a place, a prop (D93 · C6, C7): the Flow Inspector
   await page.locator('.inspector select[aria-label="where (a Cast place)"]').selectOption(quay.id)
   await expect.poll(async () => (await nodeOf()).place_id).toBe(quay.id)
   await expect(page.locator(`.flow-node[data-id="${node.id}"] .place`)).toHaveText(`@ ${quay.name}`)
-  await page.locator('.inspector button', { hasText: 'Make frame in Image' }).click()
+  await page.locator('.inspector button[aria-label="Make frame"]').click()                                // D125 (S10): the node's shot's Make frame ▾ in the shared panel
+  await page.locator('.ctx-menu button.item').filter({ has: page.locator('.lbl', { hasText: /^in Image$/ }) }).click()
   await expect(page.locator('nav.tabs button.tab.active')).toHaveText(/^Image/)
   await expect(page.locator('#gen-sec-prompt .segmented button.active')).toHaveText('Tree')
   const cards = page.locator('.gen-tree .subject.linked')

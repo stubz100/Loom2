@@ -174,7 +174,7 @@ function ShotsTab() {
             })}
           </div>
         ))}
-        {!shots.length && <div className="empty hint">No shots yet — "New shot from this camera" in Stage, "Make a shot from this clip" in Animate, or New shot…</div>}
+        {!shots.length && <div className="empty hint">No shots yet — every Dialogue or Shot node in Flow has one <Help text={"A Dialogue or Shot node is made with its shot (D125). New shot… makes one on its own; Animate's New shot from this camera… and Make a shot from this clip… make one from a camera or a clip."} /></div>}
       </div>
       <div className="verbs"><CommandButton id="story.shot.new" text /></div>
     </div>
@@ -666,7 +666,7 @@ function ShotBoard() {
   const clipsById = useStory((s) => s.clipsById)
   markUsed('story.shot.release'); markUsed('story.shot.delete')
   const s = shots.find((x) => x.id === shotId)
-  if (!s) return <div className="story-empty"><div>Pick a shot on the left, or make one: <b>New shot from this camera</b> on a Stage camera, <b>Make a shot from this clip</b> in Animate.<div className="quick-cards"><CommandButton id="story.shot.new" text /></div></div></div>
+  if (!s) return <div className="story-empty"><div>Pick a shot on the left — every Dialogue or Shot node in Flow has one.<div className="quick-cards"><CommandButton id="story.shot.new" text /></div></div></div>
   const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
   if (!v) return null
   const clip = v.clip_id ? clipsById[v.clip_id] : undefined
@@ -798,33 +798,70 @@ function CastInspector() {
   )
 }
 
+/** D125 (#4, S10): Shots' Inspector — the shot's node first (when a Flow node owns it), then the shot: the same panel as the Flow's. */
 function ShotInspector() {
   const shots = useStory((s) => s.shots)
   const shotId = useStory((s) => s.shotId)
-  const shotVersionId = useStory((s) => s.shotVersionId)
-  const clipsById = useStory((s) => s.clipsById)
-  const stagesLite = useStory((s) => s.stagesLite)
   const flowNodes = useStory((s) => s.flowNodes)
   const s = shots.find((x) => x.id === shotId)
   if (!s) return <span className="hint">Nothing selected.</span>
+  return <NodeShotPanel n={s.owner_node ? flowNodes[s.owner_node] : undefined} s={s} />
+}
+
+/** D125 (#4, S10): a node and its shot as one panel — the node's own fields, then its shot's (the selected shot: selecting a node selects
+ *  its shot, and a shot its node, so the shot verbs and the node verbs both act on what is shown). */
+function NodeShotPanel({ n, s }: { n?: FlowNode; s?: Shot }) {
+  const visual = !!n && (n.type === 'dialogue' || n.type === 'shot')
+  const shotId = useStory((st) => st.shotId)
+  useEffect(() => { if (s && shotId !== s.id) sy().selectShot(s.id, n?.shot_version) }, [s, shotId, n?.shot_version])   // the shot verbs act on the shot shown (a node picked before the shots loaded)
+  return (
+    <div className="story-insp node-insp" data-testid="node-shot-panel">
+      {n && <NodeFields n={n} />}
+      {visual && !s && <UnboundShot n={n!} />}
+      {s && <ShotFields s={s} n={visual ? n : undefined} />}
+      {n && <div className="verbs"><CommandButton id="story.flow.duplicate" text /><CommandButton id="story.flow.delete" text /></div>}
+    </div>
+  )
+}
+
+/** The shot's half of the panel: its name and versions, the shown version's fields and verbs, its recipe (RC0) and lip-sync. */
+function ShotFields({ s, n }: { s: Shot; n?: FlowNode }) {
+  const shotVersionId = useStory((st) => st.shotVersionId)
+  const clipsById = useStory((st) => st.clipsById)
+  const stagesLite = useStory((st) => st.stagesLite)
+  const flowNodes = useStory((st) => st.flowNodes)
   const v = s.versions.find((x) => x.id === (shotVersionId ?? s.current))
   const clip = v?.clip_id ? clipsById[v.clip_id] : undefined
   const stage = v?.stage_id ? stagesLite.find((x) => x.id === v.stage_id) : undefined
   return (
-    <div className="story-insp">
-      <h4>{s.name}</h4>
+    <>
+      <h4 className="shot-head">Shot · {s.name}</h4>
       <div className="kv">
         <span>name</span><input type="text" value={s.name} aria-label="shot name" onChange={(e) => sy().renameShot(e.target.value)} />
-        <span>owner</span><span>{s.owner_node ? nodeName(flowNodes, s.owner_node) : 'unbound (a Flow node binds it)'}</span>
+        {!n && <><span>owner</span><span>{s.owner_node ? nodeName(flowNodes, s.owner_node) : 'unbound (a Flow node binds it)'}</span></>}
         <span>current</span>
         <select value={s.current} aria-label="current shot version" onChange={(e) => void sy().patchShot({ current: e.target.value })}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
+        {n && <><span>this node shows</span><select value={n.shot_version ?? s.current} aria-label="bound version" title="The version the Flow pins (Play, the cut)" onChange={(e) => void sy().bindShot(n.id, s.id, e.target.value)}>{s.versions.map((x) => <option key={x.id} value={x.id}>{x.id}{x.state === 'final' ? ' · final' : ''}</option>)}</select></>}
         <span>versions</span><span>{s.versions.length}</span>
       </div>
       {v && <ShotVersionFields v={v} clip={clip} stage={stage} />}
       {v && <RecipeSteps shotId={s.id} version={v.id} editable={v.state === 'open'} run="story.shot.runStale" />}{/* RC0 (D96) */}
       {v && v.state === 'open' && <LipsyncBlock v={v} ownerNode={s.owner_node ?? null} />}
-      <div className="verbs"><CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
-    </div>
+      <div className="verbs">{n ? <CommandButton id="story.flow.openShot" text /> : null}<CommandButton id="story.shot.release" text /><CommandButton id="story.shot.delete" text /></div>
+    </>
+  )
+}
+
+/** A visual node without a shot (made before D125, or unbound since): its own, or an unbound one bound. */
+function UnboundShot({ n }: { n: FlowNode }) {
+  const shots = useStory((s) => s.shots)
+  const unbound = shots.filter((s) => !s.owner_node || s.owner_node === n.id)
+  return (
+    <>
+      <h4>Shot</h4>
+      <div className="kv"><span>bind</span><select value="" aria-label="bind shot" onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">an unbound shot…</option>{unbound.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+      <div className="verbs"><CommandButton id="story.flow.newShot" text /></div>
+    </>
   )
 }
 
@@ -975,6 +1012,7 @@ function PlaceField({ n }: { n: FlowNode }) {
       </select>
       {cur && <><span /><span className="place-hero">{hero ? <img className="place-thumb" src={api.thumbUrl(hero, 256)} alt="" /> : null}<span className="hint">{cur.name} · {cur.current}</span></span></>}
       {!places.length && <><span /><span className="hint">no places in the Cast yet <Help text={"New profile…, with the class place."} /></span></>}
+      {n.place_id && <><span /><span><CommandButton id="story.flow.placeForward" text size={14} /></span></>}{/* D125 (S7) */}
     </div>
   )
 }
@@ -1040,13 +1078,11 @@ function NodeInspector() {
   const flowNodes = useStory((s) => s.flowNodes)
   const shots = useStory((s) => s.shots)
   const problems = useStory((s) => s.problems)
-  const world = useStory((s) => s.world)
-  const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
-  markUsed('story.flow.makeFrame'); markUsed('story.flow.makeClip'); markUsed('story.flow.openBoard'); markUsed('story.flow.clearBoard')
-  markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.unbind'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit'); markUsed('story.flow.voiceAll')
+  markUsed('story.flow.openBoard'); markUsed('story.flow.clearBoard')
+  markUsed('story.flow.delete'); markUsed('story.flow.duplicate'); markUsed('story.flow.newShot'); markUsed('story.flow.openShot'); markUsed('story.flow.validate'); markUsed('story.flow.fit'); markUsed('story.flow.voiceAll')
+  markUsed('story.flow.placeForward')
   for (const t of ['start', 'hub', 'dialogue', 'choice', 'condition', 'action', 'shot', 'jump', 'comment']) markUsed(`story.flow.add.${t}`)
   const n = nodeId ? flowNodes[nodeId] : undefined
-  const mine = problems?.filter((p) => !n || p.node_id === n.id || (!p.node_id && !n)) ?? []
   if (!n) return (
     <div className="story-insp">
       {problems && <><h4>Validation</h4><ul className="flow-problems">{problems.map((p, i) => <li key={i} className={p.code}><button className="link" onClick={() => sy().selectNode(p.node_id)}>{p.message}</button></li>)}{!problems.length && <li className="ok">No problems.</li>}</ul></>}
@@ -1054,10 +1090,19 @@ function NodeInspector() {
     </div>
   )
   const sh = n.shot_id ? shots.find((s) => s.id === n.shot_id) : undefined
-  const unbound = shots.filter((s) => !s.owner_node || s.owner_node === n.id)
+  return <NodeShotPanel n={n} s={sh} />                                              // D125 (S10): the same panel as Shots'
+}
+
+/** The node's half of the panel: its type and title, its own fields by type, where, its speakers' versions, its board, its problems. */
+function NodeFields({ n }: { n: FlowNode }) {
+  const flowNodes = useStory((s) => s.flowNodes)
+  const problems = useStory((s) => s.problems)
+  const world = useStory((s) => s.world)
+  const vars = world?.variables ?? []                                                           // derived in render: a selector must not return a fresh array
+  const mine = problems?.filter((p) => p.node_id === n.id) ?? []
   const visual = n.type === 'dialogue' || n.type === 'shot'
   return (
-    <div className="story-insp node-insp">
+    <>
       <h4>{NODE_LABEL[n.type]} · {n.title || n.id}</h4>
       <div className="kv">
         <span>type</span>
@@ -1078,18 +1123,9 @@ function NodeInspector() {
       {n.type === 'action' && <><h4>Sets</h4><SetsEditor n={n} sets={n.set} onChange={(set) => void sy().patchNode(n.id, { set })} /></>}
       {visual && <PlaceField n={n} />}
       {visual && <SpeakerVersions n={n} />}
-      {visual && <>
-        <h4>Shot</h4>
-        {sh ? <div className="kv"><span>bound</span><span>{sh.name} · {n.shot_version ?? sh.current} · {sh.versions.find((v) => v.id === (n.shot_version ?? sh.current))?.state ?? '?'}</span>
-          <span>version</span><select value={n.shot_version ?? sh.current} aria-label="bound version" onChange={(e) => void sy().bindShot(n.id, sh.id, e.target.value)}>{sh.versions.map((v) => <option key={v.id} value={v.id}>{v.id}{v.state === 'final' ? ' · final' : ''}</option>)}</select></div>
-          : <div className="kv"><span>bind</span><select value="" aria-label="bind shot" onChange={(e) => { if (e.target.value) void sy().bindShot(n.id, e.target.value) }}><option value="">an unbound shot…</option>{unbound.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
-        <div className="verbs"><CommandButton id="story.flow.newShot" text /><CommandButton id="story.flow.openShot" text /><CommandButton id="story.flow.unbind" text /></div>
-        <div className="verbs"><CommandButton id="story.flow.makeFrame" text /><CommandButton id="story.flow.makeClip" text /></div>
-      </>}
       <BoardField n={n} />
       {mine.length > 0 && <><h4>Problems</h4><ul className="flow-problems">{mine.map((p, i) => <li key={i} className={p.code}>{p.message}</li>)}</ul></>}
-      <div className="verbs"><CommandButton id="story.flow.duplicate" text /><CommandButton id="story.flow.delete" text /></div>
-    </div>
+    </>
   )
 }
 

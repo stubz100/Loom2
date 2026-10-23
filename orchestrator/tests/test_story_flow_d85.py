@@ -41,7 +41,7 @@ def test_store_nodes_graph_bind(tmp_path: Path):
     st = StoryStore(ws)
     assert st.flow_nodes() == {} and st.flow_graph().nodes == [] and not (ws.story_dir / "flow" / "graph.json").is_file()   # a read writes nothing
     s = st.create_node("start", x=10, y=20)
-    d = st.create_node("dialogue", "Hello", 300, 20, lines=[{"speaker": None, "text": "Hi."}])
+    d = st.create_node("dialogue", "Hello", 300, 20, with_shot=False, lines=[{"speaker": None, "text": "Hi."}])   # D125: bound by hand below
     c = st.create_node("choice", "Pick", 600, 20, options=[{"id": "opt_a", "label": "A"}, {"id": "opt_b", "label": "B"}])
     g = st.flow_graph()
     assert g.start == s.id and [p.id for p in g.nodes] == [s.id, d.id, c.id] and g.nodes[1].x == 300 and g.revision == 3
@@ -71,7 +71,7 @@ def test_store_nodes_graph_bind(tmp_path: Path):
     assert [o.id for o in c2.options] == ["opt_b"] and all(not (e.from_ == c.id and e.port == "opt:opt_a") for e in st.flow_graph().edges)
     # bind: sole ownership; a second node is refused; unbind releases; delete releases
     sh = st.create_shot("Gate")
-    other = st.create_node("shot", "Other", 0, 300)
+    other = st.create_node("shot", "Other", 0, 300, with_shot=False)
     n, sh2 = st.bind_shot(d.id, sh.id)
     assert n.shot_id == sh.id and n.shot_version == "v1" and sh2.owner_node == d.id
     with pytest.raises(ValueError, match="owned by another node"):
@@ -110,7 +110,7 @@ def test_routes_flow(tmp_path: Path):
         assert cl.get("/story/flow").json() == {"graph": {"schema_version": 1, "nodes": [], "edges": [], "start": None, "revision": 0, "updated_at": cl.get("/story/flow").json()["graph"]["updated_at"]}, "nodes": []}
         assert cl.post("/story/flow/nodes", json={"type": "scene"}).status_code == 422
         s = cl.post("/story/flow/nodes", json={"type": "start", "x": 10, "y": 10}).json()
-        d = cl.post("/story/flow/nodes", json={"type": "dialogue", "title": "Hello", "x": 300, "y": 10}).json()
+        d = cl.post("/story/flow/nodes", json={"type": "dialogue", "title": "Hello", "x": 300, "y": 10, "shot": False}).json()   # D125: spawned below
         w = cl.get("/story/world").json()
         cl.put("/story/world", json={**w, "variables": [{"name": "met", "type": "bool", "values": [], "default": False}]})
         c = cl.post("/story/flow/nodes", json={"type": "choice", "title": "Pick", "x": 600, "y": 10}).json()
@@ -130,7 +130,7 @@ def test_routes_flow(tmp_path: Path):
         r = cl.post(f"/story/flow/nodes/{d['id']}/shot", json={"name": "Hello shot"})
         assert r.status_code == 200 and r.json()["shot"]["owner_node"] == d["id"] and r.json()["node"]["shot_id"] == r.json()["shot"]["id"]
         sid = r.json()["shot"]["id"]
-        sh = cl.post("/story/flow/nodes", json={"type": "shot", "title": "Other", "x": 0, "y": 300}).json()
+        sh = cl.post("/story/flow/nodes", json={"type": "shot", "title": "Other", "x": 0, "y": 300, "shot": False}).json()
         assert cl.post(f"/story/flow/nodes/{sh['id']}/bind", json={"shot_id": sid}).status_code == 422
         assert cl.post(f"/story/flow/nodes/{s['id']}/bind", json={"shot_id": sid}).status_code == 422
         assert cl.post(f"/story/flow/nodes/{d['id']}/bind", json={"shot_id": sid, "version": "v9"}).status_code == 404

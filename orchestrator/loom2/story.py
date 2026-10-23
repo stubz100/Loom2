@@ -351,6 +351,7 @@ def finalize_reason(v: ShotVersion, clip_w: int | None, clip_h: int | None, fmt_
 NodeType = Literal["start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment"]
 NODE_TYPES: tuple[str, ...] = ("start", "hub", "dialogue", "choice", "condition", "action", "shot", "jump", "comment")
 VISUAL_TYPES = ("dialogue", "shot")                # the nodes that bind a shot (loom R134)
+VISUAL_LABEL = {"dialogue": "Dialogue", "shot": "Shot"}   # D125 (#4): the name of an untitled visual node's shot
 FLOW_PORTS = ("out", "then", "else")               # plus "opt:<option id>" on a Choice
 
 
@@ -912,7 +913,9 @@ class _FlowMixin:
             self.save_graph(g)
         return g
 
-    def create_node(self, type_: str, title: str = "", x: float = 0.0, y: float = 0.0, **fields: Any) -> FlowNode:
+    def create_node(self, type_: str, title: str = "", x: float = 0.0, y: float = 0.0, *, with_shot: bool = True, **fields: Any) -> FlowNode:
+        """A node and its placement. D125 (#4): a Dialogue or Shot node is made with its shot — named after the node, owned by it
+        (`with_shot` False: none, for a shot bound later)."""
         if type_ not in NODE_TYPES:
             raise ValueError(f"unknown node type {type_!r}; one of {', '.join(NODE_TYPES)}")
         fields = {k: v for k, v in fields.items() if k in ("lines", "options", "cond", "set", "target", "text", "colour")}
@@ -922,6 +925,14 @@ class _FlowMixin:
         g = g.model_copy(update={"nodes": [*[p for p in g.nodes if p.id != n.id], FlowPlacement(id=n.id, x=x, y=y)], "start": g.start or (n.id if type_ == "start" else None),
                                  "revision": g.revision + 1, "updated_at": utc_now()})
         self.save_graph(g)
+        if type_ in VISUAL_TYPES and with_shot:
+            n = self._own_shot(n)
+        return n
+
+    def _own_shot(self, n: FlowNode) -> FlowNode:
+        """D125 (#4): a new shot owned by the visual node, named after it."""
+        sh = self.create_shot(n.title.strip() or VISUAL_LABEL[n.type])      # type: ignore[attr-defined]
+        n, _ = self.bind_shot(n.id, sh.id)
         return n
 
     def patch_node(self, nid: str, data: dict[str, Any]) -> FlowNode:
@@ -947,6 +958,12 @@ class _FlowMixin:
         edges = [e for e in g.edges if e.from_ != nid or e.port in node_ports(n)]
         if len(edges) != len(g.edges):
             self.save_graph(g.model_copy(update={"edges": edges, "revision": g.revision + 1, "updated_at": utc_now()}))
+        if n.type in VISUAL_TYPES and n.shot_id and n.title != cur.title:   # D125 (#4): the shot follows the node's title until renamed by hand
+            sh = self.shot(n.shot_id)                                # type: ignore[attr-defined]
+            if sh is not None and sh.owner_node == nid and sh.name == (cur.title.strip() or VISUAL_LABEL.get(cur.type, "")) and (n.title.strip() or VISUAL_LABEL[n.type]):
+                self.patch_shot(sh.id, {"name": n.title.strip() or VISUAL_LABEL[n.type]})   # type: ignore[attr-defined]
+        if n.type in VISUAL_TYPES and not n.shot_id and cur.type not in VISUAL_TYPES:   # turned visual: it gets its shot
+            n = self._own_shot(n)
         return n
 
     def set_line_audio(self, nid: str, index: int, asset_id: str | None, text: str | None) -> FlowNode:
@@ -971,8 +988,9 @@ class _FlowMixin:
                 out.append(self.patch_profile(p.id, {"voice_id": None}))
         return out
 
-    def delete_node(self, nid: str) -> Shot | None:
-        """The node file goes, its placement and edges with it; its shot is released (not deleted) and returned."""
+    def delete_node(self, nid: str, delete_shot: bool = False) -> Shot | None:
+        """The node file goes, its placement and edges with it; its shot is released (not deleted) and returned — D125 (#4): or deleted too
+        with `delete_shot` (its files stay in the Catalogue), and None returned."""
         cur = self.flow_node(nid)
         if cur is None:
             raise KeyError(nid)
@@ -980,7 +998,10 @@ class _FlowMixin:
         if cur.shot_id:
             sh = self.shot(cur.shot_id)                           # type: ignore[attr-defined]
             if sh is not None and sh.owner_node == nid:
-                released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
+                if delete_shot:
+                    self.delete_shot(sh.id)                       # type: ignore[attr-defined]
+                else:
+                    released = self.patch_shot(sh.id, {"owner_node": None})   # type: ignore[attr-defined]
         self.node_path(nid).unlink()
         self.flow_graph()
         return released

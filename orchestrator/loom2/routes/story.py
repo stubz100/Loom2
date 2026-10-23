@@ -1047,6 +1047,7 @@ class NodeCreate(BaseModel):
     y: float = 0.0
     text: str = ""
     target: str | None = None
+    shot: bool = True                              # D125 (#4): a Dialogue or Shot node is made with its shot; False for one bound later
 
 
 class BindBody(BaseModel):
@@ -1076,7 +1077,9 @@ async def flow_node_create(svc: Svc, body: NodeCreate):
     ws, _, _ = svc.require_project()
     if body.type not in NODE_TYPES:
         raise HTTPException(422, f"unknown node type {body.type!r}; one of {', '.join(NODE_TYPES)}")
-    n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, text=body.text, target=body.target)
+    n = await asyncio.to_thread(StoryStore(ws).create_node, body.type, body.title, body.x, body.y, with_shot=body.shot, text=body.text, target=body.target)
+    if n.shot_id:
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
     _flow_changed(svc, n.id)
     return n.model_dump()
 
@@ -1116,15 +1119,18 @@ async def flow_node_patch(svc: Svc, nid: str, body: dict):
         raise HTTPException(409, str(e))
     except ValueError as e:
         raise HTTPException(422, str(e))
+    if n.shot_id:                                                          # D125 (#4): its shot may follow the title, or be new
+        svc.hub.broadcast("story.changed", {"kind": "shot", "id": n.shot_id, "revision": 0})
     _flow_changed(svc, nid)
     return n.model_dump()
 
 
 @router.delete("/story/flow/nodes/{nid}", response_model=Deleted)
-async def flow_node_delete(svc: Svc, nid: str):
+async def flow_node_delete(svc: Svc, nid: str, shot: Literal["keep", "delete"] = "keep"):
+    """The node goes; its shot stays unbound (`shot=keep`) or goes too (`shot=delete`, D125 #4 — its files stay in the Catalogue)."""
     ws, _, _ = svc.require_project()
     try:
-        released = await asyncio.to_thread(StoryStore(ws).delete_node, nid)
+        released = await asyncio.to_thread(StoryStore(ws).delete_node, nid, shot == "delete")
     except KeyError:
         raise HTTPException(404, "node not found")
     if released is not None:
@@ -1182,9 +1188,15 @@ async def flow_spawn(svc: Svc, nid: str, body: SpawnBody):
     n = await asyncio.to_thread(store.flow_node, nid)
     if n is None:
         raise HTTPException(404, "node not found")
+    name = body.name.strip() or n.title or n.type
+    mine = await asyncio.to_thread(store.shot, n.shot_id) if n.shot_id else None
+    v = mine.version() if mine is not None else None
     try:
-        sh = await asyncio.to_thread(store.create_shot, body.name.strip() or n.title or n.type)
-        n, sh = await asyncio.to_thread(store.bind_shot, nid, sh.id, None)
+        if mine is not None and v is not None and mine.owner_node == nid and len(mine.versions) == 1 and not (v.takes or v.frame_asset_id or v.clip_id or v.stage_id):
+            sh = await asyncio.to_thread(store.patch_shot, mine.id, {"name": name})      # D125 (#4): the node's untouched shot is the one, renamed
+        else:
+            sh = await asyncio.to_thread(store.create_shot, name)
+            n, sh = await asyncio.to_thread(store.bind_shot, nid, sh.id, None)
     except ValueError as e:
         raise HTTPException(422, str(e))
     svc.hub.broadcast("story.changed", {"kind": "shot", "id": sh.id, "revision": sh.revision})

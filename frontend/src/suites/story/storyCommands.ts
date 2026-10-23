@@ -3,9 +3,9 @@
 import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
 import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
 import { goBack, useMakeFor } from '../../store/origin'
-import { askConfirm, askText, useSession } from '../../store/session'
+import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
 import { useAlbum } from '../catalogue/albumStore'
-import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
+import { CLASS_LABEL, latestModelJob, latestTrainJob, modelSource, nodesAfterWithoutPlace, revealClass, sy, ttsJobFor, useStory, type ProfileClass } from './storyStore'
 import { makeClipFor, makeFrameFor, makeTarget, speakersOf } from './makeFor'
 import { runStale, staleOf } from './runStale'
 import type { Profile, Shot } from '../../api/types'
@@ -50,6 +50,8 @@ const shotTarget = () => makeTarget(shot(), shotVersion()?.id)
 const nodeShot = () => { const n = node(); return n?.shot_id ? sy().shots.find((x) => x.id === n.shot_id) : undefined }
 const nodeTarget = () => makeTarget(nodeShot(), node()?.shot_version)
 const board = () => { const g = node()?.board_group_id; return g ? findNode(useAlbum.getState().tree, g) : null }
+/** D125 (S7): the visual nodes after the selected one without a place, up to the next node that has one. */
+const placeTargets = (): string[] => { const n = node(); const g = sy().flowGraph; return n && g ? nodesAfterWithoutPlace(n.id, g.edges, sy().flowNodes) : [] }
 /** Open a stage at a camera (Shots' "Open in Stage" and the Stage routes of Make ▸). D93 (C8): `speakers` — Make frame ▸ in Stage binds the
  *  shot's speakers to the stage's figures in screen order when the counts match, else says how to bind them. */
 function openStageAt(stageId: string, cam: string | null, speakers?: (Profile & { version?: string | null })[], where: 'image' | 'animate' = 'animate'): void {
@@ -337,16 +339,25 @@ const cmds: Command[] = [
   })),
   { id: 'story.flow.delete', scope: 'story', label: 'Delete node', icon: Trash2, placement: ['inspector', 'context'], danger: true, when: () => !!node() && !sy().play,
     run: () => { const n = node(); if (!n) return
-      void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: n.shot_id ? 'Its edges go with it; its shot is released (not deleted).' : 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }) } },
+      const sh = nodeShot()
+      if (!sh || sh.owner_node !== n.id) { void askConfirm({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it.' }).then((ok) => { if (ok) void sy().deleteNode(n.id) }); return }
+      // D125 (#4): the node is its shot — the shot stays unbound, or goes too (its frames and clips stay in the Catalogue)
+      void askConfirmCheck({ title: `Delete ${n.title || NODE_LABEL[n.type]}?`, okLabel: 'Delete', danger: true, text: 'Its edges go with it.', check: `Delete its shot ${sh.name} too (its frames and clips stay in the Catalogue)` })
+        .then((r) => { if (r) void sy().deleteNode(n.id, r.checked) }) } },
   // D90 (B3): an edge goes by its right-click menu or Delete / Backspace on the canvas while it is selected (nodes keep their confirm)
   { id: 'story.flow.deleteEdge', scope: 'story', label: 'Delete the connection', icon: Unlink, keys: 'Delete', alt: ['Backspace'], placement: ['context'], when: () => !!sy().edge && !sy().play,
     run: () => { const e = sy().edge; if (!e) return; const to = sy().flowGraph?.edges.find((x) => x.from === e.from && x.port === e.port)?.to
       void sy().disconnect(e.from, e.port)
       if (to) useSession.getState().toast('Connection deleted', 'info', () => void sy().connect(e.from, e.port, to)) } },
   { id: 'story.flow.duplicate', scope: 'story', label: 'Duplicate node', icon: Copy, placement: ['inspector', 'context'], when: () => !!node() && !sy().play, run: () => { const n = node(); if (n) void sy().duplicateNode(n.id) } },
-  { id: 'story.flow.newShot', scope: 'story', label: 'New shot for this node…', icon: Plus, placement: ['inspector', 'context'], when: () => visual() && !sy().play,
-    run: () => { const n = node(); if (!n) return
-      void askText({ title: 'New shot for this node', text: 'An empty shot owned by this node (one node, one shot); fill it in Shots, Stage or Animate.', initial: n.title || NODE_LABEL[n.type], placeholder: 'shot name' }).then((name) => { if (name?.trim()) void sy().spawnShot(n.id, name.trim()) }) } },
+  // D125 (#4): a Dialogue or Shot node is made with its shot; one made before, or unbound since, gets its own here (named after it)
+  { id: 'story.flow.newShot', scope: 'story', label: 'Make its shot', icon: Plus, hint: 'a shot owned by this node, named after it', placement: ['inspector', 'context'], when: () => visual() && !node()?.shot_id && !sy().play,
+    run: () => { const n = node(); if (n) void sy().spawnShot(n.id, n.title || NODE_LABEL[n.type]) } },
+  // D125 (#7, S7): the place carried to the nodes after this one that have none (stopping at a node with a place of its own)
+  { id: 'story.flow.placeForward', scope: 'story', label: 'Also for the nodes after it', icon: CornerDownRight, placement: ['inspector', 'context'],
+    hint: 'the nodes after this one without a place take it, up to the next node that has one', when: () => !!node()?.place_id && placeTargets().length > 0 && !sy().play,
+    run: () => { const n = node(); if (!n?.place_id) return; const ids = placeTargets(); ids.forEach((id) => void sy().patchNode(id, { place_id: n.place_id }))
+      useSession.getState().toast(`${ids.length} node${ids.length === 1 ? '' : 's'} at the same place`, 'info') } },
   { id: 'story.flow.unbind', scope: 'story', label: 'Unbind from its node', icon: Unlink, placement: ['inspector', 'context'], when: () => !!node()?.shot_id && !sy().play, run: () => { const n = node(); if (n) void sy().unbindShot(n.id) } },
   { id: 'story.flow.openShot', scope: 'story', label: 'Open the shot', icon: Link, placement: ['inspector', 'context'], when: () => !!node()?.shot_id,
     run: () => { const n = node(); if (!n?.shot_id) return; const sid = n.shot_id, v = n.shot_version; void import('../../frame/suiteRegistry').then((m) => { m.setRailTab('story', 'shots'); sy().selectShot(sid, v) }) } },
@@ -416,7 +427,7 @@ export function edgeMenu(): { cmd: string }[] { return [{ cmd: 'story.flow.delet
 
 /** The right-click menu of a Flow node (the node is selected first). */
 export function nodeMenu(): ({ cmd: string } | typeof sepItem)[] {
-  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, sepItem,
+  return [{ cmd: 'story.flow.makeFrame' }, { cmd: 'story.flow.makeClip' }, sepItem, { cmd: 'story.flow.newShot' }, { cmd: 'story.flow.openShot' }, { cmd: 'story.flow.unbind' }, { cmd: 'story.flow.placeForward' }, sepItem,
     { cmd: 'story.flow.openBoard' }, { cmd: 'story.flow.clearBoard' }, sepItem, { cmd: 'story.flow.voiceAll' }, sepItem, { cmd: 'story.flow.duplicate' }, { cmd: 'story.flow.delete' }]
 }
 

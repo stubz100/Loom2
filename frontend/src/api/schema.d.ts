@@ -2390,6 +2390,27 @@ export interface paths {
         patch: operations["stage_thing_rename_stages__st_id__sets__set_id__things__thing_id__patch"];
         trace?: never;
     };
+    "/story/cast/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cast Readiness
+         * @description D125 (S5, proto01_UIcomp 04 §3.3): what Cast's readiness reads that the client lacks — each profile's shots (a line's speaker, a
+         *     node's place, a stage figure or mesh bound to it, with the shot's route) and each version's reference count.
+         */
+        get: operations["cast_readiness_story_cast_uses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/story/flow": {
         parameters: {
             query?: never;
@@ -4019,6 +4040,39 @@ export interface components {
             weight_dtypes: string[];
         } & {
             [key: string]: unknown;
+        };
+        /** CastReadiness */
+        CastReadiness: {
+            /** Profile Id */
+            profile_id: string;
+            /** Refs */
+            refs: {
+                [key: string]: number;
+            };
+            /** Uses */
+            uses: components["schemas"]["CastUse"][];
+        };
+        /** CastReadinessList */
+        CastReadinessList: {
+            /** Items */
+            items: components["schemas"]["CastReadiness"][];
+        };
+        /**
+         * CastUse
+         * @description A shot that uses a Cast profile: how (a Dialogue line's speaker, the node's place, a stage figure or a mesh bound to it) and the
+         *     route of its current version (the recipe template), which say what the shot needs from the profile's version (Cast's readiness row).
+         */
+        CastUse: {
+            /** How */
+            how: ("speaker" | "place" | "figure" | "prop")[];
+            /** Name */
+            name: string;
+            /** Route */
+            route: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Version */
+            version: string;
         };
         /** CatalogueChanged */
         CatalogueChanged: {
@@ -15552,6 +15606,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cast_readiness_story_cast_uses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CastReadinessList"];
                 };
             };
         };

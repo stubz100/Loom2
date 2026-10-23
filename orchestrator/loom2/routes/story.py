@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..fsio import new_id, utc_now
 from ..origin import JobOrigin
@@ -21,7 +21,7 @@ from ..library import Library, LibraryStore, StaleLibrary
 from ..schemas import Deleted, ProfileAdded, LibraryChange, LibraryRemoved, Expanded, FlowOut, FlowProblems, LipsyncQueued, LoraCheckQueued, LoraRecordList, LoraRecordOut, NodeShot, ProfileList, ShotList, TrainQueued, TtsQueued, VoiceList, VoiceRecordOut
 from ..stages import StageStore, encode_guide
 from ..shot_recipe import TEMPLATES, StampReader, Template, recipe_state, rerun_recipe, stale_plan, used_run
-from ..story import FOR_SHOT, NODE_TYPES, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
+from ..story import FOR_SHOT, NODE_TYPES, CastUse, cast_uses, body_fit_origin, model_source, prop_model_origin, PRESETS, plan_anim_ref, cell_sentence, FlowGraph, FlowNode, Profile, ProfileClass, SheetColour, Shot, StaleFlow, StaleProfile, StaleShot, StaleWorld, StoryStore, VersionLocked, World, expand_spec, finalize_reason, plan_expand, validate_flow
 from ..voices import VoiceRecord, VoiceStore, check_voice
 from .deps import Svc
 
@@ -154,6 +154,36 @@ def _changed(svc, p: Profile) -> None:
 async def profiles_list(svc: Svc):
     ws, _, _ = svc.require_project()
     return {"items": [p.model_dump() for p in await asyncio.to_thread(StoryStore(ws).profiles)]}
+
+
+class CastReadiness(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    profile_id: str
+    uses: list[CastUse]
+    refs: dict[str, int]                          # version id → the images in its reference set
+
+
+class CastReadinessList(BaseModel):
+    items: list[CastReadiness]
+
+
+@router.get("/story/cast/uses", response_model=CastReadinessList)
+async def cast_readiness(svc: Svc):
+    """D125 (S5, proto01_UIcomp 04 §3.3): what Cast's readiness reads that the client lacks — each profile's shots (a line's speaker, a
+    node's place, a stage figure or mesh bound to it, with the shot's route) and each version's reference count."""
+    ws, _, _ = svc.require_project()
+    groups = svc.require_groups()
+    store = StoryStore(ws)
+
+    def read() -> dict:
+        stages = {st.id: st for st in StageStore(ws).list()}
+        uses = cast_uses(store.shots(), store.flow_nodes(), stages)
+        def count(gid: str | None) -> int:
+            g = groups.groups.get(gid) if gid else None
+            return sum(1 for i in g.items if i.kind == "asset") if g else 0
+        return {"items": [{"profile_id": p.id, "uses": [u.model_dump() for u in uses.get(p.id, [])],
+                           "refs": {v.id: count(v.group_id) for v in p.versions}} for p in store.profiles()]}
+    return await asyncio.to_thread(read)
 
 
 @router.post("/story/profiles", response_model=Profile)

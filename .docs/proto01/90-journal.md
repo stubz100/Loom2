@@ -8479,3 +8479,28 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   stage → Clay with the chip, a second camera used for the shot, no second shot; a clip used as its clip; the Clip cell → Stage clip).
   Offline 532 passed (no server change); Vitest 437 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 56/56 and
   open 56/56. Screenshots `proto01_UIcomp/img/sp4-*.jpg`.
+
+## 2026-10-23 23:04 — SP5 built (D125 S5, proto01_UIcomp 04 §8): Cast readiness — what each version owes for the shots it is in
+
+- **The uses**: `GET /story/cast/uses` (`story.cast_uses`) lists, per profile, the shots that use it by their current version — a Dialogue
+  line's speaker or the node's place (the node that binds the shot), a visible stage figure or a mesh bound to it (the version's stage) —
+  with each shot's route (its recipe template, else RC0's default), and each version's reference count.
+- **The readiness row** (`castReady.ts`, under the strip on the version page) replaces the bootstrap strip: Hero · Sheet · References ·
+  Animation reference · Body (a prop: 3D model) · Voice · LoRA · Final by class (a place has no animation reference, body or voice). An item
+  is done ✓, owed ○ (a shot needs it — every use the hero, the sheet, references and a final version; a speaker the voice; a figure on a
+  clay route the animation reference and the body; a prop's mesh its 3D model, on a clay route its animation reference too) or open – (no
+  shot needs it yet; a LoRA never is owed). Each item is its verb, the first that can run (a picked candidate becomes the hero, a reference
+  or the animation reference; else Expand, Make an animation reference, Fit the body, Make the 3D model, New voice…, Train a LoRA…, Mark
+  final; *Write the sheet* focuses the appearance). References count live from the loaded reference page (the bootstrap's Expand and
+  Curate; the coverage stays advisory in its grid).
+- **Each Cast row** says what its current version owes ("4 owed for 3 shots", "ready for 2 shots", "in no shot"). ***In N shots*** on the
+  version page lists the uses with the route, how and what each still needs ("needs animation reference, body, final"); a click opens the
+  shot on the Shots board. **The foot** is the next owed step with the shots that need it (*Make an animation reference ▶ · for Arrival*,
+  `story.cast.next`), Expand ▶ as before when nothing is owed.
+- **The voice**: a voice made in the form a character's Inspector opened is that character's — a second one too (it was only the first).
+- OpenAPI and schema.d.ts regenerated; `routes_d37.json` gained the route.
+- **Tests:** `test_cast_uses_d125.py` (1), `castReady.test.ts` (4); the Cast scenario reads the readiness row instead of the bootstrap
+  steps; a Cast readiness e2e scenario (the row's line, the items' states and the voice's shot, In 2 shots with the routes and needs, the
+  foot, the voice item's form giving a first and a second voice, a use opening its shot). Offline 533 passed; Vitest 441 + 3 skipped;
+  typecheck and build clean; lint 0 errors (79 warnings); e2e full 57/57 and open 57/57. Screenshots `proto01_UIcomp/img/sp5-*.jpg` (a
+  done item without a runnable verb kept at full colour after them, CSS only).

@@ -73,6 +73,7 @@
  "GET /stages/poses",
  "GET /stages/{st_id}",
  "GET /stages/{st_id}/sets/{set_id}/things/shadows",
+ "GET /story/cast/uses",
  "GET /story/flow",
  "GET /story/library",
  "GET /story/loras",

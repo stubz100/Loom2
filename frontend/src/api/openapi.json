@@ -1689,6 +1689,94 @@
         "title": "Capabilities",
         "type": "object"
       },
+      "CastReadiness": {
+        "properties": {
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "refs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Refs",
+            "type": "object"
+          },
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/CastUse"
+            },
+            "title": "Uses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile_id",
+          "uses",
+          "refs"
+        ],
+        "title": "CastReadiness",
+        "type": "object"
+      },
+      "CastReadinessList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CastReadiness"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CastReadinessList",
+        "type": "object"
+      },
+      "CastUse": {
+        "description": "A shot that uses a Cast profile: how (a Dialogue line's speaker, the node's place, a stage figure or a mesh bound to it) and the\nroute of its current version (the recipe template), which say what the shot needs from the profile's version (Cast's readiness row).",
+        "properties": {
+          "how": {
+            "items": {
+              "enum": [
+                "speaker",
+                "place",
+                "figure",
+                "prop"
+              ],
+              "type": "string"
+            },
+            "title": "How",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "name",
+          "version",
+          "route",
+          "how"
+        ],
+        "title": "CastUse",
+        "type": "object"
+      },
       "CatalogueChanged": {
         "properties": {
           "purged": {
@@ -25840,6 +25928,28 @@
         "summary": "Stage Thing Rename",
         "tags": [
           "stages"
+        ]
+      }
+    },
+    "/story/cast/uses": {
+      "get": {
+        "description": "D125 (S5, proto01_UIcomp 04 §3.3): what Cast's readiness reads that the client lacks — each profile's shots (a line's speaker, a\nnode's place, a stage figure or mesh bound to it, with the shot's route) and each version's reference count.",
+        "operationId": "cast_readiness_story_cast_uses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CastReadinessList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cast Readiness",
+        "tags": [
+          "story"
         ]
       }
     },

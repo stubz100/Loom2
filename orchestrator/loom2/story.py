@@ -847,6 +847,43 @@ class _ShotMixin:
         return out
 
 
+# ---- Cast readiness (D125 S5, proto01_UIcomp 04 §3.3) ----------------------------------------------------------------------------
+class CastUse(BaseModel):
+    """A shot that uses a Cast profile: how (a Dialogue line's speaker, the node's place, a stage figure or a mesh bound to it) and the
+    route of its current version (the recipe template), which say what the shot needs from the profile's version (Cast's readiness row)."""
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    shot_id: str
+    name: str
+    version: str
+    route: str
+    how: list[Literal["speaker", "place", "figure", "prop"]]
+
+
+def cast_uses(shots: list[Shot], nodes: dict[str, FlowNode], stages: dict[str, Any]) -> dict[str, list[CastUse]]:
+    """Every profile's uses, by the shots' current versions: the node that binds the shot (its lines' speakers, its place) and the version's
+    stage (a visible object bound to a profile — a figure, else a prop's mesh). `stages` maps a stage id to its record."""
+    by_shot = {n.shot_id: n for n in nodes.values() if n.shot_id}
+    out: dict[str, list[CastUse]] = {}
+    for s in shots:
+        v = s.version()
+        how: dict[str, set[str]] = {}
+        n = by_shot.get(s.id) or (nodes.get(s.owner_node) if s.owner_node else None)
+        if n is not None:
+            for line in n.lines:
+                if line.speaker:
+                    how.setdefault(line.speaker, set()).add("speaker")
+            if n.place_id:
+                how.setdefault(n.place_id, set()).add("place")
+        st = stages.get(v.stage_id) if v.stage_id else None
+        for o in getattr(st, "objects", []) or []:
+            if o.profile_id and o.visible:
+                how.setdefault(o.profile_id, set()).add("figure" if o.kind == "mannequin" else "prop")
+        route = (v.recipe.template if v.recipe else None) or default_template(v.stage_id)
+        for pid, h in how.items():
+            out.setdefault(pid, []).append(CastUse(shot_id=s.id, name=s.name, version=v.id, route=route, how=sorted(h)))   # type: ignore[arg-type]
+    return out
+
+
 # ---- makers in context (D90, 02 §5) ----------------------------------------------------------------------------------------------
 FOR_SHOT = "for_shot"                             # origin.surface of a job made for a shot version ("Make frame ▸" / "Make clip ▸"); payload {shot_id, version}
 

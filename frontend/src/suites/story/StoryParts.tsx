@@ -2,20 +2,22 @@
 // adders; Stage: the editor over story/world.json (logline, synopsis, styles, the spine, variables); Inspector: the project format (the
 // finalize gate), counts, the selected item's fields (a style's editor: StyleWorld.tsx, D90; a library entry's and a saved panel's:
 // LibraryWorld.tsx, D92). SY1: the Cast tab — Panel: the profiles by class; Strip: the
-// version selector and the bootstrap strip; Stage: the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates and Add to the reference set);
+// version selector; Stage: the readiness row (D125), the version page (hero, the character sheet — D93 B4, the coverage grid, the candidates and Add to the reference set);
 // Inspector: the profile and the version. Mouse-first (D32): every verb is a button or a menu entry.
 import { Film, ImagePlus, Lock } from 'lucide-react'
 import { Help } from '../../frame/Help'
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api, http, unwrap } from '../../api/client'
 import { CommandButton, MenuButton } from '../../frame/CommandButton'
-import { markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
+import { command, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { openPressMenu, showMenu } from '../../frame/ContextMenu'
 import { DEV_HOOKS } from '../../devHooks'
 import { useSuiteRail } from '../../frame/suiteRegistry'
 import { useSession } from '../../store/session'
 import type { Asset, Profile, Shot, ShotVersion, StoryBeat, StoryVariable, WorldStyle } from '../../api/types'
-import { coverageGrid, readiness, rowsCovered } from './coverage'
+import { coverageGrid } from './coverage'
+import { ITEM_LABEL, readinessOf, rowSummary, shotNeeds } from './castReady'
+import { ROUTE_LABEL } from './board'
 import { TrainingBlock } from './TrainingBlock'
 import { VoicesBlock } from './VoicesBlock'
 import { LipsyncBlock } from './LipsyncBlock'
@@ -26,7 +28,7 @@ import { useLibrary } from './libraryStore'
 import { useGenerate } from '../generate/generateStore'
 import { versionName } from '../generate/sheet'
 import { CastSheet } from './CastSheet'
-import { askExpand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
+import { askExpand, castCells, castNext, ITEM_NEXT, itemCommand, makeClipItems, makeFrameItems, NEXT_LABEL, profileMenu, rowMenu, runOnItem, selectedNext, storyItem } from './storyCommands'
 import { BoardPanel, LinkStageSheet, ShotsBoard } from './ShotsBoard'
 import { flatGroups, useAlbum } from '../catalogue/albumStore'
 import { findNode } from './styleSamples'
@@ -110,6 +112,10 @@ function CastTab() {
   const search = useStory((s) => s.castSearch)
   const q = search.trim().toLowerCase()
   const shown = profiles.filter((p) => (filter === 'all' || p.cls === filter) && (!q || p.name.toLowerCase().includes(q)))
+  const uses = useStory((s) => s.castUses)
+  const shots = useStory((s) => s.shots)
+  const flowNodes = useStory((s) => s.flowNodes)
+  useEffect(() => { void sy().loadCastUses() }, [profiles, shots, flowNodes])          // D125 (S5): each row says what it owes for its shots
   return (
     <div className="story-panel cast-panel">
       <div className="segmented" aria-label="class">
@@ -123,7 +129,8 @@ function CastTab() {
             <button key={p.id} className={`story-row profile-row${profileId === p.id ? ' active' : ''}`} role="listitem" data-id={p.id} onClick={() => sy().selectProfile(p.id)}
               onContextMenu={(e) => { sy().selectProfile(p.id); showMenu(e, profileMenu()) }}>
               {v?.hero_asset_id ? <img className="pthumb" src={api.thumbUrl(v.hero_asset_id, 256)} alt="" /> : <span className="pthumb empty" />}
-              <span className="pname">{p.name}<span className="muted"> · {CLASS_LABEL[p.cls]}</span></span>
+              <span className="pname">{p.name}<span className="muted"> · {CLASS_LABEL[p.cls]}</span>
+                {v && uses[p.id] && <span className="owes">{rowSummary(readinessOf(p, v, uses[p.id].uses, uses[p.id].refs[v.id]), uses[p.id].uses)}</span>}</span>
               <span className="n">{p.current} <i className={`dot ${v?.state === 'final' ? 'tight' : 'ok'}`} title={v?.state === 'final' ? 'final' : 'open'} /></span>
             </button>
           )
@@ -199,6 +206,8 @@ export function PrimaryAction() {
   const clipsById = useStory((s) => s.clipsById)
   const boardFinals = useStory((s) => s.boardFinals)                               // D125 (SP3): the next step reads the board's records
   const boardCuts = useStory((s) => s.boardCuts)
+  const castUses = useStory((s) => s.castUses)                                     // D125 (SP5): the Cast foot's next owed step reads them
+  const picked = useStory((s) => s.picked)
   const { active: tab } = useSuiteRail()
   const play = useStory((s) => s.play)
   const flowGraph = useStory((s) => s.flowGraph)
@@ -243,6 +252,14 @@ export function PrimaryAction() {
     const p = profiles.find((x) => x.id === profileId); const v = p?.versions.find((x) => x.id === (versionId ?? p.current))
     const reason = !p ? 'pick a profile' : !v ? 'no version' : v.state !== 'open' ? `${v.id} is final — expand a new version` : !v.hero_asset_id ? 'no hero image yet' : !caps?.model_id ? 'no model in this build' : expanding ? 'queuing…' : caps.missing.length ? `weights missing: ${caps.missing.join(', ')}` : ''
     const secs = (caps?.seconds ?? 0) * (caps?.presets.full?.cells ?? 0)
+    void castUses; void picked
+    const next = castNext()                                                           // D125 (S5): the version's next owed step, with the shots that need it
+    if (next) return (
+      <div>
+        <button className="primary" disabled={!itemCommand(next.item)} onClick={() => runCommand('story.cast.next')} title="The first item of the readiness row a shot of this profile still needs">{ITEM_NEXT[next.item]} ▶</button>
+        <div className="estimate"><span className="dot tight" />for {next.shots.join(', ')}</div>
+      </div>
+    )
     return (
       <div>
         <button className="primary" disabled={!!reason} onClick={() => runCommand('story.cast.expand')} title="Queue one job per coverage cell (Full coverage; the dialog says the cost) — Ctrl+Enter">Expand ▶</button>
@@ -255,32 +272,27 @@ export function PrimaryAction() {
 }
 
 // ------------------------------------------------------------------ Strip
-function Bootstrap({ p }: { p: Profile }) {
-  const refPage = useStory((s) => s.refPage)
-  const candPage = useStory((s) => s.candPage)
-  const versionId = useStory((s) => s.versionId)
-  const caps = useSession((s) => s.capabilities?.story)
-  const v = p.versions.find((x) => x.id === (versionId ?? p.current))
-  const refs = Object.values(refPage?.assets ?? {})
-  const grid = coverageGrid(refs, caps?.coverage.shots ?? [], caps?.coverage.angles ?? [])
-  const ready = readiness(refs, caps?.coverage.shots ?? [], caps?.coverage.angles ?? [], !!v?.hero_asset_id)
-  const curated = (caps?.coverage.shots?.length ?? 0) > 0 && rowsCovered(grid).length === (caps?.coverage.shots?.length ?? 0)
-  const steps: { id: string; label: string; done: boolean; hint: string; run?: string }[] = [
-    { id: 'cast', label: 'Cast', done: !!v?.hero_asset_id, hint: v?.hero_asset_id ? 'the hero is set' : 'make an image the hero ("Make a character…" on a tile, or pick a candidate)' },
-    { id: 'expand', label: 'Expand', done: Object.keys(candPage?.assets ?? {}).length > 0, hint: 'one job per coverage cell with the hero as the reference', run: 'story.cast.expand' },
-    { id: 'curate', label: 'Curate', done: curated, hint: curated ? 'every shot-size row has a reference' : 'add candidates to the reference set until every shot-size row has one (advisory)' },
-    { id: 'train', label: 'Train', done: !!v?.lora, hint: v?.lora ? `the version holds a LoRA (trigger ${v.trigger})` : `readiness ${ready.score} · ${ready.summary} — ${ready.lines[0]}; a LoRA from the reference set (advisory)`, run: 'story.cast.train' },
-    { id: 'lock', label: 'Final', done: v?.state === 'final', hint: 'the version becomes read-only; a retake is a new version', run: 'story.cast.lock' },
-  ]
+/** D125 (S5, SP5): the version's readiness for the shots it is in, under the strip — each item is its verb (castReady.ts; the bootstrap
+ *  strip it replaces had Expand and Curate, now the References item). Done ✓ · owed ○ (a shot needs it) · open – (none does yet). */
+const READY_GLYPH = { done: '✓', owed: '○', open: '–' } as const
+function ReadinessRow() {
+  useStory((s) => s.castUses); useStory((s) => s.profiles); useStory((s) => s.versionId); useStory((s) => s.picked); useStory((s) => s.candPage); useStory((s) => s.refPage)
+  useEffect(() => { void sy().loadCastUses() }, [])
+  const cells = castCells()
+  if (!cells) return null
   return (
-    <span className="bootstrap" aria-label="bootstrap">
-      {steps.map((s, i) => (
-        <span key={s.id} className={`bs-step${s.done ? ' done' : ''}`} title={s.hint}>
-          {s.run ? <button className="quiet" onClick={() => runCommand(s.run!)}>{s.label}{s.done ? ' ✓' : ''}</button> : <span>{s.label}{s.done ? ' ✓' : ''}</span>}
-          {i < steps.length - 1 && <span className="sep">›</span>}
-        </span>
-      ))}
-    </span>
+    <div className="cast-ready" aria-label="readiness">
+      {cells.map((c) => {
+        const id = itemCommand(c.item)
+        const why = c.state === 'done' ? 'done' : c.shots.length ? `${c.shots.join(', ')} need${c.shots.length === 1 ? 's' : ''} it` : 'no shot needs it yet'
+        return (
+          <button key={c.item} type="button" className={`ready-item ${c.state}`} data-item={c.item} disabled={!id} onClick={() => { if (id) runCommand(id) }}
+            title={`${ITEM_LABEL[c.item]}: ${why}${id ? ` — ${command(id)?.label ?? ''}` : ''}`} aria-label={`${ITEM_LABEL[c.item]}: ${c.state}`}>
+            <span className="g">{READY_GLYPH[c.state]}</span>{ITEM_LABEL[c.item]}{c.text ? <span className="t">{c.text}</span> : null}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -353,8 +365,6 @@ export function Strip() {
         </select>
         <CommandButton id="story.cast.newVersion" />
         {v?.state === 'final' ? <span className="lock-badge" title={`marked final ${v.locked_at ?? ''}`}><Lock size={12} /> final</span> : <CommandButton id="story.cast.lock" />}
-        <span className="spacer" />
-        <Bootstrap p={p} />
       </div>
     )
   }
@@ -552,6 +562,9 @@ function AnimTestSlot({ clipId }: { clipId: string | null }) {
   )
 }
 
+/** D125 (S5): a use of *In N shots* opens its shot on the Shots board. */
+const openShotRow = (id: string) => { sy().selectShot(id); void import('../../frame/suiteRegistry').then((m) => m.setRailTab('story', 'shots')) }
+
 function CastPage() {
   const profiles = useStory((s) => s.profiles)
   const profileId = useStory((s) => s.profileId)
@@ -561,6 +574,7 @@ function CastPage() {
   const picked = useStory((s) => s.picked)
   const caps = useSession((s) => s.capabilities?.story)
   const filterIsProp = useStory((s) => s.castFilter === 'prop')
+  const castUses = useStory((s) => s.castUses)
   markUsed('story.cast.addRef'); markUsed('story.cast.setHero'); markUsed('story.cast.openCandidates'); markUsed('story.cast.openGroup'); markUsed('story.cast.delete')
   const p = profiles.find((x) => x.id === profileId)
   if (!p) return filterIsProp
@@ -572,8 +586,11 @@ function CastPage() {
   const grid = coverageGrid(refs, caps?.coverage.shots ?? [], caps?.coverage.angles ?? [])
   const cands = Object.values(candPage?.assets ?? {}).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   const open = v.state === 'open'
+  const uses = castUses[p.id]?.uses ?? []
+  const cells = castCells() ?? []
   return (
     <div className="cast-page" tabIndex={0} onKeyDown={(e) => { storyKey('cast', e.nativeEvent) }}>
+      <ReadinessRow />
       <div className="cast-head">
         <div className="hero-card">{v.hero_asset_id ? <img src={api.thumbUrl(v.hero_asset_id, 512)} alt="" /> : <span className="hint">no hero yet</span>}</div>
         <div className="cast-fields">
@@ -582,6 +599,15 @@ function CastPage() {
           <div className="counts"><span>reference set · <b>{refs.length}</b></span><span>candidates · <b>{cands.length}</b></span>{v.candidates_group_id === null && <span className="hint">(none expanded yet)</span>}</div>
         </div>
       </div>
+      <section className="in-shots">
+        <h3>In {uses.length} shot{uses.length === 1 ? '' : 's'} <Help text={"The shots that use this profile — a Dialogue line's speaker, a node's place, a stage figure or a prop's mesh bound to it — with each shot's route and what it still needs from this version. A click opens the shot."} /></h3>
+        {uses.length ? <div className="use-list">{uses.map((u) => { const need = shotNeeds(u, cells, p.cls)
+          return (
+            <button key={u.shot_id} type="button" className="use-row" data-id={u.shot_id} onClick={() => openShotRow(u.shot_id)} title="Open the shot in Story · Shots">
+              <b>{u.name}</b><span className="route">{ROUTE_LABEL[u.route] ?? u.route} · {u.how.join(', ')}</span><span className={need.length ? 'needs' : 'ok'}>{need.length ? `needs ${need.join(', ')}` : 'ready'}</span>
+            </button>
+          ) })}</div> : <span className="hint">in no shot yet</span>}
+      </section>
       <section>
         <h3>Coverage <Help text={"Kept references per shot size × angle; thin cells are tinted (advisory)."} /></h3>
         <table className="cov-grid" aria-label="coverage">

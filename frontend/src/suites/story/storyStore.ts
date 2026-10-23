@@ -5,7 +5,7 @@
 // the styles for its picker (09 §3a) and the profiles for its @ picker (D73 / D85).
 import { create } from 'zustand'
 import { type ApiError, api, http, unwrap } from '../../api/client'
-import type { Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
+import type { CastReadiness, Clip, Final, FlowGraph, FlowNode, FlowProblem, GroupPage, Job, LoraRecord, Profile, ProfileAdded, ProfileVersion, Shot, ShotVersion, StoryBeat, StoryVariable, VoiceRecord, World, WorldStyle } from '../../api/types'
 import { askConfirm, useSession } from '../../store/session'
 import { useLibrary } from './libraryStore'
 import { startPlay, stepPlay, type PlayState } from './flow/play'
@@ -223,6 +223,9 @@ export interface StoryState {
   setLinkFor: (f: { shotId: string; version: string } | null) => void
   linkStage: (shotId: string, version: string, stageId: string | null, cameraId: string | null) => Promise<boolean>
   setCastSearch: (s: string) => void
+  /** D125 (S5, SP5): each profile's shots and each version's reference count (GET /story/cast/uses) — Cast's readiness reads them. */
+  castUses: Record<string, CastReadiness>
+  loadCastUses: () => Promise<void>
   // SY2 · Shots
   loadShots: () => Promise<void>
   selectShot: (id: string | null, version?: string | null) => void
@@ -386,7 +389,7 @@ export const useStory = create<StoryState>()((set, get) => {
     world: null, loading: false, saving: false, section: 'logline', selected: null,
     profiles: [], profilesLoaded: false, profileId: null, versionId: null, refPage: null, candPage: null, pagesFor: null,
     loras: [], trainOpts: DEFAULT_TRAIN, voices: [], voiceId: null, voiceForm: false, lipsyncOpts: { node_id: null, index: null, preset: 'draft' }, audioSecs: {},
-    castFilter: 'all', castSearch: '', picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
+    castFilter: 'all', castSearch: '', castUses: {}, picked: [], expanding: false, busy: false, boardFinals: [], boardCuts: [], boardFilter: 'all', linkFor: null,
     shots: [], shotsLoaded: false, shotId: null, shotVersionId: null, clipsById: {}, stagesLite: [],
     flowNodes: {}, flowGraph: null, flowLoaded: false, nodeId: null, problems: null, play: null, addAt: null, edge: null,
     load: async () => {
@@ -703,8 +706,8 @@ export const useStory = create<StoryState>()((set, get) => {
         const r = await unwrap(http.POST('/story/voices', { body }))
         await get().loadVoices()
         const p = get().profile()
-        if (p && p.cls === 'character' && !p.voice_id) await get().patchProfile({ voice_id: r.id })                // the character speaks with its first voice
-        toast(`Voice ${r.name} added (${r.tier})`, 'info')
+        if (p && p.cls === 'character') await get().patchProfile({ voice_id: r.id })                              // D125 (S5): the character the form was opened from speaks with it
+        toast(`Voice ${r.name} added (${r.tier})${p && p.cls === 'character' ? ` — ${p.name} speaks with it` : ''}`, 'info')
         return r
       } catch (e) { toast(`New voice: ${detail(e)}`); return null }
     },
@@ -796,6 +799,9 @@ export const useStory = create<StoryState>()((set, get) => {
       } catch (e) { toast(`Link: ${detail(e)}`); return false }
     },
     setCastSearch: (castSearch) => set({ castSearch }),
+    loadCastUses: async () => {
+      try { const r = await unwrap(http.GET('/story/cast/uses')); set({ castUses: Object.fromEntries(r.items.map((x) => [x.profile_id, x])) }) } catch { /* the row shows what it has */ }
+    },
     // ---- SY2 · Shots
     loadShots: async () => {
       try {

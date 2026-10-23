@@ -1235,8 +1235,12 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   const more = cands.filter((a) => a.id !== keptId && a.id !== secondId).sort((a, b) => Number(b.params.coverage_cell?.shot === keptShot) - Number(a.params.coverage_cell?.shot === keptShot)).slice(0, 4)
   await api('POST', `/story/profiles/${profile.id}/versions/v1/add`, { asset_ids: more.map((a) => a.id), role: 'reference' })
   await expect(page.locator('.cand-card')).toHaveCount(r.cells - 6)
-  // the bootstrap strip and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
-  await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(2)  // Cast ✓ · Expand ✓
+  // the readiness row (D125 S5: it replaced the bootstrap strip) and the Inspector show the state; Lock through the strip → the album refuses a move on the reference page
+  const ready = (item: string) => page.locator(`.cast-ready .ready-item[data-item="${item}"]`)
+  await expect(ready('hero')).toHaveClass(/done/)
+  await expect(ready('refs')).toHaveClass(/done/)
+  await expect(ready('refs')).toContainText(/\d/)
+  await expect(ready('final')).not.toHaveClass(/done/)
   await page.locator('.story-strip button[title^="Mark final"]').click()
   await expect(dialog).toContainText(/Mark .* final/)
   await dialog.locator('button.primary').click()
@@ -1266,7 +1270,8 @@ test('a cast (17 / SY1, D85): "Make a character…" on a tile opens Story · Cas
   const rec = (await api<{ items: { id: string; name: string; base: string; steps: number; dataset: { count: number; setting: string } }[] }>('GET', '/story/loras')).items.find((l) => l.id === lora.lora_id)!
   expect(rec.steps).toBe(100)
   expect(rec.dataset.setting).toBe('plain studio background')
-  await expect(page.locator('.story-strip .bootstrap .bs-step.done')).toHaveCount(4)  // Cast ✓ · Expand ✓ · Train ✓ · Lock ✓
+  await expect(ready('lora')).toHaveClass(/done/)
+  await expect(ready('final')).toHaveClass(/done/)
   // the mention: Generate's @ picker lists the profile first; the preview resolves it to v1's reference set with the hero first
   await openImage(page, 'Make')
   await page.locator('#gen-sec-model').scrollIntoViewIfNeeded()                      // not the rail: a click on the tab the column already sits on folds the panel
@@ -2939,4 +2944,60 @@ test('the round trip (D125 SP4): Make frame lands on the For chip (kept in view)
   await expect(page.locator('.animate-levels button.active')).toHaveText('Performance')
   await expect(page.locator('.perf-cards button.active')).toHaveText('Stage clip')
   await expect(page.locator('.panel [data-testid="for-chip"]')).toContainText(`Round ${tag}`)
+})
+
+test('Cast readiness (D125 SP5): a Cast row says what the character owes for its shots; the readiness row under the strip, In N shots with what each shot needs, the foot\'s next owed step; the voice item opens the form and a voice made there is the character\'s — a second one too', async ({ page }) => {
+  test.setTimeout(120_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type StageLite = { id: string; cameras: { id: string }[]; objects: unknown[] }
+  const img = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0].id
+  const name = `Ready ${tag}`
+  const prof = await api<{ id: string }>('POST', '/story/profiles', { name, cls: 'character', hero_asset_id: img, appearance: 'a wiry courier in a grey coat' })
+  const talk = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'dialogue', title: `Talk ${tag}` })
+  await api('PATCH', `/story/flow/nodes/${talk.id}`, { lines: [{ speaker: prof.id, text: 'Hello.', audio_asset_id: null, audio_text: null }] })
+  const walk = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Walk ${tag}` })
+  const st = await api<StageLite>('POST', '/stages', { name: `Ready stage ${tag}` })
+  await api('PUT', `/stages/${st.id}`, { ...st, objects: [{ id: `obj_${tag}`, kind: 'mannequin', preset: 'adult', name, profile_id: prof.id }] })
+  await api('PUT', `/story/shots/${walk.shot_id}/versions/v1/source`, { stage_id: st.id, camera_id: st.cameras[0].id })
+  await api('PUT', `/story/shots/${walk.shot_id}/versions/v1/template`, { template: 'clay1' })
+  await openApp(page, { suite: 'story', tab: 'cast' })
+  const row = page.locator(`.story-row.profile-row[data-id="${prof.id}"]`)
+  await expect(row.locator('.owes')).toHaveText(/^\d+ owed for 2 shots$/)
+  await row.click()
+  const ready = (item: string) => page.locator(`.cast-ready .ready-item[data-item="${item}"]`)
+  await expect(ready('hero')).toHaveClass(/done/)
+  await expect(ready('sheet')).toHaveClass(/done/)
+  await expect(ready('animref')).toHaveClass(/owed/)
+  await expect(ready('body')).toHaveClass(/owed/)
+  await expect(ready('voice')).toHaveClass(/owed/)
+  await expect(ready('lora')).toHaveClass(/open/)
+  await expect(ready('voice')).toHaveAttribute('title', new RegExp(`Talk ${tag} needs it`))
+  const inShots = page.locator('.in-shots')
+  await expect(inShots.locator('h3')).toContainText('In 2 shots')
+  await expect(inShots.locator(`.use-row[data-id="${walk.shot_id}"] .route`)).toHaveText('clay final shot · figure')
+  await expect(inShots.locator(`.use-row[data-id="${walk.shot_id}"] .needs`)).toContainText('animation reference, body')
+  await expect(inShots.locator(`.use-row[data-id="${talk.shot_id}"] .needs`)).toContainText('voice')
+  // the foot: the first owed item (the hero is in its reference set, so the animation reference), for the shot that needs it
+  await expect(ready('refs')).toHaveClass(/done/)
+  await expect(page.locator('.panel .foot button.primary')).toHaveText('Make an animation reference ▶')
+  await expect(page.locator('.panel .foot .estimate')).toHaveText(`for Walk ${tag}`)
+  // the voice item opens the form; the voice made there is the character's, and so is a second one (S5: no second select)
+  const voices = page.locator('.inspector .voices')
+  const form = voices.locator('[aria-label="new voice"]')
+  const make = async (vname: string) => {
+    await form.locator('input[aria-label="voice name"]').fill(vname)
+    await form.locator('select[aria-label="kokoro voice"]').selectOption('am_adam')
+    await form.locator('button[aria-label="create voice"]').click()
+    await expect(form).toHaveCount(0)
+    await expect(voices.locator('select[aria-label="profile voice"] option:checked')).toContainText(`${vname} · draft`)
+  }
+  await ready('voice').click()
+  await make(`First ${tag}`)
+  await expect(ready('voice')).toHaveClass(/done/)
+  await page.locator('.inspector button[title^="New voice"]').click()
+  await make(`Second ${tag}`)
+  // a use opens its shot on the Shots board
+  await inShots.locator(`.use-row[data-id="${walk.shot_id}"]`).click()
+  await expect(page.locator(`.shots-board tr.row.sel[data-id="${walk.shot_id}"]`)).toBeVisible()
 })

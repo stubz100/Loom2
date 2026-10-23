@@ -1,7 +1,8 @@
 // 17 (D85): the Story suite's verbs — every one has a mouse home (the panel's buttons, the editor rows' tools, the Inspector, right-click
 // menus) per D32; Delete and the arrows are accelerators. SY1 adds the Cast tab's verbs (new profile, expand, add to the reference set, lock, copy, open).
 import { ArrowDown, ArrowLeft, Box, Ruler, ArrowUp, BookOpen, BookPlus, ChevronLeft, ChevronRight, Pencil, UserRoundPlus, Users, Check, CircleHelp, Clapperboard, Copy, CornerDownRight, Film, FolderOpen, GitBranch, GitFork, GraduationCap, ImageOff, ImagePlus, ImageUp, Link, ListChecks, ListPlus, Lock, MapPinPlus, Maximize, MessageSquare, Mic, PackagePlus, Palette, PersonStanding, Play, Plus, RotateCcw, ScanFace, Shapes, Sparkles, Square, Star, StickyNote, ToggleLeft, Trash2, Unlink, UserPlus, Volume2, Wand2, X, Zap } from 'lucide-react'
-import { registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
+import { command, isEnabled, registerCommands, runCommand, sep, type Command, type MenuItem } from '../../frame/commands'
+import { nextOwed, readinessOf, type ReadyCell, type ReadyItem } from './castReady'
 import { goBack, useMakeFor } from '../../store/origin'
 import { cellsOf, nextStep, routeOf, type Cell, type Step } from './board'
 import { askConfirm, askConfirmCheck, askText, useSession } from '../../store/session'
@@ -82,6 +83,26 @@ function openStageRoute(card: 'clay' | 'clip' | 'final'): void {
   useMakeFor.getState().set('animate', forShot(s, v))
   openStageAt(v.stage_id, v.camera_id, shotSpeakers(s), 'animate', card, v.frame_asset_id ?? null)
 }
+
+// ---- D125 (SP5): Cast's readiness — each item's verb (the readiness row is its mouse home; the foot runs the next owed one) ----
+const ITEM_CMDS: Record<ReadyItem, string[]> = {
+  hero: ['story.cast.setHero', 'story.cast.useAsSubject'], sheet: ['story.cast.editSheet'], refs: ['story.cast.addRef', 'story.cast.expand', 'story.cast.openCandidates'],
+  animref: ['story.cast.useAsAnimRef', 'story.cast.makeAnimRef'], body: ['story.cast.fitBody'], model: ['story.cast.makeModel'], voice: ['story.cast.newVoice'],
+  lora: ['story.cast.train'], final: ['story.cast.lock'],
+}
+/** The item's verb that can run now (a picked candidate first: it becomes the hero, a reference, the animation reference), or null. */
+export const itemCommand = (item: ReadyItem): string | null => ITEM_CMDS[item].find((id) => { const c = command(id); return !!c && isEnabled(c) }) ?? null
+export const ITEM_NEXT: Record<ReadyItem, string> = { hero: 'Pick its hero', sheet: 'Write its sheet', refs: 'Make its references', animref: 'Make an animation reference',
+  body: 'Fit the body', model: 'Make the 3D model', voice: 'Give it a voice', lora: 'Train a LoRA', final: 'Mark final' }
+/** The selected version's readiness row (null without one). */
+export function castCells(): ReadyCell[] | null {
+  const p = profile(); const v = version()
+  if (!p || !v) return null
+  const r = sy().castUses[p.id]
+  const page = sy().refPage                                                  // the version's reference page, when loaded, counts live
+  return readinessOf(p, v, r?.uses ?? [], page && page.group.id === v.group_id ? Object.keys(page.assets).length : r?.refs[v.id])
+}
+export const castNext = (): ReadyCell | null => { const c = castCells(); return c ? nextOwed(c) : null }
 
 // ---- D125 (SP3): the Shots board's cells — each step's verb for the selected shot (the cell is its mouse home; Ctrl+Enter the next one) ----
 export const STEP_VERB: Record<Step, (v: ShotVersion, c: Cell) => { label: string; always?: boolean }> = {
@@ -271,6 +292,11 @@ const cmds: Command[] = [
         gs.setPoses({ cells: plan.map((c) => ({ shot: c.shot, angle: c.angle, expression: c.expression })), expressions: Array.from(new Set(plan.map((c) => c.expression))) })
         gs.setRun('expand'); r.setRailTab('generate', 'poses'); useSession.getState().setSuite('generate')
         useSession.getState().toast(`${p.name} ${v.id}: pick the poses, then Expand ▶ — the images land as its candidates`, 'info') }) } },
+  // D125 (SP5): the readiness row's Sheet item, and the foot's next owed step
+  { id: 'story.cast.editSheet', scope: 'story', label: 'Write the sheet', icon: Pencil, hint: "the version's look in words — Make frame and Expand compose it into every image of it", placement: ['strip'],
+    when: () => !!version(), run: () => { const el = document.getElementById('cast-appearance') as HTMLTextAreaElement | null; el?.scrollIntoView({ block: 'center' }); el?.focus() } },
+  { id: 'story.cast.next', scope: 'story', label: 'Do the next owed step', icon: ChevronRight, hint: "the first item of the readiness row a shot of this profile still needs", placement: ['panel'],
+    when: () => { const n = castNext(); return !!n && !!itemCommand(n.item) }, run: () => { const n = castNext(); const id = n ? itemCommand(n.item) : null; if (id) runCommand(id) } },
   { id: 'story.cast.addRef', scope: 'story', label: 'Add to the reference set', icon: Check, keys: 'K', placement: ['context', 'inspector', 'toolbar'], when: () => openVersion() && picked().length > 0,
     run: () => void sy().addRefs(picked()) },
   { id: 'story.cast.setHero', scope: 'story', label: 'Make it the hero', icon: ImageUp, placement: ['context', 'inspector'], when: () => openVersion() && picked().length === 1,

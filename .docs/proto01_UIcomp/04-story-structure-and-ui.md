@@ -276,7 +276,7 @@ rig run checks that one.
 | **SP2 · The node is the shot** ✓ built 2026-10-23 | a visual node makes its shot; the shared node-and-shot panel; the place carried forward | S6, S7, S10 | 2–3 |
 | **SP3 · The board** ✓ built 2026-10-23 | the board, its cells and states, the shot page under it, the next-step foot, the Flow cards' step pills; *Link a stage camera…*, *Block it on a stage…* and the stage routes opened in context (S11 and part of A2, moved here from SP4, because the board's Stage and Final cells need them) | S9, S11, A2 (part) | 3–4 |
 | **SP4 · The round trip** ✓ built 2026-10-23 | Image's landing and *Use as … frame*; Animate's *Stage clip* landing (the rest of A2), *Use this camera*, *Use as … clip* | I1, I2, A2, A3, A4 | 3 |
-| **SP5 · Cast readiness** | the readiness row, *In N shots*, the next-step foot, the voice given to its character | S5 | 1–2 |
+| **SP5 · Cast readiness** ✓ built 2026-10-23 | the readiness row, *In N shots*, the next-step foot, the voice given to its character | S5 | 1–2 |
 | **SP6 · Episode** | *Assemble from the Flow…*, *changed · Update*, *Export for Resolve ▶* | S13, S14 | 2–3 |
 | **SP7 · Episode verbs** | *Make the Flow from the spine…*, *Voice all lines (N)* | S4, S8 | 1 |
 | | | | **≈ 14–18** |

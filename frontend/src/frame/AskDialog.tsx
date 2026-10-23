@@ -11,7 +11,7 @@ export function AskDialog() {
   const okRef = useRef<HTMLButtonElement>(null)
   useEffect(() => { setValue(ask?.initial ?? ''); if (ask?.kind === 'confirm') okRef.current?.focus() }, [ask])
   if (!ask) return null
-  const canOk = ask.kind === 'confirm' || value.trim().length > 0
+  const canOk = ask.kind === 'confirm' || !!ask.allowEmpty || value.trim().length > 0
   const ok = () => { if (canOk) resolve(ask.kind === 'prompt' ? value.trim() : true) }
   const cancel = () => resolve(null)
   return (

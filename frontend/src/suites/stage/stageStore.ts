@@ -10,6 +10,7 @@ import { registerTransport } from '../animate/transport'
 import { clipFrames, EMPTY_KEYS, keyedFrames as keyedFramesOf, keyframesOf, sampleDoc, withKey, withoutKey, type CameraKey, type Keyframes, type ObjectKey } from './anim'
 import { JOINTS, MANNEQUIN_PRESETS, POSES } from './builders'
 import { mirrorJoints } from './ik'
+import { lensGuess, parseLens } from './lens'
 import { figureMentions, prebind as prebindOf } from './figures'
 import type { Keypoint, WholeBody } from './passes'
 import { profilesForMentions, useStory } from '../story/storyStore'
@@ -659,12 +660,28 @@ export const useStage = create<StageState>()((set, get) => ({
   },
   setFromImage: async (assetId) => {
     const cur = get().current
-    if (!cur) { useSession.getState().toast('Open a stage first (the Shot section)', 'info'); return }
+    const s = useSession.getState()
+    if (!cur) { s.toast('Open a stage first (the Shot section)', 'info'); return }
+    // D123 (SC3c-1): the lens asked before the job — prefilled from what the picture knows; empty lets MoGe read it
+    let guess = null
+    try { guess = await lensGuess(await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: assetId } } }))) } catch { /* no guess */ }
+    let lens: number | null | 'invalid' = 'invalid'
+    let initial = guess ? `${guess.mm} mm` : ''
+    let problem = ''
+    const how = "A focal length on a 36 mm sensor, or the horizontal angle in degrees; left empty, MoGe reads it from the picture (it wobbles by a few degrees — the set's row can rebuild with a corrected lens)."
+    while (lens === 'invalid') {
+      const text = await s.askText({ title: "A set from this image — the picture's lens", okLabel: 'Make the set', initial, allowEmpty: true,
+        placeholder: 'e.g. 35 mm or 70° — empty: MoGe reads it from the picture',
+        text: `${problem}${guess ? `${guess.from} says ${guess.mm} mm. ` : ''}${how}` })
+      if (text === null) return                                                     // cancelled: nothing queued
+      lens = parseLens(text)
+      if (lens === 'invalid') { problem = `"${text}" is not a lens between 20° and 150° (about 5–100 mm). `; initial = text }
+    }
     try {
-      const r = await unwrap(http.POST('/stages/{st_id}/image-set', { params: { path: { st_id: cur.id } }, body: { asset_id: assetId, lens_deg: null, relief: 'cut' } }))
+      const r = await unwrap(http.POST('/stages/{st_id}/image-set', { params: { path: { st_id: cur.id } }, body: { asset_id: assetId, lens_deg: lens, relief: 'cut' } }))
       set({ pendingSet: r.job_id })
-      useSession.getState().toast('Making a set from the picture — a few seconds once MoGe is loaded; the stage reloads with it', 'info')
-    } catch (e) { useSession.getState().toast(`Set from an image failed: ${(e as ApiError).detail ?? e}`, 'error') }
+      s.toast(`Making a set from the picture${lens ? ` at ${lens}°` : ''} — a few seconds once MoGe is loaded; the stage reloads with it`, 'info')
+    } catch (e) { s.toast(`Set from an image failed: ${(e as ApiError).detail ?? e}`, 'error') }
   },
   rebuildImageSet: async (setId, lensDeg) => {
     const cur = get().current

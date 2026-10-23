@@ -8131,3 +8131,26 @@ The author asked for a review of the state of things, then "record all this and 
   (a first run lost one scenario to Windows' `ERR_NO_BUFFER_SPACE` after the rig's connections; it passed alone and the next full run
   was clean) and 53/53 open, typecheck and build clean, lint 0 errors (79), settings audit (280), model literals and agents check clean.
 - **Next:** SC3c (the things cut out and modelled in one job) waits for the author's check in 25 §4 — automatic, or a choice per thing.
+
+## 2026-10-23 13:45 — D123 recorded: a set from an image asks for the lens first; its things are chosen one by one (SC3c planned)
+
+- **The author** on proto01_animate 25 §4's two SC3 checks: "You should choose each thing and the set should ask for the lens before the
+  first job. Let's carry on."
+- **Decided as D123** (decision log): *From an image…* asks for the lens before the job, prefilled from what the picture knows; the things
+  are picked on the picture one at a time (SAM 3's point prompts on the set's own document, E28b's way of cleaning the plate) and made into
+  Pixal3D models stood on the relief at their footprints (E30's placement). E30's automatic `props` arm is not built.
+- **The plan** (25 §3, SC3c): SC3c-1 the lens question; SC3c-2 the things picked; SC3c-3 *Make the things* (the clean plate, the relief
+  rebuilt from it, the models placed). Each step: its tests, a commit, a rig run on the real engine and screenshots for the author.
+
+## 2026-10-23 14:02 — SC3c-1 built (D123): a set from an image asks for the lens first
+
+- **The question:** *From an image…* (the Library's button and the Bin's pick, and the Bin's right-click verb) asks for the picture's lens
+  before the job — "A set from this image — the picture's lens", okay *Make the set*. Prefilled from what the picture knows
+  (`stage/lens.ts`: a Stage still's camera focal through its recipe's stage and camera; else a focal in mm in the prompt's camera lens or
+  its text); a focal on the 36 mm sensor or the horizontal angle in degrees; left empty, MoGe reads it (the dialog's new `allowEmpty`).
+  A typed answer that is not a lens between 20° and 150° (about 5–100 mm) asks again with the reason in the question; Escape queues
+  nothing.
+- **Tests:** `lens.test.ts` (the parsing, the guesses from a Stage still, a gone stage, a prompt's lens, none); the e2e's set scenario asks:
+  Escape queues no job, "5 mm wide" is asked again with its reason, empty makes the set at MoGe's reading (the backdrop now checked
+  against the picture's own aspect, not a landscape assumed). Vitest 424 + 3 skipped, e2e 53/53 full and 53/53 open, typecheck and build
+  clean, lint 0 errors (79).

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story wireframes</title>
+<!-- proto01_UIcomp 04: wireframes of the proposed Story workspaces (a static mock, not the app). Rendered to ../img/ui-*.jpg by
+     headless Edge: msedge --headless --screenshot … "file:///…/story-mock.html?s=board" (board | flow | cast | episode | image). -->
+<style>
+  :root { --bg: #121212; --panel: #181818; --raise: #202020; --line: #2c2c2c; --fg: #dcdcdc; --fg2: #a8a8a8; --fg3: #6f6f6f;
+    --acc: #f0a030; --acc2: #6b4a17; --ok: #3fb950; --warn: #d29922; --bad: #e5534b; --run: #58a6ff; --stale: #b083f0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.35 "Segoe UI", system-ui, sans-serif; width: 1600px; height: 1000px; overflow: hidden; }
+  .top { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); background: #151515; }
+  .top .tab { padding: 5px 12px; border-radius: 6px; color: var(--fg2); }
+  .top .tab.on { background: var(--raise); color: var(--fg); border: 1px solid #3a3a3a; }
+  .top kbd { font: 11px Consolas, monospace; color: var(--fg3); border: 1px solid #333; border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  .top .sp { flex: 1; }
+  .chip { border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: var(--fg2); font-size: 12px; }
+  .chip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .main { display: grid; grid-template-columns: 56px 330px 1fr 340px; height: calc(1000px - 40px - 28px); }
+  .main.noinsp { grid-template-columns: 56px 420px 1fr; }
+  .rail { border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 8px; }
+  .rail .r { width: 46px; padding: 6px 0 4px; border-radius: 8px; text-align: center; color: var(--fg3); font-size: 10px; }
+  .rail .r b { display: block; font-size: 17px; font-weight: 400; color: var(--fg2); line-height: 20px; }
+  .rail .r.on { background: var(--raise); outline: 1px solid var(--acc); color: var(--fg); }
+  .rail .r.on b { color: var(--acc); }
+  .rail .div { width: 30px; border-top: 1px solid var(--line); margin: 6px 0; }
+  .col { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .col .head { height: 36px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); font-weight: 600; gap: 8px; }
+  .col .body { flex: 1; overflow: hidden; padding: 10px 12px; }
+  .col .foot { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .primary { background: var(--acc); color: #1a1205; border-radius: 6px; text-align: center; padding: 7px; font-weight: 600; }
+  .est { color: var(--fg3); font-size: 12px; margin-top: 6px; }
+  .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .strip { height: 36px; white-space: nowrap; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--fg2); }
+  .strip b { color: var(--fg); }
+  .insp { background: var(--panel); padding: 10px 14px; overflow: hidden; }
+  .insp h4, .col h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg2); }
+  .kv { display: grid; grid-template-columns: 90px 1fr; gap: 5px 8px; align-items: center; font-size: 12.5px; }
+  .kv > span:nth-child(odd) { color: var(--fg3); }
+  .field { border: 1px solid #343434; border-radius: 5px; padding: 3px 7px; background: #1d1d1d; }
+  .verb { color: var(--fg2); margin: 5px 14px 0 0; display: inline-block; }
+  .verb::before { content: "▸ "; color: var(--fg3); }
+  .seg { display: inline-flex; border: 1px solid #363636; border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .seg span { padding: 3px 9px; color: var(--fg2); }
+  .seg span.on { background: #2b2b2b; color: var(--fg); }
+  .dock { height: 28px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--fg3); font-size: 12px; }
+  .new { outline: 2px dashed var(--acc); outline-offset: 2px; border-radius: 6px; }
+  .note { position: absolute; background: #2a1d07; color: #ffd28a; border: 1px solid var(--acc); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; max-width: 260px; z-index: 5; }
+  .thumb { background: linear-gradient(135deg, #3c5a78, #24384d); border-radius: 4px; }
+  .thumb.b { background: linear-gradient(135deg, #6a4a32, #3a2618); }
+  .thumb.g { background: linear-gradient(135deg, #4f6b3a, #2b3d1f); }
+  .thumb.d { background: linear-gradient(135deg, #5b3d6e, #31203d); }
+  .muted { color: var(--fg3); }
+  /* board */
+  table.board { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.board th { text-align: center; color: var(--fg3); font-weight: 500; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  table.board th:first-child { text-align: left; }
+  table.board td { padding: 5px 4px; border-bottom: 1px solid #222; text-align: center; }
+  table.board td.name { text-align: left; display: flex; align-items: center; gap: 8px; }
+  table.board tr.sel td { background: #241c10; }
+  table.board tr.sel td:first-child { box-shadow: inset 3px 0 var(--acc); }
+  table.board tr.grp td { color: var(--fg3); font-size: 11.5px; text-align: left; padding-top: 9px; border-bottom: none; }
+  .c { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 10px; font-size: 11.5px; border: 1px solid transparent; }
+  .c.ok { color: var(--ok); } .c.owe { color: var(--fg2); border-color: #3a3a3a; } .c.run { color: var(--run); } .c.stale { color: var(--stale); border-color: #4a3a66; }
+  .c.na { color: #3e3e3e; } .c.hov { border-color: var(--acc); color: var(--acc); background: #2a1d07; }
+  .route { font-size: 11px; color: var(--fg3); border: 1px solid #333; border-radius: 4px; padding: 0 5px; }
+  .pipe { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; }
+  .pipe .s { border: 1px solid #353535; border-radius: 12px; padding: 2px 9px; }
+  .pipe .s.ok { color: var(--ok); border-color: #24502c; } .pipe .s.run { color: var(--run); border-color: #234a73; } .pipe .s.owe { color: var(--fg2); }
+  .takes { display: flex; gap: 8px; margin-top: 8px; }
+  .takes .t { width: 120px; height: 68px; position: relative; }
+  .takes .t span { position: absolute; left: 4px; bottom: 3px; font-size: 10.5px; color: #eee; text-shadow: 0 1px 2px #000; }
+  .lines .l { display: grid; grid-template-columns: 54px 1fr 18px; gap: 6px; margin-bottom: 4px; align-items: center; }
+  /* flow */
+  .canvas { flex: 1; position: relative; background: radial-gradient(#262626 1px, transparent 1px) 0 0 / 18px 18px; }
+  .node { position: absolute; width: 150px; background: #1c1c1c; border: 1px solid #333; border-radius: 6px; font-size: 11.5px; }
+  .node .h { padding: 4px 7px; border-bottom: 1px solid #2c2c2c; display: flex; gap: 6px; }
+  .node .h .t { color: var(--fg3); font-size: 10px; text-transform: uppercase; }
+  .node .b { padding: 5px 7px; color: var(--fg2); }
+  .node .th { height: 52px; margin: 0 7px 5px; }
+  .node .pills { display: flex; gap: 4px; padding: 0 7px 6px; }
+  .node .pills span { font-size: 10px; border-radius: 8px; padding: 0 5px; border: 1px solid #333; color: var(--fg3); }
+  .node .pills span.ok { color: var(--ok); border-color: #24502c; } .node .pills span.run { color: var(--run); border-color: #234a73; }
+  .node.sel { border-color: var(--acc); }
+  .node .at { padding: 0 7px 5px; color: var(--fg3); font-size: 10.5px; }
+  svg.edges { position: absolute; inset: 0; pointer-events: none; }
+  /* cast */
+  .ready { display: flex; gap: 4px; align-items: center; font-size: 12px; flex-wrap: nowrap; }
+  .ready .s { padding: 2px 7px; border-radius: 10px; border: 1px solid #353535; color: var(--fg2); white-space: nowrap; }
+  .ready .s.ok { color: var(--ok); border-color: #24502c; } .ready .s.owe { color: #ffb4a8; border-color: #6b2b25; } .ready .s.na { color: #4a4a4a; }
+  .ready i { color: var(--fg3); font-style: normal; }
+  .box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #161616; }
+  .grid6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; font-size: 11px; }
+  .grid6 div { background: #2a2010; text-align: center; padding: 3px 0; color: var(--fg2); }
+  /* episode */
+  .lane { height: 64px; border: 1px solid var(--line); border-radius: 6px; position: relative; background: #181818; }
+  .lane .clip { position: absolute; top: 8px; height: 46px; border-radius: 4px; padding: 3px 6px; font-size: 11px; color: #eee; overflow: hidden; }
+  .lane .clip .x { position: absolute; right: 4px; top: 3px; font-size: 10px; background: #3a2a05; color: #ffcf70; border-radius: 6px; padding: 0 5px; }
+  .dis { position: absolute; top: 8px; height: 46px; width: 14px; background: repeating-linear-gradient(45deg, #ffffff22 0 3px, transparent 3px 6px); }
+  /* image */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px; }
+  .tile { height: 150px; position: relative; }
+  .tile .use { position: absolute; right: 6px; bottom: 6px; background: var(--acc); color: #1a1205; font-weight: 600; font-size: 11.5px; border-radius: 5px; padding: 3px 7px; }
+  .tile .badge { position: absolute; left: 6px; top: 6px; background: #0d2a14; color: var(--ok); font-size: 11px; border-radius: 5px; padding: 1px 6px; border: 1px solid #24502c; }
+  .forchip { border: 1px solid var(--acc); background: #22190b; border-radius: 6px; padding: 5px 9px; display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
+  .forchip .sp { flex: 1; }
+  .card { border: 1px solid #343434; border-radius: 7px; padding: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const S = new URLSearchParams(location.search).get('s') || 'board'
+const topBar = (tab) => `<div class="top"><span>☰</span><span class="chip">Project · The Debt ▾</span>
+  <span class="tab ${tab==='story'?'on':''}">Story<kbd>Ctrl+1</kbd></span><span class="tab ${tab==='image'?'on':''}">Image<kbd>Ctrl+2</kbd></span><span class="tab ${tab==='animate'?'on':''}">Animate<kbd>Ctrl+3</kbd></span>
+  <span class="sp"></span><span class="chip"><i></i>engine idle · 6.1 GB free</span><span class="chip"><i style="background:var(--run)"></i>1 running · 2 queued</span><span class="chip"><i></i>weights ok</span></div>`
+const storyRail = (on) => `<div class="rail">${[['World','◍'],['Cast','☺'],['Flow','⑂'],['Shots','▤'],['Episode','▭']].map(([n,g]) => `<div class="r ${on===n?'on':''}"><b>${g}</b>${n}</div>`).join('')}<div class="div"></div><div class="r"><b>▦</b>Catalogue</div></div>`
+const imageRail = `<div class="rail">${['▣','✎','⧉','◐','⌖','◈','⇲','✥'].map((g,i) => `<div class="r ${i===1?'on':''}"><b>${g}</b></div>`).join('')}</div>`
+const dock = `<div class="dock"><span>▴ Queue</span><span>Bin</span><span>running: Perform Ines · Wan Animate · 41 % · then 2 queued</span></div>`
+const C = (k, t) => `<span class="c ${k}">${k==='ok'?'✓':k==='owe'?'○':k==='run'?'◐':k==='stale'?'!':'–'} ${t||''}</span>`
+
+function board() {
+  const rows = [
+    ['Arrival','b','Shot','image to video', [['na'],['na'],['ok'],['na'],['ok'],['na'],['na'],['ok','approved'],['ok']]],
+    ['Reunion','a','Dialogue','clay final shot', [['ok','2'],['ok'],['na'],['ok','Tavern · 1'],['na'],['run','3/4 layers'],['owe'],['owe'],['owe']], true],
+    ['Mara close','g','Dialogue','dialogue + lip-sync', [['ok','1'],['ok'],['ok'],['na'],['na'],['na'],['run','S2V 52 %'],['owe'],['owe']]],
+    ['Ines close','d','Dialogue','dialogue + lip-sync', [['ok','1'],['stale','line changed'],['owe','',true],['na'],['na'],['na'],['owe'],['owe'],['owe']]],
+    ['grp','Stay or go ▸ Stay'],
+    ['Talk','b','Dialogue','image to video', [['ok','2'],['ok'],['ok'],['na'],['owe'],['na'],['na'],['owe'],['owe']]],
+    ['grp','Stay or go ▸ Leave'],
+    ['The door','a','Shot','stage clip', [['na'],['na'],['owe'],['ok','Tavern · 2'],['owe'],['na'],['na'],['owe'],['owe']]],
+  ]
+  const head = ['Shot','Lines','Voice','Frame','Stage','Clip','Final','Lip-sync','Approved','In cut']
+  const tr = rows.map((r) => r[0]==='grp' ? `<tr class="grp"><td colspan="10">${r[1]}</td></tr>` :
+    `<tr class="${r[5]?'sel':''}"><td class="name"><span class="thumb ${r[1]}" style="width:54px;height:30px;display:inline-block"></span><span>${r[0]}<br><span class="route">${r[3]}</span></span></td>${r[4].map((c) => `<td>${c[0]==='owe'&&c[2]?'<span class="c hov">○ Make frame in Image</span>':C(c[0], c[1])}</td>`).join('')}</tr>`).join('')
+  return `${topBar('story')}<div class="main">${storyRail('Shots')}
+  <div class="col"><div class="head">Shots</div><div class="body">
+    <div class="seg"><span class="on">All 6</span><span>Owes 5</span><span>Stale 1</span><span>Not approved 5</span></div>
+    <h4>Order</h4><div class="kv"><span>route</span><span class="field">the Flow, every branch ▾</span></div>
+    <h4>For the episode</h4>
+    <div class="verb new">Voice all lines (1 changed)</div><br><div class="verb">Run stale… (1)</div><br><div class="verb">Approve the selected…</div>
+    <h4>Legend</h4><div style="display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:12px">${C('ok')}<span>done</span>${C('owe')}<span>owed — a click does it</span>${C('run')}<span>running or queued</span>${C('stale')}<span>stale — its input changed</span>${C('na')}<span>not on this shot's route</span></div>
+  </div><div class="foot"><div class="primary">Perform Ines ▶ (Reunion's next step)</div><div class="est">Reunion · clay final shot · ≈ 6 min on the GPU, after the queue</div></div></div>
+  <div class="stage"><div class="strip"><b>The Debt · 6 shots</b><span>· 1 approved · 1 in the cut</span><span class="sp" style="flex:1"></span><span>Make frame ▾</span><span>Make clip ▾</span><span>Mark final</span></div>
+    <div style="padding:6px 14px 0;position:relative" class="new"><table class="board"><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr>${tr}</table>
+      <div class="note" style="left:640px;top:236px">a cell is its verb: here <b>Make frame in Image</b> for Ines close — Image opens on the For chip</div></div>
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding:10px 14px;display:grid;grid-template-columns:420px 1fr;gap:16px;flex:1">
+      <div><div class="thumb" style="height:236px;display:flex;align-items:flex-end;padding:8px;color:#eee">Reunion · v1 — the assembled shot (draft)</div></div>
+      <div><div style="font-weight:600;margin-bottom:6px">Reunion · v1 <span class="muted">· open · clay final shot · Tavern, camera 1</span></div>
+        <div class="pipe new"><span class="s ok">Lines ✓</span>›<span class="s ok">Voice ✓</span>›<span class="s ok">Stage ✓</span>›<span class="s run">Final ◐ plate ✓ · Mara ✓ · Ines ◐ · composition ○</span>›<span class="s owe">Lip-sync ○</span>›<span class="s owe">Approved ○</span>›<span class="s owe">In cut ○</span></div>
+        <h4>Takes</h4><div class="takes"><div class="t thumb"><span>assembly · draft</span></div><div class="t thumb b"><span>assembly · seed 2</span></div><div class="t thumb g" style="opacity:.5"><span>render · waiting</span></div></div>
+        <div style="margin-top:10px"><span class="verb">Open in Final</span><span class="verb">Open the stage (Animate · Clay)</span><span class="verb">New version (copy)</span></div></div>
+    </div></div>
+  <div class="insp"><div style="font-weight:600;font-size:14px">Reunion</div>
+    <h4>The node · Dialogue</h4><div class="lines"><div class="l"><span class="field">Mara</span><span class="field">You kept the place.</span><span>▶</span></div><div class="l"><span class="field">Ines</span><span class="field">Someone had to.</span><span>▶</span></div></div>
+    <div class="kv"><span>where</span><span class="field">The tavern ▾</span><span>speakers</span><span>Mara · current, Ines · current</span></div>
+    <h4>The shot</h4><div class="kv"><span>version</span><span class="field">v1 · current ▾</span><span>route</span><span class="field">Clay final shot ▾</span><span>source</span><span>Tavern · camera 1 · rev 4</span><span>takes</span><span>2 (1 rendering)</span></div>
+    <h4>Recipe</h4><div style="font-size:12px;line-height:1.7"><span style="color:var(--ok)">● Stage passes · fresh</span><br><span style="color:var(--ok)">● Plate · fresh</span><br><span style="color:var(--run)">◐ Layers · 1 of 2 performing</span><br><span class="muted">○ Composition · missing</span><br><span class="muted">○ Lip-sync pass · missing</span></div>
+    <div style="margin-top:8px"><span class="verb">Mark final</span><span class="verb">Run stale…</span><span class="verb">Delete shot</span></div>
+    <div class="note" style="right:16px;top:700px;position:absolute">one panel, the same in Flow: the node is the shot (S6, S10)</div>
+  </div></div>${dock}`
+}
+
+function node(x, y, type, title, line, th, pills, sel, at) {
+  return `<div class="node ${sel?'sel':''}" style="left:${x}px;top:${y}px"><div class="h"><span class="t">${type}</span><b>${title}</b></div>${line?`<div class="b">${line}</div>`:''}${th?`<div class="th thumb ${th}"></div>`:''}${pills?`<div class="pills">${pills.map(([k,t]) => `<span class="${k}">${t}</span>`).join('')}</div>`:''}${at?`<div class="at">@ The tavern</div>`:''}</div>`
+}
+function flow() {
+  const n = [
+    node(10, 90, 'start', 'Start'),
+    node(180, 60, 'shot', 'Arrival', 'Mara walks in out of the rain', 'b', [['ok','frame'],['ok','clip'],['ok','approved']], false, 1),
+    node(350, 60, 'dialogue', 'Reunion', 'Mara: You kept the place.', 'a', [['ok','stage'],['run','final 3/4'],['','approved']], true, 1),
+    node(520, 60, 'dialogue', 'Mara close', 'Mara: You kept the place.', 'g', [['ok','frame'],['run','lip-sync'],['','approved']], false, 1),
+    node(690, 60, 'dialogue', 'Ines close', 'Ines: Someone had to.', null, [['','frame'],['','lip-sync'],['','approved']], false, 1),
+    node(690, 300, 'choice', 'Stay or go', '◦ Stay  ◦ Leave'),
+    node(500, 420, 'dialogue', 'Talk', 'Ines: Sit down.', 'b', [['ok','frame'],['','clip'],['','approved']], false, 1),
+    node(690, 420, 'shot', 'The door', 'Mara opens the door to the night', null, [['ok','stage'],['','frame'],['','clip']], false, 1),
+  ].join('')
+  const e = [[160,104,180,104],[330,104,350,104],[500,104,520,104],[670,104,690,104],[765,215,765,300],[720,362,575,420],[765,362,765,420]]
+  return `${topBar('story')}<div class="main">${storyRail('Flow')}
+  <div class="col"><div class="head">Flow</div><div class="body"><div class="field muted">search nodes</div>
+    <h4>Dialogue · 4</h4><div>Reunion <span class="muted">· shot</span></div><div>Mara close <span class="muted">· shot</span></div><div>Ines close <span class="muted">· shot</span></div><div>Talk <span class="muted">· shot</span></div>
+    <h4>Shot · 2</h4><div>Arrival · The door</div><h4>Choice · 1</h4><div>Stay or go</div><h4>Variables · 0</h4><span class="muted">none</span></div>
+    <div class="foot"><div class="primary">Play ▶</div><div class="est">8 nodes · 6 shots · from the Start</div></div></div>
+  <div class="stage"><div class="strip"><span>▷ ⑂ ☰ ✓ ? ⚡ ▤ ↪ ▢</span><span class="sp" style="flex:1"></span><span class="new" style="padding:2px 6px">🎙 Voice all lines (1 changed)</span><span>Validate</span><span>Play</span><span>Fit</span></div>
+    <div class="canvas"><svg class="edges" width="100%" height="100%">${e.map(([a,b,c,d]) => `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="#555" stroke-width="1.5"/>`).join('')}</svg>${n}
+      <div class="note" style="left:20px;top:300px">every Dialogue and Shot node is a shot from the moment it is made (S6): its card shows the shot's steps; no <i>New shot for this node…</i></div>
+      <div class="note" style="left:20px;top:420px">the close-ups were made by <i>Duplicate node</i> after the voices — the spoken lines came with them</div></div></div>
+  <div class="insp"><div style="font-weight:600;font-size:14px">Dialogue · Reunion</div>
+    <div class="kv" style="margin-top:8px"><span>type</span><span class="field">Dialogue ▾</span><span>title</span><span class="field">Reunion</span></div>
+    <h4>Lines</h4><div class="lines"><div class="l"><span class="field">Mara</span><span class="field">You kept the place.</span><span>▶</span></div><div class="l"><span class="field">Ines</span><span class="field">Someone had to.</span><span>▶</span></div></div>
+    <div class="kv"><span>where</span><span class="field">The tavern ▾</span><span></span><span class="new muted" style="padding:2px 4px">→ also for the nodes after it without a place</span><span>speakers</span><span>Mara · current, Ines · current</span></div>
+    <h4>The shot</h4><div class="pipe" style="font-size:11.5px"><span class="s ok">Stage ✓</span><span class="s run">Final ◐</span><span class="s owe">Lip-sync ○</span><span class="s owe">Approved ○</span></div>
+    <div style="margin-top:8px"><span class="verb">Make frame ▾</span><span class="verb">Make clip ▾</span><span class="verb">Open in Shots</span></div>
+    <h4>Board</h4><div class="kv"><span>group</span><span class="field">(no board) ▾</span></div>
+    <div style="margin-top:10px"><span class="verb">Duplicate node</span><span class="verb" style="color:var(--bad)">Delete node…</span></div></div></div>${dock}`
+}
+
+function cast() {
+  return `${topBar('story')}<div class="main">${storyRail('Cast')}
+  <div class="col"><div class="head">Cast</div><div class="body">
+    <div class="seg new"><span class="on">Characters</span><span>Places</span><span>Props</span></div><div class="field muted" style="margin-top:8px">search</div>
+    <div style="margin-top:10px;display:grid;gap:6px">
+      <div class="box" style="border-color:var(--acc);display:flex;gap:8px;align-items:center"><span class="thumb" style="width:34px;height:34px"></span><span>Mara <span class="muted">· v1</span><br><span style="color:#ffb4a8;font-size:11.5px">3 owed for 2 shots</span></span></div>
+      <div class="box" style="display:flex;gap:8px;align-items:center"><span class="thumb b" style="width:34px;height:34px"></span><span>Ines <span class="muted">· v1 final</span><br><span style="color:var(--ok);font-size:11.5px">ready for her 3 shots</span></span></div>
+    </div></div>
+    <div class="foot"><div class="primary new">Make an animation reference ▶</div><div class="est">Mara's next step · Reunion needs it (clay final shot)</div></div></div>
+  <div class="stage"><div class="strip"><b>Mara</b><span class="field">v1 · current ▾</span><span>New version</span><span>Mark final</span><span class="sp" style="flex:1"></span><span class="muted">3 of 8 owed</span></div>
+    <div style="padding:8px 18px;border-bottom:1px solid var(--line)"><span class="ready new"><span class="s ok">Hero ✓</span><i>›</i><span class="s ok">Sheet ✓</span><i>›</i><span class="s ok">References 9</span><i>›</i><span class="s owe">Animation ref ✗</span><i>›</i><span class="s owe">Body ✗</span><i>›</i><span class="s owe">Voice ✗</span><i>›</i><span class="s na">LoRA –</span><i>›</i><span class="s">Final ○</span></span></div>
+    <div style="padding:14px 18px;display:grid;grid-template-columns:240px 1fr;gap:18px">
+      <div class="thumb" style="height:300px"></div>
+      <div><div style="font-size:18px;font-weight:600">Mara <span class="muted" style="font-size:13px">— character — v1 (open)</span></div>
+        <div class="kv" style="margin-top:10px"><span>appearance</span><span class="field">a wiry courier, short dark hair</span><span>outfit</span><span class="field">a long grey coat</span><span>colours</span><span class="field">#4A5560 coat</span></div>
+        <div class="box new" style="margin-top:14px"><b>In 3 shots</b>
+          <div style="margin-top:6px;line-height:1.8"><b>Reunion</b> <span class="muted">· clay final shot</span> — needs the <span style="color:#ffb4a8">animation reference</span> and the <span style="color:#ffb4a8">body fit</span><br>
+          <b>Mara close</b> <span class="muted">· dialogue + lip-sync</span> — needs a <span style="color:#ffb4a8">voice</span> for her line<br>
+          <b>Talk</b> <span class="muted">· image to video</span> — <span style="color:var(--ok)">ready</span></div></div>
+        <h4>Coverage</h4><div class="grid6">${Array.from({length:24},(_,i)=>`<div>${[2,1,1,0,1,0][i%6]||'–'}</div>`).join('')}</div>
+        <h4>Animation reference</h4><div style="display:flex;gap:10px"><div class="box" style="width:180px;height:80px;color:var(--fg3)">front: none yet</div><div class="box" style="width:180px;height:80px;color:var(--fg3)">back (optional)</div></div>
+      </div></div></div>
+  <div class="insp"><div style="font-weight:600;font-size:14px">Mara</div>
+    <div class="kv" style="margin-top:8px"><span>class</span><span class="field">character ▾</span><span>current</span><span class="field">v1 ▾</span><span>mention</span><span>@Mara</span></div>
+    <h4>Version v1 · open</h4><span class="verb">Use as a subject in Image</span><br><span class="verb">Expand in Image…</span><span class="verb">Mark final</span><br><span class="verb">Open the reference set in the Catalogue</span>
+    <h4>Voice</h4><div class="kv"><span>voice</span><span class="field muted">none ▾</span></div><span class="verb new">New voice… (it becomes Mara's)</span>
+    <h4>Training</h4><div class="kv"><span>readiness</span><span>62 · enough references</span></div><span class="verb">Train a LoRA…</span></div></div>${dock}`
+}
+
+function episode() {
+  const clips = [['Arrival',0,110,'b'],['Reunion',124,190,'a'],['Mara close',328,96,'g'],['Ines close',438,96,'d',1],['Talk',548,150,'b']]
+  return `${topBar('story')}<div class="main">${storyRail('Episode')}
+  <div class="col"><div class="head">Episode</div><div class="body">
+    <div style="display:flex;justify-content:space-between"><b>Cuts</b><span class="new" style="padding:0 6px">Assemble from the Flow…</span></div>
+    <div class="box" style="border-color:var(--acc);margin-top:6px">Episode 1 · Stay <span class="muted">· 5 shots · 0:41</span></div>
+    <div class="box" style="margin-top:6px">Episode 1 · Leave <span class="muted">· 4 shots · 0:33</span></div>
+    <h4>Shots (in the route's order)</h4>${clips.map(([n]) => `<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><span class="thumb" style="width:46px;height:26px"></span>${n} <span class="muted">· v1</span></div>`).join('')}
+    <h4>Clips</h4><span class="muted">every clip of the project — drag onto the lane</span></div>
+    <div class="foot"><div class="primary new">Export for Resolve ▶</div><div class="est">one folder: FCPXML + markers, EDL, SRT, markers.txt</div></div></div>
+  <div class="stage"><div class="strip"><b>Episode 1 · Stay</b><span>· route: Start › Arrival › Reunion › Mara close › Ines close › Stay or go: Stay › Talk</span></div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center"><div class="thumb" style="width:820px;height:461px"></div></div>
+    <div style="padding:8px 14px 14px"><div class="muted" style="font-size:12px;margin-bottom:4px">00:00:12:08 / 00:00:41:00</div>
+      <div class="lane">${clips.map(([n,x,w,t,ch]) => `<div class="clip thumb ${t}" style="left:${x+8}px;width:${w}px">${n}${ch?'<span class="x">changed · Update</span>':''}</div>`).join('')}<div class="dis" style="left:126px"></div><div class="dis" style="left:550px"></div>
+        <div class="note" style="left:470px;top:-44px">Ines close got a newer approved take: the lane marks it; <i>Update</i> swaps it (S13)</div></div></div></div>
+  <div class="insp"><div style="font-weight:600;font-size:14px">Episode 1 · Stay <span class="muted" style="font-size:12px">· revision 7</span></div>
+    <div class="kv" style="margin-top:8px"><span>lane</span><span>24 fps · 1920×1080</span><span>duration</span><span>0:41 · 5 shots</span></div>
+    <h4>Checklist <span class="muted">?</span></h4><div style="font-size:12.5px;line-height:1.7"><span style="color:var(--warn)">• Ines close: a newer approved take — Update</span><br><span style="color:var(--warn)">• 4 clips below the format (832×480, 1280×720) — Resolve scales them</span><br><span style="color:var(--warn)">• 2 shots not approved: Reunion, Talk</span></div>
+    <h4>Delivery</h4><span class="verb new">Export for Resolve ▶</span><br><span class="verb">Render draft (CPU, silent)</span><br><span class="verb">Assemble again…</span>
+    <h4>Clip 4 · Ines close</h4><div class="kv"><span>shot</span><span>Ines close · v1 → v2 approved</span><span>uses</span><span>frames 0–76</span></div></div></div>${dock}`
+}
+
+function image() {
+  return `${topBar('image')}<div class="main">${imageRail}
+  <div class="col"><div class="head">Image <span class="seg" style="margin-left:auto"><span class="on">Make</span><span>Edit</span></span></div>
+    <div style="padding:8px 12px;border-bottom:1px solid var(--line)" class="new"><div class="forchip">▤ For: <b>Ines close · v1</b><span class="sp"></span><span>✕</span><span>← Back to Ines close</span></div></div>
+    <div class="body"><div class="seg"><span class="on">Prompt</span><span>From a stage</span></div>
+      <h4>Prompt</h4><div class="kv"><span>scene</span><span><span class="field">The tavern · v1 ▾</span></span></div>
+      <div class="card"><b>subject 1</b> · Ines <span class="field">v1 ▾</span><div class="kv" style="margin-top:6px"><span>this shot</span><span class="field">saying Someone had to</span></div></div>
+      <div class="note" style="position:static;margin-top:10px;max-width:none">the panel holds this shot's content only (its speaker, its place, its board); the look, the model and the size are kept (I1)</div>
+      <h4>References · 2 of 4</h4><div style="display:flex;gap:6px"><span class="thumb d" style="width:56px;height:56px;display:inline-block"></span><span class="thumb" style="width:56px;height:56px;display:inline-block"></span></div></div>
+    <div class="foot"><div class="seg"><span class="on">Generate</span><span>Expand</span></div><div class="primary" style="margin-top:8px">Generate 4 ▶</div><div class="est">≈ 40 s · 1280×720 · Klein 9B</div></div></div>
+  <div class="stage"><div class="strip"><span class="seg"><span class="on">This batch</span><span>Session</span><span>All</span></span><span>· 4 for Ines close</span></div>
+    <div class="tiles">${['d','a','b','g'].map((t,i) => `<div class="tile thumb ${t}">${i===1?'<span class="use new">✓ Use as Ines close\'s frame</span>':''}${i===0?'<span class="badge">frame ✓</span>':''}</div>`).join('')}</div>
+    <div class="note" style="left:860px;top:420px;position:absolute">on hover, also in the tile's right-click menu and the Inspector (I2); the first result fills an empty frame as today</div></div>
+  <div class="insp"><div style="font-weight:600;font-size:14px">Ines close · result 2</div><div class="thumb a" style="height:170px;margin-top:8px"></div>
+    <div class="primary new" style="margin-top:10px">✓ Use as Ines close's frame</div>
+    <div style="margin-top:8px"><span class="verb">Edit</span><span class="verb">Reference</span><span class="verb">Variations</span><span class="verb">New angle…</span></div>
+    <div class="kv" style="margin-top:10px"><span>model</span><span>Klein 9B · draft</span><span>seed</span><span>812004377</span></div></div></div>${dock}`
+}
+
+document.getElementById('app').innerHTML = ({ board, flow, cast, episode, image })[S]()
+</script>
+</body>
+</html>

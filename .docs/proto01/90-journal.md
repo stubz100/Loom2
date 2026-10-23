@@ -8336,3 +8336,35 @@ The author asked for a review of the state of things, then "record all this and 
   lands where the box's footprint on the new relief is; the clean plate's carry by the new route; `test_set_things_d123.py` — the prop's
   `placed`, a 58° rebuild stands it again on the new floor, a prop moved by hand stays through the next rebuild. Offline 521 passed,
   Vitest 430 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck and build clean, lint 0 errors (79), audits clean.
+
+## 2026-10-23 19:57 — proto01_UIcomp: an episode from scratch, today's workflow against an efficient one; a proposal for Story's structure
+
+The author's request: record today's workflow from a new project to a post-processed episode (menus and navigation), devise an efficient
+workflow with the current functions, compare the two, and let that define Story's structure and UI; changes to Image's and Animate's menus
+only where justified. Written to `.docs/proto01_UIcomp/` 00–04, read from the code at `0a943c2`; nothing in the app changed.
+
+- **The reference episode** (01 §0.1): two characters, a place, a prop; eight Flow nodes with a Choice; six shots, one per making route
+  (Image to video ×2, S2V lip-sync ×2, a stage clip, the clay final shot with a lip-sync pass); two cuts; the export for Resolve.
+- **Today** (01): ≈ 351 clicks, 34 tab switches, three dead ends. 24 screenshots of the path (`img/cur-*.jpg`) from a throwaway
+  Playwright walk on the e2e build and the fake engine (the spec deleted after the run). Friction register WF1–WF30.
+- **Three defects found (WB, not fixed):** `makeFinal` is called without the shot (`finalShot.ts:350`), and the assembly and the render
+  record the take without the version (`finishers.py:1005,1099`; `for_shot_target` needs both) — so a final shot never becomes a take of its
+  Story shot and its *Lip-sync* pass never finds a line; the finalize refusal names a "Full" tier Animate does not have. And no video
+  route renders the 1920×1080 the finalize gate wants (Wan HD 1280×720, LTX HD 1280×704, finals at 832×480), so nothing can be marked final.
+- **The efficient workflow** (02): the same functions, ≈ 217 clicks and 30 tab switches (−38 %), no dead end. 89 % of the saving is Story's
+  structure (03 §2): the rail in the order of the work (World · Cast · Flow · Shots · Episode, then the Catalogue), a visual node that is its
+  shot, a Shots board of every shot × its steps whose cells open the makers in context, verbs on the episode (the Flow from the spine,
+  voice all lines, assemble the cut from the Flow, export once). Image and Animate get four changes each, for correctness: the For context
+  landing in view, honoured and ended (I1, I3, I4, A2), *Use as <shot>'s frame / clip* (I2, A4), *Use this camera for <shot>* (A3), the
+  final shot's fix (A1).
+- **The proposal** (04): the structure, the For-context contract, the states and where each comes from, five wireframes
+  (`img/ui-*.jpg`, rendered by headless Edge from `mock/story-mock.html`), the commands, the delivery gaps for RC3 / RC4, a build plan SP0–SP7
+  (≈ 14–18 d; SP0 the fixes first), and 14 decisions with recommendations for the author.
+
+## 2026-10-23 20:51 — D125 recorded: Story is the production spine; the Catalogue becomes the fourth top tab (proto01_UIcomp 04 accepted)
+
+The author on 04 §9: "I agree with all your answers, except I'd move catalog out as the fourth menu option after animate on the main rail.
+Otherwise, your proposal is solid, we should start implementing it." **D125** records the fourteen answers with #1 amended: the top bar
+becomes Story · Image · Animate · Catalogue (Ctrl+1–4) and Story's rail World · Cast · Flow · Shots · Episode (supersedes D90's "the
+Catalogue under Story"); Props become a class of Cast (amends D110's Props tab). 04 and 00 updated. The build starts with SP0 (the fixes
+WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and honoured by Re-run / Variations / New angle), then SP1 → SP7.

@@ -300,7 +300,8 @@ export interface GenerateState {
   unlinkScene: () => void
   setSceneLink: (patch: Partial<Omit<SceneLink, 'profile_id'>>) => void
   /** D93 (C7): Make frame ▸ from a Dialogue / Shot node — the Tree with one linked card per speaker (their versions; the first line as the
-   *  first speaker's action), the scene linked to the node's place. */
+   *  first speaker's action), the scene linked to the node's place. D125 (I1): it replaces the last shot's content (subjects, scene,
+   *  framing, lead text, references); the look, the model and the size stay. */
   applyFrame: (pre: FramePrefill) => void
   /** D93 (A1): "Give <name> a look" / "More looks for <name>" on a linked card — the panel's images as the version's candidates (the page
    *  made when it has none); the description must say the look first (`castAsk` marks the card and its field takes the focus). */
@@ -545,12 +546,18 @@ export const useGenerate = create<GenerateState>()(
         const profiles = profilesNow()
         const cards: Subject[] = pre.subjects.map((x) => ({ ...NEW_SUBJECT, description: '', profile_id: x.profile_id, ...(x.version ? { version: x.version } : {}), action: x.action ?? '', pose: x.pose ?? '', shot_outfit: '', shot_note: '' }))
         const place = pre.place ? profiles.find((x) => x.id === pre.place) : undefined
-        const tree: Tree = { ...p.tree, ...(cards.length ? { subjects: cards } : {}), ...(place ? { scene: '', scene_link: { profile_id: place.id, note: '' } } : {}) }   // a Shot node without speakers keeps the cards
+        // D125 (I1): the shot's own content replaces the last shot's — its subjects, scene, framing, lead text and references go; the look,
+        // the model and the size stay
+        const base: Tree = { ...p.tree, subjects: [], scene: '', background: '', composition: '', camera: { ...EMPTY_TREE.camera } }
+        delete base.scene_link
+        const tree: Tree = { ...base, ...(cards.length ? { subjects: cards } : {}), ...(place ? { scene_link: { profile_id: place.id, note: '' } } : {}) }
         const linked = [...pre.subjects.map((x) => x.profile_id), ...(place ? [place.id] : [])]
         const mentions = linked.flatMap((id) => { const pr = profiles.find((x) => x.id === id); const sub = pre.subjects.find((x) => x.profile_id === id); const v = versionOf(pr, sub?.version)
           return pr && v ? [{ group_id: v.group_id, name: pr.name, profile_id: pr.id }] : [] })
-        const next = { ...p, prompt_mode: 'tree' as const, tree, ...(pre.text !== null ? { text: pre.text } : {}) }
-        get().set({ prompt_mode: 'tree', tree, ...(pre.text !== null ? { text: pre.text } : {}), mentions: [...pruned(next).filter((m) => !linked.includes(m.profile_id ?? '')), ...mentions] })
+        const prompt_mode = cards.length || place ? 'tree' as const : p.prompt_mode
+        const next = { ...p, prompt_mode, tree, text: pre.text ?? '', refs: [] }
+        const words = promptStrings(next).join('\n')
+        get().set({ prompt_mode, tree, text: next.text, refs: [], mentions: [...(p.mentions ?? []).filter((m) => !linked.includes(m.profile_id ?? '') && words.includes('@' + m.name)), ...mentions] })
       },
       castLook: async (i) => {
         const p = get().panel, sub = p.tree.subjects?.[i], ss = useSession.getState()

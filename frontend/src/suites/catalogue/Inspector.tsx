@@ -1,7 +1,7 @@
 // The Inspector (D34, proto01_design/01 §6e): one scrolling column with collapsible sections instead of tabs — Tags,
 // Location, Actions, Lineage, Prompt, Details — for one asset, or the bulk subset for several. The single home for the actions
 // on the selection (the strip carries none); ids appear only under Details.
-import { BookOpen, ChevronDown, ChevronRight, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Columns2, Copy, ExternalLink, Film, FolderInput, GitBranch, Image, Images, Inbox, Layers, MoreHorizontal, Pencil, Pin, RotateCcw, Shuffle, Trash, Undo, Ungroup, UserRoundPlus, Wand2, X } from 'lucide-react'
 import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -13,9 +13,10 @@ import { useKeymap } from '../../frame/keymap'
 import { CommandCard } from '../../frame/CommandButton'
 import { askText, useSession } from '../../store/session'
 import { UsedBy } from './UsedBy'
+import { useMakeFor } from '../../store/origin'
 import { confirmDeleteGroup, confirmUngroup } from './groupUsers'
 import { useAlbum, type PathStep } from './albumStore'
-import { addToCharacterMenu, moveToMenu } from './catalogueCommands'
+import { addToCharacterMenu, moveToMenu, forFrame, frameUseLabel } from './catalogueCommands'
 import { CatalogueStoreCtx, useCat } from './catalogueContext'
 import { selectedOrPrimary } from './catalogueStore'
 import { notePlacements } from './placement'
@@ -214,6 +215,7 @@ function One({ a }: { a: Asset }) {
   const loc = useLocations(ids)
   const here = loc?.[a.id]
   const open = useOpenPlace()
+  useMakeFor((f) => f.generate)                                      // D125 (I2): the For chip's shot names the frame button
   return (
     <div className="insp">
       <img className="insp-thumb" src={api.thumbUrl(a.id, 512)} alt="" onDoubleClick={() => runCommand('cat.loupe')} />
@@ -230,6 +232,7 @@ function One({ a }: { a: Asset }) {
       </Section>
       <Section id="actions" title="Actions">
         <div className="igrid">
+          {forFrame() && a.kind === 'image' && <CmdBtn id="cat.useFrame" icon={<Clapperboard size={14} />} label={frameUseLabel()} />}
           <Btn icon={<Pencil size={14} />} label="Edit" run={() => runCommand('cat.edit')} title="Open in Edit (E)" />
           <Btn icon={<Film size={14} />} label="Animate ▾" run={(e) => showMenu(e, [{ cmd: 'cat.animate' }, { cmd: 'cat.animateEnd' }])} />
           <Btn icon={<Images size={14} />} label="Reference" run={() => runCommand('cat.reference')} title="Use as reference in Image (R)" />

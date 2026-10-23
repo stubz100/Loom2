@@ -7,7 +7,8 @@ import { MANNEQUIN_PRESETS, PROP_PRESETS, SET_PRESETS } from './builders'
 import { st, useStage, type Kind, type Tool } from './stageStore'
 import { nextFinalStep, useFinals } from './finalShot'
 import type { HandPreset } from './detailed'
-import { profilesForMentions } from '../story/storyStore'
+import { profilesForMentions, useStory } from '../story/storyStore'
+import { useMakeFor } from '../../store/origin'
 import { useMotion } from './motion/motionStore'
 
 const hasStage = () => !!st().current
@@ -24,6 +25,11 @@ const addCmd = (kind: Kind, preset: string, label: string, icon: typeof Box): Co
   id: `stage.add.${kind}.${preset}`, scope: 'stage', label, icon, placement: ['panel', 'context'], when: hasStage,
   run: () => { st().addObject(kind, preset, viewport.centre?.() ?? [0, 0, 0]) },
 })
+
+/** D125 (A3): the version Animate's For chip names (read from Story's shots), or undefined. */
+const forVersion = () => { const f = useMakeFor.getState().animate; return f ? useStory.getState().shots.find((x) => x.id === f.shot_id)?.versions.find((v) => v.id === f.version) : undefined }
+/** D125 (A3): the camera's Story verb for menus — Use it for the For chip's shot, else New shot from it. */
+const cameraShotItem = (): MenuItem => { const f = useMakeFor.getState().animate; return f ? { cmd: 'stage.camera.useForShot', label: `Use this camera for ${f.name}` } : { cmd: 'stage.camera.toShot' } }
 
 registerCommands([
   { id: 'stage.new', scope: 'stage', label: 'New stage…', icon: Plus, placement: ['panel', 'context'],
@@ -69,8 +75,12 @@ registerCommands([
   { id: 'stage.camera.add', scope: 'stage', label: 'Add camera', icon: Camera, placement: ['panel', 'context'], when: hasStage, run: () => st().addCamera() },
   { id: 'stage.camera.setFromView', scope: 'stage', label: 'Set the camera from the view', icon: Video, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera() && st().view === 'free',
     run: () => { const c = st().activeCamera(); const p = viewport.freePose?.(); if (c && p) st().updateCamera(c.id, { pos: p.pos, target: p.target }) } },
-  // 17 SY2 (D85): the camera becomes a Story shot's source — its ST3 frame and ST4 clip arrive on the shot as takes
-  { id: 'stage.camera.toShot', scope: 'stage', label: 'New shot from this camera…', icon: Clapperboard, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera(),
+  // D125 (A3): with Animate's For chip the camera becomes that shot version's source (no second shot); its stills and clips come back by it
+  { id: 'stage.camera.useForShot', scope: 'stage', label: 'Use this camera for the shot', icon: Clapperboard, placement: ['panel', 'inspector', 'context'], hint: "the For chip's shot version takes this camera as its source — its frames and clips come back to it",
+    when: () => { const cur = st().current; const cam = st().activeCamera(); const v = forVersion(); return !!cur && !!cam && !!v && v.state === 'open' && !(v.stage_id === cur.id && v.camera_id === cam.id) },
+    run: () => { const f = useMakeFor.getState().animate; const cur = st().current; const cam = st().activeCamera(); if (f && cur && cam) void st().flush().then(() => useStory.getState().linkStage(f.shot_id, f.version, cur.id, cam.id)).then((ok) => { if (ok) useSession.getState().toast(`${f.name} takes ${cur.name} · ${cam.name}`, 'success') }) } },
+  // 17 SY2 (D85): the camera becomes a Story shot's source — its ST3 frame and ST4 clip arrive on the shot as takes; D125 (A3): only without a For chip
+  { id: 'stage.camera.toShot', scope: 'stage', label: 'New shot from this camera…', icon: Clapperboard, placement: ['panel', 'inspector', 'context'], when: () => hasStage() && !!st().activeCamera() && !useMakeFor.getState().animate,
     run: () => { const cur = st().current; const cam = st().activeCamera(); if (!cur || !cam) return
       void askText({ title: 'New shot from this camera', text: 'A Story shot pointing at this camera: the frames and clips you generate here become its takes; the first fills the slot.', initial: `${cur.name} · ${cam.name}`, placeholder: 'shot name' })
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { stage_id: cur.id, camera_id: cam.id })) }) } },
@@ -140,14 +150,14 @@ export function viewportMenu(onObject: boolean): MenuItem[] {
     ? [{ cmd: 'stage.frameSel' }, { cmd: 'stage.object.rename' }, { cmd: 'stage.object.duplicate' }, { cmd: 'stage.object.lock' }, { cmd: 'stage.object.hide' }, { cmd: 'stage.object.reset' }, sep,
       ...(sel()?.kind === 'mannequin' ? [...bindItems(), { cmd: 'stage.pose.mode' }, { cmd: 'stage.pose.mirror' }, { cmd: 'stage.pose.reset' }, { cmd: 'stage.pose.save' }, { cmd: 'stage.motion.apply' }, { cmd: 'stage.path.clear' }, sep] : []),
       { cmd: 'stage.anim.keyObject' }, sep, { cmd: 'stage.object.delete' }, sep, { cmd: 'stage.undo' }, { cmd: 'stage.redo' }]
-    : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.toShot' }, sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
+    : [addMenu(), { cmd: 'stage.add.plane' }, { cmd: 'stage.camera.add' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.tool.select' }, { cmd: 'stage.tool.move' }, { cmd: 'stage.tool.rotate' }, { cmd: 'stage.tool.scale' }, { cmd: 'stage.tool.path' }, { cmd: 'stage.snap' }, sep, { cmd: 'stage.frameAll' }, sep,
       { cmd: 'stage.shot.passes' }, { cmd: 'stage.shot.generate' }, sep, { cmd: 'stage.anim.keyCamera' }, { cmd: 'stage.anim.removeKey' }, { cmd: 'stage.clip.guide' }, { cmd: 'stage.clip.animate' }, sep,
       { cmd: 'stage.undo' }, { cmd: 'stage.redo' }, sep, { label: 'Stage', icon: Frame, items: [{ cmd: 'stage.rename' }, { cmd: 'stage.delete' }, sep, { cmd: 'stage.new' }] }]
 }
 
 /** The right-click menu of a camera row (the camera is made active first). */
 export function cameraMenu(): MenuItem[] {
-  return [{ cmd: 'stage.view.camera' }, { cmd: 'stage.camera.setFromView' }, { cmd: 'stage.camera.toShot' }, sep, { cmd: 'stage.camera.rename' }, { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.camera.delete' }]
+  return [{ cmd: 'stage.view.camera' }, { cmd: 'stage.camera.setFromView' }, cameraShotItem(), sep, { cmd: 'stage.camera.rename' }, { cmd: 'stage.camera.add' }, sep, { cmd: 'stage.camera.delete' }]
 }
 
 export { useStage }

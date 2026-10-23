@@ -9,12 +9,14 @@ export interface TileProps {
   onLineage?: (id: string) => void
   onEdit?: (id: string) => void                                    // D95 (IM1, UX0): Image's results — ✎ Edit on the tile, opened in place
   corner?: { icon?: React.ReactNode; label: string; run: () => void }   // a pick started from a panel (the Bin): the verb's button top right, always shown
+  onUse?: (id: string) => void; useLabel?: string                 // D125 (I2): Image's results with the For chip — ✓ Use as the shot's frame
+  mark?: string                                                    // D125 (I2): "frame ✓" on the For chip's shot's current frame
 }
 
 /** The scene of a JSON prompt, else the prompt text, for the caption. */
 const promptLine = (a: Asset) => ((a.prompt_json as { scene?: string } | null)?.scene ?? a.prompt_text ?? '').trim()
 
-export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner }: TileProps) {
+export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selected, primary, pinned, onClick, onDouble, dragItems, onContext, onLineage, onEdit, corner, onUse, useLabel, mark }: TileProps) {
   const thumb = api.thumbUrl(a.id, size > 256 ? 512 : 256)
   const derived = a.root_id && a.root_id !== a.id
   return (
@@ -29,6 +31,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
         {a.thumb_status === 'done' || a.thumb_status === 'pending' ? <img src={thumb} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="missing">no thumbnail</span>}
       </div>
       <div className="badges">
+        {mark && <span className="badge-mark" title="the shot version's frame">{mark}</span>}
         {a.kind === 'video' && <span className="badge-dot" title="clip">🎬</span>}
         {a.kind === 'mesh' && <span className="badge-dot" title="3D prop (GLB)">🧊</span>}
         {a.kind === 'audio' && <span className="badge-dot" title="a spoken line (audio)">🔊</span>}
@@ -38,6 +41,7 @@ export const Tile = memo(function Tile({ a, size, fill, caption = 'off', selecte
           : <span className="badge-dot" title="derived from another asset">⤷</span>)}
       </div>
       {onEdit && a.kind === 'image' && <button type="button" className="tile-edit" title="Edit this image (Image · Edit, in place) — or double-click it, or E" aria-label="Edit" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(a.id) }}>✎ Edit</button>}
+      {onUse && a.kind === 'image' && <button type="button" className="tile-use" title={useLabel} aria-label={useLabel} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onUse(a.id) }}>✓</button>}
       {corner && <button type="button" className="tile-pick" title={corner.label} aria-label={corner.label} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); corner.run() }}>{corner.icon ?? '＋'}</button>}
       {pinned > 0 && <span className="pin">C{pinned}</span>}
       {caption === 'model' && <div className="label"><span>{a.model_id ?? a.suite}</span><span style={{ marginLeft: 'auto' }}>{a.seed ?? ''}</span></div>}

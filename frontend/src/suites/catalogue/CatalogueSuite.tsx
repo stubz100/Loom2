@@ -19,7 +19,9 @@ import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButto
 import { handleKeyFor, runCommand } from '../../frame/commands'
 import { showMenu } from '../../frame/ContextMenu'
 import { isMenuFromKeys } from '../../frame/useKeyboardMap'                // D90 (B16): Shift+F10 with a selection opens the tile menu
-import { gridMenu, headerMenu, tileMenu } from './catalogueCommands'
+import { frameUseLabel, gridMenu, headerMenu, tileMenu } from './catalogueCommands'
+import { useMakeFor } from '../../store/origin'
+import { useStory } from '../story/storyStore'
 import { CatalogueStrip, EmptyTrashButton } from './CatalogueStrip'
 import { CLEAR_ALL } from './filters'
 import { Places } from './Places'
@@ -138,6 +140,11 @@ export function Stage() {
   // D95 (IM1, UX0 #1): in Image's results a double-click (and the tile's ✎) opens the image in Edit, in place; in the Catalogue it opens the loupe
   const inResults = useContext(CatalogueStoreCtx) === useGenerateResults
   const editAsset = useCallback((id: string) => { void import('../edit/editorStore').then((m) => m.useEditor.getState().openFromAsset(id)) }, [])
+  // D125 (I2): with Image's For chip, a result's ✓ makes it the shot version's frame; the current frame wears "frame ✓"
+  const forShot = useMakeFor((f) => (inResults ? f.generate : null))
+  const frameId = useStory((st) => (forShot ? st.shots.find((x) => x.id === forShot.shot_id)?.versions.find((v) => v.id === forShot.version)?.frame_asset_id ?? null : null))
+  const frameLabel = forShot ? frameUseLabel() : undefined
+  const pickFrame = useCallback((id: string) => { c.select(id, 'single'); runCommand('cat.useFrame') }, [c])
   const [fileOver, setFileOver] = useState(false)
   useEffect(() => listenFileDrop({                                 // OS files dropped on the grid are imported (into Unprocessed)
     over: (inside) => setFileOver(inside),
@@ -240,7 +247,7 @@ export function Stage() {
           if (r.kind === 'note') return <div key={v.key} className="cat-header" style={st} data-index={v.index} ref={virt.measureElement}><span className="excerpt">{r.text}</span>{c.groupErrors[r.key] && <button className="quiet" onClick={(e) => { e.stopPropagation(); c.retryGroup(r.key) }}>retry</button>}</div>
           return (
             <div key={v.key} className="cat-row" data-index={v.index} ref={virt.measureElement} style={{ ...st, gridTemplateColumns: `repeat(${cols}, ${c.tile}px)`, gridAutoRows: `${cellH}px`, height: cellH + gap, paddingBottom: gap }}>
-              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={inResults ? editAsset : (id) => c.openLoupe(id)} onEdit={inResults ? editAsset : undefined} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
+              {r.items.map((a) => <Tile key={a.id} a={a} size={c.tile} fill={fill} caption={caption} selected={c.selected.includes(a.id)} primary={c.primary === a.id} pinned={c.compare.indexOf(a.id) + 1} onClick={onTileClick} onDouble={inResults ? editAsset : (id) => c.openLoupe(id)} onEdit={inResults ? editAsset : undefined} onLineage={(id) => c.openLineage(id)} onContext={onTileContext} onUse={forShot ? pickFrame : undefined} useLabel={frameLabel} mark={frameId === a.id ? 'frame ✓' : undefined} dragItems={() => selectedOrPrimary(c).map((id) => ({ kind: 'asset' as const, id, media: mediaOf(c.byId(id)?.kind) }))} />)}
             </div>
           )
         })}

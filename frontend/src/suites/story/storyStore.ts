@@ -237,6 +237,8 @@ export interface StoryState {
   newShotVersion: () => Promise<void>
   finalizeShot: () => Promise<boolean>
   useTake: (kind: 'image' | 'clip', id: string) => Promise<void>
+  /** D125 (I2, A4): a result made in Image or Animate for a shot (the For chip) becomes that version's frame / clip where it is picked. */
+  takeFor: (f: { shot_id: string; version: string; name: string }, kind: 'image' | 'clip', id: string) => Promise<boolean>
   deleteShot: () => Promise<void>
   /** Why the version cannot be finalized, or null (mirrors the server's gate: a clip at the project format's size). */
   finalizeWhy: (v: ShotVersion) => string | null
@@ -866,6 +868,15 @@ export const useStory = create<StoryState>()((set, get) => {
         set({ shots: get().shots.map((x) => (x.id === next.id ? next : x)) })
         void get().loadShotDetails()
       } catch (e) { toast(`Take: ${detail(e)}`) }
+    },
+    takeFor: async (f, kind, id) => {
+      try {
+        const next = await unwrap(http.POST('/story/shots/{sid}/versions/{vid}/take', { params: { path: { sid: f.shot_id, vid: f.version } }, body: { kind, id, use: true } }))
+        set({ shots: get().shots.some((x) => x.id === next.id) ? get().shots.map((x) => (x.id === next.id ? next : x)) : [...get().shots, next] })
+        if (get().shotId === next.id) void get().loadShotDetails()
+        useSession.getState().toast(`${f.name} ${f.version}: this ${kind === 'image' ? 'image is its frame' : 'clip is its clip'} now`, 'success')
+        return true
+      } catch (e) { toast(`Use for ${f.name}: ${detail(e)}`); return false }
     },
     deleteShot: async () => {
       const s = get().shot(); if (!s) return

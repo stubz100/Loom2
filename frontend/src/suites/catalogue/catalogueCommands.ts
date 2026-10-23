@@ -12,7 +12,7 @@ import { activeCatalogue } from './catalogueContext'
 import { catView } from './viewKeys'
 import { allPlaced } from './placement'
 import type { JobOrigin } from '../../api/types'
-import { originFor } from '../../store/origin'
+import { originFor, useMakeFor } from '../../store/origin'
 import { selectedOrPrimary, useGenerateResults, type GroupMode } from './catalogueStore'
 import { addToCastMenu, castTarget, madeFor } from '../story/addToCast'
 import { profilesForMentions, useStory } from '../story/storyStore'
@@ -28,6 +28,9 @@ const gen = () => import('../generate/generateStore').then((m) => m.useGenerate.
 const focusField = (id: string) => setTimeout(() => document.getElementById(id)?.focus(), 50)
 /** D66: where a re-run / variations from the grid was asked for — Generate's results grid, or the Catalogue pane on screen (a group page
  *  names its group in `ref`; elsewhere `ref` is null and the payload keeps the folder, so "Go to origin" can return to it). */
+/** D125 (I2): Image's For chip — the shot version a result can become the frame of (only in Image's results). */
+export const forFrame = () => (activeCatalogue.current === useGenerateResults ? useMakeFor.getState().generate : null)
+export const frameUseLabel = () => { const f = forFrame(); return f ? `Use as ${f.name}'s frame` : "Use as the shot's frame" }
 const originHere = (): JobOrigin => {
   if (activeCatalogue.current === useGenerateResults) return originFor('generate', { suite: 'generate', surface: 'results' })   // D125 (I4): Image's For chip
   const q = cat().q
@@ -46,6 +49,9 @@ registerCommands([
   // D90 (01 §11.2): the asset's prompt and parameters into Generate's panel (was an Inspector-only button)
   { id: 'cat.loadInGenerate', scope: 'catalogue', label: 'Load in Image', icon: Wand2, placement: ['context', 'inspector'], hint: 'this asset\'s prompt and parameters into Image\'s Make column panel', when: () => !!primary()?.params?.recipe,
     run: () => { const a = primary(); if (a) void gen().then((g) => { g.loadFromAsset(a, false); useSession.getState().setSuite('generate') }) } },
+  // D125 (I2): the result becomes the For chip's shot version's frame where it is picked (the tile's ✓, its right-click, the Inspector)
+  { id: 'cat.useFrame', scope: 'catalogue', label: "Use as the shot's frame", icon: Clapperboard, placement: ['context', 'inspector'], hint: "Image is making for a shot (the For chip): this image becomes that version's frame",
+    when: () => { const a = primary(); return !!forFrame() && a?.kind === 'image' && !a.trashed_at }, run: () => { const f = forFrame(); const a = primary(); if (f && a) void useStory.getState().takeFor(f, 'image', a.id) } },
   { id: 'cat.pin', scope: 'catalogue', label: 'Pin for compare', icon: Pin, keys: 'C', placement: ['context', 'inspector', 'strip'], when: () => !!cat().primary, run: () => cat().togglePin(cat().primary!) },
   { id: 'cat.compare', scope: 'catalogue', label: 'Open compare', icon: Columns2, keys: 'Shift+C', placement: ['context', 'strip'], when: () => cat().compare.length >= 2, run: () => cat().setCompareOpen(true) },
   { id: 'cat.unpinAll', scope: 'catalogue', label: 'Unpin all', icon: PinOff, placement: ['context', 'strip'], when: () => cat().compare.length > 0, run: () => cat().clearCompare() },
@@ -163,6 +169,7 @@ const clipTile = () => primary()?.kind === 'video'
 /** Right-click on a tile (the tile has been made primary / selected by the caller). */
 export function tileMenu(): MenuItem[] {
   return [
+    ...(forFrame() && !clipTile() ? [{ cmd: 'cat.useFrame', label: frameUseLabel() }, sep] : []),
     { cmd: 'cat.loupe' }, { cmd: 'cat.edit' }, sep,
     moveToMenu(), { cmd: 'cat.toUnprocessed' }, { cmd: 'cat.duplicate' }, { cmd: 'cat.showBatch' }, { cmd: 'cat.lineage' }, sep,
     { cmd: 'cat.tag' }, sep,

@@ -8456,3 +8456,26 @@ WB1–WB3, *Mark final* at any size, the For context ended by *← Back* and hon
   shot; Approved marks it final at its draft size; the Flow's pills): it found the Approved cell running before the shot's clip had loaded,
   so *Mark final* was still disabled — a cell now waits for the shot's details. e2e full 55/55 and open 55/55. Screenshots
   `proto01_UIcomp/img/sp3-*.jpg`.
+
+## 2026-10-23 22:43 — SP4 built (D125, proto01_UIcomp 04 §8): the round trip — Image lands on the shot; a result, a camera and a clip are used for it where they are picked
+
+- **I1 · Image's landing**: *Make frame ▸* opens Image › Make on *Prompt* (or *From a stage* for the stage entry, which now carries the For
+  chip too), the column scrolled to the Prompt section, and the For chip stays in the column's head however far it scrolls (sticky, the
+  section heads under it). The shot's own content replaces the last shot's: `applyFrame` empties the subjects, the scene and its link,
+  the background, the composition, the camera fields, the references and the lead text before it fills them from the node (its line, its
+  speakers' cards, its place, its board); the look, the model, the size and the LoRA slots stay. The prompt mode stays unless the node
+  brings cards or a place (then Tree).
+- **I2 · Use as <shot>'s frame**: with Image's For chip a result becomes the shot version's frame where it is picked — the tile's ✓ (on
+  hover or selected), the first entry of its right-click, the Inspector's Actions (`cat.useFrame`, `story.takeFor`: a take with `use`). The
+  current frame wears a *frame ✓* badge, which follows a pick, the first result filling the empty slot and a change from Story.
+- **A3 · Use this camera for <shot>** in Clay › Camera (its section, the Render tab's head and the camera's right-click): with Animate's
+  For chip the shot version takes the active camera as its source (the stage is saved first; disabled when it already is its camera);
+  *New shot from this camera…* only without a chip.
+- **A4 · Use as <shot>'s clip** on the clip's transport bar and right-clicks (the player's, the Clips row's): with the chip the played clip
+  becomes the version's clip; *Make a shot from this clip…* only without one.
+- **A2**: the rest checked — the Clip cell of a linked shot opens Performance on the Stage clip card with the chip (built in SP3).
+- **Tests:** `placesProps.test.tsx` gains the I1 reset; a round-trip e2e scenario (the last shot's reference gone, on Prompt, the chip in
+  view at the column's bottom, the node's line; the results as takes, ✓ and the right-click moving the frame and its badge; Block it on a
+  stage → Clay with the chip, a second camera used for the shot, no second shot; a clip used as its clip; the Clip cell → Stage clip).
+  Offline 532 passed (no server change); Vitest 437 + 3 skipped; typecheck and build clean; lint 0 errors (79 warnings); e2e full 56/56 and
+  open 56/56. Screenshots `proto01_UIcomp/img/sp4-*.jpg`.

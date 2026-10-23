@@ -376,7 +376,9 @@ const cmds: Command[] = [
   { id: 'story.shot.makeFrame', scope: 'story', label: 'Make frame in Image', icon: ImagePlus, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeFrameFor(s, v) } },
   { id: 'story.shot.makeFrameStage', scope: 'story', label: 'Make frame from the stage (Image)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,
-    run: () => { const v = shotTarget(); if (v?.stage_id) openStageAt(v.stage_id, v.camera_id, shotSpeakers(shot()), 'image') } },
+    run: () => { const s = shot(); const v = shotTarget(); if (!s || !v?.stage_id) return
+      useMakeFor.getState().set('generate', forShot(s, v))                 // D125 (I1): From a stage, with the chip on the shot (its stills come back by the camera)
+      openStageAt(v.stage_id, v.camera_id, shotSpeakers(s), 'image') } },
   { id: 'story.shot.makeClip', scope: 'story', label: 'Make clip in Animate', icon: Film, placement: ['strip', 'inspector', 'context'], when: () => projectOpen() && !!shotTarget(),
     run: () => { const s = shot(); const v = shotTarget(); if (s && v) void makeClipFor(s, v) } },
   { id: 'story.shot.makeClipStage', scope: 'story', label: 'Make clip on the stage (Animate)', icon: Shapes, placement: ['strip', 'inspector', 'context'], when: () => !!shotTarget()?.stage_id,

@@ -89,6 +89,14 @@ export function boardDrop(p: DragPayload, node: string): { group: string | null;
 
 const toast = (text: string, kind: 'info' | 'error' = 'info') => useSession.getState().toast(text, kind)
 
+/** D125 (I1): Image › Make opened on a section of its column (the rail's tab, and the column scrolled there once it renders). */
+function landOn(suite: 'generate', section: string): void {
+  useSession.getState().setSuite(suite)
+  void import('../../frame/suiteRegistry').then((m) => m.setRailTab(suite, section))
+  const go = (n: number) => { const el = document.getElementById(`gen-sec-${section}`); if (el) el.scrollIntoView({ block: 'start' }); else if (n) requestAnimationFrame(() => go(n - 1)) }
+  requestAnimationFrame(() => go(20))
+}
+
 /** The figures of the stage a shot version is made on (its `stage_id`) — Make frame ▸ reads their bound characters' versions and poses. */
 async function stageFigures(v: ShotVersion): Promise<StageObject[]> {
   if (!v.stage_id) return []
@@ -107,16 +115,16 @@ export async function makeFrameFor(s: Shot, v: ShotVersion, nodeId?: string | nu
   const figs = await stageFigures(v)
   const pre = framePrefill(node, st.profiles, figs)
   const over = speakersOf(node, st.profiles).flatMap((p) => { const sv = speakerVersion(p, node, figs); return sv.overrides ? [`${p.name} at ${sv.version} (the stage's binding, not the node's ${sv.overrides})`] : [] })
-  if (pre.subjects.length || pre.place) g.applyFrame(pre)
-  else if (pre.text) g.set({ text: pre.text, ...(g.panel.prompt_mode === 'json' ? { prompt_mode: 'text' as const } : {}) })
+  g.applyFrame(pre)                                                       // D125 (I1): the shot's own content, never the last shot's
   let refs = 0
   if (node?.board_group_id) {
     try {
       const ids = boardRefs(await unwrap(http.GET('/groups/{gid}', { params: { path: { gid: node.board_group_id } } })))
-      if (ids.length) { g.set({ refs: [] }); refs = useGenerate.getState().addRefs(ids) }
+      if (ids.length) refs = useGenerate.getState().addRefs(ids)
     } catch (e) { toast(`The board could not be read: ${(e as ApiError).detail ?? e}`, 'error') }
   }
-  useSession.getState().setSuite('generate')
+  useGenerate.setState({ source: 'prompt' })                              // D125 (I1): on Prompt, the chip in the column's head
+  landOn('generate', 'prompt')
   const who = pre.subjects.length ? `; ${pre.subjects.length} subject${pre.subjects.length === 1 ? '' : 's'} from the speakers` : ''
   toast(`Generate for ${forLabel(f)} — the results come back as its takes${who}${over.length ? ` (${over.join('; ')})` : ''}${pre.place ? '; the scene is its place' : ''}${refs ? `; ${refs} reference${refs === 1 ? '' : 's'} from the board` : ''}`)
 }

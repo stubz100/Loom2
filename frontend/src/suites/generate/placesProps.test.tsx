@@ -119,6 +119,17 @@ describe('D93 (C7) Make frame ▸ from a Dialogue node', () => {
       { group_id: 'grp_h2', name: 'Harbour', profile_id: 'prf_h', scene: true }])
     expect(r.prompt_json).toEqual({ subjects: [{ action: 'saying Hi there', pose: 'pointing', color_match: 'exact' }, { color_match: 'exact' }] })
   })
+  it('D125 (I1): the next shot replaces the last one\'s content — its subjects, scene, framing, lead text and references — and keeps the look, model and size', () => {
+    g().applyFrame({ text: 'At the gate', place: 'prf_h', subjects: [{ profile_id: 'prf_m' }] })
+    g().set({ refs: [{ asset_id: 'ast_board' }], tree: { ...g().panel.tree, style: 'ink wash', background: 'fog', composition: 'low', camera: { angle: 'low', lens: '85mm', depth_of_field: '', 'f-number': '', distance: 'close-up' } }, width: 1280, height: 720 })
+    const model = g().panel.model_id
+    g().applyFrame({ text: null, place: null, subjects: [] })                  // an unbound shot: nothing of its own
+    const p = g().panel
+    expect(p.tree.subjects).toEqual([]); expect(p.tree.scene_link).toBeUndefined(); expect(p.tree.background).toBe(''); expect(p.tree.composition).toBe('')
+    expect(p.tree.camera?.distance).toBe(''); expect(p.tree.camera?.lens).toBe('')
+    expect(p.text).toBe(''); expect(p.refs).toEqual([]); expect(p.mentions ?? []).toEqual([])
+    expect(p.tree.style).toBe('ink wash'); expect(p.model_id).toBe(model); expect([p.width, p.height]).toEqual([1280, 720])
+  })
   it('the Preview says what the scene and a held prop composed and got', () => {
     expect(composedLines([{ scene: true, name: 'Harbour', composed: 'a stone quay' }, { held_by: 1, name: 'Compass', composed: 'a brass compass' }, { subject: 0, name: 'Mara', composed: 'Mara, a courier' }]))
       .toEqual(['the scene · Harbour: a stone quay', 'subject 2 holds · Compass: holding a brass compass', 'subject 1 · Mara: Mara, a courier'])

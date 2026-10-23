@@ -2851,3 +2851,92 @@ test('the Shots board (D125 SP3): the shots in the Flow\'s order with their step
   await page.locator('nav.rail button[aria-label="Flow"]').click()
   await expect(page.locator(`.flow-node[data-id="${a.id}"] .pill`, { hasText: 'approved' })).toHaveClass(/done/)
 })
+
+test('the round trip (D125 SP4): Make frame lands on the For chip (kept in view) and on Prompt with the shot\'s own content; a result\'s ✓ or right-click makes it the frame (the badge follows); Clay\'s camera is used for the shot; a clip is used as its clip; Make clip on the stage opens the Stage clip card', async ({ page }) => {
+  test.setTimeout(180_000)
+  const tag = Date.now().toString(36)
+  type NodeLite = { id: string; shot_id: string }
+  type ShotLite = { versions: { stage_id: string | null; camera_id: string | null; frame_asset_id: string | null; clip_id: string | null; takes: { kind: string; id: string }[] }[] }
+  const prev = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Prev ${tag}`, text: 'the quay at night' })
+  const a = await api<NodeLite>('POST', '/story/flow/nodes', { type: 'shot', title: `Round ${tag}`, text: `a lantern on the quay ${tag}` })
+  const src = (await api<{ items: AssetLite[] }>('GET', '/assets?folder=all&kind=image&sort=created_desc&limit=1')).items[0]
+  const copy = (await api<{ ids: string[] }>('POST', '/assets/duplicate', { ids: [src.id] })).ids[0]
+  const board = await api<{ id: string }>('POST', '/groups', { name: `Prev board ${tag}` })
+  await api('POST', '/groups/move', { items: [{ kind: 'asset', id: copy }], to: board.id })
+  await api('PATCH', `/story/flow/nodes/${prev.id}`, { board_group_id: board.id })
+  const shotOf = () => api<ShotLite>('GET', `/story/shots/${a.shot_id}`)
+  await openApp(page, { suite: 'generate', tab: 'model' })
+  await page.locator('.model-card').filter({ has: page.locator('span', { hasText: /^Klein 4B$/ }) }).click()      // a model that takes references
+  await openApp(page, { suite: 'story', tab: 'shots' })
+  const row = (sid: string) => page.locator(`.shots-board tr.row[data-id="${sid}"]`)
+  const chip = page.locator('.panel [data-testid="for-chip"]')
+  // the last shot: its board's image is a reference
+  await row(prev.shot_id).locator('button[data-step="frame"]').click()
+  await expect(chip).toContainText(`Prev ${tag}`)
+  await expect(page.locator('#gen-sec-refs .gen-sec-head')).toContainText('References · 1')
+  await chip.locator('button[aria-label^="Back to"]').click()
+  // I1: this shot — on Prompt, the chip in view however the column scrolls, the last shot's reference gone, its own line as the lead text
+  await row(a.shot_id).locator('button[data-step="frame"]').click()
+  await expect(chip).toContainText(`Round ${tag}`)
+  await expect(page.locator('.gen-source .segmented button.active')).toHaveText(/Prompt/)
+  await expect(page.locator('#gen-sec-refs .gen-sec-head')).toContainText('References · 0')
+  await page.locator('.panel .body').evaluate((el) => { el.scrollTop = el.scrollHeight })
+  await expect(chip).toBeInViewport()
+  await page.locator('nav.rail button[title^="Prompt"]').click()
+  await page.locator('.segmented button', { hasText: /^Text$/ }).click()
+  await expect(page.locator('.text-prompt textarea')).toHaveValue(`a lantern on the quay ${tag}`)
+  // I2: the results come back as takes (the first fills the frame); ✓ on another makes it the frame, the right-click puts the first back
+  const go = page.locator('.panel .foot button.primary', { hasText: /^Generate/ })
+  await expect(go).toBeEnabled({ timeout: 30_000 })
+  const count = Number((await go.textContent())!.match(/Generate (\d+)/)![1])
+  expect(count).toBeGreaterThan(1)
+  await go.click()
+  await expect.poll(async () => (await shotOf()).versions[0].takes.length, { timeout: 60_000 }).toBe(count)
+  const takes = (await shotOf()).versions[0].takes.map((t) => t.id)
+  expect((await shotOf()).versions[0].frame_asset_id).toBe(takes[0])
+  const tile = (id: string) => page.locator(`.cat-grid .tile[data-id="${id}"]`)
+  await expect(tile(takes[0]).locator('.badge-mark')).toHaveText('frame ✓', { timeout: 15_000 })
+  await tile(takes[1]).hover()
+  await tile(takes[1]).locator(`button.tile-use[aria-label="Use as Round ${tag}'s frame"]`).click()
+  await expect.poll(async () => (await shotOf()).versions[0].frame_asset_id).toBe(takes[1])
+  await expect(tile(takes[1]).locator('.badge-mark')).toHaveText('frame ✓')
+  await expect(tile(takes[0]).locator('.badge-mark')).toHaveCount(0)
+  await contextChoose(page, tile(takes[0]), `Use as Round ${tag}'s frame`)
+  await expect.poll(async () => (await shotOf()).versions[0].frame_asset_id).toBe(takes[0])
+  await chip.locator('button[aria-label^="Back to"]').click()
+  // A3: a new stage for it (Clay opens with the chip); a second camera is used for the shot — no second shot, no "New shot from this camera"
+  const shots0 = (await api<{ items: unknown[] }>('GET', '/story/shots')).items.length
+  await row(a.shot_id).locator('button[data-step="stage"]').click()
+  await page.locator('.modal.link-stage button', { hasText: 'A new stage for it…' }).click()
+  await page.locator('.modal.ask button.primary').click()
+  await expect(page.locator('.animate-levels button.active')).toHaveText('Clay')
+  await expect.poll(async () => (await shotOf()).versions[0].camera_id).toBeTruthy()
+  const cam1 = (await shotOf()).versions[0].camera_id
+  await openSection(page, 'Camera')
+  await expect(page.locator('#anim-sec-camera button[aria-label^="New shot from this camera"]')).toHaveCount(0)
+  const useCam = page.locator(`#anim-sec-camera button[aria-label^="Use this camera for Round ${tag}"]`)
+  await expect(useCam).toBeDisabled()                                                                           // already its camera
+  await page.locator('#anim-sec-camera button[aria-label^="Add camera"]').click()
+  await expect(useCam).toBeEnabled()
+  await useCam.click()
+  await expect.poll(async () => (await shotOf()).versions[0].camera_id).not.toBe(cam1)
+  expect((await api<{ items: unknown[] }>('GET', '/story/shots')).items.length).toBe(shots0)
+  // A4: a clip made elsewhere, played in Performance with the chip — Use as the shot's clip
+  const caps = await api<{ defaults: { i2v: string } }>('GET', '/capabilities')
+  type JobLite = { id: string; status: string; result: { clip_id?: string } }
+  const job = (await api<{ jobs: { id: string }[] }>('POST', '/jobs', { recipe: { kind: 'i2v', model_id: caps.defaults.i2v, start_asset: takes[0], width: 832, height: 480, frames: 9, fps: 16, prompt_text: 'round' }, stage: false, origin: { suite: 'animate', surface: 'clip' } })).jobs[0]
+  await expect.poll(async () => (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)?.status, { timeout: 60_000 }).toBe('done')
+  const clipId = (await api<{ items: JobLite[] }>('GET', '/jobs')).items.find((j) => j.id === job.id)!.result.clip_id!
+  await openAnimate(page, 'Performance')
+  type AnimateHook = { getState: () => { loadClips: () => Promise<void>; select: (id: string) => void } }
+  await page.evaluate(async (id) => { const an = (window as unknown as { __loom2Animate: AnimateHook }).__loom2Animate.getState(); await an.loadClips(); an.select(id) }, clipId)
+  await expect(page.locator('.transport button[aria-label^="Make a shot from this clip"]')).toHaveCount(0)
+  await page.locator(`.transport button[aria-label^="Use as Round ${tag}'s clip"]`).click()
+  await expect.poll(async () => (await shotOf()).versions[0].clip_id).toBe(clipId)
+  // A2: Story's Clip cell on a linked shot opens Performance on the Stage clip card, the chip on the shot
+  await page.locator('nav.tabs button.tab', { hasText: 'Story' }).click()
+  await row(a.shot_id).locator('button[data-step="clip"]').click()
+  await expect(page.locator('.animate-levels button.active')).toHaveText('Performance')
+  await expect(page.locator('.perf-cards button.active')).toHaveText('Stage clip')
+  await expect(page.locator('.panel [data-testid="for-chip"]')).toContainText(`Round ${tag}`)
+})

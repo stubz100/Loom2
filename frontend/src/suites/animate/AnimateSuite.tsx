@@ -12,6 +12,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Clip } from '../../api/types'
 import { CommandButton, CommandCard, CommandRow } from '../../frame/CommandButton'
+import { useMakeFor } from '../../store/origin'
+import { useStory } from '../story/storyStore'
 import { PresetPanel } from '../../frame/PresetPanel'
 import { fieldGlyph } from '../../frame/presetGlyphs'
 import { handleKeysAt, markUsed, runCommand } from '../../frame/commands'
@@ -457,7 +459,7 @@ function Transport({ clip }: { clip: Clip }) {
       <CommandRow ids={['anim.setIn', 'anim.setOut', 'anim.clearInOut']} />
       <span>{inPoint !== null || outPoint !== null ? `in ${inPoint ?? 0} · out ${outPoint ?? clip.frames - 1}` : 'whole clip'}</span>
       <span className="spacer" />
-      <CommandRow ids={['anim.extractFrame', 'anim.sendToEdit', 'anim.toShot']} />
+      <CommandRow ids={['anim.extractFrame', 'anim.sendToEdit']} /><ClipShotVerb />
       {busy && <span>{busy}…</span>}
     </TransportBar>
   )
@@ -619,4 +621,11 @@ export const AnimateSuite: SuiteDef = {
   id: 'animate',
   rail: DEFAULT_RAIL.animate,
   Panel: PerformanceColumn, Strip: StripWithKeys, Stage, Inspector: () => null, PrimaryAction: PerformanceFoot, keepAlive: true, noInspector: true, panelTitle: 'Animate',
+}
+
+/** D125 (A4): the clip's Story verb — with the For chip it becomes that shot's clip (no second shot), without one a shot is made from it. */
+function ClipShotVerb() {
+  const f = useMakeFor((s) => s.animate)
+  useStory((s) => s.shots)                                            // used meanwhile: the verb's state follows
+  return f ? <CommandButton id="anim.useClip" label={`Use as ${f.name}'s clip`} /> : <CommandButton id="anim.toShot" />
 }

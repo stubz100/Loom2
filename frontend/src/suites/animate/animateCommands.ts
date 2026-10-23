@@ -7,6 +7,8 @@ import { askText, useSession } from '../../store/session'
 import { useAnimate } from './animateStore'
 import { useComposition } from './compositionStore'
 import { useAnimRoute } from './routeStore'
+import { useMakeFor } from '../../store/origin'
+import { useStory } from '../story/storyStore'
 import { neighbour, transport, TRANSPORT_IDS } from './transport'
 import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIcon, Crosshair as SoloIcon, Diamond as KeyIcon, EyeOff as HideIcon, Lock as LockIcon, Redo2 as RedoIcon,
   Square as RectIcon, Undo2 as UndoIcon, ArrowLeftToLine as TrimInIcon, ArrowRightToLine as TrimOutIcon, Columns2 as BeforeIcon, PenTool as PenIcon,
@@ -15,6 +17,10 @@ import { ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, Circle as EllipseIc
 const an = () => useAnimate.getState()
 const cp = () => useComposition.getState()
 const hasClip = () => !!an().clip()
+/** D125 (A4): the version Animate's For chip names (read from Story's shots), or undefined. */
+const forVersion = () => { const f = useMakeFor.getState().animate; return f ? useStory.getState().shots.find((x) => x.id === f.shot_id)?.versions.find((v) => v.id === f.version) : undefined }
+/** D125 (A4): the clip's Story verb for menus — Use it as the For chip's shot's clip, else Make a shot from it. */
+export const clipShotItem = (): MenuItem => { const f = useMakeFor.getState().animate; return f ? { cmd: 'anim.useClip', label: `Use as ${f.name}'s clip` } : { cmd: 'anim.toShot' } }
 /** D121 (AW2): the transport of the level on screen (transport.ts); the clip player's own verbs only at Performance. */
 const tp = () => transport()
 const ready = () => !!tp()?.ready()
@@ -124,8 +130,12 @@ registerCommands([
   { id: 'anim.rerun', scope: 'animate', label: 'Re-run (same seed)', icon: RotateCcw, keys: 'Ctrl+R', placement: ['inspector', 'context'], when: hasClip, run: () => void an().rerun() },
   { id: 'anim.tryOther', scope: 'animate', label: 'Try the other model', icon: Shuffle, placement: ['inspector', 'context'], when: hasClip, run: () => void an().tryOther() },
   { id: 'anim.identity', scope: 'animate', label: 'Measure identity (FaceSim)', icon: Eye, placement: ['inspector', 'context'], when: () => hasClip() && !!useSession.getState().capabilities?.facesim?.available, run: () => void an().measureIdentity() },
-  // 17 SY2 (D85): the clip becomes a Story shot's clip (version 1)
-  { id: 'anim.toShot', scope: 'animate', label: 'Make a shot from this clip…', icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], when: hasClip,
+  // D125 (A4): with the For chip the clip becomes that shot version's clip where it is played (no second shot)
+  { id: 'anim.useClip', scope: 'animate', label: "Use as the shot's clip", icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], hint: "Animate is making for a shot (the For chip): this clip becomes that version's clip",
+    when: () => { const c = an().clip(); const v = forVersion(); return !!c && !!v && v.state === 'open' && v.clip_id !== c.id },
+    run: () => { const f = useMakeFor.getState().animate; const c = an().clip(); if (f && c) void useStory.getState().takeFor(f, 'clip', c.id) } },
+  // 17 SY2 (D85): the clip becomes a Story shot's clip (version 1); D125 (A4): only without a For chip
+  { id: 'anim.toShot', scope: 'animate', label: 'Make a shot from this clip…', icon: Clapperboard, placement: ['inspector', 'context', 'toolbar'], when: () => hasClip() && !useMakeFor.getState().animate,
     run: () => { const c = an().clip(); if (!c) return
       void askText({ title: 'Make a shot from this clip', text: 'A Story shot with this clip as its clip; mark it final there once it is at the project format.', initial: (c.prompt || 'Shot').split(/[,.]/)[0].slice(0, 40), placeholder: 'shot name' })
         .then((n) => { if (n?.trim()) void import('../story/storyStore').then((m) => m.makeShotAndOpen(n.trim(), { clip_id: c.id })) }) } },
@@ -169,12 +179,12 @@ export function playerMenu(): MenuItem[] {
     { cmd: 'anim.onion', checked: s.onion }, { cmd: 'anim.loop', checked: s.loop },
     { cmd: 'anim.view.compare', label: s.view === 'compare' ? 'Leave compare' : 'Compare…' }, sep,
     { cmd: 'anim.variations' }, { cmd: 'anim.rerun' }, { cmd: 'anim.tryOther' }, { cmd: 'anim.identity' }, sep,
-    { cmd: 'anim.toShot' }, { cmd: 'anim.toCatalogue' },
+    clipShotItem(), { cmd: 'anim.toCatalogue' },
   ]
 }
 
 /** D90 (02 §9, A16): right-click on a row of the Clips tab (the clip is selected first). */
 export function clipMenu(id: string): MenuItem[] {
   if (an().current !== id) an().select(id)
-  return [{ cmd: 'anim.toCatalogue' }, sep, { cmd: 'anim.toShot' }, sep, { cmd: 'anim.trash' }]
+  return [{ cmd: 'anim.toCatalogue' }, sep, clipShotItem(), sep, { cmd: 'anim.trash' }]
 }

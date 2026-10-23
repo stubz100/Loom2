@@ -11,6 +11,8 @@ import { Aperture, Bookmark, Box, Camera, Eye, EyeOff, Frame, LayoutTemplate, Lo
 import { PresetPanel } from '../../frame/PresetPanel'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CommandButton, CommandRow, MenuButton } from '../../frame/CommandButton'
+import { useMakeFor } from '../../store/origin'
+import { useStory } from '../story/storyStore'
 import { handleKeysAt, markUsed, runCommand, sep, type MenuItem } from '../../frame/commands'
 import { inField, primaryInField } from '../../frame/fieldKeys'
 import { showMenu } from '../../frame/ContextMenu'
@@ -313,7 +315,7 @@ function CameraEditor({ c }: { c: StageCamera }) {
         <CommandButton id="stage.view.camera" text label={view === 'camera' ? 'Back to the free view' : 'Look through'} active={view === 'camera'} />
         <CommandButton id="stage.camera.setFromView" text label="Set from view" />
         <CommandButton id="stage.anim.keyCamera" text />
-        <CommandButton id="stage.camera.toShot" text />
+        <CameraShotVerb />
         <CommandButton id="stage.camera.rename" />
         <CommandButton id="stage.camera.delete" />
       </div>
@@ -341,7 +343,7 @@ export function CamerasTab() {
           <CommandButton id="stage.anim.keyCamera" text label="Key camera" />
           <CommandButton id="stage.guides" text label="Guides" active={guides} />
         </div>
-        <div className="verbs"><CommandButton id="stage.camera.toShot" text /></div>
+        <div className="verbs"><CameraShotVerb /></div>
         <Help text="The shot renders through the active camera (★). The pill over the viewport looks through it and picks another; drag its body in the free view to move it, or type where it stands under its row in Scene; Set from view puts it where the free view is. D121 (AW4)." />
       </>}
     </div>
@@ -470,7 +472,7 @@ export function ShotTab() {
   const passId = entry?.assets[image1]
   return (
     <div className="stage-panel shot-tab tree">
-      <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CommandButton id="stage.camera.toShot" />
+      <div className="head"><b>Render</b><span className="hint">{cam ? `${cam.name} · ${cam.focal_mm} mm` : 'no camera'}</span><CameraShotVerb text={false} />
         <Help text="A frame of the stage through its active camera: the method reads the scene from the pass (image 1); the references and the figures' characters give the look. The stage's clip and its final shot are made in Animate › Performance (D121)." /></div>
       <Step id="frame" title="Frame" state={stills.length ? `${stills.length} rendered` : entry ? 'passes ready' : 'no passes'}
         verb={<CommandButton id="stage.shot.passes" text label={rendering ? 'Rendering…' : 'Render passes'} />}>
@@ -912,3 +914,9 @@ function Vec({ label, v, onChange, step = 0.05 }: { label: string; v: number[]; 
 
 /** D95 (AN1): the stage's selection — an object, else the stage and its active camera — in Animate's Selection section. */
 
+/** D125 (A3): the camera's Story verb — with Animate's For chip it is used for that shot (no second shot), without one a new shot is made from it. */
+function CameraShotVerb({ text = true }: { text?: boolean }) {
+  const f = useMakeFor((s) => s.animate)
+  useStory((s) => s.shots)                                            // linked meanwhile: the verb's state follows
+  return f ? <CommandButton id="stage.camera.useForShot" text={text} label={`Use this camera for ${f.name}`} /> : <CommandButton id="stage.camera.toShot" text={text} />
+}

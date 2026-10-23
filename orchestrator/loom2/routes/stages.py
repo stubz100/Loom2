@@ -7,7 +7,8 @@ from typing import Any
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+import numpy as np
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..fsio import atomic_write_json, read_json_or, utc_now
@@ -209,11 +210,25 @@ class ThingModelJob(BaseModel):
 class ThingsMade(BaseModel):
     clean_job_id: str
     models: list[ThingModelJob]
+    shadows: float = 0.0                           # D124: the share of the picture the things' shadows add to the clean
+
+
+@router.get("/stages/{st_id}/sets/{set_id}/things/shadows")
+async def stage_things_shadows(svc: Svc, st_id: str, set_id: str):
+    """D124: the shadows *Make the things* would clean with the things not yet made — raw grey bytes at the picture's size (w·h, 255 a
+    shadow), what the things sheet draws before the Make. All zero when every thing is made."""
+    ws, catalogue, _ = svc.require_project()
+    try:
+        m = await asyncio.to_thread(set_things.things_shadows, StageStore(ws), svc.require_documents(), catalogue, st_id, set_id)
+    except (KeyError, ValueError) as e:
+        raise _things_error(e) from e
+    return Response(content=np.where(m, 255, 0).astype(np.uint8).tobytes(), media_type="application/octet-stream",
+                    headers={"X-Loom-Width": str(m.shape[1]), "X-Loom-Height": str(m.shape[0]), "Cache-Control": "no-store"})
 
 
 @router.post("/stages/{st_id}/sets/{set_id}/things/make", response_model=ThingsMade)
 async def stage_things_make(svc: Svc, st_id: str, set_id: str):
-    """D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is
+    """D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is
     rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
     footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
     turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant."""
@@ -233,7 +248,7 @@ async def stage_things_make(svc: Svc, st_id: str, set_id: str):
                          origin=origin(set_things.CLEAN_SURFACE, {"cutouts": models}))[0]
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
-    return {"clean_job_id": clean.id, "models": models}
+    return {"clean_job_id": clean.id, "models": models, "shadows": prep["shadows"]}
 
 
 @router.patch("/stages/{st_id}/sets/{set_id}/things/{thing_id}", response_model=Stage)

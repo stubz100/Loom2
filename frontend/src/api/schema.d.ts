@@ -2335,12 +2335,33 @@ export interface paths {
         put?: never;
         /**
          * Stage Things Make
-         * @description D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is
+         * @description D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is
          *     rebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its
          *     footprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their
          *     turns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.
          */
         post: operations["stage_things_make_stages__st_id__sets__set_id__things_make_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stages/{st_id}/sets/{set_id}/things/shadows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stage Things Shadows
+         * @description D124: the shadows *Make the things* would clean with the things not yet made — raw grey bytes at the picture's size (w·h, 255 a
+         *     shadow), what the things sheet draws before the Make. All zero when every thing is made.
+         */
+        get: operations["stage_things_shadows_stages__st_id__sets__set_id__things_shadows_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10103,6 +10124,11 @@ export interface components {
             clean_job_id: string;
             /** Models */
             models: components["schemas"]["ThingModelJob"][];
+            /**
+             * Shadows
+             * @default 0
+             */
+            shadows?: number;
         };
         /** Timeline */
         Timeline: {
@@ -15373,6 +15399,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThingsMade"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_things_shadows_stages__st_id__sets__set_id__things_shadows_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                st_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -49,6 +49,7 @@ the +, E30 → SC3 a set from an image (its lens, its things, laid level, its pi
 | **SC3c · the lens first, the things one by one** (D123, after the author's answers to §4) | **SC3c-1** *From an image…* asks for the lens before the job (prefilled from a Stage still's camera or the prompt's lens; empty = MoGe reads it). **SC3c-2** *Things in the picture…* on the set's row: the picture in a sheet, a click finds a thing (SAM 3 points on the set's own document, a right-click or − marks what is not it), its mask drawn on the picture, kept under a name; the list on the row. **SC3c-3** *Make the things*: the clean plate (Fill under the union of the masks, grown), the relief rebuilt from it at the set's lens, a cut-out per thing → Pixal3D → the model stood on the relief at its footprint (E30's placement on the first relief), each a prop on the stage | `StageParts`, `stageStore`, `stages.py` (the set's things, its document), a `set_things` module (the masks, the cut-outs, the placement), the segment / inpaint / image_to_mesh / image_to_set finishers by origin | SAM 3 seconds a click; the clean plate ≈ 1 min (E28b's Fill); Pixal3D ≈ 4–6 min a thing | 3–4 |
 | **SC3d · a picture set laid level** (what SC3c's rig found) | The floor fitted to the picture's lowest rows the robust way (a seeded RANSAC over near-level planes only, then least squares in a band narrowed to the floor's own noise: the walls, the baseboards and the things in those rows are vertical and never the floor); the set turned about x and raised so that floor is the stage floor, its picture camera pitched to match (the picture still lines up through it); the things stood by the same fit on the set's relief as it is when they land (the clean plate's), through the set's transform; the row says *laid level · the camera 1.9° down* or *as it came* (too little floor, or steeper than 25°) | `relief.py`, `stages.py`, `set_things.py`, the set finisher, `StageParts` | no new job | ½ |
 | **SC3e · the final's plate is the picture** (D120's "the relief re-projected is the plate", unbuilt till now) | A final made on a stage with a visible picture set takes that picture as its plate: the server marks the plate layer `picture`, Stage renders the relief textured with the (clean) picture and the picture behind it through each frame's camera with every actor hidden, right after the layers' passes — no Klein still, no GPU job; the frames carry the set's picture as the plate's still (the assembled shot's lineage). Found on the way: the picture camera looks at the distance whose depth pass holds the picture's depths (a target 1 m ahead saturated the room and the assembly could not tell a prop from the set), the picture behind the relief is carried past its edge (a frame a little taller than the picture showed black bands), and every Stage render waits for what it loads | `finals.py`, `routes/finals.py`, `finalShot.ts`, `FinalPanel.tsx`, `engine.ts`, `relief.py`, `stages.py` | none | 1 |
+| **D124 · the clean takes the things' shadows** (the author's answer to §4, after SC3e) | *Make the things* cleans the plate under each thing and under the shadow it casts: found beside the thing, darker than the same surface lit around it and of its colour, grown out from the thing, below its top, on the side away from the light (all the things weighed together: one light, one side); the things sheet shows them violet before the Make. E31 measured SAM 3's *shadow* concept against this search first | `set_things.py` (`shadows_of`), the things routes, `thingsStore`, `ThingsSheet` | none (CPU, ≈ 1.4 s for four things) | ½ |
 | **SC3f · made things follow their set; the sideways tilt** (next) | A rebuild (a corrected lens, a second *Make*) re-stands the things already made — the front edge's pixel cast onto the new relief's floor (a lens change needs more than the height ratio), the props the author moved by hand left where they are; the set levelled sideways too (the fit's `a`) | `set_things.py`, `stages.py`, the set finisher | none | ½ |
 
 Order: SC1 (the usability the author hit first; no GPU), SC2, E30 → SC3. Each step: its tests, a commit, a rig or headed check, and a
@@ -181,6 +182,24 @@ check row here.
   | --- | --- | --- |
   | ![frames](img/25-sc3e-frames.jpg) | ![assembled](img/25-sc3e-assembled-card.jpg) | ![card](img/25-sc3e-final-card.jpg) |
 
+- **2026-10-23 18:09 — E31 run, D124 built: the clean takes the things' shadows.** E31 (`engine/spikes/e31_shadows.py`, `e31_seeds.py`, the real
+  engine) on the room with its four things: SAM 3 asked for *shadow* (at 0.5 and 0.3, and as *shadow on the floor*) finds one shadow of the
+  four — the small block's sharp wedge, 0.27 % of the picture — and none of the crate's, the table's or the big block's; the photometric
+  search finds all four (0.23–0.96 % each, 1.4 s on the CPU for the four). Building it took four rules the picture taught: a shadow keeps
+  its surface's colour (warmed by the floor's bounce: the block's 0.074 off the lit floor; the dark table 0.40 off the wall — no shadow); it
+  is measured against the brighter of a near and a wide surround (inside the big block's shadow on the wall the near mean is the shadow
+  itself); it lies below its thing; and one light casts every shadow to one side — the dark beside the things to their left and to their
+  right is weighed, and the side the light comes from is shade, not shadow (the corner under the window). The clean plates: the things
+  alone (SC3c) leave the wedge, the marks at the walls' foot and the big block's shadow on the right wall; with the shadows taken the room
+  is clean — inside the shadows it is 2.03× as bright as the photograph was. The room's own dark patch in the front right stays (no picked
+  thing casts it). Found too: the Fill can paint a thing back (once in five here — the crate, at the same seed that came out empty in the
+  four reruns); E28b saw it. Built: `set_things.shadows_of`; *Make the things* cleans the things and their shadows grown 14 px; `GET
+  …/things/shadows` gives the sheet the shadows the clean will take, shown violet.
+
+  | The shadows the clean will take (violet) | The picture and its clean plate (D124 rig) | E31: the masks (SAM 3's shadow, red; the search, green) |
+  | --- | --- | --- |
+  | ![sheet](img/25-d124-things-sheet.jpg) | ![clean](img/25-d124-clean.jpg) | ![masks](img/25-e31-masks.jpg) |
+
 ## 4 · Checks for the author
 
 | Check | Your note |
@@ -193,7 +212,8 @@ check row here.
 | One Scene: does the grouping (figures, sets, props, stand-ins, meshes, lights, planes, cameras) read better than the flat list did, or should a kind with nothing on the stage hide its header? | |
 | SC3: *From an image…* on one of your own pictures of a place (a Klein still or an import): does the relief read as the place in the viewport, and does the Picture camera frame it as the picture did? Move the camera a little — is the budget line's warning early enough, or too fussy? | |
 | SC3: should the things in the picture be cut out and modelled automatically (one job: the cut, the clean plate, the models), or stay a choice per thing? | 2026-10-23: chosen one by one (D123, SC3c) |
-| SC3e: *Make the final shot…* on a picture set of yours, then *Assemble* — does the shot read as the place? The clean plate keeps a thing's own photographed shadow (the Fill takes the thing only): in the rig's shot it reads as the model's shadow — keep it, or take the shadow too when cleaning? | |
+| SC3e: *Make the final shot…* on a picture set of yours, then *Assemble* — does the shot read as the place? The clean plate keeps a thing's own photographed shadow (the Fill takes the thing only): in the rig's shot it reads as the model's shadow — keep it, or take the shadow too when cleaning? | 2026-10-23: take it too (D124) |
+| D124: *Things in the picture…* on one of yours — are the violet shadows the ones each thing casts? Is anything shaded that is not a thing's shadow, or a shadow missed? | |
 | SC3d: a picture set of yours taken looking up or down — do the figures stand on its floor through the picture camera and beside it? |  |
 | SC3c: *Things in the picture…* on one of your pictures — does a click find the thing you meant? Are the models (Pixal3D from one view) close enough to stand in for the things, and do they stand where the things stood? | |
 | SC3b: the figure's shadow on the relief (the room's picture-camera view) — dark enough, too dark? And the picture behind the street: does what shows through the sky and the seams read as the place, or should it be plain? | |

@@ -1,7 +1,7 @@
 // D123 (SC3c-2): the things in a picture set's picture, picked by the author one at a time. The picture large; a click marks the thing
 // (SAM 3's point prompt on the set's own document — the mask it finds drawn over the picture), a right-click or "Not it" marks what is
-// not; "Keep as a thing" keeps the mask under a name. The things kept so far are tinted on the picture. Made into models by the set's
-// row's "Make the things ▶" (SC3c-3).
+// not; "Keep as a thing" keeps the mask under a name. The things kept so far are tinted on the picture, and (D124) the shadows the clean
+// will take with them tinted violet. Made into models by the set's row's "Make the things ▶" (SC3c-3).
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
@@ -12,6 +12,7 @@ import { useThings } from './thingsStore'
 
 const TINTS = [[79, 209, 197], [246, 173, 85], [159, 122, 234], [104, 211, 145], [99, 179, 237], [252, 129, 129]]
 const NOW: [number, number, number] = [240, 166, 58]                                 // the accent: the mask the last click found
+const SHADOW: [number, number, number] = [150, 110, 255]                             // D124: the shadows the clean takes with the things
 
 /** A grey mask (w·h) as a tinted, half-clear layer at the picture's size. */
 function tinted(grey: Uint8ClampedArray | Uint8Array, w: number, h: number, rgb: number[], stride: number): HTMLCanvasElement {
@@ -33,6 +34,7 @@ export function ThingsSheet() {
   const mode = useThings((s) => s.mode)
   const job = useThings((s) => s.job)
   const mask = useThings((s) => s.mask)
+  const shadows = useThings((s) => s.shadows)
   const o = useStage((s) => s.current?.objects.find((x) => x.id === setId))
   const [name, setName] = useState('')
   const [disp, setDisp] = useState<{ w: number; h: number } | null>(null)
@@ -68,6 +70,7 @@ export function ThingsSheet() {
     c.width = disp.w; c.height = disp.h
     const g = c.getContext('2d')!
     g.clearRect(0, 0, c.width, c.height)
+    if (shadows && shadows.length === size.w * size.h) g.drawImage(tinted(shadows, size.w, size.h, SHADOW, 1), 0, 0, disp.w, disp.h)   // D124
     for (const t of o?.things ?? []) { const k = kept[t.mask_asset_id]; if (k) g.drawImage(k, 0, 0, disp.w, disp.h) }
     if (mask && mask.length === size.w * size.h) g.drawImage(tinted(mask, size.w, size.h, NOW, 1), 0, 0, disp.w, disp.h)
     for (const p of points) {
@@ -77,7 +80,7 @@ export function ThingsSheet() {
       g.lineWidth = 2; g.strokeStyle = '#ffffff'; g.stroke()
       g.fillStyle = '#ffffff'; g.font = 'bold 12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.label ? '+' : '−', x, y + 0.5)
     }
-  }, [mask, points, disp, size, o?.things, kept])
+  }, [mask, shadows, points, disp, size, o?.things, kept])
 
   if (!setId || !o?.plate_asset_id) return null
   const measure = () => { const im = pic.current; if (im) setDisp({ w: im.clientWidth, h: im.clientHeight }) }
@@ -94,7 +97,7 @@ export function ThingsSheet() {
     <div className="modal-backdrop" onClick={close}>
       <div className="modal things-sheet" role="dialog" aria-label="Things in the picture" onClick={(e) => e.stopPropagation()}>
         <div className="head">Things in the picture · {o.name}
-          <Help text="Pick each thing that stands in the place (a crate, a table, a chair): click it and SAM 3 finds it; a right-click — or Not it — marks a part that is not it. Keep it under a name. Make the things (the set's row) cleans the plate under them and makes each a 3D model standing where it stood." />
+          <Help text="Pick each thing that stands in the place (a crate, a table, a chair): click it and SAM 3 finds it; a right-click — or Not it — marks a part that is not it. Keep it under a name. Make the things (the set's row) cleans the plate under them and under the shadows they cast (violet: found beside each thing, on the side away from the light), and makes each a 3D model standing where it stood." />
           <span className="spacer" /><button className="quiet" onClick={close} title="Close (Esc)" aria-label="Close"><X size={16} /></button></div>
         <div className="body">
           <div className="things-bar">
@@ -111,7 +114,8 @@ export function ThingsSheet() {
           </div>
         </div>
         <div className="foot">
-          <span className="things-kept">{things.length ? `${things.length} kept: ${things.map((t) => t.name).join(', ')}` : 'none kept yet'}</span>
+          <span className="things-kept" data-shadows={shadows ? 'shown' : 'none'} title={things.map((t) => t.name).join(', ')}>
+            {things.length ? `${things.length} kept${shadows ? ' · their shadows violet' : ''}` : 'none kept yet'}</span>
           <span className="spacer" />
           <input type="text" aria-label="the thing's name" value={name} placeholder={`Thing ${things.length + 1}`} onChange={(e) => setName(e.target.value)} />
           <button type="button" className="primary" disabled={!mask || !!job} onClick={() => void keep()}>Keep as a thing</button>

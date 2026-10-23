@@ -123,6 +123,105 @@ def union_mask(catalogue: Any, things: list[SetThing], grow: int = 0) -> np.ndar
     return out
 
 
+SHADOW_RATIO = 0.72                                # D124: a shadow is the surface at most this bright against the same surface lit around it
+SHADOW_SIDE = 1.5                                  # D124 (E31): one side's dark this many times the other's tells where the light comes from
+SHADOW_REACH = 0.9                                 # D124: how far a thing's shadow may reach from it, a share of the thing's width
+SHADOW_SCALE = 640                                 # the search runs on the picture this wide (the masks come back at the picture's size)
+SHADOW_CHROMA = 0.12                               # D124: a shadow keeps the colour of the surface it falls on, warmed by the light it bounces (the rig's block: 0.074 off the lit floor; the table against the wall: 0.40)
+
+
+def _grow(m: np.ndarray, px: int) -> np.ndarray:
+    """A mask grown by `px` (3×3 steps: a square reach, cheap at any size)."""
+    img = Image.fromarray(np.where(m, 255, 0).astype(np.uint8))
+    for _ in range(max(0, px)):
+        img = img.filter(ImageFilter.MaxFilter(3))
+    return np.asarray(img) > 127
+
+
+def _box(a: np.ndarray, r: int) -> np.ndarray:
+    """The mean over a (2r+1)² window (an integral image; the window shrinks at the edges)."""
+    h, w = a.shape
+    c = np.pad(a, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    y0, y1 = np.clip(np.arange(h) - r, 0, h), np.clip(np.arange(h) + r + 1, 0, h)
+    x0, x1 = np.clip(np.arange(w) - r, 0, w), np.clip(np.arange(w) + r + 1, 0, w)
+    s = c[y1][:, x1] - c[y0][:, x1] - c[y1][:, x0] + c[y0][:, x0]
+    return s / ((y1 - y0)[:, None] * (x1 - x0)[None, :])
+
+
+def _reach(seed: np.ndarray, within: np.ndarray) -> np.ndarray:
+    """Everything in `within` connected to `seed` (a morphological reconstruction by 3×3 steps)."""
+    grown = seed & within
+    while True:
+        nxt = _grow(grown, 1) & within
+        if (nxt == grown).all():
+            return grown
+        grown = nxt
+
+
+def shadows_of(rgb: np.ndarray, masks: list[np.ndarray]) -> list[np.ndarray]:
+    """D124: the shadow each picked thing casts in its picture — the surface beside it darker than the same surface lit around it (at
+    most SHADOW_RATIO of the local level, the things left out of that level) and of its colour (within SHADOW_CHROMA of the local
+    chromaticity: a dark thing of another colour is no shadow), grown out from the thing itself through such pixels and no farther than
+    SHADOW_REACH of its width and never above its own top (a shadow lies below the thing that casts it, in a picture taken from above the
+    floor); thin dark lines (the seams between boards) are no shadow, nor are a mask's stray specks seeds. **One light, one side** (E31): the things' shadows are weighed together, the dark beside
+    each thing to its left against the dark to its right; when one side outweighs the other SHADOW_SIDE times, the parts on the lighter
+    side are shade, not cast shadow (the corner under a window), and are dropped — the part under a thing always stays. One boolean mask
+    per thing at the picture's size, without any of the things in it."""
+    if not masks:
+        return []
+    H, W = masks[0].shape
+    k = SHADOW_SCALE / W if W > SHADOW_SCALE else 1.0
+    w, h = max(1, round(W * k)), max(1, round(H * k))
+    small = lambda m: np.asarray(Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).resize((w, h), Image.BILINEAR)) > 127  # noqa: E731
+    opened = lambda m, n: np.asarray(Image.fromarray(np.where(m, 255, 0).astype(np.uint8)).filter(ImageFilter.MinFilter(n)).filter(ImageFilter.MaxFilter(n))) > 127  # noqa: E731
+    lin = (np.asarray(Image.fromarray(rgb).resize((w, h), Image.BOX), np.float32) / 255.0)
+    lin = np.where(lin <= 0.04045, lin / 12.92, ((lin + 0.055) / 1.055) ** 2.4)
+    logy = np.log(np.maximum(1e-4, lin @ np.array([0.2126, 0.7152, 0.0722], np.float32)))
+    chroma = lin[..., :2] / np.maximum(1e-4, lin.sum(axis=2, keepdims=True))   # r and g of the linear chromaticity
+    every_full = np.logical_or.reduce(masks)
+    out = _grow(small(every_full), 2)
+    r = max(4, w // 24)                                                          # the surface's own level: its mean around, the things out
+    keep = (~out).astype(np.float32)
+    norm = np.maximum(1e-3, _box(keep, r))
+    level = np.maximum(_box(logy * keep, r) / norm, _box(logy * keep, 2 * r) / np.maximum(1e-3, _box(keep, 2 * r)))   # the brighter of two reaches:
+    dark = level - logy                                                          # inside a wide shadow the near mean is the shadow itself
+    tone = np.stack([_box(chroma[..., i] * keep, r) / norm for i in range(2)], axis=-1)
+    cand = opened((dark > -np.log(SHADOW_RATIO)) & (np.abs(chroma - tone).max(axis=-1) < SHADOW_CHROMA) & ~out, 3)
+    cols, rows = np.arange(w)[None, :], np.arange(h)[:, None]
+    found: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None] = []           # per thing: its region, the region's left and right parts
+    weight = {"left": 0.0, "right": 0.0}
+    for m in masks:
+        thing = opened(small(m), 3)
+        xs = np.nonzero(thing)[1]
+        if not len(xs):
+            found.append(None)
+            continue
+        x0, x1 = float(np.percentile(xs, 2)), float(np.percentile(xs, 98))    # robust: SAM's stray specks do not widen it
+        top = float(np.percentile(np.nonzero(thing)[0], 2))
+        zone = _grow(thing, int(np.clip(SHADOW_REACH * (x1 - x0 + 1), 6, w // 6))) & (rows >= top)
+        region = _reach(_grow(thing, 4) & cand & zone, cand & zone)           # out from the thing (past the things' own 2 px) through the dark
+        left, right = region & (cols < x0), region & (cols > x1)
+        weight["left"] += float(dark[left].sum())
+        weight["right"] += float(dark[right].sum())
+        found.append((region, left, right))
+    lit = None                                                                   # the side the light comes from: its parts are shade
+    if weight["right"] > SHADOW_SIDE * weight["left"]:
+        lit = "left"
+    elif weight["left"] > SHADOW_SIDE * weight["right"]:
+        lit = "right"
+    res = []
+    for f in found:
+        if f is None or not f[0].any():
+            res.append(np.zeros((H, W), bool))
+            continue
+        region, left, right = f
+        if lit:
+            region = region & ~(left if lit == "left" else right)
+        big = np.asarray(Image.fromarray(np.where(_grow(region, 1), 255, 0).astype(np.uint8)).resize((W, H), Image.BILINEAR)) > 127
+        res.append(big & ~every_full)
+    return res
+
+
 def cutout(catalogue: Any, plate_id: str, mask: np.ndarray, margin: float = 0.12) -> Path:
     """A thing alone on white, cropped around its mask with a margin — what Pixal3D's template cuts out again (BiRefNet) and models."""
     a = catalogue.get(plate_id)
@@ -144,9 +243,30 @@ def cutout(catalogue: Any, plate_id: str, mask: np.ndarray, margin: float = 0.12
     return path
 
 
+def shadow_masks(od: Any, catalogue: Any, todo: list[SetThing]) -> list[np.ndarray]:
+    """D124: the shadows of the things to make, found together (one light, one side) on the set's document as the author sees it."""
+    masks = [_mask(catalogue, t.mask_asset_id) for t in todo]
+    rgb = np.ascontiguousarray(od.flatten()[..., :3])
+    if any(m.shape != rgb.shape[:2] for m in masks):
+        raise ValueError(f"the masks do not fit the set's document ({rgb.shape[1]}×{rgb.shape[0]})")
+    return shadows_of(rgb, masks)
+
+
+def things_shadows(store: StageStore, documents: Any, catalogue: Any, st_id: str, set_id: str) -> np.ndarray:
+    """D124 (on a worker thread): the shadows *Make the things* would clean with the things not yet made, as one mask — what the things
+    sheet shows before the Make. Empty when every thing is made."""
+    _, obj = store.picture_set(st_id, set_id)
+    todo = [t for t in obj.things if not t.mesh_asset_id]
+    od = ensure_document(store, documents, catalogue, st_id, set_id)
+    if not todo:
+        return np.zeros((od.doc.h, od.doc.w), bool)
+    return np.logical_or.reduce(shadow_masks(od, catalogue, todo))
+
+
 def prepare_make(store: StageStore, documents: Any, catalogue: Any, st_id: str, set_id: str, variant: str) -> dict[str, Any]:
-    """D123 (on a worker thread): the things not yet made — their union grown as the set's document's selection (the region the Fill
-    cleans) and each one's cut-out as a Catalogue image. The caller queues the jobs on the loop (the queue is not thread-safe)."""
+    """D123 (on a worker thread): the things not yet made — their union and (D124) their shadows, grown, as the set's document's
+    selection (the region the Fill cleans) and each one's cut-out as a Catalogue image. The caller queues the jobs on the loop (the queue
+    is not thread-safe)."""
     from .models import registry
     _, obj = store.picture_set(st_id, set_id)
     todo = [t for t in obj.things if not t.mesh_asset_id]
@@ -159,9 +279,11 @@ def prepare_make(store: StageStore, documents: Any, catalogue: Any, st_id: str, 
     if spec is None or not registry.offered(spec, variant):
         raise ValueError(f"the things' 3D models need Pixal3D, which the {variant} variant does not carry (D17 / D26)")
     od = ensure_document(store, documents, catalogue, st_id, set_id)
-    union = union_mask(catalogue, todo, CLEAN_GROW)
-    if union.shape != (od.doc.h, od.doc.w):
-        raise ValueError(f"the masks ({union.shape[1]}×{union.shape[0]}) do not fit the set's document ({od.doc.w}×{od.doc.h})")
+    things = union_mask(catalogue, todo)
+    if things.shape != (od.doc.h, od.doc.w):
+        raise ValueError(f"the masks ({things.shape[1]}×{things.shape[0]}) do not fit the set's document ({od.doc.w}×{od.doc.h})")
+    shadows = np.logical_or.reduce(shadow_masks(od, catalogue, todo))          # D124: the clean takes their shadows too
+    union = np.asarray(Image.fromarray(np.where(things | shadows, 255, 0).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * CLEAN_GROW + 1))) > 127
     od.selection = np.where(union, 255, 0).astype(np.uint8)
     od.doc.has_selection = True
     od.dirty = True
@@ -172,7 +294,7 @@ def prepare_make(store: StageStore, documents: Any, catalogue: Any, st_id: str, 
         rec = catalogue.ingest_file(path, kind="image", move=True, suite="stage", parents=[obj.plate_asset_id] if obj.plate_asset_id else [],
                                     lineage_kind="set-thing-cutout", prompt_text=t.name, params={"stage_id": st_id, "set_id": set_id, "thing_id": t.id})
         cutouts.append((t.id, catalogue.make_thumbs(rec)))
-    return {"document_id": od.doc.id, "cutouts": cutouts, "coverage": round(float(union.mean()), 4)}
+    return {"document_id": od.doc.id, "cutouts": cutouts, "coverage": round(float(union.mean()), 4), "shadows": round(float(shadows.mean()), 4)}
 
 
 def clean_plate(q: Any, job: Any, od: Any) -> dict[str, Any]:

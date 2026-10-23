@@ -16759,6 +16759,11 @@
             },
             "title": "Models",
             "type": "array"
+          },
+          "shadows": {
+            "default": 0.0,
+            "title": "Shadows",
+            "type": "number"
           }
         },
         "required": [
@@ -25542,7 +25547,7 @@
     },
     "/stages/{st_id}/sets/{set_id}/things/make": {
       "post": {
-        "description": "D123 (SC3c-3): the things not yet made — the plate cleaned under them all (a Fill on the set's document); when it lands, the relief is\nrebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its\nfootprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their\nturns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.",
+        "description": "D123 (SC3c-3): the things not yet made — the plate cleaned under them all and (D124) their shadows (a Fill on the set's document); when it lands, the relief is\nrebuilt from the clean plate at the set's lens and then a Pixal3D model is queued for each one's cut-out (stood on the relief at its\nfootprint when it lands) — the rebuild first, so the clean set shows within a minute or two and the models follow. The jobs take their\nturns through the queue (D97). 422 with the reason: nothing to make, Pixal3D not in the variant.",
         "operationId": "stage_things_make_stages__st_id__sets__set_id__things_make_post",
         "parameters": [
           {
@@ -25587,6 +25592,56 @@
           }
         },
         "summary": "Stage Things Make",
+        "tags": [
+          "stages"
+        ]
+      }
+    },
+    "/stages/{st_id}/sets/{set_id}/things/shadows": {
+      "get": {
+        "description": "D124: the shadows *Make the things* would clean with the things not yet made — raw grey bytes at the picture's size (w·h, 255 a\nshadow), what the things sheet draws before the Make. All zero when every thing is made.",
+        "operationId": "stage_things_shadows_stages__st_id__sets__set_id__things_shadows_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "st_id",
+            "required": true,
+            "schema": {
+              "title": "St Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage Things Shadows",
         "tags": [
           "stages"
         ]

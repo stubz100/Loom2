@@ -8267,3 +8267,42 @@ The author asked for a review of the state of things, then "record all this and 
   whose first Bin picture is a dark one). Offline 517 passed, Vitest 429 + 3 skipped, e2e 54/54 full and 54/54 open (two earlier full runs
   each lost one scenario to the known flakes — ERR_NO_BUFFER_SPACE, the World library's tile — each clean when rerun), typecheck and build
   clean, lint 0 errors (79), audits clean.
+
+## 2026-10-23 18:09 — E31 run and D124 built: the clean takes the things' shadows
+
+- **The author** (on proto01_animate 25 §4, after SC3e): "cleaning should take the shadow too" → D124, recorded 17:30 before the work: the
+  Fill cleans each picked thing's shadow with it; how a shadow is found measured first.
+- **E31** (`engine/spikes/e31_shadows.py`; the real engine, one job at a time, the engine stopped after): bench/sets/room.jpg, its four
+  things picked at the SC3c rig's clicks (the crate 2.01 %, the table 1.37 %, the small block 2.76 %, the big block 6.59 %; 3–4 s each after
+  SAM 3's load). **S**, SAM 3's concept: *shadow* at 0.5 and at 0.3 and *shadow on the floor* at 0.4 each found 0.26–0.27 % of the picture —
+  the small block's sharp wedge only; kept where it touches a thing: the block's 0.27 %, the others 0. **P**, `set_things.shadows_of` (CPU):
+  the crate 0.69 %, the table 0.23 %, the small block 0.88 %, the big block 0.96 %, 1.37 s for the four. The clean plates (the Fill, 49–68 s
+  each): the things alone leave the wedge, smudges at the walls' foot and the big block's shadow on the right wall; S's takes the wedge only;
+  P's takes them all — but painted a new crate where the crate stood. `e31_seeds.py`: P's region again at seeds 0–3 — all four clean, SAM 3
+  at the author's clicks finds no thing back on any (IoU with the thing's own mask 0.02–0.26); the crate was the Fill's chance failure, not
+  the region's (E28b saw it too; a check at the clicks after the Fill could catch it — not built).
+- **The search, as the picture taught it** (offline on the SC3c rig's masks, each step looked at): the surface darker than its surround (at
+  most 0.72 of the mean around, the things left out of that mean), seams opened away; grown out from the thing — the seed just past the
+  things' own 2 px (the first version seeded inside the ring it excluded: nothing found); a SAM mask's stray specks dropped (one seeded a
+  window frame). **Colour:** a shadow keeps its surface's chromaticity, warmed by the bounce (the block's wedge 0.29 as bright as the lit
+  floor and 0.074 off its colour; the dark table 0.06 as bright and 0.40 off the wall's) — tolerance 0.12 (0.035 lost the real shadows).
+  **Two reaches:** against the brighter of the near mean and one twice as wide (inside the big block's shadow on the wall, at the picture's
+  edge, the near mean is the shadow itself). **Below its top:** a thing's shadow does not climb above it in a picture taken from above the
+  floor (a strip of the window recess above the crate was taken). **One light, one side:** the things' shadows weighed together, the dark
+  beside each thing to its left against the dark to its right; one side 1.5× the other tells where the light comes from and the parts on
+  that side are shade (the corner under the window, 0.42–0.73 of its surround, touched the crate's left; a darkness core alone could not
+  tell it from the crate's real shadow at 0.29–0.50, and cost the table's softer one). One thing alone keeps both sides.
+- **Built:** `set_things.shadows_of` (all the things to make at once, on the set's document as the author sees it — `shadow_masks`);
+  `prepare_make` cleans the things and their shadows grown 14 px (`ThingsMade.shadows`: their share, in the Make's toast); `GET
+  /stages/{id}/sets/{set}/things/shadows` (raw grey bytes, what the clean will take with the things not made yet); the things sheet draws
+  them violet (read on opening, after a keep or a removal), its foot a count with the names in the tooltip. OpenAPI and schema.d.ts
+  regenerated, the route snapshot and the byte-route list updated.
+- **Rig** (`engine/spikes/d124_rig.py`, the real engine; the screenshots with the engine stopped): the set at 69.2° in 19 s, the four things
+  found in 3–4 s each, the shadows read back in 1.42 s (2.76 % of the picture), the Fill under the things and their shadows 67 s, the relief
+  rebuilt in 4 s (laid level at −1.3°); the four models cancelled once queued (SC3c measured them). Inside the shadows taken, the clean plate
+  is 2.03× as bright as the photograph was. Screenshots proto01_animate/img/25-d124-*.jpg, E31's sheets 25-e31-*.jpg.
+- **Tests:** `test_set_things_d123.py` — a synthetic wall and floor with two boxes, each shadow found (> 80 %), the shade on the light's
+  side not (< 5 %), a dark red thing not, nothing above the boxes or on them, one thing alone keeps both sides, a flat picture casts none;
+  the shadows route (w·h bytes, 404); the Make's share; `thingsStore.test.ts` (the shadows read when a thing waits to be made, not without);
+  the e2e things scenario (the sheet's foot and its `data-shadows`). Offline 518 passed, Vitest 430 + 3 skipped, e2e 54/54 full and 54/54 open, typecheck
+  and build clean, lint 0 errors, audits clean.

@@ -2589,7 +2589,9 @@ test('the things of a picture set (D123, SC3c): picked on the picture, kept by n
   await expect(status).toHaveAttribute('data-state', 'found', { timeout: 30_000 })
   await sheet.locator('input[aria-label="the thing\'s name"]').fill('Crate')
   await sheet.getByRole('button', { name: 'Keep as a thing' }).click()
-  await expect(sheet.locator('.things-kept')).toContainText('1 kept: Crate')
+  await expect(sheet.locator('.things-kept')).toContainText('1 kept')
+  await expect(sheet.locator('.things-kept')).toHaveAttribute('title', 'Crate')
+  await expect(sheet.locator('.things-kept')).toHaveAttribute('data-shadows', /^(shown|none)$/)          // D124: read after the keep (the fake's flat picture: none)
   await expect(status).toHaveText('click a thing')                                                     // the points cleared for the next one
   await page.keyboard.press('Escape')
   await expect(sheet).toHaveCount(0)

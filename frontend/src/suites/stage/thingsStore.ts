@@ -15,6 +15,7 @@ interface ThingsState {
   job: string | null                                           // the find in flight
   docId: string | null
   mask: Uint8Array | null                                      // the last find's mask, w·h grey
+  shadows: Uint8Array | null                                   // D124: the shadows the clean takes with the things not made yet, w·h grey
   making: string[]                                             // the make's jobs still to land
   open: (setId: string | null) => Promise<void>
   setMode: (m: 0 | 1) => void
@@ -24,6 +25,8 @@ interface ThingsState {
   rename: (setId: string, thingId: string) => Promise<void>
   remove: (setId: string, thingId: string) => Promise<void>
   make: (setId: string) => Promise<void>
+  /** D124: the shadows *Make the things* would clean with them, read again (after a keep or a removal). */
+  loadShadows: () => Promise<void>
 }
 
 const toast = (text: string, kind: 'info' | 'error' | 'success' = 'error') => useSession.getState().toast(text, kind)
@@ -33,13 +36,24 @@ const reload = async () => { const id = stageId(); if (id) await useStage.getSta
 const plateOf = (setId: string) => useStage.getState().current?.objects.find((o) => o.id === setId)?.plate_asset_id ?? null
 
 export const useThings = create<ThingsState>()((set, get) => ({
-  setId: null, size: null, points: [], mode: 1, job: null, docId: null, mask: null, making: [],
+  setId: null, size: null, points: [], mode: 1, job: null, docId: null, mask: null, shadows: null, making: [],
   open: async (setId) => {
-    set({ setId, points: [], job: null, mask: null, size: null })
+    set({ setId, points: [], job: null, mask: null, size: null, shadows: null })
     const plate = setId ? plateOf(setId) : null
     if (!plate) return
     try { const a = await unwrap(http.GET('/assets/{asset_id}', { params: { path: { asset_id: plate } } })); if (get().setId === setId) set({ size: { w: a.w ?? 0, h: a.h ?? 0 } }) }
     catch (e) { toast(`The set's picture: ${detail(e)}`) }
+    await get().loadShadows()
+  },
+  loadShadows: async () => {
+    const { setId } = get()
+    const sid = stageId()
+    const things = useStage.getState().current?.objects.find((o) => o.id === setId)?.things ?? []
+    if (!setId || !sid || !things.some((t) => !t.mesh_asset_id)) { set({ shadows: null }); return }
+    try {
+      const b = new Uint8Array(await api.getBytes(`/stages/${sid}/sets/${setId}/things/shadows`))
+      if (get().setId === setId) set({ shadows: b.some((v) => v > 127) ? b : null })
+    } catch (e) { toast(`The things' shadows: ${detail(e)}`) }
   },
   setMode: (m) => set({ mode: m }),
   addPoint: async (x, y, label) => {
@@ -64,6 +78,7 @@ export const useThings = create<ThingsState>()((set, get) => ({
       await unwrap(http.POST('/stages/{st_id}/sets/{set_id}/things', { params: { path: { st_id: sid, set_id: setId } }, body: { name, points } }))
       set({ points: [], mask: null })
       await reload()
+      void get().loadShadows()
       return true
     } catch (e) { toast(`Keep the thing: ${detail(e)}`); return false }
   },
@@ -81,7 +96,7 @@ export const useThings = create<ThingsState>()((set, get) => ({
     const sid = stageId()
     if (!sid) return
     await useStage.getState().flush()
-    try { await unwrap(http.DELETE('/stages/{st_id}/sets/{set_id}/things/{thing_id}', { params: { path: { st_id: sid, set_id: setId, thing_id: thingId } } })); await reload() }
+    try { await unwrap(http.DELETE('/stages/{st_id}/sets/{set_id}/things/{thing_id}', { params: { path: { st_id: sid, set_id: setId, thing_id: thingId } } })); await reload(); if (get().setId === setId) void get().loadShadows() }
     catch (e) { toast(`Remove: ${detail(e)}`) }
   },
   make: async (setId) => {
@@ -91,7 +106,7 @@ export const useThings = create<ThingsState>()((set, get) => ({
     try {
       const r = await unwrap(http.POST('/stages/{st_id}/sets/{set_id}/things/make', { params: { path: { st_id: sid, set_id: setId } } }))
       set({ making: [r.clean_job_id] })                                        // the rebuild and the models follow the Fill (its result names them)
-      toast(`Making ${r.models.length} thing${r.models.length === 1 ? '' : 's'}: the plate cleaned first, then a 3D model of each (≈ ${r.models.length * 5 + 1} min) — the stage follows as they land`, 'info')
+      toast(`Making ${r.models.length} thing${r.models.length === 1 ? '' : 's'}: the plate cleaned first (with their shadows${r.shadows ? `, ${(r.shadows * 100).toFixed(1)} % of the picture` : ': none found'}), then a 3D model of each (≈ ${r.models.length * 5 + 1} min) — the stage follows as they land`, 'info')
     } catch (e) { toast(`Make the things: ${detail(e)}`) }
   },
 }))

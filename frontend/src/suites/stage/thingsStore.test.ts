@@ -20,6 +20,7 @@ beforeEach(() => {
     const url = new URL(req.url)
     if (req.method === 'GET' && url.pathname === '/assets/ast_pic') return Response.json({ id: 'ast_pic', w: 4, h: 2 })
     if (req.method === 'GET' && url.pathname === '/documents/doc_1/selection') return new Response(new Uint8Array([0, 255, 255, 0, 0, 0, 0, 0]))
+    if (req.method === 'GET' && url.pathname === '/stages/stg_1/sets/set_1/things/shadows') { sent.push({ path: url.pathname, body: null }); return new Response(new Uint8Array([0, 0, 0, 255, 255, 0, 0, 0])) }
     if (req.method === 'POST' && url.pathname.endsWith('/things/find')) { sent.push({ path: url.pathname, body: await req.json() }); return Response.json({ job_id: 'job_find', document_id: 'doc_1' }) }
     if (req.method === 'POST' && url.pathname.endsWith('/things/make')) return Response.json({ clean_job_id: 'job_clean', models: [{ thing_id: 'thg_1', cutout_id: 'ast_cut' }] })
     return new Response('not stubbed', { status: 500 })
@@ -27,7 +28,7 @@ beforeEach(() => {
   setBackend(B)
   useSession.setState({ backend: B, jobs: {}, toast: vi.fn() as never })
   useStage.setState({ current: DOC, open: vi.fn(async () => undefined) as never, flush: vi.fn(async () => undefined) as never })
-  useThings.setState({ setId: null, size: null, points: [], mode: 1, job: null, docId: null, mask: null, making: [] })
+  useThings.setState({ setId: null, size: null, points: [], mode: 1, job: null, docId: null, mask: null, shadows: null, making: [] })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -43,6 +44,14 @@ describe('D123 the things store', () => {
     land({ job_find: job('job_find', 'done') })
     await vi.waitFor(() => expect(Array.from(useThings.getState().mask ?? [])).toEqual([0, 255, 255, 0, 0, 0, 0, 0]))
     expect(useThings.getState().job).toBeNull()
+  })
+
+  it('D124: the shadows the clean will take are read when the sheet opens on a thing still to make — none asked for without one', async () => {
+    await useThings.getState().open('set_1')
+    expect(sent.filter((x) => x.path.endsWith('/shadows'))).toHaveLength(0)                    // nothing kept: nothing to ask
+    useStage.setState({ current: { ...DOC, objects: [{ ...DOC.objects[0], things: [{ id: 'thg_1', name: 'Crate', mask_asset_id: 'ast_m', mesh_asset_id: null }] }] } as unknown as StageDoc })
+    await useThings.getState().open('set_1')
+    expect(Array.from(useThings.getState().shadows ?? [])).toEqual([0, 0, 0, 255, 255, 0, 0, 0])
   })
 
   it('Make follows the Fill: the rebuild and the models join when it lands, the stage reloads as each lands', async () => {

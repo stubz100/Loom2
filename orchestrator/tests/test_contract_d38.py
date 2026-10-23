@@ -20,7 +20,8 @@ NOT_JSON = {"GET /finals/{fid}/composition/frame", "GET /assets/{asset_id}/file"
             "GET /clips/{clip_id}/proxy.mp4", "GET /clips/{clip_id}/frames/{name}", "GET /blobs/{sha}", "POST /heal",   # D62: /heal answers raw RGBA
             "GET /preset-icons/{key}/file",                                                                       # D90: the swatch webp
             "GET /motion/files/{file_id}",                                                                        # CA1: a motion glb / fbx
-            "GET /finals/{fid}/layers/{lid}/{name}/{n}"}                                                          # D111: a layer's frame (PNG)
+            "GET /finals/{fid}/layers/{lid}/{name}/{n}",                                                          # D111: a layer's frame (PNG)
+            "GET /stages/{st_id}/sets/{set_id}/things/shadows"}                                                  # D124: raw grey bytes
 
 
 def test_every_json_route_declares_its_reply(tmp_path: Path):

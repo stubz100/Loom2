@@ -226,11 +226,15 @@ def test_routes(tmp_path: Path):
         assert thing["name"] == "Crate" and cl.get(f"/assets/{thing['mask_asset_id']}").json()["kind"] == "mask"
         assert cl.patch(f"{base}/{thing['id']}", json={"name": "Big crate"}).json()["objects"][-1]["things"][0]["name"] == "Big crate"
         assert cl.patch(f"{base}/{thing['id']}", json={"name": "  "}).status_code == 422
+        sh = cl.get(f"{base}/shadows")                                                                              # D124: what the clean would take
+        assert sh.status_code == 200 and len(sh.content) == W * H and sh.headers["X-Loom-Width"] == str(W)
+        assert cl.get(f"/stages/{st['id']}/sets/set_nope/things/shadows").status_code == 404
         made = cl.post(f"{base}/make")
         assert made.status_code == 200, made.text
         m = made.json()
         cj = cl.get(f"/jobs/{m['clean_job_id']}").json()
         assert cj["recipe"]["mode"] == "fill" and len(m["models"]) == 1 and cj["origin"]["payload"]["cutouts"] == m["models"]   # the models follow the Fill
+        assert m["shadows"] == 0.0                                                                                    # a flat grey picture casts none
         assert cl.delete(f"{base}/{thing['id']}").json()["objects"][-1]["things"] == []
         assert cl.post(f"{base}/make").status_code == 422                                                             # nothing to make
         assert cl.delete(f"{base}/thg_nope").status_code == 404
@@ -247,3 +251,42 @@ def test_make_refused_in_the_open_variant(tmp_path: Path, object_info: dict, mon
     finally:
         import asyncio
         asyncio.run(rig.close())
+
+
+def _shadow_scene() -> tuple[np.ndarray, list[np.ndarray], dict[str, np.ndarray]]:
+    """A wall over a wooden floor, the light from the left: two boxes, each with its shadow on the floor to its right; shade on the floor to
+    the first box's left (the corner under a window: as dark as a penumbra, the floor's colour); a dark red thing beside a shadow (dark,
+    but not the floor's colour)."""
+    rng = np.random.default_rng(1)
+    img = np.zeros((180, 320, 3), np.float32)
+    img[:90] = (220, 218, 212)
+    img[90:] = (150, 120, 90)
+    img += rng.normal(0, 3, img.shape)
+    def rect(x0, x1, y0, y1):
+        m = np.zeros((180, 320), bool)
+        m[y0:y1, x0:x1] = True
+        return m
+    a, b = rect(120, 161, 70, 131), rect(240, 271, 80, 126)
+    parts = {"shadow_a": rect(161, 200, 112, 131), "shadow_b": rect(271, 300, 110, 126), "shade": rect(92, 120, 108, 131), "red": rect(203, 222, 95, 131)}
+    for k, f in (("shadow_a", 0.35), ("shadow_b", 0.35), ("shade", 0.55)):
+        img[parts[k]] *= f
+    img[parts["red"]] = (90, 20, 15)
+    img[a] = (110, 110, 115)
+    img[b] = (105, 108, 112)
+    return np.clip(img, 0, 255).astype(np.uint8), [a, b], parts
+
+
+def test_a_things_shadow_is_found_beside_it_away_from_the_light():
+    """D124 (E31): a thing's shadow is the surface beside it darker than around and of its colour, grown from the thing, below its top; one
+    light: the shade on the side the light comes from is not taken, nor is a dark thing of another colour."""
+    rgb, (a, b), parts = _shadow_scene()
+    sa, sb = set_things.shadows_of(rgb, [a, b])
+    cover = lambda m, part: float((m & part).sum() / part.sum())  # noqa: E731
+    assert cover(sa, parts["shadow_a"]) > 0.8 and cover(sb, parts["shadow_b"]) > 0.8                         # each its own shadow
+    assert cover(sa, parts["shade"]) < 0.05                                                                      # the light comes from the left
+    assert cover(sa | sb, parts["red"]) < 0.05                                                                   # dark, but not the floor's colour
+    assert not (sa | sb)[:68].any() and not ((sa | sb) & (a | b)).any()                                          # never above them, never on them
+    alone, = set_things.shadows_of(rgb, [a])                                                                     # one thing: no side to weigh, both stay
+    assert cover(alone, parts["shadow_a"]) > 0.8
+    flat = np.full_like(rgb, 128)
+    assert not set_things.shadows_of(flat, [a])[0].any()                                                         # a flat picture casts none
